@@ -15,6 +15,7 @@ internal static class UnattendedTestRunner
 #else
         false;
 #endif
+    internal static bool IsReplayingRecordedInputs => false;
     public static bool AutomaticTurnSearchEnabled => !IsActive;
     public static bool VerifyIncrementalSearch => false;
     public static bool ForceShortSearchOnly => false;
