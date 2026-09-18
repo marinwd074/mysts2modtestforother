@@ -570,7 +570,7 @@ pwsh -NoProfile -File tools/run-unattended-test.ps1 -ScenarioId HP-MODIFIER-COLL
 
 - 定版范围：PR #89 的已合并行为及已审核更新日志；版本与发布元数据变更复用以下验证，本次不重跑游戏场景，不作完整可见性能验收结论。
 
-- 2026-09-13：合入当前 main，保留双方开发与测试记录；合并结果通过 Windows Release 构建（0 警告、0 错误）及结构门禁（89 个 Search 文件）。首次构建的辅助程序引用程序集解析失败，单独构建辅助程序后整体构建通过。此次仅核对合并衔接，以下游戏行为与性能结果沿用贡献者记录，本轮未重跑。
+- 2026-09-13：合入当前 main，保留双方开发与测试记录；合并结果通过 Windows Release 构建（0 警告、0 错误）及结构门禁（89 个 Search 文件）。首次构建的辅助程序引用程序集解析失败，单独构建辅助程序后整体构建通过。此次仅核对合并衔接，以下游戏行为与性能结果沿用既有记录，本轮未重跑。
 
 用户要求的最终VeryHigh压力测试（`e528749`）：四个独立headless进程，DOP16/NoGC16GB，原预设Beam135/100000节点/300000ms，不覆盖预算。灵魂枢纽`be412b0035104e85823b0363ad4e0704`通过（7.968秒、6.474GB分配、8.149GB峰值RSS，预测T9/战损6/零药，零GC）；死灵药水、2305张极端牌堆和女王生成选牌均为120秒启动器超时，不能记为通过或完整性能结果。见[本轮结果与复跑参数](performance/veryhigh-final-20260913.md)。
 
@@ -917,7 +917,7 @@ pwsh -NoProfile -File tools/run-unattended-test.ps1 -ScenarioId GROWTH-ANCIENT-P
 - `python -X utf8 tools/NoVictoryRecoveryChecks/presets.py`：直接编译生产四档声明及 SolverSearchProfile，核对节点加倍、时间及 Beam 保持原值。低/中/高/极高 Short 为 2400/4800/10000/20000，Deep 为 12000/24000/50000/100000。
 - PowerShell 结构门禁 `REFACTOR_BOUNDARIES_OK search_files=84`。未启动游戏，本轮没有新增原包恢复、可见 UI 或实战战损验收；下方 PR 附带的检查点记录来自既有验证。
 
-## 无胜利路线时的搜索面升级（贡献者记录）
+## 无胜利路线时的搜索面升级（历史记录）
 
 同一个玩家问题包 `CombatSolver-0.35.3-CEREMONIAL_BEAST_BOSS-610658da…`，观者 A9 第一幕 Boss
 仪式兽，玩家 34/79、Boss 262/262、两瓶药（稳定血清、缚魂药水），恢复方式 `native_events`
@@ -955,7 +955,7 @@ Beam 与节点是乘的关系，只抬一边都不够，四组顶格实测（`b2
 - `dotnet run --project tools/ClientUpdateChecks -c Release`：35 项通过。验证三段数字比较（包括 0.35.10）、相等/更旧/主版本升级、204 旧服务、非法/缺失 JSON、HTTP 失败、取消、服务回撤版本及关闭提醒；失败不覆盖最后有效状态。
 - 已部署工作台基线 5611856 同步后，在 `tools/OnlinePresence` 执行 `npm test`：17 项通过，含管理员登录/Origin、采集端隔离、严格版本验证、旧客户端心跳、设置更新/清除/重启持久化及已有统计逻辑。Node 23.9.0 提示 SQLite experimental warning；线上使用 Node 24.15.0。
 - 同目录 `$env:BROWSER_CHANNEL='msedge'; node --test browser.test.mjs`：9 项通过。新增版本维护表单实际 DOM 保存/关闭、刷新不覆盖输入，同时验证现有登录恢复、筛选、布局、延迟请求及统计恢复。默认 Playwright 浏览器未安装导致首轮启动失败，改用已安装的 Edge 后通过；未启动可见浏览器或游戏。
-- 下方 PR 附带检查属于贡献者原始记录。本轮不将独立替身合同表述为游戏状态差分或实机修复的完整验收。
+- 下方 PR 附带检查属于既有记录。本轮不将独立替身合同表述为游戏状态差分或实机修复的完整验收。
 
 ## 2026-09-10：玩家死亡能力清理
 
@@ -2180,8 +2180,8 @@ v30 SearchPolicy 与下列8项最小搜索夹具在同一 headless 进程复用�
 
 | 场景 | 当前结果 | 验证内容 | 日期 |
 | --- | --- | --- | --- |
-| `PR37-HOT-PATH-ALLOCATION-A/B` | 贡献者 A/B 通过 | 固定机甲根在 Windows 与 macOS 上保持工作量、路线、评分和战损不变；Windows worker 分配 `7.40 GB → 6.20 GB`，macOS 分配 `10.40 GB → 9.44 GB`，两端搜索时间均下降。 | 2026-09-03 |
-| `PR38-NOGC-FALLBACK-PARALLELISM-A/B` | 贡献者 A/B 通过 | macOS 不支持 NoGC 时保持固定工作量与结果，实际并发 `2 → 8`、耗时 `37.2 s → 27.2 s`；Windows 正常 NoGC 路径无可测差异。合并态策略断言覆盖系统余量回退保守并发与普通平台/尺寸回退完整并发。 | 2026-09-03 |
+| `PR37-HOT-PATH-ALLOCATION-A/B` | 固定 A/B 通过 | 固定机甲根在 Windows 与 macOS 上保持工作量、路线、评分和战损不变；Windows worker 分配 `7.40 GB → 6.20 GB`，macOS 分配 `10.40 GB → 9.44 GB`，两端搜索时间均下降。 | 2026-09-03 |
+| `PR38-NOGC-FALLBACK-PARALLELISM-A/B` | 固定 A/B 通过 | macOS 不支持 NoGC 时保持固定工作量与结果，实际并发 `2 → 8`、耗时 `37.2 s → 27.2 s`；Windows 正常 NoGC 路径无可测差异。合并态策略断言覆盖系统余量回退保守并发与普通平台/尺寸回退完整并发。 | 2026-09-03 |
 
 ## 0.28.1（已发布）：Smart 药水门槛与手动深度释放系统内存
 
@@ -2344,7 +2344,7 @@ v30 SearchPolicy 与下列8项最小搜索夹具在同一 headless 进程复用�
 | 场景 | 结果 | 验证内容 | 日期 |
 | --- | --- | --- | --- |
 | `POTION-PERSISTENCE-BOUNDED-AUDIT-0244` | 通过（headless 设置、搜索与控制器生命周期） | 强制/保护策略按槽位 + 药水 ID 完成 JSON 往返，同槽新药仍为 Smart，恢复 Smart 后不保留覆盖项；Smart 主搜索和药水后验共享 `1.2 s` 请求预算，累计耗时与进度不倒退。runId `0911df45b8b34a04b761d9239f530e9f`。 | 2026-09-01 |
-| `PR25-RUNTIME-GC-INTEGRATION-0244` | 贡献者实测通过；本地集成门禁通过 | 默认关闭求解器 No-GC、补账回收与显式自动收集，保留玩家“手动 GC”入口。贡献者报告实机可行且内存占用下降；本轮不重复性能基准。合并态编译与结构门禁通过，药水/控制器夹具 runId `ffe6bad16592496ea1b02fbc6715930a`。 | 2026-09-01 |
+| `PR25-RUNTIME-GC-INTEGRATION-0244` | 既有实测通过；本地集成门禁通过 | 默认关闭求解器 No-GC、补账回收与显式自动收集，保留玩家“手动 GC”入口。既有报告显示实机可行且内存占用下降；本轮不重复性能基准。合并态编译与结构门禁通过，药水/控制器夹具 runId `ffe6bad16592496ea1b02fbc6715930a`。 | 2026-09-01 |
 | `POTION-SLIM-SIDEBAR-ANCHOR-0244` | 通过（headless UI 结构与生命周期） | 药水策略为约 `184 px` 单列窄侧栏；展开侧栏时标题栏预留同宽区域，药水策略、设置和收起按钮仍锚定在主面板右缘。runId `7c0d24e7f3b9448da0e596651d853e15`。 | 2026-09-01 |
 | `POTION-SEARCH-MULTI-PHASE-LABELS-0244` | 通过（headless UI 文案与搜索阶段） | 战损提示包含性能预设建议，点击后持久关闭且不再跳转；搜索阶段覆盖无药、恰好 `N` 瓶的智能梯度，以及固定政策的单药、双药和三药药名。 | 2026-09-01 |
 | `SMART-POTION-GRADIENT-EXACT-0244` | 通过（headless 搜索结构与阈值） | Smart 以无药为唯一基线，普通药按 `9/18/27 HP` 开放恰好 `1/2/3` 瓶额度，同层药水共同竞争并在第一条合格梯度停止。runId `406220b4b3b7482a97ebef4a16a330e9`。 | 2026-09-01 |
