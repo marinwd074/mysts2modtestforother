@@ -66,6 +66,7 @@ Harmony 参数形状的条件编译位于回合补丁入口，后续按兼容迁
 | 文件 | 职责 | 不负责 |
 |---|---|---|
 | `src/Runtime/Entry.cs` | Mod 初始化、补丁安装、战斗与回合生命周期入口、无人请求循环启动 | 搜索策略和战斗语义 |
+| `src/Runtime/TestingBridge/*` | 生产运行时所需的最小战前协议 DTO、路径/JSON 选项与空闲活动桥；不拥有测试协议 | 测试请求预期字段、fixture、断言、协议 host 和测试 tracker |
 | `src/Runtime/CombatSolverLog.cs` / `CombatDiagnosticJournal.cs` | 独立日志入口；生产线程入队不可变消息，复用后台事件文件；战斗切换摘要化、搜索日志绑定所属战斗、提交前缀冻结 | Godot 全局日志收集、搜索候选判定、后台读取 live 状态 |
 | `src/Runtime/OnlinePresence.cs` | 主线程在线标量采样、共享持久安装标识和证书固定的 HTTPS 客户端；无头和多人隔离 | 搜索策略、完整路线上传、服务端历史存储 |
 | `src/Runtime/RunStatistics.cs` / `RunStatisticsStore.cs` | 主线程跑局/战斗/设置/实际操作标量事件；独立有界队列，后台持久化、原生结算恢复与幂等补传；不可变提交时战绩快照 | 搜索状态键、模拟、游戏存档修改、历史求解器参与推断 |
@@ -424,6 +425,8 @@ renderer 不得重新读取 `SolverResult`、`PlanAction`、`PlanCardChoice` 或
 ## 7. Unattended 测试
 
 `UnattendedTestRunner` 保留请求级编排和现有 fixture helper。新增流程应落到明确所有者：
+
+生产 `CombatSolver.csproj` 排除 `src/Testing/**/*.cs`；`src/Testing/UnattendedTestProtocol.cs` 中的完整请求预期字段、fixture、断言结果和测试文件协议只属于测试程序集边界。生产侧的 `src/Runtime/TestingBridge/*` 仅承载 `PreCombatForecastWorker` 必须读写的窄协议和惰性活动兼容入口，不得把测试状态重新带回 Runtime。
 
 | 组件 | 职责 |
 |---|---|

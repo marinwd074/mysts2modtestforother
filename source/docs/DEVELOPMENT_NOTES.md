@@ -2,6 +2,11 @@
 
 > 本文按时间顺序保留开发历史。当前基线为 CombatSolver `0.40.2`、目标游戏 `0.107.1`、RitsuLib 目标 `0.107.1`；下方旧版本、旧 PR 和旧验证环境不代表当前状态。
 
+## 2026-09-18：架构优化 Batch 2——生产与无人测试协议边界
+
+- 生产程序集不再编译完整 `src/Testing/UnattendedTestProtocol.cs` 与测试活动 tracker；`PreCombatForecastWorker` 改用 `src/Runtime/TestingBridge` 下的最小请求、结果和 JSON 路径契约，测试预期字段、fixture 与断言继续留在测试侧。
+- Release 构建、5 项 contract tests、结构边界门禁和目标版本门禁通过；代表性 Windows FIRST_TURN 兼容 smoke 写出 `PASS: native 0.107.1 first-turn search; actions=20; incremental verification enabled`。外层启动器随后因专用 smoke 不写常规 result 文件而以 `exit_code=0` 收尾异常，未将其记为完整 unattended 请求通过。
+
 ## 0.40.2：v0.107.1 问题包回归修复（2026-09-18）
 
 - 复核 9 份新问题包：CubeX、Mawler 与 The Kin 的状态差异都指向同一张 `ROCKET_PUNCH`；Phrog 是部署身份中的有效费用变化；Ruby Raiders 是 `JugglingPower` 的旧 Hook 注册；Slimes 是 `RegenPower` 的旧 Hook 注册。

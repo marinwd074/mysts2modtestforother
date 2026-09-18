@@ -2,6 +2,12 @@
 
 > 当前矩阵基线为 CombatSolver `0.40.2`、目标游戏 `0.107.1`、RitsuLib 目标 `0.107.1`；下方按时间排列的历史条目保留其原始版本和验证范围，不能直接当作当前发布结论。
 
+## 2026-09-18：架构优化 Batch 2——测试协议边界
+
+- 生产边界：`src/Testing/**/*.cs` 保持从 `CombatSolver.csproj` 排除；新增 Runtime 最小桥后，生产 API 不再引用完整 `UnattendedTestRequest` / `UnattendedTestResult` / `UnattendedTestFiles`。
+- 验证：Release + CompatibilitySmoke 编译 0 errors（保留既有 2 条 `CS9113` 警告）；contract tests `5/5`、PowerShell 结构门禁 `REFACTOR_BOUNDARIES_OK search_files=117`、目标版本门禁 `0.107.1/0.107.1/STS2_01071`。
+- 代表性 smoke：FIRST_TURN 在游戏进程中写出 native 0.107.1 首回合搜索通过、20 个动作并启用增量核验；启动器因该专用模式不写常规 result 文件报告 `exit_code=0` 收尾异常，因此不记为完整 unattended 请求通过。
+
 ## 0.40.2：v0.107.1 问题包回归修复（2026-09-18）
 
 - 问题包归因：CubeX `9bd8ad30`、Mawler `91f2bf97`、The Kin `03fc1f75`/`5023e5ca`/`c45c1331` 的 `ROCKET_PUNCH` 费用差异共享同一镜像根因；Phrog `c12596f0` 的部署漂移、Ruby Raiders `012a00da`/`6ea89c43` 的 Juggling Hook、Slimes `728a43c5` 的 Regen Hook 使用已有的窄化／版本条件修复。
