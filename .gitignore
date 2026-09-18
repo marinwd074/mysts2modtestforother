@@ -3,8 +3,9 @@
 !.gitignore
 !AGENTS.md
 !MODS/
-!MODS/CombatSolver.dll
 !MODS/CombatSolver.json
+# Build output stays local; releases are produced from source and a verified build.
+MODS/CombatSolver.dll
 !CombatSolver-issue-*.md
 !source/
 !source/**
