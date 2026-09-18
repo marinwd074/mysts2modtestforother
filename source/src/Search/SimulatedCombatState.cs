@@ -2098,7 +2098,12 @@ internal sealed partial class SimulatedCombatState
         }
         _ = GetFetchCardsPlayedThisTurn();
         NormalizeSwordSageReplays(simulator);
-        _enemiesIntendingAttack = [.. Enemies.Where(enemy => enemy.Monster?.IntendsToAttack == true)];
+        // Use the modeled forecast here as well as during later turns. Native
+        // IntendsToAttack omits special modeled intents such as Aeonglass EBB_MOVE,
+        // which makes conditional cards like Go For The Eyes diverge at the root.
+        IReadOnlyList<ForecastMove> rootMoves = CurrentMonsterMoves();
+        _enemiesIntendingAttack =
+            [.. rootMoves.Where(static move => move.AttackHits.Count > 0).Select(static move => move.Owner)];
         _hasPredictedEnemyIntents = true;
         if (ModelPredictionStateMirrors.HasAny)
         {

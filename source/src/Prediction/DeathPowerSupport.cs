@@ -89,6 +89,10 @@ internal static class DeathPowerSupport
                     combat.BeginReattach(simulator, dead);
                     break;
                 case SurprisePower:
+                {
+                    // Native SurprisePower adds Sneaky before Fat. Create order allocates
+                    // combat IDs, so the order must match to keep replay targets stable.
+                    MonsterSpawnSupport.Spawn<SneakyGremlin>(simulator, combat, dead, "sneaky");
                     Creature fat = MonsterSpawnSupport.Create<FatGremlin>(simulator, combat, "fat");
                     foreach (ThieveryPower thievery in combat.EffectivePowers()
                                  .OfType<ThieveryPower>()
@@ -101,9 +105,9 @@ internal static class DeathPowerSupport
                             dead);
                         heist._target = thievery.Target;
                     }
-                    MonsterSpawnSupport.Spawn<SneakyGremlin>(simulator, combat, dead, "sneaky");
                     MonsterSpawnSupport.AddCreated(simulator, combat, dead, fat);
                     break;
+                }
                 case PossessSpeedPower or PossessStrengthPower:
                     combat.RefundPossessedStats(dead);
                     break;
