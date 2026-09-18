@@ -202,6 +202,16 @@ internal static partial class CombatSearchCoordinator
         Action<SolverProgress>? progressCallback,
         Action<SolverResult>? interimResultCallback)
     {
+        if (policy.CurrentTurnOnly)
+        {
+            // Multiplayer current-turn advice must not enter novelty/long-horizon
+            // portfolio passes even if a caller supplied those knobs from settings.
+            policy = policy with
+            {
+                NoveltySearch = null,
+                UseNoveltyPortfolio = false,
+            };
+        }
         Stopwatch requestClock = Stopwatch.StartNew();
         SolverPotionPolicy? initialPotionPolicyOverride = policy.PotionPolicy == SolverPotionPolicy.Smart
             && !policy.PotionStrategy.HasForcedDirectives

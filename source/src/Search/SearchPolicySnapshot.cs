@@ -19,6 +19,12 @@ internal sealed record SearchPolicySnapshot(
     SearchFramePressureSignal FramePressureSignal,
     SearchMemoryPressureSignal MemoryPressureSignal)
 {
+    /// <summary>
+    /// Multiplayer Advisor/Safe Execute searches are intentionally bounded to the local
+    /// player's current turn. The capability gate is still responsible for deciding
+    /// whether such a search may be created at all.
+    /// </summary>
+    public bool CurrentTurnOnly { get; init; }
     public bool UseNoveltyPortfolio { get; init; }
     public NoveltySearchOptions? NoveltySearch { get; init; }
     public NoveltyPortfolioBudget NoveltyBudget { get; init; } = NoveltyPortfolioBudget.Default;

@@ -27,6 +27,11 @@ internal sealed class CombatRootSnapshot
     public LiveCombatStamp LiveStamp { get; }
     public ContinuationStamp ContinuationStamp { get; }
     public int PlayerCount { get; }
+    /// <summary>
+    /// The root was captured for an explicitly approved local-player-only multiplayer
+    /// capability. This is deliberately false for the current read-only Probe profile.
+    /// </summary>
+    public bool AllowsLocalPlayerOnlySearch { get; }
     public int StartTurnNumber { get; }
     public int InitialPlayerHp { get; }
     public int InitialPlayerMaxHp { get; }
@@ -66,6 +71,7 @@ internal sealed class CombatRootSnapshot
         ContinuationStamp continuationStamp,
         CombatPredictionSimulator rootSimulator,
         int playerCount,
+        bool allowsLocalPlayerOnlySearch,
         int startTurnNumber,
         int initialPlayerHp,
         int initialPlayerMaxHp,
@@ -94,6 +100,7 @@ internal sealed class CombatRootSnapshot
         ContinuationStamp = continuationStamp;
         _rootSimulator = rootSimulator;
         PlayerCount = playerCount;
+        AllowsLocalPlayerOnlySearch = allowsLocalPlayerOnlySearch;
         StartTurnNumber = startTurnNumber;
         InitialPlayerHp = initialPlayerHp;
         InitialPlayerMaxHp = initialPlayerMaxHp;
@@ -209,6 +216,7 @@ internal sealed class CombatRootSnapshot
             .Where(candidate => candidate.PlayerCombatState != null)
             .Sum(candidate => candidate.PlayerCombatState!.AllCards.Count());
         int powerCount = state.Creatures.Sum(creature => creature.Powers.Count);
+        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
         stopwatch.Stop();
 
         return new CombatRootSnapshot(
@@ -219,6 +227,7 @@ internal sealed class CombatRootSnapshot
             continuationBefore,
             simulator,
             state.Players.Count,
+            capabilities.IsMultiplayer && capabilities.CanSearch,
             playerState.TurnNumber,
             player.Creature.CurrentHp,
             player.Creature.MaxHp,

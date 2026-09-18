@@ -74,7 +74,8 @@ internal static partial class SolverController
 
     private static void StartDeployment(NGame host, CombatState state, SolverResult result)
     {
-        if (!SolverSessionCapabilities.Capture(state).CanDeploySimpleLocalActions)
+        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
+        if (!capabilities.CanDeploySimpleLocalActions)
         {
             Entry.Logger.Info("[CombatSolver/MultiplayerProbe] DEPLOY_START_REJECT reason=session_capability");
             return;
@@ -100,8 +101,31 @@ internal static partial class SolverController
         CancelDeployment();
         SolverDeploymentSession deployment = new() { State = state, StartTurnNumber = result.StartTurnNumber };
         _deployment = deployment;
-        int actionCount = result.BestNode.Actions.Count(action =>
-            action.Turn == result.StartTurnNumber && action.IsExecutable);
+        IReadOnlyList<PlanAction> plannedTurnActions = result.BestNode.Actions
+            .Where(action => action.Turn == result.StartTurnNumber)
+            .ToArray();
+        int actionCount;
+        if (capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute)
+        {
+            IReadOnlyList<PlanAction> safeActions =
+                MultiplayerSafeLocalActionClassifier.TakeSafePrefix(
+                    state,
+                    plannedTurnActions,
+                    out SafeLocalActionDecision stop);
+            if (safeActions.Count == 0 && plannedTurnActions.Count > 0)
+            {
+                Entry.Logger.Info(
+                    $"[CombatSolver/MultiplayerSafeExecute] DEPLOY_STOP " +
+                    $"turn={result.StartTurnNumber} reason={stop.Reason}");
+                CompleteDeployment(deployment);
+                return;
+            }
+            actionCount = safeActions.Count;
+        }
+        else
+        {
+            actionCount = plannedTurnActions.Count(action => action.IsExecutable);
+        }
         SolverSettingsSnapshot deploymentSettings = SolverSettings.Capture();
         SolverOverlay.ShowDeploying(host, result.StartTurnNumber, actionCount);
         Task deploymentTask = DeployCurrentTurn(
@@ -131,20 +155,45 @@ internal static partial class SolverController
             ? Stopwatch.GetTimestamp()
             : 0;
         int turn = result.StartTurnNumber;
-        List<PlanAction> actions = result.BestNode.Actions
-            .Where(action => action.Turn == turn && action.IsExecutable)
-            .ToList();
-        PlanAction? plannedEndTurn = result.BestNode.Actions
-            .FirstOrDefault(action => action.Turn == turn && action.Kind == PlanActionKind.EndTurn);
+        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
+        bool safeExecute = capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute;
+        IReadOnlyList<PlanAction> plannedTurnActions = result.BestNode.Actions
+            .Where(action => action.Turn == turn)
+            .ToArray();
+        List<PlanAction> actions;
+        SafeLocalActionDecision safeStop = SafeLocalActionDecision.Allow;
+        if (safeExecute)
+        {
+            actions = [.. MultiplayerSafeLocalActionClassifier.TakeSafePrefix(
+                state,
+                plannedTurnActions,
+                out safeStop)];
+            if (!safeStop.IsSafe)
+            {
+                Entry.Logger.Info(
+                    $"[CombatSolver/MultiplayerSafeExecute] DEPLOY_PREFIX_STOP " +
+                    $"turn={turn} action={safeStop.Reason}");
+            }
+        }
+        else
+        {
+            actions = plannedTurnActions.Where(action => action.IsExecutable).ToList();
+        }
+        PlanAction? plannedEndTurn = safeExecute
+            ? null
+            : plannedTurnActions.FirstOrDefault(action => action.Kind == PlanActionKind.EndTurn);
         FastModeType originalFastMode = SaveManager.Instance.PrefsSave.FastMode;
-        FastModeType? overrideFastMode = ResolveDeploymentFastMode(deploymentSettings.DeploymentFastMode);
+        SolverDeploymentFastMode allowedFastMode = capabilities.CanUseFastDeployment
+            ? deploymentSettings.DeploymentFastMode
+            : SolverDeploymentFastMode.FollowGame;
+        FastModeType? overrideFastMode = ResolveDeploymentFastMode(allowedFastMode);
         try
         {
             if (overrideFastMode is { } requestedFastMode)
                 SaveManager.Instance.PrefsSave.FastMode = requestedFastMode;
             Entry.Logger.Info(
                 $"[CombatSolver/Test] DEPLOY_START turn={turn} action_count={actions.Count} " +
-                $"fast_mode={deploymentSettings.DeploymentFastMode} " +
+                $"fast_mode={allowedFastMode} " +
                 $"inter_action_delay_seconds={deploymentSettings.DeploymentInterActionDelaySeconds:0.###}");
             for (int actionIndex = 0; actionIndex < actions.Count; actionIndex++)
             {
@@ -317,6 +366,28 @@ internal static partial class SolverController
                         deploymentSettings.DeploymentInterActionDelaySeconds,
                         token);
                 }
+            }
+
+            if (safeExecute)
+            {
+                if (CombatManager.Instance.IsInProgress && IsSamePlayableTurn(state, turn))
+                {
+                    CompleteDeployment(deployment);
+                    SolverOverlay.ShowDeploymentComplete(host, turn, actions.Count, endedTurn: false);
+                    _combat.LastSolverDeployedTurn = turn;
+                    Entry.Logger.Info(
+                        $"[CombatSolver/MultiplayerSafeExecute] DEPLOY_END turn={turn} " +
+                        $"action_count={actions.Count} end_turn=false stop_reason={safeStop.Reason}");
+                }
+                else
+                {
+                    SolverOverlay.ShowDeploymentComplete(host, turn, actions.Count, endedTurn: false);
+                    _combat.LastSolverDeployedTurn = turn;
+                    Entry.Logger.Info(
+                        $"[CombatSolver/MultiplayerSafeExecute] DEPLOY_END turn={turn} " +
+                        $"action_count={actions.Count} end_turn=false combat_or_turn_finished=true");
+                }
+                return;
             }
 
             if (CombatManager.Instance.IsInProgress && IsSamePlayableTurn(state, turn))

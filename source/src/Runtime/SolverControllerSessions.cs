@@ -165,6 +165,7 @@ internal sealed class SolverSearchSession(
     public int Generation { get; } = generation;
     public int StartTurnNumber { get; init; }
     public ReplanCause ReplanCause { get; init; }
+    public long WorldVersion { get; init; }
     public CombatState State { get; } = state;
     public LiveCombatStamp Stamp { get; } = stamp;
     public CancellationTokenSource Cancellation { get; } = new();

@@ -423,6 +423,13 @@ internal static partial class SolverController
         SolverTheftPolicy? theftPolicy,
         SearchInteractionState? interaction = null)
     {
+        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
+        SolverPotionPolicy effectivePotionPolicy = capabilities.CanUsePotionsAutomatically
+            ? settings.PotionPolicy
+            : SolverPotionPolicy.Disabled;
+        PotionStrategySnapshot effectivePotionStrategy = capabilities.CanUsePotionsAutomatically
+            ? CapturePotionStrategy(state, effectivePotionPolicy)
+            : new PotionStrategySnapshot(SolverPotionPolicy.Disabled, []);
         FramePressureSignal.ResetPressure(
             recoveryEnabled: !string.Equals(
                 DisplayServerNameProvider(),
@@ -439,15 +446,15 @@ internal static partial class SolverController
         }
         SearchPolicySnapshot policy = new(
             settings.Profile,
-            settings.PotionPolicy,
-            CapturePotionStrategy(state, settings.PotionPolicy),
+            effectivePotionPolicy,
+            effectivePotionStrategy,
             settings.EnableDetailedDiagnosticLogs,
             UnattendedTestRunner.VerifyIncrementalSearch,
             UnattendedTestRunner.FixedSearchBudget,
             UnattendedTestRunner.MeasureSearchPhases,
             maxDegreeOfParallelism,
             UnattendedTestRunner.SearchBudgetOverrideMilliseconds,
-            includeTurnSetup,
+            includeTurnSetup && capabilities.CanInterceptTurnSetup,
             theftPolicy,
             settings.ActTransitionBossHpStrategy,
             settings.FinalBossHpStrategy,
@@ -459,8 +466,10 @@ internal static partial class SolverController
             new SearchMemoryPressureSignal())
         {
             Interaction = interaction,
-            UseNoveltyPortfolio = settings.UseNoveltyPortfolio
-                || UnattendedTestRunner.UseNoveltyPortfolioOverride,
+            CurrentTurnOnly = !capabilities.CanCrossTurnSearch,
+            UseNoveltyPortfolio = (settings.UseNoveltyPortfolio
+                || UnattendedTestRunner.UseNoveltyPortfolioOverride)
+                && capabilities.CanCrossTurnSearch,
             UseBeamWidthPortfolio = settings.UseBeamWidthPortfolio
                 || UnattendedTestRunner.UseBeamWidthPortfolioOverride,
             BeamWidthPortfolioWidths = UnattendedTestRunner.BeamWidthPortfolioWidthsOverride,
@@ -468,12 +477,16 @@ internal static partial class SolverController
                 && SearchPolicySnapshot.IsAct3BossEncounter(state.RunState.CurrentActIndex, state.Encounter?.Id.Entry),
             // 这里记的是玩家填的原始值；「不考虑局外收益」的折算交给快照上的 Effective* 一处做，
             // 免得两边各判一次而走岔。问题包里两样都在，方便看出当时是填了额度还是开了开关。
-            GrowthBudgets = settings.GrowthBudgets,
-            RelicTargets = RelicCounterCatalog.Capture(state, settings.RelicStrategyEnabled, settings.RelicCounterRules),
+            GrowthBudgets = capabilities.CanCrossTurnSearch ? settings.GrowthBudgets : default,
+            RelicTargets = capabilities.CanCrossTurnSearch
+                ? RelicCounterCatalog.Capture(state, settings.RelicStrategyEnabled, settings.RelicCounterRules)
+                : [],
             StopAtAcceptableBattleHpLoss = settings.StopAtAcceptableBattleHpLoss,
             BrightestFlameMaxHpLossLimit = settings.BrightestFlameMaxHpLossLimit,
-            GrowthOpportunityTargets = GrowthOpportunityPolicy.Capture(state),
-            IgnoreLongTermRewards = settings.IgnoreLongTermRewards,
+            GrowthOpportunityTargets = capabilities.CanCrossTurnSearch
+                ? GrowthOpportunityPolicy.Capture(state)
+                : GrowthOpportunityTargets.Empty,
+            IgnoreLongTermRewards = settings.IgnoreLongTermRewards || !capabilities.CanCrossTurnSearch,
         };
         CombatBugReportExporter.RecordSearchPolicy(state, policy);
         return policy;
@@ -1232,7 +1245,8 @@ internal static partial class SolverController
         if (!SolverOverlay.IsVisible && !IsSearching && !IsDeploying
             && !PendingCombatDeferredOperations.Any(task => !task.IsCompleted)
             && !PlayerTurnSetupCoordinator.IsManaging(current)
-            && current.Players.Count == 1
+            && (current.Players.Count == 1
+                || SolverSessionCapabilities.Capture(current).IsMultiplayer)
             && LocalContext.GetMe(current)?.PlayerCombatState?.Phase == PlayerTurnPhase.Play
             && NGame.Instance is { } host)
         {
@@ -1400,7 +1414,7 @@ internal static partial class SolverController
             rejection = "求解器已在设置中禁用。";
         else if (!CombatManager.Instance.IsInProgress)
             rejection = "当前没有进行中的战斗。";
-        else if (state.Players.Count != 1)
+        else if (state.Players.Count != 1 && !capabilities.IsMultiplayer)
             rejection = "第一版只支持单人战斗。";
         else if (!capabilities.CanSearch)
             rejection = capabilities.SearchRejection;

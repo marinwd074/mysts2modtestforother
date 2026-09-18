@@ -119,7 +119,7 @@ internal sealed partial class CombatBeamSolver
                 nameof(_minimumPotionUses),
                 "最少用药数必须非负且不能超过最多用药数。");
         }
-        if (root.PlayerCount != 1)
+        if (root.PlayerCount != 1 && !root.AllowsLocalPlayerOnlySearch)
             throw new NotSupportedException("第一版只支持单人战斗。");
         if (root.Enemies.Count > 64)
             throw new NotSupportedException("单场战斗超过 64 个敌人，无法编码路线存活位图。");
@@ -1294,7 +1294,9 @@ internal sealed partial class CombatBeamSolver
             }
         }
 
-        int reservedTurnLayers = root.EncounterRoomType == RoomType.Boss
+        int reservedTurnLayers = policy.CurrentTurnOnly
+            ? 1
+            : root.EncounterRoomType == RoomType.Boss
                 ? SolverWeights.BossEnemyStrengthSuppressionHorizon
                 : SolverWeights.StandardEnemyStrengthSuppressionHorizon;
 
@@ -1936,6 +1938,16 @@ internal sealed partial class CombatBeamSolver
             }
             PublishProgress(_startTurnNumber + searchedTurnLayers, searchedTurnLayers, 0,
                 frontier.Count, completed.Count, "回合层完成", force: true);
+            if (policy.CurrentTurnOnly)
+            {
+                // Current-turn multiplayer routes are useful as advice even when no
+                // complete-victory route exists. Stop after this layer so a future
+                // teammate turn can never enter the immutable local search result.
+                adoptionReached = true;
+                currentTurnAdoptionReached = true;
+                timeBudgetReached = true;
+                break;
+            }
             SearchTakeoverRequest? layerTakeover = _interaction?.CurrentTakeoverRequest;
             if (layerTakeover?.Kind == SearchTakeoverKind.AdoptRoute
                 && layerTakeover.RouteAdoptionSeed != null)
@@ -1996,14 +2008,18 @@ internal sealed partial class CombatBeamSolver
         }
 
         List<SearchNode> finalPool;
-        SearchNode? adoptedNode = currentBestNode ?? currentTurnCandidateNode;
+        SearchNode? adoptedNode = policy.CurrentTurnOnly
+            ? currentTurnCandidateNode ?? currentBestNode
+            : currentBestNode ?? currentTurnCandidateNode;
         if (adoptionReached && adoptedNode != null)
         {
             SearchNode adopted = RefreshReleasedFallback(adoptedNode);
             List<SearchNode> remaining = [.. completed, .. frontier];
             ReleaseDroppedSnapshots(remaining, [adopted]);
             finalPool = [adopted];
-            SolverInterimResult adoptedSummary = currentBestResult ?? currentTurnCandidateResult!;
+            SolverInterimResult adoptedSummary = policy.CurrentTurnOnly
+                ? currentTurnCandidateResult ?? currentBestResult!
+                : currentBestResult ?? currentTurnCandidateResult!;
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] SEARCH_CHECKPOINT_ADOPTED " +
                 $"scope={(currentTurnAdoptionReached ? "current_turn" : "complete_victory")} " +
@@ -2053,7 +2069,7 @@ internal sealed partial class CombatBeamSolver
         SolverResult result = MaterializeSelectedRoute(
             ordering,
             onlyDeathRoutesFound,
-            currentTurnAdoptionReached
+            currentTurnAdoptionReached || policy.CurrentTurnOnly
                 ? SolverResultScope.CurrentTurnAdoption
                 : SolverResultScope.SearchCompletion,
             searchedTurnLayers,
