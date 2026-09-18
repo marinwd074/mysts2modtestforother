@@ -77,11 +77,7 @@ internal sealed class MirroredHookListenerFilter(bool enabled)
         [nameof(AbstractModel.AfterEnergyReset)] = MirroredHookMask.AfterEnergyReset,
         [nameof(AbstractModel.AfterModifyingBlockAmount)] = MirroredHookMask.AfterModifyingBlockAmount,
         [nameof(AbstractModel.AfterModifyingCardPlayCount)] = MirroredHookMask.AfterModifyingCardPlayCount,
-#if STS2_01071
-        [nameof(AbstractModel.AfterModifyingCardPlayResultPileOrPosition)] = MirroredHookMask.AfterModifyingCardPlayResultLocation,
-#else
-        [nameof(AbstractModel.AfterModifyingCardPlayResultLocation)] = MirroredHookMask.AfterModifyingCardPlayResultLocation,
-#endif
+        [Sts2CardHookCompatibility.AfterModifyingCardPlayResultLocationMethodName] = MirroredHookMask.AfterModifyingCardPlayResultLocation,
         [nameof(AbstractModel.AfterModifyingHpLostAfterOsty)] = MirroredHookMask.AfterModifyingHpLostAfterOsty,
         [nameof(AbstractModel.AfterOrbChanneled)] = MirroredHookMask.AfterOrbChanneled,
         [nameof(AbstractModel.AfterOrbEvoked)] = MirroredHookMask.AfterOrbEvoked,
@@ -101,11 +97,7 @@ internal sealed class MirroredHookListenerFilter(bool enabled)
         [nameof(AbstractModel.ModifyBlockAdditive)] = MirroredHookMask.ModifyBlockAdditive,
         [nameof(AbstractModel.ModifyBlockMultiplicative)] = MirroredHookMask.ModifyBlockMultiplicative,
         [nameof(AbstractModel.ModifyCardPlayCount)] = MirroredHookMask.ModifyCardPlayCount,
-#if STS2_01071
-        [nameof(AbstractModel.ModifyCardPlayResultPileTypeAndPosition)] = MirroredHookMask.ModifyCardPlayResultLocation,
-#else
-        [nameof(AbstractModel.ModifyCardPlayResultLocation)] = MirroredHookMask.ModifyCardPlayResultLocation,
-#endif
+        [Sts2CardHookCompatibility.ModifyCardPlayResultLocationMethodName] = MirroredHookMask.ModifyCardPlayResultLocation,
         [nameof(AbstractModel.ModifyDamageAdditive)] = MirroredHookMask.ModifyDamageAdditive,
         [nameof(AbstractModel.ModifyDamageCap)] = MirroredHookMask.ModifyDamageCap,
         [nameof(AbstractModel.ModifyDamageMultiplicative)] = MirroredHookMask.ModifyDamageMultiplicative,

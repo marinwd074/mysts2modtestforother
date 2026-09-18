@@ -4,9 +4,11 @@
 `source/build-target.json` and are checked by `source/tools/verify-target-version.ps1`.
 
 Version-specific native API shape belongs here when it can be isolated without
-adding a per-node abstraction. The first migrated boundary is
-`Sts2TurnSetupCompatibility`: it owns the 0.107.1-versus-legacy reflection
-signatures and invocation argument arrays used by the turn-setup runtime patch.
+adding a per-node abstraction. The migrated boundaries are
+`Sts2TurnSetupCompatibility`, which owns the 0.107.1-versus-legacy reflection
+signatures and invocation argument arrays used by the turn-setup runtime patch,
+and `Sts2CardHookCompatibility`, which owns the card-result hook names,
+reflection signatures, and result-location conversion.
 The Harmony prefix signatures remain conditional in `Runtime/PlayerTurnSetupPatches.cs`
 because Harmony must compile against the native parameter shape for the selected
 game version.
