@@ -1,0 +1,262 @@
+{
+  "schemaVersion": 1,
+  "mode": "COMPAT1071_PERFORMANCE_BASELINE",
+  "sampleLabel": "candidate-control-03",
+  "targetGameVersion": "0.107.1",
+  "fixture": {
+    "runSeed": "COMPAT1071",
+    "characterId": "IRONCLAD",
+    "encounterId": "NIBBITS_NORMAL",
+    "actIndex": 0,
+    "startTurn": 1
+  },
+  "search": {
+    "profile": {
+      "beamWidth": 60,
+      "maxExpandedNodes": 120000,
+      "maxCardBranchesPerNode": 32,
+      "maxPileChoiceBranchesPerAction": 18,
+      "maxHandChoiceBranchesPerAction": 24
+    },
+    "parallelism": 1,
+    "budgetMilliseconds": 5000,
+    "potionPolicy": "Smart",
+    "useBeamWidthPortfolio": true,
+    "useNoveltyPortfolio": false,
+    "fixedBudget": true,
+    "verifyIncrementalSearch": false
+  },
+  "metrics": {
+    "expanded": 3528,
+    "transitions": 10156,
+    "elapsedMs": 3140.0811,
+    "allocatedBytes": 370659896,
+    "bytesPerTransition": 36496.64198503348,
+    "gen0": 24,
+    "gen1": 12,
+    "gen2": 0,
+    "gcPauseMs": 200.861,
+    "maxGcPauseMs": 16.329,
+    "maxFrameGapMs": 23.7358,
+    "framesOver50Ms": 0,
+    "framesOver100Ms": 0,
+    "frameCount": 54,
+    "boundary": "None",
+    "routeIdentity": "0:1:PlayCard:BASH::2:BASH\u002B0|energy=False:2|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=8;VulnerablePower=2|-|:0|baselib=-:0|1:1:PlayCard:STRIKE_IRONCLAD::2:STRIKE_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=6|-|:0|baselib=-:0|2:1:EndTurn:::-::0|3:2:PlayCard:STRIKE_IRONCLAD::2:STRIKE_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=6|-|:0|baselib=-:0|4:2:PlayCard:STRIKE_IRONCLAD::2:STRIKE_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=6|-|:0|baselib=-:0|5:2:PlayCard:DEFEND_IRONCLAD::-:DEFEND_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Block=5|-|:0|baselib=-:0|6:2:EndTurn:::-::0|7:3:PlayCard:STRIKE_IRONCLAD::2:STRIKE_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=6|-|:0|baselib=-:0|8:3:PlayCard:STRIKE_IRONCLAD::2:STRIKE_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=6|-|:0|baselib=-:0|9:3:PlayCard:DEFEND_IRONCLAD::-:DEFEND_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Block=5|-|:0|baselib=-:0|10:3:EndTurn:::-::0|11:4:PlayCard:BASH::1:BASH\u002B0|energy=False:2|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=8;VulnerablePower=2|-|:0|baselib=-:0|12:4:PlayCard:DEFEND_IRONCLAD::-:DEFEND_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Block=5|-|:0|baselib=-:0|13:4:EndTurn:::-::0|14:5:PlayCard:BASH::1:BASH\u002B0|energy=False:2|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=8;VulnerablePower=2|-|:0|baselib=-:0|15:5:PlayCard:STRIKE_IRONCLAD::1:STRIKE_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=6|-|:0|baselib=-:0|16:5:EndTurn:::-::0|17:6:PlayCard:STRIKE_IRONCLAD::1:STRIKE_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=6|-|:0|baselib=-:0|18:6:PlayCard:STRIKE_IRONCLAD::1:STRIKE_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=6|-|:0|baselib=-:0|19:6:PlayCard:STRIKE_IRONCLAD::1:STRIKE_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=6|-|:0|baselib=-:0",
+    "route": [
+      {
+        "index": 0,
+        "turn": 1,
+        "kind": "PlayCard",
+        "cardId": "BASH",
+        "potionId": null,
+        "targetCombatId": 2,
+        "cardStateKey": "BASH\u002B0|energy=False:2|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=8;VulnerablePower=2|-|:0|baselib=-",
+        "replayCount": 0
+      },
+      {
+        "index": 1,
+        "turn": 1,
+        "kind": "PlayCard",
+        "cardId": "STRIKE_IRONCLAD",
+        "potionId": null,
+        "targetCombatId": 2,
+        "cardStateKey": "STRIKE_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=6|-|:0|baselib=-",
+        "replayCount": 0
+      },
+      {
+        "index": 2,
+        "turn": 1,
+        "kind": "EndTurn",
+        "cardId": null,
+        "potionId": null,
+        "targetCombatId": null,
+        "cardStateKey": "",
+        "replayCount": 0
+      },
+      {
+        "index": 3,
+        "turn": 2,
+        "kind": "PlayCard",
+        "cardId": "STRIKE_IRONCLAD",
+        "potionId": null,
+        "targetCombatId": 2,
+        "cardStateKey": "STRIKE_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=6|-|:0|baselib=-",
+        "replayCount": 0
+      },
+      {
+        "index": 4,
+        "turn": 2,
+        "kind": "PlayCard",
+        "cardId": "STRIKE_IRONCLAD",
+        "potionId": null,
+        "targetCombatId": 2,
+        "cardStateKey": "STRIKE_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=6|-|:0|baselib=-",
+        "replayCount": 0
+      },
+      {
+        "index": 5,
+        "turn": 2,
+        "kind": "PlayCard",
+        "cardId": "DEFEND_IRONCLAD",
+        "potionId": null,
+        "targetCombatId": null,
+        "cardStateKey": "DEFEND_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Block=5|-|:0|baselib=-",
+        "replayCount": 0
+      },
+      {
+        "index": 6,
+        "turn": 2,
+        "kind": "EndTurn",
+        "cardId": null,
+        "potionId": null,
+        "targetCombatId": null,
+        "cardStateKey": "",
+        "replayCount": 0
+      },
+      {
+        "index": 7,
+        "turn": 3,
+        "kind": "PlayCard",
+        "cardId": "STRIKE_IRONCLAD",
+        "potionId": null,
+        "targetCombatId": 2,
+        "cardStateKey": "STRIKE_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=6|-|:0|baselib=-",
+        "replayCount": 0
+      },
+      {
+        "index": 8,
+        "turn": 3,
+        "kind": "PlayCard",
+        "cardId": "STRIKE_IRONCLAD",
+        "potionId": null,
+        "targetCombatId": 2,
+        "cardStateKey": "STRIKE_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=6|-|:0|baselib=-",
+        "replayCount": 0
+      },
+      {
+        "index": 9,
+        "turn": 3,
+        "kind": "PlayCard",
+        "cardId": "DEFEND_IRONCLAD",
+        "potionId": null,
+        "targetCombatId": null,
+        "cardStateKey": "DEFEND_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Block=5|-|:0|baselib=-",
+        "replayCount": 0
+      },
+      {
+        "index": 10,
+        "turn": 3,
+        "kind": "EndTurn",
+        "cardId": null,
+        "potionId": null,
+        "targetCombatId": null,
+        "cardStateKey": "",
+        "replayCount": 0
+      },
+      {
+        "index": 11,
+        "turn": 4,
+        "kind": "PlayCard",
+        "cardId": "BASH",
+        "potionId": null,
+        "targetCombatId": 1,
+        "cardStateKey": "BASH\u002B0|energy=False:2|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=8;VulnerablePower=2|-|:0|baselib=-",
+        "replayCount": 0
+      },
+      {
+        "index": 12,
+        "turn": 4,
+        "kind": "PlayCard",
+        "cardId": "DEFEND_IRONCLAD",
+        "potionId": null,
+        "targetCombatId": null,
+        "cardStateKey": "DEFEND_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Block=5|-|:0|baselib=-",
+        "replayCount": 0
+      },
+      {
+        "index": 13,
+        "turn": 4,
+        "kind": "EndTurn",
+        "cardId": null,
+        "potionId": null,
+        "targetCombatId": null,
+        "cardStateKey": "",
+        "replayCount": 0
+      },
+      {
+        "index": 14,
+        "turn": 5,
+        "kind": "PlayCard",
+        "cardId": "BASH",
+        "potionId": null,
+        "targetCombatId": 1,
+        "cardStateKey": "BASH\u002B0|energy=False:2|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=8;VulnerablePower=2|-|:0|baselib=-",
+        "replayCount": 0
+      },
+      {
+        "index": 15,
+        "turn": 5,
+        "kind": "PlayCard",
+        "cardId": "STRIKE_IRONCLAD",
+        "potionId": null,
+        "targetCombatId": 1,
+        "cardStateKey": "STRIKE_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=6|-|:0|baselib=-",
+        "replayCount": 0
+      },
+      {
+        "index": 16,
+        "turn": 5,
+        "kind": "EndTurn",
+        "cardId": null,
+        "potionId": null,
+        "targetCombatId": null,
+        "cardStateKey": "",
+        "replayCount": 0
+      },
+      {
+        "index": 17,
+        "turn": 6,
+        "kind": "PlayCard",
+        "cardId": "STRIKE_IRONCLAD",
+        "potionId": null,
+        "targetCombatId": 1,
+        "cardStateKey": "STRIKE_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=6|-|:0|baselib=-",
+        "replayCount": 0
+      },
+      {
+        "index": 18,
+        "turn": 6,
+        "kind": "PlayCard",
+        "cardId": "STRIKE_IRONCLAD",
+        "potionId": null,
+        "targetCombatId": 1,
+        "cardStateKey": "STRIKE_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=6|-|:0|baselib=-",
+        "replayCount": 0
+      },
+      {
+        "index": 19,
+        "turn": 6,
+        "kind": "PlayCard",
+        "cardId": "STRIKE_IRONCLAD",
+        "potionId": null,
+        "targetCombatId": 1,
+        "cardStateKey": "STRIKE_IRONCLAD\u002B0|energy=False:1|stars=False:-1|replay=0|exhaust=False|sly=False|retain=False|deck=True|keywords=|vars=Damage=6|-|:0|baselib=-",
+        "replayCount": 0
+      }
+    ],
+    "resultIdentity": {
+      "score": 10000679980,
+      "projectedBattleHpLost": 27,
+      "potionCount": 0,
+      "searchedTurns": 6,
+      "shufflesCrossed": 2,
+      "finalHp": 53,
+      "finalEnemyHp": 0,
+      "allEnemiesDead": true,
+      "playerDead": false,
+      "onlyDeathRoutes": false,
+      "combatEndedTurn": 6
+    }
+  }
+}

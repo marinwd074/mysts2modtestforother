@@ -16,22 +16,12 @@ using AfterRegistry = MethodMirrorRegistry<AbstractModel, AfterModifyingCardPlay
 internal static class ModifyCardPlayResultLocationMirrors
 {
     private static readonly MirrorMethodSpec ModifyCardPlayResultLocation = MirrorMethodSpec.Hook(
-#if STS2_01071
-        nameof(AbstractModel.ModifyCardPlayResultPileTypeAndPosition),
-        [typeof(CardModel), typeof(bool), typeof(ResourceInfo), typeof(PileType), typeof(CardPilePosition)]);
-#else
-        nameof(AbstractModel.ModifyCardPlayResultLocation),
-        [typeof(CardModel), typeof(bool), typeof(ResourceInfo), typeof(CardLocation)]);
-#endif
+        Sts2CardHookCompatibility.ModifyCardPlayResultLocationMethodName,
+        Sts2CardHookCompatibility.ModifyCardPlayResultLocationParameterTypes);
 
     private static readonly MirrorMethodSpec AfterModifyingCardPlayResultLocation = MirrorMethodSpec.Hook(
-#if STS2_01071
-        nameof(AbstractModel.AfterModifyingCardPlayResultPileOrPosition),
-        [typeof(CardModel), typeof(PileType), typeof(CardPilePosition)]);
-#else
-        nameof(AbstractModel.AfterModifyingCardPlayResultLocation),
-        [typeof(CardModel), typeof(CardLocation)]);
-#endif
+        Sts2CardHookCompatibility.AfterModifyingCardPlayResultLocationMethodName,
+        Sts2CardHookCompatibility.AfterModifyingCardPlayResultLocationParameterTypes);
 
     private static readonly Registry Registry = CreateRegistry();
     private static readonly AfterRegistry AfterRegistry = CreateAfterRegistry();
@@ -55,26 +45,12 @@ internal static class ModifyCardPlayResultLocationMirrors
     private static CardLocation InvokeOriginal(
         AbstractModel listener,
         ModifyCardPlayResultLocationMirrorContext context)
-    {
-#if STS2_01071
-        var (pileType, position) = listener.ModifyCardPlayResultPileTypeAndPosition(
-            context.Card.Preview,
-            context.IsAutoPlay,
-            context.Resources,
-            context.Location.pileType,
-            context.Location.position);
-        var location = context.Location;
-        location.pileType = pileType;
-        location.position = position;
-        return location;
-#else
-        return listener.ModifyCardPlayResultLocation(
+        => Sts2CardHookCompatibility.InvokeModifyCardPlayResultLocation(
+            listener,
             context.Card.Preview,
             context.IsAutoPlay,
             context.Resources,
             context.Location);
-#endif
-    }
 
     private static Registry CreateRegistry()
     {

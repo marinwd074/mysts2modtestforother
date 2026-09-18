@@ -41,7 +41,7 @@ METRIC_PHYSICAL = {"roundReplayPrefixCaptures", "roundReplayPrefixReuses", "card
 
 def read(path):
     def load(name):
-        return json.loads((path / name).read_text())
+        return json.loads((path / name).read_text(encoding='utf-8'))
 
     result, details, memory = load("result.json"), load("details.json"), load("memory.json")
     if result["status"] != "Passed" or memory["launcherExitCode"] != 0:
@@ -122,7 +122,7 @@ def main():
         "excludedMetricSchedulingFields": sorted(METRIC_SCHEDULING),
         "forkNormalization": "forks - round_prefix_captures - card_prefix_fallbacks - potion_prefix_forks - potion_prefix_fallbacks == transitions",
         "comparisons": comparisons,
-    }, ensure_ascii=False, indent=2) + "\n")
+    }, ensure_ascii=False, indent=2) + "\n", encoding='utf-8')
     return 0 if all(c["oracleEqual"] for c in comparisons) else 1
 
 

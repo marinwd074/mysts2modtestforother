@@ -227,7 +227,7 @@ internal static class PreCombatForecastWorker
                 .Select(static mod => $"{mod.Id}@{mod.Version}")
                 .OrderBy(static value => value, StringComparer.Ordinal)
                 .ToArray();
-            UnattendedTestRequest request = new()
+            UnattendedRuntimeRequest request = new()
             {
                 RunId = requestId,
                 ScenarioId = options.SimulationSeed.HasValue
@@ -253,7 +253,7 @@ internal static class PreCombatForecastWorker
                 PreCombatPlayerCurrentHpOverride = options.PlayerCurrentHpOverride,
                 PreCombatSimulationSeed = options.SimulationSeed,
                 PreCombatInterveningMapPoints = options.InterveningMapPoints
-                    .Select(static step => new UnattendedPreCombatMapStep
+                    .Select(static step => new UnattendedRuntimePreCombatMapStep
                     {
                         Coordinate = step.Coordinate,
                         RoomType = step.RoomType,
@@ -272,7 +272,7 @@ internal static class PreCombatForecastWorker
             Entry.Logger.Info(
                 $"[CombatSolver/PreCombatApi] WORKER_REQUEST request_id={requestId} " +
                 $"pid={session.Process.Id} reused={reusedWorker} audio_muted={session.AudioMuted}");
-            UnattendedTestResult workerResult;
+            UnattendedRuntimeResult workerResult;
             try
             {
                 workerResult = await WaitForResultAsync(
@@ -332,7 +332,7 @@ internal static class PreCombatForecastWorker
                 throw;
             }
 
-            UnattendedSolverMetrics metrics = workerResult.SolverMetrics;
+            UnattendedRuntimeSolverMetrics metrics = workerResult.SolverMetrics;
             PreCombatForecastConfidence confidence = metrics.OnlyDeathRoutes
                 ? PreCombatForecastConfidence.DeathOnly
                 : metrics.CombatEndedTurn.HasValue
@@ -857,7 +857,7 @@ internal static class PreCombatForecastWorker
             ?? throw new InvalidOperationException("The isolated game process did not start.");
     }
 
-    private static async Task<UnattendedTestResult> WaitForResultAsync(
+    private static async Task<UnattendedRuntimeResult> WaitForResultAsync(
         Process process,
         string resultPath,
         string requestId,
@@ -869,9 +869,9 @@ internal static class PreCombatForecastWorker
             if (File.Exists(resultPath))
             {
                 string json = await File.ReadAllTextAsync(resultPath, cancellationToken).ConfigureAwait(false);
-                UnattendedTestResult? result = JsonSerializer.Deserialize<UnattendedTestResult>(
+                UnattendedRuntimeResult? result = JsonSerializer.Deserialize<UnattendedRuntimeResult>(
                     json,
-                    UnattendedTestFiles.JsonOptions);
+                    UnattendedRuntimeProtocol.JsonOptions);
                 if (result?.RunId == requestId)
                     return result;
             }
@@ -899,7 +899,7 @@ internal static class PreCombatForecastWorker
                 string json = await File.ReadAllTextAsync(readyPath, cancellationToken).ConfigureAwait(false);
                 WorkerReady? ready = JsonSerializer.Deserialize<WorkerReady>(
                     json,
-                    UnattendedTestFiles.JsonOptions);
+                    UnattendedRuntimeProtocol.JsonOptions);
                 if (ready?.RunId == requestId)
                 {
                     if (ready.Held)
@@ -940,7 +940,7 @@ internal static class PreCombatForecastWorker
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         string tempPath = path + ".tmp";
-        string json = JsonSerializer.Serialize(value, UnattendedTestFiles.JsonOptions);
+        string json = JsonSerializer.Serialize(value, UnattendedRuntimeProtocol.JsonOptions);
         await File.WriteAllTextAsync(tempPath, json, cancellationToken).ConfigureAwait(false);
         File.Move(tempPath, path, true);
     }

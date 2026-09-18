@@ -32,7 +32,7 @@ This file records that permission and is the NOTICE required by its conditions. 
 
 ## Scope and Ownership
 
-Random Foreseer code and the portions of Combat Solver derived from it remain subject to hotwords123's copyright and are distributed under the MIT License. Combat Solver's modifications, search system, deployment system, user interface, diagnostics, tests, documentation, and other original work are copyright Torch and their respective contributors and are also distributed under the MIT License.
+Random Foreseer code and the portions of Combat Solver derived from it remain subject to hotwords123's copyright and are distributed under the MIT License. Combat Solver's modifications, search system, deployment system, user interface, diagnostics, tests, documentation, and other original work are separate from that third-party code and are also distributed under the MIT License.
 
 Combat Solver does not load or distribute the Random Foreseer assembly as a runtime dependency. This runtime separation does not alter the source relationship described above.
 

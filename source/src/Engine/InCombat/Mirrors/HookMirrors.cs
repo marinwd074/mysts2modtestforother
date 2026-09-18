@@ -1278,15 +1278,20 @@ internal static partial class HookMirrors
         private readonly IReadOnlyList<AbstractModel>? _second;
 
         private readonly CombatPredictionSimulator _simulator;
-        private readonly MirroredHookMask _mask;
+        private readonly int[]? _filteredIndices;
 
         public HookListenerEnumerable(CombatPredictionSimulator simulator, IReadOnlyList<AbstractModel> listeners,
             MirroredHookMask mask = MirroredHookMask.All)
         {
             _simulator = simulator;
-            _mask = mask;
-            if (listeners is MirroredHookListenerSnapshot snapshot && !snapshot.HasAny(mask))
-                listeners = Array.Empty<AbstractModel>();
+            _filteredIndices = null;
+            if (listeners is MirroredHookListenerSnapshot snapshot)
+            {
+                if (!snapshot.HasAny(mask))
+                    listeners = Array.Empty<AbstractModel>();
+                else
+                    _filteredIndices = snapshot.Layout.IndicesFor(mask);
+            }
             if (listeners is ISegmentedModelList segmented)
             {
                 _first = segmented.Prefix;
@@ -1300,7 +1305,7 @@ internal static partial class HookMirrors
         }
 
         public Enumerator GetEnumerator()
-            => new(_simulator, _first, _second, _mask);
+            => new(_simulator, _first, _second, _filteredIndices);
 
         public bool Contains(AbstractModel candidate)
         {
@@ -1323,14 +1328,17 @@ internal static partial class HookMirrors
             CombatPredictionSimulator simulator,
             IReadOnlyList<AbstractModel> first,
             IReadOnlyList<AbstractModel>? second,
-            MirroredHookMask mask)
+            int[]? filteredIndices)
         {
             private IReadOnlyList<AbstractModel> _segment = first;
             private IReadOnlyList<AbstractModel>? _pending = second;
             private int _index = -1;
-            private MirroredHookListenerSnapshot? _filtered = first as MirroredHookListenerSnapshot;
+            private int[]? _filteredIndices = filteredIndices;
 
-            public AbstractModel Current => _segment[_index];
+            public AbstractModel Current
+                => _filteredIndices is { } indices
+                    ? _segment[indices[_index]]
+                    : _segment[_index];
 
             public bool MoveNext()
             {
@@ -1340,16 +1348,12 @@ internal static partial class HookMirrors
                 if (simulator.HasPendingChoice)
                     return false;
                 int next = _index + 1;
-                if (_filtered is { } filtered)
+                if (_filteredIndices is { } indices)
                 {
-                    while (next < filtered.Layout.Entries.Length)
+                    if (next < indices.Length)
                     {
-                        if ((filtered.Layout.Entries[next].Mask & mask) != 0)
-                        {
-                            _index = next;
-                            return true;
-                        }
-                        next++;
+                        _index = next;
+                        return true;
                     }
                 }
                 else if (next < _segment.Count)
@@ -1360,8 +1364,8 @@ internal static partial class HookMirrors
                 if (_pending is null)
                     return false;
                 _segment = _pending;
-                _filtered = _segment as MirroredHookListenerSnapshot;
                 _pending = null;
+                _filteredIndices = null;
                 _index = -1;
                 return MoveNext();
             }

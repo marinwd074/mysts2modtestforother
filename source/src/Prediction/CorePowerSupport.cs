@@ -488,7 +488,7 @@ internal static class CorePowerSupport
     {
         combat.RestoreTemporaryStrength(players);
         combat.RestoreTemporaryDexterity();
-        combat.RestoreTemporaryFocus();
+        // Native 0.107.1 keeps temporary Focus active through regular AfterSideTurnEnd hooks.
         foreach (Creature player in players)
         {
 #if STS2_01071
@@ -521,6 +521,7 @@ internal static class CorePowerSupport
         {
             return false;
         }
+        combat.RestoreTemporaryFocus();
         PowerLifecycleSupport.ResolvePowerAmountChanges(simulator, combat);
         if (simulator.HasPendingChoice)
             return false;

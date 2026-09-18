@@ -65,7 +65,7 @@ def build_command(item, out, harness):
 def log_messages(out):
     messages = []
     for path in sorted(out.glob('logs/*/*.jsonl')):
-        for line in path.read_text(errors='replace').splitlines():
+        for line in path.read_text(encoding='utf-8', errors='replace').splitlines():
             if not line.strip():
                 continue
             try:
@@ -84,7 +84,7 @@ def run_one(item, workspace, harness, keep_existing):
         if not keep_existing:
             raise FileExistsError(f'{out} 已存在；换工作区或加 --reuse')
         if (out / 'result.json').exists():
-            existing = json.loads((out / 'result.json').read_text())
+            existing = json.loads((out / 'result.json').read_text(encoding='utf-8'))
             existing['reused'] = True
             return existing
     out.mkdir(parents=True, exist_ok=True)
@@ -93,7 +93,7 @@ def run_one(item, workspace, harness, keep_existing):
     if item.get('dll'):
         env['OFFLINE_HARNESS_COMBATSOLVER_DLL'] = str(Path(item['dll']).resolve(strict=True))
     started = time.monotonic()
-    with (out / 'stdout.log').open('w') as log:
+    with (out / 'stdout.log').open('w', encoding='utf-8') as log:
         process = subprocess.run(build_command(item, out, harness), cwd=REPO, env=env,
                                  stdout=log, stderr=subprocess.STDOUT,
                                  timeout=max(PROCESS_TIMEOUT_SECONDS,
@@ -105,7 +105,7 @@ def run_one(item, workspace, harness, keep_existing):
     if not result_path.exists():
         return {'label': label, 'status': 'Failed', 'error': '宿主没有写出 result.json',
                 'exitCode': process.returncode, 'processWallSeconds': round(wall, 2)}
-    result = json.loads(result_path.read_text())
+    result = json.loads(result_path.read_text(encoding='utf-8'))
     result['exitCode'] = process.returncode
     result['processWallSeconds'] = round(wall, 2)
 
@@ -118,9 +118,9 @@ def run_one(item, workspace, harness, keep_existing):
     result['valid'] = (process.returncode == 0 and result.get('status') == 'Passed' and not hit_time)
     if not result['valid'] and hit_time:
         result.setdefault('error', '撞到搜索时间边界，本根作废')
-    result_path.write_text(json.dumps(result, ensure_ascii=False, indent=2))
+    result_path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
     if messages:
-        (out / 'search-messages.json').write_text(json.dumps(messages, ensure_ascii=False, indent=1))
+        (out / 'search-messages.json').write_text(json.dumps(messages, ensure_ascii=False, indent=1), encoding='utf-8')
     return result
 
 
@@ -156,7 +156,7 @@ def main():
     harness = args.harness.resolve(strict=True)
     workspace = args.workspace.resolve()
     workspace.mkdir(parents=True, exist_ok=True)
-    plan = json.loads(args.plan.read_text())
+    plan = json.loads(args.plan.read_text(encoding='utf-8'))
     if not isinstance(plan, list) or not plan:
         raise SystemExit('plan 必须是非空数组')
     labels = [item['label'] for item in plan]
@@ -170,7 +170,7 @@ def main():
     started = time.monotonic()
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
         futures = {pool.submit(run_one, item, workspace, harness, args.reuse): item for item in plan}
-        with jsonl.open('a') as stream:
+        with jsonl.open('a', encoding='utf-8') as stream:
             for future in concurrent.futures.as_completed(futures):
                 item = futures[future]
                 try:
@@ -192,7 +192,7 @@ def main():
         'plan': str(args.plan), 'workers': args.workers, 'roots': len(plan),
         'invalid': failures, 'elapsedSeconds': round(elapsed, 2),
         'summaries': sorted(summaries, key=lambda row: row['label'] or ''),
-    }, ensure_ascii=False, indent=2))
+    }, ensure_ascii=False, indent=2), encoding='utf-8')
     print(f'# roots={len(plan)} invalid={failures} workers={args.workers} elapsed={elapsed:.1f}s', flush=True)
     return 1 if failures else 0
 

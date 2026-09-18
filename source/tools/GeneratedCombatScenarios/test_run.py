@@ -28,7 +28,7 @@ class SuiteLifecycle(unittest.TestCase):
                 directory = Path(command[normalized.index('evidencedirectory')+1])
                 failed = directory.name == '0000'
                 (directory/'result.json').write_text(json.dumps(dict(status='Failed' if failed else 'Passed',
-                    runId=directory.name, error='fixture failure' if failed else None)))
+                    runId=directory.name, error='fixture failure' if failed else None)), encoding='utf-8')
                 return subprocess.CompletedProcess(command, 1 if failed else 0)
             with patch.object(sys, 'argv', argv), patch.object(subprocess, 'run', fake_run):
                 if interrupt:
@@ -36,7 +36,7 @@ class SuiteLifecycle(unittest.TestCase):
                         suite.main()
                 else:
                     self.assertEqual(1, suite.main())
-                    rows = [json.loads(line) for line in (output/'results.jsonl').read_text().splitlines()]
+                    rows = [json.loads(line) for line in (output/'results.jsonl').read_text(encoding='utf-8').splitlines()]
                     self.assertEqual(['Failed', 'Passed'], [x['status'] for x in rows])
                     self.assertNotEqual(rows[0]['evidence'], rows[1]['evidence'])
                     self.assertEqual('fixture failure', rows[0]['error'])

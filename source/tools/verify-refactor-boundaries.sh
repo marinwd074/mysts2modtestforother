@@ -150,9 +150,39 @@ shopt -u nullglob
 
 cycle_policy_paths=(
     "$search_root/CombatBeamSolver.CyclePlanning.cs"
+    "$search_root/CombatBeamSolver.BeamRetentionPolicy.Cycle.cs"
     "$search_root/CombatBeamSolver.CycleRegionRetention.cs"
     "$search_root/CombatBeamSolver.OrderedMutationRetention.cs"
 )
+hook_compatibility_path="$repository_root/src/Compatibility/Sts2HookCompatibility.cs"
+after_block_broken_mirror_path="$repository_root/src/Engine/InCombat/Mirrors/Hooks/Block/AfterBlockBrokenMirrors.cs"
+require_fixed "$hook_compatibility_path" 'internal static class Sts2HookCompatibility' 'missing compatibility hook boundary:'
+require_fixed "$hook_compatibility_path" 'AfterBlockBrokenParameterTypes' 'missing compatibility hook parameter shape:'
+require_fixed "$after_block_broken_mirror_path" 'Sts2HookCompatibility.AfterBlockBrokenParameterTypes' 'AfterBlockBroken mirror bypasses compatibility:'
+forbid_fixed "$after_block_broken_mirror_path" '#if STS2_01071' 'native AfterBlockBroken parameter shape returned outside Compatibility:'
+
+turn_setup_compatibility_path="$repository_root/src/Compatibility/Sts2TurnSetupCompatibility.cs"
+turn_setup_patch_path="$repository_root/src/Runtime/PlayerTurnSetupPatches.cs"
+require_fixed "$turn_setup_compatibility_path" 'SetupPlayerTurnParameterTypes' 'missing turn-setup compatibility parameter shape:'
+require_fixed "$turn_setup_compatibility_path" 'RunAutoPrePlayPhaseParameterTypes' 'missing turn-setup compatibility parameter shape:'
+require_fixed "$turn_setup_patch_path" 'Sts2TurnSetupCompatibility.SetupPlayerTurnParameterTypes' 'turn-setup patch bypasses compatibility:'
+require_fixed "$turn_setup_patch_path" 'Sts2TurnSetupCompatibility.RunAutoPrePlayPhaseParameterTypes' 'turn-setup patch bypasses compatibility:'
+forbid_fixed "$turn_setup_patch_path" 'CombatTurnStateType' 'native turn-state type returned outside Compatibility:'
+
+patch_registration_path="$repository_root/src/Runtime/PatchRegistration.cs"
+entry_path="$repository_root/src/Runtime/Entry.cs"
+require_fixed "$patch_registration_path" 'internal static class PatchRegistration' 'missing patch-registration boundary:'
+require_fixed "$patch_registration_path" 'ApplyRequiredPatches' 'missing patch-registration entry point:'
+require_fixed "$patch_registration_path" 'patcher.RegisterPatch<PlayerTurnSetupPatch>();' 'patch-registration list lost its first patch:'
+require_fixed "$patch_registration_path" 'RitsuLibFramework.ApplyRequiredPatcher(patcher, onFailure);' 'patch-registration failure boundary moved:'
+require_fixed "$entry_path" 'PatchRegistration.ApplyRequiredPatches(ModId, DisableMod);' 'Entry bypasses patch-registration boundary:'
+for retired_patch_registration_call in \
+    'RitsuLibFramework.CreatePatcher(' \
+    'patcher.RegisterPatch<' \
+    'RitsuLibFramework.ApplyRequiredPatcher('; do
+    forbid_fixed "$entry_path" "$retired_patch_registration_call" 'patch registration returned to Entry:'
+done
+
 legacy_loop_guard_paths=(
     "$search_root/CombatBeamSolver.Expansion.cs"
     "$search_root/CombatBeamSolver.ParallelExpansion.cs"
@@ -235,13 +265,34 @@ for ordered_coordinator_rule in \
     'HasOrdinaryAnchor'; do
     if [[ "$ordered_coordinator_rule" == 'Every independent retention channel must finish before the ordered coordinator.' ]]; then
         ordered_coordinator_path="$search_root/CombatBeamSolver.Retention.cs"
+    elif [[ "$ordered_coordinator_rule" == 'BuildOrderedMutationContinuationAdmissionLease(candidate);' ]]; then
+        ordered_coordinator_path="$search_root/CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"
     else
-        ordered_coordinator_path="$search_root/CombatBeamSolver.BeamRetentionPolicy.cs"
+        ordered_coordinator_path="$search_root/CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"
     fi
     require_fixed \
         "$ordered_coordinator_path" \
         "$ordered_coordinator_rule" \
         'unified ordered-mutation coordinator invariant is missing:'
+done
+for mutation_member in \
+    'ArmOrderedMutationObservationBridges(' \
+    'BuildOrderedMutationContinuationAdmissionLease(' \
+    'VerifyOrderedMutationKeyPolicyForTesting('; do
+    require_fixed \
+        "$search_root/CombatBeamSolver.BeamRetentionPolicy.Mutation.cs" \
+        "$mutation_member" \
+        'Mutation partial is missing:'
+done
+for retired_mutation_member in \
+    'AddOrderedMutationPortfolio(' \
+    'ArmOrderedMutationObservationBridges(' \
+    'BuildOrderedMutationContinuationAdmissionLease(' \
+    'VerifyOrderedMutationKeyPolicyForTesting('; do
+    forbid_fixed \
+        "$search_root/CombatBeamSolver.BeamRetentionPolicy.cs" \
+        "$retired_mutation_member" \
+        'Mutation member returned to facade:'
 done
 for ordered_metric in \
     'ordered_admitted=' \
@@ -448,7 +499,7 @@ while IFS=$'\t' read -r relative_path text; do
     require_fixed "$repository_root/$relative_path" "$text" 'missing GC research ownership boundary'
 done <<'EOF'
 src/Runtime/SearchGcPolicy.cs	scope.CompleteLifecycle(CaptureLifecycle())
-src/Runtime/SolverController.cs	SearchGcPolicy.EnterSearchScope(
+src/Runtime/SolverController.SearchLifecycle.cs	SearchGcPolicy.EnterSearchScope(
 src/Search/CombatBeamSolver.Models.cs	ExpansionBatchPool = new(static snapshot => snapshot.ReleaseSimulator())
 src/Search/CombatBeamSolver.ParallelExpansion.cs	new(_run.ExpansionBatchPool)
 src/Search/CombatBeamSolver.Phases.cs	SearchWaveMemoryPolicy.ParentWaveCapacity(
@@ -495,7 +546,7 @@ while IFS=$'\t' read -r relative_path text; do
     require_fixed "$repository_root/$relative_path" "$text" 'missing root snapshot boundary'
 done <<'EOF'
 src/Runtime/CombatRootSnapshot.cs	Combat root snapshot must be captured on the main thread.
-src/Runtime/SolverController.cs	CombatRootSnapshot.Capture(state)
+src/Runtime/SolverController.SearchLifecycle.cs	CombatRootSnapshot.Capture(state)
 src/Runtime/PlayerTurnSetupPatches.cs	CombatRootSnapshot.Capture(combat)
 src/Search/CombatSearchCoordinator.cs	CombatRootSnapshot root
 src/Search/RootCombatHistorySnapshot.cs	history.CardPlaysStarted.ToArray()
@@ -537,6 +588,7 @@ expected_beam_files=(
     CombatBeamSolver.cs
     CombatBeamSolver.AdmittedExpansion.cs
     CombatBeamSolver.EndTurnChoiceReplay.cs
+    CombatBeamSolver.EndTurnExpansion.cs
     CombatBeamSolver.RoundTransition.cs
     CombatBeamSolver.CardChoiceContinuation.cs
     CombatBeamSolver.PotionChoiceContinuation.cs
@@ -544,6 +596,11 @@ expected_beam_files=(
     CombatBeamSolver.ExecutionChoiceContinuation.Testing.cs
     CombatBeamSolver.TurnExecutionContinuation.cs
     CombatBeamSolver.BeamRetentionPolicy.cs
+    CombatBeamSolver.BeamRetentionPolicy.Choice.cs
+    CombatBeamSolver.BeamRetentionPolicy.Potion.cs
+    CombatBeamSolver.BeamRetentionPolicy.Mutation.cs
+    CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs
+    CombatBeamSolver.BeamRetentionPolicy.Cycle.cs
     CombatBeamSolver.BlockPotionInsertion.cs
     CombatBeamSolver.CrossTurnPlanning.cs
     CombatBeamSolver.CyclePlanning.cs
@@ -552,6 +609,7 @@ expected_beam_files=(
     CombatBeamSolver.FinalPlanOrdering.cs
     CombatBeamSolver.Models.cs
     CombatBeamSolver.NoveltySearch.cs
+    CombatBeamSolver.OpeningExpansion.cs
     CombatBeamSolver.Transpositions.cs
     CombatBeamSolver.OrderedMutationRetention.cs
     CombatBeamSolver.ParallelExpansion.cs
@@ -597,7 +655,24 @@ NoveltyPortfolioBudget.cs	profile.MaxExpandedNodes - (int)expandedNodes
 CombatBeamSolver.cs	private readonly SearchRunContext _run = new(
 CombatBeamSolver.cs	private BeamRetentionPolicy Retention =>
 CombatBeamSolver.cs	private FinalPlanOrdering FinalOrdering =>
-CombatBeamSolver.BeamRetentionPolicy.cs	private sealed class BeamRetentionPolicy(
+CombatBeamSolver.BeamRetentionPolicy.cs	private sealed partial class BeamRetentionPolicy(
+CombatBeamSolver.BeamRetentionPolicy.Choice.cs	private sealed partial class BeamRetentionPolicy
+CombatBeamSolver.BeamRetentionPolicy.Choice.cs	BuildRootActionLineageSignature(SearchNode node)
+CombatBeamSolver.BeamRetentionPolicy.Potion.cs	private sealed partial class BeamRetentionPolicy
+CombatBeamSolver.BeamRetentionPolicy.Potion.cs	FinalPolicyQualificationFacts(
+CombatBeamSolver.BeamRetentionPolicy.Potion.cs	BuildFinalPolicyQualificationFacts(SearchNode node)
+CombatBeamSolver.BeamRetentionPolicy.Potion.cs	CompareFinalPolicyQualificationSignatures(
+CombatBeamSolver.BeamRetentionPolicy.Potion.cs	ReservePotionQuotaLeaders(
+CombatBeamSolver.BeamRetentionPolicy.Mutation.cs	private sealed partial class BeamRetentionPolicy
+CombatBeamSolver.BeamRetentionPolicy.Mutation.cs	public void AddOrderedMutationPortfolio(
+CombatBeamSolver.BeamRetentionPolicy.Mutation.cs	ArmOrderedMutationObservationBridges(
+CombatBeamSolver.BeamRetentionPolicy.Mutation.cs	VerifyOrderedMutationKeyPolicyForTesting(
+CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs	private sealed partial class BeamRetentionPolicy
+CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs	public void AddCrossTurnPortfolio(
+CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs	public static bool RequiresCrossTurnPlanning(SearchNode node)
+CombatBeamSolver.BeamRetentionPolicy.Cycle.cs	private sealed partial class BeamRetentionPolicy
+CombatBeamSolver.BeamRetentionPolicy.Cycle.cs	public void AddCyclePortfolio(
+CombatBeamSolver.BeamRetentionPolicy.Cycle.cs	public void AddCycleExitPortfolio(
 CombatBeamSolver.BeamRetentionPolicy.cs	public List<SearchNode> RankBest(
 CombatBeamSolver.BeamRetentionPolicy.cs	private sealed class RoutingChoiceNodes(SearchNode first) : List<SearchNode>
 CombatBeamSolver.BeamRetentionPolicy.cs	public void Clear() => NodesByChoice.Clear();
@@ -631,6 +706,10 @@ CombatBeamSolver.RoundTransition.cs	checkpoint.HandDrawCount.HasValue ? PlayerSt
 RootCombatCardGenerationPoolSnapshot.cs	public bool TryGetEligibleCharacterCards(
 CombatBeamSolver.Retention.cs	var maximum = BeamRetentionPolicy.GetLongTermResourceMaximum(pool);
 CombatBeamSolver.Retention.cs	if (maximum.Count == pool.Count)
+CombatBeamSolver.Retention.cs	Retention.AddCrossTurnPortfolio(pool, selected, selectedSet);
+CombatBeamSolver.Retention.cs	Retention.AddCyclePortfolio(pool, selected, selectedSet);
+CombatBeamSolver.Retention.cs	Retention.AddCycleExitPortfolio(pool, selected, selectedSet);
+CombatBeamSolver.Retention.cs	BeamRetentionPolicy.RequiresCrossTurnPlanning(candidate)
 CombatBeamSolver.EndTurnChoiceReplay.cs	capture.ObservePendingChoice(this, pendingSourceId);
 CombatBeamSolver.AdmittedExpansion.cs	endTurn.TransferEndTurnTo(Aggregate!, candidate);
 CombatBeamSolver.AdmittedExpansion.cs	PublishCrossTurnStandPatBaselines(Node, _endTurnBaselines);
@@ -658,7 +737,7 @@ CombatBeamSolver.RetentionJobs.cs	wave.Completed.Wait();
 CombatBeamSolver.RetentionJobs.cs	_coordinator._run.OffThreadAllocatedBytes += job.AllocatedBytes;
 CombatBeamSolver.RetentionJobs.cs	wave.Error?.Throw();
 CombatBeamSolver.BeamRetentionPolicy.cs	_run.RoutingChoiceSummaryBuilds += summaryGroups.Length;
-CombatBeamSolver.BeamRetentionPolicy.cs	RequestOrderedMutationObservation(candidate);
+CombatBeamSolver.BeamRetentionPolicy.Mutation.cs	RequestOrderedMutationObservation(candidate);
 SearchWaveMemoryPolicy.cs	return checked(degreeOfParallelism * 2);
 SearchWaveMemoryPolicy.cs	current >= maximum - current ? maximum : current * 2
 CombatBeamSolver.Phases.cs	SearchWaveMemoryPolicy.GrowCapacity(
@@ -704,6 +783,28 @@ require_fixed "$search_root/CombatBeamSolver.Retention.cs" 'SearchPathObservatio
 require_fixed "$search_root/CombatBeamSolver.BeamRetentionPolicy.cs" 'observedOptionLeaders.Add(optionLeader)' 'routing observation no longer captures the actual option leader:'
 forbid_fixed "$path_diagnostics_path" 'node.Actions;' 'path observer populates retained action caches:'
 require_fixed "$search_root/CombatBeamSolver.Retention.cs" 'SearchPathObservationStage.PruneFinal' 'final prune observation is missing:'
+for retired_cross_turn_member in \
+    'private void AddCrossTurnPortfolio(' \
+    'private static CrossTurnProbeFamilyKey' \
+    'private void StartCrossTurnProbe(' \
+    'private bool RequiresCrossTurnPlanning('; do
+    for cross_turn_path in \
+        "$search_root/CombatBeamSolver.Retention.cs" \
+        "$search_root/CombatBeamSolver.CrossTurnPlanning.cs"; do
+        forbid_fixed "$cross_turn_path" "$retired_cross_turn_member" 'CrossTurn retention member returned outside BeamRetentionPolicy.CrossTurn:'
+    done
+done
+for retired_cycle_member in \
+    'private void AddCyclePortfolio(' \
+    'private void AddCycleExitPortfolio(' \
+    'private CycleStartupRetentionKey BuildCycleStartupRetentionKey(' \
+    'private static SearchNode? FindActiveCycleExitCandidate(' \
+    'private static bool TryLeaseCycleExitCandidate(' \
+    'private static int CompareCycleExitFamilyCandidates(' \
+    'private static int CompareCycleExitCandidates(' \
+    'private static int CompareCycleProbeCandidates('; do
+    forbid_fixed "$search_root/CombatBeamSolver.Retention.cs" "$retired_cycle_member" 'Cycle retention member returned outside BeamRetentionPolicy.Cycle:'
+done
 stat_relic_mirror_path="$repository_root/src/Engine/InCombat/Mirrors/Hooks/Card/AfterCardPlayedMirrors.cs"
 require_fixed "$stat_relic_mirror_path" 'private static bool ApplyRelicStatPower(' 'relic stat application left its exact hook boundary:'
 require_fixed "$stat_relic_mirror_path" 'if (context.Simulator.IsEnding)' 'relic stat command ending guard is missing:'
@@ -929,9 +1030,9 @@ for renderer_path in "${overlay_renderer_paths[@]}"; do
     done
 done
 
-bug_report_exporter_path="$repository_root/src/Runtime/CombatBugReportExporter.cs"
+bug_report_exporter_path="$repository_root/src/Diagnostics/BugReports/CombatBugReportExporter.cs"
 diagnostic_journal_path="$repository_root/src/Runtime/CombatDiagnosticJournal.cs"
-bug_report_uploader_path="$repository_root/src/Runtime/CombatBugReportUploader.cs"
+bug_report_uploader_path="$repository_root/src/Diagnostics/BugReports/CombatBugReportUploader.cs"
 solver_settings_panel_path="$repository_root/src/UI/SolverSettingsPanel.cs"
 solver_settings_general_path="$repository_root/src/UI/SolverSettingsPanel.General.cs"
 solver_settings_performance_path="$repository_root/src/UI/SolverSettingsPanel.Performance.cs"
@@ -977,7 +1078,7 @@ $search_completion_notifier_path	EntryPoint = "Shell_NotifyIconW"
 $search_completion_notifier_path	EntryPoint = "LoadIconW"
 $search_completion_notifier_path	GetWindowThreadProcessId(foreground, out uint processId)
 $search_completion_notifier_path	ShellNotifyIcon(NotifyIconDelete, ref data)
-$repository_root/src/Runtime/SolverController.cs	SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Stale)
+$repository_root/src/Runtime/SolverController.SearchLifecycle.cs	SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Stale)
 $repository_root/src/Runtime/PlayerTurnSetupPatches.cs	SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Failed)
 $solver_settings_general_path	CreateSearchCompletionNotificationPolicyInput()
 EOF
@@ -1052,7 +1153,7 @@ src/Engine/Common/MirroredHookListenerFilter.cs	BaseHooks.Append(NativeKeywordHo
 src/Engine/InCombat/Simulation/CombatPredictedCardExtensions.cs	!listeners.HasAny(MirroredHookMask.TryModifyKeywordsInCombat)
 EOF
 
-for file in CombatBeamSolver.RetentionJobs.cs CombatBeamSolver.BeamRetentionPolicy.cs; do
+for file in CombatBeamSolver.RetentionJobs.cs CombatBeamSolver.BeamRetentionPolicy.cs CombatBeamSolver.BeamRetentionPolicy.Mutation.cs CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs CombatBeamSolver.BeamRetentionPolicy.Cycle.cs; do
     forbid_fixed "$search_root/$file" 'Parallel.For(' 'retention work bypassed fixed lanes:'
     forbid_fixed "$search_root/$file" 'Task.Run(' 'retention work bypassed fixed lanes:'
 done

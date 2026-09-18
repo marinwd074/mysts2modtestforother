@@ -61,6 +61,7 @@ $beamFiles = Get-ChildItem -LiteralPath $searchRoot -Filter "CombatBeamSolver*.c
 $beamPaths = @($beamFiles.FullName)
 $cyclePolicyPaths = @(
     (Join-Path $searchRoot "CombatBeamSolver.CyclePlanning.cs"),
+    (Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.Cycle.cs"),
     (Join-Path $searchRoot "CombatBeamSolver.CycleRegionRetention.cs"),
     (Join-Path $searchRoot "CombatBeamSolver.OrderedMutationRetention.cs")
 )
@@ -74,6 +75,56 @@ foreach ($file in $searchFiles) {
         foreach ($match in Select-String -LiteralPath $file.FullName -SimpleMatch $reference) {
             $violations.Add("$($file.FullName):$($match.LineNumber): forbidden Search reference '$reference'")
         }
+    }
+}
+
+$hookCompatibilityPath = Join-Path $repositoryRoot "src/Compatibility/Sts2HookCompatibility.cs"
+$afterBlockBrokenMirrorPath = Join-Path $repositoryRoot "src/Engine/InCombat/Mirrors/Hooks/Block/AfterBlockBrokenMirrors.cs"
+foreach ($compatibilityBoundary in @(
+    @{ Path = $hookCompatibilityPath; Text = "internal static class Sts2HookCompatibility" },
+    @{ Path = $hookCompatibilityPath; Text = "AfterBlockBrokenParameterTypes" },
+    @{ Path = $afterBlockBrokenMirrorPath; Text = "Sts2HookCompatibility.AfterBlockBrokenParameterTypes" })) {
+    if (-not (Select-String -LiteralPath $compatibilityBoundary.Path -SimpleMatch $compatibilityBoundary.Text -Quiet)) {
+        $violations.Add("$($compatibilityBoundary.Path): missing compatibility hook boundary '$($compatibilityBoundary.Text)'")
+    }
+}
+if (Select-String -LiteralPath $afterBlockBrokenMirrorPath -SimpleMatch "#if STS2_01071" -Quiet) {
+    $violations.Add("${afterBlockBrokenMirrorPath}: native AfterBlockBroken parameter shape returned outside Compatibility")
+}
+
+$turnSetupCompatibilityPath = Join-Path $repositoryRoot "src/Compatibility/Sts2TurnSetupCompatibility.cs"
+$turnSetupPatchPath = Join-Path $repositoryRoot "src/Runtime/PlayerTurnSetupPatches.cs"
+foreach ($turnSetupBoundary in @(
+    @{ Path = $turnSetupCompatibilityPath; Text = "SetupPlayerTurnParameterTypes" },
+    @{ Path = $turnSetupCompatibilityPath; Text = "RunAutoPrePlayPhaseParameterTypes" },
+    @{ Path = $turnSetupPatchPath; Text = "Sts2TurnSetupCompatibility.SetupPlayerTurnParameterTypes" },
+    @{ Path = $turnSetupPatchPath; Text = "Sts2TurnSetupCompatibility.RunAutoPrePlayPhaseParameterTypes" })) {
+    if (-not (Select-String -LiteralPath $turnSetupBoundary.Path -SimpleMatch $turnSetupBoundary.Text -Quiet)) {
+        $violations.Add("$($turnSetupBoundary.Path): missing turn-setup compatibility boundary '$($turnSetupBoundary.Text)'")
+    }
+}
+if (Select-String -LiteralPath $turnSetupPatchPath -SimpleMatch "CombatTurnStateType" -Quiet) {
+    $violations.Add("${turnSetupPatchPath}: native turn-state type returned outside Compatibility")
+}
+
+$patchRegistrationPath = Join-Path $repositoryRoot "src/Runtime/PatchRegistration.cs"
+$entryPath = Join-Path $repositoryRoot "src/Runtime/Entry.cs"
+foreach ($patchRegistrationBoundary in @(
+    @{ Path = $patchRegistrationPath; Text = "internal static class PatchRegistration" },
+    @{ Path = $patchRegistrationPath; Text = "ApplyRequiredPatches" },
+    @{ Path = $patchRegistrationPath; Text = "patcher.RegisterPatch<PlayerTurnSetupPatch>();" },
+    @{ Path = $patchRegistrationPath; Text = "RitsuLibFramework.ApplyRequiredPatcher(patcher, onFailure);" },
+    @{ Path = $entryPath; Text = "PatchRegistration.ApplyRequiredPatches(ModId, DisableMod);" })) {
+    if (-not (Select-String -LiteralPath $patchRegistrationBoundary.Path -SimpleMatch $patchRegistrationBoundary.Text -Quiet)) {
+        $violations.Add("$($patchRegistrationBoundary.Path): missing patch-registration boundary '$($patchRegistrationBoundary.Text)'")
+    }
+}
+foreach ($retiredPatchRegistrationCall in @(
+    "RitsuLibFramework.CreatePatcher(",
+    "patcher.RegisterPatch<",
+    "RitsuLibFramework.ApplyRequiredPatcher(")) {
+    if (Select-String -LiteralPath $entryPath -SimpleMatch $retiredPatchRegistrationCall -Quiet) {
+        $violations.Add("${entryPath}: patch registration returned to Entry '$retiredPatchRegistrationCall'")
     }
 }
 
@@ -149,14 +200,32 @@ foreach ($orderedTransactionRule in @(
     }
 }
 $orderedCoordinatorPaths = @{
-    'BuildOrderedMutationContinuationAdmissionLease(candidate);' = Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.cs"
+    'BuildOrderedMutationContinuationAdmissionLease(candidate);' = Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"
     'Every independent retention channel must finish before the ordered coordinator.' = Join-Path $searchRoot "CombatBeamSolver.Retention.cs"
-    'Any inherited lane left outside this prune' = Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.cs"
-    'HasOrdinaryAnchor' = Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.cs"
+    'Any inherited lane left outside this prune' = Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"
+    'HasOrdinaryAnchor' = Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"
 }
 foreach ($entry in $orderedCoordinatorPaths.GetEnumerator()) {
     if (-not (Select-String -LiteralPath $entry.Value -SimpleMatch $entry.Key -Quiet)) {
         $violations.Add("$($entry.Value): unified ordered-mutation coordinator invariant is missing '$($entry.Key)'")
+    }
+}
+$mutationPolicyPath = Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"
+foreach ($requiredMutationMember in @(
+    'ArmOrderedMutationObservationBridges(',
+    'BuildOrderedMutationContinuationAdmissionLease(',
+    'VerifyOrderedMutationKeyPolicyForTesting(')) {
+    if (-not (Select-String -LiteralPath $mutationPolicyPath -SimpleMatch $requiredMutationMember -Quiet)) {
+        $violations.Add("${mutationPolicyPath}: Mutation partial is missing '$requiredMutationMember'")
+    }
+}
+foreach ($retiredMutationMember in @(
+    'AddOrderedMutationPortfolio(',
+    'ArmOrderedMutationObservationBridges(',
+    'BuildOrderedMutationContinuationAdmissionLease(',
+    'VerifyOrderedMutationKeyPolicyForTesting(')) {
+    if (Select-String -LiteralPath (Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.cs") -SimpleMatch $retiredMutationMember -Quiet) {
+        $violations.Add("${searchRoot}/CombatBeamSolver.BeamRetentionPolicy.cs: Mutation member returned to facade '$retiredMutationMember'")
     }
 }
 $solverDiagnosticsPath = Join-Path $repositoryRoot "src\Runtime\SolverDiagnostics.cs"
@@ -370,7 +439,7 @@ if (Select-String -LiteralPath $searchGcPolicyPath -SimpleMatch "ReclaimAfterAct
 # GC admission accounting and scratch-container ownership remain in their existing layers.
 foreach ($check in @(
     @{ RelativePath = "src/Runtime/SearchGcPolicy.cs"; Text = "scope.CompleteLifecycle(CaptureLifecycle())" },
-    @{ RelativePath = "src/Runtime/SolverController.cs"; Text = "SearchGcPolicy.EnterSearchScope(" },
+    @{ RelativePath = "src/Runtime/SolverController.SearchLifecycle.cs"; Text = "SearchGcPolicy.EnterSearchScope(" },
     @{ RelativePath = "src/Search/CombatBeamSolver.Models.cs"; Text = "ExpansionBatchPool = new(static snapshot => snapshot.ReleaseSimulator())" },
     @{ RelativePath = "src/Search/CombatBeamSolver.ParallelExpansion.cs"; Text = "new(_run.ExpansionBatchPool)" },
     @{ RelativePath = "src/Engine/InCombat/Simulation/CombatPredictionRngSet.cs"; Text = "private sealed class FrozenStream(PredictionRngState state)" },
@@ -425,7 +494,7 @@ $rootSnapshotChecks = @(
         Text = "Combat root snapshot must be captured on the main thread."
     },
     @{
-        Path = Join-Path $repositoryRoot "src\Runtime\SolverController.cs"
+        Path = Join-Path $repositoryRoot "src\Runtime\SolverController.SearchLifecycle.cs"
         Text = "CombatRootSnapshot.Capture(state)"
     },
     @{
@@ -452,15 +521,15 @@ $preCombatApiChecks = @(
         Text = "public static class CombatShowcaseApi"
     },
     @{
-        Path = Join-Path $repositoryRoot "src\Runtime\CombatShowcaseRuntime.cs"
+        Path = Join-Path $repositoryRoot "src\Replay\CombatShowcaseRuntime.cs"
         Text = "SolverController.AcceptShowcaseRoute"
     },
     @{
-        Path = Join-Path $repositoryRoot "src\Runtime\CombatShowcaseCollector.cs"
+        Path = Join-Path $repositoryRoot "src\Replay\CombatShowcaseCollector.cs"
         Text = "CombatShowcaseCollector.FlushPendingAsync"
     },
     @{
-        Path = Join-Path $repositoryRoot "src\Runtime\CombatShowcaseModEligibility.cs"
+        Path = Join-Path $repositoryRoot "src\Replay\CombatShowcaseModEligibility.cs"
         Text = "FindGameplayModificationNames"
     },
     @{
@@ -561,6 +630,7 @@ $expectedBeamFiles = @(
     "CombatBeamSolver.cs",
     "CombatBeamSolver.AdmittedExpansion.cs",
     "CombatBeamSolver.EndTurnChoiceReplay.cs",
+    "CombatBeamSolver.EndTurnExpansion.cs",
     "CombatBeamSolver.RoundTransition.cs",
     "CombatBeamSolver.CardChoiceContinuation.cs",
     "CombatBeamSolver.PotionChoiceContinuation.cs",
@@ -568,6 +638,12 @@ $expectedBeamFiles = @(
     "CombatBeamSolver.ExecutionChoiceContinuation.Testing.cs",
     "CombatBeamSolver.TurnExecutionContinuation.cs",
     "CombatBeamSolver.BeamRetentionPolicy.cs",
+    "CombatBeamSolver.BeamRetentionPolicy.Choice.cs",
+    "CombatBeamSolver.BeamRetentionPolicy.Potion.cs",
+    "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs",
+    "CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs",
+    "CombatBeamSolver.BeamRetentionPolicy.Cycle.cs",
+    "CombatBeamSolver.BeamRanking.cs",
     "CombatBeamSolver.BlockPotionInsertion.cs",
     "CombatBeamSolver.CrossTurnPlanning.cs",
     "CombatBeamSolver.CyclePlanning.cs",
@@ -576,6 +652,7 @@ $expectedBeamFiles = @(
     "CombatBeamSolver.FinalPlanOrdering.cs",
     "CombatBeamSolver.Models.cs",
     "CombatBeamSolver.NoveltySearch.cs",
+    "CombatBeamSolver.OpeningExpansion.cs",
     "CombatBeamSolver.Transpositions.cs",
     "CombatBeamSolver.OrderedMutationRetention.cs",
     "CombatBeamSolver.ParallelExpansion.cs",
@@ -591,7 +668,7 @@ $expectedBeamFiles = @(
 $pathDiagnosticsPath = Join-Path $searchRoot "CombatBeamSolver.PathDiagnostics.cs"
 foreach ($required in @(
     @{ Path = (Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.cs"); Text = 'HasRetainedRoutingChoice: RetainedRoutingChoice(node) != null' },
-    @{ Path = (Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.cs"); Text = 'if (values.HasRetainedRoutingChoice)' },
+    @{ Path = (Join-Path $searchRoot "CombatBeamSolver.BeamRanking.cs"); Text = 'if (values.HasRetainedRoutingChoice)' },
     @{ Path = (Join-Path $repositoryRoot "src/Testing/UnattendedTestRunner.SearchPolicy.cs"); Text = 'seven, [], [0, 7, 1, 4, 2, 5, 6], useTacticalOrder: true);' },
     @{ Path = (Join-Path $repositoryRoot "src/Testing/UnattendedTestRunner.Executor.cs"); Text = 'KNOWN-SOUL-GENERATION-CONTEXT-V0111' },
     @{ Path = (Join-Path $repositoryRoot "src/Testing/UnattendedTestRunner.Executor.cs"); Text = 'KNOWN-SOUL-GENERATION-SUFFIX-V0111' },
@@ -612,6 +689,10 @@ foreach ($required in @(
     @{ Path = $pathDiagnosticsPath; Text = 'SearchPathObservationStage.RetentionPoolInput' },
     @{ Path = $pathDiagnosticsPath; Text = 'Evaluation: new SearchPathEvaluationValues(' },
     @{ Path = (Join-Path $searchRoot "CombatBeamSolver.Retention.cs"); Text = 'SearchPathObservationStage.RetentionPoolFinal' },
+    @{ Path = (Join-Path $searchRoot "CombatBeamSolver.Retention.cs"); Text = 'Retention.AddCrossTurnPortfolio(pool, selected, selectedSet);' },
+    @{ Path = (Join-Path $searchRoot "CombatBeamSolver.Retention.cs"); Text = 'Retention.AddCyclePortfolio(pool, selected, selectedSet);' },
+    @{ Path = (Join-Path $searchRoot "CombatBeamSolver.Retention.cs"); Text = 'Retention.AddCycleExitPortfolio(pool, selected, selectedSet);' },
+    @{ Path = (Join-Path $searchRoot "CombatBeamSolver.Retention.cs"); Text = 'BeamRetentionPolicy.RequiresCrossTurnPlanning(candidate)' },
     @{ Path = (Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.cs"); Text = 'observedOptionLeaders.Add(optionLeader)' },
     @{ Path = (Join-Path $searchRoot "CombatBeamSolver.Retention.cs"); Text = 'SearchPathObservationStage.PruneFinal' },
     @{ Path = (Join-Path $repositoryRoot "src\Engine\InCombat\Mirrors\Hooks\Card\AfterCardPlayedMirrors.cs"); Text = 'private static bool ApplyRelicStatPower(' },
@@ -627,6 +708,32 @@ foreach ($forbidden in @(
     @{ Path = (Join-Path $searchRoot "SimulatedCombatState.Relics.cs"); Text = 'Apply<DexterityPower>' })) {
     foreach ($match in Select-String -LiteralPath $forbidden.Path -SimpleMatch $forbidden.Text) {
         $violations.Add("$($match.Path):$($match.LineNumber): observer cache mutation or deferred relic stat application returned '$($forbidden.Text)'")
+    }
+}
+foreach ($retiredCrossTurnMember in @(
+    'private void AddCrossTurnPortfolio(',
+    'private static CrossTurnProbeFamilyKey',
+    'private void StartCrossTurnProbe(',
+    'private bool RequiresCrossTurnPlanning(')) {
+    foreach ($path in @(
+        (Join-Path $searchRoot "CombatBeamSolver.Retention.cs"),
+        (Join-Path $searchRoot "CombatBeamSolver.CrossTurnPlanning.cs"))) {
+        foreach ($match in Select-String -LiteralPath $path -SimpleMatch $retiredCrossTurnMember) {
+            $violations.Add("${path}:$($match.LineNumber): CrossTurn retention member returned outside BeamRetentionPolicy.CrossTurn '$retiredCrossTurnMember'")
+        }
+    }
+}
+foreach ($retiredCycleMember in @(
+    'private void AddCyclePortfolio(',
+    'private void AddCycleExitPortfolio(',
+    'private CycleStartupRetentionKey BuildCycleStartupRetentionKey(',
+    'private static SearchNode? FindActiveCycleExitCandidate(',
+    'private static bool TryLeaseCycleExitCandidate(',
+    'private static int CompareCycleExitFamilyCandidates(',
+    'private static int CompareCycleExitCandidates(',
+    'private static int CompareCycleProbeCandidates(')) {
+    foreach ($match in Select-String -LiteralPath (Join-Path $searchRoot "CombatBeamSolver.Retention.cs") -SimpleMatch $retiredCycleMember) {
+        $violations.Add("$($match.Path):$($match.LineNumber): Cycle retention member returned outside BeamRetentionPolicy.Cycle '$retiredCycleMember'")
     }
 }
 $actualBeamFiles = @($beamFiles.Name | Sort-Object)
@@ -652,7 +759,26 @@ $beamStructureChecks = @(
     @{ File = "CombatBeamSolver.cs"; Text = "private readonly SearchRunContext _run = new(" },
     @{ File = "CombatBeamSolver.cs"; Text = "private BeamRetentionPolicy Retention =>" },
     @{ File = "CombatBeamSolver.cs"; Text = "private FinalPlanOrdering FinalOrdering =>" },
-    @{ File = "CombatBeamSolver.BeamRetentionPolicy.cs"; Text = "private sealed class BeamRetentionPolicy(" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.cs"; Text = "private sealed partial class BeamRetentionPolicy(" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Choice.cs"; Text = "private sealed partial class BeamRetentionPolicy" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Choice.cs"; Text = "BuildRootActionLineageSignature(SearchNode node)" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Potion.cs"; Text = "private sealed partial class BeamRetentionPolicy" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Potion.cs"; Text = "FinalPolicyQualificationFacts(" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Potion.cs"; Text = "BuildFinalPolicyQualificationFacts(SearchNode node)" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Potion.cs"; Text = "CompareFinalPolicyQualificationSignatures(" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Potion.cs"; Text = "ReservePotionQuotaLeaders(" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Potion.cs"; Text = "PotionUseLineageKey(SearchNode node)" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Potion.cs"; Text = "private static bool UsesPotion(SearchNode node)" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"; Text = "private sealed partial class BeamRetentionPolicy" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"; Text = "public void AddOrderedMutationPortfolio(" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"; Text = "ArmOrderedMutationObservationBridges(" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"; Text = "VerifyOrderedMutationKeyPolicyForTesting(" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs"; Text = "private sealed partial class BeamRetentionPolicy" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs"; Text = "public void AddCrossTurnPortfolio(" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs"; Text = "public static bool RequiresCrossTurnPlanning(SearchNode node)" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Cycle.cs"; Text = "private sealed partial class BeamRetentionPolicy" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Cycle.cs"; Text = "public void AddCyclePortfolio(" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Cycle.cs"; Text = "public void AddCycleExitPortfolio(" },
     @{ File = "CombatBeamSolver.BeamRetentionPolicy.cs"; Text = "public List<SearchNode> RankBest(" },
     @{ File = "CombatBeamSolver.BeamRetentionPolicy.cs"; Text = "private sealed class RoutingChoiceNodes(SearchNode first) : List<SearchNode>" },
     @{ File = "CombatBeamSolver.BeamRetentionPolicy.cs"; Text = "public void Clear() => NodesByChoice.Clear();" },
@@ -714,7 +840,7 @@ $beamStructureChecks = @(
     @{ File = "CombatBeamSolver.RetentionJobs.cs"; Text = "_coordinator._run.OffThreadAllocatedBytes += job.AllocatedBytes;" },
     @{ File = "CombatBeamSolver.RetentionJobs.cs"; Text = "wave.Error?.Throw();" },
     @{ File = "CombatBeamSolver.BeamRetentionPolicy.cs"; Text = "_run.RoutingChoiceSummaryBuilds += summaryGroups.Length;" },
-    @{ File = "CombatBeamSolver.BeamRetentionPolicy.cs"; Text = "RequestOrderedMutationObservation(candidate);" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"; Text = "RequestOrderedMutationObservation(candidate);" },
     @{ File = "SearchWaveMemoryPolicy.cs"; Text = "return checked(degreeOfParallelism * 2);" },
     @{ File = "SearchWaveMemoryPolicy.cs"; Text = "current >= maximum - current ? maximum : current * 2" },
     @{ File = "CombatBeamSolver.Phases.cs"; Text = "SearchWaveMemoryPolicy.GrowCapacity(" },
@@ -1183,9 +1309,9 @@ foreach ($rendererPath in $overlayRendererPaths) {
     }
 }
 
-$bugReportExporterPath = Join-Path $repositoryRoot "src\Runtime\CombatBugReportExporter.cs"
+$bugReportExporterPath = Join-Path $repositoryRoot "src\Diagnostics\BugReports\CombatBugReportExporter.cs"
 $diagnosticJournalPath = Join-Path $repositoryRoot "src\Runtime\CombatDiagnosticJournal.cs"
-$bugReportUploaderPath = Join-Path $repositoryRoot "src\Runtime\CombatBugReportUploader.cs"
+$bugReportUploaderPath = Join-Path $repositoryRoot "src\Diagnostics\BugReports\CombatBugReportUploader.cs"
 $solverSettingsPanelPath = Join-Path $repositoryRoot "src\UI\SolverSettingsPanel.cs"
 $solverSettingsGeneralPath = Join-Path $repositoryRoot "src\UI\SolverSettingsPanel.General.cs"
 $solverSettingsPerformancePath = Join-Path $repositoryRoot "src\UI\SolverSettingsPanel.Performance.cs"
@@ -1234,7 +1360,7 @@ foreach ($check in @(
     @{ Path = $searchCompletionNotifierPath; Text = 'EntryPoint = "LoadIconW"' },
     @{ Path = $searchCompletionNotifierPath; Text = "GetWindowThreadProcessId(foreground, out uint processId)" },
     @{ Path = $searchCompletionNotifierPath; Text = "ShellNotifyIcon(NotifyIconDelete, ref data)" },
-    @{ Path = $controllerPath; Text = "SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Stale)" },
+    @{ Path = (Join-Path $repositoryRoot "src\Runtime\SolverController.SearchLifecycle.cs"); Text = "SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Stale)" },
     @{ Path = $turnSetupPath; Text = "SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Failed)" },
     @{ Path = $solverSettingsGeneralPath; Text = "CreateSearchCompletionNotificationPolicyInput()" })) {
     if (-not (Select-String -LiteralPath $check.Path -SimpleMatch $check.Text -Quiet)) {
@@ -1261,7 +1387,7 @@ foreach ($check in @(
     @{ File = 'src/Search/CombatBeamSolver.Phases.cs'; Text = 'policy.RelicTargetsSatisfied(node.Snapshot.RelicCounters)' },
     @{ File = 'src/Search/CombatSearchCoordinator.cs'; Text = 'policy.RelicTargetsSatisfied(result.Snapshot.RelicCounters)' },
     @{ File = 'src/Runtime/SolvedRouteCache.cs'; Text = 'policy.RelicTargets' },
-    @{ File = 'src/Search/CombatBeamSolver.Expansion.cs'; Text = 'ApplyFixedPrefix(seed, prefix)' },
+    @{ File = 'src/Search/CombatBeamSolver.OpeningExpansion.cs'; Text = 'ApplyFixedPrefix(seed, prefix)' },
     @{ File = 'src/UI/SolverRelicStrategyPanel.cs'; Text = 'row.Enabled.ButtonPressed' })) {
     if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot $check.File) -SimpleMatch $check.Text -Quiet)) {
         $violations.Add("$($check.File): missing relic policy ownership '$($check.Text)'")
@@ -1327,7 +1453,7 @@ foreach ($check in $metadataReuseChecks) {
 }
 
 # Keep the no-op dispatch metadata complete when callbacks are added to the facade.
-foreach ($file in @("CombatBeamSolver.RetentionJobs.cs", "CombatBeamSolver.BeamRetentionPolicy.cs")) {
+foreach ($file in @("CombatBeamSolver.RetentionJobs.cs", "CombatBeamSolver.BeamRetentionPolicy.cs", "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs", "CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs", "CombatBeamSolver.BeamRetentionPolicy.Cycle.cs")) {
     foreach ($forbidden in @("Parallel.For(", "Task.Run(")) {
         if (Select-String -LiteralPath (Join-Path $searchRoot $file) -SimpleMatch $forbidden -Quiet) {
             $violations.Add("$($file): retention work bypassed fixed lanes '$forbidden'")

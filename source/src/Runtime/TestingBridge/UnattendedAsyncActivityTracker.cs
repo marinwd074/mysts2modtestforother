@@ -1,7 +1,7 @@
 namespace CombatSolver;
 
-// The unattended protocol is not part of the 0.107.1 production build. Keep the
-// runtime instrumentation calls inert so they do not alter task scheduling.
+// The production build has no unattended protocol owner. Keep Runtime's
+// tracking calls allocation-free and inert; the full tracker stays test-only.
 internal static class UnattendedAsyncActivityTracker
 {
     public static bool IsRequestActive => false;

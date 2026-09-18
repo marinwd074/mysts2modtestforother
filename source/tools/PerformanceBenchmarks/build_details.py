@@ -32,7 +32,7 @@ def main():
                  'actions = result.BestNode.Actions, '
                  'policy = CombatBugReportExporter.LatestEffectivePolicy });')
     try:
-        writer.write_text(source.replace(anchor, anchor + injection))
+        writer.write_text(source.replace(anchor, anchor + injection), encoding='utf-8')
         subprocess.run(["dotnet", "build", "CombatSolver.csproj", "-c", "Release",
                         "-p:CopyModOnBuild=false", "-o", str(output)], cwd=checkout, check=True)
         shutil.copy2(checkout / "CombatSolver.json", output / "CombatSolver.json")

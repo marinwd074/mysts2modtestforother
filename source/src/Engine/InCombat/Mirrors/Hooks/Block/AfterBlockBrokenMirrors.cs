@@ -1,5 +1,4 @@
 using MegaCrit.Sts2.Core.Entities.Creatures;
-using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.Models.Relics;
@@ -15,11 +14,7 @@ internal static class AfterBlockBrokenMirrors
 {
     private static readonly MirrorMethodSpec AfterBlockBroken = MirrorMethodSpec.Hook(
         nameof(AbstractModel.AfterBlockBroken),
-#if STS2_01071
-        [typeof(Creature)]);
-#else
-        [typeof(PlayerChoiceContext), typeof(Creature), typeof(Creature)]);
-#endif
+        Sts2HookCompatibility.AfterBlockBrokenParameterTypes);
 
     private static readonly Registry Registry = CreateRegistry();
 

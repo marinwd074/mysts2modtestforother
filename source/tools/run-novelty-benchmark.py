@@ -12,7 +12,7 @@ import time
 
 
 def write_json(path, value):
-    path.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n")
+    path.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding='utf-8')
 
 
 def main():
@@ -44,15 +44,15 @@ def main():
     root = Path(__file__).resolve().parents[1]
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
-    settings = json.loads(args.settings.read_text())
-    spec = json.loads(args.input.read_text())
+    settings = json.loads(args.settings.read_text(encoding='utf-8'))
+    spec = json.loads(args.input.read_text(encoding='utf-8'))
     if spec.get("mode") != "Search":
         parser.error("Input must explicitly use Search mode")
-    if args.smart: (output / "smart.flag").write_text("1\n")
-    if args.native: (output / "native.flag").write_text("1\n")
+    if args.smart: (output / "smart.flag").write_text("1\n", encoding='utf-8')
+    if args.native: (output / "native.flag").write_text("1\n", encoding='utf-8')
     for name in ("control_checks", "gc_scope", "expect_reclaim"):
-        if getattr(args, name): (output / (name.replace("_", "-") + ".flag")).write_text("1\n")
-    write_json(output / "research-options.json", json.loads(args.research_options.read_text()))
+        if getattr(args, name): (output / (name.replace("_", "-") + ".flag")).write_text("1\n", encoding='utf-8')
+    write_json(output / "research-options.json", json.loads(args.research_options.read_text(encoding='utf-8')))
     write_json(output / "settings.json", settings)
     write_json(output / "input.json", spec)
     gc_keys = ("DOTNET_gcServer", "COMPlus_gcServer", "DOTNET_GCHeapCount", "COMPlus_GCHeapCount",
@@ -72,7 +72,7 @@ def main():
     stop = launcher + ["--headless-instance", args.instance, "--stop-instance"]
     # Let the native launcher establish/check ownership before touching settings.
     subprocess.run(stop, cwd=root, check=True, stdout=subprocess.DEVNULL)
-    owner = json.loads((runtime / "runtime-owner.json").read_text())
+    owner = json.loads((runtime / "runtime-owner.json").read_text(encoding='utf-8'))
     if owner["worktree"] != str(root) or owner["instance"] != args.instance or owner["root"] != str(runtime):
         raise ValueError("Unexpected runtime owner")
     data = runtime / "data/SlayTheSpire2"
@@ -105,18 +105,18 @@ def main():
     samples, pid, peak, run = [], None, 0, None
     started = time.monotonic()
     try:
-        with (output / "launcher.log").open("w") as log:
+        with (output / "launcher.log").open("w", encoding='utf-8') as log:
             run = subprocess.Popen(cmd, cwd=root, stdout=log, stderr=subprocess.STDOUT)
             while True:
                 marker = runtime / "process.json"
                 if pid is None and marker.exists():
                     try:
-                        pid = json.loads(marker.read_text())["pid"]
+                        pid = json.loads(marker.read_text(encoding='utf-8'))["pid"]
                     except json.JSONDecodeError:
                         pass  # The marker may be in the middle of its initial write.
                 if pid is not None:
                     try:
-                        lines = Path(f"/proc/{pid}/status").read_text().splitlines()
+                        lines = Path(f"/proc/{pid}/status").read_text(encoding='utf-8').splitlines()
                         values = {line.split(":")[0]: int(line.split()[1]) * 1024
                                   for line in lines if line.startswith(("VmRSS:", "VmHWM:", "VmSwap:"))}
                         peak = max(peak, values.get("VmHWM", 0))
@@ -127,7 +127,7 @@ def main():
                     break
                 time.sleep(.25)
         result_path = output / "result.json"
-        result = json.loads(result_path.read_text()) if result_path.exists() else {"status": "MissingResult"}
+        result = json.loads(result_path.read_text(encoding='utf-8')) if result_path.exists() else {"status": "MissingResult"}
         write_json(output / "memory.json", {
             "pid": pid, "launcherExitCode": run.returncode, "status": result["status"],
             "processPeakRssBytes": peak,

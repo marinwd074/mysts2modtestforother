@@ -21,28 +21,15 @@ namespace CombatSolver;
 
 internal sealed class PlayerTurnSetupPatch : IPatchMethod
 {
-#if !STS2_01071
-    private static readonly Type CombatTurnStateType = typeof(CombatManager).Assembly.GetType(
-        "MegaCrit.Sts2.Core.Combat.CombatTurnState",
-        throwOnError: true)!;
-#endif
-
     public static string PatchId => "combat_solver_player_turn_setup";
     public static string Description => "首回合页面后搜索，后续回合可见重放既有选择";
 
     public static ModPatchTarget[] GetTargets() =>
     [
-#if STS2_01071
         new(
             typeof(CombatManager),
             "SetupPlayerTurn",
-            [typeof(Player), typeof(HookPlayerChoiceContext)]),
-#else
-        new(
-            typeof(CombatManager),
-            "SetupPlayerTurn",
-            [CombatTurnStateType, typeof(Player), typeof(HookPlayerChoiceContext)]),
-#endif
+            Sts2TurnSetupCompatibility.SetupPlayerTurnParameterTypes),
     ];
 
     [HarmonyPriority(Priority.First)]
@@ -76,28 +63,15 @@ internal sealed class PlayerTurnSetupPatch : IPatchMethod
 
 internal sealed class PlayerTurnAutoPrePlayPatch : IPatchMethod
 {
-#if !STS2_01071
-    private static readonly Type CombatTurnStateType = typeof(CombatManager).Assembly.GetType(
-        "MegaCrit.Sts2.Core.Combat.CombatTurnState",
-        throwOnError: true)!;
-#endif
-
     public static string PatchId => "combat_solver_player_turn_auto_pre_play";
     public static string Description => "回合准备自动牌通过原生页面执行计划选择";
 
     public static ModPatchTarget[] GetTargets() =>
     [
-#if STS2_01071
         new(
             typeof(CombatManager),
             "RunAutoPrePlayPhase",
-            [typeof(HookPlayerChoiceContext), typeof(Task), typeof(Player)]),
-#else
-        new(
-            typeof(CombatManager),
-            "RunAutoPrePlayPhase",
-            [CombatTurnStateType, typeof(HookPlayerChoiceContext), typeof(Task), typeof(Player)]),
-#endif
+            Sts2TurnSetupCompatibility.RunAutoPrePlayPhaseParameterTypes),
     ];
 
     [HarmonyPriority(Priority.First)]
@@ -212,42 +186,10 @@ internal static class PlayerTurnSetupCoordinator
             TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
-#if !STS2_01071
-    private static readonly Type CombatTurnStateType = typeof(CombatManager).Assembly.GetType(
-        "MegaCrit.Sts2.Core.Combat.CombatTurnState",
-        throwOnError: true)!;
-#endif
-#if STS2_01071
-    private static readonly MethodInfo SetupPlayerTurnMethod = typeof(CombatManager).GetMethod(
-        "SetupPlayerTurn",
-        BindingFlags.Instance | BindingFlags.NonPublic,
-        binder: null,
-        [typeof(Player), typeof(HookPlayerChoiceContext)],
-        modifiers: null)
-        ?? throw new MissingMethodException(typeof(CombatManager).FullName, "SetupPlayerTurn");
-    private static readonly MethodInfo RunAutoPrePlayPhaseMethod = typeof(CombatManager).GetMethod(
-        "RunAutoPrePlayPhase",
-        BindingFlags.Instance | BindingFlags.NonPublic,
-        binder: null,
-        [typeof(HookPlayerChoiceContext), typeof(Task), typeof(Player)],
-        modifiers: null)
-        ?? throw new MissingMethodException(typeof(CombatManager).FullName, "RunAutoPrePlayPhase");
-#else
-    private static readonly MethodInfo SetupPlayerTurnMethod = typeof(CombatManager).GetMethod(
-        "SetupPlayerTurn",
-        BindingFlags.Instance | BindingFlags.NonPublic,
-        binder: null,
-        [CombatTurnStateType, typeof(Player), typeof(HookPlayerChoiceContext)],
-        modifiers: null)
-        ?? throw new MissingMethodException(typeof(CombatManager).FullName, "SetupPlayerTurn");
-    private static readonly MethodInfo RunAutoPrePlayPhaseMethod = typeof(CombatManager).GetMethod(
-        "RunAutoPrePlayPhase",
-        BindingFlags.Instance | BindingFlags.NonPublic,
-        binder: null,
-        [CombatTurnStateType, typeof(HookPlayerChoiceContext), typeof(Task), typeof(Player)],
-        modifiers: null)
-        ?? throw new MissingMethodException(typeof(CombatManager).FullName, "RunAutoPrePlayPhase");
-#endif
+    private static readonly MethodInfo SetupPlayerTurnMethod =
+        Sts2TurnSetupCompatibility.SetupPlayerTurnMethod;
+    private static readonly MethodInfo RunAutoPrePlayPhaseMethod =
+        Sts2TurnSetupCompatibility.RunAutoPrePlayPhaseMethod;
 
     [ThreadStatic]
     private static bool _invokingOriginalSetup;
@@ -958,11 +900,10 @@ internal static class PlayerTurnSetupCoordinator
         {
             Task original = (Task)(SetupPlayerTurnMethod.Invoke(
                 manager,
-#if STS2_01071
-                [player, choiceContext])
-#else
-                [turnState, player, choiceContext])
-#endif
+                Sts2TurnSetupCompatibility.BuildSetupPlayerTurnArguments(
+                    turnState,
+                    player,
+                    choiceContext))
                 ?? throw new InvalidOperationException("SetupPlayerTurn 没有返回任务。"));
             _invokingOriginalSetup = false;
             await original;
@@ -987,11 +928,11 @@ internal static class PlayerTurnSetupCoordinator
             _invokingOriginalAutoPrePlay = true;
             original = (Task)(RunAutoPrePlayPhaseMethod.Invoke(
                 manager,
-#if STS2_01071
-                [choiceContext, setupTask, player])
-#else
-                [turnState, choiceContext, setupTask, player])
-#endif
+                Sts2TurnSetupCompatibility.BuildRunAutoPrePlayPhaseArguments(
+                    turnState,
+                    choiceContext,
+                    setupTask,
+                    player))
                 ?? throw new InvalidOperationException("RunAutoPrePlayPhase 没有返回任务。"));
             _invokingOriginalAutoPrePlay = false;
             NGame host = NGame.Instance

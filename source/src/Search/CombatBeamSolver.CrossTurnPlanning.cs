@@ -119,31 +119,4 @@ internal sealed partial class CombatBeamSolver
         };
     }
 
-    private void StartCrossTurnProbe(SearchNode node)
-    {
-        if (node.CrossTurnProbe != null)
-            return;
-        node.CrossTurnProbe = new CrossTurnProbeState(
-            new CrossTurnProbeTracker(node, node.Snapshot.CycleShapeKey),
-            0,
-            node.CrossTurnSemanticStateChanged ? 1 : 0,
-            node.CrossTurnSemanticStateChanged ? 1 : 0,
-            0,
-            false,
-            node.CrossTurnSemanticStateChanged);
-        _run.CrossTurnCandidatesProtected++;
-    }
-
-    private bool RequiresCrossTurnPlanning(SearchNode node)
-    {
-        if (node.IsTerminal
-            || node.BoundaryReason != SearchBoundaryReason.None
-            || node.CycleExitProbe != null
-            || node.Outcome == null)
-        {
-            return false;
-        }
-        return node.CombatProgress.TurnsWithoutProgress > 0
-            || node.CrossTurnSemanticInvisibleToModeledQuality;
-    }
 }
