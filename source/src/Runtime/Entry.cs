@@ -10,7 +10,6 @@ using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Runs;
 using STS2RitsuLib;
 using STS2RitsuLib.Interop;
-using STS2RitsuLib.Patching.Core;
 using CombatSolver.Api;
 using CombatSolver.Engine.InCombat.Simulation;
 
@@ -54,55 +53,7 @@ public static class Entry
         RitsuLibFramework.SubscribeLifecycle<CombatEndedEvent>(_ => SolverController.Reset("combat_ended"));
         CombatManager.Instance.TurnStarted += OnTurnStarted;
 
-        var patcher = RitsuLibFramework.CreatePatcher(ModId, "combat-solver", "战斗路线求解器");
-        patcher.RegisterPatch<PlayerTurnSetupPatch>();
-        patcher.RegisterPatch<PlayerTurnAutoPrePlayPatch>();
-        patcher.RegisterPatch<PlayerTurnSetupSceneExitPatch>();
-        patcher.RegisterPatch<ChooseCardObservationPatch>();
-        patcher.RegisterPatch<SimpleGridObservationPatch>();
-        patcher.RegisterPatch<RewardGridObservationPatch>();
-        patcher.RegisterPatch<CombatPileObservationPatch>();
-        patcher.RegisterPatch<HandObservationPatch>();
-        patcher.RegisterPatch<HandUpgradeObservationPatch>();
-        patcher.RegisterPatch<CombatStateTrackerIsolationPatch>();
-        patcher.RegisterPatch<RitsuFreePlayVoidIsolationPatch>();
-        patcher.RegisterPatch<RitsuFreePlayBoolIsolationPatch>();
-        patcher.RegisterPatch<RitsuFreePlayResolveIsolationPatch>();
-        patcher.RegisterPatch<RitsuDefaultCapabilityRegistrationPatch>();
-        patcher.RegisterPatch<RitsuEmptyCardTypeFastPathPatch>();
-        patcher.RegisterPatch<RitsuEmptyCardRarityFastPathPatch>();
-        patcher.RegisterPatch<RitsuEmptyCardTagsFastPathPatch>();
-        patcher.RegisterPatch<RitsuEmptyEnergyContributorFastPathPatch>();
-        patcher.RegisterPatch<RitsuEmptyEnergyCostFastPathPatch>();
-        patcher.RegisterPatch<RitsuEmptyStarContributorFastPathPatch>();
-        patcher.RegisterPatch<RitsuEmptyStarCostFastPathPatch>();
-        patcher.RegisterPatch<RitsuEmptyCanPlayFastPathPatch>();
-        patcher.RegisterPatch<SimulationCardPileLookupPatch>();
-        patcher.RegisterPatch<BaseLibCloneConcurrencyPatch>();
-        patcher.RegisterPatch<BaseLibDynamicVarCloneMetadataPatch>();
-        patcher.RegisterPatch<RitsuDynamicVarCloneMetadataPatch>();
-        patcher.RegisterPatch<PowerDynamicVarMaterializationGuardPatch>();
-        patcher.RegisterPatch<PowerAmountComparisonPatch>();
-        patcher.RegisterPatch<RichTextEnvironmentLifetimePatch>();
-        patcher.RegisterPatch<NodePoolSignalLifetimePatch>();
-        patcher.RegisterPatch<CombatInstantModePatch>();
-#if !STS2_01071
-        patcher.RegisterPatch<UnattendedTestIsolationPatch>();
-        patcher.RegisterPatch<UnattendedHeadlessFtuePatch>();
-#endif
-        patcher.RegisterPatch<CombatReplayRecordingPatch>();
-        patcher.RegisterPatch<RunStatisticsNewRunPatch>();
-        patcher.RegisterPatch<RunStatisticsLaunchPatch>();
-        patcher.RegisterPatch<RunStatisticsEndPatch>();
-#if !STS2_01071
-        patcher.RegisterPatch<UnattendedCombatStartReplayPatch>();
-#endif
-#if !STS2_01071
-        // 0.107.1 没有该 SaveManager 重载；注册会让 RitsuLib 回滚整个必需补丁集。
-        patcher.RegisterPatch<CombatShowcaseSaveIsolationPatch>();
-#endif
-        patcher.RegisterPatch<CombatShowcaseCleanupPatch>();
-        RitsuLibFramework.ApplyRequiredPatcher(patcher, DisableMod);
+        PatchRegistration.ApplyRequiredPatches(ModId, DisableMod);
 
         if (Enabled)
         {

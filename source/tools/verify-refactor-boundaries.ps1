@@ -107,6 +107,27 @@ if (Select-String -LiteralPath $turnSetupPatchPath -SimpleMatch "CombatTurnState
     $violations.Add("${turnSetupPatchPath}: native turn-state type returned outside Compatibility")
 }
 
+$patchRegistrationPath = Join-Path $repositoryRoot "src/Runtime/PatchRegistration.cs"
+$entryPath = Join-Path $repositoryRoot "src/Runtime/Entry.cs"
+foreach ($patchRegistrationBoundary in @(
+    @{ Path = $patchRegistrationPath; Text = "internal static class PatchRegistration" },
+    @{ Path = $patchRegistrationPath; Text = "ApplyRequiredPatches" },
+    @{ Path = $patchRegistrationPath; Text = "patcher.RegisterPatch<PlayerTurnSetupPatch>();" },
+    @{ Path = $patchRegistrationPath; Text = "RitsuLibFramework.ApplyRequiredPatcher(patcher, onFailure);" },
+    @{ Path = $entryPath; Text = "PatchRegistration.ApplyRequiredPatches(ModId, DisableMod);" })) {
+    if (-not (Select-String -LiteralPath $patchRegistrationBoundary.Path -SimpleMatch $patchRegistrationBoundary.Text -Quiet)) {
+        $violations.Add("$($patchRegistrationBoundary.Path): missing patch-registration boundary '$($patchRegistrationBoundary.Text)'")
+    }
+}
+foreach ($retiredPatchRegistrationCall in @(
+    "RitsuLibFramework.CreatePatcher(",
+    "patcher.RegisterPatch<",
+    "RitsuLibFramework.ApplyRequiredPatcher(")) {
+    if (Select-String -LiteralPath $entryPath -SimpleMatch $retiredPatchRegistrationCall -Quiet) {
+        $violations.Add("${entryPath}: patch registration returned to Entry '$retiredPatchRegistrationCall'")
+    }
+}
+
 $blockPotionInsertionPath = Join-Path $searchRoot "CombatBeamSolver.BlockPotionInsertion.cs"
 foreach ($requiredBlockPotionRule in @(
     'HpLostByTurn',

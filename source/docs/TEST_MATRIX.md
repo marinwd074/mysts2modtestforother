@@ -29,6 +29,11 @@
 - CI：`compatibility.yml` 的 `static-consistency` Job 新增 `Verify architecture boundaries`，执行 `source/tools/verify-refactor-boundaries.ps1`。
 - 本地等价验证：结构门禁通过；本批次未改变生产源码或测试输入，Release DLL 重新构建并输出供用户实测。详见 [Batch 15 报告](performance/architecture-boundary-ci-gate-20260918.md)。
 
+## 2026-09-18：架构优化 Batch 16——Entry 补丁注册职责拆分
+
+- 结构：`Entry.Initialize` 只调用 `PatchRegistration.ApplyRequiredPatches`；完整 patcher 注册清单及版本条件继续保留在 `src/Runtime/PatchRegistration.cs`。
+- 验证：Release 构建、结构门禁、目标版本门禁和最终 DLL 记录于 [Batch 16 报告](performance/entry-patch-registration-split-20260918.md)；本批次为纯职责移动，不重复行为 smoke。
+
 ## 2026-09-18：架构优化 Batch 11——BeamRetentionPolicy CrossTurn partial
 
 - 结构：跨回合 retention 选择图移至 `CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs`；`Retention.cs` 保留剪枝协调调用，`CrossTurnPlanning.cs` 保留证据传播与 stand-pat 语义状态附着。未改变候选顺序、风险分带、探测预算或搜索算法。

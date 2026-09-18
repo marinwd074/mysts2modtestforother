@@ -2,7 +2,7 @@
 
 > **当前基线：** CombatSolver `0.40.2`，目标游戏 `0.107.1`，RitsuLib 目标 `0.107.1`，兼容符号 `STS2_01071`，运行时为 .NET 9 / Godot 4.5.1。分支与提交以当前 `main` HEAD 为准。
 
-> **当前工作项：** `AEONGLASS_BOSS`、`SOUL_NEXUS_ELITE`、`BYGONE_EFFIGY_ELITE` 三份新问题包已闭环；`CombatSolver_architecture_optimization_plan` 的 BeamRetentionPolicy Choice、Potion、Mutation、Cycle、CrossTurn 物理拆分、兼容 API 边界及 GitHub 架构门禁已完成，继续 `Entry.cs` 注册职责拆分。
+> **当前工作项：** `AEONGLASS_BOSS`、`SOUL_NEXUS_ELITE`、`BYGONE_EFFIGY_ELITE` 三份新问题包已闭环；`CombatSolver_architecture_optimization_plan` 的 BeamRetentionPolicy Choice、Potion、Mutation、Cycle、CrossTurn 物理拆分、兼容 API 边界、GitHub 架构门禁及 `Entry.cs` 注册职责拆分已完成，继续文档事实瘦身。
 
 本文件约束所有在本仓库中工作的 coding agent。开始处理任务前完整阅读；子目录若有更具体的 `AGENTS.md`，其规则只补充对应目录，不能放宽这里的硬约束。
 

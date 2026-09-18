@@ -169,6 +169,20 @@ require_fixed "$turn_setup_patch_path" 'Sts2TurnSetupCompatibility.SetupPlayerTu
 require_fixed "$turn_setup_patch_path" 'Sts2TurnSetupCompatibility.RunAutoPrePlayPhaseParameterTypes' 'turn-setup patch bypasses compatibility:'
 forbid_fixed "$turn_setup_patch_path" 'CombatTurnStateType' 'native turn-state type returned outside Compatibility:'
 
+patch_registration_path="$repository_root/src/Runtime/PatchRegistration.cs"
+entry_path="$repository_root/src/Runtime/Entry.cs"
+require_fixed "$patch_registration_path" 'internal static class PatchRegistration' 'missing patch-registration boundary:'
+require_fixed "$patch_registration_path" 'ApplyRequiredPatches' 'missing patch-registration entry point:'
+require_fixed "$patch_registration_path" 'patcher.RegisterPatch<PlayerTurnSetupPatch>();' 'patch-registration list lost its first patch:'
+require_fixed "$patch_registration_path" 'RitsuLibFramework.ApplyRequiredPatcher(patcher, onFailure);' 'patch-registration failure boundary moved:'
+require_fixed "$entry_path" 'PatchRegistration.ApplyRequiredPatches(ModId, DisableMod);' 'Entry bypasses patch-registration boundary:'
+for retired_patch_registration_call in \
+    'RitsuLibFramework.CreatePatcher(' \
+    'patcher.RegisterPatch<' \
+    'RitsuLibFramework.ApplyRequiredPatcher('; do
+    forbid_fixed "$entry_path" "$retired_patch_registration_call" 'patch registration returned to Entry:'
+done
+
 legacy_loop_guard_paths=(
     "$search_root/CombatBeamSolver.Expansion.cs"
     "$search_root/CombatBeamSolver.ParallelExpansion.cs"
