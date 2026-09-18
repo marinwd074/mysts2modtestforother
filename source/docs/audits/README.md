@@ -6,6 +6,7 @@
 
 | 文档 | 内容 |
 |---|---|
+| [多人就绪度全仓审计（2026-09-19）](CombatSolver_full_repo_audit_multiplayer_readiness_2026-09-19.md) | `0.40.2 / 0.107.1` 基线：多人支持边界、失效关闭覆盖、状态/网络/Replay 缺口和分阶段准备条件；当前结论为不具备多人功能就绪度 |
 | [Gemini UI 建议复核与当前重构建议](ui-redesign-gemini-review-20260911.md) | 729b4ad 基线：逐项复核、按钮分组、收起布局与分阶段实施建议；尚未实施 |
 | [仓库与 Agent 指令审计](CombatSolver_Repository_Audit_20260825.md) | 2026-08-25 的源码地图、工程规范和指令建议 |
 | [早期 UI 与性能审计](AUDIT_REPORT.md) | 0.5.9 / 0.6.0 基线的分析与建议 |
