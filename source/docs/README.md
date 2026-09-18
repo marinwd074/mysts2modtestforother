@@ -71,6 +71,7 @@
 | 问题包目录、提交元数据和后台筛选口径 | [报告协议](BUG_REPORT_PROTOCOL.md) |
 | 188 份计划外重算报告的分类与高频修复 | [2026-09-08 重算分诊](issues/report-replans-20260908.md) |
 | 0.33.0 修复批次的剩余问题与交接 | [2026-09-07 修复交接](issues/report-logic-bugs-20260907-handoff.md) |
+| 0.40.2 KNIGHTS_ELITE 问题包修复与下一步实机验证 | [2026-09-18 CombatSolver 交接](issues/combat-solver-20260918-handoff.md) |
 | 第三方卡牌、Power、药水等登记入口 | [第三方 Mod 适配手册](THIRD_PARTY_ADAPTERS.md) |
 | 第三方 Power 的搜索估值 | [战略估值登记](third-party-strategic-effects.md) |
 | 遗物与 Modifier 的捕获、Fork 与续用状态 | [模型状态适配](third-party-model-state.md) |

@@ -1,5 +1,7 @@
 # 问题批次与分诊
 
+- [2026-09-18 CombatSolver 交接：0.40.2 KNIGHTS_ELITE 问题包修复与实机验证](combat-solver-20260918-handoff.md)。
+
 - [2026-09-13计划外重算批次](report-replans-20260913.md)：943份报告、16类已修机制、各类候选频率与未解决项；未达到20–30类高频目标。
 
 - [环绕轨道与自动化返能估值](recurring-energy-valuation-20260913.md)：固定预算质量、自然抽牌与原版完整部署证据。
