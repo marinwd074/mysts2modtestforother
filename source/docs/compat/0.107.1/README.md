@@ -14,6 +14,7 @@ not silently reinterpreted as 0.107.1 results.
 | First-turn and incremental search | [SEARCH_SMOKE.md](SEARCH_SMOKE.md) |
 | Native turn setup | [TURN_SETUP_SMOKE.md](TURN_SETUP_SMOKE.md) |
 | Full-auto continuation | [FULL_AUTO_SMOKE.md](FULL_AUTO_SMOKE.md) |
+| Full battle lifecycle | [FULL_BATTLE_SMOKE.md](FULL_BATTLE_SMOKE.md) |
 | Known limitations and unrun claims | [KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md) |
 
 Runtime evidence is stored under the repository root's

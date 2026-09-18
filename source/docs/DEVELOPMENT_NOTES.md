@@ -2,6 +2,11 @@
 
 > 本文按时间顺序保留开发历史。当前基线为 CombatSolver `0.40.2`、目标游戏 `0.107.1`、RitsuLib 目标 `0.107.1`；下方旧版本、旧 PR 和旧验证环境不代表当前状态。
 
+## 2026-09-18：架构优化 Batch 5——完整战斗生命周期 smoke
+
+- 新增 `COMPAT1071_FULL_BATTLE` 兼容 smoke：沿用原生回合开始选牌、全自动部署和实际动作执行，将测试夹具驱动到真实 `CombatEnded`，再等待战斗引用释放屏障。
+- Windows headless 写出 `PASS: native 0.107.1 full battle reached combat end; setup_turn=2; selected=True; deployed=True; next_turn=2; route_reuse=False; combat_in_progress=false; cleanup=search,deployment,turn_setup,gc; lifecycle=2>1; gc_ends=1; gc_losses=0`。控制器搜索/部署、回合设置会话和 GC/No-GC 活跃状态均清理；外层启动器因专用 smoke 不写常规 result 文件而报告 `exit_code=0` 收尾异常，未将其记为完整 unattended 请求通过。
+
 ## 2026-09-18：架构优化 Batch 2——生产与无人测试协议边界
 
 - 生产程序集不再编译完整 `src/Testing/UnattendedTestProtocol.cs` 与测试活动 tracker；`PreCombatForecastWorker` 改用 `src/Runtime/TestingBridge` 下的最小请求、结果和 JSON 路径契约，测试预期字段、fixture 与断言继续留在测试侧。

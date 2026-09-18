@@ -21,6 +21,8 @@ internal static partial class CompatibilitySmoke
         try
         {
             CombatState state = await StartCombatAsync(host);
+            if (mode is "COMPAT1071_FULL_BATTLE" or "FULL_BATTLE")
+                await PrepareFullBattleFixtureAsync(state);
             string result = mode switch
             {
                 "FIRST_TURN" => await RunFirstTurnAsync(state),
@@ -28,9 +30,11 @@ internal static partial class CompatibilitySmoke
                     await RunTurnSetupAsync(host, state, fullAuto: false),
                 "COMPAT1071_FULLAUTO" or "FULLAUTO" =>
                     await RunTurnSetupAsync(host, state, fullAuto: true),
+                "COMPAT1071_FULL_BATTLE" or "FULL_BATTLE" =>
+                    await RunFullBattleAsync(host, state),
                 _ => throw new InvalidOperationException(
                     $"Unknown compatibility smoke mode '{mode}'. " +
-                    "Expected FIRST_TURN, COMPAT1071_TURN_SETUP, or COMPAT1071_FULLAUTO."),
+                    "Expected FIRST_TURN, COMPAT1071_TURN_SETUP, COMPAT1071_FULLAUTO, or COMPAT1071_FULL_BATTLE."),
             };
             string? directory = System.IO.Path.GetDirectoryName(output);
             if (!string.IsNullOrWhiteSpace(directory))

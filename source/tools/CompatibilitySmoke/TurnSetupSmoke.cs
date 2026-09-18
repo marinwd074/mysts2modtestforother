@@ -21,7 +21,8 @@ internal static partial class CompatibilitySmoke
     private static async Task<string> RunTurnSetupAsync(
         NGame host,
         CombatState state,
-        bool fullAuto)
+        bool fullAuto,
+        bool awaitCombatEnd = false)
     {
         Player player = LocalContext.GetMe(state)
             ?? throw new InvalidOperationException("The local player is missing from the smoke combat.");
@@ -123,6 +124,7 @@ internal static partial class CompatibilitySmoke
             }
 
             if (fullAuto
+                && !awaitCombatEnd
                 && sawSelected
                 && sawDeployment
                 && sawNextTurn
@@ -131,6 +133,17 @@ internal static partial class CompatibilitySmoke
                 return $"PASS: native 0.107.1 full-auto turn setup; setup_turn={setupTurn}; " +
                     $"selected={sawSelected}; deployed={sawDeployment}; next_turn={maximumTurn}; " +
                     $"route_reuse={sawReuse}; combat_in_progress={CombatManager.Instance.IsInProgress}";
+            }
+
+            if (fullAuto
+                && awaitCombatEnd
+                && sawSelected
+                && sawDeployment
+                && !CombatManager.Instance.IsInProgress)
+            {
+                return $"PASS: native 0.107.1 full battle reached combat end; setup_turn={setupTurn}; " +
+                    $"selected={sawSelected}; deployed={sawDeployment}; next_turn={maximumTurn}; " +
+                    $"route_reuse={sawReuse}; combat_in_progress=false";
             }
 
             if (!CombatManager.Instance.IsInProgress)

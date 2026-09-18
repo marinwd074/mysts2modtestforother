@@ -480,6 +480,7 @@ NativeReplayDriver 保存开战/结束观察器抛出的原始异常，由 Advan
 ## 8. 工具与结构门禁
 
 - `tools/run-unattended-test.ps1` / `tools/run-unattended-test.sh`：Windows / Linux 的平台原生入口，保留请求协议、精确进程生命周期、结果与静稳 ACK；同实例同时只有一个 producer。
+- `tools/CompatibilitySmoke/*`：0.107.1 生产兼容构建的游戏内最小 smoke；`FIRST_TURN`、`COMPAT1071_TURN_SETUP` 与 `COMPAT1071_FULLAUTO` 验证搜索/原生回合设置/全自动续用，`COMPAT1071_FULL_BATTLE` 继续驱动到 `CombatEnded` 并检查 Controller、回合设置和 GC 生命周期均已清理。
 - `tools/headless-runtime.ps1` / `tools/headless-runtime.sh`：拥有实例目录、私有游戏/Mod 内容快照与每用户主机租约。默认 exclusive，显式 parallel 最多两个游戏；CPU/内存预约随游戏进程存活，暖进程也占名额。它们不改变 Search DOP、NoGC、战斗语义或请求协议。详见 [实例与并行说明](HEADLESS_TESTING.md)。
 
 - `tools/run-visible-steam-benchmark.ps1` / `tools/run-visible-steam-benchmark.sh`：Windows / Linux 的平台原生入口，负责正常可见 Steam 会话的搜索、GC 与帧口径。

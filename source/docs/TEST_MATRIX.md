@@ -2,6 +2,11 @@
 
 > 当前矩阵基线为 CombatSolver `0.40.2`、目标游戏 `0.107.1`、RitsuLib 目标 `0.107.1`；下方按时间排列的历史条目保留其原始版本和验证范围，不能直接当作当前发布结论。
 
+## 2026-09-18：架构优化 Batch 5——完整战斗生命周期 smoke
+
+- 新增 `COMPAT1071_FULL_BATTLE`：从 0.107.1 原生回合设置选牌开始，经过全自动部署和实际卡牌动作，确认 `CombatEnded` 后等待引用屏障；断言 `IsSearching`、`IsDeploying`、`FullAutoEnabled`、自动搜索暂停、`PlayerTurnSetupCoordinator` 活动会话以及 GC/No-GC 活跃状态均已清理。
+- 验证结果：专用 smoke 写出 `setup_turn=2; selected=True; deployed=True; next_turn=2; route_reuse=False; combat_in_progress=false; cleanup=search,deployment,turn_setup,gc; lifecycle=2>1; gc_ends=1; gc_losses=0`；外层启动器未生成常规 result，按既有口径不记为完整 unattended 请求通过。
+
 ## 2026-09-18：架构优化 Batch 2——测试协议边界
 
 - 生产边界：`src/Testing/**/*.cs` 保持从 `CombatSolver.csproj` 排除；新增 Runtime 最小桥后，生产 API 不再引用完整 `UnattendedTestRequest` / `UnattendedTestResult` / `UnattendedTestFiles`。

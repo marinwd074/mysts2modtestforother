@@ -12,3 +12,5 @@ a visible Steam layout result.
 
 Evidence: [`20260918-compatibility-fullauto`](../../../../runtime-evidence/20260918-compatibility-fullauto/).
 
+The complete battle lifecycle is covered separately by
+[`COMPAT1071_FULL_BATTLE`](FULL_BATTLE_SMOKE.md).
