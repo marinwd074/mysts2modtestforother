@@ -2,7 +2,7 @@
 
 This directory stores sanitized evidence from private Slay the Spire 2 and CombatSolver runs.
 
-Create one timestamped directory per run, for example:
+Create one timestamped directory only when the run adds a new failure mode, a new validation conclusion, or new key evidence for an existing bug. Repeated runs and diagnostically equivalent failures are not committed. For an eligible run, use a timestamped directory such as:
 
 ```text
 runtime-evidence/2026-09-18/20260918-120000-0.107.1/
