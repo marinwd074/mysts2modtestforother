@@ -212,6 +212,13 @@ internal sealed partial class UnattendedTestRunner
             SetEnergy(player, 10);
             SetStars(player, 10);
             await InjectCardAsync(combat, player, new UnattendedCardInjection { CardId = cardId, Pile = "Hand" });
+            if (cardId == "FUEL")
+            {
+                // Fuel's native OnPlay gains energy first, then draws two cards. Keep
+                // real cards in the draw pile so the command test catches a missing draw.
+                await InjectCardAsync(combat, player, new UnattendedCardInjection
+                { CardId = "STRIKE_IRONCLAD", Pile = "Draw", Count = 2 });
+            }
             CombatPredictionSimulator simulator = CombatRootSnapshot.Capture(combat).ForkSimulator();
             SimulatedCombatState shadow = (SimulatedCombatState)simulator.State.CombatState;
             PlaySimulatedCard(simulator, shadow, FindSimulatedHandCard(simulator, player, cardId, 0), null, combat.Enemies);

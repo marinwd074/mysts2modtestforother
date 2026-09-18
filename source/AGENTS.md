@@ -2,7 +2,7 @@
 
 > **当前基线：** CombatSolver `0.40.2`，目标游戏 `0.107.1`，RitsuLib 目标 `0.107.1`，兼容符号 `STS2_01071`，运行时为 .NET 9 / Godot 4.5.1。分支与提交以当前 `main` HEAD 为准。
 
-> **当前工作项：** 按 `CombatSolver_architecture_optimization_plan` 执行 Batch 9（BeamRetentionPolicy Potion 纯拆分）：将药水配额、药水谱系分组和 `UsesPotion` 辅助移动到嵌套 `BeamRetentionPolicy` partial 文件，保持搜索算法、候选顺序、expanded、transitions 和结果身份不变。
+> **当前工作项：** 先闭环 `CombatSolver-0.40.2-AEONGLASS_BOSS`、`SOUL_NEXUS_ELITE`、`BYGONE_EFFIGY_ELITE` 三份新问题包；问题包修复和生产 DLL 输出完成后，继续 `CombatSolver_architecture_optimization_plan` 的 Mutation → CrossTurn → Cycle 后续批次。
 
 本文件约束所有在本仓库中工作的 coding agent。开始处理任务前完整阅读；子目录若有更具体的 `AGENTS.md`，其规则只补充对应目录，不能放宽这里的硬约束。
 

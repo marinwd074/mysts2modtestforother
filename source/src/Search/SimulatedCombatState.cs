@@ -1277,10 +1277,10 @@ internal sealed partial class SimulatedCombatState
         SlowPower? slow = GetMutablePower<SlowPower>(owner);
         if (slow != null)
         {
-            // Native Slow keeps its acquired instance across turns. Reset both the
-            // displayed state and the damage mirror's counter on that branch instance.
+            // Native Slow keeps its acquired instance across turns. Reset its source
+            // amount and the damage mirror's counter on that branch instance;
+            // DisplayAmount is computed from SlowAmount in v0.107.1.
             slow.DynamicVars["SlowAmount"].BaseValue = 0;
-            slow.DynamicVars["DisplayAmount"].BaseValue = 0;
             simulator.StateStore.Get(slow, () => new CounterPredictionState(0)).Value = 0;
         }
 

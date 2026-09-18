@@ -110,8 +110,16 @@ internal static partial class CardOnPlaySupport
                 combat.Apply<FeralPower>(owner, card.DynamicVars["FeralPower"].IntValue, owner);
                 combat.InitializeFeralAfterApplied(simulator, owner);
                 break;
-            case ForgottenRitual or Fuel or Luminesce:
+            case ForgottenRitual or Luminesce:
                 simulator.GainEnergy(card.Owner, card.DynamicVars.Energy.IntValue);
+                break;
+            case Fuel:
+                // Fuel.OnPlay gains energy before drawing; the draw can trigger VOID's
+                // energy loss, so both steps must stay in the native order.
+                simulator.GainEnergy(card.Owner, card.DynamicVars.Energy.IntValue);
+                if (simulator.HasPendingChoice)
+                    return;
+                simulator.Draw(card.Owner, card.DynamicVars.Cards.BaseValue);
                 break;
             case Haze:
                 foreach (Creature enemy in combat.HittableEnemies)

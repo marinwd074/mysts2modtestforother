@@ -2,6 +2,13 @@
 
 > 当前矩阵基线为 CombatSolver `0.40.2`、目标游戏 `0.107.1`、RitsuLib 目标 `0.107.1`；下方按时间排列的历史条目保留其原始版本和验证范围，不能直接当作当前发布结论。
 
+## 2026-09-18：三份新问题包共因回归修复
+
+- 代码覆盖 `FUEL` 原生“先加能量、再抽牌”顺序，以及 v0.107.1 `SlowPower` 的 `SlowAmount` 生命周期；对应问题包为 `AEONGLASS_BOSS`、`SOUL_NEXUS_ELITE`、`BYGONE_EFFIGY_ELITE`。
+- L0/L2：Release 与 CompatibilitySmoke 构建通过（0 errors，2 条既有 `CS9113`）；`verify-refactor-boundaries.ps1` 输出 `REFACTOR_BOUNDARIES_OK search_files=119`；`verify-target-version.ps1` 输出 `TARGET_VERSION_PASS game=0.107.1 ritsu=0.107.1 symbol=STS2_01071`。
+- L3：0.107.1 私有 headless 游戏进程的 `FIRST_TURN` CompatibilitySmoke 通过：`PASS: native 0.107.1 first-turn search; actions=20; incremental verification enabled`；日志确认 63/63 CombatSolver 补丁应用成功。脱敏证据见[`runtime-evidence/20260918-issue-fix-compat-smoke`](../../runtime-evidence/20260918-issue-fix-compat-smoke/)。
+- 限制：生产构建按设计排除 `src/Testing`，因此通用 `run-unattended-test.ps1` 与 `SLOW-TURN-RESET-FORK` 不作为本批次通过依据；三份问题包的完整游戏内回放仍待用户用输出 DLL 实测。
+
 ## 2026-09-18：架构优化 Batch 9——BeamRetentionPolicy Potion partial
 
 - 结构：最终政策资格记录/比较、药水配额、药水谱系分组和 `UsesPotion` 拆至 `CombatBeamSolver.BeamRetentionPolicy.Potion.cs`，仍为同一嵌套 `BeamRetentionPolicy` partial，未改变搜索算法或候选顺序。

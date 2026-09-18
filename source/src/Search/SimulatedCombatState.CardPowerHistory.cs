@@ -36,8 +36,8 @@ internal sealed partial class SimulatedCombatState
                 CanonicalModels.Power<SlowPower>(),
                 slow.Applier);
             mutable.DynamicVars["SlowAmount"].BaseValue++;
-            mutable.DynamicVars["DisplayAmount"].BaseValue =
-                mutable.DynamicVars["SlowAmount"].BaseValue * 10;
+            // In v0.107.1 DisplayAmount is a computed SlowPower property, not a DynamicVar.
+            // Updating the nonexistent dictionary entry aborts search when Slow is active.
         }
     }
 

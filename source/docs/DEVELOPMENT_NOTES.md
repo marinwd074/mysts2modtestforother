@@ -2,6 +2,12 @@
 
 > 本文按时间顺序保留开发历史。当前基线为 CombatSolver `0.40.2`、目标游戏 `0.107.1`、RitsuLib 目标 `0.107.1`；下方旧版本、旧 PR 和旧验证环境不代表当前状态。
 
+## 2026-09-18：0.40.2 三份新问题包共因修复
+
+- `AEONGLASS_BOSS` 的跨回合弃牌堆顺序偏移与 `SOUL_NEXUS_ELITE` 的 `VOID` 能量漂移共享 `FUEL` 预测补偿缺少抽牌这一个根因。预测现在按原生顺序先获得能量，再抽 `Cards` 张牌；`VOID` 等抽牌触发效果因此会在同一分支内生效，`FORGOTTEN_RITUAL` 与 `LUMINESCENCE` 仍保持能量专属路径。
+- `BYGONE_EFFIGY_ELITE` 的 `SlowPower` 在 v0.107.1 只有 `SlowAmount` 动态变量，`DisplayAmount` 是由原版计算的只读属性。搜索出牌记录和回合清零均移除错误的 `DynamicVars["DisplayAmount"]` 写入，保留 `SlowAmount` 与伤害镜像计数的分支状态。
+- Release 与 CompatibilitySmoke 构建均通过（0 errors，保留既有 2 条 `CS9113`）；结构门禁 `REFACTOR_BOUNDARIES_OK search_files=119`，目标版本门禁 `0.107.1/0.107.1/STS2_01071`。0.107.1 `FIRST_TURN` CompatibilitySmoke 写出 20 动作、增量核验开启的通过结果。原始三份问题包的完整实机回放和 `src/Testing` 专用 `SLOW-TURN-RESET-FORK` 重跑未在生产兼容构建中宣称通过，留给用户使用新 DLL 实测。
+
 ## 2026-09-18：架构优化 Batch 9——BeamRetentionPolicy Potion partial 拆分
 
 - 只移动最终政策资格记录/比较、药水配额、药水谱系分组和 `UsesPotion` 到嵌套 `BeamRetentionPolicy` partial 文件；不改调用方、遍历顺序、配额、候选排序、RNG 或终局裁决，也不引入接口/服务/仓储。
