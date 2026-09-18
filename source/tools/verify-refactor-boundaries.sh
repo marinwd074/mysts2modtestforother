@@ -154,6 +154,13 @@ cycle_policy_paths=(
     "$search_root/CombatBeamSolver.CycleRegionRetention.cs"
     "$search_root/CombatBeamSolver.OrderedMutationRetention.cs"
 )
+hook_compatibility_path="$repository_root/src/Compatibility/Sts2HookCompatibility.cs"
+after_block_broken_mirror_path="$repository_root/src/Engine/InCombat/Mirrors/Hooks/Block/AfterBlockBrokenMirrors.cs"
+require_fixed "$hook_compatibility_path" 'internal static class Sts2HookCompatibility' 'missing compatibility hook boundary:'
+require_fixed "$hook_compatibility_path" 'AfterBlockBrokenParameterTypes' 'missing compatibility hook parameter shape:'
+require_fixed "$after_block_broken_mirror_path" 'Sts2HookCompatibility.AfterBlockBrokenParameterTypes' 'AfterBlockBroken mirror bypasses compatibility:'
+forbid_fixed "$after_block_broken_mirror_path" '#if STS2_01071' 'native AfterBlockBroken parameter shape returned outside Compatibility:'
+
 legacy_loop_guard_paths=(
     "$search_root/CombatBeamSolver.Expansion.cs"
     "$search_root/CombatBeamSolver.ParallelExpansion.cs"

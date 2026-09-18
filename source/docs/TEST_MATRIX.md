@@ -14,6 +14,11 @@
 - 结构：循环 startup/exit portfolio、风险桶代表、探测族比较、票据租约和有界保留选择移至 `CombatBeamSolver.BeamRetentionPolicy.Cycle.cs`；`Retention.cs` 保留调用/共享桥接/最终票据结算，`CyclePlanning.cs` 保留周期生命周期与预算。
 - 验证：Release 与 CompatibilitySmoke 构建 0 errors（2 条既有 `CS9113`），结构门禁与目标版本门禁结果记录于 [Batch 12 报告](performance/beam-retention-policy-cycle-split-20260918.md)。本批次不重复上一批已超时的私有运行；最终 DLL 由用户在可见游戏中测试。
 
+## 2026-09-18：架构优化 Batch 13——AfterBlockBroken Hook 兼容边界
+
+- 结构：`AfterBlockBroken` 的版本相关原生参数列表移至 `src/Compatibility/Sts2HookCompatibility.cs`；Hook 镜像不再直接包含该版本条件编译。
+- 验证：Release 与 CompatibilitySmoke 构建、结构门禁和目标版本门禁结果记录于 [Batch 13 报告](performance/after-block-broken-hook-compatibility-20260918.md)；最终 DLL 由用户在可见游戏中测试。
+
 ## 2026-09-18：架构优化 Batch 11——BeamRetentionPolicy CrossTurn partial
 
 - 结构：跨回合 retention 选择图移至 `CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs`；`Retention.cs` 保留剪枝协调调用，`CrossTurnPlanning.cs` 保留证据传播与 stand-pat 语义状态附着。未改变候选顺序、风险分带、探测预算或搜索算法。

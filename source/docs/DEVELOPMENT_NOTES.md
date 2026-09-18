@@ -15,6 +15,12 @@
 - 仅调整物理归属和实例调用限定，保留原候选遍历、风险桶、比较顺序、六条 portfolio 上限、票据租约和清理时序；未引入接口、服务、策略替换或并发路径。
 - 验证与限制记录在[Batch 12 报告](performance/beam-retention-policy-cycle-split-20260918.md)。
 
+## 2026-09-18：架构优化 Batch 13——AfterBlockBroken Hook 兼容边界
+
+- 将 `AfterBlockBroken` 在 0.107.1 与旧目标之间变化的原生参数列表移至静态 `Sts2HookCompatibility`；镜像注册只消费兼容 helper，不在 Hook 镜像内保留版本条件分支。
+- 只移动 API shape，不改变镜像注册、模型处理、预测效果或分配路径；未引入接口、服务、运行时反射或 per-node 分支。
+- 验证与限制记录在[Batch 13 报告](performance/after-block-broken-hook-compatibility-20260918.md)。
+
 ## 2026-09-18：架构优化 Batch 11——BeamRetentionPolicy CrossTurn partial 拆分
 
 - 将跨回合保留的候选族键、投资风险分带、在途/新族代表选择、回退候选、比较器、探测启动和准入判定移至 `CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs` 的嵌套 `BeamRetentionPolicy` partial。`CombatBeamSolver.Retention.cs` 只保留剪枝阶段调用边界；`CombatBeamSolver.CrossTurnPlanning.cs` 继续拥有跨回合证据传播、stand-pat 基线和语义状态附着，不混入保留排序。

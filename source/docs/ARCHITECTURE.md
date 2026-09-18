@@ -48,7 +48,8 @@ Entry / turn hooks
 ```
 
 版本相关的原生反射签名集中在 `src/Compatibility/`；当前回合准备入口由
-`Sts2TurnSetupCompatibility` 负责，搜索节点不经过该边界。仍需保留原生
+`Sts2TurnSetupCompatibility` 负责，卡牌结果 Hook 由 `Sts2CardHookCompatibility`
+负责，`AfterBlockBroken` 参数形状由 `Sts2HookCompatibility` 负责，搜索节点不经过该边界。仍需保留原生
 Harmony 参数形状的条件编译位于回合补丁入口，后续按兼容迁移顺序逐项收敛。
 
 搜索 worker 接收 `CombatRootSnapshot`、`SearchPolicySnapshot`、诊断 sink、帧压力信号和取消令牌。它不读取全局设置、控制器、UI 或无人测试状态。

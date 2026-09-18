@@ -78,6 +78,20 @@ foreach ($file in $searchFiles) {
     }
 }
 
+$hookCompatibilityPath = Join-Path $repositoryRoot "src/Compatibility/Sts2HookCompatibility.cs"
+$afterBlockBrokenMirrorPath = Join-Path $repositoryRoot "src/Engine/InCombat/Mirrors/Hooks/Block/AfterBlockBrokenMirrors.cs"
+foreach ($compatibilityBoundary in @(
+    @{ Path = $hookCompatibilityPath; Text = "internal static class Sts2HookCompatibility" },
+    @{ Path = $hookCompatibilityPath; Text = "AfterBlockBrokenParameterTypes" },
+    @{ Path = $afterBlockBrokenMirrorPath; Text = "Sts2HookCompatibility.AfterBlockBrokenParameterTypes" })) {
+    if (-not (Select-String -LiteralPath $compatibilityBoundary.Path -SimpleMatch $compatibilityBoundary.Text -Quiet)) {
+        $violations.Add("$($compatibilityBoundary.Path): missing compatibility hook boundary '$($compatibilityBoundary.Text)'")
+    }
+}
+if (Select-String -LiteralPath $afterBlockBrokenMirrorPath -SimpleMatch "#if STS2_01071" -Quiet) {
+    $violations.Add("${afterBlockBrokenMirrorPath}: native AfterBlockBroken parameter shape returned outside Compatibility")
+}
+
 $blockPotionInsertionPath = Join-Path $searchRoot "CombatBeamSolver.BlockPotionInsertion.cs"
 foreach ($requiredBlockPotionRule in @(
     'HpLostByTurn',
