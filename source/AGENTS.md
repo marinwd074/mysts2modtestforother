@@ -2,7 +2,7 @@
 
 > **当前基线：** CombatSolver `0.40.2`，目标游戏 `0.107.1`，RitsuLib 目标 `0.107.1`，兼容符号 `STS2_01071`，运行时为 .NET 9 / Godot 4.5.1。分支与提交以当前 `main` HEAD 为准。
 
-> **当前工作项：** 按 `CombatSolver_architecture_optimization_plan` 执行 Batch 6（Performance Baseline），固定 0.107.1 兼容 smoke 的 fixture、seed、profile、beam、DOP 和预算，收集搜索工作量、分配/GC、主线程帧间隔及路线身份；不改搜索算法或质量策略。
+> **当前工作项：** 按 `CombatSolver_architecture_optimization_plan` 执行 Batch 7（Search 热点优化）：为 `MirroredHookListenerSnapshot` 按 Hook mask 按需缓存有序位置索引，保持监听顺序、分支对象、搜索质量和结果身份不变；固定 0.107.1 性能 smoke 做 baseline/candidate 对照。
 
 本文件约束所有在本仓库中工作的 coding agent。开始处理任务前完整阅读；子目录若有更具体的 `AGENTS.md`，其规则只补充对应目录，不能放宽这里的硬约束。
 

@@ -2,6 +2,12 @@
 
 > 本文按时间顺序保留开发历史。当前基线为 CombatSolver `0.40.2`、目标游戏 `0.107.1`、RitsuLib 目标 `0.107.1`；下方旧版本、旧 PR 和旧验证环境不代表当前状态。
 
+## 2026-09-18：架构优化 Batch 7——Hook 监听槽位热点
+
+- `MirroredHookListenerLayout` 现在只在某个 Hook mask 首次被请求时建立有序位置索引；`HookListenerEnumerable` 按索引读取当前分支的完整监听快照。没有缓存模型引用，不改变重复成员、原生顺序、第三方/动态类型旁路或 `PendingChoice` 停止边界；`All` mask 保留完整顺序扫描路径。
+- 该改动针对历史 0.107.1 热点审计中约 1.69 亿次位图槽位检查、约 361 万次成员交出的成本；它只优化监听遍历，不改变 Search 的 Beam、候选顺序、评分、RNG、预算或终局裁决。
+- 固定 IRONCLAD/NIBBITS_NORMAL、`COMPAT1071`、Medium/beam 60、DOP1、5000 ms 的 Windows headless A-B-B-A-A-B：六次均为 `expanded=3528`、`transitions=10156`，路线和结果身份逐次一致。baseline 平均 `3169.203 ms / 370,614,600 B`，candidate 平均 `3145.065 ms / 370,677,333 B`，耗时约 `-0.762%`，分配约 `+0.017%`；后者视为噪声范围，不宣称分配收益。GC、>50/100 ms 帧均未出现新的异常尾部。首回合 0.107.1 smoke 另写出 20 动作、增量核验开启的通过结果。详见[Batch 7 报告](performance/compat1071-hook-index-20260918.md)。
+
 ## 2026-09-18：架构优化 Batch 6——搜索性能基线
 
 - 在生产程序集保持 `src/Testing` 隔离的前提下，增加 `COMPAT1071_PERFORMANCE_BASELINE` 兼容 smoke。它沿现有 0.107.1 游戏内最小 fixture 调用生产 `CombatSearchCoordinator`，固定 5000 ms、DOP1 和当前 profile/Beam，只采集搜索工作量、分配/GC、主线程帧间隔及路线身份，不修改搜索热路径。

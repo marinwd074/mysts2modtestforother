@@ -2,6 +2,12 @@
 
 > 当前矩阵基线为 CombatSolver `0.40.2`、目标游戏 `0.107.1`、RitsuLib 目标 `0.107.1`；下方按时间排列的历史条目保留其原始版本和验证范围，不能直接当作当前发布结论。
 
+## 2026-09-18：架构优化 Batch 7——Hook 监听索引候选
+
+- 代码范围：`MirroredHookListenerLayout` 的按 mask 惰性索引与 `HookListenerEnumerable` 的分支快照索引遍历；不改变监听顺序、重复成员、PendingChoice 停止或搜索策略。
+- 固定 0.107.1 headless A-B-B-A-A-B 六次：baseline `3169.203 ms / 370,614,600 B`，candidate `3145.065 ms / 370,677,333 B`；`expanded=3528`、`transitions=10156`、route/result identity 全部一致，GC Gen2 与 >50/100 ms 帧均为 0。耗时下降约 0.762%，分配变化约 +0.017%，仅作为持平范围记录；未测可见 Steam 性能。
+- `COMPAT1071_FIRST_TURN` 候选产物通过：`PASS: native 0.107.1 first-turn search; actions=20; incremental verification enabled`。专用 smoke 不写常规 result 文件，外层启动器的退出提示不记为 unattended 请求通过。原始 JSON 见[`runtime-evidence/20260918-batch7-hook-index`](../../runtime-evidence/20260918-batch7-hook-index/)，汇总见[性能报告](performance/compat1071-hook-index-20260918.md)。
+
 ## 2026-09-18：架构优化 Batch 6——搜索性能基线
 
 - 新增 `COMPAT1071_PERFORMANCE_BASELINE`：在 0.107.1 游戏进程内固定 IRONCLAD/NIBBIT、`COMPAT1071` seed、生产 profile、beam、DOP1 和 5000 ms 固定预算，只记录 expanded、transitions、耗时、worker 分配、bytes/transition、GC、主线程帧间隔以及完整路线身份；不改变搜索算法、评分、Beam 或质量策略。

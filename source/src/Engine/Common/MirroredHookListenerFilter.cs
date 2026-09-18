@@ -298,6 +298,51 @@ internal sealed class MirroredHookListenerLayout(
     internal readonly record struct Entry(Type Type, MirroredHookMask Mask);
     internal Entry[] Entries { get; } = entries;
     internal bool HasAny(MirroredHookMask mask) => (combined & mask) != 0;
+
+    // Most mirrored hooks use one mask bit, but the same immutable type layout is
+    // visited by many branches. Build the ordered positions only for masks that are
+    // actually requested, then publish a copy-on-write cache for lock-free reads.
+    // The layout still contains types only; branch model identity stays in the
+    // MirroredHookListenerSnapshot source list.
+    private Dictionary<MirroredHookMask, int[]>? _indicesByMask;
+
+    internal int[]? IndicesFor(MirroredHookMask mask)
+    {
+        if (mask == MirroredHookMask.All)
+            return null;
+
+        Dictionary<MirroredHookMask, int[]>? cache = Volatile.Read(ref _indicesByMask);
+        if (cache is not null && cache.TryGetValue(mask, out int[]? cached))
+            return cached;
+
+        int matchingCount = 0;
+        foreach (Entry entry in Entries)
+            if ((entry.Mask & mask) != 0)
+                matchingCount++;
+        int[] indices = matchingCount == 0 ? Array.Empty<int>() : new int[matchingCount];
+        if (matchingCount != 0)
+        {
+            int next = 0;
+            for (int index = 0; index < Entries.Length; index++)
+                if ((Entries[index].Mask & mask) != 0)
+                    indices[next++] = index;
+        }
+
+        lock (this)
+        {
+            cache = _indicesByMask;
+            if (cache is not null && cache.TryGetValue(mask, out cached))
+                return cached;
+
+            Dictionary<MirroredHookMask, int[]> updated = cache is null
+                ? []
+                : new(cache);
+            updated[mask] = indices;
+            Volatile.Write(ref _indicesByMask, updated);
+            return indices;
+        }
+    }
+
     internal bool Matches(IReadOnlyList<AbstractModel> source)
     {
         if (source.Count != Entries.Length)

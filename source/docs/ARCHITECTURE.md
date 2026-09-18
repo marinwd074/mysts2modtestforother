@@ -288,7 +288,7 @@ Smart 层间使用 `SmartLayerMemoryForecast` 的同窗分配和转移高水位�
 
 `SimulatedCombatState` 将基础监听快照分为阵容/遗物/药水/根 Power 前段和球/卡牌/原生附着效果后段。卡牌或球变化只重建后段；阵容或药水变化清空基础前段。有效/活动 Power 只重写前段，沿用原完整顺序；新增 Power 找不到前段所有者锚点时回退到完整列表，保留卡牌锚点或列表尾部插入。不透明 CardModifier 根始终走完整路径，其附着监听追加器仍收到前段在内的完整列表。成功分段后的有效/活动前段及 Power 投影也可跨卡牌/球变化保留；Power 变更与基础前段变化仍完整清空这些派生缓存。无前段锚点和不透明来源不保留该投影。发布的各段不可变，拼接视图长度一次冻结；Fork 通过同一 `PredictionForkContext` 重映射接收者，并复用相同后段。`HOOK_LISTENER_SEGMENTS scope=root_cumulative` 记录基础及有效前段构建/复用与分段/完整构建，主搜与恢复数不可相加。
 
-`EffectivePowers` 保留已知敌人尚待完成死亡结算的能力；普通 `ICombatState` / `ICombatPredictionHookListenerSource` 回调使用活动监听视图，排除所有者已离场的 Power。两种视图共用既有根与分支能力实例，活动视图随阵容和能力缓存失效，不清空死亡补偿所需的数据。
+`EffectivePowers` 保留已知敌人尚待完成死亡结算的能力；普通 `ICombatState` / `ICombatPredictionHookListenerSource` 回调使用活动监听视图，排除所有者已离场的 Power。两种视图共用既有根与分支能力实例，活动视图随阵容和能力缓存失效，不清空死亡补偿所需的数据。镜像 Hook 在不可变类型布局上按 mask 按需缓存有序位置索引，枚举时仍从当前分支的完整监听快照取模型；空路径、重复成员、原生顺序和 PendingChoice 停止边界不变。
 
 ## 4. 内嵌模拟引擎
 
