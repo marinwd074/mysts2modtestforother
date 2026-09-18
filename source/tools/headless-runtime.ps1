@@ -136,7 +136,16 @@ function Get-HeadlessSnapshotPlan(
             throw "Cannot freeze a game tree containing a reparse point: $($item.FullName)"
         }
         if (-not $item.PSIsContainer) {
-            $sources[[IO.Path]::GetRelativePath($Context.SourceGameRoot, $item.FullName)] = $item.FullName
+            $relative = [IO.Path]::GetRelativePath($Context.SourceGameRoot, $item.FullName).Replace('/', '\')
+            # The installed game may retain the legacy top-level mod payload
+            # beside the packaged mods/CombatSolver directory. The snapshot
+            # below injects the packaged payload explicitly; carrying both
+            # makes STS2 discover CombatSolver twice and abort startup.
+            if ([string]::Equals($relative, 'mods\CombatSolver.dll', [StringComparison]::OrdinalIgnoreCase) -or
+                [string]::Equals($relative, 'mods\CombatSolver.json', [StringComparison]::OrdinalIgnoreCase)) {
+                continue
+            }
+            $sources[$relative] = $item.FullName
         }
     }
     $sources['mods\CombatSolver\CombatSolver.dll'] = $CombatSolverDll
