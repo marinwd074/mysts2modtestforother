@@ -23,6 +23,12 @@ internal static partial class SolverController
 
     private static void StartFullAutoDeployment(NGame host, CombatState state, SolverResult result)
     {
+        if (!SolverSessionCapabilities.Capture(state).CanFullAuto)
+        {
+            _combat.FullAutoEnabled = false;
+            Entry.Logger.Info("[CombatSolver/MultiplayerProbe] FULL_AUTO_DEPLOY_REJECT reason=session_capability");
+            return;
+        }
         if (_stopFullAutoOnWorseRecalculation
             && !result.WasReused
             && result.ProjectedBattleHpLossIncrease > 0)
@@ -68,6 +74,11 @@ internal static partial class SolverController
 
     private static void StartDeployment(NGame host, CombatState state, SolverResult result)
     {
+        if (!SolverSessionCapabilities.Capture(state).CanDeploySimpleLocalActions)
+        {
+            Entry.Logger.Info("[CombatSolver/MultiplayerProbe] DEPLOY_START_REJECT reason=session_capability");
+            return;
+        }
         bool hasCurrentTurnPlan = result.BestNode.Actions.Any(action =>
             action.Turn == result.StartTurnNumber
             && (action.IsExecutable || action.Kind == PlanActionKind.EndTurn));

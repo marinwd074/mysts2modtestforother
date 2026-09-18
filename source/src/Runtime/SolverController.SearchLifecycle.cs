@@ -24,6 +24,12 @@ internal static partial class SolverController
     public static void RequestSearch(NGame host, CombatState state, SearchReason reason, bool deployWhenReady = false)
     {
         AssertMainThread();
+        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
+        if (!capabilities.CanSearch)
+        {
+            Entry.Logger.Info($"[CombatSolver/MultiplayerProbe] SEARCH_REJECT reason={capabilities.SearchRejection}");
+            return;
+        }
         if (_combat.ShowcaseMode && reason != SearchReason.AutoTurnStart)
         {
             StopShowcaseRoute(host, "战斗状态与录像路线不一致，已停止执行。");

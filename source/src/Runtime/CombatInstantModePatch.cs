@@ -72,7 +72,8 @@ internal sealed class CombatInstantModePatch : IPatchMethod
     internal static FastModeType Resolve(PrefsSave prefs)
         => Entry.Enabled && !SolverController.SolverDisabled
            && SolverSettings.Current.DeploymentFastMode == SolverDeploymentFastMode.Instant
-           && CombatManager.Instance.IsInProgress && !SolverController.IsMultiplayerSession
+           && CombatManager.Instance.IsInProgress
+           && SolverSessionCapabilities.Capture(CombatManager.Instance.DebugOnlyGetState()).CanUseInstantDeployment
             ? FastModeType.Instant
             : prefs.FastMode;
 }

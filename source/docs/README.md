@@ -17,6 +17,7 @@
 | 当前开发批次、未发布改动和已知限制 | [开发笔记](DEVELOPMENT_NOTES.md) |
 | 当前测试目录、重跑方式和未验证范围 | [测试矩阵](TEST_MATRIX.md) |
 | 工具生成的 Hook 覆盖固定入口 | [战斗 Hook 覆盖目录](COMBAT_HOOK_COVERAGE.md) |
+| 多人适配当前阶段、能力边界和 MP-0 门槛 | [多人适配阶段](multiplayer/README.md) |
 
 ## 专题目录
 
@@ -31,6 +32,7 @@
 | [pr/](pr/README.md) | PR 审查、集成修正和验证记录 |
 | [strategy/](strategy/README.md) | 策略需求、搜索研究和优化记录 |
 | [audits/](audits/README.md) | 历史仓库、架构和 UI 审计 |
+| [multiplayer/](multiplayer/README.md) | 当前多人适配阶段与验证门槛 |
 | [history/](history/README.md) | 已切档的历史开发与测试资料 |
 
 ## 维护约定

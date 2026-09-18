@@ -80,7 +80,7 @@ public static class Entry
         if (!Enabled
             || state.CurrentSide != CombatSide.Player
             || NGame.Instance == null
-            || SolverController.IsMultiplayerSession)
+            || !SolverSessionCapabilities.Capture(state).CanSearch)
             return;
         if (SolverController.SolverDisabled)
         {
@@ -131,7 +131,7 @@ public static class Entry
 
         if (!Enabled
             || SolverController.SolverDisabled
-            || SolverController.IsMultiplayerSession
+            || !SolverSessionCapabilities.Capture(state).CanSearch
             || !UnattendedTestRunner.AutomaticTurnSearchEnabled
             || !SolverController.AutomaticCalculationEnabled
             || SolverController.AutomaticSearchPaused

@@ -83,6 +83,7 @@ internal static partial class SolverController
             || _combat.AutomaticSearchPaused
             || !CombatManager.Instance.IsInProgress
             || state.Players.Count != 1
+            || !SolverSessionCapabilities.Capture(state).CanSearch
             || state.CurrentSide != CombatSide.Player
             || player?.PlayerCombatState?.Phase != PlayerTurnPhase.Play
             || result.TurnSetupPlayState is not { } expected

@@ -23,6 +23,14 @@ internal static partial class SolverController
             return;
         }
 
+        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
+        if (!capabilities.CanFullAuto)
+        {
+            Entry.Logger.Info($"[CombatSolver/MultiplayerProbe] FULL_AUTO_REJECT reason={capabilities.DeploymentRejection}");
+            SolverOverlay.RefreshControls();
+            return;
+        }
+
         if (_combat.AutomaticSearchPaused)
         {
             _combat.AutomaticSearchPaused = false;
@@ -229,6 +237,14 @@ internal static partial class SolverController
     public static void ApplyCurrentTurn()
     {
         AssertMainThread();
+        if (!CurrentSessionCapabilities.CanDeploySimpleLocalActions)
+        {
+            Entry.Logger.Info(
+                $"[CombatSolver/MultiplayerProbe] APPLY_CURRENT_TURN_REJECT " +
+                $"reason={CurrentSessionCapabilities.DeploymentRejection}");
+            SolverOverlay.RefreshControls();
+            return;
+        }
         _combat.AutomaticSearchPaused = false;
         _combat.AutomaticSearchPausedTurn = null;
         _combat.FullAutoEnabled = false;
@@ -253,6 +269,14 @@ internal static partial class SolverController
     public static void AdoptCurrentRoute()
     {
         AssertMainThread();
+        if (!CurrentSessionCapabilities.CanDeploySimpleLocalActions)
+        {
+            Entry.Logger.Info(
+                $"[CombatSolver/MultiplayerProbe] ADOPT_ROUTE_REJECT " +
+                $"reason={CurrentSessionCapabilities.DeploymentRejection}");
+            SolverOverlay.RefreshControls();
+            return;
+        }
         _combat.AutomaticSearchPaused = false;
         _combat.AutomaticSearchPausedTurn = null;
         if (_search is not { } search)
