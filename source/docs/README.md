@@ -10,6 +10,7 @@
 | 要查什么 | 入口 |
 |---|---|
 | STS2 0.107.1 当前兼容证据、Smoke 结果与限制 | [0.107.1 兼容证据](compat/0.107.1/README.md) |
+| 测试层级、纯逻辑/集成/原生运行边界 | [测试分层与入口](TESTING_LAYERS.md) |
 | 性能回归阈值、固定工作量和禁止的测试捷径 | [性能与质量护栏](PERFORMANCE_GUARDRAILS.md) |
 | 无需训练的有界新颖性／Beam 组合、实验开关和完整对照 | [有界多策略搜索](strategy/bounded-novelty-search-20260916.md) |
 | 不启动 Godot 批量跑搜索、量宽度与预算 | [离线搜索宿主](OFFLINE_SEARCH_HARNESS.md) |
