@@ -590,6 +590,7 @@ $expectedBeamFiles = @(
     "CombatBeamSolver.BeamRetentionPolicy.Choice.cs",
     "CombatBeamSolver.BeamRetentionPolicy.Potion.cs",
     "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs",
+    "CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs",
     "CombatBeamSolver.BeamRanking.cs",
     "CombatBeamSolver.BlockPotionInsertion.cs",
     "CombatBeamSolver.CrossTurnPlanning.cs",
@@ -636,6 +637,8 @@ foreach ($required in @(
     @{ Path = $pathDiagnosticsPath; Text = 'SearchPathObservationStage.RetentionPoolInput' },
     @{ Path = $pathDiagnosticsPath; Text = 'Evaluation: new SearchPathEvaluationValues(' },
     @{ Path = (Join-Path $searchRoot "CombatBeamSolver.Retention.cs"); Text = 'SearchPathObservationStage.RetentionPoolFinal' },
+    @{ Path = (Join-Path $searchRoot "CombatBeamSolver.Retention.cs"); Text = 'Retention.AddCrossTurnPortfolio(pool, selected, selectedSet);' },
+    @{ Path = (Join-Path $searchRoot "CombatBeamSolver.Retention.cs"); Text = 'BeamRetentionPolicy.RequiresCrossTurnPlanning(candidate)' },
     @{ Path = (Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.cs"); Text = 'observedOptionLeaders.Add(optionLeader)' },
     @{ Path = (Join-Path $searchRoot "CombatBeamSolver.Retention.cs"); Text = 'SearchPathObservationStage.PruneFinal' },
     @{ Path = (Join-Path $repositoryRoot "src\Engine\InCombat\Mirrors\Hooks\Card\AfterCardPlayedMirrors.cs"); Text = 'private static bool ApplyRelicStatPower(' },
@@ -651,6 +654,19 @@ foreach ($forbidden in @(
     @{ Path = (Join-Path $searchRoot "SimulatedCombatState.Relics.cs"); Text = 'Apply<DexterityPower>' })) {
     foreach ($match in Select-String -LiteralPath $forbidden.Path -SimpleMatch $forbidden.Text) {
         $violations.Add("$($match.Path):$($match.LineNumber): observer cache mutation or deferred relic stat application returned '$($forbidden.Text)'")
+    }
+}
+foreach ($retiredCrossTurnMember in @(
+    'private void AddCrossTurnPortfolio(',
+    'private static CrossTurnProbeFamilyKey',
+    'private void StartCrossTurnProbe(',
+    'private bool RequiresCrossTurnPlanning(')) {
+    foreach ($path in @(
+        (Join-Path $searchRoot "CombatBeamSolver.Retention.cs"),
+        (Join-Path $searchRoot "CombatBeamSolver.CrossTurnPlanning.cs"))) {
+        foreach ($match in Select-String -LiteralPath $path -SimpleMatch $retiredCrossTurnMember) {
+            $violations.Add("${path}:$($match.LineNumber): CrossTurn retention member returned outside BeamRetentionPolicy.CrossTurn '$retiredCrossTurnMember'")
+        }
     }
 }
 $actualBeamFiles = @($beamFiles.Name | Sort-Object)
@@ -690,6 +706,9 @@ $beamStructureChecks = @(
     @{ File = "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"; Text = "public void AddOrderedMutationPortfolio(" },
     @{ File = "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"; Text = "ArmOrderedMutationObservationBridges(" },
     @{ File = "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"; Text = "VerifyOrderedMutationKeyPolicyForTesting(" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs"; Text = "private sealed partial class BeamRetentionPolicy" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs"; Text = "public void AddCrossTurnPortfolio(" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs"; Text = "public static bool RequiresCrossTurnPlanning(SearchNode node)" },
     @{ File = "CombatBeamSolver.BeamRetentionPolicy.cs"; Text = "public List<SearchNode> RankBest(" },
     @{ File = "CombatBeamSolver.BeamRetentionPolicy.cs"; Text = "private sealed class RoutingChoiceNodes(SearchNode first) : List<SearchNode>" },
     @{ File = "CombatBeamSolver.BeamRetentionPolicy.cs"; Text = "public void Clear() => NodesByChoice.Clear();" },
@@ -1364,7 +1383,7 @@ foreach ($check in $metadataReuseChecks) {
 }
 
 # Keep the no-op dispatch metadata complete when callbacks are added to the facade.
-foreach ($file in @("CombatBeamSolver.RetentionJobs.cs", "CombatBeamSolver.BeamRetentionPolicy.cs", "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs")) {
+foreach ($file in @("CombatBeamSolver.RetentionJobs.cs", "CombatBeamSolver.BeamRetentionPolicy.cs", "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs", "CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs")) {
     foreach ($forbidden in @("Parallel.For(", "Task.Run(")) {
         if (Select-String -LiteralPath (Join-Path $searchRoot $file) -SimpleMatch $forbidden -Quiet) {
             $violations.Add("$($file): retention work bypassed fixed lanes '$forbidden'")

@@ -9,6 +9,11 @@
 - L3：0.107.1 私有 headless 游戏进程的 `FIRST_TURN` CompatibilitySmoke 通过：`PASS: native 0.107.1 first-turn search; actions=20; incremental verification enabled`；日志确认 63/63 CombatSolver 补丁应用成功。脱敏证据见[`runtime-evidence/20260918-issue-fix-compat-smoke`](../../runtime-evidence/20260918-issue-fix-compat-smoke/)。
 - 限制：生产构建按设计排除 `src/Testing`，因此通用 `run-unattended-test.ps1` 与 `SLOW-TURN-RESET-FORK` 不作为本批次通过依据；三份问题包的完整游戏内回放仍待用户用输出 DLL 实测。
 
+## 2026-09-18：架构优化 Batch 11——BeamRetentionPolicy CrossTurn partial
+
+- 结构：跨回合 retention 选择图移至 `CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs`；`Retention.cs` 保留剪枝协调调用，`CrossTurnPlanning.cs` 保留证据传播与 stand-pat 语义状态附着。未改变候选顺序、风险分带、探测预算或搜索算法。
+- 验证：Release 与 CompatibilitySmoke 构建 0 errors（2 条既有 `CS9113`），结构门禁与目标版本门禁结果记录于 [Batch 11 报告](performance/beam-retention-policy-cross-turn-split-20260918.md)。本批次不重复启动上一批已超时的私有运行；最终 DLL 由用户在可见游戏中测试。
+
 ## 2026-09-18：架构优化 Batch 10——BeamRetentionPolicy Mutation partial
 
 - 结构：完整有序变异职责移至 `CombatBeamSolver.BeamRetentionPolicy.Mutation.cs`；主文件保留共享协调器/通用排名，`CombatBeamSolver.OrderedMutationRetention.cs` 保留账本与最终提交边界。未改变算法、候选顺序或搜索预算。

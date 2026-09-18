@@ -216,11 +216,13 @@ Smart 层间使用 `SmartLayerMemoryForecast` 的同窗分配和转移高水位�
 | `CombatBeamSolver.RetentionJobs.cs` | 剪枝只读索引作业；复用空闲固定 lane，按原索引收集输出，排空后统一记账并传播取消/错误 |
 | `ParallelExpansionWorkProfile.cs` | coordinator 所有的作业经过时间分布与 wave/等待/提交计时；不代表 CPU 时间 |
 | `CombatBeamSolver.PathDiagnostics.cs` | 可选路径观察的值复制与边界配对；分别记录生成、两类转置、实际展开、动作准入、完整保留及回合注释，不写搜索策略或账本 |
-| `CombatBeamSolver.Retention.cs` | prune/retention 调用边界与相关小型辅助 |
+| `CombatBeamSolver.Retention.cs` | prune/retention 调用边界、通道协调与相关小型辅助 |
 | `CombatBeamSolver.BeamRetentionPolicy.cs` | 状态去重、中间分数排序、多样性通道和小型 Pareto；拥有嵌套 `BeamRetentionPolicy` 的主体策略 |
 | `CombatBeamSolver.BeamRetentionPolicy.Choice.cs` | 同一嵌套 `BeamRetentionPolicy` partial 的路由/回合开始选择谱系、上下文排序、保留排名与候选辅助 |
 | `CombatBeamSolver.BeamRetentionPolicy.Potion.cs` | 同一嵌套 `BeamRetentionPolicy` partial 的最终政策资格记录/比较、药水配额、药水谱系分组和 `UsesPotion` 辅助 |
 | `CombatBeamSolver.BeamRetentionPolicy.Mutation.cs` | 同一嵌套 `BeamRetentionPolicy` partial 的有序变异碰撞激活、续接 admission、observation、key 构建与策略校验；不拥有 `OrderedMutationRetention.cs` 的预算常量、lineage/lease ledger 或最终提交 |
+| `CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs` | 同一嵌套 `BeamRetentionPolicy` partial 的跨回合保留候选族、风险分带、探测代表、回退比较与有界探测启动；不拥有跨回合语义证据传播 |
+| `CombatBeamSolver.CrossTurnPlanning.cs` | 跨回合 probe 证据传播、stand-pat 基线发布与语义状态附着；不拥有 retention 候选排序 |
 | `CombatBeamSolver.CyclePlanning.cs` | 精确动作周期、通用收益与出口探针；按周期族和回合记账的有限观察与成长预算 |
 | `CombatBeamSolver.CycleRegionRetention.cs` | 合并同回合、同控制形状的动作排列；对最终存活候选事务式提交区域保留预算与进展证据 |
 | `CombatBeamSolver.OrderedMutationRetention.cs` | 有序操作碰撞的谱系、租约、成对激活和预算账本；统一处理续接、到期与普通通道回退 |

@@ -8,6 +8,12 @@
 - `BYGONE_EFFIGY_ELITE` 的 `SlowPower` 在 v0.107.1 只有 `SlowAmount` 动态变量，`DisplayAmount` 是由原版计算的只读属性。搜索出牌记录和回合清零均移除错误的 `DynamicVars["DisplayAmount"]` 写入，保留 `SlowAmount` 与伤害镜像计数的分支状态。
 - Release 与 CompatibilitySmoke 构建均通过（0 errors，保留既有 2 条 `CS9113`）；结构门禁 `REFACTOR_BOUNDARIES_OK search_files=119`，目标版本门禁 `0.107.1/0.107.1/STS2_01071`。0.107.1 `FIRST_TURN` CompatibilitySmoke 写出 20 动作、增量核验开启的通过结果。原始三份问题包的完整实机回放和 `src/Testing` 专用 `SLOW-TURN-RESET-FORK` 重跑未在生产兼容构建中宣称通过，留给用户使用新 DLL 实测。
 
+## 2026-09-18：架构优化 Batch 11——BeamRetentionPolicy CrossTurn partial 拆分
+
+- 将跨回合保留的候选族键、投资风险分带、在途/新族代表选择、回退候选、比较器、探测启动和准入判定移至 `CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs` 的嵌套 `BeamRetentionPolicy` partial。`CombatBeamSolver.Retention.cs` 只保留剪枝阶段调用边界；`CombatBeamSolver.CrossTurnPlanning.cs` 继续拥有跨回合证据传播、stand-pat 基线和语义状态附着，不混入保留排序。
+- 仅调整物理归属与外层调用限定，保留原候选遍历、风险分带、比较顺序、探测预算、排名清空和状态清理；未新增接口、服务、策略替换或并发路径。
+- 验证与限制记录在[Batch 11 报告](performance/beam-retention-policy-cross-turn-split-20260918.md)。
+
 ## 2026-09-18：架构优化 Batch 10——BeamRetentionPolicy Mutation partial 拆分
 
 - 按 P2-3 只移动有序变异的外层记录/工作项类型，以及嵌套 `BeamRetentionPolicy` 的完整 Mutation 方法图：组合碰撞、激活/代表选择、continuation packet、admission/observation、公平调度、lease transition、key-policy 校验。主文件继续保留构造器、共享排序/Beam/Pareto 辅助、`RankBest` 与通用策略；`OrderedMutationRetention.cs` 继续拥有预算常量、lineage/lease ledger、原子 pair、普通回退和最终提交。

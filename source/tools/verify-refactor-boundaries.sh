@@ -569,6 +569,7 @@ expected_beam_files=(
     CombatBeamSolver.BeamRetentionPolicy.Choice.cs
     CombatBeamSolver.BeamRetentionPolicy.Potion.cs
     CombatBeamSolver.BeamRetentionPolicy.Mutation.cs
+    CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs
     CombatBeamSolver.BlockPotionInsertion.cs
     CombatBeamSolver.CrossTurnPlanning.cs
     CombatBeamSolver.CyclePlanning.cs
@@ -635,6 +636,9 @@ CombatBeamSolver.BeamRetentionPolicy.Mutation.cs	private sealed partial class Be
 CombatBeamSolver.BeamRetentionPolicy.Mutation.cs	public void AddOrderedMutationPortfolio(
 CombatBeamSolver.BeamRetentionPolicy.Mutation.cs	ArmOrderedMutationObservationBridges(
 CombatBeamSolver.BeamRetentionPolicy.Mutation.cs	VerifyOrderedMutationKeyPolicyForTesting(
+CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs	private sealed partial class BeamRetentionPolicy
+CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs	public void AddCrossTurnPortfolio(
+CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs	public static bool RequiresCrossTurnPlanning(SearchNode node)
 CombatBeamSolver.BeamRetentionPolicy.cs	public List<SearchNode> RankBest(
 CombatBeamSolver.BeamRetentionPolicy.cs	private sealed class RoutingChoiceNodes(SearchNode first) : List<SearchNode>
 CombatBeamSolver.BeamRetentionPolicy.cs	public void Clear() => NodesByChoice.Clear();
@@ -668,6 +672,8 @@ CombatBeamSolver.RoundTransition.cs	checkpoint.HandDrawCount.HasValue ? PlayerSt
 RootCombatCardGenerationPoolSnapshot.cs	public bool TryGetEligibleCharacterCards(
 CombatBeamSolver.Retention.cs	var maximum = BeamRetentionPolicy.GetLongTermResourceMaximum(pool);
 CombatBeamSolver.Retention.cs	if (maximum.Count == pool.Count)
+CombatBeamSolver.Retention.cs	Retention.AddCrossTurnPortfolio(pool, selected, selectedSet);
+CombatBeamSolver.Retention.cs	BeamRetentionPolicy.RequiresCrossTurnPlanning(candidate)
 CombatBeamSolver.EndTurnChoiceReplay.cs	capture.ObservePendingChoice(this, pendingSourceId);
 CombatBeamSolver.AdmittedExpansion.cs	endTurn.TransferEndTurnTo(Aggregate!, candidate);
 CombatBeamSolver.AdmittedExpansion.cs	PublishCrossTurnStandPatBaselines(Node, _endTurnBaselines);
@@ -741,6 +747,17 @@ require_fixed "$search_root/CombatBeamSolver.Retention.cs" 'SearchPathObservatio
 require_fixed "$search_root/CombatBeamSolver.BeamRetentionPolicy.cs" 'observedOptionLeaders.Add(optionLeader)' 'routing observation no longer captures the actual option leader:'
 forbid_fixed "$path_diagnostics_path" 'node.Actions;' 'path observer populates retained action caches:'
 require_fixed "$search_root/CombatBeamSolver.Retention.cs" 'SearchPathObservationStage.PruneFinal' 'final prune observation is missing:'
+for retired_cross_turn_member in \
+    'private void AddCrossTurnPortfolio(' \
+    'private static CrossTurnProbeFamilyKey' \
+    'private void StartCrossTurnProbe(' \
+    'private bool RequiresCrossTurnPlanning('; do
+    for cross_turn_path in \
+        "$search_root/CombatBeamSolver.Retention.cs" \
+        "$search_root/CombatBeamSolver.CrossTurnPlanning.cs"; do
+        forbid_fixed "$cross_turn_path" "$retired_cross_turn_member" 'CrossTurn retention member returned outside BeamRetentionPolicy.CrossTurn:'
+    done
+done
 stat_relic_mirror_path="$repository_root/src/Engine/InCombat/Mirrors/Hooks/Card/AfterCardPlayedMirrors.cs"
 require_fixed "$stat_relic_mirror_path" 'private static bool ApplyRelicStatPower(' 'relic stat application left its exact hook boundary:'
 require_fixed "$stat_relic_mirror_path" 'if (context.Simulator.IsEnding)' 'relic stat command ending guard is missing:'
