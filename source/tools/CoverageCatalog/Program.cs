@@ -20,6 +20,14 @@ using STS2RitsuLib.Utils.HarmonyIl;
 
 string repositoryRoot = args.FirstOrDefault(argument => !argument.StartsWith("--", StringComparison.Ordinal))
     ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+string targetConfigPath = Path.Combine(repositoryRoot, "build-target.json");
+using JsonDocument targetConfig = JsonDocument.Parse(File.ReadAllText(targetConfigPath));
+string targetGameVersion = targetConfig.RootElement.GetProperty("game_version").GetString()
+    ?? throw new InvalidOperationException("build-target.json game_version is null.");
+string targetRitsuLibVersion = targetConfig.RootElement.GetProperty("ritsu_lib_target_version").GetString()
+    ?? throw new InvalidOperationException("build-target.json ritsu_lib_target_version is null.");
+if (!string.Equals(targetGameVersion, targetRitsuLibVersion, StringComparison.Ordinal))
+    throw new InvalidOperationException("build-target.json game and RitsuLib target versions differ.");
 bool verify = args.Contains("--verify", StringComparer.Ordinal);
 bool verifyEffective = args.Contains("--verify-effective", StringComparer.Ordinal);
 bool verifyNoRescan = args.Contains("--verify-no-rescan", StringComparer.Ordinal);
@@ -190,7 +198,7 @@ string[] nonPassingTestIds = classifications.Values
 CoverageCatalog catalog = new(
     SchemaVersion: 3,
     CombatSolverVersion: combatSolverVersion,
-    GameVersion: "0.111.0",
+    GameVersion: targetGameVersion,
     SimulationEngine: "embedded",
     Entries: entries);
 
@@ -198,7 +206,7 @@ File.WriteAllText(catalogPath, JsonSerializer.Serialize(catalog, JsonOptions()),
 SearchBoundaryCatalog boundaries = new(
     SchemaVersion: 1,
     CombatSolverVersion: combatSolverVersion,
-    GameVersion: "0.111.0",
+    GameVersion: targetGameVersion,
     NativeAutoRescan: entries
         .Where(entry => entry.EffectiveStatus == EffectiveSupportStatus.NativeAutoRescan)
         .Select(entry => new SearchBoundaryEntry(
@@ -229,13 +237,13 @@ CoverageEntry[] activeWithoutRuntimeEvidence = entries.Where(entry =>
 RuntimeEvidenceGapCatalog runtimeGaps = new(
     SchemaVersion: 1,
     CombatSolverVersion: combatSolverVersion,
-    GameVersion: "0.111.0",
+    GameVersion: targetGameVersion,
     Entries: activeWithoutRuntimeEvidence.Select(ToRuntimeEvidenceGap).ToArray());
 File.WriteAllText(runtimeGapPath, JsonSerializer.Serialize(runtimeGaps, JsonOptions()), new UTF8Encoding(false));
 BranchStateReadRiskCatalog branchStateReadRiskCatalog = new(
     SchemaVersion: 1,
     CombatSolverVersion: combatSolverVersion,
-    GameVersion: "0.111.0",
+    GameVersion: targetGameVersion,
     Entries: branchStateReadRisks);
 File.WriteAllText(
     branchStateReadRiskPath,
@@ -598,7 +606,7 @@ static RosterSourceCatalog AuditRosterSources(string combatSolverVersion)
     return new RosterSourceCatalog(
         1,
         combatSolverVersion,
-        "0.111.0",
+        targetGameVersion,
         entries.Count(entry => entry.Classification == "Unresolved"),
         entries);
 }
@@ -690,7 +698,7 @@ static AutoPlaySourceCatalog AuditAutoPlaySources(string combatSolverVersion)
     return new AutoPlaySourceCatalog(
         1,
         combatSolverVersion,
-        "0.111.0",
+        targetGameVersion,
         entries.Count(entry => entry.Classification == "Unresolved"),
         entries);
 }
@@ -824,7 +832,7 @@ static CombatChoiceSourceCatalog AuditCombatChoiceSources(string combatSolverVer
     return new CombatChoiceSourceCatalog(
         2,
         combatSolverVersion,
-        "0.111.0",
+        targetGameVersion,
         entries.Count(entry => entry.Classification == "Unresolved"),
         entries);
 }
@@ -884,7 +892,7 @@ static StateMutationCatalog AuditStateMutations(
     return new StateMutationCatalog(
         SchemaVersion: 1,
         CombatSolverVersion: combatSolverVersion,
-        GameVersion: "0.111.0",
+        GameVersion: targetGameVersion,
         UnverifiedCount: mutations.Count(entry => entry.RequiresRuntimeEvidence && !entry.RuntimeVerified),
         SnapshotOnlyWithoutRuntimeEvidenceCount: mutations.Count(entry =>
             entry.Phase == "InitialSnapshot" && !entry.RuntimeVerified),
@@ -1105,7 +1113,7 @@ static StateFieldCatalog AuditStateFields(string combatSolverVersion)
     return new StateFieldCatalog(
         SchemaVersion: 1,
         CombatSolverVersion: combatSolverVersion,
-        GameVersion: "0.111.0",
+        GameVersion: targetGameVersion,
         UnclassifiedCount: fields.Count(field => field.Role == "Unclassified"),
         Entries: fields);
 }

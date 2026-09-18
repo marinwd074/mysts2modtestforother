@@ -1,0 +1,9 @@
+<Project>
+  <Target Name="ValidateCombatSolverBuildTarget" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(CombatSolverTargetGameVersion)' == ''" Text="CombatSolverTargetGameVersion must be defined by Directory.Build.props." />
+    <Error Condition="'$(CombatSolverTargetRitsuLibVersion)' == ''" Text="CombatSolverTargetRitsuLibVersion must be defined by Directory.Build.props." />
+    <Error Condition="'$(CombatSolverCompatibilityConstant)' == ''" Text="CombatSolverCompatibilityConstant must be defined by Directory.Build.props." />
+    <Error Condition="'$(RitsuLibReferenceTarget)' != '$(CombatSolverTargetRitsuLibVersion)'" Text="RitsuLibReferenceTarget must match CombatSolverTargetRitsuLibVersion ($(CombatSolverTargetRitsuLibVersion))." />
+    <Error Condition="!Exists('$(MSBuildThisFileDirectory)build-target.json')" Text="The checked-in build-target.json is missing from the source root." />
+  </Target>
+</Project>

@@ -438,6 +438,14 @@ for command_name in jq realpath flock setsid pgrep sha256sum; do
     command -v "$command_name" >/dev/null 2>&1 || runtime_error "$command_name is required"
 done
 
+target_config="$repo_root/build-target.json"
+[[ -f "$target_config" ]] || runtime_error "missing build-target.json: $target_config"
+target_game_version="$(jq -er '.game_version' "$target_config")" || runtime_error "invalid game_version in $target_config"
+target_ritsu_lib_version="$(jq -er '.ritsu_lib_target_version' "$target_config")" || runtime_error "invalid ritsu_lib_target_version in $target_config"
+target_compatibility_symbol="$(jq -er '.compatibility_symbol' "$target_config")" || runtime_error "invalid compatibility_symbol in $target_config"
+[[ "$target_game_version" == "$target_ritsu_lib_version" ]] || runtime_error "game and RitsuLib target versions differ in $target_config"
+[[ -n "$target_compatibility_symbol" ]] || runtime_error "compatibility_symbol is empty in $target_config"
+
 source_game_root="$(realpath -m -- "${option_value[sts2-game-root]}")"
 if [[ -n ${option_value[combat-solver-build-dir]} ]]; then
     build_dir="$(realpath -m -- "${option_value[combat-solver-build-dir]}")"
@@ -448,10 +456,10 @@ else
     combat_solver_manifest="$repo_root/CombatSolver.json"
 fi
 ritsu_workshop_root="$(realpath -m -- "${option_value[ritsu-workshop-root]}")"
-ritsu_legacy_dll="$ritsu_workshop_root/lib/0.111.0/STS2-RitsuLib.dll"
+ritsu_legacy_dll="$ritsu_workshop_root/lib/$target_ritsu_lib_version/STS2-RitsuLib.dll"
 ritsu_bundle_dll="$ritsu_workshop_root/STS2-RitsuLib.dll"
 ritsu_bundle_index="$ritsu_workshop_root/ritsulib-variants.manifest"
-ritsu_bundle_runtime="$ritsu_workshop_root/compat/0.111.0/STS2-RitsuLib.Runtime.dll"
+ritsu_bundle_runtime="$ritsu_workshop_root/compat/$target_ritsu_lib_version/STS2-RitsuLib.Runtime.dll"
 ritsu_bundle_shared="$ritsu_workshop_root/shared/STS2-RitsuLib.Shared.dll"
 ritsu_manifest_source="$ritsu_workshop_root/mod_manifest.json"
 if [[ -f $ritsu_bundle_dll && -f $ritsu_bundle_index && -f $ritsu_bundle_runtime && -f $ritsu_bundle_shared ]]; then

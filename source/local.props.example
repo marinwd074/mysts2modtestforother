@@ -14,6 +14,7 @@
     <Sts2Dir>$(SteamRoot)/steamapps/common/Slay the Spire 2</Sts2Dir>
     <Sts2DataDir Condition="'$(OS)' == 'Windows_NT'">$(Sts2Dir)/data_sts2_windows_x86_64</Sts2DataDir>
     <Sts2DataDir Condition="'$(OS)' != 'Windows_NT'">$(Sts2Dir)/data_sts2_linuxbsd_x86_64</Sts2DataDir>
-    <RitsuLibDir>$(SteamRoot)/steamapps/workshop/content/2868840/3747602295/lib/0.111.0</RitsuLibDir>
+    <RitsuLibDir>$(SteamRoot)/steamapps/workshop/content/2868840/3747602295/compat/$(CombatSolverTargetRitsuLibVersion)</RitsuLibDir>
+    <RitsuLibReferenceTarget>$(CombatSolverTargetRitsuLibVersion)</RitsuLibReferenceTarget>
   </PropertyGroup>
 </Project>

@@ -272,6 +272,17 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$targetConfigPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\build-target.json'))
+$targetConfig = Get-Content -LiteralPath $targetConfigPath -Raw | ConvertFrom-Json
+$targetGameVersion = [string]$targetConfig.game_version
+$targetRitsuLibVersion = [string]$targetConfig.ritsu_lib_target_version
+$targetCompatibilitySymbol = [string]$targetConfig.compatibility_symbol
+if ([string]::IsNullOrWhiteSpace($targetGameVersion) -or
+    [string]::IsNullOrWhiteSpace($targetRitsuLibVersion) -or
+    [string]::IsNullOrWhiteSpace($targetCompatibilitySymbol) -or
+    $targetGameVersion -ne $targetRitsuLibVersion) {
+    throw "build-target.json must define matching game and RitsuLib compatibility versions."
+}
 . (Join-Path $PSScriptRoot 'headless-runtime.ps1')
 if ($EvidenceDirectory) { $EvidenceDirectory = [IO.Path]::GetFullPath($EvidenceDirectory) }
 
@@ -357,10 +368,10 @@ $memoryCleaner = if ([string]::IsNullOrWhiteSpace($CombatSolverBuildDir)) {
     Join-Path $repositoryRoot 'tools\CombatSolver.MemoryCleaner\bin\Release\net48\CombatSolver.MemoryCleaner.exe'
 } else { Join-Path $buildDirectory 'CombatSolver.MemoryCleaner.exe' }
 $resolvedRitsuWorkshopRoot = [IO.Path]::GetFullPath($RitsuWorkshopRoot)
-$ritsuLegacyDll = Join-Path $resolvedRitsuWorkshopRoot "lib\0.111.0\STS2-RitsuLib.dll"
+$ritsuLegacyDll = Join-Path $resolvedRitsuWorkshopRoot "lib\$targetRitsuLibVersion\STS2-RitsuLib.dll"
 $ritsuBundleDll = Join-Path $resolvedRitsuWorkshopRoot "STS2-RitsuLib.dll"
 $ritsuBundleIndex = Join-Path $resolvedRitsuWorkshopRoot "ritsulib-variants.manifest"
-$ritsuBundleRuntime = Join-Path $resolvedRitsuWorkshopRoot "compat\0.111.0\STS2-RitsuLib.Runtime.dll"
+$ritsuBundleRuntime = Join-Path $resolvedRitsuWorkshopRoot "compat\$targetRitsuLibVersion\STS2-RitsuLib.Runtime.dll"
 $ritsuBundleShared = Join-Path $resolvedRitsuWorkshopRoot "shared\STS2-RitsuLib.Shared.dll"
 $ritsuManifestSource = Join-Path $resolvedRitsuWorkshopRoot "mod_manifest.json"
 $headlessDependencyDir = Join-Path $gameModsRoot ".combatsolver-headless-ritsulib"
@@ -1149,7 +1160,7 @@ if (-not [string]::IsNullOrWhiteSpace($PowerId)) {
     )
 }
 
-$snapshotPlan = Get-HeadlessSnapshotPlan $runtimeContext $combatSolverDll $combatSolverManifest $memoryCleaner $resolvedRitsuWorkshopRoot $ritsuManifestSource
+$snapshotPlan = Get-HeadlessSnapshotPlan $runtimeContext $combatSolverDll $combatSolverManifest $memoryCleaner $resolvedRitsuWorkshopRoot $ritsuManifestSource $targetRitsuLibVersion
 $runtimeContext.ArtifactId = $snapshotPlan.id
 $combatSolverDllSha256 = @($snapshotPlan.files | Where-Object { $_.relative -eq 'mods\CombatSolver\CombatSolver.dll' })[0].sha256
 $combatSolverManifestSha256 = @($snapshotPlan.files | Where-Object { $_.relative -eq 'mods\CombatSolver\CombatSolver.json' })[0].sha256

@@ -125,7 +125,8 @@ function Get-HeadlessSnapshotPlan(
     [string]$CombatSolverManifest,
     [string]$MemoryCleaner,
     [string]$RitsuRoot,
-    [string]$RitsuManifest
+    [string]$RitsuManifest,
+    [string]$RitsuLibTargetVersion
 ) {
     # Every payload is bound, including other mods and non-DLL mod assets. No
     # hardlinks/junctions: a build in another worktree must not mutate this image.
@@ -155,7 +156,7 @@ function Get-HeadlessSnapshotPlan(
             $sources[(Join-Path 'mods\.combatsolver-headless-ritsulib' $relative)] = $item.FullName
         }
     } else {
-        $legacyDll = Join-Path $RitsuRoot 'lib\0.111.0\STS2-RitsuLib.dll'
+        $legacyDll = Join-Path $RitsuRoot (Join-Path "lib" (Join-Path $RitsuLibTargetVersion 'STS2-RitsuLib.dll'))
         $sources['mods\.combatsolver-headless-ritsulib\STS2-RitsuLib.dll'] = $legacyDll
     }
     $files = [Collections.Generic.List[object]]::new()

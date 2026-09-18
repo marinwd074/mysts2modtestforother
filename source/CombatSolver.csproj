@@ -21,7 +21,6 @@
     <ImplicitUsings>true</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnableDynamicLoading>true</EnableDynamicLoading>
-    <DefineConstants>$(DefineConstants);STS2_01071</DefineConstants>
     <RootNamespace>CombatSolver</RootNamespace>
     <Version>0.40.2</Version>
     <SteamRoot Condition="'$(SteamRoot)' == '' and '$(OS)' == 'Windows_NT' and Exists('D:/SteamLibrary')">D:/SteamLibrary</SteamRoot>
@@ -32,9 +31,8 @@
     <Sts2DataDir Condition="'$(Sts2DataDir)' == '' and '$(OS)' == 'Windows_NT'">$(Sts2Dir)/data_sts2_windows_x86_64</Sts2DataDir>
     <Sts2DataDir Condition="'$(Sts2DataDir)' == ''">$(Sts2Dir)/data_sts2_linuxbsd_x86_64</Sts2DataDir>
     <RitsuWorkshopRoot Condition="'$(RitsuWorkshopRoot)' == ''">$(SteamRoot)/steamapps/workshop/content/2868840/3747602295</RitsuWorkshopRoot>
-    <RitsuLibDir Condition="'$(RitsuLibDir)' == ''">$(SteamRoot)/steamapps/workshop/content/2868840/3747602295/compat/0.107.1</RitsuLibDir>
-    <RitsuLibReferenceTarget Condition="'$(RitsuLibReferenceTarget)' == ''">0.107.1</RitsuLibReferenceTarget>
-    <RitsuLibReferencesProps>$(RitsuWorkshopRoot)/RitsuLib.References.props</RitsuLibReferencesProps>
+    <RitsuLibDir Condition="'$(RitsuLibDir)' == ''">$(RitsuWorkshopRoot)/compat/$(CombatSolverTargetRitsuLibVersion)</RitsuLibDir>
+    <RitsuLibReferencesProps Condition="'$(RitsuLibReferencesProps)' == ''">$(RitsuWorkshopRoot)/RitsuLib.References.props</RitsuLibReferencesProps>
     <ModOutputDir>$(Sts2Dir)/mods/CombatSolver</ModOutputDir>
     <CopyModOnBuild Condition="'$(CopyModOnBuild)' == ''">true</CopyModOnBuild>
     <NoWarn>$(NoWarn);CS0436</NoWarn>
