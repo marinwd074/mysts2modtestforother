@@ -2,7 +2,7 @@
 
 > **当前基线：** CombatSolver `0.40.2`，目标游戏 `0.107.1`，RitsuLib 目标 `0.107.1`，兼容符号 `STS2_01071`，运行时为 .NET 9 / Godot 4.5.1。分支与提交以当前 `main` HEAD 为准。
 
-> **当前工作项：** 按 `CombatSolver_architecture_optimization_plan` 执行 Batch 2，已将无人测试协议的大型请求/断言/fixture 从生产程序集隔离，仅保留战前 API 所需的最小运行时桥，并保持单程序集、单人模式和既有搜索语义。
+> **当前工作项：** 按 `CombatSolver_architecture_optimization_plan` 执行 Batch 3，已将问题报告、统计/通知和 Replay/Showcase 文件整理到职责目录；本批次只移动文件并保持单程序集、单人模式和既有搜索语义。
 
 本文件约束所有在本仓库中工作的 coding agent。开始处理任务前完整阅读；子目录若有更具体的 `AGENTS.md`，其规则只补充对应目录，不能放宽这里的硬约束。
 
@@ -69,6 +69,9 @@ CombatSolver 是《杀戮尖塔 2》的单人战斗路线求解器 Mod，使用 
 - `src/Runtime/BaseLibCloneConcurrencyPatch.cs`：BaseLib 克隆扩展已加载时，串行保护原版 `MutableClone` 的第三方扩展段；预测克隆只允许 `NativeModelCloneConcurrency` 核对过的隔离域普通原版卡牌及默认内部初始化 Power 旁路；不得扩大成整段搜索串行化。
 - `src/Runtime/PowerDynamicVarWarmup.cs`：主线程捕获根状态时物化规范 Power 与当前战斗 Power 的显示变量，禁止把惰性本地化工作带入 worker。
 - `src/Runtime/PowerDynamicVarMaterializationGuardPatch.cs`：搜索模拟期间禁止惰性创建 Power 显示变量；命中表示根捕获缺少必要实例的物化。
+- `src/Diagnostics/BugReports/*`：问题包的取证、元数据、路径、描述与上传；不承载搜索决策或测试协议。
+- `src/Diagnostics/Telemetry/*`：在线状态、跑局/战斗统计与更新提醒；不拥有搜索状态或模拟分支。
+- `src/Replay/*`：原生战斗录制、录像展示和恢复运行时；测试侧回放夹具仍属于 `src/Testing`。
 
 ### 4.2 Search
 

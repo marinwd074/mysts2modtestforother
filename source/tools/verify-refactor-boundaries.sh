@@ -929,9 +929,9 @@ for renderer_path in "${overlay_renderer_paths[@]}"; do
     done
 done
 
-bug_report_exporter_path="$repository_root/src/Runtime/CombatBugReportExporter.cs"
+bug_report_exporter_path="$repository_root/src/Diagnostics/BugReports/CombatBugReportExporter.cs"
 diagnostic_journal_path="$repository_root/src/Runtime/CombatDiagnosticJournal.cs"
-bug_report_uploader_path="$repository_root/src/Runtime/CombatBugReportUploader.cs"
+bug_report_uploader_path="$repository_root/src/Diagnostics/BugReports/CombatBugReportUploader.cs"
 solver_settings_panel_path="$repository_root/src/UI/SolverSettingsPanel.cs"
 solver_settings_general_path="$repository_root/src/UI/SolverSettingsPanel.General.cs"
 solver_settings_performance_path="$repository_root/src/UI/SolverSettingsPanel.Performance.cs"

@@ -452,15 +452,15 @@ $preCombatApiChecks = @(
         Text = "public static class CombatShowcaseApi"
     },
     @{
-        Path = Join-Path $repositoryRoot "src\Runtime\CombatShowcaseRuntime.cs"
+        Path = Join-Path $repositoryRoot "src\Replay\CombatShowcaseRuntime.cs"
         Text = "SolverController.AcceptShowcaseRoute"
     },
     @{
-        Path = Join-Path $repositoryRoot "src\Runtime\CombatShowcaseCollector.cs"
+        Path = Join-Path $repositoryRoot "src\Replay\CombatShowcaseCollector.cs"
         Text = "CombatShowcaseCollector.FlushPendingAsync"
     },
     @{
-        Path = Join-Path $repositoryRoot "src\Runtime\CombatShowcaseModEligibility.cs"
+        Path = Join-Path $repositoryRoot "src\Replay\CombatShowcaseModEligibility.cs"
         Text = "FindGameplayModificationNames"
     },
     @{
@@ -1186,9 +1186,9 @@ foreach ($rendererPath in $overlayRendererPaths) {
     }
 }
 
-$bugReportExporterPath = Join-Path $repositoryRoot "src\Runtime\CombatBugReportExporter.cs"
+$bugReportExporterPath = Join-Path $repositoryRoot "src\Diagnostics\BugReports\CombatBugReportExporter.cs"
 $diagnosticJournalPath = Join-Path $repositoryRoot "src\Runtime\CombatDiagnosticJournal.cs"
-$bugReportUploaderPath = Join-Path $repositoryRoot "src\Runtime\CombatBugReportUploader.cs"
+$bugReportUploaderPath = Join-Path $repositoryRoot "src\Diagnostics\BugReports\CombatBugReportUploader.cs"
 $solverSettingsPanelPath = Join-Path $repositoryRoot "src\UI\SolverSettingsPanel.cs"
 $solverSettingsGeneralPath = Join-Path $repositoryRoot "src\UI\SolverSettingsPanel.General.cs"
 $solverSettingsPerformancePath = Join-Path $repositoryRoot "src\UI\SolverSettingsPanel.Performance.cs"

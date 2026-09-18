@@ -8,6 +8,11 @@
 - 验证：Release + CompatibilitySmoke 编译 0 errors（保留既有 2 条 `CS9113` 警告）；contract tests `5/5`、PowerShell 结构门禁 `REFACTOR_BOUNDARIES_OK search_files=117`、目标版本门禁 `0.107.1/0.107.1/STS2_01071`。
 - 代表性 smoke：FIRST_TURN 在游戏进程中写出 native 0.107.1 首回合搜索通过、20 个动作并启用增量核验；启动器因该专用模式不写常规 result 文件报告 `exit_code=0` 收尾异常，因此不记为完整 unattended 请求通过。
 
+## 2026-09-18：架构优化 Batch 3——Runtime 目录整理
+
+- 物理边界：问题报告移至 `src/Diagnostics/BugReports`，统计/在线通知移至 `src/Diagnostics/Telemetry`，Replay/Showcase 移至 `src/Replay`；namespace、逻辑和主程序集保持不变。
+- 验证：主程序集 Release + CompatibilitySmoke 构建 0 errors（2 条既有 `CS9113` 警告），PowerShell 结构门禁 `REFACTOR_BOUNDARIES_OK search_files=117`；FIRST_TURN smoke 写出 20 动作、增量核验开启的 native 0.107.1 通过结果。独立工具项目因缺少 `project.assets.json` 未完成编译，未记为通过。
+
 ## 0.40.2：v0.107.1 问题包回归修复（2026-09-18）
 
 - 问题包归因：CubeX `9bd8ad30`、Mawler `91f2bf97`、The Kin `03fc1f75`/`5023e5ca`/`c45c1331` 的 `ROCKET_PUNCH` 费用差异共享同一镜像根因；Phrog `c12596f0` 的部署漂移、Ruby Raiders `012a00da`/`6ea89c43` 的 Juggling Hook、Slimes `728a43c5` 的 Regen Hook 使用已有的窄化／版本条件修复。

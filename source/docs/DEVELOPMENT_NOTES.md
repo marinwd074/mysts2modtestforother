@@ -7,6 +7,11 @@
 - 生产程序集不再编译完整 `src/Testing/UnattendedTestProtocol.cs` 与测试活动 tracker；`PreCombatForecastWorker` 改用 `src/Runtime/TestingBridge` 下的最小请求、结果和 JSON 路径契约，测试预期字段、fixture 与断言继续留在测试侧。
 - Release 构建、5 项 contract tests、结构边界门禁和目标版本门禁通过；代表性 Windows FIRST_TURN 兼容 smoke 写出 `PASS: native 0.107.1 first-turn search; actions=20; incremental verification enabled`。外层启动器随后因专用 smoke 不写常规 result 文件而以 `exit_code=0` 收尾异常，未将其记为完整 unattended 请求通过。
 
+## 2026-09-18：架构优化 Batch 3——Runtime 目录整理
+
+- 只移动文件并保持 namespace 与逻辑不变：问题报告进入 `src/Diagnostics/BugReports`，统计/在线通知进入 `src/Diagnostics/Telemetry`，Replay/Showcase 合并到 `src/Replay`；同步更新结构门禁和两个独立工具项目的源码路径。
+- 主程序集 Release + CompatibilitySmoke 构建通过，结构门禁通过；FIRST_TURN smoke 写出同一版本的 20 动作通过结果。两个独立工具项目未执行完整编译，因为本地没有 `project.assets.json`，未擅自执行还原。
+
 ## 0.40.2：v0.107.1 问题包回归修复（2026-09-18）
 
 - 复核 9 份新问题包：CubeX、Mawler 与 The Kin 的状态差异都指向同一张 `ROCKET_PUNCH`；Phrog 是部署身份中的有效费用变化；Ruby Raiders 是 `JugglingPower` 的旧 Hook 注册；Slimes 是 `RegenPower` 的旧 Hook 注册。
