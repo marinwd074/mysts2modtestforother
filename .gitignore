@@ -5,3 +5,5 @@
 !MODS/CombatSolver.dll
 !MODS/CombatSolver.json
 !CombatSolver-issue-*.md
+!source/
+!source/**
