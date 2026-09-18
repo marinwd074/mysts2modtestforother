@@ -2,6 +2,12 @@
 
 > 本文按时间顺序保留开发历史。当前基线为 CombatSolver `0.40.2`、目标游戏 `0.107.1`、RitsuLib 目标 `0.107.1`；下方旧版本、旧 PR 和旧验证环境不代表当前状态。
 
+## 2026-09-18：架构优化 Batch 8——BeamRetentionPolicy Choice partial 拆分
+
+- 按 P2-3 只移动路由／回合开始选择的血缘、上下文排序、保留排名和读取辅助到嵌套 `BeamRetentionPolicy` partial 文件；保留原类、字段所有权、方法签名和算法，不新增接口、策略服务或仓储。药水、变异、循环、跨回合和 Pareto 逻辑留在原文件，供后续批次拆分。
+- 源码移动块逐段等价校验通过（290 + 171 行）；Release、CompatibilitySmoke 构建均 0 errors；结构门禁为 `REFACTOR_BOUNDARIES_OK search_files=118`。
+- 固定 0.107.1 游戏进程 smoke 与 Batch 7 candidate-03 的 `expanded=3528`、`transitions=10156`、route identity、result identity 均一致；本轮单次耗时 2818.126 ms，不作为性能收益结论。详见[Batch 8 报告](performance/beam-retention-policy-choice-split-20260918.md)。
+
 ## 2026-09-18：架构优化 Batch 7——Hook 监听槽位热点
 
 - `MirroredHookListenerLayout` 现在只在某个 Hook mask 首次被请求时建立有序位置索引；`HookListenerEnumerable` 按索引读取当前分支的完整监听快照。没有缓存模型引用，不改变重复成员、原生顺序、第三方/动态类型旁路或 `PendingChoice` 停止边界；`All` mask 保留完整顺序扫描路径。

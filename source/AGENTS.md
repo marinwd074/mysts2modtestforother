@@ -2,7 +2,7 @@
 
 > **当前基线：** CombatSolver `0.40.2`，目标游戏 `0.107.1`，RitsuLib 目标 `0.107.1`，兼容符号 `STS2_01071`，运行时为 .NET 9 / Godot 4.5.1。分支与提交以当前 `main` HEAD 为准。
 
-> **当前工作项：** 按 `CombatSolver_architecture_optimization_plan` 执行 Batch 7（Search 热点优化）：为 `MirroredHookListenerSnapshot` 按 Hook mask 按需缓存有序位置索引，保持监听顺序、分支对象、搜索质量和结果身份不变；固定 0.107.1 性能 smoke 做 baseline/candidate 对照。
+> **当前工作项：** 按 `CombatSolver_architecture_optimization_plan` 执行 Batch 8（BeamRetentionPolicy 纯拆分）：将路由/回合开始选择保留辅助移动到嵌套 `BeamRetentionPolicy` partial 文件，保持搜索算法、候选顺序、expanded、transitions 和结果身份不变。
 
 本文件约束所有在本仓库中工作的 coding agent。开始处理任务前完整阅读；子目录若有更具体的 `AGENTS.md`，其规则只补充对应目录，不能放宽这里的硬约束。
 
@@ -84,7 +84,8 @@ CombatSolver 是《杀戮尖塔 2》的单人战斗路线求解器 Mod，使用 
 - `CombatBeamSolver.AdmittedExpansion.cs`：已准入父节点的动作、选择链、药水与回合尾部作业；有界派发、唯一快照所有权和在途排空。
 - `CombatBeamSolver.PrimaryChoiceReplay.cs`：保证原预算必经的首层选择回放、快照暂存与原序消费；不并发消费动态选择预算。
 - `CombatBeamSolver.Retention.cs`：剪枝调用边界；具体中间保路属于 `BeamRetentionPolicy`。
-- `CombatBeamSolver.BeamRetentionPolicy.cs`：状态去重、Beam 排名、多样性通道、动作/回合开始选牌保路、药水配额和小型 Pareto。
+- `CombatBeamSolver.BeamRetentionPolicy.cs`：状态去重、Beam 排名、多样性通道、药水配额和小型 Pareto；继续拥有嵌套 `BeamRetentionPolicy` 的主体策略。
+- `CombatBeamSolver.BeamRetentionPolicy.Choice.cs`：路由/回合开始选择的谱系、上下文排序、保留排名与候选辅助；只声明同一嵌套 `BeamRetentionPolicy` 的 partial，不引入策略服务或接口。
 - `CombatBeamSolver.FinalPlanOrdering.cs`：终局胜负、战损、药水、偷窃、卖血和边界排序。
 - `CombatBeamSolver.StateEvaluation.cs`：快照、威胁与评分特征。
 - `CombatBeamSolver.Terminal.cs`：终局回放、回合结果和路线标注。

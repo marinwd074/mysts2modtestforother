@@ -2,6 +2,12 @@
 
 > 当前矩阵基线为 CombatSolver `0.40.2`、目标游戏 `0.107.1`、RitsuLib 目标 `0.107.1`；下方按时间排列的历史条目保留其原始版本和验证范围，不能直接当作当前发布结论。
 
+## 2026-09-18：架构优化 Batch 8——BeamRetentionPolicy Choice partial
+
+- 结构：路由／回合开始选择辅助逻辑拆至 `CombatBeamSolver.BeamRetentionPolicy.Choice.cs`，仍为嵌套 `BeamRetentionPolicy` partial；未引入接口、服务或策略替换，候选顺序和搜索算法不变。
+- 校验：移动块逐段等价（290 + 171 行）、Release + CompatibilitySmoke 构建 0 errors、结构门禁 `REFACTOR_BOUNDARIES_OK search_files=118`。
+- 固定 0.107.1 游戏进程 smoke：`expanded=3528`、`transitions=10156`，与 Batch 7 candidate-03 的路线和结果身份均 identical；`gen2=0`、>50/100 ms 帧为 0。专用 smoke 不写常规 result，外层启动器收尾提示不作为 unattended 通过/失败判定。原始 JSON 见[`runtime-evidence/20260918-batch8-beam-choice-split`](../../runtime-evidence/20260918-batch8-beam-choice-split/)，汇总见[Batch 8 报告](performance/beam-retention-policy-choice-split-20260918.md)。
+
 ## 2026-09-18：架构优化 Batch 7——Hook 监听索引候选
 
 - 代码范围：`MirroredHookListenerLayout` 的按 mask 惰性索引与 `HookListenerEnumerable` 的分支快照索引遍历；不改变监听顺序、重复成员、PendingChoice 停止或搜索策略。
