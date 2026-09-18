@@ -1,6 +1,6 @@
 # CombatSolver 测试清单
 
-> 当前矩阵基线为 CombatSolver `0.40.2`、目标游戏 `0.107.1`、RitsuLib 目标 `0.107.1`；下方按时间排列的历史条目保留其原始版本和验证范围，不能直接当作当前发布结论。
+> 本文是按时间顺序保留的历史验证证据，不是当前发布结论。当前规则与职责以 [`source/AGENTS.md`](../AGENTS.md) 和 [`ARCHITECTURE.md`](ARCHITECTURE.md) 为准；文档归档边界见 [`history/README.md`](history/README.md)。下方条目保留原始版本和验证范围，不能直接当作当前版本通过。
 
 ## 2026-09-18：三份新问题包共因回归修复
 
@@ -8,6 +8,12 @@
 - L0/L2：Release 与 CompatibilitySmoke 构建通过（0 errors，2 条既有 `CS9113`）；`verify-refactor-boundaries.ps1` 输出 `REFACTOR_BOUNDARIES_OK search_files=119`；`verify-target-version.ps1` 输出 `TARGET_VERSION_PASS game=0.107.1 ritsu=0.107.1 symbol=STS2_01071`。
 - L3：0.107.1 私有 headless 游戏进程的 `FIRST_TURN` CompatibilitySmoke 通过：`PASS: native 0.107.1 first-turn search; actions=20; incremental verification enabled`；日志确认 63/63 CombatSolver 补丁应用成功。脱敏证据见[`runtime-evidence/20260918-issue-fix-compat-smoke`](../../runtime-evidence/20260918-issue-fix-compat-smoke/)。
 - 限制：生产构建按设计排除 `src/Testing`，因此通用 `run-unattended-test.ps1` 与 `SLOW-TURN-RESET-FORK` 不作为本批次通过依据；三份问题包的完整游戏内回放仍待用户用输出 DLL 实测。
+
+## 2026-09-18：架构优化 Batch 17——文档事实瘦身与构建产物清理
+
+- 文档门禁：`source/AGENTS.md` 不再把已完成批次写成当前工作项；`ARCHITECTURE.md` 的 Runtime 所有权与 `PatchRegistration.cs` 对齐；开发笔记和测试矩阵标明历史证据边界，重复 Batch 8 标题已删除。
+- 验证：Release 构建 0 errors（2 条既有 `CS9113`）、`REFACTOR_BOUNDARIES_OK search_files=122`、`TARGET_VERSION_PASS game=0.107.1 ritsu=0.107.1 symbol=STS2_01071`、`git diff --check` 通过。详见 [Batch 17 报告](performance/documentation-fact-slimming-20260918.md)。
+- 清理：删除 14 个工具 `bin/obj` 目录，约 50.5 MB，可由下次构建恢复；保留游戏本体、活动运行数据、`.godot`/`.local` 和历史报告引用的性能 JSON。最终 DLL 已输出供用户可见游戏测试。
 
 ## 2026-09-18：架构优化 Batch 12——BeamRetentionPolicy Cycle partial
 
@@ -51,7 +57,6 @@
 - 结构：最终政策资格记录/比较、药水配额、药水谱系分组和 `UsesPotion` 拆至 `CombatBeamSolver.BeamRetentionPolicy.Potion.cs`，仍为同一嵌套 `BeamRetentionPolicy` partial，未改变搜索算法或候选顺序。
 - 验证：Potion 专属源码逐段等价、Release 与 CompatibilitySmoke 构建均 0 errors（2 条既有 `CS9113`）、结构门禁 `REFACTOR_BOUNDARIES_OK search_files=119`。本轮无新增运行时结论，生产 DLL 留给用户进行可见 Steam 实机测试。汇总见[Batch 9 报告](performance/beam-retention-policy-potion-split-20260918.md)。
 
-## 2026-09-18：架构优化 Batch 8——BeamRetentionPolicy Choice partial
 ## 2026-09-18：架构优化 Batch 8——BeamRetentionPolicy Choice partial
 
 - 结构：路由／回合开始选择辅助逻辑拆至 `CombatBeamSolver.BeamRetentionPolicy.Choice.cs`，仍为嵌套 `BeamRetentionPolicy` partial；未引入接口、服务或策略替换，候选顺序和搜索算法不变。

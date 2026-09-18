@@ -50,7 +50,7 @@ Entry / turn hooks
 版本相关的原生反射签名和补丁目标参数形状集中在 `src/Compatibility/`；当前回合准备入口由
 `Sts2TurnSetupCompatibility` 负责，卡牌结果 Hook 由 `Sts2CardHookCompatibility`
 负责，`AfterBlockBroken` 参数形状由 `Sts2HookCompatibility` 负责，搜索节点不经过该边界。仍需保留原生
-Harmony 参数形状的条件编译位于回合补丁入口，后续按兼容迁移顺序逐项收敛。
+Harmony 参数形状的条件编译位于回合补丁入口；这是当前兼容边界，搜索节点不消费这些原生签名。
 
 搜索 worker 接收 `CombatRootSnapshot`、`SearchPolicySnapshot`、诊断 sink、帧压力信号和取消令牌。它不读取全局设置、控制器、UI 或无人测试状态。
 
@@ -66,7 +66,8 @@ Harmony 参数形状的条件编译位于回合补丁入口，后续按兼容迁
 
 | 文件 | 职责 | 不负责 |
 |---|---|---|
-| `src/Runtime/Entry.cs` | Mod 初始化、补丁安装、战斗与回合生命周期入口、无人请求循环启动 | 搜索策略和战斗语义 |
+| `src/Runtime/Entry.cs` | Mod 初始化、战斗与回合生命周期入口、无人请求循环启动 | 补丁注册清单、搜索策略和战斗语义 |
+| `src/Runtime/PatchRegistration.cs` | 创建、注册并应用 RitsuLib 必需补丁；保留版本条件与注册顺序 | Mod 生命周期、搜索策略和战斗语义 |
 | `src/Runtime/TestingBridge/*` | 生产运行时所需的最小战前协议 DTO、路径/JSON 选项与空闲活动桥；不拥有测试协议 | 测试请求预期字段、fixture、断言、协议 host 和测试 tracker |
 | `src/Runtime/CombatSolverLog.cs` / `CombatDiagnosticJournal.cs` | 独立日志入口；生产线程入队不可变消息，复用后台事件文件；战斗切换摘要化、搜索日志绑定所属战斗、提交前缀冻结 | Godot 全局日志收集、搜索候选判定、后台读取 live 状态 |
 | `src/Diagnostics/Telemetry/OnlinePresence.cs` | 主线程在线标量采样、共享持久安装标识和证书固定的 HTTPS 客户端；无头和多人隔离 | 搜索策略、完整路线上传、服务端历史存储 |

@@ -1,12 +1,19 @@
 # CombatSolver 开发笔记与未来构想
 
-> 本文按时间顺序保留开发历史。当前基线为 CombatSolver `0.40.2`、目标游戏 `0.107.1`、RitsuLib 目标 `0.107.1`；下方旧版本、旧 PR 和旧验证环境不代表当前状态。
+> 本文是按时间顺序保留的历史证据日志，不是当前架构规范或发布结论。当前规则与职责以 [`source/AGENTS.md`](../AGENTS.md) 和 [`ARCHITECTURE.md`](ARCHITECTURE.md) 为准；文档归档边界见 [`history/README.md`](history/README.md)。下方旧版本、旧 PR 和旧验证环境不代表当前状态。
 
 ## 2026-09-18：0.40.2 三份新问题包共因修复
 
 - `AEONGLASS_BOSS` 的跨回合弃牌堆顺序偏移与 `SOUL_NEXUS_ELITE` 的 `VOID` 能量漂移共享 `FUEL` 预测补偿缺少抽牌这一个根因。预测现在按原生顺序先获得能量，再抽 `Cards` 张牌；`VOID` 等抽牌触发效果因此会在同一分支内生效，`FORGOTTEN_RITUAL` 与 `LUMINESCENCE` 仍保持能量专属路径。
 - `BYGONE_EFFIGY_ELITE` 的 `SlowPower` 在 v0.107.1 只有 `SlowAmount` 动态变量，`DisplayAmount` 是由原版计算的只读属性。搜索出牌记录和回合清零均移除错误的 `DynamicVars["DisplayAmount"]` 写入，保留 `SlowAmount` 与伤害镜像计数的分支状态。
 - Release 与 CompatibilitySmoke 构建均通过（0 errors，保留既有 2 条 `CS9113`）；结构门禁 `REFACTOR_BOUNDARIES_OK search_files=119`，目标版本门禁 `0.107.1/0.107.1/STS2_01071`。0.107.1 `FIRST_TURN` CompatibilitySmoke 写出 20 动作、增量核验开启的通过结果。原始三份问题包的完整实机回放和 `src/Testing` 专用 `SLOW-TURN-RESET-FORK` 重跑未在生产兼容构建中宣称通过，留给用户使用新 DLL 实测。
+
+## 2026-09-18：架构优化 Batch 17——文档事实瘦身与构建产物清理
+
+- `source/AGENTS.md` 顶部移除已完成批次的“当前工作项”；`ARCHITECTURE.md` 将补丁注册所有权改为 `PatchRegistration.cs`，并明确 Harmony 原生参数条件编译是当前兼容边界。
+- `DEVELOPMENT_NOTES.md` 与 `TEST_MATRIX.md` 明确为历史证据日志，移除测试矩阵重复的 Batch 8 标题；新增 `docs/history/README.md` 作为当前事实入口与历史证据边界索引。
+- 文档改动不改变生产代码、搜索策略、测试输入或发布协议。Release 构建通过（0 errors，保留既有 2 条 `CS9113`）；结构门禁 `REFACTOR_BOUNDARIES_OK search_files=122`；目标版本门禁 `TARGET_VERSION_PASS game=0.107.1 ritsu=0.107.1 symbol=STS2_01071`。
+- 删除 14 个工具项目的 `bin/obj` 可重建产物，回收约 50.5 MB；游戏本体、活动 Mod/运行数据、`.godot`/`.local` 和被历史报告引用的性能 JSON 均保留。清理对象可由下一次构建恢复。最终 DLL 已输出到 `D:\yingye\MODDEV\ports\upstream-0.107.1\release-0.107.1\CombatSolver.dll`，大小 4,134,912 bytes。
 
 ## 2026-09-18：架构优化 Batch 12——BeamRetentionPolicy Cycle partial 拆分
 
