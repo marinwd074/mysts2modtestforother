@@ -1,0 +1,9 @@
+[INFO] Release Version: v0.107.1
+[INFO] RitsuLib version: 0.6.2 [compat branch: 0.107.1]
+[INFO] CombatSolver patch application complete: 63 applied, 0 ignored, 0 failed, 63 total
+[INFO] Host Version: v0.107.1
+[INFO] Loaded Mods: 2 (RitsuLib; CombatSolver)
+[INFO] Creating NCombatRoom with mode=ActiveCombat encounter=NIBBITS_NORMAL.
+[INFO] Monster NIBBIT performing move SLICE_MOVE
+[INFO] Monster NIBBIT performing move HISS_MOVE
+[INFO] Player 1 chose cards [DEFEND_IRONCLAD]
