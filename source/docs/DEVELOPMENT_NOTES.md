@@ -17,6 +17,11 @@
 - 纯移动 `RequestSearch`、搜索 worker 回调/结果发布、root capture barrier 延迟/取消、搜索引用释放和取消生命周期到 `SolverController.SearchLifecycle.cs`；保持 `internal static partial class SolverController`、方法签名、异步顺序、取消行为和字段所有权不变。
 - Release + CompatibilitySmoke 构建和结构门禁通过；FIRST_TURN smoke 写出 `PASS: native 0.107.1 first-turn search; actions=20; incremental verification enabled`。专用 smoke 不写常规 result，外层启动器的 `exit_code=0` 收尾仍不记为完整 unattended 请求通过。
 
+## 2026-09-18：架构优化 Batch 4——SolverController Deployment partial
+
+- 纯移动全自动部署、动作执行、原生选择驱动、部署延迟、取消/完成和部署引用释放到 `SolverController.Deployment.cs`；保持 `static partial`、方法签名、动作顺序、取消行为和字段所有权不变。
+- Release + CompatibilitySmoke 构建和结构门禁通过；FULLAUTO smoke 写出 `setup_turn=2; selected=True; deployed=True; next_turn=3; route_reuse=True; combat_in_progress=True`。专用 smoke 不写常规 result，外层启动器的 `exit_code=0` 收尾仍不记为完整 unattended 请求通过。
+
 ## 0.40.2：v0.107.1 问题包回归修复（2026-09-18）
 
 - 复核 9 份新问题包：CubeX、Mawler 与 The Kin 的状态差异都指向同一张 `ROCKET_PUNCH`；Phrog 是部署身份中的有效费用变化；Ruby Raiders 是 `JugglingPower` 的旧 Hook 注册；Slimes 是 `RegenPower` 的旧 Hook 注册。

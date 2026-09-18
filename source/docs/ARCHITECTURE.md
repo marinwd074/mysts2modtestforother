@@ -72,6 +72,7 @@ Harmony 参数形状的条件编译位于回合补丁入口，后续按兼容迁
 | `src/Diagnostics/Telemetry/RunStatistics.cs` / `src/Diagnostics/Telemetry/RunStatisticsStore.cs` | 主线程跑局/战斗/设置/实际操作标量事件；独立有界队列，后台持久化、原生结算恢复与幂等补传；不可变提交时战绩快照 | 搜索状态键、模拟、游戏存档修改、历史求解器参与推断 |
 | `src/Runtime/SolverController.cs` | 主线程高层搜索/续用/部署/全自动编排入口、共享状态与 facade | Beam 内部算法和 UI 布局、搜索 worker 生命周期细节 |
 | `src/Runtime/SolverController.SearchLifecycle.cs` | 搜索请求、root barrier 延迟/取消、worker 回调、结果发布、搜索引用释放与 CTS 生命周期 | 部署动作顺序、Beam 内部算法和 UI 布局 |
+| `src/Runtime/SolverController.Deployment.cs` | 全自动部署、动作入队与原生选择驱动、部署间隔、取消/完成及部署引用释放 | 搜索策略、搜索 worker 生命周期和 UI 布局 |
 | `src/Runtime/SolverControllerSessions.cs` | combat/search/deployment 三类会话的状态与取消所有权 | 跨会话全局静态字段堆积 |
 | `src/Runtime/CombatRootSnapshot.cs` | 主线程捕获完整预测根，比较捕获前后 live 状态，并向 worker 提供 Fork 根 | worker 惰性读取 live 战斗 |
 | `src/Runtime/ContinuationStamp.cs` | 跨回合 live/predicted 状态文本、首个差异与完整差异；九条战斗 RNG 使用计数器与四段内部状态共同核对 | Beam 状态去重 |
