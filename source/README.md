@@ -4,7 +4,7 @@ Combat Solver 是一个面向《杀戮尖塔 2》单人模式的战斗路线求�
 
 玩家可以只查看建议，也可以让求解器执行当前回合，或连续接管整场战斗。搜索不会修改游戏 RNG，也不会在后台操作真实战斗状态。
 
-当前版本为 **0.40.2**：合入 ltlly 的卡牌变形长线搜索性能优化，并修正搜索进度与高战损引导。详见 [更新日志](docs/releases/0.40.2-RELEASE_NOTES.md)。
+当前版本为 **0.40.2**，并修正了搜索进度与高战损引导。详见 [更新日志](docs/releases/0.40.2-RELEASE_NOTES.md)。
 
 **English UI:** Set the game language to English and restart the game. CombatSolver provides a recommended route; use **Play turn** for one turn or **Auto: On** for continuous play. Configure potions, growth and search budgets in the overlay. **Settings > Reports > Upload report** submits a bug report. Logs, raw errors and some detailed diagnostics retain their original text. Single-player only.
 
@@ -22,7 +22,7 @@ Combat Solver 是一个面向《杀戮尖塔 2》单人模式的战斗路线求�
 - **可调搜索预算**：提供低、中、高、极高和自定义配置，并支持单线程或 `2-16` 路并行搜索。
 - **界面与通知**：默认使用深色界面，可切换浅色模式并调整覆盖层透明度；搜索结束可按设置发送 Windows 系统通知和提示音。
 - **问题反馈**：可以从设置中直接上传问题包，也可以导出到本地后手动提交。问题描述会附带本场自动分类，便于定位更优路线、计划外重算、执行中止和搜索失败。
-- **在线统计**：默认每 30 秒向作者发送随机安装标识、昵称、角色、楼层、当前战斗、预计战损和版本，可在设置中关闭；不上传完整路线，离线后清除昵称和战斗详情，保留历史人数及安装标识对应的累计在线时长。详见 [统计字段与关闭方式](docs/ONLINE_STATISTICS.md)。
+- **在线统计**：默认每 30 秒向在线统计服务发送随机安装标识、昵称、角色、楼层、当前战斗、预计战损和版本，可在设置中关闭；不上传完整路线，离线后清除昵称和战斗详情，保留历史人数及安装标识对应的累计在线时长。详见 [统计字段与关闭方式](docs/ONLINE_STATISTICS.md)。
 
 ## 工作方式
 
@@ -169,7 +169,7 @@ Windows 和 Linux 的无人测试入口分别为 `tools/run-unattended-test.ps1`
 
 遇到错误路线、计划外重算、自动执行异常或搜索失败时，请在设置的“反馈”页使用“上传问题包”。上传内容会附带 Combat Solver 版本和本场自动分类；服务器与后端由社区贡献者 [iRyougi](https://github.com/iRyougi) 提供支持。
 
-也可以使用“导出问题包”将完整包保存到桌面的 `CombatSolver-BugReports`，再通过项目维护者提供的反馈渠道提交。问题包中的日志、战斗状态和自动分类通常比单张截图更适合复现搜索问题。
+也可以使用“导出问题包”将完整包保存到桌面的 `CombatSolver-BugReports`，再通过项目提供的反馈渠道提交。问题包中的日志、战斗状态和自动分类通常比单张截图更适合复现搜索问题。
 
 ## 开源、许可与代码来源
 
@@ -179,7 +179,7 @@ Combat Solver 的内置战斗模拟核心使用并改造了 Random Foreseer 的�
 
 - [Random Foreseer GitHub 仓库](https://github.com/hotwords123/StS2.RandomForeseer)
 - [Random Foreseer 创意工坊页面](https://steamcommunity.com/sharedfiles/filedetails/?id=3747531952)
-- [Combat Solver GitHub 仓库](https://github.com/Torch1230/CombatSolver)
+- [Combat Solver GitHub 仓库](https://github.com/xwr20070408-cloud/CombatSolver)
 
 感谢 hotwords123 与 Random Foreseer 所做的工作。来源关系、署名和早期书面许可记录见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，并随每个二进制发布包提供。
 

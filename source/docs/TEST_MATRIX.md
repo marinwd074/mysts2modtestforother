@@ -915,7 +915,7 @@ pwsh -NoProfile -File tools/run-unattended-test.ps1 -ScenarioId GROWTH-ANCIENT-P
 
 - `python -X utf8 tools/NoVictoryRecoveryChecks/run.py`：通过 PR 自带 `AssertNoVictoryEscalationPolicy` 的全部策略断言与新增 8 项请求流程检查。直接编译生产 BuildNoVictoryEscalationProfile / EscalateSearchWhenNoVictory；原入口先复现“追加搜索丢弃明确采用结果”，修正后覆盖接管、已有胜利不重搜、胜利退出、停止、拒绝更差结果、两轮封顶、第二轮饱和及仅分支增长。结果、质量排序和根采用确定性替身，未声明整场搜索验证。
 - `python -X utf8 tools/NoVictoryRecoveryChecks/presets.py`：直接编译生产四档声明及 SolverSearchProfile，核对节点加倍、时间及 Beam 保持原值。低/中/高/极高 Short 为 2400/4800/10000/20000，Deep 为 12000/24000/50000/100000。
-- PowerShell 结构门禁 `REFACTOR_BOUNDARIES_OK search_files=84`。未启动游戏，本轮没有新增原包恢复、可见 UI 或实战战损验收；下方 PR 附带的检查点记录来自作者此前验证。
+- PowerShell 结构门禁 `REFACTOR_BOUNDARIES_OK search_files=84`。未启动游戏，本轮没有新增原包恢复、可见 UI 或实战战损验收；下方 PR 附带的检查点记录来自既有验证。
 
 ## 无胜利路线时的搜索面升级（贡献者记录）
 
@@ -1302,7 +1302,7 @@ pwsh -NoProfile -File tools/run-unattended-test.ps1 -ScenarioId STOCK-THORNS-RES
 | BACKEND-SWORD-SAGE-ROOT | `9f39cb7d612c46628e719fd96c556d4b` | Passed，5.50 秒；REGENT / SOVEREIGN_BLADE / SWORD_SAGE_POWER=2，冻结根、分支增减、生成牌、重复归一和 Fork 隔离 |
 
 - 并行场景沿用 `docs/performance/perf2-integration-20260909.md` 的最小合同命令并加 `-VerifyForkBoundaries`；监听和费用合同在首根断言后停止。两个 0.34.5 回归使用其原场景参数，Power 顺序场景指定 `-EnemyCurrentHp 100`。
-- 未运行新一轮整场性能 A/B、可见 Steam / FPS、完整发布门禁；其他章节的作者历史测量不能计入本轮测试。
+- 未运行新一轮整场性能 A/B、可见 Steam / FPS、完整发布门禁；其他章节的历史测量不能计入本轮测试。
 - 所有请求结束后已停止该私有实例，使用 `Remove-HeadlessOwnedGameTree` 精确清理其带所有权标记的 `game` 快照；Steam 游戏目录未写入，诊断证据保留。
 
 ## 2026-09-09：快照/重放复查与上游合并
@@ -1551,7 +1551,7 @@ pwsh -NoProfile -File tools/run-unattended-test.ps1 -ScenarioId STOCK-THORNS-RES
 - `PR60-65-CONTRACT`，`348d44e4a0b24db39cbd712f3570e5a0` Passed，22 秒。直接运行死亡补货胜利判定与第三方移除偏置合同，不扩跑整个 Fork 批次。
 - 中间运行 `20f2a7b0333444609de93c417ffdf311` 的补货检查已通过，移除测试失败：替身牌通用估值 12 加 -10 为 2，原断言要求负值。测试偏置改为 -20 后通过，生产估值逻辑不变。
 - 命令：`pwsh -NoProfile -File tools/run-unattended-test.ps1 -ScenarioId PR60-65-CONTRACT -HeadlessInstance pr5965 -EnemyCurrentHp 100 -TimeoutSeconds 120 -ExitOnComplete`；成长夹具沿用下方 FREE-FIRST 命令并加 `-ExitOnComplete`。
-- 本轮未重跑 API v6 的隔离 worker 样本，未跑节点预算的长循环性能基准、付费成长夹具或完整发布门禁；不能将作者历史证据视为本轮通过。未创建标签、发布包或上传工坊。
+- 本轮未重跑 API v6 的隔离 worker 样本，未跑节点预算的长循环性能基准、付费成长夹具或完整发布门禁；不能将历史证据视为本轮通过。未创建标签、发布包或上传工坊。
 
 ## 0.33.6 跑局统计
 
@@ -1689,7 +1689,7 @@ pwsh -NoProfile -File tools/run-unattended-test.ps1 -ScenarioId STOCK-THORNS-RES
 
 ## 0.32.0 定版
 
-行为源码沿用下列成长策略与点击外部保存的通过证据，本次仅同步版本和发布文档，不重复行为场景。PR #22 按维护者决定关闭，其强制收益逻辑与精进成长未纳入版本；PR #56 既有适配入口随本版发布。最终产物从版本提交执行 Release 构建并同步本地 mods，发布使用最小 ZIP；未执行完整发布门禁或可见 Steam 人工验收。
+行为源码沿用下列成长策略与点击外部保存的通过证据，本次仅同步版本和发布文档，不重复行为场景。PR #22 按项目决策关闭，其强制收益逻辑与精进成长未纳入版本；PR #56 既有适配入口随本版发布。最终产物从版本提交执行 Release 构建并同步本地 mods，发布使用最小 ZIP；未执行完整发布门禁或可见 Steam 人工验收。
 
 ## 2026-09-07：成长设置分离与点击外部保存
 
@@ -1764,7 +1764,7 @@ PR #49 直接合同在本机 RitsuLib `0.5.19` 上通过全部 10 项：当前�
 
 首次 Clash 请求 `990db5f805574a8c8c050d44a0fa136a` 因同时要求卡牌 ID 与标题的测试参数被单独使用而失败；改为首动作与动作数断言后通过，行为源码未改。首次 Bash 语法检查使用了不存在的安装路径，定位本机 Git Bash 后通过。
 
-上述用例证明原版相关通道回归通过。第三方战略估值委托、形态药剂、预视弃牌和未登记第三方可打出条件的专属夹具，本轮未执行；PR 作者提供的观者结果仍为作者历史证据。未运行可见 Steam 联动或完整战斗回归。测试实例已停止。
+上述用例证明原版相关通道回归通过。第三方战略估值委托、形态药剂、预视弃牌和未登记第三方可打出条件的专属夹具，本轮未执行；PR 附带的观者结果仍为历史证据。未运行可见 Steam 联动或完整战斗回归。测试实例已停止。
 
 ## 2026-09-07：Ritsu目标类型查询缓存
 
@@ -1783,7 +1783,7 @@ PR #49 直接合同在本机 RitsuLib `0.5.19` 上通过全部 10 项：当前�
 
 ## 2026-09-06：PR #43 集成
 
-`PR43-PRECOMBAT-API-INTEGRATION`，runId `d44c83b14da04695b79f218e5056d32d`，68.0秒 Passed：规范化恢复、独立 Mod 文件、设置令牌、取消、确定/假设预测、2次 worker 创建和3次复用、静音与主跑局不变。`PR43-EXIT-CLEANUP`，runId `b2d1e2d25beb47eeb976f8062657a4a3`，18.9秒 Passed，另查正常退出后 startup-mods 已清除。Seed Oracle main `29cee875` 对新 DLL 编译通过。详见 [审查记录](pr/pr43-review.md)；未执行可见 Steam 双 Mod 联动。作者原 0.29.x 测试数据保留为历史证据。
+`PR43-PRECOMBAT-API-INTEGRATION`，runId `d44c83b14da04695b79f218e5056d32d`，68.0秒 Passed：规范化恢复、独立 Mod 文件、设置令牌、取消、确定/假设预测、2次 worker 创建和3次复用、静音与主跑局不变。`PR43-EXIT-CLEANUP`，runId `b2d1e2d25beb47eeb976f8062657a4a3`，18.9秒 Passed，另查正常退出后 startup-mods 已清除。Seed Oracle main `29cee875` 对新 DLL 编译通过。详见 [审查记录](pr/pr43-review.md)；未执行可见 Steam 双 Mod 联动。原 0.29.x 测试数据保留为历史证据。
 
 复跑：`tools/run-unattended-test.ps1 -ScenarioId PR43-PRECOMBAT-API-INTEGRATION -HeadlessInstance pr-api -VerifyPreCombatForecastApi -ForceShortSearchOnly -ShortSearchBudgetOverrideMilliseconds 1500 -StopAfterInitialSolverResultAssertion -HeadlessFastModeForTest Instant -TimeoutSeconds 120 -ExitOnComplete`。Bash 对应 `--verify-pre-combat-forecast-api`，其余使用现有 kebab-case 参数。
 
@@ -2104,11 +2104,11 @@ v30 SearchPolicy 与下列8项最小搜索夹具在同一 headless 进程复用�
 | --- | --- | --- | --- |
 | `PRECOMBAT-MOD-PIN-015` | 通过 | 十 Mod 组合加载 Combat Solver `0.29.5`、Seed Oracle `0.1.18`、HowlFromBeyondBgm `1.1.5` 等主进程版本；工坊式原子替换后，启动期硬链接快照仍保留旧内容。两次确定预测和一次假设样本复用同一 worker，计数 `starts=1 / reuses=3`；战损 `5`、内存可见、隔离音频静音、2/10/30 分钟与一直维持、自动关闭及 live 状态不变均通过。runId `8382cbd40ce74a44ac2cac7e444f6403`。 | 2026-09-05 |
 
-## 0.29.4（本地扩展）：作者 0.29.1 基线与可配置 worker 期限
+## 0.29.4（本地扩展）：0.29.1 基线与可配置 worker 期限
 
 | 场景 | 当前结果 | 验证内容 | 日期 |
 | --- | --- | --- | --- |
-| `PRECOMBAT-API-V5-UPSTREAM-0291-013` | 通过 | 作者 `v0.29.1`、RitsuLib、Random Foreseer、Combat Solver `0.29.4` 与 Seed Oracle `0.1.16` 组合加载。停止状态接受 2/10 分钟和一直维持；预热后显示 PID/内存/静音并切换为 30 分钟；两次确定预测战损均为 `5`，一个假设样本复用同一 worker，计数 `starts=1 / reuses=3`，样本结束自动关闭，live 状态令牌不变。runId `e2236a4ec85041dc95c0b3417ed0b688`。 | 2026-09-04 |
+| `PRECOMBAT-API-V5-UPSTREAM-0291-013` | 通过 | 上游 `v0.29.1`、RitsuLib、Random Foreseer、Combat Solver `0.29.4` 与 Seed Oracle `0.1.16` 组合加载。停止状态接受 2/10 分钟和一直维持；预热后显示 PID/内存/静音并切换为 30 分钟；两次确定预测战损均为 `5`，一个假设样本复用同一 worker，计数 `starts=1 / reuses=3`，样本结束自动关闭，live 状态令牌不变。runId `e2236a4ec85041dc95c0b3417ed0b688`。 | 2026-09-04 |
 | `SEEDORACLE-PRECOMBAT-V5-LOCALIZATION-014` | 通过 | Seed Oracle UI 自检验证 5 个 worker 策略、内存/关闭/预热控件、11 个样本次数、6 类对象、完整模拟风险说明，以及当前幕所有遭遇标题均由游戏本地化解析，不再显示 `LocString … .title`。runId `e15b744f36e84d85aa8771cf02328121`。 | 2026-09-04 |
 
 ## 0.29.3（本地扩展）：worker 资源控制与假设战斗样本
@@ -2145,7 +2145,7 @@ v30 SearchPolicy 与下列8项最小搜索夹具在同一 headless 进程复用�
 | `PRECOMBAT-POTION-METRICS-006` | 通过 | 强制至少使用一瓶药水的短搜索把非空动作写入公共结果协议：`FIRE_POTION` / “火焰药水”、第 `3` 回合、槽位 `0`；战斗第 `3` 回合结束。runId `5e281451a3534051b605577cd51c9038`。 | 2026-09-04 |
 | `PRECOMBAT-REMOTE-CAMPFIRE-007` | 通过 | 从含历史事件选择的完整跑局精确恢复；按目标路线补记第 9 层篝火与第 10 层宝箱，用目标列坐标进入第 11 层 `SLIMES_NORMAL`，在开战 Hook 前覆盖为休息后的 `66 HP`。3 秒 DOP1 短搜返回战损 `12`、最终 `54 HP`；完成项包含 `DirectRunSnapshot:ExactStateRestored`、`PreCombatInterveningMapPoints:2`、`PreCombatPlayerHp:66`。runId `fe93b060ada64e78864fca8d825aeb85`。 | 2026-09-04 |
 | `PRECOMBAT-API-MANUAL-V2-008` | 通过 | public API v2 双进程往返使用目标坐标、独占可取消 worker、强制重算和入战 HP 覆盖；空事件历史变量被规范化、非空变量保留，返回 `EntryHp=79`、战损 `1`、药水 `0`、边界 `None`，调用前后 live 状态令牌一致。runId `f8db7c03ea9444cc89483495c985f221`。 | 2026-09-04 |
-| `PRECOMBAT-API-SEED-STACK-0.29.1-FINAL` | 通过 | API v2 改动重放到作者 `0.29.0` 后的四 Mod 组合回归；Combat Solver 以 `0.29.1.0` 加载，外层 Seed Oracle 记录 `precombat_public_api_v2=true`，公开 API 返回 `EntryHp=79`、战损 `5`、药水 `0`、边界 `None`，调用前后 live 状态令牌一致。runId `2e038fa1be6b45a19a7a5096c9be0f16`。 | 2026-09-04 |
+| `PRECOMBAT-API-SEED-STACK-0.29.1-FINAL` | 通过 | API v2 改动重放到上游 `0.29.0` 后的四 Mod 组合回归；Combat Solver 以 `0.29.1.0` 加载，外层 Seed Oracle 记录 `precombat_public_api_v2=true`，公开 API 返回 `EntryHp=79`、战损 `5`、药水 `0`、边界 `None`，调用前后 live 状态令牌一致。runId `2e038fa1be6b45a19a7a5096c9be0f16`。 | 2026-09-04 |
 
 性能指标口径：`selected_*` 只描述最终选中的单个 solver；请求级 `total_expanded_nodes / total_transitions / total_choice_branches`、`total_solver_ms`、分配与 GC 累计对正常、失败和取消的每个 solver 工作区间精确记录一次，包括取消前已发生的部分工作。Smart 有限药水层之间由 coordinator 主动执行的内存整理也计入时间、分配与 GC，但不增加 solver 数；建立开局、层间比较等其他编排工作仍不在这些总值中。因此端到端耗时以请求/阶段外层墙钟为准，峰值内存以进程 `VmHWM` 为准。Smart 多层的取消时点可能令请求总工作量小幅波动，语义验收优先比较胜负、战损、回合和动作路线。峰值工作集是瞬时进程峰值，不能跨阶段相加；`16 GB` NoGC 是运行时请求预算，不等于实际占用或硬上限；NoGC 活跃时 `GC.GetTotalMemory(false)` 不是严格 live-set 测量。
 

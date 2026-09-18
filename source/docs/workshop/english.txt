@@ -37,13 +37,13 @@ That code relationship remains in the current version, including foundations for
 Thank you to hotwords123 and Random Foreseer. Permission, attribution and third-party notices are included with the source and every binary distribution.
 
 Random Foreseer: search for Random Foreseer on Steam Workshop, or hotwords123/StS2.RandomForeseer on GitHub.
-Combat Solver source: search for Torch1230/CombatSolver on GitHub.
+Combat Solver source: search for xwr20070408-cloud/CombatSolver on GitHub.
 
 [h2]Requirements and compatibility[/h2]
 
 [list]
-[*]Requires RitsuLib 0.5.18 or later.
-[*]Targets Slay the Spire 2 version 0.111.0.
+[*]Requires RitsuLib 0.6.2 or later.
+[*]Targets Slay the Spire 2 version 0.107.1.
 [*]Single-player combat only; multiplayer is not supported.
 [*]Background search does not modify the live game's RNG.
 [*]Search is bounded by time, node and memory budgets. The recommended route is the best found within those limits, not a guarantee of a mathematically optimal solution.
@@ -60,5 +60,3 @@ Search can use substantial CPU and memory. The default is the Medium preset with
 Share builds, discuss runs and suggest improvements. For incorrect routes, unexpected recalculations, execution failures or game errors, use Upload report in the mod's Settings. Reports include automatic issue classification to help diagnosis. The reporting backend was developed with community support from iRyougi. You can also use Export report to keep a local copy.
 
 When following up, include the report ID and a description of what happened.
-
-Author: Torch
