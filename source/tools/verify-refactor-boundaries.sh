@@ -150,6 +150,7 @@ shopt -u nullglob
 
 cycle_policy_paths=(
     "$search_root/CombatBeamSolver.CyclePlanning.cs"
+    "$search_root/CombatBeamSolver.BeamRetentionPolicy.Cycle.cs"
     "$search_root/CombatBeamSolver.CycleRegionRetention.cs"
     "$search_root/CombatBeamSolver.OrderedMutationRetention.cs"
 )
@@ -570,6 +571,7 @@ expected_beam_files=(
     CombatBeamSolver.BeamRetentionPolicy.Potion.cs
     CombatBeamSolver.BeamRetentionPolicy.Mutation.cs
     CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs
+    CombatBeamSolver.BeamRetentionPolicy.Cycle.cs
     CombatBeamSolver.BlockPotionInsertion.cs
     CombatBeamSolver.CrossTurnPlanning.cs
     CombatBeamSolver.CyclePlanning.cs
@@ -639,6 +641,9 @@ CombatBeamSolver.BeamRetentionPolicy.Mutation.cs	VerifyOrderedMutationKeyPolicyF
 CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs	private sealed partial class BeamRetentionPolicy
 CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs	public void AddCrossTurnPortfolio(
 CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs	public static bool RequiresCrossTurnPlanning(SearchNode node)
+CombatBeamSolver.BeamRetentionPolicy.Cycle.cs	private sealed partial class BeamRetentionPolicy
+CombatBeamSolver.BeamRetentionPolicy.Cycle.cs	public void AddCyclePortfolio(
+CombatBeamSolver.BeamRetentionPolicy.Cycle.cs	public void AddCycleExitPortfolio(
 CombatBeamSolver.BeamRetentionPolicy.cs	public List<SearchNode> RankBest(
 CombatBeamSolver.BeamRetentionPolicy.cs	private sealed class RoutingChoiceNodes(SearchNode first) : List<SearchNode>
 CombatBeamSolver.BeamRetentionPolicy.cs	public void Clear() => NodesByChoice.Clear();
@@ -673,6 +678,8 @@ RootCombatCardGenerationPoolSnapshot.cs	public bool TryGetEligibleCharacterCards
 CombatBeamSolver.Retention.cs	var maximum = BeamRetentionPolicy.GetLongTermResourceMaximum(pool);
 CombatBeamSolver.Retention.cs	if (maximum.Count == pool.Count)
 CombatBeamSolver.Retention.cs	Retention.AddCrossTurnPortfolio(pool, selected, selectedSet);
+CombatBeamSolver.Retention.cs	Retention.AddCyclePortfolio(pool, selected, selectedSet);
+CombatBeamSolver.Retention.cs	Retention.AddCycleExitPortfolio(pool, selected, selectedSet);
 CombatBeamSolver.Retention.cs	BeamRetentionPolicy.RequiresCrossTurnPlanning(candidate)
 CombatBeamSolver.EndTurnChoiceReplay.cs	capture.ObservePendingChoice(this, pendingSourceId);
 CombatBeamSolver.AdmittedExpansion.cs	endTurn.TransferEndTurnTo(Aggregate!, candidate);
@@ -757,6 +764,17 @@ for retired_cross_turn_member in \
         "$search_root/CombatBeamSolver.CrossTurnPlanning.cs"; do
         forbid_fixed "$cross_turn_path" "$retired_cross_turn_member" 'CrossTurn retention member returned outside BeamRetentionPolicy.CrossTurn:'
     done
+done
+for retired_cycle_member in \
+    'private void AddCyclePortfolio(' \
+    'private void AddCycleExitPortfolio(' \
+    'private CycleStartupRetentionKey BuildCycleStartupRetentionKey(' \
+    'private static SearchNode? FindActiveCycleExitCandidate(' \
+    'private static bool TryLeaseCycleExitCandidate(' \
+    'private static int CompareCycleExitFamilyCandidates(' \
+    'private static int CompareCycleExitCandidates(' \
+    'private static int CompareCycleProbeCandidates('; do
+    forbid_fixed "$search_root/CombatBeamSolver.Retention.cs" "$retired_cycle_member" 'Cycle retention member returned outside BeamRetentionPolicy.Cycle:'
 done
 stat_relic_mirror_path="$repository_root/src/Engine/InCombat/Mirrors/Hooks/Card/AfterCardPlayedMirrors.cs"
 require_fixed "$stat_relic_mirror_path" 'private static bool ApplyRelicStatPower(' 'relic stat application left its exact hook boundary:'
@@ -1106,7 +1124,7 @@ src/Engine/Common/MirroredHookListenerFilter.cs	BaseHooks.Append(NativeKeywordHo
 src/Engine/InCombat/Simulation/CombatPredictedCardExtensions.cs	!listeners.HasAny(MirroredHookMask.TryModifyKeywordsInCombat)
 EOF
 
-for file in CombatBeamSolver.RetentionJobs.cs CombatBeamSolver.BeamRetentionPolicy.cs CombatBeamSolver.BeamRetentionPolicy.Mutation.cs; do
+for file in CombatBeamSolver.RetentionJobs.cs CombatBeamSolver.BeamRetentionPolicy.cs CombatBeamSolver.BeamRetentionPolicy.Mutation.cs CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs CombatBeamSolver.BeamRetentionPolicy.Cycle.cs; do
     forbid_fixed "$search_root/$file" 'Parallel.For(' 'retention work bypassed fixed lanes:'
     forbid_fixed "$search_root/$file" 'Task.Run(' 'retention work bypassed fixed lanes:'
 done

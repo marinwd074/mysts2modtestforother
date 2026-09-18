@@ -61,6 +61,7 @@ $beamFiles = Get-ChildItem -LiteralPath $searchRoot -Filter "CombatBeamSolver*.c
 $beamPaths = @($beamFiles.FullName)
 $cyclePolicyPaths = @(
     (Join-Path $searchRoot "CombatBeamSolver.CyclePlanning.cs"),
+    (Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.Cycle.cs"),
     (Join-Path $searchRoot "CombatBeamSolver.CycleRegionRetention.cs"),
     (Join-Path $searchRoot "CombatBeamSolver.OrderedMutationRetention.cs")
 )
@@ -591,6 +592,7 @@ $expectedBeamFiles = @(
     "CombatBeamSolver.BeamRetentionPolicy.Potion.cs",
     "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs",
     "CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs",
+    "CombatBeamSolver.BeamRetentionPolicy.Cycle.cs",
     "CombatBeamSolver.BeamRanking.cs",
     "CombatBeamSolver.BlockPotionInsertion.cs",
     "CombatBeamSolver.CrossTurnPlanning.cs",
@@ -638,6 +640,8 @@ foreach ($required in @(
     @{ Path = $pathDiagnosticsPath; Text = 'Evaluation: new SearchPathEvaluationValues(' },
     @{ Path = (Join-Path $searchRoot "CombatBeamSolver.Retention.cs"); Text = 'SearchPathObservationStage.RetentionPoolFinal' },
     @{ Path = (Join-Path $searchRoot "CombatBeamSolver.Retention.cs"); Text = 'Retention.AddCrossTurnPortfolio(pool, selected, selectedSet);' },
+    @{ Path = (Join-Path $searchRoot "CombatBeamSolver.Retention.cs"); Text = 'Retention.AddCyclePortfolio(pool, selected, selectedSet);' },
+    @{ Path = (Join-Path $searchRoot "CombatBeamSolver.Retention.cs"); Text = 'Retention.AddCycleExitPortfolio(pool, selected, selectedSet);' },
     @{ Path = (Join-Path $searchRoot "CombatBeamSolver.Retention.cs"); Text = 'BeamRetentionPolicy.RequiresCrossTurnPlanning(candidate)' },
     @{ Path = (Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.cs"); Text = 'observedOptionLeaders.Add(optionLeader)' },
     @{ Path = (Join-Path $searchRoot "CombatBeamSolver.Retention.cs"); Text = 'SearchPathObservationStage.PruneFinal' },
@@ -667,6 +671,19 @@ foreach ($retiredCrossTurnMember in @(
         foreach ($match in Select-String -LiteralPath $path -SimpleMatch $retiredCrossTurnMember) {
             $violations.Add("${path}:$($match.LineNumber): CrossTurn retention member returned outside BeamRetentionPolicy.CrossTurn '$retiredCrossTurnMember'")
         }
+    }
+}
+foreach ($retiredCycleMember in @(
+    'private void AddCyclePortfolio(',
+    'private void AddCycleExitPortfolio(',
+    'private CycleStartupRetentionKey BuildCycleStartupRetentionKey(',
+    'private static SearchNode? FindActiveCycleExitCandidate(',
+    'private static bool TryLeaseCycleExitCandidate(',
+    'private static int CompareCycleExitFamilyCandidates(',
+    'private static int CompareCycleExitCandidates(',
+    'private static int CompareCycleProbeCandidates(')) {
+    foreach ($match in Select-String -LiteralPath (Join-Path $searchRoot "CombatBeamSolver.Retention.cs") -SimpleMatch $retiredCycleMember) {
+        $violations.Add("$($match.Path):$($match.LineNumber): Cycle retention member returned outside BeamRetentionPolicy.Cycle '$retiredCycleMember'")
     }
 }
 $actualBeamFiles = @($beamFiles.Name | Sort-Object)
@@ -709,6 +726,9 @@ $beamStructureChecks = @(
     @{ File = "CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs"; Text = "private sealed partial class BeamRetentionPolicy" },
     @{ File = "CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs"; Text = "public void AddCrossTurnPortfolio(" },
     @{ File = "CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs"; Text = "public static bool RequiresCrossTurnPlanning(SearchNode node)" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Cycle.cs"; Text = "private sealed partial class BeamRetentionPolicy" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Cycle.cs"; Text = "public void AddCyclePortfolio(" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Cycle.cs"; Text = "public void AddCycleExitPortfolio(" },
     @{ File = "CombatBeamSolver.BeamRetentionPolicy.cs"; Text = "public List<SearchNode> RankBest(" },
     @{ File = "CombatBeamSolver.BeamRetentionPolicy.cs"; Text = "private sealed class RoutingChoiceNodes(SearchNode first) : List<SearchNode>" },
     @{ File = "CombatBeamSolver.BeamRetentionPolicy.cs"; Text = "public void Clear() => NodesByChoice.Clear();" },
@@ -1383,7 +1403,7 @@ foreach ($check in $metadataReuseChecks) {
 }
 
 # Keep the no-op dispatch metadata complete when callbacks are added to the facade.
-foreach ($file in @("CombatBeamSolver.RetentionJobs.cs", "CombatBeamSolver.BeamRetentionPolicy.cs", "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs", "CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs")) {
+foreach ($file in @("CombatBeamSolver.RetentionJobs.cs", "CombatBeamSolver.BeamRetentionPolicy.cs", "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs", "CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs", "CombatBeamSolver.BeamRetentionPolicy.Cycle.cs")) {
     foreach ($forbidden in @("Parallel.For(", "Task.Run(")) {
         if (Select-String -LiteralPath (Join-Path $searchRoot $file) -SimpleMatch $forbidden -Quiet) {
             $violations.Add("$($file): retention work bypassed fixed lanes '$forbidden'")

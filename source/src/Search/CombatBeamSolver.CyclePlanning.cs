@@ -889,21 +889,6 @@ internal sealed partial class CombatBeamSolver
         return true;
     }
 
-    private void RequestRetainedCycleStartupImprovementEpoch(
-        SearchNode candidate,
-        int healthRiskBucket)
-    {
-        if (healthRiskBucket <= 0
-            || candidate.CycleProbeLease is not { } lease)
-        {
-            return;
-        }
-        _ = TryRequestCycleFamilyImprovementEpochAtLeast(
-            _run.CycleFamilyLedger,
-            lease.Tracker.FamilyKey,
-            healthRiskBucket);
-    }
-
     private static void AdvanceCycleFamilyImprovementEpochAtLayerStart(
         CycleFamilyLedgerEntry ledger)
     {

@@ -222,6 +222,7 @@ Smart 层间使用 `SmartLayerMemoryForecast` 的同窗分配和转移高水位�
 | `CombatBeamSolver.BeamRetentionPolicy.Potion.cs` | 同一嵌套 `BeamRetentionPolicy` partial 的最终政策资格记录/比较、药水配额、药水谱系分组和 `UsesPotion` 辅助 |
 | `CombatBeamSolver.BeamRetentionPolicy.Mutation.cs` | 同一嵌套 `BeamRetentionPolicy` partial 的有序变异碰撞激活、续接 admission、observation、key 构建与策略校验；不拥有 `OrderedMutationRetention.cs` 的预算常量、lineage/lease ledger 或最终提交 |
 | `CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs` | 同一嵌套 `BeamRetentionPolicy` partial 的跨回合保留候选族、风险分带、探测代表、回退比较与有界探测启动；不拥有跨回合语义证据传播 |
+| `CombatBeamSolver.BeamRetentionPolicy.Cycle.cs` | 同一嵌套 `BeamRetentionPolicy` partial 的循环 startup/exit portfolio、风险桶代表、探测族比较、票据租约和有界保留选择；不拥有周期状态推断、账本预算或最终票据结算 |
 | `CombatBeamSolver.CrossTurnPlanning.cs` | 跨回合 probe 证据传播、stand-pat 基线发布与语义状态附着；不拥有 retention 候选排序 |
 | `CombatBeamSolver.CyclePlanning.cs` | 精确动作周期、通用收益与出口探针；按周期族和回合记账的有限观察与成长预算 |
 | `CombatBeamSolver.CycleRegionRetention.cs` | 合并同回合、同控制形状的动作排列；对最终存活候选事务式提交区域保留预算与进展证据 |
