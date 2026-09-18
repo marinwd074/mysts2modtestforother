@@ -8,5 +8,8 @@
 !CombatSolver-issue-*.md
 !source/
 !source/**
+!.github/
+!.github/workflows/
+!.github/workflows/**
 !runtime-evidence/
 !runtime-evidence/**

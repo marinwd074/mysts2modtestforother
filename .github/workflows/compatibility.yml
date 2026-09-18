@@ -1,0 +1,36 @@
+name: 0.107.1 compatibility consistency
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  static-consistency:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Verify target version guard
+        shell: pwsh
+        run: ./source/tools/verify-target-version.ps1
+
+      - name: Validate target manifest and project XML
+        shell: pwsh
+        run: |
+          $target = Get-Content -LiteralPath './source/build-target.json' -Raw | ConvertFrom-Json
+          if ($target.game_version -ne '0.107.1' -or
+              $target.ritsu_lib_target_version -ne '0.107.1' -or
+              $target.compatibility_symbol -ne 'STS2_01071') {
+            throw 'build-target.json does not describe the supported 0.107.1 target.'
+          }
+          [xml]$project = Get-Content -LiteralPath './source/CombatSolver.csproj' -Raw
+          if ($project.Project.Sdk -ne 'Godot.NET.Sdk/4.5.1') {
+            throw 'CombatSolver.csproj SDK drifted from the pinned Godot SDK.'
+          }
+          git diff --check
+
+# The full game build and headless smoke require the locally installed STS2 and
+# RitsuLib payloads. This workflow intentionally gates only source consistency;
+# local Release/runtime evidence remains the authoritative integration check.
