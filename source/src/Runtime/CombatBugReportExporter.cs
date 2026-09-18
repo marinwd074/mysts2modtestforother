@@ -190,6 +190,7 @@ internal static class CombatBugReportExporter
         public long NextCheckpointSequence { get; set; }
         public CombatReplayRecording? Recording { get; init; }
         public required CombatReplayOutcome Outcome { get; set; }
+        public RuntimeEvidenceRingBuffer RuntimeEvidence { get; } = new();
         public BugReportCombat? ReportCombat { get; set; }
         public string? SearchRootId { get; set; }
         public string? LastCompletedSearchRootId { get; set; }
@@ -267,6 +268,10 @@ internal static class CombatBugReportExporter
             UserDataDirectory = userDataDirectory,
         };
         Entry.Logger.Journal.BeginCombat(_currentSession.SessionId, _currentSession.EncounterId, _currentSession.Seed);
+        _currentSession.RuntimeEvidence.Record(
+            "lifecycle",
+            "combat_start",
+            $"encounter={_currentSession.EncounterId}");
         RecordCheckpointCore(state, "combat_start", null, string.Empty);
         CombatReplayRecording.TestCombatStartObserver?.Invoke(state);
     }
@@ -328,20 +333,67 @@ internal static class CombatBugReportExporter
             return Task.CompletedTask;
 
         CombatState? live = CombatManager.Instance.DebugOnlyGetState();
+        CombatReplayOutcomeSnapshot? outcome = null;
         if (live != null && live.RunState.Rng.StringSeed == session.Seed)
         {
             RecordCheckpointCore(live, "combat_end", result, replanAudit);
             CombatReplayRecording.TestCombatEndObserver?.Invoke(live);
             session.Outcome.Complete(live);
+            outcome = session.Outcome.Capture(live, ended: true);
             session.Recording?.Dispose();
         }
         Entry.Logger.Journal.EndCombat(reason);
+        DateTimeOffset endedAt = DateTimeOffset.Now;
+        RuntimeEvidenceRun evidence = BuildRuntimeEvidence(
+            session,
+            reason,
+            result,
+            outcome,
+            endedAt);
+        if (RuntimeEvidenceStore.TryReserve(evidence, out RuntimeEvidenceCapture capture, out string? reserveError))
+        {
+            if (capture.FullCaptureRequested && capture.RawDirectory != null)
+            {
+                try
+                {
+                    Task<string> export = ExportCurrentAsync(
+                        capture.RawDirectory,
+                        "自动运行证据",
+                        Guid.NewGuid().ToString("N"));
+                    _ = RuntimeEvidenceStore.FinalizeFullCaptureAsync(capture, evidence, export);
+                }
+                catch (Exception error) when (error is InvalidOperationException
+                    or IOException
+                    or UnauthorizedAccessException
+                    or InvalidDataException
+                    or JsonException
+                    or NotSupportedException)
+                {
+                    _ = RuntimeEvidenceStore.FinalizeFullCaptureAsync(
+                        capture,
+                        evidence,
+                        Task.FromException<string>(error));
+                    Entry.Logger.Error(
+                        $"[CombatSolver/Diagnostics] RUNTIME_EVIDENCE_EXPORT_FAILED " +
+                        $"fingerprint={capture.Fingerprint} error={error}");
+                }
+            }
+            Entry.Logger.Info(
+                $"[CombatSolver/Diagnostics] RUNTIME_EVIDENCE_RECORDED " +
+                $"fingerprint={capture.Fingerprint} occurrence={capture.Occurrence} " +
+                $"new={capture.IsNewFingerprint} full={capture.FullCaptureRequested}");
+        }
+        else
+        {
+            Entry.Logger.Warn(
+                $"[CombatSolver/Diagnostics] RUNTIME_EVIDENCE_INDEX_FAILED error={reserveError}");
+        }
         Task completion = QueueSessionCompletion(
             session,
             reason,
             result,
             replanAudit,
-            DateTimeOffset.Now);
+            endedAt);
         _lastSession = session;
         _currentSession = null;
         return completion;
@@ -587,6 +639,12 @@ internal static class CombatBugReportExporter
     {
         ForensicSession session = _currentSession
             ?? throw new InvalidOperationException("Missing forensic session.");
+        session.RuntimeEvidence.Record(
+            "checkpoint",
+            label,
+            replanAudit,
+            result?.StartTurnNumber,
+            result?.BestNode.Actions.Count);
         if (label.Contains("fail", StringComparison.OrdinalIgnoreCase))
             session.FirstErrorRootId ??= session.LastSearchableRootId;
         int pending = Interlocked.Increment(ref session.PendingCheckpointWrites);
@@ -997,11 +1055,92 @@ internal static class CombatBugReportExporter
         string label,
         Exception exception)
     {
+        session.RuntimeEvidence.Record(
+            "background_failure",
+            label,
+            exception.ToString());
         if (session.BackgroundErrors.Count < 16) session.BackgroundErrors.Enqueue(exception);
         else Interlocked.Increment(ref session.DroppedCaptureErrors);
         session.FirstErrorRootId ??= session.LastSearchableRootId;
         Entry.Logger.Error(
             $"[CombatSolver/Test] BUG_REPORT_CHECKPOINT_FAILURE label={label} exception={exception}");
+    }
+
+    internal static void RecordRuntimeException(string stage, Exception exception)
+    {
+        _currentSession?.RuntimeEvidence.Record(
+            "failure",
+            stage,
+            exception.ToString());
+    }
+
+    internal static void RecordRuntimeDivergence(
+        string stage,
+        string difference,
+        string? native = null,
+        string? predicted = null)
+    {
+        _currentSession?.RuntimeEvidence.Record(
+            "divergence",
+            stage,
+            difference,
+            difference: difference,
+            native: native,
+            predicted: predicted);
+    }
+
+    private static RuntimeEvidenceRun BuildRuntimeEvidence(
+        ForensicSession session,
+        string reason,
+        SolverResult? result,
+        CombatReplayOutcomeSnapshot? outcome,
+        DateTimeOffset endedAt)
+    {
+        CombatBugReportClassificationSnapshot classification =
+            SolverController.CaptureBugReportClassificationForRuntimeEvidence();
+        foreach (CombatBugReportIssue issue in classification.Issues)
+        {
+            session.RuntimeEvidence.Record(
+                "issue",
+                issue.Kind.ToString(),
+                issue.Detail);
+        }
+
+        bool hasReplanEvidence = classification.StateMismatchReplans > 0
+            || classification.DeploymentDriftReplans > 0
+            || classification.ContinuationMissingReplans > 0
+            || classification.PlanExhaustedReplans > 0
+            || classification.ManualDivergenceReplans > 0;
+        bool reasonLooksLikeFailure = reason.Contains("fail", StringComparison.OrdinalIgnoreCase)
+            || reason.Contains("timeout", StringComparison.OrdinalIgnoreCase)
+            || reason.Contains("error", StringComparison.OrdinalIgnoreCase)
+            || reason.Contains("exception", StringComparison.OrdinalIgnoreCase);
+        bool fullCaptureCandidate = classification.Issues.Count > 0
+            || hasReplanEvidence
+            || reasonLooksLikeFailure;
+        string failureStage = classification.Issues.FirstOrDefault()?.Kind.ToString()
+            ?? (classification.StateMismatchReplans > 0 ? "state_mismatch"
+                : classification.DeploymentDriftReplans > 0 ? "deployment_drift"
+                : classification.ContinuationMissingReplans > 0 ? "continuation_missing"
+                : classification.PlanExhaustedReplans > 0 ? "plan_exhausted"
+                : classification.ManualDivergenceReplans > 0 ? "manual_divergence"
+                : fullCaptureCandidate ? reason : "success");
+        return new RuntimeEvidenceRun(
+            session.SessionId,
+            session.StartedAt,
+            endedAt,
+            session.EncounterId,
+            session.EncounterType,
+            session.Seed,
+            typeof(CombatState).Assembly.GetName().Version?.ToString(),
+            CombatBugReportDescription.CurrentModVersion,
+            reason,
+            failureStage,
+            fullCaptureCandidate,
+            outcome,
+            classification,
+            RuntimeEvidencePerformance.From(result),
+            session.RuntimeEvidence.Snapshot());
     }
 
     private static string DescribeRoute(SolverResult? result)

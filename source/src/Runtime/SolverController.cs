@@ -414,6 +414,7 @@ internal static partial class SolverController
         _combat.BugReportIssues.RecordFailure(
             CombatBugReportIssueKind.TurnSetupFailure,
             exception);
+        CombatBugReportExporter.RecordRuntimeException("turn_setup", exception);
         Entry.Logger.Error(
             $"[CombatSolver/Test] TURN_SETUP_FAILURE exception={exception.GetBaseException()}");
         if (NGame.Instance is { } host)
@@ -438,6 +439,7 @@ internal static partial class SolverController
         _combat.BugReportIssues.Record(
             CombatBugReportIssueKind.TurnSetupStateMismatch,
             difference);
+        CombatBugReportExporter.RecordRuntimeDivergence("turn_setup", difference);
         SolverOverlay.RefreshControls();
         return true;
     }
@@ -1273,6 +1275,7 @@ internal static partial class SolverController
         catch (Exception ex)
         {
             _combat.BugReportIssues.RecordFailure(CombatBugReportIssueKind.SearchSetupFailure, ex);
+            CombatBugReportExporter.RecordRuntimeException("search_setup", ex);
             CancelSearch();
             _combat.State = null;
             _combat.LatestResult = null;
@@ -2323,6 +2326,7 @@ internal static partial class SolverController
             _combat.PendingManualProjectionBaseline = null;
             Exception ex = task.Exception?.GetBaseException() ?? new InvalidOperationException("后台搜索失败但没有异常对象。");
             _combat.BugReportIssues.RecordFailure(CombatBugReportIssueKind.SearchFailure, ex);
+            CombatBugReportExporter.RecordRuntimeException("search", ex);
             LastSearchFailureForTesting = ex;
             if (ex is PotionPolicyUnsatisfiedException)
             {
@@ -2977,6 +2981,7 @@ internal static partial class SolverController
         catch (Exception ex)
         {
             _combat.BugReportIssues.RecordFailure(CombatBugReportIssueKind.DeploymentFailure, ex);
+            CombatBugReportExporter.RecordRuntimeException("deployment", ex);
             SolverOverlay.Show(host, FormatDeploymentFailure(ex));
             Entry.Logger.Error($"[CombatSolver/Test] DEPLOY_FAILURE turn={turn} exception={ex}");
         }
@@ -3013,6 +3018,7 @@ internal static partial class SolverController
         _combat.AutomaticSearchPaused = true;
         _combat.AutomaticSearchPausedTurn = turn;
         _combat.BugReportIssues.RecordFailure(CombatBugReportIssueKind.DeploymentFailure, failure);
+        CombatBugReportExporter.RecordRuntimeException("deployment_choice", failure);
         CompleteDeployment(deployment);
         SolverOverlay.Show(host, SolverText.Get("自动选牌未完成，已暂停执行。当前选择交还手动操作，完成后点击“重新计算”。"));
         Entry.Logger.Error($"[CombatSolver/Test] DEPLOY_CHOICE_PAUSED turn={turn} exception={failure}");
@@ -3443,6 +3449,8 @@ internal static partial class SolverController
     internal static CombatBugReportClassificationSnapshot CaptureBugReportClassificationForExport()
         => CombatManager.Instance.IsInProgress ? CaptureBugReportClassification()
             : _lastBugReportClassification ?? CaptureBugReportClassification();
+    internal static CombatBugReportClassificationSnapshot CaptureBugReportClassificationForRuntimeEvidence()
+        => CaptureBugReportClassification();
     internal static ManualProjectionComparison? ManualProjectionComparisonForExport
         => CombatManager.Instance.IsInProgress ? _combat.LastManualProjectionComparison : _lastManualProjectionComparison;
 
