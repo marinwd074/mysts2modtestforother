@@ -75,7 +75,7 @@
   </PropertyGroup>
 
   <ItemGroup Condition="'$(CompatibilitySmoke)' == 'true'">
-    <Compile Include="tools/CompatibilitySmoke/CompatibilitySmoke.cs" />
+    <Compile Include="tools/CompatibilitySmoke/*.cs" />
   </ItemGroup>
 
   <Target Name="BuildMemoryCleaner" BeforeTargets="Build" Condition="'$(OS)' == 'Windows_NT'">

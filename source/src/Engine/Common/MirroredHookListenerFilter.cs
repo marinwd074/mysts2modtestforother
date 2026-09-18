@@ -77,7 +77,9 @@ internal sealed class MirroredHookListenerFilter(bool enabled)
         [nameof(AbstractModel.AfterEnergyReset)] = MirroredHookMask.AfterEnergyReset,
         [nameof(AbstractModel.AfterModifyingBlockAmount)] = MirroredHookMask.AfterModifyingBlockAmount,
         [nameof(AbstractModel.AfterModifyingCardPlayCount)] = MirroredHookMask.AfterModifyingCardPlayCount,
-#if !STS2_01071
+#if STS2_01071
+        [nameof(AbstractModel.AfterModifyingCardPlayResultPileOrPosition)] = MirroredHookMask.AfterModifyingCardPlayResultLocation,
+#else
         [nameof(AbstractModel.AfterModifyingCardPlayResultLocation)] = MirroredHookMask.AfterModifyingCardPlayResultLocation,
 #endif
         [nameof(AbstractModel.AfterModifyingHpLostAfterOsty)] = MirroredHookMask.AfterModifyingHpLostAfterOsty,
@@ -99,7 +101,9 @@ internal sealed class MirroredHookListenerFilter(bool enabled)
         [nameof(AbstractModel.ModifyBlockAdditive)] = MirroredHookMask.ModifyBlockAdditive,
         [nameof(AbstractModel.ModifyBlockMultiplicative)] = MirroredHookMask.ModifyBlockMultiplicative,
         [nameof(AbstractModel.ModifyCardPlayCount)] = MirroredHookMask.ModifyCardPlayCount,
-#if !STS2_01071
+#if STS2_01071
+        [nameof(AbstractModel.ModifyCardPlayResultPileTypeAndPosition)] = MirroredHookMask.ModifyCardPlayResultLocation,
+#else
         [nameof(AbstractModel.ModifyCardPlayResultLocation)] = MirroredHookMask.ModifyCardPlayResultLocation,
 #endif
         [nameof(AbstractModel.ModifyDamageAdditive)] = MirroredHookMask.ModifyDamageAdditive,

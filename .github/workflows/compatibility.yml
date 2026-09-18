@@ -31,6 +31,16 @@ jobs:
           }
           git diff --check
 
+  contract-tests:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Run L1 pure contract tests
+        shell: pwsh
+        run: ./source/tools/run-contract-tests.ps1
+
 # The full game build and headless smoke require the locally installed STS2 and
 # RitsuLib payloads. This workflow intentionally gates only source consistency;
 # local Release/runtime evidence remains the authoritative integration check.

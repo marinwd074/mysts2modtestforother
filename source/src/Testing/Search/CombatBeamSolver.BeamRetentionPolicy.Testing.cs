@@ -488,4 +488,3 @@ internal sealed partial class CombatBeamSolver
         }
     }
 }
-

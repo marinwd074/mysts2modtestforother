@@ -2480,6 +2480,9 @@ internal static partial class SolverController
                 try
                 {
                     await choiceSession.AwaitProducerAndCompleteAsync(actionCompletion);
+                    // The root action can complete before nested card/potion actions settle;
+                    // deploy the next planned action only after the native queue is idle.
+                    await RunManager.Instance.ActionExecutor.FinishedExecutingActions().WaitAsync(token);
                     RunStatistics.Activity(state, execution: true, auto: _combat.FullAutoEnabled);
                 }
                 catch (NativeChoicePlanMismatchException)

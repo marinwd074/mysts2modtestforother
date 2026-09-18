@@ -7,10 +7,11 @@ from xml.sax.saxutils import escape
 repo = Path(__file__).resolve().parents[2]
 output = repo / '.local/beam-rank-sort-checks'
 output.mkdir(parents=True, exist_ok=True)
-source = (repo / 'src/Search/CombatBeamSolver.BeamRetentionPolicy.cs').read_text()
+retention_source = (repo / 'src/Search/CombatBeamSolver.BeamRetentionPolicy.cs').read_text()
+ranking_source = (repo / 'src/Search/CombatBeamSolver.BeamRanking.cs').read_text()
 snapshot_source = (repo / 'src/Search/CombatPlan.cs').read_text()
 
-def block(signature):
+def block(source, signature):
     start = source.index(signature)
     cursor = source.index('{', start)
     depth = 1
@@ -21,11 +22,11 @@ def block(signature):
         end += 1
     return source[start:end]
 
-score = block('private double BeamRankScore(SearchNode node)').replace('private double', 'public double', 1)
-retained = source[source.index('private int RetainedAttackGrowth(SimulationSnapshot snapshot)'):]
+score = block(retention_source, 'private double BeamRankScore(SearchNode node)').replace('private double', 'public double', 1)
+retained = retention_source[retention_source.index('private int RetainedAttackGrowth(SimulationSnapshot snapshot)'):]
 retained = retained[:retained.index(';') + 1]
-compare = block('internal static int CompareBeamRankOrder(').replace('internal static', 'public static', 1)
-sort = block('private void SortByBeamRank(List<SearchNode> ranked)').replace('private void', 'public void', 1)
+compare = block(ranking_source, 'internal static int CompareBeamRankOrder(').replace('internal static', 'public static', 1)
+sort = block(retention_source, 'private void SortByBeamRank(List<SearchNode> ranked)').replace('private void', 'public void', 1)
 fields = sorted(set(re.findall(r'(?:node\.Snapshot|snapshot)\.(\w+)', score + retained)))
 for name in fields + ['OffensiveProgressValue']:
     if not re.search(r'public int ' + name + r'\s*\{', snapshot_source):
@@ -38,10 +39,12 @@ classes += '\n'.join(f'public int {name} {{ get; init; }}' for name in fields + 
 classes += '''
 }
 internal sealed class Run { public int InitialPersistentBuffValue, InitialEnemyStrengthSuppression, InitialEnemyWeakTurns, InitialRetainedAttackValue; }
+internal sealed class SolverSearchProfile { public bool BaseScoreOnly { get; init; } }
 internal sealed class Scorer(bool boss, int enemies, Run initial) {
 private readonly bool _isActEndingBoss = boss;
 private readonly int _initialEnemyCount = enemies;
 private readonly Run _run = initial;
+private readonly SolverSearchProfile _profile = new();
 '''
 classes += '\n'.join([score, retained, compare, sort]) + '\n}'
 (output / 'Extracted.cs').write_text(classes)

@@ -561,6 +561,7 @@ $expectedBeamFiles = @(
     "CombatBeamSolver.cs",
     "CombatBeamSolver.AdmittedExpansion.cs",
     "CombatBeamSolver.EndTurnChoiceReplay.cs",
+    "CombatBeamSolver.EndTurnExpansion.cs",
     "CombatBeamSolver.RoundTransition.cs",
     "CombatBeamSolver.CardChoiceContinuation.cs",
     "CombatBeamSolver.PotionChoiceContinuation.cs",
@@ -568,6 +569,7 @@ $expectedBeamFiles = @(
     "CombatBeamSolver.ExecutionChoiceContinuation.Testing.cs",
     "CombatBeamSolver.TurnExecutionContinuation.cs",
     "CombatBeamSolver.BeamRetentionPolicy.cs",
+    "CombatBeamSolver.BeamRanking.cs",
     "CombatBeamSolver.BlockPotionInsertion.cs",
     "CombatBeamSolver.CrossTurnPlanning.cs",
     "CombatBeamSolver.CyclePlanning.cs",
@@ -576,6 +578,7 @@ $expectedBeamFiles = @(
     "CombatBeamSolver.FinalPlanOrdering.cs",
     "CombatBeamSolver.Models.cs",
     "CombatBeamSolver.NoveltySearch.cs",
+    "CombatBeamSolver.OpeningExpansion.cs",
     "CombatBeamSolver.Transpositions.cs",
     "CombatBeamSolver.OrderedMutationRetention.cs",
     "CombatBeamSolver.ParallelExpansion.cs",
@@ -591,7 +594,7 @@ $expectedBeamFiles = @(
 $pathDiagnosticsPath = Join-Path $searchRoot "CombatBeamSolver.PathDiagnostics.cs"
 foreach ($required in @(
     @{ Path = (Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.cs"); Text = 'HasRetainedRoutingChoice: RetainedRoutingChoice(node) != null' },
-    @{ Path = (Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.cs"); Text = 'if (values.HasRetainedRoutingChoice)' },
+    @{ Path = (Join-Path $searchRoot "CombatBeamSolver.BeamRanking.cs"); Text = 'if (values.HasRetainedRoutingChoice)' },
     @{ Path = (Join-Path $repositoryRoot "src/Testing/UnattendedTestRunner.SearchPolicy.cs"); Text = 'seven, [], [0, 7, 1, 4, 2, 5, 6], useTacticalOrder: true);' },
     @{ Path = (Join-Path $repositoryRoot "src/Testing/UnattendedTestRunner.Executor.cs"); Text = 'KNOWN-SOUL-GENERATION-CONTEXT-V0111' },
     @{ Path = (Join-Path $repositoryRoot "src/Testing/UnattendedTestRunner.Executor.cs"); Text = 'KNOWN-SOUL-GENERATION-SUFFIX-V0111' },
@@ -1261,7 +1264,7 @@ foreach ($check in @(
     @{ File = 'src/Search/CombatBeamSolver.Phases.cs'; Text = 'policy.RelicTargetsSatisfied(node.Snapshot.RelicCounters)' },
     @{ File = 'src/Search/CombatSearchCoordinator.cs'; Text = 'policy.RelicTargetsSatisfied(result.Snapshot.RelicCounters)' },
     @{ File = 'src/Runtime/SolvedRouteCache.cs'; Text = 'policy.RelicTargets' },
-    @{ File = 'src/Search/CombatBeamSolver.Expansion.cs'; Text = 'ApplyFixedPrefix(seed, prefix)' },
+    @{ File = 'src/Search/CombatBeamSolver.OpeningExpansion.cs'; Text = 'ApplyFixedPrefix(seed, prefix)' },
     @{ File = 'src/UI/SolverRelicStrategyPanel.cs'; Text = 'row.Enabled.ButtonPressed' })) {
     if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot $check.File) -SimpleMatch $check.Text -Quiet)) {
         $violations.Add("$($check.File): missing relic policy ownership '$($check.Text)'")
