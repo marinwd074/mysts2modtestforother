@@ -370,7 +370,7 @@ if (Select-String -LiteralPath $searchGcPolicyPath -SimpleMatch "ReclaimAfterAct
 # GC admission accounting and scratch-container ownership remain in their existing layers.
 foreach ($check in @(
     @{ RelativePath = "src/Runtime/SearchGcPolicy.cs"; Text = "scope.CompleteLifecycle(CaptureLifecycle())" },
-    @{ RelativePath = "src/Runtime/SolverController.cs"; Text = "SearchGcPolicy.EnterSearchScope(" },
+    @{ RelativePath = "src/Runtime/SolverController.SearchLifecycle.cs"; Text = "SearchGcPolicy.EnterSearchScope(" },
     @{ RelativePath = "src/Search/CombatBeamSolver.Models.cs"; Text = "ExpansionBatchPool = new(static snapshot => snapshot.ReleaseSimulator())" },
     @{ RelativePath = "src/Search/CombatBeamSolver.ParallelExpansion.cs"; Text = "new(_run.ExpansionBatchPool)" },
     @{ RelativePath = "src/Engine/InCombat/Simulation/CombatPredictionRngSet.cs"; Text = "private sealed class FrozenStream(PredictionRngState state)" },
@@ -425,7 +425,7 @@ $rootSnapshotChecks = @(
         Text = "Combat root snapshot must be captured on the main thread."
     },
     @{
-        Path = Join-Path $repositoryRoot "src\Runtime\SolverController.cs"
+        Path = Join-Path $repositoryRoot "src\Runtime\SolverController.SearchLifecycle.cs"
         Text = "CombatRootSnapshot.Capture(state)"
     },
     @{
@@ -1237,7 +1237,7 @@ foreach ($check in @(
     @{ Path = $searchCompletionNotifierPath; Text = 'EntryPoint = "LoadIconW"' },
     @{ Path = $searchCompletionNotifierPath; Text = "GetWindowThreadProcessId(foreground, out uint processId)" },
     @{ Path = $searchCompletionNotifierPath; Text = "ShellNotifyIcon(NotifyIconDelete, ref data)" },
-    @{ Path = $controllerPath; Text = "SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Stale)" },
+    @{ Path = (Join-Path $repositoryRoot "src\Runtime\SolverController.SearchLifecycle.cs"); Text = "SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Stale)" },
     @{ Path = $turnSetupPath; Text = "SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Failed)" },
     @{ Path = $solverSettingsGeneralPath; Text = "CreateSearchCompletionNotificationPolicyInput()" })) {
     if (-not (Select-String -LiteralPath $check.Path -SimpleMatch $check.Text -Quiet)) {

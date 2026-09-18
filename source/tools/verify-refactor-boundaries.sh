@@ -448,7 +448,7 @@ while IFS=$'\t' read -r relative_path text; do
     require_fixed "$repository_root/$relative_path" "$text" 'missing GC research ownership boundary'
 done <<'EOF'
 src/Runtime/SearchGcPolicy.cs	scope.CompleteLifecycle(CaptureLifecycle())
-src/Runtime/SolverController.cs	SearchGcPolicy.EnterSearchScope(
+src/Runtime/SolverController.SearchLifecycle.cs	SearchGcPolicy.EnterSearchScope(
 src/Search/CombatBeamSolver.Models.cs	ExpansionBatchPool = new(static snapshot => snapshot.ReleaseSimulator())
 src/Search/CombatBeamSolver.ParallelExpansion.cs	new(_run.ExpansionBatchPool)
 src/Search/CombatBeamSolver.Phases.cs	SearchWaveMemoryPolicy.ParentWaveCapacity(
@@ -495,7 +495,7 @@ while IFS=$'\t' read -r relative_path text; do
     require_fixed "$repository_root/$relative_path" "$text" 'missing root snapshot boundary'
 done <<'EOF'
 src/Runtime/CombatRootSnapshot.cs	Combat root snapshot must be captured on the main thread.
-src/Runtime/SolverController.cs	CombatRootSnapshot.Capture(state)
+src/Runtime/SolverController.SearchLifecycle.cs	CombatRootSnapshot.Capture(state)
 src/Runtime/PlayerTurnSetupPatches.cs	CombatRootSnapshot.Capture(combat)
 src/Search/CombatSearchCoordinator.cs	CombatRootSnapshot root
 src/Search/RootCombatHistorySnapshot.cs	history.CardPlaysStarted.ToArray()
@@ -977,7 +977,7 @@ $search_completion_notifier_path	EntryPoint = "Shell_NotifyIconW"
 $search_completion_notifier_path	EntryPoint = "LoadIconW"
 $search_completion_notifier_path	GetWindowThreadProcessId(foreground, out uint processId)
 $search_completion_notifier_path	ShellNotifyIcon(NotifyIconDelete, ref data)
-$repository_root/src/Runtime/SolverController.cs	SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Stale)
+$repository_root/src/Runtime/SolverController.SearchLifecycle.cs	SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Stale)
 $repository_root/src/Runtime/PlayerTurnSetupPatches.cs	SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Failed)
 $solver_settings_general_path	CreateSearchCompletionNotificationPolicyInput()
 EOF
