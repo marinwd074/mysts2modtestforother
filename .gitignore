@@ -7,3 +7,5 @@
 !CombatSolver-issue-*.md
 !source/
 !source/**
+!runtime-evidence/
+!runtime-evidence/**
