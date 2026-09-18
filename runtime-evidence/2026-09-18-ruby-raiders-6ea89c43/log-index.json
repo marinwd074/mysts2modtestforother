@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "combat": {
+    "sessionId": "8bdc338d4ee24aa8b217a7076e7fe640",
+    "encounter": "RUBY_RAIDERS_NORMAL",
+    "seed": "7S7R2CTV5U",
+    "startedAt": "2026-09-18T11:48:37.6343974+08:00",
+    "endedAt": null,
+    "endReason": null,
+    "messages": 42,
+    "errors": 2,
+    "lastError": "[CombatSolver/Test] SEARCH_FAILURE generation=6 exception=CombatSolver.SearchTransitionException: \u641C\u7D22\u52A8\u4F5C\u56DE\u653E\u5931\u8D25\uFF1Aturn=2 action_count=6 kind=PlayCard card=DEFEND_DEFECT occurrence=0 target=- parent_state=StateFingerprint { First = 14837706792127177874, Second = 16826888708141830027 }\u3002\r\n ---\u003E System.TypeInitializationException: The type initializer for \u0027CombatSolver.Engine.InCombat.Mirrors.Hooks.Card.BeforeCardPlayedMirrors\u0027 threw an exception.\r\n ---\u003E System.InvalidOperationException: MegaCrit.Sts2.Core.Models.Powers.JugglingPower does not override MegaCrit.Sts2.Core.Models.AbstractModel.BeforeCardPlayed.\r\n   at CombatSolver.Engine.Common.Mirrors.MethodMirrorRegistry\u00602.ValidateOverride(Type type)\r\n   at CombatSolver.Engine.Common.Mirrors.MethodMirrorRegistry\u00602.Register[TModel](Action\u00602 handler)\r\n   at CombatSolver.Engine.InCombat.Mirrors.Hooks.Card.BeforeCardPlayedMirrors.CreateRegistry()\r\n   at CombatSolver.Engine.InCombat.Mirrors.Hooks.Card.BeforeCardPlayedMirrors..cctor()\r\n   --- End of inner exception stack trace ---\r\n   at CombatSolver.Engine.InCombat.Simulation.CombatPredictionSimulator.ContinueCardPlayExecution(PredictedCard card, Creature target, Boolean isAutoPlay, ResourceInfo resources, CardLocation result, Int32 playCount, String choiceSource, String choiceContext, Int32 nextIndex, CardExecutionStage stage, CardPlay activePlay, Int32 ownerBlockBefore, Int32 playHistoryStart)\r\n   at CombatSolver.Engine.InCombat.Simulation.CombatPredictionSimulator.OnPlayWrapper(PredictedCard card, Creature target, Boolean isAutoPlay, ResourceInfo resources, PredictionTraceFrame\u0026 frame, String nestedChoiceSourceId, String nestedChoiceContextId)\r\n   at CombatSolver.Engine.InCombat.Simulation.CombatPredictionSimulator.ManualPlay(PredictedCard card, Creature target, PredictionTraceFrame\u0026 frame)\r\n   at CombatSolver.CombatBeamSolver.Replay(IReadOnlyList\u00601 actions, SimulationSnapshot parentSnapshot, Int32 startingTurn, Int32 priorActionCount, ActionRelicTriggerRecorder triggerRecorder, ",
+    "recordingError": null
+  },
+  "current": {
+    "eventCount": 42,
+    "error": null,
+    "peakPendingBytes": 10610,
+    "writtenBytes": 33653
+  },
+  "process": {
+    "eventCount": 77,
+    "error": null,
+    "writtenBytes": 31913
+  },
+  "detailScope": "current_or_most_recent_combat",
+  "previousCombatScope": "summary_only"
+}
