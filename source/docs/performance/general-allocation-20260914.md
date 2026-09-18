@@ -83,7 +83,7 @@ BYRDONIS仅用原A1/A2与F1/F2计算耗时为+0.90%。此前针对同一上游�
 
 本批最终取舍：交付上述五项局部优化。较大的严格同工作量收益集中在储君女王（耗时−27.97%、峰值−17.00%）和蟹战（耗时−18.05%、峰值−9.57%）；十个开局未观察到稳定的逐场耗时或峰值退化。最终候选共24次完整请求，22次严格oracle相同，亡灵契约师女王两次保留上述一转移差异，全部动作/路线仍相同。这个结论仅覆盖所测开局和本机无头环境，不保证任意新场景/机器都更快，也没有完成可见或原生整场部署验证。
 
-所有原始结果、运行ID、实际政策、开局、完整动作/路线、同PID峰值、GC指标、失败与字段差异保存在[结构化证据](general-allocation-20260914.json)。其中`finalRuns`/`aggregates`是原四项候选阶段；最终五项使用`resourceFinalRuns`/`resourceFinalAggregates`，补充交错对照使用`focusedFinalAggregates`，不能把旧候选混入最终候选均值。
+所有原始结果、运行ID、实际政策、开局、完整动作/路线、同PID峰值、GC指标、失败与字段差异保存在[结构化证据](RAW_DATA_ARCHIVE.md#general-allocation-20260914-json)。其中`finalRuns`/`aggregates`是原四项候选阶段；最终五项使用`resourceFinalRuns`/`resourceFinalAggregates`，补充交错对照使用`focusedFinalAggregates`，不能把旧候选混入最终候选均值。
 
 ## 峰值反例后的局部修正
 

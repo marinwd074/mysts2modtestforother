@@ -72,7 +72,7 @@
 - `retention-jobs` 首样本差异很小，随后预先安排 `retention2–baseline3–retention3–baseline4` 对照。全部四次基线和三次候选的探索均值约减少 3.22%；最终结论以第 3 节独立正式组为准。
 - 新试验 `hook-index` 给现有不可变类型布局增加逐 Hook 接收者位置表，保留原接收者顺序及复合 mask 扫描。与纯保路候选探索均值相比，没有建立额外耗时收益，正常分配增加约 134 MB，已连同索引专属测试原型撤回。该原型的目标 Short/正常工作字段和动作一致；未把未执行的索引原生合同写成通过。
 
-各原型的 runId、完整原始指标、比较结果与撤回理由都在 [结构化记录](perf2-integration-20260909.json) 中。Profiler、完整日志及 DLL 仅留在忽略目录。
+各原型的 runId、完整原始指标、比较结果与撤回理由都在 [结构化记录](RAW_DATA_ARCHIVE.md#perf2-integration-20260909-json) 中。Profiler、完整日志及 DLL 仅留在忽略目录。
 
 ## 5. 继续研究得到的热点
 

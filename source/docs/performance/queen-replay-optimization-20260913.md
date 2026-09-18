@@ -74,6 +74,6 @@ A为隔离checkout的bcc15da，仅加相同MVID诊断修复以允许原包加载
 
 原包使用两端run-unattended-test入口的CheckpointArchivePath、CheckpointSelector=latest、ReplayMode=RestoreOnly/SearchOnly。短搜覆盖文件只设profile的maxExpandedNodes=10000与fixedBudget=true，其他profile值来自包内记录。原值、覆盖值、实际配置与每份结果均保留在.local/queen-optimization-20260913。
 
-[结构化结果、采样与撤回数据](queen-replay-optimization-20260913.json)。完整原始ZIP、trace、原型补丁和完整日志不提交。
+[结构化结果、采样与撤回数据](RAW_DATA_ARCHIVE.md#queen-replay-optimization-20260913-json)。完整原始ZIP、trace、原型补丁和完整日志不提交。
 
 最终正常构建另跑原包原始profile（Beam512/100000节点/300000ms、无FixedBudget）：2fd12be960ad45afbd6b74dedfe7f422在120秒请求上限内未返回，启动器明确记录超时并停止游戏；含启动/清理总耗时134.031秒，采样峰值RSS22.06464GB。没有完整搜索指标，不补造速度或质量结果。本轮修复了恢复误拦并减少分配，但没有解决原始大预算慢搜，也未证明Windows频繁GC已解决。

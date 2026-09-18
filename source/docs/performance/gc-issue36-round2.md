@@ -1,6 +1,6 @@
 # issue #36 第二轮：分配采样与低风险候选
 
-研究起点为本分支 `7d724d6`；首轮结论见 [实施报告](gc-issue36-implementation.md)。本轮重新运行起点 DLL，不把首轮不同时间/版本的中位数混入增量收益。公开 fixture、节点预算与平台入口沿用 [重现说明](gc-issue36-reproduce.md)。原始 trace、gcdump、完整日志与 DLL 仅在忽略目录保留；可分享结果见 [结构化证据](gc-issue36-round2-results.json)。
+研究起点为本分支 `7d724d6`；首轮结论见 [实施报告](gc-issue36-implementation.md)。本轮重新运行起点 DLL，不把首轮不同时间/版本的中位数混入增量收益。公开 fixture、节点预算与平台入口沿用 [重现说明](gc-issue36-reproduce.md)。原始 trace、gcdump、完整日志与 DLL 仅在忽略目录保留；可分享结果见 [结构化证据](RAW_DATA_ARCHIVE.md#gc-issue36-round2-results-json)。
 
 ## Snapshot 临时列表
 

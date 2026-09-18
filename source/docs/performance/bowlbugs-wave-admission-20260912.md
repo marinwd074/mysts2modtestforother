@@ -1,6 +1,6 @@
 # 盛碗虫群：父节点预约与并行调度
 
-本轮基线为 `e956f5c`，生产修改只位于 Search 的内存预约算术与调用处；未改模拟语义、Beam、节点/选牌预算、DOP 或 No-GC 区域上限。详细样本见[机器可读证据](bowlbugs-wave-admission-20260912.json)。
+本轮基线为 `e956f5c`，生产修改只位于 Search 的内存预约算术与调用处；未改模拟语义、Beam、节点/选牌预算、DOP 或 No-GC 区域上限。详细样本见[机器可读证据](RAW_DATA_ARCHIVE.md#bowlbugs-wave-admission-20260912-json)。
 
 ## 原因与实现
 

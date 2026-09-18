@@ -1,6 +1,6 @@
 # 合并后的性能探索（2026-09-13）
 
-[性能索引](README.md) · [结构化证据](hotspot-exploration-20260913.json)
+[性能索引](README.md) · [结构化证据](RAW_DATA_ARCHIVE.md#hotspot-exploration-20260913-json)
 
 用户确认 PR #89 已合并，要求从上游新开性能分支并继续测试与探索。`perf/hotspot-exploration-20260913` 基于 `bcc15da`（0.37.0），带入上一分支尚未进入上游的最终压力报告。上游还改动了评分/威胁投影与卖血策略，因此本轮重新建立基线；不把旧分支数字当作新分支 A/B。
 

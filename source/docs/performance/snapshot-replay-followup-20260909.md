@@ -1,6 +1,6 @@
 # 快照与重放热点复查及 PR 收口（2026-09-09）
 
-[返回性能目录](README.md) · [结构化证据](snapshot-replay-followup-20260909.json)
+[返回性能目录](README.md) · [结构化证据](RAW_DATA_ARCHIVE.md#snapshot-replay-followup-20260909-json)
 
 本次从 `3f2ac26` 继续细分快照和动作重放成本，试验投影洗牌的显式比较委托。预定 B–C–C–B 筛查中，normal 均值只减少 **0.216%**，两次基线漂移 **3.190%**；Short 均值增加 **0.321%**。没有建立稳定的新收益，原型已撤回，按用户要求整理此前验证过的性能分支为 PR。
 

@@ -236,7 +236,7 @@ Smart 层间使用 [SmartLayerMemoryForecast](../../src/Search/SmartLayerMemoryF
 
 研究结果足以支持将通过验证的生产改动提交为 draft PR，并明确 Smart 的空间代价。未验证正常可见 Steam 会话、Windows 游戏、完整自动部署与 EventPipe allocation/retained-heap trace；因此不作玩家可见卡顿或所有遭遇普遍提速结论。外层前缀释放仍不能消除单 parent 原始候选的完整驻留，P2 需要后续统一实体表示和真实 Hook 回放验证。
 
-逐轮数值、runId 和比较口径见 [机器证据](gc-issue36-results.json)，原生 Bash/PowerShell 重现步骤见 [重现说明](gc-issue36-reproduce.md)。
+逐轮数值、runId 和比较口径见 [机器证据](RAW_DATA_ARCHIVE.md#gc-issue36-results-json)，原生 Bash/PowerShell 重现步骤见 [重现说明](gc-issue36-reproduce.md)。
 
 
 ## 9. 普通 GC 自适应并发：真实探测后不启用

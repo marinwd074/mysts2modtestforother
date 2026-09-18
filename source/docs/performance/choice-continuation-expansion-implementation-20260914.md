@@ -90,4 +90,4 @@ Search仅在明确父动作/已消费选择前缀匹配时复用，捕获和复�
 
 最终Bash与PowerShell结构门禁均通过，`search_files=101`；变更空白检查通过。执行计数接入后的16项比较器测试此前已通过且源码未再修改，复用该证据。
 
-全部输入、设置、12份样本、完整动作/路线、逻辑计数差异及开发失败见[结构化证据](choice-continuation-expansion-implementation-20260914.json)。按用户澄清停止工作量归因；蟹战的差异仍明确保留，没有宣称任意战斗或所有嵌套状态均已穷举验证。
+全部输入、设置、12份样本、完整动作/路线、逻辑计数差异及开发失败见[结构化证据](RAW_DATA_ARCHIVE.md#choice-continuation-expansion-implementation-20260914-json)。按用户澄清停止工作量归因；蟹战的差异仍明确保留，没有宣称任意战斗或所有嵌套状态均已穷举验证。

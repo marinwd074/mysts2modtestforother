@@ -1,6 +1,6 @@
 # 已准入父节点内的动作与选择作业（2026-09-08–09）
 
-[性能目录](README.md) · [结构化证据](admitted-expansion-jobs-20260908.json)
+[性能目录](README.md) · [结构化证据](RAW_DATA_ARCHIVE.md#admitted-expansion-jobs-20260908-json)
 
 本轮在 `984fa59` 的现有搜索后端上实现固定父窗口内的作业调度。保留卡牌动作、药水/目标、选择准备、保证必经的首层回放、原序续接与 EndTurn 作业，共用一次 Solve 的固定后台 lane。VeryHigh 的搜索预算、候选配额、选择回放上限和接受顺序不变。没有版本提升、发包、推送或新后端。
 

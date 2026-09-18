@@ -1,6 +1,6 @@
 # Issue #36：固定工作量重现
 
-逐轮数值、中位数、runId、生命周期及完整路线/工作量/质量/剪枝比较见 [结果 JSON](gc-issue36-results.json)，候选取舍见 [实现记录](gc-issue36-implementation.md)。以下命令等价于本轮本地 `run-matrix.py` 的请求参数，直接使用已跟踪的原生 launcher；不依赖未提交的研究脚本。
+逐轮数值、中位数、runId、生命周期及完整路线/工作量/质量/剪枝比较见 [结果 JSON](RAW_DATA_ARCHIVE.md#gc-issue36-results-json)，候选取舍见 [实现记录](gc-issue36-implementation.md)。以下命令等价于本轮本地 `run-matrix.py` 的请求参数，直接使用已跟踪的原生 launcher；不依赖未提交的研究脚本。
 
 这是 Linux headless 研究，尚无 Windows 实测或可见 Steam 帧时间结论。普通 GC、NoGC、不同 fixture 分组比较；每组串行启动三个独立进程，保存全部结果，报告中位数，不剔除离群值。早期 `candidate1`、撤回 listener 的控制、压力和自适应试验各配置仅一次，不能称为三次复测。中间候选不是独立提交，不能仅 checkout 一个标签复原其组合实现。
 
