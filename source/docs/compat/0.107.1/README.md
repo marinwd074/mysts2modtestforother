@@ -7,6 +7,7 @@ not silently reinterpreted as 0.107.1 results.
 | Topic | Current record |
 |---|---|
 | Build and static target guard | [BUILD_VERIFICATION.md](BUILD_VERIFICATION.md) |
+| Source compatibility boundary | [Compatibility README](../../../src/Compatibility/README.md) |
 | Hook/patch coverage | [HOOK_COVERAGE.md](HOOK_COVERAGE.md) |
 | Native-vs-predicted differential | [NATIVE_DIFFERENTIAL.md](NATIVE_DIFFERENTIAL.md) |
 | First-turn and incremental search | [SEARCH_SMOKE.md](SEARCH_SMOKE.md) |

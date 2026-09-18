@@ -45,6 +45,10 @@ Entry / turn hooks
   -> Overlay renderer / 原版部署入口
 ```
 
+版本相关的原生反射签名集中在 `src/Compatibility/`；当前回合准备入口由
+`Sts2TurnSetupCompatibility` 负责，搜索节点不经过该边界。仍需保留原生
+Harmony 参数形状的条件编译位于回合补丁入口，后续按兼容迁移顺序逐项收敛。
+
 搜索 worker 接收 `CombatRootSnapshot`、`SearchPolicySnapshot`、诊断 sink、帧压力信号和取消令牌。它不读取全局设置、控制器、UI 或无人测试状态。
 
 成长策略由 `GrowthBudgets` 随请求冻结，每次实际收益按对应来源取得 HP 额度，中间保路和终局排序沿用同一份额度；成长侧栏只编辑原有额度和忽略收益开关。`CardMechanismFacts` 提供小刀数量、攻击命中与消耗抽牌的纯值估计，`StrategicEffectModel` 消费分支状态；StateEvaluation 的首攻击估值只在原版致命消费者存在或外部战略登记表非空时构建，外部既有字段上下文保持；当前没有奖励／商店评分模块。
