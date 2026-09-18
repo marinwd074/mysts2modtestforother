@@ -41,13 +41,13 @@ DISPLAY_FIELDS = {'cardTitle', 'targetName', 'actionTitle', 'potionTitle'}
 
 def read_json(path):
     path = Path(path)
-    return json.loads(path.read_text()) if path.exists() else None
+    return json.loads(path.read_text(encoding='utf-8')) if path.exists() else None
 
 
 def collect(runs, prefix):
     out = {}
     for result in sorted(Path(runs).glob('*/result.json')):
-        payload = json.loads(result.read_text())
+        payload = json.loads(result.read_text(encoding='utf-8'))
         label = payload.get('label') or result.parent.name
         root = label[len(prefix) + 1:] if prefix and label.startswith(prefix + '-') else label
         out[root] = (payload, read_json(result.parent / 'route.json'))
@@ -120,7 +120,7 @@ def main():
         'mismatchedRoots': [row['root'] for row in roots if row['mismatches']],
         'details': roots,
     }
-    Path(args.out).write_text(json.dumps(report, indent=1, ensure_ascii=False))
+    Path(args.out).write_text(json.dumps(report, indent=1, ensure_ascii=False), encoding='utf-8')
     ok = not report['mismatchedRoots'] and not report['leftOnly'] and not report['rightOnly']
     print(f"roots={report['roots']} fields={report['comparedFields']} "
           f"mismatched_roots={len(report['mismatchedRoots'])} "

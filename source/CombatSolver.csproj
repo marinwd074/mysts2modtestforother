@@ -48,7 +48,6 @@
     <Compile Remove="src/Testing/**/*.cs" />
     <Compile Include="src/Testing/UnattendedTestProtocol.cs" />
     <Compile Include="src/Testing/UnattendedAsyncActivityTracker.Compatibility.cs" />
-    <Compile Remove="src/Runtime/PlayerTurnSetupCoordinator.Compatibility.cs" />
     <EmbeddedResource Include="src/UI/English.json" LogicalName="CombatSolver.UI.English.json" />
     <PackageReference Include="Krafs.Publicizer" Version="2.3.0" PrivateAssets="all" />
     <Publicize Include="sts2" IncludeVirtualMembers="false" IncludeCompilerGeneratedMembers="false" />

@@ -29,7 +29,7 @@ created = [source / 'src/Testing' / ('ChoicePrototype.' + name) for name in ['Ex
 if any(path.exists() for path in created):
     raise SystemExit('Injected test sources already exist; refusing to overwrite them.')
 lock = source / '.choice-prototype-build.lock'
-with lock.open('x') as guard:
+with lock.open('x', encoding='utf-8') as guard:
     guard.write('Do not edit or build this disposable worktree concurrently.\n')
 saved = {path: (source / path).read_bytes() for path in tracked}
 try:
@@ -42,7 +42,7 @@ try:
     subprocess.run(command, cwd=source, check=True)
     shutil.copy2(source / 'CombatSolver.json', output / 'CombatSolver.json')
     (output / 'prototype-build.json').write_text(json.dumps({'sourceCommit': head, 'command': command,
-        'experimentalOnly': True, 'defaultSearchIntegration': False}, indent=2) + '\n')
+        'experimentalOnly': True, 'defaultSearchIntegration': False}, indent=2) + '\n', encoding='utf-8')
 finally:
     for path, content in saved.items():
         (source / path).write_bytes(content)

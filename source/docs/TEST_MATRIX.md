@@ -1,5 +1,7 @@
 # CombatSolver 测试清单
 
+> 当前矩阵基线为 CombatSolver `0.40.2`、目标游戏 `0.107.1`、RitsuLib 目标 `0.107.1`；下方按时间排列的历史条目保留其原始版本和验证范围，不能直接当作当前发布结论。
+
 ## 0.40.2：v0.107.1 问题包回归修复（2026-09-18）
 
 - 问题包归因：CubeX `9bd8ad30`、Mawler `91f2bf97`、The Kin `03fc1f75`/`5023e5ca`/`c45c1331` 的 `ROCKET_PUNCH` 费用差异共享同一镜像根因；Phrog `c12596f0` 的部署漂移、Ruby Raiders `012a00da`/`6ea89c43` 的 Juggling Hook、Slimes `728a43c5` 的 Regen Hook 使用已有的窄化／版本条件修复。

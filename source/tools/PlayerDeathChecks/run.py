@@ -11,7 +11,7 @@ parser.add_argument('--damage-source', type=Path,
 args = parser.parse_args()
 
 def extract(path, declaration):
-    text = path.read_text()
+    text = path.read_text(encoding='utf-8')
     start = text.index(declaration)
     opening = text.index('{', start)
     end, depth = opening + 1, 1
@@ -25,10 +25,10 @@ out.mkdir(parents=True, exist_ok=True)
 handler = extract(args.damage_source, '    private bool HandlePlayerDeath(')
 cleanup = extract(root / 'src/Search/SimulatedCombatState.DeathLifecycle.cs', '    public void RemovePowersAfterDeath(')
 (out / 'Production.cs').write_text('namespace CombatSolver;\npartial class Simulator\n{\n' + handler
-    + '\n}\npartial class SimulatedCombatState\n{\n' + cleanup + '\n}\n')
-(out / 'Program.cs').write_text((Path(__file__).parent / 'Program.cs').read_text())
+    + '\n}\npartial class SimulatedCombatState\n{\n' + cleanup + '\n}\n', encoding='utf-8')
+(out / 'Program.cs').write_text((Path(__file__).parent / 'Program.cs').read_text(encoding='utf-8'), encoding='utf-8')
 (out / 'Checks.csproj').write_text('''<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>
 <OutputType>Exe</OutputType><TargetFramework>net9.0</TargetFramework><LangVersion>13</LangVersion>
 <Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings>
-</PropertyGroup></Project>''')
+</PropertyGroup></Project>''', encoding='utf-8')
 subprocess.run(['dotnet', 'run', '--project', str(out / 'Checks.csproj'), '-c', 'Release'], check=True)

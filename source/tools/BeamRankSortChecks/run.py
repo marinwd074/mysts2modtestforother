@@ -7,9 +7,9 @@ from xml.sax.saxutils import escape
 repo = Path(__file__).resolve().parents[2]
 output = repo / '.local/beam-rank-sort-checks'
 output.mkdir(parents=True, exist_ok=True)
-retention_source = (repo / 'src/Search/CombatBeamSolver.BeamRetentionPolicy.cs').read_text()
-ranking_source = (repo / 'src/Search/CombatBeamSolver.BeamRanking.cs').read_text()
-snapshot_source = (repo / 'src/Search/CombatPlan.cs').read_text()
+retention_source = (repo / 'src/Search/CombatBeamSolver.BeamRetentionPolicy.cs').read_text(encoding='utf-8')
+ranking_source = (repo / 'src/Search/CombatBeamSolver.BeamRanking.cs').read_text(encoding='utf-8')
+snapshot_source = (repo / 'src/Search/CombatPlan.cs').read_text(encoding='utf-8')
 
 def block(source, signature):
     start = source.index(signature)
@@ -47,10 +47,10 @@ private readonly Run _run = initial;
 private readonly SolverSearchProfile _profile = new();
 '''
 classes += '\n'.join([score, retained, compare, sort]) + '\n}'
-(output / 'Extracted.cs').write_text(classes)
+(output / 'Extracted.cs').write_text(classes, encoding='utf-8')
 (output / 'Program.cs').write_bytes((repo / 'tools/BeamRankSortChecks/Program.cs').read_bytes())
 (output / 'Checks.csproj').write_text('''<Project Sdk="Microsoft.NET.Sdk">
 <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net9.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
 <ItemGroup><Compile Include="''' + escape(str(repo / 'src/Search/SolverWeights.cs')) + '''" /></ItemGroup>
-</Project>''')
+</Project>''', encoding='utf-8')
 subprocess.run(['dotnet', 'run', '--project', str(output / 'Checks.csproj'), '-c', 'Release'], cwd=repo, check=True)

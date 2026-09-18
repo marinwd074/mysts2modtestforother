@@ -34,13 +34,13 @@ class ComparisonTests(unittest.TestCase):
         for path in (self.a, self.b):
             path.mkdir()
             for name, value in fixture.items():
-                (path / name).write_text(json.dumps(value))
+                (path / name).write_text(json.dumps(value), encoding='utf-8')
 
     def change(self, name, mutation):
         path = self.b / name
-        value = json.loads(path.read_text())
+        value = json.loads(path.read_text(encoding='utf-8'))
         mutation(value)
-        path.write_text(json.dumps(value))
+        path.write_text(json.dumps(value), encoding='utf-8')
 
     def assert_drift(self):
         result = compare(self.a, self.b)

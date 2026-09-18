@@ -14,7 +14,7 @@ out = root / '.local/end-turn-admission-checks'
 out.mkdir(parents=True, exist_ok=True)
 
 def method(path, name):
-    text = path.read_text()
+    text = path.read_text(encoding='utf-8')
     # Locate by declaration, not calls earlier in the same file.
     match = re.search(r'^    private [^\n]*\b' + name + r'\(', text, re.M)
     if not match:
@@ -35,11 +35,11 @@ for file, names in [
     ('CombatBeamSolver.CyclePlanning.cs', ['NeedsCycleExitAdmission', 'MaterializeAdmittedCycleExitObservation']),
 ]:
     parts.extend(method(search / file, name) for name in names)
-(out / 'Production.cs').write_text('namespace CombatSolver;\npartial class CombatBeamSolver\n{\n' + '\n'.join(parts) + '\n}\n')
-(out / 'Program.cs').write_text((Path(__file__).parent / 'Program.cs').read_text())
-(out / 'OwnedExpansionBatch.cs').write_text((search / 'OwnedExpansionBatch.cs').read_text())
+(out / 'Production.cs').write_text('namespace CombatSolver;\npartial class CombatBeamSolver\n{\n' + '\n'.join(parts) + '\n}\n', encoding='utf-8')
+(out / 'Program.cs').write_text((Path(__file__).parent / 'Program.cs').read_text(encoding='utf-8'), encoding='utf-8')
+(out / 'OwnedExpansionBatch.cs').write_text((search / 'OwnedExpansionBatch.cs').read_text(encoding='utf-8'), encoding='utf-8')
 (out / 'Checks.csproj').write_text('''<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>
 <OutputType>Exe</OutputType><TargetFramework>net9.0</TargetFramework><LangVersion>13</LangVersion>
 <NoWarn>CS0649</NoWarn><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings>
-</PropertyGroup></Project>''')
+</PropertyGroup></Project>''', encoding='utf-8')
 subprocess.run(['dotnet', 'run', '--project', str(out / 'Checks.csproj'), '-c', 'Release'], check=True)

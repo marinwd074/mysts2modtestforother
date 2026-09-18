@@ -5,7 +5,7 @@ from pathlib import Path
 p = argparse.ArgumentParser()
 p.add_argument('result', type=Path)
 a = p.parse_args()
-data = json.loads(a.result.read_text())
+data = json.loads(a.result.read_text(encoding='utf-8'))
 summary = []
 for branches in sorted({sample['branches'] for sample in data['samples']}):
     modes = {}
