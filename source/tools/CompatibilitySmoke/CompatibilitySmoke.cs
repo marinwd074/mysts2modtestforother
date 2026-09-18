@@ -32,9 +32,12 @@ internal static partial class CompatibilitySmoke
                     await RunTurnSetupAsync(host, state, fullAuto: true),
                 "COMPAT1071_FULL_BATTLE" or "FULL_BATTLE" =>
                     await RunFullBattleAsync(host, state),
+                "COMPAT1071_PERFORMANCE_BASELINE" or "PERFORMANCE_BASELINE" =>
+                    await RunPerformanceBaselineAsync(host, state),
                 _ => throw new InvalidOperationException(
                     $"Unknown compatibility smoke mode '{mode}'. " +
-                    "Expected FIRST_TURN, COMPAT1071_TURN_SETUP, COMPAT1071_FULLAUTO, or COMPAT1071_FULL_BATTLE."),
+                    "Expected FIRST_TURN, COMPAT1071_TURN_SETUP, COMPAT1071_FULLAUTO, " +
+                    "COMPAT1071_FULL_BATTLE, or COMPAT1071_PERFORMANCE_BASELINE."),
             };
             string? directory = System.IO.Path.GetDirectoryName(output);
             if (!string.IsNullOrWhiteSpace(directory))

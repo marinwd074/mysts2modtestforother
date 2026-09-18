@@ -2,6 +2,11 @@
 
 > 本文按时间顺序保留开发历史。当前基线为 CombatSolver `0.40.2`、目标游戏 `0.107.1`、RitsuLib 目标 `0.107.1`；下方旧版本、旧 PR 和旧验证环境不代表当前状态。
 
+## 2026-09-18：架构优化 Batch 6——搜索性能基线
+
+- 在生产程序集保持 `src/Testing` 隔离的前提下，增加 `COMPAT1071_PERFORMANCE_BASELINE` 兼容 smoke。它沿现有 0.107.1 游戏内最小 fixture 调用生产 `CombatSearchCoordinator`，固定 5000 ms、DOP1 和当前 profile/Beam，只采集搜索工作量、分配/GC、主线程帧间隔及路线身份，不修改搜索热路径。
+- 3+3 次交错样本、固定 commit/游戏/RitsuLib/fixture/seed/profile/beam/DOP/预算的汇总见 [搜索性能基线](performance/compat1071-search-baseline-20260918.md)。本批次没有 candidate 算法改动，因此第二组只作同二进制 control 重跑，不作加速结论；可见 Steam 帧时间仍需用户实际测试。
+
 ## 2026-09-18：架构优化 Batch 5——完整战斗生命周期 smoke
 
 - 新增 `COMPAT1071_FULL_BATTLE` 兼容 smoke：沿用原生回合开始选牌、全自动部署和实际动作执行，将测试夹具驱动到真实 `CombatEnded`，再等待战斗引用释放屏障。
