@@ -11,10 +11,22 @@ namespace CombatSolver;
 // The turn-setup coordinator only sees the stable operation shape.
 internal static class Sts2TurnSetupCompatibility
 {
-#if !STS2_01071
+#if STS2_01071
+    internal static readonly Type[] SetupPlayerTurnParameterTypes =
+    [typeof(Player), typeof(HookPlayerChoiceContext)];
+
+    internal static readonly Type[] RunAutoPrePlayPhaseParameterTypes =
+    [typeof(HookPlayerChoiceContext), typeof(Task), typeof(Player)];
+#else
     private static readonly Type CombatTurnStateType = typeof(CombatManager).Assembly.GetType(
         "MegaCrit.Sts2.Core.Combat.CombatTurnState",
         throwOnError: true)!;
+
+    internal static readonly Type[] SetupPlayerTurnParameterTypes =
+    [CombatTurnStateType, typeof(Player), typeof(HookPlayerChoiceContext)];
+
+    internal static readonly Type[] RunAutoPrePlayPhaseParameterTypes =
+    [CombatTurnStateType, typeof(HookPlayerChoiceContext), typeof(Task), typeof(Player)];
 #endif
 
 #if STS2_01071
@@ -22,7 +34,7 @@ internal static class Sts2TurnSetupCompatibility
         "SetupPlayerTurn",
         BindingFlags.Instance | BindingFlags.NonPublic,
         binder: null,
-        [typeof(Player), typeof(HookPlayerChoiceContext)],
+        SetupPlayerTurnParameterTypes,
         modifiers: null)
         ?? throw new MissingMethodException(typeof(CombatManager).FullName, "SetupPlayerTurn");
 
@@ -30,7 +42,7 @@ internal static class Sts2TurnSetupCompatibility
         "RunAutoPrePlayPhase",
         BindingFlags.Instance | BindingFlags.NonPublic,
         binder: null,
-        [typeof(HookPlayerChoiceContext), typeof(Task), typeof(Player)],
+        RunAutoPrePlayPhaseParameterTypes,
         modifiers: null)
         ?? throw new MissingMethodException(typeof(CombatManager).FullName, "RunAutoPrePlayPhase");
 
@@ -51,7 +63,7 @@ internal static class Sts2TurnSetupCompatibility
         "SetupPlayerTurn",
         BindingFlags.Instance | BindingFlags.NonPublic,
         binder: null,
-        [CombatTurnStateType, typeof(Player), typeof(HookPlayerChoiceContext)],
+        SetupPlayerTurnParameterTypes,
         modifiers: null)
         ?? throw new MissingMethodException(typeof(CombatManager).FullName, "SetupPlayerTurn");
 
@@ -59,7 +71,7 @@ internal static class Sts2TurnSetupCompatibility
         "RunAutoPrePlayPhase",
         BindingFlags.Instance | BindingFlags.NonPublic,
         binder: null,
-        [CombatTurnStateType, typeof(HookPlayerChoiceContext), typeof(Task), typeof(Player)],
+        RunAutoPrePlayPhaseParameterTypes,
         modifiers: null)
         ?? throw new MissingMethodException(typeof(CombatManager).FullName, "RunAutoPrePlayPhase");
 

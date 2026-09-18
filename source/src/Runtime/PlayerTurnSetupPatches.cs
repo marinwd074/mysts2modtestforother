@@ -21,28 +21,15 @@ namespace CombatSolver;
 
 internal sealed class PlayerTurnSetupPatch : IPatchMethod
 {
-#if !STS2_01071
-    private static readonly Type CombatTurnStateType = typeof(CombatManager).Assembly.GetType(
-        "MegaCrit.Sts2.Core.Combat.CombatTurnState",
-        throwOnError: true)!;
-#endif
-
     public static string PatchId => "combat_solver_player_turn_setup";
     public static string Description => "首回合页面后搜索，后续回合可见重放既有选择";
 
     public static ModPatchTarget[] GetTargets() =>
     [
-#if STS2_01071
         new(
             typeof(CombatManager),
             "SetupPlayerTurn",
-            [typeof(Player), typeof(HookPlayerChoiceContext)]),
-#else
-        new(
-            typeof(CombatManager),
-            "SetupPlayerTurn",
-            [CombatTurnStateType, typeof(Player), typeof(HookPlayerChoiceContext)]),
-#endif
+            Sts2TurnSetupCompatibility.SetupPlayerTurnParameterTypes),
     ];
 
     [HarmonyPriority(Priority.First)]
@@ -76,28 +63,15 @@ internal sealed class PlayerTurnSetupPatch : IPatchMethod
 
 internal sealed class PlayerTurnAutoPrePlayPatch : IPatchMethod
 {
-#if !STS2_01071
-    private static readonly Type CombatTurnStateType = typeof(CombatManager).Assembly.GetType(
-        "MegaCrit.Sts2.Core.Combat.CombatTurnState",
-        throwOnError: true)!;
-#endif
-
     public static string PatchId => "combat_solver_player_turn_auto_pre_play";
     public static string Description => "回合准备自动牌通过原生页面执行计划选择";
 
     public static ModPatchTarget[] GetTargets() =>
     [
-#if STS2_01071
         new(
             typeof(CombatManager),
             "RunAutoPrePlayPhase",
-            [typeof(HookPlayerChoiceContext), typeof(Task), typeof(Player)]),
-#else
-        new(
-            typeof(CombatManager),
-            "RunAutoPrePlayPhase",
-            [CombatTurnStateType, typeof(HookPlayerChoiceContext), typeof(Task), typeof(Player)]),
-#endif
+            Sts2TurnSetupCompatibility.RunAutoPrePlayPhaseParameterTypes),
     ];
 
     [HarmonyPriority(Priority.First)]

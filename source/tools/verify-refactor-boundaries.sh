@@ -161,6 +161,14 @@ require_fixed "$hook_compatibility_path" 'AfterBlockBrokenParameterTypes' 'missi
 require_fixed "$after_block_broken_mirror_path" 'Sts2HookCompatibility.AfterBlockBrokenParameterTypes' 'AfterBlockBroken mirror bypasses compatibility:'
 forbid_fixed "$after_block_broken_mirror_path" '#if STS2_01071' 'native AfterBlockBroken parameter shape returned outside Compatibility:'
 
+turn_setup_compatibility_path="$repository_root/src/Compatibility/Sts2TurnSetupCompatibility.cs"
+turn_setup_patch_path="$repository_root/src/Runtime/PlayerTurnSetupPatches.cs"
+require_fixed "$turn_setup_compatibility_path" 'SetupPlayerTurnParameterTypes' 'missing turn-setup compatibility parameter shape:'
+require_fixed "$turn_setup_compatibility_path" 'RunAutoPrePlayPhaseParameterTypes' 'missing turn-setup compatibility parameter shape:'
+require_fixed "$turn_setup_patch_path" 'Sts2TurnSetupCompatibility.SetupPlayerTurnParameterTypes' 'turn-setup patch bypasses compatibility:'
+require_fixed "$turn_setup_patch_path" 'Sts2TurnSetupCompatibility.RunAutoPrePlayPhaseParameterTypes' 'turn-setup patch bypasses compatibility:'
+forbid_fixed "$turn_setup_patch_path" 'CombatTurnStateType' 'native turn-state type returned outside Compatibility:'
+
 legacy_loop_guard_paths=(
     "$search_root/CombatBeamSolver.Expansion.cs"
     "$search_root/CombatBeamSolver.ParallelExpansion.cs"

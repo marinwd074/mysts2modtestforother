@@ -92,6 +92,21 @@ if (Select-String -LiteralPath $afterBlockBrokenMirrorPath -SimpleMatch "#if STS
     $violations.Add("${afterBlockBrokenMirrorPath}: native AfterBlockBroken parameter shape returned outside Compatibility")
 }
 
+$turnSetupCompatibilityPath = Join-Path $repositoryRoot "src/Compatibility/Sts2TurnSetupCompatibility.cs"
+$turnSetupPatchPath = Join-Path $repositoryRoot "src/Runtime/PlayerTurnSetupPatches.cs"
+foreach ($turnSetupBoundary in @(
+    @{ Path = $turnSetupCompatibilityPath; Text = "SetupPlayerTurnParameterTypes" },
+    @{ Path = $turnSetupCompatibilityPath; Text = "RunAutoPrePlayPhaseParameterTypes" },
+    @{ Path = $turnSetupPatchPath; Text = "Sts2TurnSetupCompatibility.SetupPlayerTurnParameterTypes" },
+    @{ Path = $turnSetupPatchPath; Text = "Sts2TurnSetupCompatibility.RunAutoPrePlayPhaseParameterTypes" })) {
+    if (-not (Select-String -LiteralPath $turnSetupBoundary.Path -SimpleMatch $turnSetupBoundary.Text -Quiet)) {
+        $violations.Add("$($turnSetupBoundary.Path): missing turn-setup compatibility boundary '$($turnSetupBoundary.Text)'")
+    }
+}
+if (Select-String -LiteralPath $turnSetupPatchPath -SimpleMatch "CombatTurnStateType" -Quiet) {
+    $violations.Add("${turnSetupPatchPath}: native turn-state type returned outside Compatibility")
+}
+
 $blockPotionInsertionPath = Join-Path $searchRoot "CombatBeamSolver.BlockPotionInsertion.cs"
 foreach ($requiredBlockPotionRule in @(
     'HpLostByTurn',

@@ -5,8 +5,9 @@
 
 Version-specific native API shape belongs here when it can be isolated without
 adding a per-node abstraction. The migrated boundaries are
-`Sts2TurnSetupCompatibility`, which owns the 0.107.1-versus-legacy reflection
-signatures and invocation argument arrays used by the turn-setup runtime patch,
+`Sts2TurnSetupCompatibility`, which owns the 0.107.1-versus-legacy patch target
+parameter arrays, reflection signatures, and invocation argument arrays used by
+the turn-setup runtime patch,
 `Sts2CardHookCompatibility`, which owns the card-result hook names, reflection
 signatures, and result-location conversion, and `Sts2HookCompatibility`, which
 owns the version-specific `AfterBlockBroken` parameter list used by its mirror.

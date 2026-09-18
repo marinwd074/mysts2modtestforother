@@ -21,6 +21,12 @@
 - 只移动 API shape，不改变镜像注册、模型处理、预测效果或分配路径；未引入接口、服务、运行时反射或 per-node 分支。
 - 验证与限制记录在[Batch 13 报告](performance/after-block-broken-hook-compatibility-20260918.md)。
 
+## 2026-09-18：架构优化 Batch 14——回合准备补丁目标参数兼容边界
+
+- 将 `SetupPlayerTurn` 与 `RunAutoPrePlayPhase` 的版本相关目标参数数组移至 `Sts2TurnSetupCompatibility`；回合准备补丁保留必须与 Harmony 原生参数形状一致的 Prefix 条件编译，但不再拥有 `CombatTurnState` 类型解析或目标签名分支。
+- 仅收敛目标 API shape，保留反射方法、调用参数、补丁顺序和回合准备行为；兼容 helper 仍为静态字段，无搜索节点反射、接口或额外 per-node 分配路径。
+- 验证与限制记录在[Batch 14 报告](performance/turn-setup-target-compatibility-20260918.md)。
+
 ## 2026-09-18：架构优化 Batch 11——BeamRetentionPolicy CrossTurn partial 拆分
 
 - 将跨回合保留的候选族键、投资风险分带、在途/新族代表选择、回退候选、比较器、探测启动和准入判定移至 `CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs` 的嵌套 `BeamRetentionPolicy` partial。`CombatBeamSolver.Retention.cs` 只保留剪枝阶段调用边界；`CombatBeamSolver.CrossTurnPlanning.cs` 继续拥有跨回合证据传播、stand-pat 基线和语义状态附着，不混入保留排序。

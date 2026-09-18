@@ -19,6 +19,11 @@
 - 结构：`AfterBlockBroken` 的版本相关原生参数列表移至 `src/Compatibility/Sts2HookCompatibility.cs`；Hook 镜像不再直接包含该版本条件编译。
 - 验证：Release 与 CompatibilitySmoke 构建、结构门禁和目标版本门禁结果记录于 [Batch 13 报告](performance/after-block-broken-hook-compatibility-20260918.md)；最终 DLL 由用户在可见游戏中测试。
 
+## 2026-09-18：架构优化 Batch 14——回合准备补丁目标参数兼容边界
+
+- 结构：`SetupPlayerTurn` 与 `RunAutoPrePlayPhase` 的目标参数数组和 `CombatTurnState` 解析移至 `src/Compatibility/Sts2TurnSetupCompatibility.cs`；Harmony Prefix 的原生参数条件编译仍保留在补丁入口。
+- 验证：Release 与 CompatibilitySmoke 构建、结构门禁和目标版本门禁结果记录于 [Batch 14 报告](performance/turn-setup-target-compatibility-20260918.md)；最终 DLL 由用户在可见游戏中测试。
+
 ## 2026-09-18：架构优化 Batch 11——BeamRetentionPolicy CrossTurn partial
 
 - 结构：跨回合 retention 选择图移至 `CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs`；`Retention.cs` 保留剪枝协调调用，`CrossTurnPlanning.cs` 保留证据传播与 stand-pat 语义状态附着。未改变候选顺序、风险分带、探测预算或搜索算法。
