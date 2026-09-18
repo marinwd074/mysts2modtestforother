@@ -149,14 +149,32 @@ foreach ($orderedTransactionRule in @(
     }
 }
 $orderedCoordinatorPaths = @{
-    'BuildOrderedMutationContinuationAdmissionLease(candidate);' = Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.cs"
+    'BuildOrderedMutationContinuationAdmissionLease(candidate);' = Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"
     'Every independent retention channel must finish before the ordered coordinator.' = Join-Path $searchRoot "CombatBeamSolver.Retention.cs"
-    'Any inherited lane left outside this prune' = Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.cs"
-    'HasOrdinaryAnchor' = Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.cs"
+    'Any inherited lane left outside this prune' = Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"
+    'HasOrdinaryAnchor' = Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"
 }
 foreach ($entry in $orderedCoordinatorPaths.GetEnumerator()) {
     if (-not (Select-String -LiteralPath $entry.Value -SimpleMatch $entry.Key -Quiet)) {
         $violations.Add("$($entry.Value): unified ordered-mutation coordinator invariant is missing '$($entry.Key)'")
+    }
+}
+$mutationPolicyPath = Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"
+foreach ($requiredMutationMember in @(
+    'ArmOrderedMutationObservationBridges(',
+    'BuildOrderedMutationContinuationAdmissionLease(',
+    'VerifyOrderedMutationKeyPolicyForTesting(')) {
+    if (-not (Select-String -LiteralPath $mutationPolicyPath -SimpleMatch $requiredMutationMember -Quiet)) {
+        $violations.Add("${mutationPolicyPath}: Mutation partial is missing '$requiredMutationMember'")
+    }
+}
+foreach ($retiredMutationMember in @(
+    'AddOrderedMutationPortfolio(',
+    'ArmOrderedMutationObservationBridges(',
+    'BuildOrderedMutationContinuationAdmissionLease(',
+    'VerifyOrderedMutationKeyPolicyForTesting(')) {
+    if (Select-String -LiteralPath (Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.cs") -SimpleMatch $retiredMutationMember -Quiet) {
+        $violations.Add("${searchRoot}/CombatBeamSolver.BeamRetentionPolicy.cs: Mutation member returned to facade '$retiredMutationMember'")
     }
 }
 $solverDiagnosticsPath = Join-Path $repositoryRoot "src\Runtime\SolverDiagnostics.cs"
@@ -571,6 +589,7 @@ $expectedBeamFiles = @(
     "CombatBeamSolver.BeamRetentionPolicy.cs",
     "CombatBeamSolver.BeamRetentionPolicy.Choice.cs",
     "CombatBeamSolver.BeamRetentionPolicy.Potion.cs",
+    "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs",
     "CombatBeamSolver.BeamRanking.cs",
     "CombatBeamSolver.BlockPotionInsertion.cs",
     "CombatBeamSolver.CrossTurnPlanning.cs",
@@ -667,6 +686,10 @@ $beamStructureChecks = @(
     @{ File = "CombatBeamSolver.BeamRetentionPolicy.Potion.cs"; Text = "ReservePotionQuotaLeaders(" },
     @{ File = "CombatBeamSolver.BeamRetentionPolicy.Potion.cs"; Text = "PotionUseLineageKey(SearchNode node)" },
     @{ File = "CombatBeamSolver.BeamRetentionPolicy.Potion.cs"; Text = "private static bool UsesPotion(SearchNode node)" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"; Text = "private sealed partial class BeamRetentionPolicy" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"; Text = "public void AddOrderedMutationPortfolio(" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"; Text = "ArmOrderedMutationObservationBridges(" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"; Text = "VerifyOrderedMutationKeyPolicyForTesting(" },
     @{ File = "CombatBeamSolver.BeamRetentionPolicy.cs"; Text = "public List<SearchNode> RankBest(" },
     @{ File = "CombatBeamSolver.BeamRetentionPolicy.cs"; Text = "private sealed class RoutingChoiceNodes(SearchNode first) : List<SearchNode>" },
     @{ File = "CombatBeamSolver.BeamRetentionPolicy.cs"; Text = "public void Clear() => NodesByChoice.Clear();" },
@@ -728,7 +751,7 @@ $beamStructureChecks = @(
     @{ File = "CombatBeamSolver.RetentionJobs.cs"; Text = "_coordinator._run.OffThreadAllocatedBytes += job.AllocatedBytes;" },
     @{ File = "CombatBeamSolver.RetentionJobs.cs"; Text = "wave.Error?.Throw();" },
     @{ File = "CombatBeamSolver.BeamRetentionPolicy.cs"; Text = "_run.RoutingChoiceSummaryBuilds += summaryGroups.Length;" },
-    @{ File = "CombatBeamSolver.BeamRetentionPolicy.cs"; Text = "RequestOrderedMutationObservation(candidate);" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"; Text = "RequestOrderedMutationObservation(candidate);" },
     @{ File = "SearchWaveMemoryPolicy.cs"; Text = "return checked(degreeOfParallelism * 2);" },
     @{ File = "SearchWaveMemoryPolicy.cs"; Text = "current >= maximum - current ? maximum : current * 2" },
     @{ File = "CombatBeamSolver.Phases.cs"; Text = "SearchWaveMemoryPolicy.GrowCapacity(" },
@@ -1341,7 +1364,7 @@ foreach ($check in $metadataReuseChecks) {
 }
 
 # Keep the no-op dispatch metadata complete when callbacks are added to the facade.
-foreach ($file in @("CombatBeamSolver.RetentionJobs.cs", "CombatBeamSolver.BeamRetentionPolicy.cs")) {
+foreach ($file in @("CombatBeamSolver.RetentionJobs.cs", "CombatBeamSolver.BeamRetentionPolicy.cs", "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs")) {
     foreach ($forbidden in @("Parallel.For(", "Task.Run(")) {
         if (Select-String -LiteralPath (Join-Path $searchRoot $file) -SimpleMatch $forbidden -Quiet) {
             $violations.Add("$($file): retention work bypassed fixed lanes '$forbidden'")

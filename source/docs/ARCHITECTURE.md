@@ -220,6 +220,7 @@ Smart 层间使用 `SmartLayerMemoryForecast` 的同窗分配和转移高水位�
 | `CombatBeamSolver.BeamRetentionPolicy.cs` | 状态去重、中间分数排序、多样性通道和小型 Pareto；拥有嵌套 `BeamRetentionPolicy` 的主体策略 |
 | `CombatBeamSolver.BeamRetentionPolicy.Choice.cs` | 同一嵌套 `BeamRetentionPolicy` partial 的路由/回合开始选择谱系、上下文排序、保留排名与候选辅助 |
 | `CombatBeamSolver.BeamRetentionPolicy.Potion.cs` | 同一嵌套 `BeamRetentionPolicy` partial 的最终政策资格记录/比较、药水配额、药水谱系分组和 `UsesPotion` 辅助 |
+| `CombatBeamSolver.BeamRetentionPolicy.Mutation.cs` | 同一嵌套 `BeamRetentionPolicy` partial 的有序变异碰撞激活、续接 admission、observation、key 构建与策略校验；不拥有 `OrderedMutationRetention.cs` 的预算常量、lineage/lease ledger 或最终提交 |
 | `CombatBeamSolver.CyclePlanning.cs` | 精确动作周期、通用收益与出口探针；按周期族和回合记账的有限观察与成长预算 |
 | `CombatBeamSolver.CycleRegionRetention.cs` | 合并同回合、同控制形状的动作排列；对最终存活候选事务式提交区域保留预算与进展证据 |
 | `CombatBeamSolver.OrderedMutationRetention.cs` | 有序操作碰撞的谱系、租约、成对激活和预算账本；统一处理续接、到期与普通通道回退 |

@@ -9,6 +9,13 @@
 - L3：0.107.1 私有 headless 游戏进程的 `FIRST_TURN` CompatibilitySmoke 通过：`PASS: native 0.107.1 first-turn search; actions=20; incremental verification enabled`；日志确认 63/63 CombatSolver 补丁应用成功。脱敏证据见[`runtime-evidence/20260918-issue-fix-compat-smoke`](../../runtime-evidence/20260918-issue-fix-compat-smoke/)。
 - 限制：生产构建按设计排除 `src/Testing`，因此通用 `run-unattended-test.ps1` 与 `SLOW-TURN-RESET-FORK` 不作为本批次通过依据；三份问题包的完整游戏内回放仍待用户用输出 DLL 实测。
 
+## 2026-09-18：架构优化 Batch 10——BeamRetentionPolicy Mutation partial
+
+- 结构：完整有序变异职责移至 `CombatBeamSolver.BeamRetentionPolicy.Mutation.cs`；主文件保留共享协调器/通用排名，`CombatBeamSolver.OrderedMutationRetention.cs` 保留账本与最终提交边界。未改变算法、候选顺序或搜索预算。
+- 纯移动核对：类型 152 行、首段 1,753 行、后续 Mutation 方法图 2,634 行逐字等价；Release + CompatibilitySmoke 编译 0 errors（2 条既有 `CS9113`），结构门禁 `REFACTOR_BOUNDARIES_OK search_files=120`，目标版本门禁 `0.107.1/0.107.1/STS2_01071`。
+- 兼容运行：本批次额外私有 `FIRST_TURN` 尝试超时（180 秒），不记为通过；没有据此推导行为回归。此前 issue-fix 的 0.107.1 首回合 smoke 通过结果继续作为启动/加载基线，最终 DLL 由用户在可见游戏中测试。
+- 汇总见[Batch 10 报告](performance/beam-retention-policy-mutation-split-20260918.md)。
+
 ## 2026-09-18：架构优化 Batch 9——BeamRetentionPolicy Potion partial
 
 - 结构：最终政策资格记录/比较、药水配额、药水谱系分组和 `UsesPotion` 拆至 `CombatBeamSolver.BeamRetentionPolicy.Potion.cs`，仍为同一嵌套 `BeamRetentionPolicy` partial，未改变搜索算法或候选顺序。

@@ -235,13 +235,34 @@ for ordered_coordinator_rule in \
     'HasOrdinaryAnchor'; do
     if [[ "$ordered_coordinator_rule" == 'Every independent retention channel must finish before the ordered coordinator.' ]]; then
         ordered_coordinator_path="$search_root/CombatBeamSolver.Retention.cs"
+    elif [[ "$ordered_coordinator_rule" == 'BuildOrderedMutationContinuationAdmissionLease(candidate);' ]]; then
+        ordered_coordinator_path="$search_root/CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"
     else
-        ordered_coordinator_path="$search_root/CombatBeamSolver.BeamRetentionPolicy.cs"
+        ordered_coordinator_path="$search_root/CombatBeamSolver.BeamRetentionPolicy.Mutation.cs"
     fi
     require_fixed \
         "$ordered_coordinator_path" \
         "$ordered_coordinator_rule" \
         'unified ordered-mutation coordinator invariant is missing:'
+done
+for mutation_member in \
+    'ArmOrderedMutationObservationBridges(' \
+    'BuildOrderedMutationContinuationAdmissionLease(' \
+    'VerifyOrderedMutationKeyPolicyForTesting('; do
+    require_fixed \
+        "$search_root/CombatBeamSolver.BeamRetentionPolicy.Mutation.cs" \
+        "$mutation_member" \
+        'Mutation partial is missing:'
+done
+for retired_mutation_member in \
+    'AddOrderedMutationPortfolio(' \
+    'ArmOrderedMutationObservationBridges(' \
+    'BuildOrderedMutationContinuationAdmissionLease(' \
+    'VerifyOrderedMutationKeyPolicyForTesting('; do
+    forbid_fixed \
+        "$search_root/CombatBeamSolver.BeamRetentionPolicy.cs" \
+        "$retired_mutation_member" \
+        'Mutation member returned to facade:'
 done
 for ordered_metric in \
     'ordered_admitted=' \
@@ -547,6 +568,7 @@ expected_beam_files=(
     CombatBeamSolver.BeamRetentionPolicy.cs
     CombatBeamSolver.BeamRetentionPolicy.Choice.cs
     CombatBeamSolver.BeamRetentionPolicy.Potion.cs
+    CombatBeamSolver.BeamRetentionPolicy.Mutation.cs
     CombatBeamSolver.BlockPotionInsertion.cs
     CombatBeamSolver.CrossTurnPlanning.cs
     CombatBeamSolver.CyclePlanning.cs
@@ -609,6 +631,10 @@ CombatBeamSolver.BeamRetentionPolicy.Potion.cs	FinalPolicyQualificationFacts(
 CombatBeamSolver.BeamRetentionPolicy.Potion.cs	BuildFinalPolicyQualificationFacts(SearchNode node)
 CombatBeamSolver.BeamRetentionPolicy.Potion.cs	CompareFinalPolicyQualificationSignatures(
 CombatBeamSolver.BeamRetentionPolicy.Potion.cs	ReservePotionQuotaLeaders(
+CombatBeamSolver.BeamRetentionPolicy.Mutation.cs	private sealed partial class BeamRetentionPolicy
+CombatBeamSolver.BeamRetentionPolicy.Mutation.cs	public void AddOrderedMutationPortfolio(
+CombatBeamSolver.BeamRetentionPolicy.Mutation.cs	ArmOrderedMutationObservationBridges(
+CombatBeamSolver.BeamRetentionPolicy.Mutation.cs	VerifyOrderedMutationKeyPolicyForTesting(
 CombatBeamSolver.BeamRetentionPolicy.cs	public List<SearchNode> RankBest(
 CombatBeamSolver.BeamRetentionPolicy.cs	private sealed class RoutingChoiceNodes(SearchNode first) : List<SearchNode>
 CombatBeamSolver.BeamRetentionPolicy.cs	public void Clear() => NodesByChoice.Clear();
@@ -669,7 +695,7 @@ CombatBeamSolver.RetentionJobs.cs	wave.Completed.Wait();
 CombatBeamSolver.RetentionJobs.cs	_coordinator._run.OffThreadAllocatedBytes += job.AllocatedBytes;
 CombatBeamSolver.RetentionJobs.cs	wave.Error?.Throw();
 CombatBeamSolver.BeamRetentionPolicy.cs	_run.RoutingChoiceSummaryBuilds += summaryGroups.Length;
-CombatBeamSolver.BeamRetentionPolicy.cs	RequestOrderedMutationObservation(candidate);
+CombatBeamSolver.BeamRetentionPolicy.Mutation.cs	RequestOrderedMutationObservation(candidate);
 SearchWaveMemoryPolicy.cs	return checked(degreeOfParallelism * 2);
 SearchWaveMemoryPolicy.cs	current >= maximum - current ? maximum : current * 2
 CombatBeamSolver.Phases.cs	SearchWaveMemoryPolicy.GrowCapacity(
@@ -1063,7 +1089,7 @@ src/Engine/Common/MirroredHookListenerFilter.cs	BaseHooks.Append(NativeKeywordHo
 src/Engine/InCombat/Simulation/CombatPredictedCardExtensions.cs	!listeners.HasAny(MirroredHookMask.TryModifyKeywordsInCombat)
 EOF
 
-for file in CombatBeamSolver.RetentionJobs.cs CombatBeamSolver.BeamRetentionPolicy.cs; do
+for file in CombatBeamSolver.RetentionJobs.cs CombatBeamSolver.BeamRetentionPolicy.cs CombatBeamSolver.BeamRetentionPolicy.Mutation.cs; do
     forbid_fixed "$search_root/$file" 'Parallel.For(' 'retention work bypassed fixed lanes:'
     forbid_fixed "$search_root/$file" 'Task.Run(' 'retention work bypassed fixed lanes:'
 done

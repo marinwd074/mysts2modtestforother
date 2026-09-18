@@ -8,6 +8,13 @@
 - `BYGONE_EFFIGY_ELITE` 的 `SlowPower` 在 v0.107.1 只有 `SlowAmount` 动态变量，`DisplayAmount` 是由原版计算的只读属性。搜索出牌记录和回合清零均移除错误的 `DynamicVars["DisplayAmount"]` 写入，保留 `SlowAmount` 与伤害镜像计数的分支状态。
 - Release 与 CompatibilitySmoke 构建均通过（0 errors，保留既有 2 条 `CS9113`）；结构门禁 `REFACTOR_BOUNDARIES_OK search_files=119`，目标版本门禁 `0.107.1/0.107.1/STS2_01071`。0.107.1 `FIRST_TURN` CompatibilitySmoke 写出 20 动作、增量核验开启的通过结果。原始三份问题包的完整实机回放和 `src/Testing` 专用 `SLOW-TURN-RESET-FORK` 重跑未在生产兼容构建中宣称通过，留给用户使用新 DLL 实测。
 
+## 2026-09-18：架构优化 Batch 10——BeamRetentionPolicy Mutation partial 拆分
+
+- 按 P2-3 只移动有序变异的外层记录/工作项类型，以及嵌套 `BeamRetentionPolicy` 的完整 Mutation 方法图：组合碰撞、激活/代表选择、continuation packet、admission/observation、公平调度、lease transition、key-policy 校验。主文件继续保留构造器、共享排序/Beam/Pareto 辅助、`RankBest` 与通用策略；`OrderedMutationRetention.cs` 继续拥有预算常量、lineage/lease ledger、原子 pair、普通回退和最终提交。
+- 迁移按源码块逐字核对：类型 152 行、首段协调方法 1,753 行、后续 Mutation 方法图 2,634 行；主文件剩余内容与拆分前完全一致。未新增字段、接口、服务或策略替换，不改变候选顺序、预算、RNG、搜索结果或终局裁决。
+- Release 与 CompatibilitySmoke 编译均通过（0 errors，保留既有 2 条 `CS9113`）；目标版本门禁为 `0.107.1/0.107.1/STS2_01071`，结构门禁为 `REFACTOR_BOUNDARIES_OK search_files=120`。本批次额外私有 `FIRST_TURN` 运行尝试在 180 秒内超时，未作为通过证据；此前同版本首回合 smoke 的通过结果仍只证明启动/加载/首回合链路，生产 DLL 的实际可见游戏验收留给用户。
+- 详见[Batch 10 报告](performance/beam-retention-policy-mutation-split-20260918.md)。
+
 ## 2026-09-18：架构优化 Batch 9——BeamRetentionPolicy Potion partial 拆分
 
 - 只移动最终政策资格记录/比较、药水配额、药水谱系分组和 `UsesPotion` 到嵌套 `BeamRetentionPolicy` partial 文件；不改调用方、遍历顺序、配额、候选排序、RNG 或终局裁决，也不引入接口/服务/仓储。
