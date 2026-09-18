@@ -1,5 +1,11 @@
 # CombatSolver 开发笔记与未来构想
 
+## 0.40.2：v0.107.1 问题包回归修复（2026-09-18）
+
+- 复核 9 份新问题包：CubeX、Mawler 与 The Kin 的状态差异都指向同一张 `ROCKET_PUNCH`；Phrog 是部署身份中的有效费用变化；Ruby Raiders 是 `JugglingPower` 的旧 Hook 注册；Slimes 是 `RegenPower` 的旧 Hook 注册。
+- `RocketPunch.AfterCardGeneratedForCombat` 的原生实现对满足条件的状态牌调用 `EnergyCost.SetUntilPlayed(0)`。镜像不再使用 `AddUntilPlayed(-1)`，避免已有临时／本地费用修饰时与原生费用状态分叉。Ruby Raiders 的 `AfterCardPlayed` 注册、Slimes 的 `v0.107.1` 条件排除和 Phrog 的仅费用键部署窄化保持有效。
+- Release 编译通过；仅保留既有 `RegalitePredictionState` 未使用参数 `CS9113` 警告。Windows headless 已验证 0.107.1/RitsuLib 0.6.2/CombatSolver 0.40.2 启动及 60/60 补丁应用，但 CubeX `DeploySolver` 在 120 秒内未产出结果，未将其记为回归通过。
+
 ## 0.40.2：多策略路线搜索默认关闭与大战损引导（2026-09-17）
 
 - 「多策略路线搜索（实验）」对新安装保持默认关闭；设置迁移版本提升到 246，但升级时完整保留玩家当前的开启或关闭选择。多宽度路线精炼仍默认开启且没有独立横幅，设置页的开关与状态反馈保持不变。

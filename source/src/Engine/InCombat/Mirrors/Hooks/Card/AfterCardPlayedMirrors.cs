@@ -102,6 +102,7 @@ internal static class AfterCardPlayedMirrors
 #if !STS2_01071
         registry.Register<ImitationLearningPower>(HandleImitationLearningPower);
 #endif
+        registry.Register<JugglingPower>(HandleJugglingPower);
         registry.Register<MasterPlannerPower>(HandleMasterPlannerPower);
         registry.Register<MonologuePower>(HandleMonologuePower);
         registry.Register<OblivionPower>(HandleOblivionPower);
@@ -612,6 +613,32 @@ internal static class AfterCardPlayedMirrors
         if (TakePairAmount(power, context) is > 0 and var amount)
         {
             context.Simulator.Damage(context.State.HittableEnemies, amount, ValueProp.Unpowered, power.Owner);
+        }
+    }
+
+    private static void HandleJugglingPower(JugglingPower power, AfterCardPlayedMirrorContext context)
+    {
+        if (context.PreviewCard.Owner != power.Owner.Player || context.PreviewCard.Type != CardType.Attack)
+        {
+            return;
+        }
+
+        var state = context.StateStore.Get(power, () => new JugglingPredictionState(power));
+        state.AttacksPlayedThisTurn++;
+        if (state.AttacksPlayedThisTurn != 3)
+        {
+            return;
+        }
+
+        for (var i = 0; i < power.Amount; i++)
+        {
+            context.Simulator.AddGeneratedCardToCombat(
+                context.Card.CreateClone(),
+                PileType.Hand,
+                power.Owner.Player,
+                resultKind: CardGenerationResultKind.Contextual);
+            if (context.Simulator.HasPendingChoice)
+                return;
         }
     }
 

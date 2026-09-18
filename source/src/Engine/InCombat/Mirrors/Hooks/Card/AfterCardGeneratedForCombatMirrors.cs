@@ -159,7 +159,10 @@ internal static class AfterCardGeneratedForCombatMirrors
             context.PreviewCard.Owner == card.Owner &&
             context.PreviewCard.Type == CardType.Status)
         {
-            context.State.FindCard(card)?.MutablePreview.EnergyCost.AddUntilPlayed(-1);
+            // Rocket Punch's native hook sets the until-played cost to zero.  Using an
+            // additive modifier is not equivalent when the card already carries a
+            // temporary/local cost modifier, and v0.107.1 exposes the exact setter.
+            context.State.FindCard(card)?.MutablePreview.EnergyCost.SetUntilPlayed(0);
         }
     }
 }

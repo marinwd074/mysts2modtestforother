@@ -59,7 +59,6 @@ internal static class BeforeCardPlayedMirrors
 #if !STS2_01071
         registry.Register<ImitationLearningPower>(HandleImitationLearningPower);
 #endif
-        registry.Register<JugglingPower>(HandleJugglingPower);
         registry.Register<MonologuePower>(HandleMonologuePower);
         registry.Register<OblivionPower>(HandleOblivionPower);
         registry.Register<RupturePower>(HandleRupturePower);
@@ -145,32 +144,6 @@ internal static class BeforeCardPlayedMirrors
     private static void HandleGravityPower(GravityPower power, BeforeCardPlayedMirrorContext context)
     {
         SnapshotOwnerCard(power, context, power.Amount);
-    }
-
-    private static void HandleJugglingPower(JugglingPower power, BeforeCardPlayedMirrorContext context)
-    {
-        if (context.PreviewCard.Owner != power.Owner.Player || context.PreviewCard.Type != CardType.Attack)
-        {
-            return;
-        }
-
-        var state = context.StateStore.Get(power, () => new JugglingPredictionState(power));
-        state.AttacksPlayedThisTurn++;
-        if (state.AttacksPlayedThisTurn != 3)
-        {
-            return;
-        }
-
-        for (var i = 0; i < power.Amount; i++)
-        {
-            context.Simulator.AddGeneratedCardToCombat(
-                context.Card.CreateClone(),
-                PileType.Hand,
-                power.Owner.Player,
-                resultKind: CardGenerationResultKind.Contextual);
-            if (context.Simulator.HasPendingChoice)
-                return;
-        }
     }
 
 #if !STS2_01071

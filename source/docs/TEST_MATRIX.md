@@ -1,5 +1,11 @@
 # CombatSolver 测试清单
 
+## 0.40.2：v0.107.1 问题包回归修复（2026-09-18）
+
+- 问题包归因：CubeX `9bd8ad30`、Mawler `91f2bf97`、The Kin `03fc1f75`/`5023e5ca`/`c45c1331` 的 `ROCKET_PUNCH` 费用差异共享同一镜像根因；Phrog `c12596f0` 的部署漂移、Ruby Raiders `012a00da`/`6ea89c43` 的 Juggling Hook、Slimes `728a43c5` 的 Regen Hook 使用已有的窄化／版本条件修复。
+- 代码验证：`RocketPunch` 镜像改为 `EnergyCost.SetUntilPlayed(0)`；活动源 Release 编译成功（0 errors，1 条既有 `CS9113` 警告）。
+- `FIX-ROCKET-PUNCH-CUBEX` / runId `4aed021648054af0b6d3963c069b7004`：headless 使用 v0.107.1/RitsuLib 0.6.2/CombatSolver 0.40.2 启动成功，60/60 补丁应用成功；从问题包 `start` 执行 `DeploySolver` 在 120 秒内超时且未写结果，因此不记为 Passed。证据：[launcher-result.json](../../runtime-evidence/2026-09-18-rocket-punch-cubex-9bd8ad30-clean/launcher-result.json)。
+
 ## 0.40.2：多策略路线搜索默认关闭与大战损引导（2026-09-17）
 
 - 设置与 UI 合同已更新：新安装默认关闭多策略路线搜索；245→246 迁移只推进版本，完整保留玩家已有的开启／关闭状态与永久隐藏横幅选择。多宽度路线精炼仍默认开启且没有独立横幅。

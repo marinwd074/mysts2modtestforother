@@ -3031,7 +3031,44 @@ internal static partial class SolverController
                     StringComparison.Ordinal))
                 .Skip(action.CardStateOccurrence)
                 .FirstOrDefault();
-            return stateMatch ?? throw new InvalidOperationException(
+            if (stateMatch != null)
+                return stateMatch;
+
+            // Native card-cost hooks can change only the effective energy cost after an
+            // earlier card is played. The physical card is still the planned card, so do
+            // not turn this harmless mutable-state change into a deployment replan.
+            string plannedWithoutEnergy = DeploymentCardKeyWithoutEnergy(action.CardStateKey);
+            List<CardModel> mutableStateMatches = hand
+                .Where(card => string.Equals(
+                    DeploymentCardKeyWithoutEnergy(CardChoiceSupport.ChoiceCardKey(card)),
+                    plannedWithoutEnergy,
+                    StringComparison.Ordinal))
+                .ToList();
+            CardModel? occurrenceMatch = hand
+                .Where(card => string.Equals(card.Id.Entry, action.CardId, StringComparison.Ordinal))
+                .Skip(action.CardOccurrence)
+                .FirstOrDefault();
+            if (occurrenceMatch != null
+                && mutableStateMatches.Contains(occurrenceMatch))
+            {
+                Entry.Logger.Info(
+                    $"[CombatSolver/Test] DEPLOY_CARD_STATE_RECONCILED card={action.CardId} " +
+                    $"occurrence={action.CardOccurrence} reason=effective_energy_cost_changed " +
+                    $"planned={action.CardStateKey} actual={CardChoiceSupport.ChoiceCardKey(occurrenceMatch)}");
+                return occurrenceMatch;
+            }
+
+            if (mutableStateMatches.Count == 1)
+            {
+                CardModel reconciled = mutableStateMatches[0];
+                Entry.Logger.Info(
+                    $"[CombatSolver/Test] DEPLOY_CARD_STATE_RECONCILED card={action.CardId} " +
+                    $"occurrence={action.CardOccurrence} reason=effective_energy_cost_changed " +
+                    $"planned={action.CardStateKey} actual={CardChoiceSupport.ChoiceCardKey(reconciled)}");
+                return reconciled;
+            }
+
+            throw new InvalidOperationException(
                 $"部署时找不到计划中的手牌状态 {action.CardId}@{action.CardStateOccurrence}；" +
                 $"当前手牌={string.Join(',', hand.Select(card => CardChoiceSupport.ChoiceCardKey(card)))}。");
         }
@@ -3043,6 +3080,18 @@ internal static partial class SolverController
             ?? throw new InvalidOperationException(
                 $"部署时找不到手牌 {action.CardId}#{action.CardOccurrence}；" +
                 $"当前手牌={string.Join(',', hand.Select(card => card.Id.Entry))}。");
+    }
+
+    private static string DeploymentCardKeyWithoutEnergy(string key)
+    {
+        const string marker = "|energy=";
+        int start = key.IndexOf(marker, StringComparison.Ordinal);
+        if (start < 0)
+            return key;
+        int end = key.IndexOf('|', start + marker.Length);
+        return end < 0
+            ? key[..start]
+            : string.Concat(key.AsSpan(0, start), key.AsSpan(end));
     }
 
     private static bool IsMissingDeploymentCard(InvalidOperationException exception)
