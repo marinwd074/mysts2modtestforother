@@ -16,6 +16,10 @@ jobs:
         shell: pwsh
         run: ./source/tools/verify-target-version.ps1
 
+      - name: Verify architecture boundaries
+        shell: pwsh
+        run: ./source/tools/verify-refactor-boundaries.ps1
+
       - name: Validate target manifest and project XML
         shell: pwsh
         run: |
