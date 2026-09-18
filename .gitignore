@@ -1,0 +1,7 @@
+# This directory is a Steam installation. Track only the CombatSolver artifacts.
+*
+!.gitignore
+!MODS/
+!MODS/CombatSolver.dll
+!MODS/CombatSolver.json
+!CombatSolver-issue-*.md
