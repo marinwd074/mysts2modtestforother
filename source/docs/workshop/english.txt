@@ -28,15 +28,10 @@ Once combat starts, it simulates your hand, draw and discard piles, enemy action
 [*]Review the recommended route, execute the current turn, or enable auto-play.
 [/olist]
 
-[h2]Code origins, permission and credits[/h2]
+[h2]Open source and notices[/h2]
 
-Combat Solver's embedded combat simulation core uses and adapts parts of Random Foreseer, with permission from its original author, [b]hotwords123[/b].
+Third-party code, permissions, licenses and source notices are documented in THIRD_PARTY_NOTICES.md and included with the source and every binary distribution.
 
-That code relationship remains in the current version, including foundations for combat state, card piles, RNG, forks, history and mirrors. Combat Solver builds on this work with multi-turn search, route reuse, automatic execution, native choice handling and performance controls. It does not load or distribute the Random Foreseer assembly as a runtime dependency; this separation does not change the origins of the code.
-
-Thank you to hotwords123 and Random Foreseer. Permission, attribution and third-party notices are included with the source and every binary distribution.
-
-Random Foreseer: search for Random Foreseer on Steam Workshop, or hotwords123/StS2.RandomForeseer on GitHub.
 Combat Solver source: search for xwr20070408-cloud/CombatSolver on GitHub.
 
 [h2]Requirements and compatibility[/h2]
@@ -57,6 +52,6 @@ Search can use substantial CPU and memory. The default is the Medium preset with
 
 [b]QQ community: 1106541324[/b]
 
-Share builds, discuss runs and suggest improvements. For incorrect routes, unexpected recalculations, execution failures or game errors, use Upload report in the mod's Settings. Reports include automatic issue classification to help diagnosis. The reporting backend was developed with community support from iRyougi. You can also use Export report to keep a local copy.
+Share builds, discuss runs and suggest improvements. For incorrect routes, unexpected recalculations, execution failures or game errors, use Upload report in the mod's Settings. Reports include automatic issue classification to help diagnosis. You can also use Export report to keep a local copy.
 
 When following up, include the report ID and a description of what happened.

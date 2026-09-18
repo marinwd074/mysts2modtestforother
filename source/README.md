@@ -167,20 +167,14 @@ Windows 和 Linux 的无人测试入口分别为 `tools/run-unattended-test.ps1`
 
 ## 问题反馈
 
-遇到错误路线、计划外重算、自动执行异常或搜索失败时，请在设置的“反馈”页使用“上传问题包”。上传内容会附带 Combat Solver 版本和本场自动分类；服务器与后端由社区贡献者 [iRyougi](https://github.com/iRyougi) 提供支持。
+遇到错误路线、计划外重算、自动执行异常或搜索失败时，请在设置的“反馈”页使用“上传问题包”。上传内容会附带 Combat Solver 版本和本场自动分类，可通过项目提供的反馈渠道提交。
 
 也可以使用“导出问题包”将完整包保存到桌面的 `CombatSolver-BugReports`，再通过项目提供的反馈渠道提交。问题包中的日志、战斗状态和自动分类通常比单张截图更适合复现搜索问题。
 
 ## 开源、许可与代码来源
 
-Combat Solver 的内置战斗模拟核心使用并改造了 Random Foreseer 的部分实现。Random Foreseer 由 **hotwords123** 创建，当前采用 MIT License。
+第三方代码、许可、来源关系和书面许可记录集中见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，并随每个二进制发布包提供。
 
-相关来源关系持续存在于当前版本，涉及战斗状态、牌堆、RNG、Fork、History 与 Mirror 等基础逻辑。Combat Solver 在此基础上持续重构并扩展了跨回合搜索、路线复用、自动执行、原生选牌流程和性能控制。Combat Solver 不加载或分发 Random Foreseer 程序集作为运行时依赖；运行时分离不改变上述代码来源关系。
-
-- [Random Foreseer GitHub 仓库](https://github.com/hotwords123/StS2.RandomForeseer)
-- [Random Foreseer 创意工坊页面](https://steamcommunity.com/sharedfiles/filedetails/?id=3747531952)
 - [Combat Solver GitHub 仓库](https://github.com/xwr20070408-cloud/CombatSolver)
 
-感谢 hotwords123 与 Random Foreseer 所做的工作。来源关系、署名和早期书面许可记录见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，并随每个二进制发布包提供。
-
-Combat Solver 采用 [MIT License](LICENSE)。Random Foreseer 的版权署名及代码来源关系保留在 `LICENSE` 与 `THIRD_PARTY_NOTICES.md` 中。
+Combat Solver 采用 [MIT License](LICENSE)。
