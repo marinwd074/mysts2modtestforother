@@ -1,0 +1,5 @@
+{
+  "runId": "4aed021648054af0b6d3963c069b7004",
+  "status": "timeout",
+  "reason": "Unattended test exceeded the launcher timeout; its game process was stopped. run_id=4aed021648054af0b6d3963c069b7004"
+}

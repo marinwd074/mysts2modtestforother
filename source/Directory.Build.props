@@ -1,0 +1,14 @@
+<Project>
+  <!--
+    The source tree has one supported game/compatibility target. Keep the
+    target facts here so every SDK project receives the same reference target
+    and preprocessor symbol, including the small audit tools.
+  -->
+  <PropertyGroup>
+    <CombatSolverTargetGameVersion Condition="'$(CombatSolverTargetGameVersion)' == ''">0.107.1</CombatSolverTargetGameVersion>
+    <CombatSolverTargetRitsuLibVersion Condition="'$(CombatSolverTargetRitsuLibVersion)' == ''">0.107.1</CombatSolverTargetRitsuLibVersion>
+    <CombatSolverCompatibilityConstant Condition="'$(CombatSolverCompatibilityConstant)' == ''">STS2_01071</CombatSolverCompatibilityConstant>
+    <DefineConstants>$(DefineConstants);$(CombatSolverCompatibilityConstant)</DefineConstants>
+    <RitsuLibReferenceTarget Condition="'$(RitsuLibReferenceTarget)' == ''">$(CombatSolverTargetRitsuLibVersion)</RitsuLibReferenceTarget>
+  </PropertyGroup>
+</Project>

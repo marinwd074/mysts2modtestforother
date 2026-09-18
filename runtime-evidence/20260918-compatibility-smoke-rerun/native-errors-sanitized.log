@@ -1,0 +1,4 @@
+ERROR: Attempting to initialize the wrong RID
+ERROR: Parameter "mem" is null.
+ERROR: Attempting to use an uninitialized RID
+WARNING: Renderer resources and ObjectDB instances were reported as leaked at intentional headless shutdown.
