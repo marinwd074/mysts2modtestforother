@@ -537,6 +537,7 @@ expected_beam_files=(
     CombatBeamSolver.cs
     CombatBeamSolver.AdmittedExpansion.cs
     CombatBeamSolver.EndTurnChoiceReplay.cs
+    CombatBeamSolver.EndTurnExpansion.cs
     CombatBeamSolver.RoundTransition.cs
     CombatBeamSolver.CardChoiceContinuation.cs
     CombatBeamSolver.PotionChoiceContinuation.cs
@@ -544,6 +545,8 @@ expected_beam_files=(
     CombatBeamSolver.ExecutionChoiceContinuation.Testing.cs
     CombatBeamSolver.TurnExecutionContinuation.cs
     CombatBeamSolver.BeamRetentionPolicy.cs
+    CombatBeamSolver.BeamRetentionPolicy.Choice.cs
+    CombatBeamSolver.BeamRetentionPolicy.Potion.cs
     CombatBeamSolver.BlockPotionInsertion.cs
     CombatBeamSolver.CrossTurnPlanning.cs
     CombatBeamSolver.CyclePlanning.cs
@@ -552,6 +555,7 @@ expected_beam_files=(
     CombatBeamSolver.FinalPlanOrdering.cs
     CombatBeamSolver.Models.cs
     CombatBeamSolver.NoveltySearch.cs
+    CombatBeamSolver.OpeningExpansion.cs
     CombatBeamSolver.Transpositions.cs
     CombatBeamSolver.OrderedMutationRetention.cs
     CombatBeamSolver.ParallelExpansion.cs
@@ -597,7 +601,14 @@ NoveltyPortfolioBudget.cs	profile.MaxExpandedNodes - (int)expandedNodes
 CombatBeamSolver.cs	private readonly SearchRunContext _run = new(
 CombatBeamSolver.cs	private BeamRetentionPolicy Retention =>
 CombatBeamSolver.cs	private FinalPlanOrdering FinalOrdering =>
-CombatBeamSolver.BeamRetentionPolicy.cs	private sealed class BeamRetentionPolicy(
+CombatBeamSolver.BeamRetentionPolicy.cs	private sealed partial class BeamRetentionPolicy(
+CombatBeamSolver.BeamRetentionPolicy.Choice.cs	private sealed partial class BeamRetentionPolicy
+CombatBeamSolver.BeamRetentionPolicy.Choice.cs	BuildRootActionLineageSignature(SearchNode node)
+CombatBeamSolver.BeamRetentionPolicy.Potion.cs	private sealed partial class BeamRetentionPolicy
+CombatBeamSolver.BeamRetentionPolicy.Potion.cs	FinalPolicyQualificationFacts(
+CombatBeamSolver.BeamRetentionPolicy.Potion.cs	BuildFinalPolicyQualificationFacts(SearchNode node)
+CombatBeamSolver.BeamRetentionPolicy.Potion.cs	CompareFinalPolicyQualificationSignatures(
+CombatBeamSolver.BeamRetentionPolicy.Potion.cs	ReservePotionQuotaLeaders(
 CombatBeamSolver.BeamRetentionPolicy.cs	public List<SearchNode> RankBest(
 CombatBeamSolver.BeamRetentionPolicy.cs	private sealed class RoutingChoiceNodes(SearchNode first) : List<SearchNode>
 CombatBeamSolver.BeamRetentionPolicy.cs	public void Clear() => NodesByChoice.Clear();

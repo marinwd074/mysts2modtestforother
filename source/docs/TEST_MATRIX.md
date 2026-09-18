@@ -2,6 +2,12 @@
 
 > 当前矩阵基线为 CombatSolver `0.40.2`、目标游戏 `0.107.1`、RitsuLib 目标 `0.107.1`；下方按时间排列的历史条目保留其原始版本和验证范围，不能直接当作当前发布结论。
 
+## 2026-09-18：架构优化 Batch 9——BeamRetentionPolicy Potion partial
+
+- 结构：最终政策资格记录/比较、药水配额、药水谱系分组和 `UsesPotion` 拆至 `CombatBeamSolver.BeamRetentionPolicy.Potion.cs`，仍为同一嵌套 `BeamRetentionPolicy` partial，未改变搜索算法或候选顺序。
+- 验证：Potion 专属源码逐段等价、Release 与 CompatibilitySmoke 构建均 0 errors（2 条既有 `CS9113`）、结构门禁 `REFACTOR_BOUNDARIES_OK search_files=119`。本轮无新增运行时结论，生产 DLL 留给用户进行可见 Steam 实机测试。汇总见[Batch 9 报告](performance/beam-retention-policy-potion-split-20260918.md)。
+
+## 2026-09-18：架构优化 Batch 8——BeamRetentionPolicy Choice partial
 ## 2026-09-18：架构优化 Batch 8——BeamRetentionPolicy Choice partial
 
 - 结构：路由／回合开始选择辅助逻辑拆至 `CombatBeamSolver.BeamRetentionPolicy.Choice.cs`，仍为嵌套 `BeamRetentionPolicy` partial；未引入接口、服务或策略替换，候选顺序和搜索算法不变。
