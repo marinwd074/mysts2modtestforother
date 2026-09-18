@@ -23,6 +23,11 @@
 - 结构变更：`SolverController.Deployment.cs` 承担全自动部署、动作/选择执行、延迟、取消和部署引用释放；未改变 namespace、签名、动作顺序或搜索策略。
 - 验证：Release + CompatibilitySmoke 构建 0 errors（2 条既有 `CS9113` 警告）、结构门禁 `REFACTOR_BOUNDARIES_OK search_files=117`；FULLAUTO smoke 验证回合准备选牌、部署、进入下一回合、路线复用及战斗仍在进行。外层脚本未生成常规 result，未记为完整 unattended 通过。
 
+## 2026-09-18：架构优化 Batch 4——SolverController Continuation
+
+- 结构变更：`SolverController.Continuation.cs` 承担跨回合续用校验、路线采用、回合准备续接预览和重算/手动分歧审计；未改变 namespace、签名、异步顺序或部署动作。
+- 验证：Release + CompatibilitySmoke 构建 0 errors（2 条既有 `CS9113` 警告）、结构门禁 `REFACTOR_BOUNDARIES_OK search_files=117`；FULLAUTO + route reuse smoke 验证选牌、部署、下一回合、路线复用和战斗生命周期。外层脚本未生成常规 result，未记为完整 unattended 通过。
+
 ## 0.40.2：v0.107.1 问题包回归修复（2026-09-18）
 
 - 问题包归因：CubeX `9bd8ad30`、Mawler `91f2bf97`、The Kin `03fc1f75`/`5023e5ca`/`c45c1331` 的 `ROCKET_PUNCH` 费用差异共享同一镜像根因；Phrog `c12596f0` 的部署漂移、Ruby Raiders `012a00da`/`6ea89c43` 的 Juggling Hook、Slimes `728a43c5` 的 Regen Hook 使用已有的窄化／版本条件修复。

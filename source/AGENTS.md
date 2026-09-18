@@ -2,7 +2,7 @@
 
 > **当前基线：** CombatSolver `0.40.2`，目标游戏 `0.107.1`，RitsuLib 目标 `0.107.1`，兼容符号 `STS2_01071`，运行时为 .NET 9 / Godot 4.5.1。分支与提交以当前 `main` HEAD 为准。
 
-> **当前工作项：** 按 `CombatSolver_architecture_optimization_plan` 执行 Batch 4（Deployment），已将全自动部署、动作执行、部署延迟、取消和部署引用释放移入 `SolverController.Deployment.cs`；保持 `static partial`、单程序集、单人模式和既有搜索语义。
+> **当前工作项：** 按 `CombatSolver_architecture_optimization_plan` 执行 Batch 4（Continuation），已将续用校验、路线采用、回合准备续接预览、重算审计和手动分歧记录移入 `SolverController.Continuation.cs`；保持 `static partial`、单程序集、单人模式和既有搜索语义。
 
 本文件约束所有在本仓库中工作的 coding agent。开始处理任务前完整阅读；子目录若有更具体的 `AGENTS.md`，其规则只补充对应目录，不能放宽这里的硬约束。
 
