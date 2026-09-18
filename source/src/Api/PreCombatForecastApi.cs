@@ -74,6 +74,7 @@ public static class PreCombatForecastApi
         if (!NGame.IsMainThread())
             throw new InvalidOperationException("RestartWorkerAsync must be called on the game main thread.");
         ValidateWorkerIdleTimeoutOrThrow(idleTimeoutMilliseconds);
+        PreCombatForecastWorker.PinMainProcessModSources();
         PreCombatLiveStateSnapshot snapshot = PreCombatLiveStateSnapshot.Capture(run);
         return Task.Run(
             () => PreCombatForecastWorker.RestartSessionAsync(snapshot, idleTimeoutMilliseconds, cancellationToken),
@@ -169,6 +170,7 @@ public static class PreCombatForecastApi
         PreCombatLiveStateSnapshot snapshot;
         try
         {
+            PreCombatForecastWorker.PinMainProcessModSources();
             snapshot = PreCombatLiveStateSnapshot.Capture(run);
         }
         catch (NotSupportedException ex)
@@ -301,6 +303,7 @@ public static class PreCombatForecastApi
         PreCombatLiveStateSnapshot snapshot;
         try
         {
+            PreCombatForecastWorker.PinMainProcessModSources();
             snapshot = PreCombatLiveStateSnapshot.Capture(liveRun).WithPlanningRun(plannedRun);
         }
         catch (NotSupportedException exception)
@@ -389,6 +392,7 @@ public static class PreCombatForecastApi
         PreCombatLiveStateSnapshot snapshot;
         try
         {
+            PreCombatForecastWorker.PinMainProcessModSources();
             snapshot = PreCombatLiveStateSnapshot.Capture(run);
         }
         catch (NotSupportedException ex)

@@ -643,7 +643,7 @@ internal static class PreCombatForecastWorker
             }
             if (_ownedRuntimeRoot is { } root)
             {
-                foreach (string name in new[] { "game", "startup-mods" })
+                foreach (string name in new[] { "game", "startup-mods", "requests" })
                 {
                     string directory = Path.Combine(root, name);
                     AssertOwnedPath(root, directory);
@@ -684,6 +684,10 @@ internal static class PreCombatForecastWorker
 
     private static void EnsureRuntimeRoot(string runtimeRoot, string sourceGameRoot)
     {
+        string runtimeParent = Path.GetDirectoryName(Path.GetFullPath(runtimeRoot))
+            ?? throw new InvalidOperationException($"The pre-combat runtime has no parent: {runtimeRoot}");
+        Directory.CreateDirectory(runtimeParent);
+        CleanupStaleProcessRoots(runtimeParent, runtimeRoot, sourceGameRoot);
         Directory.CreateDirectory(runtimeRoot);
         string markerPath = Path.Combine(runtimeRoot, RuntimeMarkerName);
         string expected = $"{RuntimeMarkerContents}{Environment.NewLine}{Path.GetFullPath(sourceGameRoot)}";
@@ -700,6 +704,52 @@ internal static class PreCombatForecastWorker
             throw new InvalidDataException($"Refusing to adopt a non-empty unowned runtime directory: {runtimeRoot}");
         File.WriteAllText(markerPath, expected);
         _ownedRuntimeRoot = runtimeRoot;
+    }
+
+    private static void CleanupStaleProcessRoots(
+        string runtimeParent,
+        string currentRuntimeRoot,
+        string sourceGameRoot)
+    {
+        string parent = Path.GetFullPath(runtimeParent).TrimEnd(Path.DirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        string current = Path.GetFullPath(currentRuntimeRoot);
+        string expectedMarker = $"{RuntimeMarkerContents}{Environment.NewLine}{Path.GetFullPath(sourceGameRoot)}";
+        foreach (string candidate in Directory.EnumerateDirectories(runtimeParent, "process-*", SearchOption.TopDirectoryOnly))
+        {
+            string fullCandidate = Path.GetFullPath(candidate);
+            if (fullCandidate.Equals(current, StringComparison.OrdinalIgnoreCase)
+                || !fullCandidate.StartsWith(parent, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            string markerPath = Path.Combine(fullCandidate, RuntimeMarkerName);
+            if (!File.Exists(markerPath)
+                || !File.ReadAllText(markerPath).Equals(expectedMarker, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            string name = Path.GetFileName(fullCandidate);
+            if (!int.TryParse(name["process-".Length..], out int processId) || processId <= 0)
+                continue;
+            try
+            {
+                using Process process = Process.GetProcessById(processId);
+                if (!process.HasExited)
+                    continue;
+            }
+            catch (ArgumentException)
+            {
+                // The owner PID is gone; this is the safe stale-runtime case.
+            }
+            catch (InvalidOperationException)
+            {
+                // A process that disappeared while being inspected is also stale.
+            }
+
+            Directory.Delete(fullCandidate, recursive: true);
+            Entry.Logger.Info(
+                $"[CombatSolver/PreCombatApi] STALE_RUNTIME_REMOVED path={fullCandidate} " +
+                $"owner_pid={processId}");
+        }
     }
 
     private static void EnsureGameMirror(string runtimeRoot, string sourceRoot, string targetRoot)

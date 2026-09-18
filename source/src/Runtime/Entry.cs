@@ -46,15 +46,6 @@ public static class Entry
         Logger = new CombatSolverLog(logDirectory);
         if (!centralizedLogs)
             Logger.Warn("[CombatSolver/Diagnostics] CENTRALIZED_LOG_DIRECTORY_UNAVAILABLE");
-        try
-        {
-            PreCombatForecastWorker.PinMainProcessModSources();
-        }
-        catch (Exception ex)
-        {
-            Logger.Warn(
-                $"[CombatSolver/PreCombatApi] MOD_SOURCE_PINNING_UNAVAILABLE error={ex}");
-        }
         SolverSettings.Load();
         SolverUiTokens.ConfigureTheme(SolverSettings.Current.OverlayTheme);
         SolverController.ApplyPersistentSettings(SolverSettings.Capture());
@@ -64,11 +55,9 @@ public static class Entry
         CombatManager.Instance.TurnStarted += OnTurnStarted;
 
         var patcher = RitsuLibFramework.CreatePatcher(ModId, "combat-solver", "战斗路线求解器");
-#if !STS2_01071
         patcher.RegisterPatch<PlayerTurnSetupPatch>();
         patcher.RegisterPatch<PlayerTurnAutoPrePlayPatch>();
         patcher.RegisterPatch<PlayerTurnSetupSceneExitPatch>();
-#endif
         patcher.RegisterPatch<ChooseCardObservationPatch>();
         patcher.RegisterPatch<SimpleGridObservationPatch>();
         patcher.RegisterPatch<RewardGridObservationPatch>();
