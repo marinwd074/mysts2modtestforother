@@ -33,7 +33,7 @@
     <RitsuWorkshopRoot Condition="'$(RitsuWorkshopRoot)' == ''">$(SteamRoot)/steamapps/workshop/content/2868840/3747602295</RitsuWorkshopRoot>
     <RitsuLibDir Condition="'$(RitsuLibDir)' == ''">$(RitsuWorkshopRoot)/compat/$(CombatSolverTargetRitsuLibVersion)</RitsuLibDir>
     <RitsuLibReferencesProps Condition="'$(RitsuLibReferencesProps)' == ''">$(RitsuWorkshopRoot)/RitsuLib.References.props</RitsuLibReferencesProps>
-    <ModOutputDir>$(Sts2Dir)/mods/CombatSolver</ModOutputDir>
+    <ModOutputDir>$(MSBuildProjectDirectory)/../artifacts/CombatSolver</ModOutputDir>
     <CopyModOnBuild Condition="'$(CopyModOnBuild)' == ''">true</CopyModOnBuild>
     <NoWarn>$(NoWarn);CS0436</NoWarn>
     <MemoryCleanerProject>$(MSBuildProjectDirectory)/tools/CombatSolver.MemoryCleaner/CombatSolver.MemoryCleaner.csproj</MemoryCleanerProject>
