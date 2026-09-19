@@ -164,6 +164,12 @@ foreach ($probeFile in $probeFiles) {
                 $probeFailures.Add(('{0}:{1} missing {2}' -f $probeFile, $lineNumber, $field))
             }
         }
+        if ($null -eq (Get-MapValue $record 'multiplayerScalingHooks')) {
+            $probeFailures.Add(('{0}:{1} multiplayerScalingHooks is unavailable' -f $probeFile, $lineNumber))
+        }
+        if ([string]::IsNullOrWhiteSpace([string](Get-MapValue $record 'cardMultiplayerConstraint'))) {
+            $probeFailures.Add(('{0}:{1} missing cardMultiplayerConstraint' -f $probeFile, $lineNumber))
+        }
         if ((Get-MapValue $record 'readOnly') -ne $true) {
             $probeFailures.Add(('{0}:{1} readOnly contract is not true' -f $probeFile, $lineNumber))
         }
