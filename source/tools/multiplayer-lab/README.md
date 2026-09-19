@@ -58,6 +58,9 @@ Lobby、wire 或战斗证据。
 - `validate-phase0-results.ps1` 是只读证据校验器。`-Phase MP-0A` 不要求
   Probe，但要求三组 profile 都有明确结果；`-Phase MP-0B` 要求真实 Probe
   JSONL，默认 `-Phase All` 同时校验三组 profile、字段矩阵和 Probe。
+- `compare-probe-public-state.ps1` 只读比较两个独立 CombatSolver Client
+  Probe 的分段敌人公开状态；只有每段 seed 和观察到的有序敌人状态集合完全相同
+  才报告 `PASS`，采样窗口不同报告 `UNVERIFIED`，且不会自动修改 Phase 0 矩阵。
 
 ## 推荐流程
 
@@ -72,26 +75,42 @@ pwsh -NoLogo -NoProfile -File .\prepare-instances.ps1 -Profile ClientCombatSolve
 再启动：
 
 ~~~powershell
-pwsh -NoLogo -NoProfile -File .\start-host.ps1 -InstanceRoot "$env:LOCALAPPDATA\CombatSolver\multiplayer-lab\mp-host"
-pwsh -NoLogo -NoProfile -File .\start-client.ps1 -InstanceRoot "$env:LOCALAPPDATA\CombatSolver\multiplayer-lab\mp-client-solver"
+$labRoot = 'D:\yingye\CombatSolver\.local\multiplayer-lab'
+pwsh -NoLogo -NoProfile -File .\start-host.ps1 `
+  -InstanceRoot "$labRoot\runtime-mp-host"
+pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
+  -InstanceRoot "$labRoot\runtime-mp-client-solver"
 ~~~
 
 手动完成 Host/Join、角色和 Ready 后，停止时只传入本次准备过的 root：
 
 ~~~powershell
 pwsh -NoLogo -NoProfile -File .\stop-owned-instances.ps1 `
-  -InstanceRoot "$env:LOCALAPPDATA\CombatSolver\multiplayer-lab\mp-host"
+  -InstanceRoot 'D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp-host'
 pwsh -NoLogo -NoProfile -File .\stop-owned-instances.ps1 `
-  -InstanceRoot "$env:LOCALAPPDATA\CombatSolver\multiplayer-lab\mp-client-solver"
+  -InstanceRoot 'D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp-client-solver'
 ~~~
 
 收集和校验：
 
 ~~~powershell
-pwsh -NoLogo -NoProfile -Command "& '.\collect-results.ps1' -InstanceRoot @('$env:LOCALAPPDATA\CombatSolver\multiplayer-lab\mp-host', '$env:LOCALAPPDATA\CombatSolver\multiplayer-lab\mp-client-solver')"
+pwsh -NoLogo -NoProfile -Command "& '.\collect-results.ps1' -InstanceRoot @('D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp-host', 'D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp-client-solver')"
 pwsh -NoLogo -NoProfile -File .\validate-phase0-results.ps1 `
   -Phase MP-0A -MatrixPath .\.local\multiplayer-lab\results\<run>\phase0-matrix.template.json
 ~~~
+
+若下一轮使用 Host + 两个 CombatSolver Client 观察公开敌人状态：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\prepare-instances.ps1 `
+  -Profile ClientCombatSolver -Instance mp-client-observer
+pwsh -NoLogo -NoProfile -File .\compare-probe-public-state.ps1 `
+  -LeftProbePath 'D:\yingye\CombatSolver\.local\multiplayer-lab\results\<run>\client-a\probe\multiplayer-probe-*.jsonl' `
+  -RightProbePath 'D:\yingye\CombatSolver\.local\multiplayer-lab\results\<run>\client-b\probe\multiplayer-probe-*.jsonl' `
+  -OutputPath 'D:\yingye\CombatSolver\.local\multiplayer-lab\results\<run>\enemy-state-comparison.json'
+~~~
+
+比较报告是辅助证据，仍需人工确认 Host/Client 身份、生命周期和安全边界。
 
 退出码：0 为 PASS，1 为矛盾/无效 Probe，2 为缺失或仍为 UNVERIFIED。真实
 Host/Client 运行证据必须带可审查的日志位置；单进程模拟和合成 JSON 不可作为

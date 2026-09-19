@@ -87,6 +87,11 @@
 - 最终 `339/339` 条记录满足 `readOnly=true`、`searchStarted=false`、`actionsEnqueued=false`、`customNetworkPacketSent=false`；本轮仍未启用 Advisor/Safe Execute，也没有发送自定义网络包。
 - 归档时两个进程已退出，但日志没有提供可验证的退出/重新加入流程；因此不能把进程终止本身计作 exit/rejoin 证据。最终结果仍为 `UNVERIFIED`。
 
+## 敌人公开状态对照准备（2026-09-19）
+
+- 为补强 `enemyStateSync`，新增只读工具 `source/tools/multiplayer-lab/compare-probe-public-state.ps1`。它按 sequence/worldVersion 重置切分战斗段，只在两个独立 Client Probe 的 seed 和每段有序敌人状态集合完全相同时报告 `PASS`；采样窗口不同只报告 `UNVERIFIED`，不会修改 Phase 0 矩阵。
+- 第二个观察 Client 已准备到 `D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp-client-observer-20260919`，profile 为 `ClientCombatSolver`，使用与正式 C 组相同的 DLL；本轮未启动该实例，也未修改 Host、正式安装或网络协议。
+
 ## 仍然阻塞 MP-0 PASS
 
 以下证据当前仍缺失，必须保持 `UNVERIFIED`：
@@ -94,6 +99,7 @@
 - A/B/C 三组连接证据已填入 `../evidence/phase0-matrix-2026-09-19.json`，MP-0A 可独立校验；MP-0B 仍含未完成项，整体 MP-0 保持 `UNVERIFIED`。
 - C 组最后一场战斗的结束、退出和重新加入，以及跨生命周期保持只读边界。
 - C 组敌人状态的独立 Host/Client 公共状态对照；当前只有 Client Probe 的 74 次变化和配对日志动作，尚无同一时刻的公共状态逐项对照。
+- 下一轮需在同一 Host 下让两个 Client 同时加入并完成可比战斗，再运行上述对照器；同时继续收集最后一场结束和退出/重新加入日志。
 - Local PlayCard、Local EndTurn 和连续快速动作属于后续 MP-2 Safe Execute，不在本轮启用。
 
 ## 当前安全边界
