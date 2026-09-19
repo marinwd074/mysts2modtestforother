@@ -8,6 +8,8 @@ param(
     [ValidateSet('', 'host', 'join')]
     [string]$FastMpMode = '',
 
+    [UInt64]$ClientId = 0,
+
     [switch]$ForceSteamOff
 )
 
@@ -16,6 +18,7 @@ try {
         -Role Client `
         -InstanceRoot $InstanceRoot `
         -FastMpMode $FastMpMode `
+        -ClientId $ClientId `
         -ForceSteamOff:$ForceSteamOff
     if (-not $?) { exit 1 }
     exit 0

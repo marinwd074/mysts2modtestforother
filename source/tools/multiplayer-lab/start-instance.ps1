@@ -12,6 +12,8 @@ param(
     [ValidateSet('', 'host', 'join')]
     [string]$FastMpMode = '',
 
+    [UInt64]$ClientId = 0,
+
     [switch]$ForceSteamOff
 )
 
@@ -28,6 +30,9 @@ if ($Role -eq 'Host' -and $profileName -ne 'HostVanilla') {
 }
 if ($Role -eq 'Client' -and $profileName -eq 'HostVanilla') {
     throw 'Client launcher cannot use a HostVanilla instance.'
+}
+if ($Role -eq 'Host' -and $ClientId -ne 0) {
+    throw 'ClientId is only valid for a Client launcher.'
 }
 
 $existingState = Get-MultiplayerOwnedProcessState $instance
@@ -62,6 +67,10 @@ if (-not [string]::IsNullOrWhiteSpace($FastMpMode)) {
     # This is intentionally opt-in. The current 0.107.1 command-line entry
     # point is not itself MP-0 evidence and the launcher never auto-joins.
     [void]$arguments.Add("--fastmp=$FastMpMode")
+}
+if ($ClientId -ne 0) {
+    # FastMpJoin defaults to 1000; local multi-client runs need unique IDs.
+    [void]$arguments.Add("--clientId=$ClientId")
 }
 
 $startInfo = [Diagnostics.ProcessStartInfo]::new()
@@ -98,6 +107,7 @@ try {
         startedUtc = $startedUtc.ToString('O')
         logPath = $logPath
         fastMpMode = if ([string]::IsNullOrWhiteSpace($FastMpMode)) { $null } else { $FastMpMode }
+        clientId = if ($ClientId -eq 0) { $null } else { $ClientId }
         forceSteamOff = $ForceSteamOff.IsPresent
         runtimeEvidenceEligible = $false
     }
@@ -110,6 +120,7 @@ try {
         processId = $identity.pid
         logPath = $logPath
         processMarkerPath = $instance.ProcessMarkerPath
+        clientId = if ($ClientId -eq 0) { $null } else { $ClientId }
         runtimeEvidenceEligible = $false
     }
     Write-HeadlessJson $resultPath $result

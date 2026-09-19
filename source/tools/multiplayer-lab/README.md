@@ -46,7 +46,9 @@ Lobby、wire 或战斗证据。
   把大型测试快照写入系统盘。
 - `start-host.ps1` / `start-client.ps1` 只启动指定私有 snapshot，使用独立
   `APPDATA`、`LOCALAPPDATA` 和日志；默认保留可见 UI，允许用户手动建房、
-  加入、选角色和 Ready。`-FastMpMode host|join` 只在显式指定时传给当前
+  加入、选角色和 Ready。`-ClientId` 只用于同一台机器上同时运行多个
+  `FastMpJoin` 客户端；原生默认值是 `1000`，每个客户端必须使用不同的
+  非零 ID。`-FastMpMode host|join` 只在显式指定时传给当前
   二进制；它的结果仍是 UNVERIFIED，不构成连接证据。
 - `stop-owned-instances.ps1` 只接受显式 instance root，并同时校验 marker、
   PID、进程出生时间和 executable path；没有 ownership 证据就停止。
@@ -79,8 +81,12 @@ $labRoot = 'D:\yingye\CombatSolver\.local\multiplayer-lab'
 pwsh -NoLogo -NoProfile -File .\start-host.ps1 `
   -InstanceRoot "$labRoot\runtime-mp-host"
 pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
-  -InstanceRoot "$labRoot\runtime-mp-client-solver"
+  -InstanceRoot "$labRoot\runtime-mp-client-solver" `
+  -ClientId 1000
 ~~~
+
+同一 Host 上启动第二个本地 Client 时，必须使用不同的 ID，例如
+`-ClientId 1001`；否则 Host 会按重复 peer ID 拒绝连接。
 
 手动完成 Host/Join、角色和 Ready 后，停止时只传入本次准备过的 root：
 
