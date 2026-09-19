@@ -3,12 +3,17 @@
 !.gitignore
 !AGENTS.md
 !MODS/
-!MODS/CombatSolver.json
 # Build output stays local; releases are produced from source and a verified build.
 MODS/CombatSolver.dll
-!CombatSolver-issue-*.md
 !source/
 !source/**
+# Multiplayer lab runs and generated coverage stay outside version control.
+/.local/multiplayer-lab/
+/artifacts/
+/source/coverage/
+/source/.godot/
+/source/tools/**/bin/
+/source/tools/**/obj/
 # Large performance JSON exports are kept in the GitHub Release archive below.
 /source/docs/performance/admitted-expansion-jobs-20260908.json
 /source/docs/performance/backend-cpu-hotspots-20260908.json
