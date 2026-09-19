@@ -54,11 +54,16 @@ foreach ($root in $InstanceRoot) {
     if (Test-Path -LiteralPath $probeRoot -PathType Container) {
         $probeDestination = Join-Path $destination 'probe'
         New-Item -ItemType Directory -Path $probeDestination -Force | Out-Null
-        foreach ($probe in Get-ChildItem -LiteralPath $probeRoot -File -Filter '*.jsonl' -Force) {
-            $target = Join-Path $probeDestination $probe.Name
+        foreach ($probe in Get-ChildItem -LiteralPath $probeRoot -File -Filter '*.jsonl' -Force -Recurse) {
+            $relativeProbePath = [IO.Path]::GetRelativePath($probeRoot, $probe.FullName)
+            $target = Join-Path $probeDestination $relativeProbePath
+            Assert-MultiplayerPathWithin -Child $target -Parent $probeDestination
+            New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
             Copy-Item -LiteralPath $probe.FullName -Destination $target -Force
             $copiedFiles.Add($target)
-            $collectedProbePaths.Add($target)
+            if ($probe.Name -like 'multiplayer-probe-*.jsonl') {
+                $collectedProbePaths.Add($target)
+            }
         }
     }
 
