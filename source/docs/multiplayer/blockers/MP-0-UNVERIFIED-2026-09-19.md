@@ -79,13 +79,21 @@
 - 新 token 使牌序分析可复核：`35/35` 次抽牌前缀与 Hand 增量精确匹配；捕获 `2` 次 Discard→Draw reshuffle 且 Shuffle RNG counter 增长、`29` 次 Discard 变化、`1` 次 Exhaust 变化、`35` 次敌人变化和 `33` 次远端玩家摘要变化。矩阵已只把这些直接有证据的检查提升为 PASS。
 - 该快照仍是中间快照，用户操作尚未声明完成；敌人状态尚缺独立 Host/Client 公共状态对照，完整战斗结束/下一层/退出/重新加入也未完成，因此总体 MP-0 继续保持 `UNVERIFIED`，能力门禁不变。
 
+## C 组新 DLL 最终收尾快照（2026-09-19）
+
+- 用户完成本轮手动操作后，最终归档为 `D:\yingye\CombatSolver\.local\multiplayer-lab\results\mp0-c-new-dll-20260919\20260919-193408-4dffbcd3`；Host/Client 均为 D: 隔离实例，正式 Steam 安装和源码安装未修改。
+- Seed `AQUAAUS9FR` 的 Client/Host 日志成对记录了 4 场战斗启动：`NIBBITS_WEAK`、`SLIMES_WEAK`、`SHRINKER_BEETLE_WEAK`、`INKLETS_NORMAL`。前 3 场记录了 `Combat ended`、双方奖励集完成，并沿地图从 `(3,0)` 推进到 `(3,1)`、`(3,2)`、`(2,3)`、`(3,4)`；第 4 场已启动但归档前没有战斗结束记录。
+- 最终 Client Probe 为 `339` 条记录、`4` 个战斗段（每场开始时 sequence/worldVersion 重置），`4094/4094` 个牌 token 带有 `instance` 标识；`81/81` 次 DrawPile 前缀移除与 Hand 增量匹配，观察到 `5` 次 Discard→Draw 洗牌、`70` 次 Discard 变化、`4` 次 Exhaust 变化、`74` 次敌人变化和 `93` 次远端玩家摘要变化。
+- 最终 `339/339` 条记录满足 `readOnly=true`、`searchStarted=false`、`actionsEnqueued=false`、`customNetworkPacketSent=false`；本轮仍未启用 Advisor/Safe Execute，也没有发送自定义网络包。
+- 归档时两个进程已退出，但日志没有提供可验证的退出/重新加入流程；因此不能把进程终止本身计作 exit/rejoin 证据。最终结果仍为 `UNVERIFIED`。
+
 ## 仍然阻塞 MP-0 PASS
 
 以下证据当前仍缺失，必须保持 `UNVERIFIED`：
 
 - A/B/C 三组连接证据已填入 `../evidence/phase0-matrix-2026-09-19.json`，MP-0A 可独立校验；MP-0B 仍含未完成项，整体 MP-0 保持 `UNVERIFIED`。
-- Lobby、角色准备、战斗开始/结束、下一层、退出和重新加入的完整生命周期。
-- C 组敌人状态的独立 Host/Client 公共状态对照、战斗结束/下一层/退出/重新加入，以及跨生命周期保持只读边界。
+- C 组最后一场战斗的结束、退出和重新加入，以及跨生命周期保持只读边界。
+- C 组敌人状态的独立 Host/Client 公共状态对照；当前只有 Client Probe 的 74 次变化和配对日志动作，尚无同一时刻的公共状态逐项对照。
 - Local PlayCard、Local EndTurn 和连续快速动作属于后续 MP-2 Safe Execute，不在本轮启用。
 
 ## 当前安全边界
@@ -96,4 +104,4 @@
 
 ## 下一步
 
-现在 A/B/C 三组均已连接到首战并形成 MP-0A 矩阵；下一步是补齐 C 组剩余的只读状态变化与生命周期场景，再完成 MP-0B。完成前，不能把当前部分结果升级为完整 MP-0 通过。
+现在 A/B/C 三组均已形成 MP-0A 连接矩阵，C 组已补齐多场战斗的只读牌堆/远端变化证据；下一步仍需补齐敌人 Host/Client 公共状态逐项对照、完整战斗收尾和退出/重新加入。完成前，不能把当前部分结果升级为完整 MP-0 通过。

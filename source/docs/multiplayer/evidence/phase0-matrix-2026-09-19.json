@@ -13,55 +13,55 @@
     },
     "noCustomNetworkPackets": {
       "status": "PASS",
-      "evidence": "C probe records customNetworkPacketSent=false for all 8 records; A/B contain no CombatSolver; see blockers/MP-0-UNVERIFIED-2026-09-19.md"
+      "evidence": "C final Probe records customNetworkPacketSent=false for all 339 records; A/B contain no CombatSolver; see blockers/MP-0-UNVERIFIED-2026-09-19.md#c-组新-dll-最终收尾快照2026-09-19"
     },
     "wireModelCompatibility": {
       "status": "PASS",
-      "evidence": "All A/B/C profiles completed lobby, ready, synchronized MapCoord (3,0), NCombatRoom creation, and Combat started; see blockers/MP-0-UNVERIFIED-2026-09-19.md"
+      "evidence": "All A/B/C profiles completed lobby, ready, synchronized MapCoord (3,0), NCombatRoom creation, and Combat started; final C run also reached three combat ends and later map moves; see blockers/MP-0-UNVERIFIED-2026-09-19.md"
     },
     "localPlayerIdentity": {
       "status": "PASS",
-      "evidence": "C probe 8/8 records: Client netId=1000, playerCount=2, character=IRONCLAD; local archive mp0-c-evidence-20260919/20260919-143255-4399f135"
+      "evidence": "C final Probe 339/339 records: Client netId=1000, playerCount=2, character=IRONCLAD; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-193408-4dffbcd3"
     },
     "localHand": {
       "status": "PASS",
-      "evidence": "C new-DLL Probe contains local Hand in 134 records; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-192854-166e5f24"
+      "evidence": "C final new-DLL Probe contains local Hand in 339 records; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-193408-4dffbcd3"
     },
     "localDrawPile": {
       "status": "PASS",
-      "evidence": "C new-DLL Probe contains ordered local DrawPile and per-card instance tokens in 134 records; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-192854-166e5f24"
+      "evidence": "C final new-DLL Probe contains ordered local DrawPile and per-card instance tokens in 339 records; 4094/4094 observed card tokens include instance IDs; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-193408-4dffbcd3"
     },
     "drawAfterDraw": {
       "status": "PASS",
-      "evidence": "C new-DLL Probe analysis matched 35/35 DrawPile-prefix removals to Hand additions using per-combat instance tokens; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-192854-166e5f24"
+      "evidence": "C final new-DLL Probe analysis matched 81/81 DrawPile-prefix removals to Hand additions using per-combat instance tokens; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-193408-4dffbcd3"
     },
     "shuffleOrder": {
       "status": "PASS",
-      "evidence": "C new-DLL Probe captured 2 Discard-to-Draw reshuffles with increasing Shuffle RNG counters; post-reshuffle draw transitions are included in the 35/35 exact matches; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-192854-166e5f24"
+      "evidence": "C final new-DLL Probe captured 5 Discard-to-Draw reshuffles with increasing Shuffle RNG counters; post-reshuffle draw transitions are included in the 81/81 exact matches; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-193408-4dffbcd3"
     },
     "localDiscardExhaust": {
       "status": "PASS",
-      "evidence": "C new-DLL Probe observed 29 Discard transitions and 1 Exhaust transition with instance tokens; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-192854-166e5f24"
+      "evidence": "C final new-DLL Probe observed 70 Discard transitions and 4 Exhaust transitions with instance tokens; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-193408-4dffbcd3"
     },
     "enemyStateSync": {
       "status": "UNVERIFIED",
-      "evidence": "C new-DLL Probe observed 35 enemy-state changes while the Host log recorded the corresponding multiplayer actions; independent Host/Client public-state comparison remains outstanding"
+      "evidence": "C final new-DLL Probe observed 74 enemy-state changes while paired Host/Client logs recorded multiplayer actions; independent Host/Client public-state comparison remains outstanding"
     },
     "multiplayerScaling": {
       "status": "PASS",
-      "evidence": "C probe 8/8 records report multiplayerScalingHooks=true; local archive mp0-c-evidence-20260919/20260919-143255-4399f135"
+      "evidence": "C final Probe 339/339 records report multiplayerScalingHooks=true and cardMultiplayerConstraint=MultiplayerOnly; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-193408-4dffbcd3"
     },
     "remoteWorldDelta": {
       "status": "PASS",
-      "evidence": "C new-DLL Probe observed 33 remote-player summary changes while Client and Host logs recorded remote PlayCard/EndTurn actions; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-192854-166e5f24"
+      "evidence": "C final new-DLL Probe observed 93 remote-player summary changes while Client and Host logs recorded remote PlayCard/EndTurn actions; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-193408-4dffbcd3"
     },
     "probeReadOnly": {
       "status": "PASS",
-      "evidence": "C new-DLL Probe 134/134 records: readOnly=true, searchStarted=false, actionsEnqueued=false, customNetworkPacketSent=false; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-192854-166e5f24"
+      "evidence": "C final new-DLL Probe 339/339 records: readOnly=true, searchStarted=false, actionsEnqueued=false, customNetworkPacketSent=false; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-193408-4dffbcd3"
     },
     "lifecycle": {
       "status": "UNVERIFIED",
-      "evidence": "C new-DLL run covered lobby and two combat starts, but combat end/next floor/exit/rejoin have not yet been collected in the final snapshot"
+      "evidence": "C final run covered lobby, four combat starts (NIBBITS_WEAK, SLIMES_WEAK, SHRINKER_BEETLE_WEAK, INKLETS_NORMAL), three combat ends, three reward sets and map moves through (3,4); the fourth combat, exit and rejoin were not captured"
     },
     "singleplayerRegression": {
       "status": "PASS",
@@ -87,12 +87,12 @@
     {
       "name": "HostVanilla + ClientCombatSolver",
       "status": "PASS",
-      "evidence": "D archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-192854-166e5f24; Seed AQUAAUS9FR; NIBBITS_WEAK then SLIMES_WEAK; 134-record non-empty read-only Probe with instance tokens"
+      "evidence": "D final archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-193408-4dffbcd3; Seed AQUAAUS9FR; four combat starts with three completed reward/map transitions; 339-record non-empty read-only Probe with instance tokens"
     }
   ],
   "notes": [
     "MP-0A connection compatibility is explicitly evidenced for all three profiles.",
-    "Overall MP-0 remains UNVERIFIED because MP-0B lifecycle and state-transition checks are incomplete.",
+    "Overall MP-0 remains UNVERIFIED because independent enemy Host/Client comparison and exit/rejoin lifecycle evidence are incomplete.",
     "This matrix does not authorize MultiplayerAdvisor or MultiplayerSafeExecute."
   ]
 }
