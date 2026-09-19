@@ -24,6 +24,8 @@
 - Host 私有实例可启动到主菜单并由 marker 安全停止；Client 私有实例能识别 RitsuLib/CombatSolver manifest，启动日志显示 Mod 排序为 RitsuLib → CombatSolver。
 - 使用当前二进制已确认的 `--fastmp=host` 和 `--fastmp=join` 做了有界双实例启动探针：Host 日志为 `D:\yingye\CombatSolver\.local\multiplayer-lab\instances\mp-host-20260919\logs\20260919-130414-host-0d3b45eb.log`，只确认启动到主菜单，未出现已确认的 ENet listener/lobby；Client 日志为 `D:\yingye\CombatSolver\.local\multiplayer-lab\instances\mp-client-solver-20260919\logs\20260919-130431-client-13bd112a.log`，进入 `ENetClientConnectionInitializer` 后出现 `Connection timed out`。两实例均已通过 ownership marker 停止。
 - Client 首次启动还停在原生“尚未确认 Mod 警告”弹窗；因此没有进入战斗，也没有产生可用于 MP-0B 的 Probe JSONL、DrawPile、敌人同步或生命周期证据。
+- 对 `data_sts2_windows_x86_64\sts2.dll` 的只读 IL 检查确认：`CheckCommandLineArgs` 接受 `host`、`host_standard`、`host_daily`、`host_custom`、`load`、`join`；`fastmp=host` 的非 Steam 路径调用 `StartENetHost(33771, 4)`，`fastmp=join` 固定使用 `127.0.0.1:33771`。因此当前不是“参数值未知”。
+- 再次启动 Host 并等待进入主菜单后，`Get-NetUDPEndpoint -LocalPort 33771`、`Get-NetTCPConnection -LocalPort 33771` 和 `netstat -ano` 均未观察到 33771 监听；Host 进程本身仍存活并已由 ownership marker 停止。下一步需确认原生 Host UI 的启动时序或游戏网络初始化失败原因，不能用端口缺失推断 Mod/Probe 兼容性结论。
 
 ## 仍然阻塞 MP-0 PASS
 
