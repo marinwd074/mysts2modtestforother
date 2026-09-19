@@ -75,6 +75,12 @@ void PlayerBoundaryContractChecks()
             MultiplayerAdvisorBoundaryContracts.SelectEndTurnPlayers([local, remote], captured),
             captured),
         "EndTurn returns the captured root list instead of the public roster.");
+    IReadOnlyList<Player> singleplayerRoster = [local, remote];
+    Check(
+        ReferenceEquals(
+            MultiplayerAdvisorBoundaryContracts.SelectEndTurnPlayers(singleplayerRoster, singleplayerRoster),
+            singleplayerRoster),
+        "Singleplayer EndTurn retains the complete player roster.");
 
     bool rejected = false;
     try
