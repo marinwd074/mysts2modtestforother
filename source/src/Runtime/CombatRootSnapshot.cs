@@ -149,6 +149,12 @@ internal sealed class CombatRootSnapshot
             ?? throw new InvalidOperationException("找不到本地玩家。");
         PlayerCombatState playerState = player.PlayerCombatState
             ?? throw new InvalidOperationException("玩家没有战斗状态。");
+        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
+        if (capabilities.IsMultiplayer && capabilities.CanSearch)
+        {
+            throw new NotSupportedException(
+                "多人 local-player-only root 尚未隔离队友牌堆与隐藏状态；保持能力门禁关闭。");
+        }
         AbstractModel[] liveCombatHookListeners = state.IterateHookListeners().ToArray();
         if (liveCombatHookListeners.Any(PredictionModModelSupport.IsBaseLibCardModifier))
         {
@@ -216,7 +222,6 @@ internal sealed class CombatRootSnapshot
             .Where(candidate => candidate.PlayerCombatState != null)
             .Sum(candidate => candidate.PlayerCombatState!.AllCards.Count());
         int powerCount = state.Creatures.Sum(creature => creature.Powers.Count);
-        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
         stopwatch.Stop();
 
         return new CombatRootSnapshot(

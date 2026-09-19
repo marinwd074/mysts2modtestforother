@@ -56,7 +56,8 @@ internal readonly record struct SolverSessionCapabilitySet(
 internal static class SolverSessionCapabilities
 {
     public static bool IsNetworkMultiplayer
-        => RunManager.Instance.IsInProgress && RunManager.Instance.NetService.Type.IsMultiplayer();
+        => RunManager.Instance.IsInProgress
+           && RunManager.Instance.NetService.Type != NetGameType.Singleplayer;
 
     /// <summary>
     /// Multiplayer remains in read-only Probe until a real Host/Client evidence gate is

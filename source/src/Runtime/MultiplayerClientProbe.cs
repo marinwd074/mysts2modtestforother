@@ -5,6 +5,7 @@ using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.Runs;
+using CombatSolver.Engine.Common;
 
 namespace CombatSolver;
 
@@ -73,7 +74,8 @@ internal static class MultiplayerClientProbe
             ';',
             state.Enemies.Select(enemy =>
                 $"{enemy.CombatId?.ToString() ?? "-"}:{enemy.Monster?.Id.Entry ?? "-"}:" +
-                $"{enemy.CurrentHp}/{enemy.MaxHp}/{enemy.Block}:{enemy.Monster?.NextMove?.Id ?? "-"}"));
+                $"{enemy.CurrentHp}/{enemy.MaxHp}/{enemy.Block}:{enemy.Monster?.NextMove?.Id ?? "-"}:" +
+                $"powers={Powers(enemy.Powers)}"));
 
         return $"net_type={RunManager.Instance.NetService.Type} players={state.Players.Count} " +
                $"round={state.RoundNumber} side={state.CurrentSide} " +
@@ -82,31 +84,12 @@ internal static class MultiplayerClientProbe
     }
 
     private static string HardFingerprint(CombatState state, Player? localPlayer)
-    {
-        string localContinuation = TryCaptureLocalContinuation(state, localPlayer);
-        return $"local_continuation={localContinuation};remote_players={RemotePlayers(state, localPlayer)}";
-    }
+        => $"net_type={RunManager.Instance.NetService.Type};players={state.Players.Count};" +
+           $"round={state.RoundNumber};side={state.CurrentSide};seed={state.RunState.Rng.StringSeed};" +
+           $"rng={RngStates(state)};enemies={Enemies(state)};" +
+           $"remote_players={RemotePlayers(state, localPlayer)};local={LocalPlayer(localPlayer)}";
 
-    private static string TryCaptureLocalContinuation(CombatState state, Player? localPlayer)
-    {
-        if (localPlayer?.PlayerCombatState == null)
-            return $"unavailable;fallback={FallbackLocalFingerprint(localPlayer)}";
-
-        try
-        {
-            // ContinuationStamp already covers the local combat fields whose semantic
-            // changes invalidate a search, including upgraded/enchanted card state.
-            return ContinuationStamp.CaptureLive(state).StateText;
-        }
-        catch (Exception)
-        {
-            // Probing must remain read-only and non-fatal while a native state is
-            // between lifecycle phases. Keep a semantic local fallback for that gap.
-            return $"unavailable;fallback={FallbackLocalFingerprint(localPlayer)}";
-        }
-    }
-
-    private static string FallbackLocalFingerprint(Player? localPlayer)
+    private static string LocalPlayer(Player? localPlayer)
     {
         PlayerCombatState? combat = localPlayer?.PlayerCombatState;
         if (localPlayer == null || combat == null)
@@ -117,8 +100,17 @@ internal static class MultiplayerClientProbe
                $"turn={combat.TurnNumber};phase={combat.Phase};" +
                $"hand={Cards(combat.Hand.Cards)};draw={Cards(combat.DrawPile.Cards)};" +
                $"discard={Cards(combat.DiscardPile.Cards)};exhaust={Cards(combat.ExhaustPile.Cards)};" +
+               $"potions={string.Join(',', localPlayer.PotionSlots.Select(potion => potion?.Id.Entry ?? "-"))};" +
                $"powers={Powers(localPlayer.Creature.Powers)}";
     }
+
+    private static string Enemies(CombatState state)
+        => string.Join(
+            ';',
+            state.Enemies.Select(enemy =>
+                $"{enemy.CombatId?.ToString() ?? "-"}:{enemy.Monster?.Id.Entry ?? "-"}:" +
+                $"{enemy.CurrentHp}/{enemy.MaxHp}/{enemy.Block}:{enemy.Monster?.NextMove?.Id ?? "-"}:" +
+                $"powers={Powers(enemy.Powers)}"));
 
     private static string RemotePlayers(CombatState state, Player? localPlayer)
         => string.Join(
@@ -138,7 +130,7 @@ internal static class MultiplayerClientProbe
     private static string Cards(IEnumerable<CardModel> cards)
         => string.Join(',', cards.Select(card =>
             $"{card.Id.Entry}+{card.CurrentUpgradeLevel}" +
-            $"/enchant={EnchantmentStateSupport.Describe(card.Enchantment!)}" +
+            $"/enchant={(card.Enchantment == null ? "-" : EnchantmentStateSupport.Describe(card.Enchantment))}" +
             $"/affliction={card.Affliction?.Id.Entry ?? "-"}:{card.Affliction?.Amount ?? 0}"));
 
     private static string Powers(IEnumerable<PowerModel> powers)
@@ -154,5 +146,15 @@ internal static class MultiplayerClientProbe
                $"potion_gen={rng.CombatPotionGeneration.Counter},card_select={rng.CombatCardSelection.Counter}," +
                $"energy={rng.CombatEnergyCosts.Counter},targets={rng.CombatTargets.Counter}," +
                $"orb={rng.CombatOrbGeneration.Counter},monster_ai={rng.MonsterAi.Counter},niche={rng.Niche.Counter}";
+    }
+
+    private static string RngStates(CombatState state)
+    {
+        var rng = state.RunState.Rng;
+        return $"shuffle={rng.Shuffle.CaptureState()},card_gen={rng.CombatCardGeneration.CaptureState()}," +
+               $"potion_gen={rng.CombatPotionGeneration.CaptureState()},card_select={rng.CombatCardSelection.CaptureState()}," +
+               $"energy={rng.CombatEnergyCosts.CaptureState()},targets={rng.CombatTargets.CaptureState()}," +
+               $"orb={rng.CombatOrbGeneration.CaptureState()},monster_ai={rng.MonsterAi.CaptureState()}," +
+               $"niche={rng.Niche.CaptureState()}";
     }
 }

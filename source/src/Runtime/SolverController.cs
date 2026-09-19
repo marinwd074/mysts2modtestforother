@@ -68,6 +68,8 @@ internal static partial class SolverController
     private static CancellationTokenSource? _deferredSearchCts;
     private static int _deferredSearchId;
     private static CancellationTokenSource _combatDeferredOperationCancellation = new();
+    private static CancellationTokenSource? _multiplayerDebounceCts;
+    private static int _multiplayerDebounceId;
 
     public static bool IsSearching
         => _search != null
@@ -1078,6 +1080,7 @@ internal static partial class SolverController
     private static void ResetCore(string reason)
     {
         int lifecycleGeneration = Interlocked.Increment(ref _combatLifecycleGeneration);
+        CancelMultiplayerDebouncedSearch();
         bool deferredSearchCanceled = _deferredSearchCts != null;
         CancelDeferredSearch();
         Task deferredSearchRelease = DrainDeferredSearchReleases();
@@ -1230,10 +1233,14 @@ internal static partial class SolverController
             return;
         }
 
-        if (SolverSessionCapabilities.IsNetworkMultiplayer)
-            MultiplayerClientProbe.Observe(current, "main_thread_monitor");
+        bool multiplayerWorldChanged = SolverSessionCapabilities.IsNetworkMultiplayer
+            && MultiplayerClientProbe.Observe(current, "main_thread_monitor");
 
-        if (!SolverSessionCapabilities.Capture(current).CanSearch)
+        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(current);
+        if (multiplayerWorldChanged && capabilities.CanSearch)
+            InvalidateMultiplayerSearch(current);
+
+        if (!capabilities.CanSearch)
             return;
 
         if (_combat.State != null && !ReferenceEquals(current, _combat.State))
@@ -1257,9 +1264,129 @@ internal static partial class SolverController
                 SolverOverlay.ShowSearchStopped(host);
             else if (!AutomaticCalculationEnabled || !UnattendedTestRunner.AutomaticTurnSearchEnabled)
                 SolverOverlay.ShowManualCalculationReady(host, HasCalculatedThisCombat);
-            else if (CanSolve(current, out _))
+            else if (!capabilities.IsMultiplayer && CanSolve(current, out _))
                 RequestSearch(host, current, SearchReason.AutoTurnStart);
         }
+
+        if (capabilities.IsMultiplayer)
+            TryScheduleMultiplayerSearch(host: NGame.Instance, current);
+    }
+
+    private static void InvalidateMultiplayerSearch(CombatState state)
+    {
+        CancelMultiplayerDebouncedSearch();
+        CancelDeferredSearch();
+        CancelSearch();
+        _combat.LatestResult = null;
+        _combat.LatestStamp = null;
+        _combat.ContinuationSource = null;
+        _combat.PendingCompleteProjectionBaseline = null;
+        _combat.PendingManualProjectionBaseline = null;
+        InvalidateRenderedRouteAdoptionSeed();
+        SolverOverlay.RefreshControls();
+        Entry.Logger.Info(
+            $"[CombatSolver/MultiplayerAdvisor] WORLD_INVALIDATED " +
+            $"world_version={MultiplayerWorldTracker.WorldVersion} " +
+            $"reason={MultiplayerWorldTracker.LastReason} " +
+            $"turn={LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0}");
+    }
+
+    private static void TryScheduleMultiplayerSearch(NGame? host, CombatState state)
+    {
+        if (host == null
+            || _search != null
+            || _deployment != null
+            || _deferredSearchCts != null
+            || PendingCombatDeferredOperations.Any(task => !task.IsCompleted)
+            || !AutomaticCalculationEnabled
+            || !UnattendedTestRunner.AutomaticTurnSearchEnabled
+            || _combat.AutomaticSearchPaused
+            || !CanSolve(state, out _)
+            || !MultiplayerWorldTracker.TryTakeStable(out long worldVersion))
+        {
+            return;
+        }
+
+        CancelMultiplayerDebouncedSearch();
+        CancellationTokenSource debounceCancellation = new();
+        _multiplayerDebounceCts = debounceCancellation;
+        int requestId = ++_multiplayerDebounceId;
+        Entry.Logger.Info(
+            $"[CombatSolver/MultiplayerAdvisor] SEARCH_DEBOUNCED " +
+            $"world_version={worldVersion} request_id={requestId} " +
+            $"delay_ms={MultiplayerWorldTracker.DefaultDebounceMilliseconds}");
+        Task operation = StartCombatDeferredOperation(combatToken =>
+            RunMultiplayerDebouncedSearchAsync(
+                host,
+                state,
+                worldVersion,
+                requestId,
+                debounceCancellation,
+                combatToken));
+        if (UnattendedAsyncActivityTracker.IsRequestActive)
+            operation = UnattendedAsyncActivityTracker.Track(operation);
+        TaskHelper.RunSafely(operation);
+    }
+
+    private static async Task RunMultiplayerDebouncedSearchAsync(
+        NGame host,
+        CombatState state,
+        long worldVersion,
+        int requestId,
+        CancellationTokenSource debounceCancellation,
+        CancellationToken combatToken)
+    {
+        CancellationToken token = debounceCancellation.Token;
+        try
+        {
+            ActionExecutor actionExecutor = RunManager.Instance.ActionExecutor;
+            Task nativeActionBarrier = actionExecutor.CurrentlyRunningAction is { } runningAction
+                ? Task.WhenAll(actionExecutor.FinishedExecutingActions(), runningAction.CompletionTask)
+                : actionExecutor.FinishedExecutingActions();
+            await nativeActionBarrier.WaitAsync(token);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            token.ThrowIfCancellationRequested();
+            combatToken.ThrowIfCancellationRequested();
+
+            if (requestId != _multiplayerDebounceId
+                || !ReferenceEquals(_multiplayerDebounceCts, debounceCancellation)
+                || !ReferenceEquals(CombatManager.Instance.DebugOnlyGetState(), state)
+                || MultiplayerWorldTracker.WorldVersion != worldVersion
+                || !CanSolve(state, out _)
+                || !AutomaticCalculationEnabled
+                || !UnattendedTestRunner.AutomaticTurnSearchEnabled
+                || _combat.AutomaticSearchPaused)
+            {
+                return;
+            }
+
+            Entry.Logger.Info(
+                $"[CombatSolver/MultiplayerAdvisor] SEARCH_DEBOUNCED_START " +
+                $"world_version={worldVersion} request_id={requestId}");
+            RequestSearch(host, state, SearchReason.AutoTurnStart);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested || combatToken.IsCancellationRequested)
+        {
+            Entry.Logger.Info(
+                $"[CombatSolver/MultiplayerAdvisor] SEARCH_DEBOUNCED_CANCEL " +
+                $"world_version={worldVersion} request_id={requestId}");
+        }
+        finally
+        {
+            if (ReferenceEquals(_multiplayerDebounceCts, debounceCancellation))
+                _multiplayerDebounceCts = null;
+            debounceCancellation.Dispose();
+        }
+    }
+
+    private static void CancelMultiplayerDebouncedSearch()
+    {
+        CancellationTokenSource? cancellation = _multiplayerDebounceCts;
+        _multiplayerDebounceCts = null;
+        if (cancellation == null)
+            return;
+        _multiplayerDebounceId++;
+        cancellation.Cancel();
     }
 
     public static void RefreshSearchProgress()

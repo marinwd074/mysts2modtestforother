@@ -152,7 +152,10 @@ internal static partial class SolverController
             && UnattendedTestRunner.AutomaticTurnSearchEnabled
             && CanSolve(state, out _))
         {
-            RequestSearch(host, state, SearchReason.AutoTurnStart);
+            if (SolverSessionCapabilities.Capture(state).IsMultiplayer)
+                TryScheduleMultiplayerSearch(host, state);
+            else
+                RequestSearch(host, state, SearchReason.AutoTurnStart);
         }
     }
 
@@ -196,7 +199,10 @@ internal static partial class SolverController
             && AutomaticCalculationEnabled
             && CanSolve(state, out _))
         {
-            RequestSearch(game, state, SearchReason.AutoTurnStart);
+            if (SolverSessionCapabilities.Capture(state).IsMultiplayer)
+                TryScheduleMultiplayerSearch(game, state);
+            else
+                RequestSearch(game, state, SearchReason.AutoTurnStart);
         }
     }
 

@@ -99,7 +99,14 @@ internal static partial class SolverController
         _combat.LatestResult = null;
         _combat.LatestStamp = null;
         CancelDeployment();
-        SolverDeploymentSession deployment = new() { State = state, StartTurnNumber = result.StartTurnNumber };
+        SolverDeploymentSession deployment = new()
+        {
+            State = state,
+            StartTurnNumber = result.StartTurnNumber,
+            WorldVersion = capabilities.IsMultiplayer
+                ? MultiplayerWorldTracker.WorldVersion
+                : 0,
+        };
         _deployment = deployment;
         IReadOnlyList<PlanAction> plannedTurnActions = result.BestNode.Actions
             .Where(action => action.Turn == result.StartTurnNumber)
@@ -199,6 +206,22 @@ internal static partial class SolverController
             {
                 PlanAction action = actions[actionIndex];
                 token.ThrowIfCancellationRequested();
+                if (deployment.WorldVersion != 0
+                    && MultiplayerWorldTracker.WorldVersion != deployment.WorldVersion)
+                {
+                    CompleteDeployment(deployment);
+                    SolverOverlay.ShowDeploymentComplete(
+                        host,
+                        turn,
+                        actionIndex,
+                        endedTurn: false);
+                    Entry.Logger.Info(
+                        $"[CombatSolver/MultiplayerSafeExecute] DEPLOY_STOP " +
+                        $"turn={turn} completed_actions={actionIndex} reason=world_version_changed " +
+                        $"search_world_version={deployment.WorldVersion} " +
+                        $"current_world_version={MultiplayerWorldTracker.WorldVersion}");
+                    return;
+                }
                 if (!IsSamePlayableTurn(state, turn))
                     throw new InvalidOperationException("部署途中已不再是原玩家回合。");
 

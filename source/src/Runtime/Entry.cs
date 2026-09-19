@@ -77,11 +77,17 @@ public static class Entry
 
     private static void OnTurnStarted(CombatState state)
     {
+        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
         if (!Enabled
             || state.CurrentSide != CombatSide.Player
             || NGame.Instance == null
-            || !SolverSessionCapabilities.Capture(state).CanSearch)
+            || !capabilities.CanSearch)
             return;
+        if (capabilities.IsMultiplayer)
+        {
+            Logger.Info("[CombatSolver/MultiplayerAdvisor] AUTO_SEARCH_DEFERRED reason=world_debounce");
+            return;
+        }
         if (SolverController.SolverDisabled)
         {
             SolverOverlay.ShowDisabled(NGame.Instance);

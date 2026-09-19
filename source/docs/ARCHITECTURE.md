@@ -50,7 +50,7 @@ Harmony 参数形状的条件编译位于回合补丁入口；这是当前兼容
 
 搜索 worker 接收 `CombatRootSnapshot`、`SearchPolicySnapshot`、诊断 sink、帧压力信号和取消令牌。它不读取全局设置、控制器、UI 或无人测试状态。
 
-当前多人适配仍处于 MP-0 只读探针阶段。`SolverSessionCapabilities` 是 Runtime 的唯一能力合同：网络多人默认进入 `MultiplayerProbe`，搜索、部署、回合准备接管、选择驱动、药水、Full Auto、Instant、跨回合复用和 Showcase 均关闭；`MultiplayerAdvisor` 与 `MultiplayerSafeExecute` 只声明后续阶段的显式能力，不会根据玩家数或网络类型自动启用。受控代码路径已准备好当前回合截断、local-player-only root、world version 结果失效和 `MultiplayerSafeLocalActionClassifier` 的安全动作前缀，但都等待能力门禁与 MP-0 实机证据。`MultiplayerClientProbe` 只在主线程读取本地玩家与敌方公开状态，`MultiplayerWorldTracker` 只维护观察 fingerprint、world version 和稳定等待窗口，不拥有网络、不修改 live state、不发送动作。
+当前多人适配仍处于 MP-0 只读探针阶段。`SolverSessionCapabilities` 是 Runtime 的唯一能力合同：网络多人默认进入 `MultiplayerProbe`，搜索、部署、回合准备接管、选择驱动、药水、Full Auto、Instant、跨回合复用和 Showcase 均关闭；`MultiplayerAdvisor` 与 `MultiplayerSafeExecute` 只声明后续阶段的显式能力，不会根据玩家数或网络类型自动启用。受控代码路径已准备好当前回合截断、world version 结果失效、稳定 debounce 和 `MultiplayerSafeLocalActionClassifier` 的安全动作前缀；当前根快照仍会捕获完整玩家集合，因此在 local-player-only 隔离完成前显式拒绝多人搜索。`MultiplayerClientProbe` 只在主线程读取本地玩家、敌方和远端公开状态，`MultiplayerWorldTracker` 只维护观察 fingerprint、world version 和稳定确认窗口，不拥有网络、不修改 live state、不发送动作。
 
 成长策略由 `GrowthBudgets` 随请求冻结，每次实际收益按对应来源取得 HP 额度，中间保路和终局排序沿用同一份额度；成长侧栏只编辑原有额度和忽略收益开关。`CardMechanismFacts` 提供小刀数量、攻击命中与消耗抽牌的纯值估计，`StrategicEffectModel` 消费分支状态；StateEvaluation 的首攻击估值只在原版致命消费者存在或外部战略登记表非空时构建，外部既有字段上下文保持；当前没有奖励／商店评分模块。
 
@@ -72,7 +72,7 @@ Harmony 参数形状的条件编译位于回合补丁入口；这是当前兼容
 | `src/Diagnostics/Telemetry/RunStatistics.cs` / `src/Diagnostics/Telemetry/RunStatisticsStore.cs` | 主线程跑局/战斗/设置/实际操作标量事件；独立有界队列，后台持久化、原生结算恢复与幂等补传；不可变提交时战绩快照 | 搜索状态键、模拟、游戏存档修改、历史求解器参与推断 |
 | `src/Runtime/SolverController.cs` | 主线程高层搜索/续用/部署/全自动编排入口、共享状态与 facade | Beam 内部算法和 UI 布局、搜索 worker 生命周期细节 |
 | `src/Runtime/SolverSessionCapabilities.cs` | 集中声明单人、多人只读 Probe、多人 Advisor 与多人 Safe Execute 的能力边界；当前只返回单人或 Probe | 实机多人证据、网络协议、队友规划和动作分类器 |
-| `src/Runtime/MultiplayerClientProbe.cs` | 主线程只读记录网络多人客户端的本地可见状态与公共敌人状态，生成观察 fingerprint | 搜索、部署、RNG/CombatState 修改、网络包和队友隐藏状态 |
+| `src/Runtime/MultiplayerClientProbe.cs` | 主线程只读记录网络多人客户端的本地可见状态、公共敌人状态和远端公开玩家摘要，生成硬失效 fingerprint | 搜索、部署、RNG/CombatState 修改、网络包和队友隐藏状态 |
 | `src/Runtime/MultiplayerWorldTracker.cs` | 维护多人观察的 `WorldVersion`、dirty 标志和 debounce 稳定边界 | 网络事件订阅、路线修复、搜索调度和 live 状态读取 |
 | `src/Runtime/MultiplayerSafeLocalActionClassifier.cs` | 对未来 Safe Execute 的本地普通 PlayCard 做保守前缀分类；未知交互直接停止 | 搜索语义、网络协议、队友动作和 EndTurn |
 | `src/Runtime/SolverController.SearchLifecycle.cs` | 搜索请求、root barrier 延迟/取消、worker 回调、结果发布、搜索引用释放与 CTS 生命周期 | 部署动作顺序、Beam 内部算法和 UI 布局 |

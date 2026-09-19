@@ -232,6 +232,7 @@ internal sealed class SolverDeploymentSession
 {
     public CombatState? State { get; init; }
     public int StartTurnNumber { get; init; }
+    public long WorldVersion { get; init; }
     public CancellationTokenSource Cancellation { get; } = new();
     public Task Operation { get; set; } = Task.CompletedTask;
     public int ReferenceReleaseState;
