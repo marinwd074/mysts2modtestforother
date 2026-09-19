@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Cards;
@@ -6,8 +7,42 @@ using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.Runs;
 using CombatSolver.Engine.Common;
+using CombatSolver.Replay;
 
 namespace CombatSolver;
+
+internal sealed record MultiplayerProbeSnapshot(
+    int SchemaVersion,
+    long CapturedAtUnixMilliseconds,
+    int Sequence,
+    long WorldVersion,
+    string Reason,
+    string NetworkType,
+    int PlayerCount,
+    int RoundNumber,
+    string CurrentSide,
+    string? LocalNetId,
+    string? LocalCharacter,
+    string? LocalHp,
+    string? LocalBlock,
+    string? LocalEnergy,
+    string? LocalStars,
+    string? LocalTurn,
+    string? LocalPhase,
+    string[] LocalHand,
+    string[] LocalDrawPile,
+    string[] LocalDiscard,
+    string[] LocalExhaust,
+    string[] LocalPotions,
+    string[] LocalPowers,
+    string[] RemotePlayers,
+    string[] Enemies,
+    string[] RngStates,
+    string HardFingerprint,
+    bool ReadOnly,
+    bool SearchStarted,
+    bool ActionsEnqueued,
+    bool CustomNetworkPacketSent);
 
 /// <summary>
 /// Read-only Phase 0 observation for a network multiplayer client. It records only the
@@ -17,14 +52,33 @@ namespace CombatSolver;
 internal static class MultiplayerClientProbe
 {
     private const int MinimumSampleIntervalMilliseconds = 100;
+    private const int ProbeEvidenceEstimatedBytes = 16 * 1024;
+    private static readonly object EvidenceGate = new();
+    private static readonly JsonSerializerOptions EvidenceJson = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+    private static readonly string EvidenceFileName =
+        $"multiplayer-probe-{Environment.ProcessId}-{Guid.NewGuid():N}.jsonl";
     private static long _lastSampleAt;
     private static int _observationSequence;
+    private static AppendOnlyEventLog<MultiplayerProbeSnapshot>? _evidenceLog;
+    private static bool _evidenceDisabled;
 
     internal static void Reset()
     {
         _lastSampleAt = 0;
         _observationSequence = 0;
         MultiplayerWorldTracker.Reset();
+    }
+
+    internal static void Dispose()
+    {
+        lock (EvidenceGate)
+        {
+            _evidenceLog?.Dispose();
+            _evidenceLog = null;
+        }
     }
 
     internal static bool Observe(CombatState state, string reason)
@@ -48,11 +102,96 @@ internal static class MultiplayerClientProbe
             return false;
 
         _observationSequence++;
+        WriteEvidence(CaptureSnapshot(
+            state,
+            localPlayer,
+            reason,
+            hardFingerprint,
+            _observationSequence));
         Entry.Logger.Info(
             $"[CombatSolver/MultiplayerProbe] OBSERVED sequence={_observationSequence} " +
             $"world_version={MultiplayerWorldTracker.WorldVersion} reason={reason} " +
             $"hard_changed=true {display}");
         return true;
+    }
+
+    private static MultiplayerProbeSnapshot CaptureSnapshot(
+        CombatState state,
+        Player? localPlayer,
+        string reason,
+        string hardFingerprint,
+        int sequence)
+    {
+        PlayerCombatState? combat = localPlayer?.PlayerCombatState;
+        return new(
+            SchemaVersion: 1,
+            CapturedAtUnixMilliseconds: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            Sequence: sequence,
+            WorldVersion: MultiplayerWorldTracker.WorldVersion,
+            Reason: reason,
+            NetworkType: RunManager.Instance.NetService.Type.ToString(),
+            PlayerCount: state.Players.Count,
+            RoundNumber: state.RoundNumber,
+            CurrentSide: state.CurrentSide.ToString(),
+            LocalNetId: localPlayer?.NetId.ToString(),
+            LocalCharacter: localPlayer?.Character.Id.Entry,
+            LocalHp: combat == null || localPlayer == null
+                ? null
+                : $"{localPlayer.Creature.CurrentHp}/{localPlayer.Creature.MaxHp}",
+            LocalBlock: combat == null || localPlayer == null
+                ? null
+                : localPlayer.Creature.Block.ToString(),
+            LocalEnergy: combat?.Energy.ToString(),
+            LocalStars: combat?.Stars.ToString(),
+            LocalTurn: combat?.TurnNumber.ToString(),
+            LocalPhase: combat?.Phase.ToString(),
+            LocalHand: combat == null ? [] : CardTokens(combat.Hand.Cards),
+            LocalDrawPile: combat == null ? [] : CardTokens(combat.DrawPile.Cards),
+            LocalDiscard: combat == null ? [] : CardTokens(combat.DiscardPile.Cards),
+            LocalExhaust: combat == null ? [] : CardTokens(combat.ExhaustPile.Cards),
+            LocalPotions: localPlayer == null
+                ? []
+                : localPlayer.PotionSlots.Select(potion => potion?.Id.Entry ?? "-").ToArray(),
+            LocalPowers: localPlayer == null ? [] : PowerTokens(localPlayer.Creature.Powers),
+            RemotePlayers: RemotePlayerTokens(state, localPlayer),
+            Enemies: EnemyTokens(state),
+            RngStates: RngStateTokens(state),
+            HardFingerprint: hardFingerprint,
+            ReadOnly: true,
+            SearchStarted: false,
+            ActionsEnqueued: false,
+            CustomNetworkPacketSent: false);
+    }
+
+    private static void WriteEvidence(MultiplayerProbeSnapshot snapshot)
+    {
+        lock (EvidenceGate)
+        {
+            if (_evidenceDisabled)
+                return;
+
+            try
+            {
+                _evidenceLog ??= new AppendOnlyEventLog<MultiplayerProbeSnapshot>(
+                    value => JsonSerializer.SerializeToUtf8Bytes(value, EvidenceJson),
+                    maximumPendingBytes: 2 * 1024 * 1024,
+                    maximumFileBytes: 16 * 1024 * 1024,
+                    outputPath: Path.Combine(CombatBugReportPaths.ModLogsDirectory, EvidenceFileName));
+                _evidenceLog.TryAppend(snapshot, ProbeEvidenceEstimatedBytes);
+            }
+            catch (DirectoryNotFoundException)
+            {
+                _evidenceDisabled = true;
+            }
+            catch (IOException)
+            {
+                _evidenceDisabled = true;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                _evidenceDisabled = true;
+            }
+        }
     }
 
     private static string Describe(CombatState state, Player? localPlayer)
@@ -105,17 +244,19 @@ internal static class MultiplayerClientProbe
     }
 
     private static string Enemies(CombatState state)
-        => string.Join(
-            ';',
-            state.Enemies.Select(enemy =>
+        => string.Join(';', EnemyTokens(state));
+
+    private static string[] EnemyTokens(CombatState state)
+        => state.Enemies.Select(enemy =>
                 $"{enemy.CombatId?.ToString() ?? "-"}:{enemy.Monster?.Id.Entry ?? "-"}:" +
                 $"{enemy.CurrentHp}/{enemy.MaxHp}/{enemy.Block}:{enemy.Monster?.NextMove?.Id ?? "-"}:" +
-                $"powers={Powers(enemy.Powers)}"));
+                $"powers={Powers(enemy.Powers)}").ToArray();
 
     private static string RemotePlayers(CombatState state, Player? localPlayer)
-        => string.Join(
-            ';',
-            state.Players
+        => string.Join(';', RemotePlayerTokens(state, localPlayer));
+
+    private static string[] RemotePlayerTokens(CombatState state, Player? localPlayer)
+        => state.Players
                 .Where(player => localPlayer == null || player.NetId != localPlayer.NetId)
                 .OrderBy(player => player.NetId)
                 .Select(player =>
@@ -125,19 +266,27 @@ internal static class MultiplayerClientProbe
                            $"turn={combat?.TurnNumber.ToString() ?? "-"}/phase={combat?.Phase.ToString() ?? "-"}:" +
                            $"hp={player.Creature.CurrentHp}/{player.Creature.MaxHp}:" +
                            $"block={player.Creature.Block}:powers={Powers(player.Creature.Powers)}";
-                }));
+                })
+                .ToArray();
 
     private static string Cards(IEnumerable<CardModel> cards)
-        => string.Join(',', cards.Select(card =>
+        => string.Join(',', CardTokens(cards));
+
+    private static string[] CardTokens(IEnumerable<CardModel> cards)
+        => cards.Select(card =>
             $"{card.Id.Entry}+{card.CurrentUpgradeLevel}" +
             $"/enchant={(card.Enchantment == null ? "-" : EnchantmentStateSupport.Describe(card.Enchantment))}" +
-            $"/affliction={card.Affliction?.Id.Entry ?? "-"}:{card.Affliction?.Amount ?? 0}"));
+            $"/affliction={card.Affliction?.Id.Entry ?? "-"}:{card.Affliction?.Amount ?? 0}").ToArray();
 
     private static string Powers(IEnumerable<PowerModel> powers)
-        => string.Join(',', powers
+        => string.Join(',', PowerTokens(powers));
+
+    private static string[] PowerTokens(IEnumerable<PowerModel> powers)
+        => powers
             .Where(power => power.Amount != 0)
             .OrderBy(power => power.Id.Entry, StringComparer.Ordinal)
-            .Select(power => $"{power.Id.Entry}:{power.Amount}"));
+            .Select(power => $"{power.Id.Entry}:{power.Amount}")
+            .ToArray();
 
     private static string RngCounters(CombatState state)
     {
@@ -149,12 +298,22 @@ internal static class MultiplayerClientProbe
     }
 
     private static string RngStates(CombatState state)
+        => string.Join(',', RngStateTokens(state));
+
+    private static string[] RngStateTokens(CombatState state)
     {
         var rng = state.RunState.Rng;
-        return $"shuffle={rng.Shuffle.CaptureState()},card_gen={rng.CombatCardGeneration.CaptureState()}," +
-               $"potion_gen={rng.CombatPotionGeneration.CaptureState()},card_select={rng.CombatCardSelection.CaptureState()}," +
-               $"energy={rng.CombatEnergyCosts.CaptureState()},targets={rng.CombatTargets.CaptureState()}," +
-               $"orb={rng.CombatOrbGeneration.CaptureState()},monster_ai={rng.MonsterAi.CaptureState()}," +
-               $"niche={rng.Niche.CaptureState()}";
+        return
+        [
+            $"shuffle={rng.Shuffle.CaptureState()}",
+            $"card_gen={rng.CombatCardGeneration.CaptureState()}",
+            $"potion_gen={rng.CombatPotionGeneration.CaptureState()}",
+            $"card_select={rng.CombatCardSelection.CaptureState()}",
+            $"energy={rng.CombatEnergyCosts.CaptureState()}",
+            $"targets={rng.CombatTargets.CaptureState()}",
+            $"orb={rng.CombatOrbGeneration.CaptureState()}",
+            $"monster_ai={rng.MonsterAi.CaptureState()}",
+            $"niche={rng.Niche.CaptureState()}",
+        ];
     }
 }

@@ -70,6 +70,7 @@ public static class Entry
                 host.AddChild(new CombatShowcaseUploadNode());
                 host.TreeExiting += PreCombatForecastWorker.StopSessionAtProcessExit;
                 host.TreeExiting += Logger.Journal.Dispose;
+                host.TreeExiting += MultiplayerClientProbe.Dispose;
             }
             UnattendedTestRunner.TryStart(host);
         }
