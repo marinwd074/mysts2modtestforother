@@ -96,6 +96,7 @@ pwsh -NoLogo -NoProfile -File "$toolRoot\start-client.ps1" `
 - `BurningBlood` root 修复后的首次实机复验已进入 combat；随后 generation 6 暴露未捕获远端 `RelicsOf(remote)` 被 side-turn relic phase 误枚举，generation 7 暴露 `ModifyBlockMultiplicative` 对本地 `DEFEND` 也提前拒绝双玩家。
 - `ffad49b` 让 side-turn relic 只枚举参与且已捕获的玩家，远端 turn 仍显式 fail-closed；多人 block mirror 先复刻原生 enemy/powered-block early-exit，再调用原生 scaling table，不保留 live RunState/CombatState。
 - 新 Release/runtime DLL SHA-256 为 `70FA663D661056317093EE9F6FAFE7FA37699FEB3681B16FF5B9FD420A6D384C`；`-bbfix` client 快照已替换并于 23:06 重启，下一轮真实 Smoke 仍待手动完成 Lobby/战斗。
+- `37592ca` 将 EndTurn replay 的玩家阶段限制为 `RootCapturedPlayers`，避免 local-player-only root materialize 远端私有 combat state；当前 runtime DLL SHA-256 为 `281A286A109F4A2EC428290E0CAEF9B05A034DE837C6793533590EF695BC4A75`，client 已于 23:17 重启，真实 Smoke 仍待手动复验。
 
 ## 下一阶段
 

@@ -43,6 +43,7 @@
 - BurningBlood 修复后的首轮实机已进入 combat，但 generation 6 报告 `RelicsOf(remote)` 被 side-turn relic phase 误访问，generation 7 报告多人 block mirror 对本地 `DEFEND` 过早抛出 single-player guard；两者均保持 fail-closed，未发布路线。
 - `ffad49b` 只让 side-turn relic 遍历参与且已捕获玩家；原生 block mirror 复刻 enemy/powered-block early-exit，并复用原生 scaling table。未知远端 turn 仍抛出 `PredictionUnsupportedException`，没有读取远端私有遗物。
 - 新 DLL SHA-256 为 `70FA663D661056317093EE9F6FAFE7FA37699FEB3681B16FF5B9FD420A6D384C`；`-bbfix` client 已替换并重启，下一轮真实 Smoke 仍待手动复验。
+- `37592ca` 进一步把 EndTurn replay 的玩家阶段限制为 `RootCapturedPlayers`，修正 local-player-only root 对远端私有 combat state 的 materialize；当前 runtime DLL SHA-256 为 `281A286A109F4A2EC428290E0CAEF9B05A034DE837C6793533590EF695BC4A75`，client 已于 23:17 重启。
 
 ## Active blockers
 
