@@ -49,8 +49,8 @@ internal sealed partial class RunStatistics : Node
         NewRunPrepared = false;
         if (_instance != null) { _instance._run = null; _instance._snapshot = null; }
         if (OnlinePresence.IsHeadless() || UnattendedTestRunner.IsActive || !manager.ShouldSave || manager.State == null
-            || manager.NetService.Type != MegaCrit.Sts2.Core.Multiplayer.Game.NetGameType.Singleplayer
-            || manager.State.Players.Count != 1 || manager.State.GameMode != GameMode.Standard) return;
+            || !SolverSessionCapabilities.CaptureRun(manager.State).CanUploadRunStatistics
+            || manager.State.GameMode != GameMode.Standard) return;
         Start(NGame.Instance!);
         var instance = _instance!;
         string profile = Key(OS.GetUserDataDir() + ":" + SaveManager.Instance.CurrentProfileId);
@@ -72,20 +72,24 @@ internal sealed partial class RunStatistics : Node
     internal static void Battle(ICombatState? state)
     {
         if (state == null || _instance?._run == null || OnlinePresence.IsHeadless() || UnattendedTestRunner.IsActive
-            || state.Players.Count != 1 || !ReferenceEquals(state, CombatManager.Instance.DebugOnlyGetState())) return;
+            || !SolverSessionCapabilities.CaptureRun(state.RunState.Players.Count).CanUploadRunStatistics
+            || !ReferenceEquals(state, CombatManager.Instance.DebugOnlyGetState())) return;
         _instance.Enqueue(new("battle", _instance._run, Battle: BattleKey(state), Enabled: !SolverController.SolverDisabled, InCombat: true));
     }
     private static string BattleKey(ICombatState state) => state.RunState.TotalFloor + ":" + state.Encounter?.Id.Entry;
     internal static void Activity(CombatState state, bool execution = false, bool auto = false)
     {
-        if (_instance?._run == null || OnlinePresence.IsHeadless() || SolverController.IsMultiplayerSession) return;
+        if (_instance?._run == null || OnlinePresence.IsHeadless()
+            || !SolverSessionCapabilities.Capture(state).CanUploadRunStatistics) return;
         string battle = BattleKey(state);
         if (!_instance._activities.Add(battle + ":" + execution + ":" + auto)) return;
         _instance.Enqueue(new(execution ? "execute" : "solve", _instance._run, battle, true, true, auto));
     }
     internal static void Ended(RunHistory history)
     {
-        if (_instance?._run == null || history.Players.Count != 1 || history.GameMode != GameMode.Standard) return;
+        if (_instance?._run == null
+            || !SolverSessionCapabilities.CaptureRun(history.Players.Count).CanUploadRunStatistics
+            || history.GameMode != GameMode.Standard) return;
         if (_instance._run.StartedAt != history.StartTime * 1000) return;
         var ended = _instance._run with { Outcome = history.WasAbandoned ? "abandoned" : history.Win ? "win" : "loss",
             EndedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };
@@ -95,7 +99,10 @@ internal sealed partial class RunStatistics : Node
     internal static void SettingsChanged()
     {
         if (_instance == null) return;
-        _instance.SetUploading(SolverSettings.Current.OnlineStatisticsEnabled && !SolverController.IsMultiplayerSession && !UnattendedTestRunner.IsActive);
+        _instance.SetUploading(
+            SolverSettings.Current.OnlineStatisticsEnabled
+            && SolverSessionCapabilities.CaptureRun(RunManager.Instance.DebugOnlyGetState()).CanUploadRunStatistics
+            && !UnattendedTestRunner.IsActive);
         _instance.ObserveSetting();
     }
     private void ObserveSetting()
@@ -115,7 +122,10 @@ internal sealed partial class RunStatistics : Node
     {
         if (_worker?.IsFaulted == true) { SetProcess(false); Entry.Logger.Error($"Run statistics stopped: {_worker.Exception}"); return; }
         ObserveSetting();
-        SetUploading(SolverSettings.Current.OnlineStatisticsEnabled && !SolverController.IsMultiplayerSession && !UnattendedTestRunner.IsActive);
+        SetUploading(
+            SolverSettings.Current.OnlineStatisticsEnabled
+            && SolverSessionCapabilities.CaptureRun(RunManager.Instance.DebugOnlyGetState()).CanUploadRunStatistics
+            && !UnattendedTestRunner.IsActive);
         _elapsed += delta;
         if (_elapsed < 30) return;
         _elapsed = 0;

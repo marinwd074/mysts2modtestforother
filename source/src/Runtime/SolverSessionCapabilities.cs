@@ -71,6 +71,29 @@ internal static class SolverSessionCapabilities
         return Singleplayer;
     }
 
+    /// <summary>
+    /// Captures the same boundary for run-level APIs that execute outside combat.
+    /// A run with multiple players or a non-singleplayer transport must not inherit
+    /// singleplayer-only forecast, replay, showcase, or telemetry capabilities.
+    /// </summary>
+    public static SolverSessionCapabilitySet CaptureRun(RunState? run)
+    {
+        if (run is null)
+            return IsNetworkMultiplayer ? MultiplayerProbe : Singleplayer;
+        return CaptureRun(run.Players.Count);
+    }
+
+    /// <summary>
+    /// Applies the run-level boundary to serialized/history shapes that expose only
+    /// their player count. The transport check still comes from the active session.
+    /// </summary>
+    public static SolverSessionCapabilitySet CaptureRun(int playerCount)
+    {
+        if (IsNetworkMultiplayer || playerCount != 1)
+            return MultiplayerProbe;
+        return Singleplayer;
+    }
+
     public static SolverSessionCapabilitySet Singleplayer { get; } = new(
         SolverSessionKind.Singleplayer,
         CanSearch: true,

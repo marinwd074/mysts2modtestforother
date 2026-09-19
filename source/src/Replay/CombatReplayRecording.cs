@@ -76,7 +76,9 @@ internal sealed class CombatReplayRecording : IDisposable
     {
         _pending?.Dispose();
         _pending?._events.Dispose();
-        _pending = run.Players.Count == 1 ? new CombatReplayRecording(run) : null;
+        _pending = SolverSessionCapabilities.CaptureRun(run.Players.Count).CanShowcase
+            ? new CombatReplayRecording(run)
+            : null;
     }
     internal static RecordedModIdentity[] CaptureModIdentity() => AppDomain.CurrentDomain.GetAssemblies()
         .Where(assembly => !assembly.IsDynamic && assembly != typeof(CombatReplayRecording).Assembly

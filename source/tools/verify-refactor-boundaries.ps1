@@ -379,7 +379,7 @@ $forkBoundaryChecks = @(
     },
     @{
         Path = Join-Path $repositoryRoot "src\Runtime\ContinuationStamp.cs"
-        Text = "ModelPredictionStateMirrors.AppendLiveContinuation(text, state)"
+        Text = "ModelPredictionStateMirrors.AppendLiveContinuation(text, state, capturedPlayers)"
     },
     @{
         Path = Join-Path $repositoryRoot "src\Runtime\ContinuationStamp.cs"

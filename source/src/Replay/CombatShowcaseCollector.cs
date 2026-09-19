@@ -230,8 +230,8 @@ internal static class CombatShowcaseCollector
         ritsuVersion = string.Empty;
         rejection = string.Empty;
         BattleDamageSnapshot damage = BattleDamageTracker.Observe(state);
-        if (state.Players.Count != 1)
-            return Reject("player_count", out rejection);
+        if (!SolverSessionCapabilities.Capture(state).CanShowcase)
+            return Reject("session_capability", out rejection);
         if (player?.PlayerCombatState?.TurnNumber != 1)
             return Reject("not_first_turn", out rejection);
         if (state.RunState.GameMode != GameMode.Standard)
