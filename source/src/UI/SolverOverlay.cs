@@ -1240,9 +1240,16 @@ internal static partial class SolverOverlay
         CombatState? combat = CombatManager.Instance.DebugOnlyGetState();
         bool combatActive = combat != null && CombatManager.Instance.IsInProgress;
         SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(combat);
+        bool previousMultiplayerSession = _multiplayerSession;
         _multiplayerSession = capabilities.IsMultiplayer;
         if (_multiplayerSession)
+        {
             _potionStrategyVisible = false;
+            _growthStrategyVisible = false;
+            _relicStrategyVisible = false;
+        }
+        if (_multiplayerSession != previousMultiplayerSession)
+            ApplyContentVisibility();
         RefreshMultiplayerModeBanner(capabilities);
         // Re-apply the button state after the live session capability is captured.
         _fullAutoButton.Text = SolverText.Get(_multiplayerSession
@@ -1262,13 +1269,19 @@ internal static partial class SolverOverlay
         }
         if (_growthStrategyButton != null)
         {
-            _growthStrategyButton.Disabled = !combatActive;
+            _growthStrategyButton.Disabled = !combatActive || _multiplayerSession;
+            _growthStrategyButton.TooltipText = SolverText.Get(_multiplayerSession
+                ? "多人精简模式不提供跨回合成长策略。"
+                : "打开成长策略。");
             _growthStrategyButton.AddThemeColorOverride("font_color", _growthStrategyVisible ? Accent : SolverUiTokens.Palette.TextSecondary);
         }
         _growthStrategyPanel?.Refresh(SolverController.IsDeploying);
         if (_relicStrategyButton != null)
         {
-            _relicStrategyButton.Disabled = !combatActive;
+            _relicStrategyButton.Disabled = !combatActive || _multiplayerSession;
+            _relicStrategyButton.TooltipText = SolverText.Get(_multiplayerSession
+                ? "多人精简模式不提供跨回合遗物策略。"
+                : "打开遗物策略。");
             _relicStrategyButton.AddThemeColorOverride("font_color", _relicStrategyVisible ? Accent : SolverUiTokens.Palette.TextSecondary);
         }
         if (_relicStrategyVisible) _relicStrategyPanel?.Refresh(SolverController.IsDeploying);
@@ -2020,9 +2033,17 @@ internal static partial class SolverOverlay
         if (!visible)
             return;
 
-        _multiplayerModeBannerLabel.Text = SolverText.Get(
-            "多人精简模式：仅限本地玩家操作；请手动结束回合。当前未启用多人搜索。"
-        );
+        string banner = capabilities.Kind switch
+        {
+            SolverSessionKind.MultiplayerProbe
+                => "多人精简模式：当前仅记录只读状态，未启用多人搜索。",
+            SolverSessionKind.MultiplayerAdvisor
+                => "多人精简模式：仅搜索本地玩家当前回合并显示建议；不会自动执行。",
+            SolverSessionKind.MultiplayerSafeExecute
+                => "多人精简模式：仅执行已分类的本地普通牌；请手动选择、用药和结束回合。",
+            _ => "多人精简模式：当前能力受限。",
+        };
+        _multiplayerModeBannerLabel.Text = SolverText.Get(banner);
         _multiplayerModeBannerLabel.AddThemeColorOverride("font_color", Warning);
         _multiplayerModeBanner.AddThemeStyleboxOverride("panel", SolverUiTokens.CreateBox(
             SolverUiTokens.IsLightTheme ? Warning.Lightened(0.86f) : Warning.Darkened(0.78f),
@@ -2361,8 +2382,9 @@ internal static partial class SolverOverlay
         if (_potionStrategyButton != null)
             _potionStrategyButton.Visible = !_collapsed && !_multiplayerSession;
         if (_growthStrategyButton != null)
-            _growthStrategyButton.Visible = !_collapsed;
-        if (_relicStrategyButton != null) _relicStrategyButton.Visible = !_collapsed;
+            _growthStrategyButton.Visible = !_collapsed && !_multiplayerSession;
+        if (_relicStrategyButton != null)
+            _relicStrategyButton.Visible = !_collapsed && !_multiplayerSession;
         if (_settingsButton != null)
             _settingsButton.Visible = !_collapsed;
         // Keep the same outcome controls and presentation state in both layouts.
@@ -2393,9 +2415,11 @@ internal static partial class SolverOverlay
             _potionStrategyPanel.Visible = !_collapsed && !_settingsVisible
                 && !_multiplayerSession && _potionStrategyVisible;
         if (_growthStrategyPanel != null)
-            _growthStrategyPanel.Visible = !_collapsed && !_settingsVisible && _growthStrategyVisible;
+            _growthStrategyPanel.Visible = !_collapsed && !_settingsVisible
+                && !_multiplayerSession && _growthStrategyVisible;
         if (_relicStrategyPanel != null)
-            _relicStrategyPanel.Visible = !_collapsed && !_settingsVisible && _relicStrategyVisible;
+            _relicStrategyPanel.Visible = !_collapsed && !_settingsVisible
+                && !_multiplayerSession && _relicStrategyVisible;
         RefreshBossHpStrategyHint();
         if (_settingsButton != null)
         {
@@ -2929,6 +2953,9 @@ internal static partial class SolverOverlay
 
     private static void ToggleGrowthStrategy()
     {
+        if (_multiplayerSession || SolverSessionCapabilities.Capture(
+                CombatManager.Instance.DebugOnlyGetState()).IsMultiplayer)
+            return;
         _relicStrategyVisible = false;
         if (_settingsVisible && _settingsPanel?.CommitPending() == false)
             return;
@@ -2960,6 +2987,9 @@ internal static partial class SolverOverlay
 
     private static void ToggleRelicStrategy()
     {
+        if (_multiplayerSession || SolverSessionCapabilities.Capture(
+                CombatManager.Instance.DebugOnlyGetState()).IsMultiplayer)
+            return;
         if (_settingsVisible && _settingsPanel?.CommitPending() == false) return;
         if (_collapsed) SetCollapsed(false);
         _settingsVisible = false;
