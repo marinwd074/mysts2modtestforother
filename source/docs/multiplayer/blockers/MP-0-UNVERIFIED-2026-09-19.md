@@ -48,11 +48,20 @@
 - 8 条记录的只读契约均为 `readOnly=true`、`searchStarted=false`、`actionsEnqueued=false`、`customNetworkPacketSent=false`；本轮只观察了开局抽牌变化，没有执行 PlayCard、EndTurn、洗牌、Discard/Exhaust 或制造队友动作。因此这证明的是 C 组连接后的只读观察部分，不是 MP-0 PASS。
 - 校验器对该归档结果给出 `probeJsonlContract=PASS`，整体仍为 `UNVERIFIED`；归档目录为 `.local/multiplayer-lab/results/mp0-c-evidence-20260919/20260919-143255-4399f135`。当前保留的独立警告是 Client 的 RitsuLib `CombatStartingEvent: Sequence contains more than one element`，它没有阻止本轮进入战斗。
 
+## A/B 组连接实机结果（2026-09-19）
+
+- A 组 `Vanilla Host + Vanilla Client` 已完成 Lobby、双方 Ready、同图投票与首战同步。两端进入 Seed `1D3F5N525F` 的 `NIBBITS_WEAK`，日志均记录 `MoveToMapCoordAction`、`Creating NCombatRoom` 和 `Combat started`；归档目录为 `.local/multiplayer-lab/results/mp0-a2-evidence-20260919/20260919-155859-b3f851f0`。
+- B 组 `Vanilla Host + RitsuLib Client` 已完成同样的连接路径。Host 允许 Client 独有的非 gameplay mod `STS2-RitsuLib-0.6.2`，双方进入 Seed `MMWBMK5APR` 的 `NIBBITS_WEAK`；Client 的 Ready、Host 的双方投票、`MoveToMapCoordAction` 与两端 `Combat started` 均有成对日志。归档目录为 `.local/multiplayer-lab/results/mp0-b-evidence-20260919/20260919-162533-695eb7b2`。
+- B 组首次加载 RitsuLib 时，原生 Mod 确认会主动退出 Client 以重启加载；当 Host 保留旧 peer 时，重启 Client 会超时，Host 记录 `Peer not connected`。停止两个自有实例并以已确认 Mod 的私有设置重新启动后连接成功。这是实验启动时序要求，不是 RitsuLib/CombatSolver wire compatibility 失败。
+- 初始地图的可用节点是底部 `_startingPointNode` `(3,0)`；`VisitedMapCoords` 为空时，直接点击上方第一层敌人节点不会产生投票。A/B 组均改为双方先投票 `(3,0)` 后正常进入首战。
+- A/B 组本轮只验证到首战连接，不含 CombatSolver Probe；收集器按设计输出 `UNVERIFIED`，没有自动推断 PASS。进入战斗后未出牌、未结束回合、未作选择，也未发送自定义网络包。
+- `validate-phase0-results.ps1` 原先在单独校验 MP-0B 时会把空的 profile 要求展开成 `$null`，严格模式下访问 `.Count` 失败；现已用数组包装修复。矩阵实测结果为 MP-0A `PASS`、MP-0B `UNVERIFIED`，C 组 8 条 Probe 的 JSONL 契约为 `PASS`。
+
 ## 仍然阻塞 MP-0 PASS
 
 以下证据当前仍缺失，必须保持 `UNVERIFIED`：
 
-- A/B/C 三组完整矩阵、Vanilla Host 与 Vanilla/RitsuLib/CombatSolver Client 的对照，以及正式 wire/model compatibility 结论；本轮只覆盖 C 组的一次战斗。
+- A/B/C 三组连接证据已填入 `../evidence/phase0-matrix-2026-09-19.json`，MP-0A 可独立校验；MP-0B 仍含未完成项，整体 MP-0 保持 `UNVERIFIED`。
 - Lobby、角色准备、战斗开始/结束、下一层、退出和重新加入的完整生命周期。
 - C 组中抽牌后的真实顺序、洗牌、Discard/Exhaust、敌人持续同步、队友动作导致的 world fingerprint 变化，以及跨生命周期保持只读边界。
 - 单人 Release/contract/smoke 回归证据。Local PlayCard、Local EndTurn 和连续快速动作属于后续 MP-2 Safe Execute，不在本轮启用。
@@ -65,4 +74,4 @@
 
 ## 下一步
 
-现在已有能准备隔离快照、启动可见 Host/Client、停止自有进程和收集证据的基础设施；下一步是补齐 A/B 组和 C 组剩余的只读场景，再将成对日志和 Probe JSONL 填入 MP-0A/MP-0B 矩阵。完成前，不能把本轮 C 组部分结果升级为 MP-0 通过。
+现在 A/B/C 三组均已连接到首战并形成 MP-0A 矩阵；下一步是补齐 C 组剩余的只读状态变化与生命周期场景，再完成 MP-0B。完成前，不能把当前部分结果升级为完整 MP-0 通过。

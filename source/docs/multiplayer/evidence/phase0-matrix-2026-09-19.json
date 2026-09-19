@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "phase": "MP-0",
+  "status": "UNVERIFIED",
+  "checks": {
+    "vanillaHostAcceptedClient": {
+      "status": "PASS",
+      "evidence": "blockers/MP-0-UNVERIFIED-2026-09-19.md#ab-组连接实机结果2026-09-19; local archives mp0-a2-evidence-20260919/20260919-155859-b3f851f0, mp0-b-evidence-20260919/20260919-162533-695eb7b2, mp0-c-evidence-20260919/20260919-143255-4399f135"
+    },
+    "hostUnaware": {
+      "status": "PASS",
+      "evidence": "All three profiles used HostVanilla; see blockers/MP-0-UNVERIFIED-2026-09-19.md#ab-组连接实机结果2026-09-19 and #c-组非空-probe-实机结果2026-09-19"
+    },
+    "noCustomNetworkPackets": {
+      "status": "PASS",
+      "evidence": "C probe records customNetworkPacketSent=false for all 8 records; A/B contain no CombatSolver; see blockers/MP-0-UNVERIFIED-2026-09-19.md"
+    },
+    "wireModelCompatibility": {
+      "status": "PASS",
+      "evidence": "All A/B/C profiles completed lobby, ready, synchronized MapCoord (3,0), NCombatRoom creation, and Combat started; see blockers/MP-0-UNVERIFIED-2026-09-19.md"
+    },
+    "localPlayerIdentity": {
+      "status": "PASS",
+      "evidence": "C probe 8/8 records: Client netId=1000, playerCount=2, character=IRONCLAD; local archive mp0-c-evidence-20260919/20260919-143255-4399f135"
+    },
+    "localHand": {
+      "status": "PASS",
+      "evidence": "C probe contract contains local Hand in all 8 records; local archive mp0-c-evidence-20260919/20260919-143255-4399f135"
+    },
+    "localDrawPile": {
+      "status": "PASS",
+      "evidence": "C probe contract contains ordered local DrawPile in all 8 records; local archive mp0-c-evidence-20260919/20260919-143255-4399f135"
+    },
+    "drawAfterDraw": {
+      "status": "UNVERIFIED",
+      "evidence": "Only opening draw changes observed; actual post-draw ordering comparison remains outstanding"
+    },
+    "shuffleOrder": {
+      "status": "UNVERIFIED",
+      "evidence": "No shuffle scenario captured"
+    },
+    "localDiscardExhaust": {
+      "status": "UNVERIFIED",
+      "evidence": "Fields captured but no discard/exhaust transition scenario completed"
+    },
+    "enemyStateSync": {
+      "status": "UNVERIFIED",
+      "evidence": "Three enemies captured at combat start; sustained synchronization comparison remains outstanding"
+    },
+    "multiplayerScaling": {
+      "status": "PASS",
+      "evidence": "C probe 8/8 records report multiplayerScalingHooks=true; local archive mp0-c-evidence-20260919/20260919-143255-4399f135"
+    },
+    "remoteWorldDelta": {
+      "status": "UNVERIFIED",
+      "evidence": "No controlled teammate action scenario captured"
+    },
+    "probeReadOnly": {
+      "status": "PASS",
+      "evidence": "C probe 8/8 records: readOnly=true, searchStarted=false, actionsEnqueued=false, customNetworkPacketSent=false"
+    },
+    "lifecycle": {
+      "status": "UNVERIFIED",
+      "evidence": "Lobby and combat start covered; combat end, next floor, exit, and rejoin remain outstanding"
+    },
+    "singleplayerRegression": {
+      "status": "UNVERIFIED",
+      "evidence": "No Release/contract/smoke regression run attached to this matrix"
+    }
+  },
+  "profiles": [
+    "HostVanilla + ClientVanilla",
+    "HostVanilla + ClientRitsuOnly",
+    "HostVanilla + ClientCombatSolver"
+  ],
+  "profileResults": [
+    {
+      "name": "HostVanilla + ClientVanilla",
+      "status": "PASS",
+      "evidence": "local archive mp0-a2-evidence-20260919/20260919-155859-b3f851f0; Seed 1D3F5N525F; NIBBITS_WEAK; both logs Combat started"
+    },
+    {
+      "name": "HostVanilla + ClientRitsuOnly",
+      "status": "PASS",
+      "evidence": "local archive mp0-b-evidence-20260919/20260919-162533-695eb7b2; Seed MMWBMK5APR; NIBBITS_WEAK; both logs Combat started"
+    },
+    {
+      "name": "HostVanilla + ClientCombatSolver",
+      "status": "PASS",
+      "evidence": "local archive mp0-c-evidence-20260919/20260919-143255-4399f135; Seed NCP5BET83Z; SLIMES_WEAK; non-empty read-only probe"
+    }
+  ],
+  "notes": [
+    "MP-0A connection compatibility is explicitly evidenced for all three profiles.",
+    "Overall MP-0 remains UNVERIFIED because MP-0B lifecycle and state-transition checks are incomplete.",
+    "This matrix does not authorize MultiplayerAdvisor or MultiplayerSafeExecute."
+  ]
+}

@@ -137,7 +137,7 @@ foreach ($checkName in $requiredChecks) {
     })
 }
 
-if ($requiredProfileResults.Count -gt 0) {
+if (@($requiredProfileResults).Count -gt 0) {
     $profileResults = Get-MapValue $matrix 'profileResults'
     $profileListValid = $null -ne $profileResults -and $profileResults -is [System.Collections.IEnumerable] -and $profileResults -isnot [System.Collections.IDictionary] -and $profileResults -isnot [string]
     $profileEntries = if ($profileListValid) {
