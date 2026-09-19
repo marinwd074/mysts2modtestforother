@@ -83,7 +83,7 @@ internal static class MultiplayerClientProbe
 
     internal static bool Observe(CombatState state, string reason)
     {
-        if (!SolverSessionCapabilities.IsNetworkMultiplayer
+        if (!SolverSessionCapabilities.Capture(state).IsMultiplayer
             || !CombatManager.Instance.IsInProgress)
         {
             return false;

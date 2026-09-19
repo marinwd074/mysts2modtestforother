@@ -125,12 +125,12 @@ internal static partial class SolverController
     }
 
     /// <summary>
-    /// True whenever the current run is a networked multiplayer session (host or client).
-    /// The solver must stay fully inert in this case: the game's own multiplayer turn
-    /// synchronization has no concept of a client silently auto-planning another player's turn.
+    /// True whenever the current session is classified as multiplayer, including a
+    /// network transition or a state with more than one player. The solver must stay
+    /// inert for uploads and single-player-only control surfaces in these sessions.
     /// </summary>
     public static bool IsMultiplayerSession
-        => SolverSessionCapabilities.IsNetworkMultiplayer;
+        => SolverSessionCapabilities.Capture(CombatManager.Instance.DebugOnlyGetState()).IsMultiplayer;
 
     internal static SolverSessionCapabilitySet CurrentSessionCapabilities
         => SolverSessionCapabilities.Capture(CombatManager.Instance.DebugOnlyGetState());
@@ -1233,10 +1233,9 @@ internal static partial class SolverController
             return;
         }
 
-        bool multiplayerWorldChanged = SolverSessionCapabilities.IsNetworkMultiplayer
-            && MultiplayerClientProbe.Observe(current, "main_thread_monitor");
-
         SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(current);
+        bool multiplayerWorldChanged = capabilities.IsMultiplayer
+            && MultiplayerClientProbe.Observe(current, "main_thread_monitor");
         if (multiplayerWorldChanged && capabilities.CanSearch)
             InvalidateMultiplayerSearch(current);
 
