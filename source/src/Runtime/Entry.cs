@@ -57,6 +57,14 @@ public static class Entry
 
         if (Enabled)
         {
+            if (SolverSessionCapabilities.IsMultiplayerAdvisorOptedIn)
+            {
+                Version advisorVersion = Assembly.GetExecutingAssembly().GetName().Version
+                    ?? throw new InvalidOperationException("CombatSolver 程序集缺少版本号。");
+                Logger.Info(
+                    $"[CombatSolver/MultiplayerAdvisor] MP_ADVISOR_STARTUP_READY " +
+                    $"mod={advisorVersion.ToString(3)} patches=required");
+            }
             Logger.Info($"[CombatSolver/Test] POWER_AMOUNT_ENUM_COMPARISONS rewritten={PowerAmountComparisonPatch.RewrittenComparisons}");
             Version version = Assembly.GetExecutingAssembly().GetName().Version
                 ?? throw new InvalidOperationException("CombatSolver 程序集缺少版本号。");

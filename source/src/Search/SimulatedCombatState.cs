@@ -395,6 +395,10 @@ internal sealed partial class SimulatedCombatState
             .Take(standardCombatListenerCount)
             .Select(listener => rootModelClones.GetValueOrDefault(listener, listener))
             .Where(listener => listener is not null)
+            .Where(listener => listener is not RelicModel relic
+                || relic.Owner is not Player owner
+                || _rootCapturedPlayers.Contains(owner)
+                || MultiplayerRemotePublicRelicSupport.IsKnownCurrentTurnIrrelevant(relic))
             .Where(listener => listener is not CardModel
                 and not AfflictionModel
                 and not EnchantmentModel
@@ -2163,11 +2167,12 @@ internal sealed partial class SimulatedCombatState
     internal bool RootMultiplayerScalingIsDetached => _multiplayerScalingModel is null
         || (MultiplayerScalingRunStateField.GetValue(_multiplayerScalingModel) is null
             && MultiplayerScalingCombatStateField.GetValue(_multiplayerScalingModel) is null);
-    internal int RootRemotePublicRelicListenerCount
+    internal int RootUnsupportedRemotePublicRelicListenerCount
         => _rootHookListeners.Count(listener =>
             listener is RelicModel relic
             && relic.Owner is Player owner
-            && !_rootCapturedPlayers.Contains(owner));
+            && !_rootCapturedPlayers.Contains(owner)
+            && !MultiplayerRemotePublicRelicSupport.IsKnownCurrentTurnIrrelevant(relic));
 
     internal IReadOnlyList<RelicModel> RelicsOf(Player player)
         => _rootRelics.TryGetValue(player, out RelicModel[]? relics)

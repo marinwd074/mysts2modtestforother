@@ -62,7 +62,7 @@ internal static class MultiplayerRootCaptureContracts
         }
 
         if (simulator.State.CombatState is SimulatedCombatState withRemoteRelics
-            && withRemoteRelics.RootRemotePublicRelicListenerCount != 0)
+            && withRemoteRelics.RootUnsupportedRemotePublicRelicListenerCount != 0)
         {
             throw new PredictionUnsupportedException(
                 "Remote public relic hooks require a targeted multiplayer semantic capture contract.");

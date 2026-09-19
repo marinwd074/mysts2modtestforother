@@ -313,6 +313,13 @@ internal static partial class SolverController
             CombatRootSnapshot rootSnapshot;
             try
             {
+                if (capabilities.Kind == SolverSessionKind.MultiplayerAdvisor)
+                {
+                    Entry.Logger.Info(
+                        $"[CombatSolver/MultiplayerAdvisor] MP_ADVISOR_ROOT_CAPTURE_BEGIN " +
+                        $"generation={generation} world_version={search.WorldVersion} " +
+                        $"turn={search.StartTurnNumber}");
+                }
                 rootSnapshot = CombatRootSnapshot.Capture(state);
             }
             catch (Exception ex) when (capabilities.Kind == SolverSessionKind.MultiplayerAdvisor)
