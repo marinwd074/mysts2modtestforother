@@ -98,6 +98,12 @@
 - 只读 IL 检查确认游戏的 `FastMpJoin` 默认 `clientId=1000`，但支持命令行 `--clientId` 覆盖。已在 `source/tools/multiplayer-lab/start-client.ps1` / `start-instance.ps1` 增加可选 `-ClientId`，并将实际值写入启动结果与 ownership marker；提交 `0afcb42` 已推送。
 - B 已单独重启，启动日志 `D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp-client-observer-20260919\logs\20260919-200336-client-ffb78c11.log` 明确记录 `Command Line Args: --force-steam=off --clientId=1001`，且 CombatSolver 报告 `63 applied, 0 ignored, 0 failed`。当前尚未把手动重新加入计为证据，需用户在 B 窗口完成加入并继续同一 Host 测试。
 
+## 双 Client 对照实机运行（2026-09-19）
+
+- 随后 B 以 `clientId=1001` 成功加入仍在运行的 Host；Host 日志同时记录 peer `1000` 与 `1001`，B 收到 `ClientLobbyJoinResponseMessage Players: 3` 并绑定 `netId=1001`。三端随后进入同一场战斗，Host 日志记录了 `1000` 和 `1001` 的出牌、结束回合及敌方回合同步动作。
+- 当前 A Probe 为 `D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp-client-card-instance-20260919\diagnostics\CombatSolver-BugReports\logs\CombatSolver\multiplayer-probe-11596-247995a14b8e46878453c36a9faf40d6.jsonl`，B Probe 为 `D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp-client-observer-20260919\diagnostics\CombatSolver-BugReports\logs\CombatSolver\multiplayer-probe-23588-1758225456bb40c5864144bddd6c3e3c.jsonl`；只读对照当时读到 `138/152` 条记录、两段同一 Seed `N1HHX05Q5U`。
+- `compare-probe-public-state.ps1` 的中间结果为 `UNVERIFIED`：第一段两端有序敌人状态集合 `31` 项完全相同；第二段 A 为 `26` 条、B 为 `34` 条，B 多出 `2` 个状态，属于采样窗口不一致。该报告没有修改矩阵，`enemyStateSync` 仍不得记为 PASS；需在本轮继续采样或收尾后重新比较。
+
 ## 仍然阻塞 MP-0 PASS
 
 以下证据当前仍缺失，必须保持 `UNVERIFIED`：
