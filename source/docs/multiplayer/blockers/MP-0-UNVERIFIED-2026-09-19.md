@@ -66,6 +66,12 @@
 - 仍不能把牌序相关检查直接记为 PASS：旧 Probe token 只有牌名/升级/附着状态，记录 `57→58` 的同名 `SLIMED` 移动无法区分具体实例；因此当前矩阵没有被自动升级。源码已增加每场战斗内基于对象引用的只读 `instance` token，下一次新 DLL 实机需重新验证该边界。
 - 本快照来自新实例 ID 改动之前启动的 DLL；新 DLL 已完成 Release 编译、5/5 合同测试和目标版本门禁，但尚未进入游戏实测。下一次启动新实例前需先通知用户并由用户手动推进。
 
+## 新 DLL 隔离实例准备阻碍（2026-09-19）
+
+- 为验证卡牌实例 token，尝试准备新的 `HostVanilla` 与 `ClientCombatSolver` 隔离快照时，默认 `C:` 盘在 Client 快照复制到 `SlayTheSpire2.exe` 时报告“磁盘空间不足”。失败 staging 已由脚本移除，并报告 `source_game_preserved=true`；没有启动新游戏，也没有修改正式 Steam 安装。
+- 失败根目录是本轮创建的精确临时路径：`C:\Users\WUHU\AppData\Local\CombatSolver\multiplayer-lab\mp-host-card-instance-20260919`（约 242 字节）和 `C:\Users\WUHU\AppData\Local\CombatSolver\multiplayer-lab\mp-client-card-instance-20260919`（约 246 字节），目前只含 `instance.json`。按清理规则尝试删除这两个目录时被当前执行策略拒绝，因此它们仍可恢复，未再尝试替代删除方法。
+- 检查时 `C:` 可用约 `2.14 GB`，`D:` 可用约 `68.5 GB`。下一次新 DLL 实测需要在用户确认后改用显式 `-RuntimeRoot D:\...`，或由用户先释放 C: 空间；启动游戏前仍必须先通知用户。
+
 ## 仍然阻塞 MP-0 PASS
 
 以下证据当前仍缺失，必须保持 `UNVERIFIED`：
