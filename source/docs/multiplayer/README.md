@@ -8,7 +8,7 @@
 
 - **MP-0 Core：PASS**。连接兼容、本地私有状态只读采集、远端公开战斗状态、双 Client 对照和 Probe 只读契约均有证据。
 - **MP-0 Hardening：INCOMPLETE**。连接建立后的退出/重新加入闭环仍未捕获；因此完整矩阵仍保持 `UNVERIFIED`，不能把进程停止当作生命周期通过。
-- **MP-1 Advisor：READY FOR VALIDATION**。静态合同与 Release 构建已通过；默认仍是 Probe，只有显式设置 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才会授予当前回合、本地玩家、只显示路线的搜索能力，绝不会自动执行动作。首轮真实多人 Smoke 已完成连接与战斗入口验证，但搜索在远端公开遗物 hook 处按合同 fail closed，尚未形成可显示路线。
+- **MP-1 Advisor：READY FOR VALIDATION**。静态合同与 Release 构建已通过；默认仍是 Probe，只有显式设置 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才会授予当前回合、本地玩家、只显示路线的搜索能力，绝不会自动执行动作。首轮 Smoke 的 `BurningBlood` blocker 已完成最小公开语义收敛，fresh build/snapshot 已准备，真实复验仍待手动进入战斗，尚未形成 `SEARCH_COMPLETE` 证据。
 - **MP-2 Safe Execute：BLOCKED**。本地动作分类、原生动作证据和世界版本自变更保护尚未满足。
 
 ## 已实现
@@ -24,7 +24,7 @@
 已把后续 MP-1/MP-2 的受控路径接入源码，但仍由上述 Probe 门禁关闭：
 
 - Advisor/Safe Execute 允许时，`SearchPolicySnapshot.CurrentTurnOnly` 会截断首个本地回合层，关闭跨回合成长目标、远期 Novelty、路线缓存和 continuation reuse。
-- `SolverPerspective` 用 `Public/Private/Unknown` 知识语义与 authority 解耦；`CombatRootSnapshot` 在显式多人搜索能力开启时传入 local-player-only capture。`SimulatedCombatState` 与 `CombatPredictionState` 只物化根玩家的私有牌堆、遗物、药水、运行级牌组和 mod card audit，公共玩家名册仍可作为战斗上下文存在，访问未捕获队友私有 combat state、药水或金币会显式失败；远端遗物 hook 若没有针对性的公开语义 capture 也会 fail closed，不能静默丢失队友影响。
+- `SolverPerspective` 用 `Public/Private/Unknown` 知识语义与 authority 解耦；`CombatRootSnapshot` 在显式多人搜索能力开启时传入 local-player-only capture。`SimulatedCombatState` 与 `CombatPredictionState` 只物化根玩家的私有牌堆、遗物、药水、运行级牌组和 mod card audit，公共玩家名册仍可作为战斗上下文存在，访问未捕获队友私有 combat state、药水或金币会显式失败；远端遗物 hook 若没有针对性的公开语义 capture 也会 fail closed，不能静默丢失队友影响。基于 STS2 0.107.1 原生审计，`BurningBlood` 只覆盖 `AfterCombatVictory`，因此精确类型可从 CurrentTurnOnly root listener 表省略；未知远端遗物仍由 `RootUnsupportedRemotePublicRelicListenerCount` 拦截。
 - `MultiplayerSafeLocalActionClassifier` 只接受本地手牌的普通 `PlayCard`，目标仅限自身/敌人/无目标；药水、结束回合、选择、重复语义、多人专属卡、远端或未知目标形成连续前缀硬停止。
 - 搜索会记录启动时 `WorldVersion`，结果发布时若远端 fingerprint 已变化则丢弃旧结果；能力门禁打开后，Runtime 会取消旧搜索，等待原生动作队列稳定和 debounce，再只启动一次最新当前回合搜索。
 - Safe Execute 路径会在每个本地动作前复核 `WorldVersion`；远端世界变化会停止后续动作，不会自动 EndTurn 或跳过不安全动作继续执行。
@@ -70,9 +70,9 @@ $labRoot = 'D:\yingye\CombatSolver\.local\multiplayer-lab'
 $toolRoot = 'D:\yingye\CombatSolver\source\tools\multiplayer-lab'
 
 pwsh -NoLogo -NoProfile -File "$toolRoot\start-host.ps1" `
-  -InstanceRoot "$labRoot\runtime-mp-advisor-host-20260919" -ForceSteamOff
+  -InstanceRoot "$labRoot\runtime-mp-advisor-host-20260919-bbfix" -ForceSteamOff
 pwsh -NoLogo -NoProfile -File "$toolRoot\start-client.ps1" `
-  -InstanceRoot "$labRoot\runtime-mp-advisor-client-20260919" `
+  -InstanceRoot "$labRoot\runtime-mp-advisor-client-20260919-bbfix" `
   -ClientId 1000 -MultiplayerMode advisor -ForceSteamOff
 ```
 
@@ -84,6 +84,12 @@ pwsh -NoLogo -NoProfile -File "$toolRoot\start-client.ps1" `
 - Client 的 Advisor combat log 产生 `MP_ADVISOR_SEARCH_START` 16 次、`MP_ADVISOR_SEARCH_COMPLETE` 0 次；16 次均在 `root_capture` 因未建模的远端公开 `RELIC.BURNING_BLOOD` hook 触发 `MP_ADVISOR_FAIL_CLOSED`。未绕过该合同，也未发布路线。
 - 同一轮 Probe 134 条记录全部保持 `readOnly=true`、`actionsEnqueued=false`、`customNetworkPacketSent=false`；因此本轮没有 Solver 自动动作或自定义网络包证据。该结果是 Advisor 的真实阻塞证据，不应记为 Smoke PASS。
 - 下一步只针对该具体公开语义建立受限 capture（或选择没有该 hook 的明确场景）；不捕获队友全部遗物/牌组，不扩大到 Safe Execute。
+
+### MP-1 Advisor BurningBlood root fix（2026-09-19）
+
+- 原生反射与 IL 审计确认：`BurningBlood` 仅声明 `AfterCombatVictory(CombatRoom)`，逻辑是胜利后治疗持有者；它不参与当前回合战斗 hook、当前敌人状态或当前路线评分。
+- `afa6a64` 增加精确类型 allow-list：远端 `BurningBlood` 不进入 local-player-only root listener 表；未知远端遗物仍保留并由 root contract fail closed，远端 `RelicsOf(remote)` 仍不可用。
+- `MultiplayerRootCaptureChecks` 通过 4 项合同检查；Release DLL SHA-256 为 `507FAFDCAF72E3E56ED537BCB3A4B15BCC99A63277308F3714B910C2BBA85E11`。全新隔离快照为 `runtime-mp-advisor-host-20260919-bbfix` / `runtime-mp-advisor-client-20260919-bbfix`，尚未把手动 Smoke 结果记为 PASS。
 
 ## 下一阶段
 
