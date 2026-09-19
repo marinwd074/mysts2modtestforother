@@ -63,12 +63,19 @@
 - 重连后的 combat journal 记录 `SEARCH_START=4`、`ROOT_CAPTURE_BEGIN=4`、`SEARCH_COMPLETE=3`、`FAIL_CLOSED=0`、`SEARCH_FAILURE=0`；成功路线有 `ROUTE_REPLAY=3`、`ROUTE_ACTION=7`、`UI_STATE=ready=3`。1 个 generation 在 world invalidation/debounce 期间未发布，不把它计作成功。
 - Probe `130/130` 为 `readOnly=true`，动作入队和自定义网络包均为 `0`；本轮本地药水槽为空，因此只证明“无远端私有药水”的受控重连稳定性，不覆盖既有的非空远端私有药水阻碍。机器摘要见 [`evidence/mp1-advisor-stability-2026-09-20.json`](../evidence/mp1-advisor-stability-2026-09-20.json)。
 
+## MP-1 Advisor 非空远端药水复验（2026-09-20）
+
+- 新一轮按游戏规则完成 Host 退出、重建房间，Client 重新加入、Ready 并再次进入战斗；远端玩家实际使用了 `FIRE_POTION` 与 `COLORLESS_POTION`。
+- 远端私有药水仍存在时，Advisor 的 `generation=38..44` 均在 root capture 以 `InvalidOperationException: Player 1 is outside the captured potion inventory` fail-closed；记录为 `SEARCH_START=9`、`ROOT_CAPTURE_BEGIN=9`、`FAIL_CLOSED=7`、`SEARCH_SETUP_FAILURE=7`。这证明阻碍场景已被实际覆盖，且没有通过读取或猜测远端私有库存来绕过门禁。
+- 远端药水消耗后，`generation=45`/`46` 成功完成当前回合搜索；Probe `259/259` 仍只读，无动作入队或自定义网络包。机器摘要见 [`evidence/mp1-advisor-potion-2026-09-20.json`](../evidence/mp1-advisor-potion-2026-09-20.json)。
+- 正常退出时游戏写入 `progress.save` 等实例存档；退出收尾另出现 `RunManager.ToSave_Patch1` 经 `CombatBugReportExporter` 的 `NullReferenceException`，这是独立的诊断/存档导出问题，未改变前述 Advisor fail-closed 结论。
+
 ## Active blockers
 
 - 当前生命周期闭环已通过；后续不再把 Host-quit/create-room/Client-join 误判为缺失证据。
 - 直接 Host 逐时刻敌人公开状态导出仍未单独采集；当前 `enemyStateSync` 仅表示两个独立 CombatSolver Client 的公开状态集合对照。
-- MP-1 Advisor 的首轮真实 Smoke 已通过受控验收；本轮追加的重连后无药水场景也通过受控验证；固定工作量单人 post-MP1 spot 对照已完成且路线/工作量无回归，但更广稳定性仍待收口，未知远端遗物和远端私有药水的 fail-closed 门禁不可移除。对照证据见 `runtime-evidence/20260920-post-mp1-performance/`。
-- 重连后的远端私有药水库存仍不可访问，Advisor 必须保持 fail-closed；如需支持该语义，应另立受控 public-state 设计与合同，不在本次 MP-0 生命周期收口中静默放开。
+- MP-1 Advisor 的首轮真实 Smoke 已通过受控验收；无药水重连场景和非空远端药水 fail-closed 场景均已实机覆盖；固定工作量单人 post-MP1 spot 对照已完成且路线/工作量无回归，但更广稳定性仍待收口，未知远端遗物和远端私有药水的 fail-closed 门禁不可移除。对照证据见 `runtime-evidence/20260920-post-mp1-performance/`。
+- 重连后的远端私有药水库存仍不可访问，Advisor 必须保持 fail-closed；如需支持正向搜索语义，应另立受控 public-state 设计与合同，不在本次 MP-0 生命周期收口中静默放开。退出阶段的 `CombatBugReportExporter` `NullReferenceException` 另需独立 triage。
 - Local PlayCard、Local EndTurn 和连续快速动作属于后续 MP-2 Safe Execute，不在本阶段启用。
 
 ## 当前安全边界

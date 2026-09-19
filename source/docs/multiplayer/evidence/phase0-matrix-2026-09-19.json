@@ -102,6 +102,6 @@
     "The enemy-state PASS is limited to two independent CombatSolver Clients observing the same Host run; it does not enable custom packets or infer Host-side mod behavior.",
     "A direct Host-side per-timestep enemy export is still not separately captured; this is an evidence limitation, not a lifecycle failure.",
     "MultiplayerAdvisor is only an explicit process-scoped opt-in for the local current-turn, display-only path; MultiplayerSafeExecute remains blocked.",
-    "2026-09-20 controlled Advisor Stability round passed the no-remote-potion rejoin case (4 starts, 3 completes, 0 fail-closed, Probe 130/130 read-only); the non-empty remote-private-potion case remains unverified and overall MP-1 stability stays PARTIAL. See evidence/mp1-advisor-stability-2026-09-20.json."
+    "2026-09-20 controlled Advisor Stability round passed the no-remote-potion rejoin case (4 starts, 3 completes, 0 fail-closed, Probe 130/130 read-only). A later controlled round exercised remote FIRE_POTION/COLORLESS_POTION: 7 root-capture fail-closed results while the remote private inventory was non-empty, followed by 2 successful searches after consumption; overall MP-1 stability stays PARTIAL. See evidence/mp1-advisor-stability-2026-09-20.json and evidence/mp1-advisor-potion-2026-09-20.json."
   ]
 }

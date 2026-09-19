@@ -52,6 +52,10 @@ Lobby、wire 或战斗证据。
   非零 ID。`-FastMpMode host|join` 只在显式指定时传给当前
   二进制；`-MultiplayerMode probe|advisor` 只设置 CombatSolver 进程环境，
   默认不设置；它的结果仍是 UNVERIFIED，不构成连接证据。
+- 同一 `InstanceRoot` 的 `Roaming`/`Local` 目录会跨进程保留，后续可直接复用
+  已准备的实例而不重新复制游戏快照；进程真正重启时仍会重新加载 Mod DLL，
+  未写入存档的当前战斗或房间状态不保证恢复。只有更换构建产物时才需要重新
+  `prepare-instances.ps1`，同一产物的启动/停止不应删除实例根目录。
 - `stop-owned-instances.ps1` 只接受显式 instance root，并同时校验 marker、
   PID、进程出生时间和 executable path；没有 ownership 证据就停止。
 - `collect-results.ps1` 只复制指定实例的日志/Probe JSONL，并生成

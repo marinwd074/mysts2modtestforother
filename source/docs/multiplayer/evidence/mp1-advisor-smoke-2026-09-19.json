@@ -124,7 +124,13 @@
       "status": "PASS_CONTROLLED_REJOIN_NO_POTION",
       "overallMp1Stability": "PARTIAL",
       "evidence": "evidence/mp1-advisor-stability-2026-09-20.json",
-      "note": "The required Host-recreate/Client-rejoin path produced successful current-turn Advisor routes with no live actions; the non-empty remote-private-potion case remains unexercised."
+      "note": "The required Host-recreate/Client-rejoin path produced successful current-turn Advisor routes with no live actions; a later round exercises the non-empty remote-private-potion fail-closed boundary."
+    },
+    "advisorPotionRound20260920": {
+      "status": "PASS_EXPECTED_FAIL_CLOSED_REMOTE_POTION",
+      "overallMp1Stability": "PARTIAL",
+      "evidence": "evidence/mp1-advisor-potion-2026-09-20.json",
+      "note": "Remote FIRE_POTION and COLORLESS_POTION were observed. Advisor failed closed while the remote private inventory was non-empty, then completed after those potions were consumed; no positive route with unavailable private state is claimed."
     }
   },
   "boundaries": {

@@ -128,6 +128,14 @@ pwsh -NoLogo -NoProfile -File "$toolRoot\start-client.ps1" `
 - 重连后的 Advisor 遇到远端私有药水库存未捕获时记录 `MP_ADVISOR_FAIL_CLOSED=7`、`SEARCH_COMPLETE=0`，这是当前 Unknown 私有语义的预期安全边界，不计作 Advisor 搜索通过，也不升级到 Safe Execute。
 - 机器摘要中的生命周期、Probe 后续和 fail-closed 细节见 [`evidence/mp1-advisor-smoke-2026-09-19.json`](evidence/mp1-advisor-smoke-2026-09-19.json)。
 
+### MP-1 Advisor 非空远端药水实机复验（2026-09-20）
+
+- 新一轮使用当前 Release DLL（commit `54e3d91`，SHA-256 `864EC2A8276845B0C412106259D75AE2D30333826D415BE03A7371FD3A3B474F`）完成 Host 退出重建房间、Client 重新加入、Ready 和再次进入战斗。
+- 远端玩家实际使用了 `FIRE_POTION` 与 `COLORLESS_POTION`。药水仍在远端私有库存时，Advisor 记录 `SEARCH_START=9`、`ROOT_CAPTURE_BEGIN=9`、`FAIL_CLOSED=7`、`SEARCH_SETUP_FAILURE=7`；失败原因为 `Player 1 is outside the captured potion inventory`，符合 Unknown 私有语义的 fail-closed 合同。
+- 远端药水被消耗后，generation `45`/`46` 各完成一次当前回合搜索；Probe 共 `259` 条，全部 `readOnly=true`，`actionsEnqueued=0`、`customNetworkPacketSent=0`。总体稳定性仍为 `PARTIAL`，不把“非空远端药水”升级为正向搜索能力。
+- 正常退出时游戏写入 `progress.save`、`prefs.save`、`settings.save` 和 `profile.save`；同一实例根目录的 `Roaming`/`Local` 数据可复用，进程重启仍会重新加载 Mod，未保存的当前战斗状态不承诺跨进程恢复。退出阶段另有独立的 `RunManager.ToSave_Patch1` `NullReferenceException`，已与 Advisor 计算失败分开记录。
+- 机器摘要见 [`evidence/mp1-advisor-potion-2026-09-20.json`](evidence/mp1-advisor-potion-2026-09-20.json)。
+
 ## 下一阶段
 
-MP-0 生命周期证据已收口；固定工作量单人对照已完成受限 spot 验证，但更广 Advisor 稳定性仍为 `PARTIAL`：重连后遇到未捕获远端私有药水时继续 fail-closed。Advisor 继续维持显式 opt-in，只搜索本地玩家当前回合、只显示路线、不自动执行；在更广稳定性收口前，不评估 `SafeLocalAction` 分类器和 MP-2 Safe Execute。
+MP-0 生命周期证据已收口；固定工作量单人对照已完成受限 spot 验证，非空远端私有药水场景已实机复验并继续按合同 fail-closed，更广 Advisor 稳定性仍为 `PARTIAL`。Advisor 继续维持显式 opt-in，只搜索本地玩家当前回合、只显示路线、不自动执行；在更广稳定性收口前，不评估 `SafeLocalAction` 分类器和 MP-2 Safe Execute。
