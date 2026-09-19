@@ -61,6 +61,23 @@ MP-0B 在 MP-0A 成立后，继续验证：
 
 当前阻碍和未验证项集中记录在 [`blockers/MP-0-UNVERIFIED-2026-09-19.md`](blockers/MP-0-UNVERIFIED-2026-09-19.md)。
 
+## MP-1 Advisor 手动验证入口（当前）
+
+以下 D: 快照已装入当前 `CombatSolver.dll`；命令只启动可见隔离实例，不自动创建 Lobby、选择角色或点击 UI。启动后由用户手动完成 Join、Ready、进入普通战斗，并观察建议模式：
+
+```powershell
+$labRoot = 'D:\yingye\CombatSolver\.local\multiplayer-lab'
+$toolRoot = 'D:\yingye\CombatSolver\source\tools\multiplayer-lab'
+
+pwsh -NoLogo -NoProfile -File "$toolRoot\start-host.ps1" `
+  -InstanceRoot "$labRoot\runtime-mp-advisor-host-20260919" -ForceSteamOff
+pwsh -NoLogo -NoProfile -File "$toolRoot\start-client.ps1" `
+  -InstanceRoot "$labRoot\runtime-mp-advisor-client-20260919" `
+  -ClientId 1000 -MultiplayerMode advisor -ForceSteamOff
+```
+
+验证时应看到 `MP_ADVISOR_SEARCH_START` / `MP_ADVISOR_SEARCH_COMPLETE`；队友动作应产生 `MP_ADVISOR_WORLD_CHANGED` 并使旧结果出现 `MP_ADVISOR_SEARCH_STALE`。Advisor 只能显示当前本地回合路线，不能自动出牌、结束回合、用药、驱动选择或发送自定义网络包。收集前由用户手动完成一次正常退出/重新加入；停止进程本身不计作 lifecycle 证据。运行日志和 Probe 仍留在 `.local/`，不直接提交。
+
 ## 下一阶段
 
 继续把退出/重新加入作为 MP-0 Hardening 单独补证；Advisor 维持显式 opt-in，只搜索本地玩家当前回合、只显示路线、不自动执行。只有 Advisor 的固定工作量性能对照、root contract 和实机稳定性完成后，才评估 `SafeLocalAction` 分类器和 MP-2 Safe Execute。
