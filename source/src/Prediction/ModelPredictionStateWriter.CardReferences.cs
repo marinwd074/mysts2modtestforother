@@ -18,10 +18,14 @@ internal partial struct ModelPredictionStateWriter
         }
     }
 
-    internal void BindCardReferences(ICombatState combat, CombatPredictionSimulator? simulator)
+    internal void BindCardReferences(
+        ICombatState combat,
+        CombatPredictionSimulator? simulator,
+        IReadOnlyList<Player>? capturedPlayers = null)
     {
         _referenceCombat = combat;
         _referenceSimulator = simulator;
+        _referencePlayers = capturedPlayers;
         _cardPositions = null;
     }
 
@@ -91,10 +95,12 @@ internal partial struct ModelPredictionStateWriter
 
     private void BuildCardPositions()
     {
-        // One lazy index per complete observation, shared by all registered model writers.
+        // One lazy index per requested observation, shared by all registered model writers.
+        // A multiplayer local-player root deliberately supplies only its captured player
+        // set; teammate private piles must never be needed to describe local state.
         // No live card fields are read in predicted observation, including after preview COW.
         Dictionary<object, CardPosition> positions = new(ReferenceEqualityComparer.Instance);
-        foreach (Player player in _referenceCombat!.Players)
+        foreach (Player player in _referencePlayers ?? _referenceCombat!.Players)
         {
             if (_referenceSimulator is { } simulator)
             {

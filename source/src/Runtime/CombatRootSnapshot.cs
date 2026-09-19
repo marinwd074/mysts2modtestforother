@@ -151,7 +151,7 @@ internal sealed class CombatRootSnapshot
         // Listener enumeration and third-party owner discovery are part of root capture.
         // Take the baseline first so any semantic mutation in those callbacks is rejected by
         // the existing after-capture stamp without paying for another full serialization.
-        ContinuationStamp continuationBefore = ContinuationStamp.CaptureLive(state);
+        ContinuationStamp continuationBefore = ContinuationStamp.CaptureLive(state, rootCapturedPlayers);
         LiveCombatStamp liveBefore = LiveCombatStamp.FromContinuation(continuationBefore);
 
         AbstractModel[] liveCombatHookListeners = state.IterateHookListeners().ToArray();
@@ -203,7 +203,7 @@ internal sealed class CombatRootSnapshot
                 continuationBefore.DescribeFirstDifference(projected));
         }
 
-        ContinuationStamp continuationAfter = ContinuationStamp.CaptureLive(state);
+        ContinuationStamp continuationAfter = ContinuationStamp.CaptureLive(state, rootCapturedPlayers);
         LiveCombatStamp liveAfter = LiveCombatStamp.FromContinuation(continuationAfter);
         if (!string.Equals(liveBefore.StateText, liveAfter.StateText, StringComparison.Ordinal)
             || !string.Equals(
