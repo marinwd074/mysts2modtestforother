@@ -70,6 +70,7 @@ internal static partial class SolverController
     private static CancellationTokenSource _combatDeferredOperationCancellation = new();
     private static CancellationTokenSource? _multiplayerDebounceCts;
     private static int _multiplayerDebounceId;
+    private static bool _multiplayerInertSessionObserved;
 
     public static bool IsSearching
         => _search != null
@@ -1120,6 +1121,7 @@ internal static partial class SolverController
         Task deploymentReferenceRelease = DrainDeploymentReferenceReleases();
         _combat = new SolverCombatSession();
         MultiplayerClientProbe.Reset();
+        _multiplayerInertSessionObserved = false;
         LastFullAutoStoppedForWorseRecalculationForTesting = false;
         LastFullAutoStoppedAtLiveRiskForTesting = false;
         LastSearchFailureForTesting = null;
@@ -1236,8 +1238,25 @@ internal static partial class SolverController
         SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(current);
         bool multiplayerWorldChanged = capabilities.IsMultiplayer
             && MultiplayerClientProbe.Observe(current, "main_thread_monitor");
-        if (multiplayerWorldChanged && capabilities.CanSearch)
-            InvalidateMultiplayerSearch(current);
+        bool enteredMultiplayerSession = capabilities.IsMultiplayer && !_multiplayerInertSessionObserved;
+        if (capabilities.IsMultiplayer)
+        {
+            _multiplayerInertSessionObserved = true;
+            if (enteredMultiplayerSession || multiplayerWorldChanged)
+            {
+                if (enteredMultiplayerSession)
+                {
+                    Entry.Logger.Info(
+                        "[CombatSolver/MultiplayerProbe] CAPABILITY_BOUNDARY " +
+                        "entered=true search_cancel=true deployment_cancel=true turn_setup_reset=true");
+                }
+                InvalidateMultiplayerSearch(current);
+            }
+        }
+        else
+        {
+            _multiplayerInertSessionObserved = false;
+        }
 
         if (!capabilities.CanSearch)
             return;
@@ -1276,6 +1295,12 @@ internal static partial class SolverController
         CancelMultiplayerDebouncedSearch();
         CancelDeferredSearch();
         CancelSearch();
+        CancelDeployment();
+        Task turnSetupRelease = PlayerTurnSetupCoordinator.Reset("multiplayer_capability");
+        PendingCombatDeferredOperations.RemoveAll(static task => task.IsCompleted);
+        if (!turnSetupRelease.IsCompleted)
+            PendingCombatDeferredOperations.Add(turnSetupRelease);
+        _combat.FullAutoEnabled = false;
         _combat.LatestResult = null;
         _combat.LatestStamp = null;
         _combat.ContinuationSource = null;
