@@ -6,7 +6,7 @@
 
 - MP-0 Core：`PASS`；MP-0 Hardening：`INCOMPLETE`（退出/重新加入生命周期证据缺口），完整 MP-0 矩阵保持 `UNVERIFIED`。
 - MP-1 Advisor：`SMOKE_PASS`（受控范围；静态合同/Release 已通过，fresh `-bbfix` 真实复验 `SEARCH_COMPLETE=5`、`SEARCH_STALE=1`、`FAIL_CLOSED=0`、`SEARCH_FAILURE=0`，并有原生完成通知与路线回放），默认仍是 Probe，只有 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 显式 opt-in；MP-2 Safe Execute：`BLOCKED`。
-- Advisor root/phase 合同：`MultiplayerRootCaptureChecks` 14 项通过；精确 `BurningBlood` 可省略，未知远端遗物继续 fail closed，远端私有遗物清单仍不可访问，EndTurn/side-turn/block scaling 边界均有窄合同。
+- Advisor root/phase 合同：`MultiplayerRootCaptureChecks` 15 项通过；精确 `BurningBlood` 可省略，未知远端遗物继续 fail closed，远端私有遗物清单仍不可访问，EndTurn/side-turn/block scaling 边界及单人 EndTurn 保持均有窄合同。
 - Advisor 复验修正：side-turn relic 只读取已捕获参与者；原生多人 block scaling 仅在 enemy/powered-block 路径计算；EndTurn replay 只处理 `RootCapturedPlayers`，未知远端 turn 仍 fail closed。
 - Advisor Smoke 只读合同：Probe `51/51` 条为 `readOnly=true`，`actionsEnqueued=0`、`customNetworkPacketSent=0`；路线动作仅为模拟回放，未启用 Safe Execute、自动 EndTurn、药水或选择。
 - Advisor Smoke 机器可读摘要：[mp1-advisor-smoke-2026-09-19.json](multiplayer/evidence/mp1-advisor-smoke-2026-09-19.json)；完整运行日志仍保留在本地 `.local/`。
