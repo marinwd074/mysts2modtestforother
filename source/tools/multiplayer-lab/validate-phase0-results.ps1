@@ -44,6 +44,15 @@ $requiredChecks = if ($Phase -eq 'MP-0A') {
     $connectionChecks + $readOnlyChecks
 }
 $probeRequired = $Phase -in @('MP-0B', 'MP-0', 'All')
+$requiredProfileResults = if ($Phase -in @('MP-0A', 'MP-0', 'All')) {
+    @(
+        'HostVanilla + ClientVanilla',
+        'HostVanilla + ClientRitsuOnly',
+        'HostVanilla + ClientCombatSolver'
+    )
+} else {
+    @()
+}
 
 function Get-MapValue {
     param(
@@ -125,7 +134,59 @@ foreach ($checkName in $requiredChecks) {
             Status = $status
             Evidence = if ([string]::IsNullOrWhiteSpace($evidence)) { $null } else { $evidence }
             Detail = $detail
-        })
+    })
+}
+
+if ($requiredProfileResults.Count -gt 0) {
+    $profileResults = Get-MapValue $matrix 'profileResults'
+    $profileListValid = $null -ne $profileResults -and $profileResults -is [System.Collections.IEnumerable] -and $profileResults -isnot [System.Collections.IDictionary] -and $profileResults -isnot [string]
+    $profileEntries = if ($profileListValid) {
+        @($profileResults)
+    } else {
+        @()
+    }
+
+    foreach ($profileName in $requiredProfileResults) {
+        $profileEntry = $null
+        foreach ($candidate in $profileEntries) {
+            $candidateMatches = $candidate -is [System.Collections.IDictionary] -and [string](Get-MapValue $candidate 'name') -eq $profileName
+            if ($candidateMatches) {
+                $profileEntry = $candidate
+                break
+            }
+        }
+
+        if ($null -eq $profileEntry) {
+            $matrixResults.Add([pscustomobject]@{
+                    Name = "profile:$profileName"
+                    Status = 'UNVERIFIED'
+                    Evidence = $null
+                    Detail = 'missing profile result'
+                })
+            continue
+        }
+
+        $status = [string](Get-MapValue $profileEntry 'status')
+        $evidence = [string](Get-MapValue $profileEntry 'evidence')
+        if ($status -notin @('PASS', 'FAIL', 'UNVERIFIED')) {
+            $status = 'UNVERIFIED'
+            $detail = 'status must be PASS, FAIL, or UNVERIFIED'
+        } elseif ($status -eq 'PASS' -and [string]::IsNullOrWhiteSpace($evidence)) {
+            $status = 'UNVERIFIED'
+            $detail = 'PASS requires an evidence reference'
+        } elseif ([string]::IsNullOrWhiteSpace($evidence)) {
+            $detail = 'no evidence reference'
+        } else {
+            $detail = $null
+        }
+
+        $matrixResults.Add([pscustomobject]@{
+                Name = "profile:$profileName"
+                Status = $status
+                Evidence = if ([string]::IsNullOrWhiteSpace($evidence)) { $null } else { $evidence }
+                Detail = $detail
+            })
+    }
 }
 
 $probeFailures = [System.Collections.Generic.List[string]]::new()

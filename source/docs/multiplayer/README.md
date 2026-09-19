@@ -48,7 +48,7 @@ MP-0B 在 MP-0A 成立后，继续验证：
 项，移到 MP-2 Safe Execute。FastMP 命令行启动本身也不能代替 Lobby 或 wire
 证据。
 
-本仓库已取得一份 C 组（Vanilla Host + CombatSolver Client）的非空、只读 Probe 证据，但尚未形成完整 MP-0A/MP-0B 矩阵；因此本阶段仍不能把 MultiplayerProbe 改成 Advisor，也不能解除多人硬门禁。
+本仓库已取得一份 C 组（Vanilla Host + CombatSolver Client）的非空、只读 Probe 证据，但尚未形成包含 A/B/C 三组 profile 结果的完整 MP-0A/MP-0B 矩阵；校验器会拒绝缺少 profile 结果的矩阵，因此本阶段仍不能把 MultiplayerProbe 改成 Advisor，也不能解除多人硬门禁。
 
 当前阻碍和未验证项集中记录在 [`blockers/MP-0-UNVERIFIED-2026-09-19.md`](blockers/MP-0-UNVERIFIED-2026-09-19.md)。
 

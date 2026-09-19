@@ -116,14 +116,33 @@ foreach ($check in $allChecks) {
         evidence = $null
     }
 }
+$templateProfiles = @(
+    [ordered]@{
+        name = 'HostVanilla + ClientVanilla'
+        status = 'UNVERIFIED'
+        evidence = $null
+    },
+    [ordered]@{
+        name = 'HostVanilla + ClientRitsuOnly'
+        status = 'UNVERIFIED'
+        evidence = $null
+    },
+    [ordered]@{
+        name = 'HostVanilla + ClientCombatSolver'
+        status = 'UNVERIFIED'
+        evidence = $null
+    }
+)
 $matrixTemplate = [ordered]@{
     schemaVersion = 1
     phase = 'MP-0'
     status = 'UNVERIFIED'
     checks = $templateChecks
-    profiles = @('HostVanilla + ClientVanilla', 'HostVanilla + ClientRitsuOnly', 'HostVanilla + ClientCombatSolver')
+    profiles = @($templateProfiles | ForEach-Object { $_.name })
+    profileResults = $templateProfiles
     notes = @(
         'This is a template only; collection never promotes UNVERIFIED to PASS.',
+        'MP-0A/MP-0/All validation requires explicit PASS/FAIL/UNVERIFIED results for all three profiles.',
         'localPlayCardSync, localEndTurnSync, and fastActionStress belong to MP-2 Safe Execute.',
         'FastMP command-line startup is not lobby or wire evidence.'
     )
