@@ -41,16 +41,36 @@ internal static class MultiplayerWorldTracker
         return true;
     }
 
-    internal static bool TryTakeStable(out long worldVersion)
+    /// <summary>
+    /// Reads the current stable dirty version without consuming it.
+    /// Callers can inspect their own conditions after this returns true, then
+    /// use <see cref="TryConfirmStable"/> with the returned version.
+    /// </summary>
+    internal static bool TryReadStable(out long worldVersion)
     {
-        if (!_dirty || Environment.TickCount64 < _stableAfter)
-        {
-            worldVersion = _worldVersion;
+        worldVersion = _worldVersion;
+        return _dirty && Environment.TickCount64 >= _stableAfter;
+    }
+
+    /// <summary>
+    /// Consumes a stable dirty version only when it is still the current world
+    /// version. A newer observation leaves the newer version dirty.
+    /// </summary>
+    internal static bool TryConfirmStable(long worldVersion)
+    {
+        if (!TryReadStable(out long currentWorldVersion)
+            || currentWorldVersion != worldVersion)
             return false;
-        }
 
         _dirty = false;
-        worldVersion = _worldVersion;
         return true;
+    }
+
+    internal static bool TryTakeStable(out long worldVersion)
+    {
+        if (!TryReadStable(out worldVersion))
+            return false;
+
+        return TryConfirmStable(worldVersion);
     }
 }
