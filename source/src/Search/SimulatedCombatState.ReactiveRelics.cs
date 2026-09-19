@@ -220,7 +220,7 @@ internal sealed partial class SimulatedCombatState
         IReadOnlyList<Creature> participants,
         int etherealExhaustCount)
     {
-        foreach (RelicModel relic in Players
+        foreach (RelicModel relic in CapturedSideTurnPlayers(participants)
                      .SelectMany(RelicsOf)
                      .Where(relic => !relic.IsMelted && participants.Contains(relic.Owner.Creature)))
         {

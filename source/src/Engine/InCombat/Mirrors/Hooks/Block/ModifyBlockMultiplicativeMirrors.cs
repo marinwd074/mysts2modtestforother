@@ -75,10 +75,28 @@ internal static class ModifyBlockMultiplicativeMirrors
         MultiplayerScalingModel _,
         ModifyBlockMultiplicativeMirrorContext context)
     {
-        int playerCount = context.State.CombatState.Players.Count;
-        if (playerCount != 1)
-            throw new NotSupportedException($"CombatSolver only supports single-player combat, found {playerCount} players.");
-        return 1m;
+        // Match the native hook's early exits before consulting multiplayer
+        // scaling. A local-player-only Advisor root may still replay a player
+        // block card; that path never needs the enemy-only multiplayer factor.
+        if (!context.Target.IsPrimaryEnemy
+            && !context.Target.IsSecondaryEnemy
+            || !ValuePropExtensions.IsPoweredCardOrMonsterMoveBlock(context.Props))
+        {
+            return 1m;
+        }
+
+        SimulatedCombatState combat = context.State.CombatState as SimulatedCombatState
+            ?? throw new InvalidOperationException("Multiplayer scaling prediction requires SimulatedCombatState.");
+        int playerCount = combat.Players.Count;
+        if (playerCount == 1)
+            return 1m;
+
+        // GetMultiplayerScaling is a pure native table keyed by encounter and
+        // act. Reusing it preserves the game's enemy-block semantics without
+        // retaining the live RunState/CombatState fields on the detached model.
+        return playerCount * MultiplayerScalingModel.GetMultiplayerScaling(
+            combat.Encounter,
+            combat.CurrentActIndex);
     }
 
     private static decimal HandlePaelsLegion(
