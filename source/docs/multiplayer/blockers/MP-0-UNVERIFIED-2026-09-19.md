@@ -6,7 +6,7 @@
 
 - **MP-0 Core：PASS**：A/B/C 连接矩阵、本地私有状态只读采集、远端公开战斗状态、双 Client 公共敌人状态对照和 Probe 只读契约均有证据。
 - **MP-0 Hardening：INCOMPLETE**：连接建立后的退出/重新加入闭环尚未捕获；第三场战斗在最终归档时尚未结束，进程停止不计作生命周期证据。
-- **MP-1 Advisor：READY FOR VALIDATION**：静态合同与 Release 构建已通过；默认仍是 Probe，只有 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才进入当前回合的只读路线显示，不执行动作。`BurningBlood`、side-turn relic 和多人 block-scaling 边界均已完成受限修正，fresh client 已重启，真实复验尚未形成 `SEARCH_COMPLETE`；远端私有字段保持 `Unknown`。
+- **MP-1 Advisor：SMOKE PASS（受控范围）**：静态合同与 Release 构建已通过；默认仍是 Probe，只有 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才进入当前回合的只读路线显示，不执行动作。fresh `-bbfix` client 已形成 `SEARCH_COMPLETE=5`、原生完成通知和路线回放证据，Probe 保持只读；远端私有字段保持 `Unknown`，未知远端遗物仍 fail closed。
 - **MP-2 Safe Execute：BLOCKED**：本地动作分类、世界版本自变更和原生动作证据仍未满足。
 
 ## AB 组连接实机结果（2026-09-19）
@@ -42,14 +42,20 @@
 
 - BurningBlood 修复后的首轮实机已进入 combat，但 generation 6 报告 `RelicsOf(remote)` 被 side-turn relic phase 误访问，generation 7 报告多人 block mirror 对本地 `DEFEND` 过早抛出 single-player guard；两者均保持 fail-closed，未发布路线。
 - `ffad49b` 只让 side-turn relic 遍历参与且已捕获玩家；原生 block mirror 复刻 enemy/powered-block early-exit，并复用原生 scaling table。未知远端 turn 仍抛出 `PredictionUnsupportedException`，没有读取远端私有遗物。
-- 新 DLL SHA-256 为 `70FA663D661056317093EE9F6FAFE7FA37699FEB3681B16FF5B9FD420A6D384C`；`-bbfix` client 已替换并重启，下一轮真实 Smoke 仍待手动复验。
+- 新 DLL SHA-256 为 `70FA663D661056317093EE9F6FAFE7FA37699FEB3681B16FF5B9FD420A6D384C`；`-bbfix` client 已替换并重启，下一轮真实 Smoke 随后由 `37592ca` 继续修正并完成。
 - `37592ca` 进一步把 EndTurn replay 的玩家阶段限制为 `RootCapturedPlayers`，修正 local-player-only root 对远端私有 combat state 的 materialize；当前 runtime DLL SHA-256 为 `281A286A109F4A2EC428290E0CAEF9B05A034DE837C6793533590EF695BC4A75`，client 已于 23:17 重启。
+
+## MP-1 Advisor 真实 Smoke PASS（2026-09-19）
+
+- 当前 combat log：`SEARCH_START=10`、`ROOT_CAPTURE_BEGIN=10`、`SEARCH_COMPLETE=5`、`SEARCH_STALE=1`、`FAIL_CLOSED=0`、`SEARCH_FAILURE=0`；完成通知为 `kind=Succeeded native=shown`，并有 `ROUTE_REPLAY` / `ROUTE_ACTION` / `UI_STATE=ready` 记录。
+- 当前 Probe 共 `51` 条，`readOnly=true` 为 `51/51`，`actionsEnqueued=true` 为 `0`，`customNetworkPacketSent=true` 为 `0`。路线动作是模拟回放记录，不是 live action enqueue。
+- 证据文件：`.local/multiplayer-lab/runtime-mp-advisor-client-20260919-bbfix/diagnostics/CombatSolver-BugReports/logs/CombatSolver/40228-d303f91cf2004ad5a218de87817320ee/`；运行中的 Host PID `38548` 与 Client PID `40228` 均正常响应。
 
 ## Active blockers
 
 - 补齐连接建立后的退出/重新加入，并在重新加入后再次取得 Probe 或 Lobby 顺序证据；在此之前不要把完整矩阵升级为 PASS。
 - 直接 Host 逐时刻敌人公开状态导出仍未单独采集；当前 `enemyStateSync` 仅表示两个独立 CombatSolver Client 的公开状态集合对照。
-- MP-1 Advisor 需在已部署 `ffad49b` 的 fresh `-bbfix` 快照上取得真实 `SEARCH_COMPLETE`/路线显示证据；在此之前不得宣称 Advisor Smoke 通过。未知远端遗物的 fail-closed 门禁不可移除。
+- MP-1 Advisor 的首轮真实 Smoke 已通过受控验收；后续只补固定工作量性能/更广稳定性证据，未知远端遗物的 fail-closed 门禁不可移除。
 - Local PlayCard、Local EndTurn 和连续快速动作属于后续 MP-2 Safe Execute，不在本阶段启用。
 
 ## 当前安全边界

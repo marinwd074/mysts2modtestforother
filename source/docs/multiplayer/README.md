@@ -1,6 +1,6 @@
 # Multiplayer 适配阶段
 
-当前阶段：**MP-0 Core 已通过；MP-0 Hardening（生命周期）未完成；MP-1 Advisor 已具备受控验证入口**。
+当前阶段：**MP-0 Core 已通过；MP-0 Hardening（生命周期）未完成；MP-1 Advisor 受控 Smoke 已通过，后续性能/稳定性验证未完成**。
 
 本阶段依据 `Multiplayer Apply` 中的精简功能方案和修正版执行计划实现，目标是先用隔离的双实例完成真实 Host/Client 证据，不改变多人会话语义。
 
@@ -8,7 +8,7 @@
 
 - **MP-0 Core：PASS**。连接兼容、本地私有状态只读采集、远端公开战斗状态、双 Client 对照和 Probe 只读契约均有证据。
 - **MP-0 Hardening：INCOMPLETE**。连接建立后的退出/重新加入闭环仍未捕获；因此完整矩阵仍保持 `UNVERIFIED`，不能把进程停止当作生命周期通过。
-- **MP-1 Advisor：READY FOR VALIDATION**。静态合同与 Release 构建已通过；默认仍是 Probe，只有显式设置 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才会授予当前回合、本地玩家、只显示路线的搜索能力，绝不会自动执行动作。`BurningBlood` 与首轮实机暴露的 side-turn relic / block-scaling 边界均已收敛，fresh client 已重启，真实复验仍待手动进入战斗，尚未形成 `SEARCH_COMPLETE` 证据。
+- **MP-1 Advisor：SMOKE PASS（受控范围）**。静态合同与 Release 构建已通过；默认仍是 Probe，只有显式设置 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才会授予当前回合、本地玩家、只显示路线的搜索能力，绝不会自动执行动作。`BurningBlood`、side-turn relic、多人 block-scaling 和 EndTurn replay 边界均已收敛；fresh `-bbfix` client 的真实复验记录 `SEARCH_COMPLETE=5`、`SEARCH_FAILURE=0`、`FAIL_CLOSED=0`，并有原生完成通知与路线回放证据。Probe 仍保持只读，MP-2 Safe Execute 不在本次通过范围内。
 - **MP-2 Safe Execute：BLOCKED**。本地动作分类、原生动作证据和世界版本自变更保护尚未满足。
 
 ## 已实现
@@ -96,7 +96,14 @@ pwsh -NoLogo -NoProfile -File "$toolRoot\start-client.ps1" `
 - `BurningBlood` root 修复后的首次实机复验已进入 combat；随后 generation 6 暴露未捕获远端 `RelicsOf(remote)` 被 side-turn relic phase 误枚举，generation 7 暴露 `ModifyBlockMultiplicative` 对本地 `DEFEND` 也提前拒绝双玩家。
 - `ffad49b` 让 side-turn relic 只枚举参与且已捕获的玩家，远端 turn 仍显式 fail-closed；多人 block mirror 先复刻原生 enemy/powered-block early-exit，再调用原生 scaling table，不保留 live RunState/CombatState。
 - 新 Release/runtime DLL SHA-256 为 `70FA663D661056317093EE9F6FAFE7FA37699FEB3681B16FF5B9FD420A6D384C`；`-bbfix` client 快照已替换并于 23:06 重启，下一轮真实 Smoke 仍待手动完成 Lobby/战斗。
-- `37592ca` 将 EndTurn replay 的玩家阶段限制为 `RootCapturedPlayers`，避免 local-player-only root materialize 远端私有 combat state；当前 runtime DLL SHA-256 为 `281A286A109F4A2EC428290E0CAEF9B05A034DE837C6793533590EF695BC4A75`，client 已于 23:17 重启，真实 Smoke 仍待手动复验。
+- `37592ca` 将 EndTurn replay 的玩家阶段限制为 `RootCapturedPlayers`，避免 local-player-only root materialize 远端私有 combat state；当前 runtime DLL SHA-256 为 `281A286A109F4A2EC428290E0CAEF9B05A034DE837C6793533590EF695BC4A75`，client 已于 23:17 重启，随后 fresh Smoke 结果见下。
+
+### MP-1 Advisor 真实 Smoke PASS（2026-09-19）
+
+- fresh `-bbfix` runtime（DLL SHA-256 `281A286A109F4A2EC428290E0CAEF9B05A034DE837C6793533590EF695BC4A75`）的当前 combat log 记录 `MP_ADVISOR_SEARCH_START=10`、`MP_ADVISOR_ROOT_CAPTURE_BEGIN=10`、`MP_ADVISOR_SEARCH_COMPLETE=5`、`MP_ADVISOR_FAIL_CLOSED=0`、`SEARCH_FAILURE=0`。
+- 原生完成通知记录 `SEARCH_COMPLETION_NOTIFICATION kind=Succeeded native=shown`；同时有 `ROUTE_REPLAY=6`、`ROUTE_ACTION=17`、`UI_STATE state=ready`（5 次）的路线发布/回放记录。`MP_ADVISOR_SEARCH_STALE=1` 后出现后续 generation 完成，且记录了 world-version 变化，满足本轮 stale/re-search 观察目标。
+- 同一 client 的 Probe `51/51` 条记录为 `readOnly=true`，`actionsEnqueued=true` 为 `0`，`customNetworkPacketSent=true` 为 `0`；本轮没有 Safe Execute、自动出牌、自动 EndTurn、药水或选择入口。路线中的 PlayCard/EndTurn 仅为模拟回放证据，不是 live action enqueue。
+- 证据保留在 `.local/multiplayer-lab/runtime-mp-advisor-client-20260919-bbfix/diagnostics/`；退出/重新加入生命周期仍属于 MP-0 Hardening，未知远端遗物 fail-closed 和远端私有清单不可访问的合同继续有效。
 
 ## 下一阶段
 
