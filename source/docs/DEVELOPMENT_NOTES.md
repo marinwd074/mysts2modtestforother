@@ -4,9 +4,9 @@
 
 ## 2026-09-19：多人阶段收口与当前边界
 
-- Vanilla Host + CombatSolver Client 的连接、只读 Probe、远端公开状态和双 Client 对照证据已写入 [`docs/multiplayer/evidence/phase0-matrix-2026-09-19.json`](multiplayer/evidence/phase0-matrix-2026-09-19.json)。MP-0 Core 为 `PASS`；Hardening 因退出/重新加入生命周期证据缺口保持 `INCOMPLETE`，完整矩阵保持 `UNVERIFIED`。
+- Vanilla Host + CombatSolver Client 的连接、只读 Probe、远端公开状态、双 Client 对照，以及按游戏规则由 Host 重建房间后 Client 重新加入的生命周期证据，已写入 [`docs/multiplayer/evidence/phase0-matrix-2026-09-19.json`](multiplayer/evidence/phase0-matrix-2026-09-19.json)。MP-0 Core 与受控 Hardening lifecycle 均为 `PASS`；重连后的 Advisor 私有药水语义仍按合同 fail-closed。
 - MP-1 Advisor controlled Smoke 已 `PASS`：fresh `-bbfix` 运行记录 `SEARCH_COMPLETE=5`、`SEARCH_STALE=1`、`FAIL_CLOSED=0`、`SEARCH_FAILURE=0`；Probe `51/51` 为只读且无动作入队/自定义网络包。摘要见 [`mp1-advisor-smoke-2026-09-19.json`](multiplayer/evidence/mp1-advisor-smoke-2026-09-19.json)。
-- Runtime 默认 `MultiplayerProbe`；`COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才启用只读 Advisor 入口，`MultiplayerSafeExecute` 仍 blocked。当前边界包括 `SolverPerspective`、local-player-only root contracts、schema v2 Probe 证据和 Lab-only flush 策略；MP-0 lifecycle hardening 仍 incomplete。
+- Runtime 默认 `MultiplayerProbe`；`COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才启用只读 Advisor 入口，`MultiplayerSafeExecute` 仍 blocked。当前边界包括 `SolverPerspective`、local-player-only root contracts、schema v2 Probe 证据和 Lab-only flush 策略；重连后远端私有药水库存不可见时保持 fail-closed。
 - 本次收口以 `source/CombatSolver.json` 为唯一 manifest 来源；已解决问题单、旧适配审计和完整快照不再作为当前入口，历史内容由 Git history 保留。
 
 ## 2026-09-18：0.40.2 三份新问题包共因修复

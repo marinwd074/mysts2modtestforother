@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "status": "PASS",
   "scope": "controlled-smoke",
   "sourceCommit": "37592ca",
@@ -23,6 +23,84 @@
     "actionsEnqueuedTrue": 0,
     "customNetworkPacketSentTrue": 0
   },
+  "followUp": {
+    "observedAt": "2026-09-19T23:54:37+08:00",
+    "lifecycle": {
+      "status": "PASS",
+      "protocol": "host-quit-create-room-client-join",
+      "hostEvidence": {
+        "hostQuit": ".../logs/20260919-223753-host-20e09cd5.log#L16169-L16171",
+        "clientRejoined": ".../logs/20260919-223753-host-20e09cd5.log#L16197-L16203",
+        "readyAndRunLoaded": ".../logs/20260919-223753-host-20e09cd5.log#L16204-L16211",
+        "combatStarted": ".../logs/20260919-223753-host-20e09cd5.log#L16242-L16254"
+      },
+      "clientEvidence": {
+        "disconnected": ".../logs/20260919-231734-client-6036b22f.log#L3252-L3253",
+        "joinAndRejoin": ".../logs/20260919-231734-client-6036b22f.log#L3277-L3305",
+        "readyAndRunLoaded": ".../logs/20260919-231734-client-6036b22f.log#L3307-L3315",
+        "combatStarted": ".../logs/20260919-231734-client-6036b22f.log#L3345-L3358"
+      }
+    },
+    "probe": {
+      "records": 257,
+      "readOnlyTrue": 257,
+      "actionsEnqueuedTrue": 0,
+      "customNetworkPacketSentTrue": 0,
+      "searchStartedTrue": 0,
+      "combatSegments": [
+        {
+          "segment": 2,
+          "encounters": ["NIBBIT"],
+          "records": 103,
+          "localEndPhaseSamples": 4,
+          "remoteStateVariants": 25
+        },
+        {
+          "segment": 3,
+          "encounters": ["TWIG_SLIME_S", "LEAF_SLIME_M", "LEAF_SLIME_S"],
+          "records": 86,
+          "localEndPhaseSamples": 2,
+          "remoteStateVariants": 16
+        },
+        {
+          "segment": 4,
+          "encounters": ["PHROG_PARASITE"],
+          "records": 8,
+          "localEndPhaseSamples": 0,
+          "remoteStateVariants": 3
+        },
+        {
+          "segment": 5,
+          "encounters": ["PHROG_PARASITE"],
+          "records": 8,
+          "localEndPhaseSamples": 0,
+          "remoteStateVariants": 3
+        }
+      ]
+    },
+    "advisorAfterRejoin": {
+      "status": "FAIL_CLOSED_EXPECTED",
+      "reason": "remote-private-potion-inventory-unavailable",
+      "searchStart": 7,
+      "rootCaptureBegin": 7,
+      "failClosed": 7,
+      "searchComplete": 0,
+      "searchSetupFailure": 7,
+      "evidenceArchives": [
+        ".local/multiplayer-lab/runtime-mp-advisor-client-20260919-bbfix/diagnostics/CombatSolver-BugReports/CombatSolver-0.40.2-SLIMES_WEAK-eb153506b529456ab2847dbba149e5bc.zip",
+        ".local/multiplayer-lab/runtime-mp-advisor-client-20260919-bbfix/diagnostics/CombatSolver-BugReports/CombatSolver-0.40.2-PHROG_PARASITE_ELITE-20ff3b11430a497baaf5c60877b74aaf.zip"
+      ]
+    },
+    "stability": {
+      "status": "PARTIAL",
+      "completedCombatSegments": [2, 3],
+      "differentEncounterFamilies": 2,
+      "remoteStateChanged": true,
+      "localEndTurnPhaseObserved": true,
+      "noLiveActions": true,
+      "note": "Probe and lifecycle remained healthy; Advisor after rejoin stayed fail-closed because remote private potion inventory is unavailable."
+    }
+  },
   "boundaries": {
     "advisorScope": "CurrentTurnAdoption",
     "safeExecute": false,
@@ -31,7 +109,10 @@
     "remotePrivateInventory": "unavailable"
   },
   "evidencePaths": [
-    ".local/multiplayer-lab/runtime-mp-advisor-client-20260919-bbfix/diagnostics/CombatSolver-BugReports/logs/CombatSolver/40228-d303f91cf2004ad5a218de87817320ee/combat-0d424ca7506b4f3ea73a8a31b570756b.jsonl",
-    ".local/multiplayer-lab/runtime-mp-advisor-client-20260919-bbfix/diagnostics/CombatSolver-BugReports/logs/CombatSolver/multiplayer-probe-40228-043c207f9f414d5b8a926898133ace03.jsonl"
+    ".local/multiplayer-lab/runtime-mp-advisor-host-20260919-bbfix/logs/20260919-223753-host-20e09cd5.log",
+    ".local/multiplayer-lab/runtime-mp-advisor-client-20260919-bbfix/logs/20260919-231734-client-6036b22f.log",
+    ".local/multiplayer-lab/runtime-mp-advisor-client-20260919-bbfix/diagnostics/CombatSolver-BugReports/logs/CombatSolver/multiplayer-probe-40228-043c207f9f414d5b8a926898133ace03.jsonl",
+    ".local/multiplayer-lab/runtime-mp-advisor-client-20260919-bbfix/diagnostics/CombatSolver-BugReports/CombatSolver-0.40.2-SLIMES_WEAK-eb153506b529456ab2847dbba149e5bc.zip",
+    ".local/multiplayer-lab/runtime-mp-advisor-client-20260919-bbfix/diagnostics/CombatSolver-BugReports/CombatSolver-0.40.2-PHROG_PARASITE_ELITE-20ff3b11430a497baaf5c60877b74aaf.zip"
   ]
 }

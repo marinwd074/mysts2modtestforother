@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "phase": "MP-0",
-  "status": "UNVERIFIED",
+  "status": "PASS",
   "coreStatus": "PASS",
-  "hardeningStatus": "INCOMPLETE",
+  "hardeningStatus": "PASS",
   "nextPhase": {
-    "mp1Advisor": "READY_FOR_VALIDATION",
+    "mp1Advisor": "SMOKE_PASS_CONTROLLED",
     "mp2SafeExecute": "BLOCKED"
   },
   "checks": {
@@ -66,8 +66,8 @@
       "evidence": "Final dual-Client A/B Probes 477/477 records have readOnly=true, searchStarted=false, actionsEnqueued=false and customNetworkPacketSent=false; archive .local/multiplayer-lab/results/mp0-c-dual-client-20260919/20260919-201041-fbab53a5"
     },
     "lifecycle": {
-      "status": "UNVERIFIED",
-      "evidence": "Final dual-Client run recorded three combat starts and two combat ends; the third combat had started when collection completed. No verified post-connection exit/rejoin cycle was captured, so process termination is not counted as lifecycle evidence."
+      "status": "PASS",
+      "evidence": "Advisor follow-up captured the game's required lifecycle: Host stopped/created a room, Client received Quit, Host accepted a new handshake and ClientLoadJoinRequest, both players became ready, the run loaded, and PHROG_PARASITE_ELITE combat started. Host log lines 16169-16254 and Client log lines 3252-3358 in .local/multiplayer-lab/runtime-mp-advisor-{host,client}-20260919-bbfix."
     },
     "singleplayerRegression": {
       "status": "PASS",
@@ -98,8 +98,9 @@
   ],
   "notes": [
     "MP-0A connection compatibility is explicitly evidenced for all three profiles.",
-    "MP-0 Core is PASS; full MP-0 remains UNVERIFIED because exit/rejoin lifecycle evidence is incomplete and the final third combat was not ended before collection. Lifecycle is retained as MP-0 Hardening and does not silently promote the default Probe profile.",
+    "MP-0 Core and the required Host-quit/create-room/Client-join lifecycle are PASS. The follow-up Probe remained read-only; Advisor still fails closed after rejoin when a remote private potion inventory is required, which is recorded in mp1-advisor-smoke-2026-09-19.json and does not enable Safe Execute.",
     "The enemy-state PASS is limited to two independent CombatSolver Clients observing the same Host run; it does not enable custom packets or infer Host-side mod behavior.",
+    "A direct Host-side per-timestep enemy export is still not separately captured; this is an evidence limitation, not a lifecycle failure.",
     "MultiplayerAdvisor is only an explicit process-scoped opt-in for the local current-turn, display-only path; MultiplayerSafeExecute remains blocked."
   ]
 }

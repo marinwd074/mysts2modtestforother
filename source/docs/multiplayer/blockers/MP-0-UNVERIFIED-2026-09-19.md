@@ -1,11 +1,11 @@
 # MP-0 当前阻碍与事实（2026-09-19）
 
-本文件只保留当前多人阶段的可审计结论和仍未完成的阻碍。机器事实以 [Phase 0 矩阵](../evidence/phase0-matrix-2026-09-19.json) 为准：MP-0 Core 为 `PASS`，Hardening 为 `INCOMPLETE`，完整矩阵继续为 `UNVERIFIED`。
+本文件只保留当前多人阶段的可审计结论和仍未完成的阻碍。机器事实以 [Phase 0 矩阵](../evidence/phase0-matrix-2026-09-19.json) 为准：MP-0 Core 与受控生命周期 Hardening 为 `PASS`；重连后的 Advisor 远端私有药水语义仍按合同 fail-closed，MP-2 继续 blocked。
 
 ## 当前状态
 
 - **MP-0 Core：PASS**：A/B/C 连接矩阵、本地私有状态只读采集、远端公开战斗状态、双 Client 公共敌人状态对照和 Probe 只读契约均有证据。
-- **MP-0 Hardening：INCOMPLETE**：连接建立后的退出/重新加入闭环尚未捕获；第三场战斗在最终归档时尚未结束，进程停止不计作生命周期证据。
+- **MP-0 Hardening：PASS（受控生命周期）**：Host 退出并重新创建房间后，Client 收到 Quit、重新握手、Join、Ready，并再次进入有效战斗；进程停止不计作生命周期证据。
 - **MP-1 Advisor：SMOKE PASS（受控范围）**：静态合同与 Release 构建已通过；默认仍是 Probe，只有 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才进入当前回合的只读路线显示，不执行动作。fresh `-bbfix` client 已形成 `SEARCH_COMPLETE=5`、原生完成通知和路线回放证据，Probe 保持只读；远端私有字段保持 `Unknown`，未知远端遗物仍 fail closed。
 - **MP-2 Safe Execute：BLOCKED**：本地动作分类、世界版本自变更和原生动作证据仍未满足。
 
@@ -23,7 +23,7 @@
 
 - Vanilla Host 同时承载 Client A `netId=1000` 和 Client B `netId=1001`；两端分别记录 `234` / `243` 条 Probe，合计 `477/477` 条满足只读契约。
 - 独立 Client-to-Client 的公开敌人状态报告为 `PASS`，三段同 Seed、状态差集均为 `0`。这不是自定义 Host 协议证据。
-- Host、A、B 均记录三场战斗开始、两场结束；未捕获连接后的干净退出/重新加入闭环，因此 lifecycle 仍为 `UNVERIFIED`。
+- Host、A、B 均记录三场战斗开始、两场结束；该历史双 Client 快照不包含生命周期，但最新 Advisor follow-up 已单独完成 Host 重建房间后的 Client 重新加入闭环。
 
 ## MP-1 Advisor 首轮 Smoke（2026-09-19）
 
@@ -51,11 +51,18 @@
 - 当前 Probe 共 `51` 条，`readOnly=true` 为 `51/51`，`actionsEnqueued=true` 为 `0`，`customNetworkPacketSent=true` 为 `0`。路线动作是模拟回放记录，不是 live action enqueue。
 - 证据文件：`.local/multiplayer-lab/runtime-mp-advisor-client-20260919-bbfix/diagnostics/CombatSolver-BugReports/logs/CombatSolver/40228-d303f91cf2004ad5a218de87817320ee/`；运行中的 Host PID `38548` 与 Client PID `40228` 均正常响应。
 
+## MP-0 生命周期与重连后 Advisor 边界（2026-09-19）
+
+- Host 日志记录 `Stopping host. Reason: Quit`、Client 断开、新握手、`ClientLoadJoinRequestMessage`、Ready、run load 和 `Combat started`；Client 日志同步记录 Quit、重新 Join、epoch 4、Ready、run load 和 `PHROG_PARASITE_ELITE` 战斗开始。证据见 [`evidence/phase0-matrix-2026-09-19.json`](../evidence/phase0-matrix-2026-09-19.json) 与 [`evidence/mp1-advisor-smoke-2026-09-19.json`](../evidence/mp1-advisor-smoke-2026-09-19.json)。
+- 重连后的 Probe `257/257` 保持 `readOnly=true`，`actionsEnqueued=0`、`customNetworkPacketSent=0`；NIBBIT、SLIMES、PHROG 战斗均重新取得公开状态和回合变化。
+- 重连后的 Advisor 记录 `MP_ADVISOR_SEARCH_START=7`、`ROOT_CAPTURE_BEGIN=7`、`FAIL_CLOSED=7`、`SEARCH_COMPLETE=0`，原因是远端私有药水库存不可见。这是当前 Unknown 私有语义的预期 fail-closed 边界，不把该轮误记为 Advisor 搜索通过。
+
 ## Active blockers
 
-- 补齐连接建立后的退出/重新加入，并在重新加入后再次取得 Probe 或 Lobby 顺序证据；在此之前不要把完整矩阵升级为 PASS。
+- 当前生命周期闭环已通过；后续不再把 Host-quit/create-room/Client-join 误判为缺失证据。
 - 直接 Host 逐时刻敌人公开状态导出仍未单独采集；当前 `enemyStateSync` 仅表示两个独立 CombatSolver Client 的公开状态集合对照。
 - MP-1 Advisor 的首轮真实 Smoke 已通过受控验收；后续只补固定工作量性能/更广稳定性证据，未知远端遗物的 fail-closed 门禁不可移除。
+- 重连后的远端私有药水库存仍不可访问，Advisor 必须保持 fail-closed；如需支持该语义，应另立受控 public-state 设计与合同，不在本次 MP-0 生命周期收口中静默放开。
 - Local PlayCard、Local EndTurn 和连续快速动作属于后续 MP-2 Safe Execute，不在本阶段启用。
 
 ## 当前安全边界
