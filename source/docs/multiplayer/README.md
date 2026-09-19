@@ -8,7 +8,7 @@
 
 - `SolverSessionCapabilities`：集中声明单人、多人 Probe、多人 Advisor、多人 Safe Execute 能力；当前网络多人固定选择 `MultiplayerProbe`。
 - `MultiplayerClientProbe`：只读记录本地玩家身份、生命/格挡/能量、回合、手牌、牌堆、药水、敌方公开状态、远端公开玩家摘要和完整 RNG 状态；不搜索、不部署、不改 `CombatState`/RNG、不发送自定义网络包。`Observe` 返回硬 fingerprint 是否变化。
-- Probe 的每次硬 fingerprint 变化还会异步写入 `CombatSolver-BugReports/logs/CombatSolver/multiplayer-probe-<pid>-<run>.jsonl`；文件有 16 MiB 上限，记录序列、`WorldVersion`、本地 Hand/DrawPile/Discard/Exhaust、远端公开摘要、敌人、RNG、MultiplayerScaling、CardMultiplayerConstraint 和只读契约标记，便于 Phase 0 对照 Host/Client 证据。
+- Probe 的每次硬 fingerprint 变化还会异步写入 `CombatSolver-BugReports/logs/CombatSolver/multiplayer-probe-<pid>-<run>.jsonl`；普通安装使用桌面诊断目录，Multiplayer Lab 通过 `COMBATSOLVER_MULTIPLAYER_INSTANCE` 重定向到实例自有的 `diagnostics/CombatSolver-BugReports/`，避免跨运行混入证据。文件有 16 MiB 上限，记录序列、`WorldVersion`、本地 Hand/DrawPile/Discard/Exhaust、远端公开摘要、敌人、RNG、MultiplayerScaling、CardMultiplayerConstraint 和只读契约标记，便于 Phase 0 对照 Host/Client 证据。
 - `source/tools/multiplayer-lab/prepare-instances.ps1`、`start-host.ps1`、`start-client.ps1`、`stop-owned-instances.ps1` 和 `collect-results.ps1` 提供带 ownership marker 的隔离实例与证据收集；它们不会修改正式 Steam 安装或正式 `MODS`。
 - `source/tools/multiplayer-lab/validate-phase0-results.ps1` 只读校验带证据引用的 Host/Client 矩阵和 Probe JSONL；`MP-0A` 只校验连接兼容，`MP-0B` 才要求真实 Probe；它不会启动游戏，也不会解除 Advisor 门禁。
 - `MultiplayerWorldTracker`：维护只读观察的 `WorldVersion`、dirty 状态和 200ms 稳定等待窗口；提供不消费的稳定读取与按版本确认接口。
@@ -48,7 +48,7 @@ MP-0B 在 MP-0A 成立后，继续验证：
 项，移到 MP-2 Safe Execute。FastMP 命令行启动本身也不能代替 Lobby 或 wire
 证据。
 
-本仓库当前没有 Host/Client 实机证据，因此本阶段不能把 MultiplayerProbe 改成 Advisor，也不能解除多人硬门禁。
+本仓库目前只有 Host/Client 连接、Ready 和启动路径的部分实机证据，尚未形成完整 MP-0A/MP-0B 矩阵或非空 Probe 证据，因此本阶段不能把 MultiplayerProbe 改成 Advisor，也不能解除多人硬门禁。
 
 当前阻碍和未验证项集中记录在 [`blockers/MP-0-UNVERIFIED-2026-09-19.md`](blockers/MP-0-UNVERIFIED-2026-09-19.md)。
 

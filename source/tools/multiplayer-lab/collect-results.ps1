@@ -46,7 +46,11 @@ foreach ($root in $InstanceRoot) {
         }
     }
 
-    $probeRoot = Join-Path $instance.RoamingRoot 'SlayTheSpire2\CombatSolver-BugReports\logs\CombatSolver'
+    # Multiplayer lab processes redirect CombatBugReportPaths into an owned
+    # instance directory via COMBATSOLVER_MULTIPLAYER_INSTANCE. Do not inspect
+    # the normal desktop report root here: it may contain evidence from another run.
+    $probeRoot = Join-Path $instance.Root 'diagnostics\CombatSolver-BugReports\logs\CombatSolver'
+    Assert-MultiplayerPathWithin -Child $probeRoot -Parent $instance.Root
     if (Test-Path -LiteralPath $probeRoot -PathType Container) {
         $probeDestination = Join-Path $destination 'probe'
         New-Item -ItemType Directory -Path $probeDestination -Force | Out-Null

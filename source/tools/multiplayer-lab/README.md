@@ -49,7 +49,9 @@ Lobby、wire 或战斗证据。
 - `stop-owned-instances.ps1` 只接受显式 instance root，并同时校验 marker、
   PID、进程出生时间和 executable path；没有 ownership 证据就停止。
 - `collect-results.ps1` 只复制指定实例的日志/Probe JSONL，并生成
-  `UNVERIFIED` matrix 模板；不会修改实例状态或生成 PASS。
+  `UNVERIFIED` matrix 模板；Lab 进程会把诊断写入实例下的
+  `diagnostics/CombatSolver-BugReports/`，不会误收集桌面上其他运行的证据；脚本
+  不会修改实例状态或生成 PASS。
 - `validate-phase0-results.ps1` 是只读证据校验器。`-Phase MP-0A` 不要求
   Probe，`-Phase MP-0B` 要求真实 Probe JSONL，默认 `-Phase All` 校验两组。
 

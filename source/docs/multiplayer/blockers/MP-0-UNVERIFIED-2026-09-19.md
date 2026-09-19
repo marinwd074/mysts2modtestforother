@@ -34,6 +34,7 @@
 - 原生多人 UI 已成功创建 Standard Host；Host 监听 UDP `33771`，Client 完成握手并取得本地 `netId=1000`。Client 收到 `Version: v0.107.1 Hash: 3954186980 Type: Standard State: InLobby`；仅报告非 Gameplay Mod mismatch，允许继续。
 - 两端完成角色选择和 Ready，Host/Client 进入同一局 Seed `1SCQBUB9V1`；双方日志均进入 `EVENT.NEOW` 开局奖励页。该轮自动化输入在奖励页未能推进，因此没有把地图/战斗结果误记为新的 MP-0 证据。
 - 已实现三处运行时修复：CombatStarting/CombatEnded 重置 `MultiplayerClientProbe`；`SolverDispatcher` 在主线程、战斗进行中调用只读 `MultiplayerClientProbe.Observe`；`AppendOnlyEventLog` 每条 JSONL 写入后执行 `Flush`，使运行中的证据可观察。
+- 又修正了实机证据路径：普通安装仍写桌面 `CombatSolver-BugReports`，隔离 Lab 通过 `COMBATSOLVER_MULTIPLAYER_INSTANCE` 写入实例自有的 `diagnostics/CombatSolver-BugReports`，`collect-results.ps1` 已按该路径收集，避免跨运行误收集桌面文件。新 DLL 启动探针已确认实例诊断目录创建；该次未进入战斗，所以只产生进程日志，没有新的 Probe JSONL。
 - 修复前一轮曾真实进入 `SLIMES_WEAK` 战斗并创建 `C:\Users\WUHU\Desktop\CombatSolver-BugReports\logs\CombatSolver\multiplayer-probe-14036-a2dd7ca66c974469a3eafc5b3a3e446f.jsonl`，但文件为 `0` 字节；这是调用链存在的线索，不是 MP-0B 通过证据。`Flush` 修复后的非零 Probe 文件尚未取得。
 - 当前复测仍遇到独立输入阻碍：在全屏开局奖励页，`WM_MOUSEMOVE`/`WM_LBUTTONDOWN`/`WM_LBUTTONUP` 以及焦点 `Tab`/`Enter` 消息均未触发选项确认；两实例已通过 ownership marker 停止。该阻碍不改变只读探针安全边界。
 - 旧战斗复测还出现 RitsuLib 生命周期警告 `Sequence contains more than one element`，但未阻止进入战斗；需与 Probe 证据分开跟踪。
