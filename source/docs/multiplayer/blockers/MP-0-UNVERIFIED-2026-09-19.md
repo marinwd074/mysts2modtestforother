@@ -6,7 +6,7 @@
 
 - **MP-0 Core：PASS**：A/B/C 连接矩阵、本地私有状态只读采集、远端公开战斗状态、双 Client 公共敌人状态对照和 Probe 只读契约均有证据。
 - **MP-0 Hardening：INCOMPLETE**：连接建立后的退出/重新加入闭环尚未捕获；第三场战斗在最终归档时尚未结束，进程停止不计作生命周期证据。
-- **MP-1 Advisor：READY FOR IMPLEMENTATION**：默认仍是 Probe；只有 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才进入当前回合的只读路线显示，不执行动作。远端私有字段保持 `Unknown`，未建模遗物 hook fail closed。
+- **MP-1 Advisor：READY FOR VALIDATION**：静态合同与 Release 构建已通过；默认仍是 Probe，只有 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才进入当前回合的只读路线显示，不执行动作。真实多人 Smoke 尚未完成；远端私有字段保持 `Unknown`，未建模遗物 hook fail closed。
 - **MP-2 Safe Execute：BLOCKED**：本地动作分类、世界版本自变更和原生动作证据仍未满足。
 
 ## AB 组连接实机结果（2026-09-19）

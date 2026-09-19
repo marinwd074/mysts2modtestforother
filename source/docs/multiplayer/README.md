@@ -1,6 +1,6 @@
 # Multiplayer 适配阶段
 
-当前阶段：**MP-0 Core 已通过；MP-0 Hardening（生命周期）未完成；MP-1 Advisor 已具备受控实现入口**。
+当前阶段：**MP-0 Core 已通过；MP-0 Hardening（生命周期）未完成；MP-1 Advisor 已具备受控验证入口**。
 
 本阶段依据 `Multiplayer Apply` 中的精简功能方案和修正版执行计划实现，目标是先用隔离的双实例完成真实 Host/Client 证据，不改变多人会话语义。
 
@@ -8,7 +8,7 @@
 
 - **MP-0 Core：PASS**。连接兼容、本地私有状态只读采集、远端公开战斗状态、双 Client 对照和 Probe 只读契约均有证据。
 - **MP-0 Hardening：INCOMPLETE**。连接建立后的退出/重新加入闭环仍未捕获；因此完整矩阵仍保持 `UNVERIFIED`，不能把进程停止当作生命周期通过。
-- **MP-1 Advisor：READY FOR IMPLEMENTATION**。默认仍是 Probe；只有显式设置 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才会授予当前回合、本地玩家、只显示路线的搜索能力，绝不会自动执行动作。
+- **MP-1 Advisor：READY FOR VALIDATION**。静态合同与 Release 构建已通过；默认仍是 Probe，只有显式设置 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才会授予当前回合、本地玩家、只显示路线的搜索能力，绝不会自动执行动作。真实多人 Smoke 尚未完成。
 - **MP-2 Safe Execute：BLOCKED**。本地动作分类、原生动作证据和世界版本自变更保护尚未满足。
 
 ## 已实现

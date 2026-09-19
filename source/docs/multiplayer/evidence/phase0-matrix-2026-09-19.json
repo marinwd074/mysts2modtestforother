@@ -5,7 +5,7 @@
   "coreStatus": "PASS",
   "hardeningStatus": "INCOMPLETE",
   "nextPhase": {
-    "mp1Advisor": "READY_FOR_IMPLEMENTATION",
+    "mp1Advisor": "READY_FOR_VALIDATION",
     "mp2SafeExecute": "BLOCKED"
   },
   "checks": {

@@ -5,7 +5,7 @@
 ## Multiplayer Lab（当前）
 
 - MP-0 Core：`PASS`；MP-0 Hardening：`INCOMPLETE`（退出/重新加入生命周期证据缺口），完整 MP-0 矩阵保持 `UNVERIFIED`。
-- MP-1 Advisor：`READY_FOR_IMPLEMENTATION`，默认仍是 Probe，只有 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 显式 opt-in；MP-2 Safe Execute：`BLOCKED`。
+- MP-1 Advisor：`READY_FOR_VALIDATION`（静态合同/Release 已通过，实机 Smoke 待验证），默认仍是 Probe，只有 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 显式 opt-in；MP-2 Safe Execute：`BLOCKED`。
 - 机器事实与证据索引：[phase0-matrix-2026-09-19.json](multiplayer/evidence/phase0-matrix-2026-09-19.json)；运行器：[tools/multiplayer-lab/](../tools/multiplayer-lab/)。
 - 定向复跑：`validate-phase0-results.ps1 -Phase MP-0A` / `-Phase All`；双 Client 公开状态使用 `compare-probe-public-state.ps1`。这些入口不会把缺失生命周期证据自动升级为 PASS。
 
