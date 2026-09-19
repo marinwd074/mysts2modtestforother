@@ -21,6 +21,8 @@ internal sealed record MultiplayerProbeSnapshot(
     int PlayerCount,
     int RoundNumber,
     string CurrentSide,
+    bool? MultiplayerScalingHooks,
+    string CardMultiplayerConstraint,
     string? LocalNetId,
     string? LocalCharacter,
     string? LocalHp,
@@ -133,6 +135,8 @@ internal static class MultiplayerClientProbe
             PlayerCount: state.Players.Count,
             RoundNumber: state.RoundNumber,
             CurrentSide: state.CurrentSide.ToString(),
+            MultiplayerScalingHooks: state.MultiplayerScalingModel?.ShouldReceiveCombatHooks,
+            CardMultiplayerConstraint: state.RunState.CardMultiplayerConstraint.ToString(),
             LocalNetId: localPlayer?.NetId.ToString(),
             LocalCharacter: localPlayer?.Character.Id.Entry,
             LocalHp: combat == null || localPlayer == null

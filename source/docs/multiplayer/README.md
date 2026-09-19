@@ -8,7 +8,7 @@
 
 - `SolverSessionCapabilities`：集中声明单人、多人 Probe、多人 Advisor、多人 Safe Execute 能力；当前网络多人固定选择 `MultiplayerProbe`。
 - `MultiplayerClientProbe`：只读记录本地玩家身份、生命/格挡/能量、回合、手牌、牌堆、药水、敌方公开状态、远端公开玩家摘要和完整 RNG 状态；不搜索、不部署、不改 `CombatState`/RNG、不发送自定义网络包。`Observe` 返回硬 fingerprint 是否变化。
-- Probe 的每次硬 fingerprint 变化还会异步写入 `CombatSolver-BugReports/logs/CombatSolver/multiplayer-probe-<pid>-<run>.jsonl`；文件有 16 MiB 上限，记录序列、`WorldVersion`、本地 Hand/DrawPile/Discard/Exhaust、远端公开摘要、敌人、RNG 状态和只读契约标记，便于 Phase 0 对照 Host/Client 证据。
+- Probe 的每次硬 fingerprint 变化还会异步写入 `CombatSolver-BugReports/logs/CombatSolver/multiplayer-probe-<pid>-<run>.jsonl`；文件有 16 MiB 上限，记录序列、`WorldVersion`、本地 Hand/DrawPile/Discard/Exhaust、远端公开摘要、敌人、RNG、MultiplayerScaling、CardMultiplayerConstraint 和只读契约标记，便于 Phase 0 对照 Host/Client 证据。
 - `source/tools/multiplayer-lab/validate-phase0-results.ps1` 只读校验带证据引用的 Host/Client 矩阵和 Probe JSONL；它不会启动游戏，也不会解除 Advisor 门禁。
 - `MultiplayerWorldTracker`：维护只读观察的 `WorldVersion`、dirty 状态和 200ms 稳定等待窗口；提供不消费的稳定读取与按版本确认接口。
 - Runtime 的搜索、部署、路线接管、全自动、回合开始接管和 Instant 入口统一经过能力表；没有通过实机证据前，网络多人保持关闭。

@@ -151,7 +151,15 @@ foreach ($probeFile in $probeFiles) {
         if ([string]::IsNullOrWhiteSpace([string](Get-MapValue $record 'localNetId'))) {
             $probeFailures.Add(('{0}:{1} missing localNetId' -f $probeFile, $lineNumber))
         }
-        foreach ($field in @('localHand', 'localDrawPile', 'localDiscard', 'localExhaust', 'enemies', 'rngStates')) {
+        foreach ($field in @(
+                'localHand',
+                'localDrawPile',
+                'localDiscard',
+                'localExhaust',
+                'enemies',
+                'rngStates',
+                'multiplayerScalingHooks',
+                'cardMultiplayerConstraint')) {
             if (-not (Has-MapKey $record $field)) {
                 $probeFailures.Add(('{0}:{1} missing {2}' -f $probeFile, $lineNumber, $field))
             }
