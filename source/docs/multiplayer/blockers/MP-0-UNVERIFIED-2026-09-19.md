@@ -26,6 +26,7 @@
 - Client 首次启动还停在原生“尚未确认 Mod 警告”弹窗；因此没有进入战斗，也没有产生可用于 MP-0B 的 Probe JSONL、DrawPile、敌人同步或生命周期证据。
 - 对 `data_sts2_windows_x86_64\sts2.dll` 的只读 IL 检查确认：`CheckCommandLineArgs` 接受 `host`、`host_standard`、`host_daily`、`host_custom`、`load`、`join`；`fastmp=host` 的非 Steam 路径调用 `StartENetHost(33771, 4)`，`fastmp=join` 固定使用 `127.0.0.1:33771`。因此当前不是“参数值未知”。
 - 再次启动 Host 并等待进入主菜单后，`Get-NetUDPEndpoint -LocalPort 33771`、`Get-NetTCPConnection -LocalPort 33771` 和 `netstat -ano` 均未观察到 33771 监听；Host 进程本身仍存活并已由 ownership marker 停止。下一步需确认原生 Host UI 的启动时序或游戏网络初始化失败原因，不能用端口缺失推断 Mod/Probe 兼容性结论。
+- 在隔离的 `ClientCombatSolver` 快照中预置 `settings.save` 的 `mod_settings.player_agreed_to_mod_loading=true` 和空 `mod_list` 后重新启动，日志 `D:\yingye\CombatSolver\.local\multiplayer-lab\instances\mp-client-solver-20260919\logs\20260919-131817-client-00e5a4b0.log` 仍报告 `user has not yet seen the mods warning`；未进入战斗，也未产生 Probe JSONL。该尝试只改了私有快照，正式安装和正式用户数据未改动。
 
 ## 仍然阻塞 MP-0 PASS
 
