@@ -56,6 +56,9 @@ internal static class MultiplayerClientProbe
     private const int MinimumSampleIntervalMilliseconds = 100;
     private const int ProbeEvidenceEstimatedBytes = 16 * 1024;
     private static readonly object EvidenceGate = new();
+    private static readonly object CardIdentityGate = new();
+    private static readonly Dictionary<CardModel, int> CardIdentityIds =
+        new(ReferenceEqualityComparer.Instance);
     private static readonly JsonSerializerOptions EvidenceJson = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -64,6 +67,7 @@ internal static class MultiplayerClientProbe
         $"multiplayer-probe-{Environment.ProcessId}-{Guid.NewGuid():N}.jsonl";
     private static long _lastSampleAt;
     private static int _observationSequence;
+    private static int _nextCardIdentityId;
     private static AppendOnlyEventLog<MultiplayerProbeSnapshot>? _evidenceLog;
     private static bool _evidenceDisabled;
 
@@ -71,6 +75,11 @@ internal static class MultiplayerClientProbe
     {
         _lastSampleAt = 0;
         _observationSequence = 0;
+        lock (CardIdentityGate)
+        {
+            CardIdentityIds.Clear();
+            _nextCardIdentityId = 0;
+        }
         MultiplayerWorldTracker.Reset();
     }
 
@@ -80,6 +89,11 @@ internal static class MultiplayerClientProbe
         {
             _evidenceLog?.Dispose();
             _evidenceLog = null;
+        }
+        lock (CardIdentityGate)
+        {
+            CardIdentityIds.Clear();
+            _nextCardIdentityId = 0;
         }
     }
 
@@ -284,7 +298,23 @@ internal static class MultiplayerClientProbe
         => cards.Select(card =>
             $"{card.Id.Entry}+{card.CurrentUpgradeLevel}" +
             $"/enchant={(card.Enchantment == null ? "-" : EnchantmentStateSupport.Describe(card.Enchantment))}" +
-            $"/affliction={card.Affliction?.Id.Entry ?? "-"}:{card.Affliction?.Amount ?? 0}").ToArray();
+            $"/affliction={card.Affliction?.Id.Entry ?? "-"}:{card.Affliction?.Amount ?? 0}" +
+            $"/instance={CardIdentity(card)}").ToArray();
+
+    private static int CardIdentity(CardModel card)
+    {
+        // Card names are not unique in a real combat. A reference-based ID lets the
+        // read-only probe distinguish duplicate cards without mutating the game model.
+        lock (CardIdentityGate)
+        {
+            if (CardIdentityIds.TryGetValue(card, out int identity))
+                return identity;
+
+            identity = ++_nextCardIdentityId;
+            CardIdentityIds.Add(card, identity);
+            return identity;
+        }
+    }
 
     private static string Powers(IEnumerable<PowerModel> powers)
         => string.Join(',', PowerTokens(powers));

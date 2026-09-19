@@ -58,6 +58,14 @@
 - `validate-phase0-results.ps1` 原先在单独校验 MP-0B 时会把空的 profile 要求展开成 `$null`，严格模式下访问 `.Count` 失败；现已用数组包装修复。矩阵实测结果为 MP-0A `PASS`、MP-0B `UNVERIFIED`，C 组 8 条 Probe 的 JSONL 契约为 `PASS`。
 - 单人回归已补齐最小证据：Release 编译 `0` 错误（保留 2 条既有 `CS9113`）、目标版本门禁 `0.107.1/0.107.1/STS2_01071`、合同测试 `5/5 PASS`；隔离 `FIRST_TURN` smoke 写出 `PASS: native 0.107.1 first-turn search; actions=20; incremental verification enabled`。专用 smoke 按既有设计不写常规 result，外层启动器以 `exit_code=0` 报收尾异常，不影响专用结果；普通 Release 已在测试后恢复。
 
+## C 组手动战斗扩展快照（2026-09-19）
+
+- 在用户手动操作两个可见实例后，收集器生成了 `D:\yingye\CombatSolver\.local\multiplayer-lab\results\mp0-c-manual-20260919\20260919-190721-e2a8cea1`。该快照覆盖第一场战斗结束、随机事件 `EVENT.THE_LEGENDS_WERE_TRUE`、地图移动和第二场 `SHRINKER_BEETLE_WEAK` 开始；两个自有进程在收集时仍存活，源实例和正式游戏安装未修改。
+- Client Probe JSONL 有 `212` 条记录、两个战斗段（第二场开始时 sequence/worldVersion 重置），全部满足 `readOnly=true`、`searchStarted=false`、`actionsEnqueued=false`、`customNetworkPacketSent=false`；校验器对该文件报告 `probeJsonlContract=PASS`，整体 MP-0B 仍为 `UNVERIFIED`。
+- 当前快照观察到 `61` 次 DrawPile 递减、`60` 次可用牌 token 前缀与 Hand 增量一致、`4` 次 DrawPile 清空后 Discard→Draw 且 Shuffle RNG counter 增长、`51` 次 Discard 变化、`4` 次 Exhaust 变化、`28` 次敌人状态变化和 `59` 次远端玩家摘要变化。
+- 仍不能把牌序相关检查直接记为 PASS：旧 Probe token 只有牌名/升级/附着状态，记录 `57→58` 的同名 `SLIMED` 移动无法区分具体实例；因此当前矩阵没有被自动升级。源码已增加每场战斗内基于对象引用的只读 `instance` token，下一次新 DLL 实机需重新验证该边界。
+- 本快照来自新实例 ID 改动之前启动的 DLL；新 DLL 已完成 Release 编译、5/5 合同测试和目标版本门禁，但尚未进入游戏实测。下一次启动新实例前需先通知用户并由用户手动推进。
+
 ## 仍然阻塞 MP-0 PASS
 
 以下证据当前仍缺失，必须保持 `UNVERIFIED`：
