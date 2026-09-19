@@ -1249,6 +1249,14 @@ internal static partial class SolverController
             _multiplayerInertSessionObserved = true;
             if (enteredMultiplayerSession || multiplayerWorldChanged)
             {
+                if (multiplayerWorldChanged
+                    && capabilities.Kind == SolverSessionKind.MultiplayerAdvisor)
+                {
+                    Entry.Logger.Info(
+                        $"[CombatSolver/MultiplayerAdvisor] MP_ADVISOR_WORLD_CHANGED " +
+                        $"world_version={MultiplayerWorldTracker.WorldVersion} " +
+                        $"reason={MultiplayerWorldTracker.LastReason}");
+                }
                 if (enteredMultiplayerSession)
                 {
                     Entry.Logger.Info(

@@ -284,6 +284,13 @@ internal static partial class SolverController
             _search = search;
             CancellationToken token = search.Cancellation.Token;
             int generation = search.Generation;
+            if (capabilities.Kind == SolverSessionKind.MultiplayerAdvisor)
+            {
+                Entry.Logger.Info(
+                    $"[CombatSolver/MultiplayerAdvisor] MP_ADVISOR_SEARCH_START " +
+                    $"generation={generation} world_version={search.WorldVersion} " +
+                    $"turn={search.StartTurnNumber} reason={reason}");
+            }
             _combat.SearchesStarted++;
             _combat.ReplanCounts[replanCause] = _combat.ReplanCounts.GetValueOrDefault(replanCause) + 1;
             if (replanCause == ReplanCause.ManualDivergence)
@@ -307,6 +314,13 @@ internal static partial class SolverController
             try
             {
                 rootSnapshot = CombatRootSnapshot.Capture(state);
+            }
+            catch (Exception ex) when (capabilities.Kind == SolverSessionKind.MultiplayerAdvisor)
+            {
+                Entry.Logger.Warn(
+                    $"[CombatSolver/MultiplayerAdvisor] MP_ADVISOR_FAIL_CLOSED " +
+                    $"stage=root_capture generation={generation} exception={ex.GetType().Name}");
+                throw;
             }
             finally
             {
@@ -583,6 +597,12 @@ internal static partial class SolverController
                 host,
                 FormatSearchFailure(ex, search.MaxDegreeOfParallelism > 1));
             SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Failed);
+            if (SolverSessionCapabilities.Capture(search.State).Kind == SolverSessionKind.MultiplayerAdvisor)
+            {
+                Entry.Logger.Warn(
+                    $"[CombatSolver/MultiplayerAdvisor] MP_ADVISOR_FAIL_CLOSED " +
+                    $"stage=search generation={generation} exception={ex.GetType().Name}");
+            }
             Entry.Logger.Error($"[CombatSolver/Test] SEARCH_FAILURE generation={generation} exception={ex}");
             return;
         }
@@ -608,6 +628,13 @@ internal static partial class SolverController
                 "[b]战斗路线求解器[/b]\n战斗状态在计算期间发生变化，已丢弃过期结果。\n" +
                 SolverUiTokens.BugReportUploadInstructionRichText);
             SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Stale);
+            if (SolverSessionCapabilities.Capture(searchedState).Kind == SolverSessionKind.MultiplayerAdvisor)
+            {
+                Entry.Logger.Info(
+                    $"[CombatSolver/MultiplayerAdvisor] MP_ADVISOR_SEARCH_STALE " +
+                    $"generation={generation} search_world_version={search.WorldVersion} " +
+                    $"current_world_version={MultiplayerWorldTracker.WorldVersion}");
+            }
             Entry.Logger.Info($"[CombatSolver/Test] SEARCH_STALE generation={generation}");
             return;
         }
@@ -680,6 +707,14 @@ internal static partial class SolverController
         SolverOverlay.ShowResult(
             host,
             routeAdopted ? MarkRouteAdopted(completedSnapshot) : completedSnapshot);
+        if (SolverSessionCapabilities.Capture(searchedState).Kind == SolverSessionKind.MultiplayerAdvisor)
+        {
+            Entry.Logger.Info(
+                $"[CombatSolver/MultiplayerAdvisor] MP_ADVISOR_SEARCH_COMPLETE " +
+                $"generation={generation} world_version={search.WorldVersion} " +
+                $"turn={result.StartTurnNumber} actions={result.BestNode.Actions.Count} " +
+                $"scope={result.ResultScope}");
+        }
         SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Succeeded);
         if (currentTurnAdopted)
         {
