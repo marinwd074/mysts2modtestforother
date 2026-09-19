@@ -1,6 +1,12 @@
 # CombatSolver 开发笔记（当前索引）
 
-> 本文只保留最近维护批次的变更摘要、当前边界和维护入口；完整时间线与旧版本证据见 [开发笔记历史归档](history/development/DEVELOPMENT_NOTES-2026-09-19.md)。当前架构规范以 [`source/AGENTS.md`](../AGENTS.md) 和 [`ARCHITECTURE.md`](ARCHITECTURE.md) 为准。
+> 本文只保留最近维护批次的变更摘要、当前边界和维护入口；退役快照由 [文档历史索引](history/README.md) 说明并可从 Git 历史恢复。当前架构规范以 [`source/AGENTS.md`](../AGENTS.md) 和 [`ARCHITECTURE.md`](ARCHITECTURE.md) 为准。
+
+## 2026-09-19：多人阶段收口与当前边界
+
+- Vanilla Host + CombatSolver Client 的连接、只读 Probe、远端公开状态和双 Client 对照证据已写入 [`docs/multiplayer/evidence/phase0-matrix-2026-09-19.json`](multiplayer/evidence/phase0-matrix-2026-09-19.json)。MP-0 Core 为 `PASS`；Hardening 因退出/重新加入生命周期证据缺口保持 `INCOMPLETE`，完整矩阵保持 `UNVERIFIED`。
+- Runtime 默认 `MultiplayerProbe`；`COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才启用只读 Advisor 入口，`MultiplayerSafeExecute` 仍 blocked。当前边界包括 `SolverPerspective`、local-player-only root contracts、schema v2 Probe 证据和 Lab-only flush 策略。
+- 本次收口以 `source/CombatSolver.json` 为唯一 manifest 来源；已解决问题单、旧适配审计和完整快照不再作为当前入口，历史内容由 Git history 保留。
 
 ## 2026-09-18：0.40.2 三份新问题包共因修复
 
@@ -262,4 +268,4 @@
 - 新的工程规则、职责迁移、版本基线和发布证据分别写入 `source/AGENTS.md`、`ARCHITECTURE.md`、`TEST_MATRIX.md` 和对应专题归档。
 - 新增批次应给出验证入口与已知缺口；未重跑的旧结果不能代替当前构建或运行证据。
 
-完整原始时间线：[开发笔记历史归档](history/development/DEVELOPMENT_NOTES-2026-09-19.md)
+完整旧版本可由 Git history 恢复；当前历史入口：[文档历史索引](history/README.md)

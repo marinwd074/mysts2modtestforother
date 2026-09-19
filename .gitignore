@@ -2,9 +2,7 @@
 *
 !.gitignore
 !AGENTS.md
-!MODS/
 # Build output stays local; releases are produced from source and a verified build.
-MODS/CombatSolver.dll
 !source/
 !source/**
 # Multiplayer lab runs and generated coverage stay outside version control.

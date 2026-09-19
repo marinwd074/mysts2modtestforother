@@ -135,7 +135,7 @@ Combat Solver 使用受时间、节点和内存预算约束的 Beam Search。它
 
 当前目标是覆盖 `0.107.1` 的单人战斗内容。运行时遇到尚未支持的新版本或第三方战斗语义时，求解器会明确停止在不支持边界，不会把未完成模拟误报为胜利。多人模式、局外流程和第三方 Mod 的自定义战斗效果不在通用兼容范围内。
 
-当前 `0.107.1` 的构建、Hook、原生 Smoke 和限制见 [0.107.1 兼容证据链](docs/compat/0.107.1/README.md)。历史覆盖目录与适配记录仍保留原版本标签；详细历史资料见 [战斗 Hook 覆盖报告](docs/COMBAT_HOOK_COVERAGE.md) 与 [适配验证记录](docs/ADAPTATION_VERIFICATION.md)。
+当前 `0.107.1` 的构建、Hook、原生 Smoke 和限制见 [0.107.1 兼容证据链](docs/compat/0.107.1/README.md)、[战斗 Hook 覆盖报告](docs/COMBAT_HOOK_COVERAGE.md) 与 [当前测试矩阵](docs/TEST_MATRIX.md)。旧版适配验证日志已退役；如需复核原始内容，请从 Git 历史恢复。
 
 ## 开发
 

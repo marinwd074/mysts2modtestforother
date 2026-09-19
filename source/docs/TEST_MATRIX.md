@@ -1,6 +1,13 @@
 # CombatSolver 当前测试矩阵
 
-> 本文只保留当前测试入口、最近批次、覆盖范围、重跑方式和已知边界；完整历史结果见 [测试矩阵历史归档](history/testing/TEST_MATRIX-2026-09-19.md)。当前规则与职责以 [`source/AGENTS.md`](../AGENTS.md) 和 [`ARCHITECTURE.md`](ARCHITECTURE.md) 为准。
+> 本文只保留当前测试入口、最近批次、覆盖范围、重跑方式和已知边界；退役快照由 [文档历史索引](history/README.md) 说明并可从 Git 历史恢复。当前规则与职责以 [`source/AGENTS.md`](../AGENTS.md) 和 [`ARCHITECTURE.md`](ARCHITECTURE.md) 为准。
+
+## Multiplayer Lab（当前）
+
+- MP-0 Core：`PASS`；MP-0 Hardening：`INCOMPLETE`（退出/重新加入生命周期证据缺口），完整 MP-0 矩阵保持 `UNVERIFIED`。
+- MP-1 Advisor：`READY_FOR_IMPLEMENTATION`，默认仍是 Probe，只有 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 显式 opt-in；MP-2 Safe Execute：`BLOCKED`。
+- 机器事实与证据索引：[phase0-matrix-2026-09-19.json](multiplayer/evidence/phase0-matrix-2026-09-19.json)；运行器：[tools/multiplayer-lab/](../tools/multiplayer-lab/)。
+- 定向复跑：`validate-phase0-results.ps1 -Phase MP-0A` / `-Phase All`；双 Client 公开状态使用 `compare-probe-public-state.ps1`。这些入口不会把缺失生命周期证据自动升级为 PASS。
 
 ## 2026-09-18：三份新问题包共因回归修复
 
@@ -452,4 +459,4 @@ Windows等价入口：
 - 协议 `Passed` 只表示该请求实际启用的断言通过；性能、路线质量、原生部署和未覆盖的边界必须单独声明。
 - 历史条目中的版本、提交、环境和数值只用于追溯当时证据，不作为当前版本的自动通过结论。
 
-完整原始矩阵：[测试矩阵历史归档](history/testing/TEST_MATRIX-2026-09-19.md)
+完整旧版本可由 Git history 恢复；当前历史入口：[文档历史索引](history/README.md)

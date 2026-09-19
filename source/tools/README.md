@@ -10,10 +10,14 @@
 - `run-visible-steam-benchmark.ps1/.sh`、`CompatibilitySmoke/`、`CoverageCatalog/`、`CheckpointTool/`、`GeneratedCombatScenarios/`：可见/兼容/覆盖/检查点和场景验证。
 - `verify-refactor-boundaries.ps1/.sh`、`verify-target-version.ps1/.sh`、`build-local-stack.ps1/.sh`：结构、版本和本地构建入口。
 
-## EXPERIMENTAL
+## REGRESSION
 
-名称带有 `Experimental`、`Prototype`、`Research` 或 `Candidate` 的目录（例如 `ExperimentalAdaptiveGc/`、`ChoiceContinuationPrototype/`、`BfwsResearchChecks/`、`PerformanceCandidateProbes/`）按实验工具处理。它们可以被专题任务显式调用，但不属于默认生产门禁或运行时依赖。
+需要随版本回归但不参与默认门禁的入口，包括 `multiplayer-lab/`、兼容 Smoke、覆盖目录和性能基准。它们必须保留可重跑说明和已知边界；回归结论不能自动改变当前矩阵。
+
+## RESEARCH
+
+名称带有 `Experimental`、`Prototype`、`Research` 或 `Candidate` 的目录（例如 `ExperimentalAdaptiveGc/`、`ChoiceContinuationPrototype/`、`BfwsResearchChecks/`、`PerformanceCandidateProbes/`）按研究工具处理。它们可以被专题任务显式调用，但不属于默认生产门禁或运行时依赖。
 
 ## ARCHIVED
 
-当前没有完成引用审计、可以安全移出的目录。旧工具即使暂时没有调用方，也先留在原路径，待单独任务确认归档位置、恢复方式和证据保留期限后再处理。
+只有完成引用审计、确认无默认门禁和无当前证据依赖的工具才能进入此级别。归档前必须记录恢复路径和证据保留期限；本次收口未移动工具目录。
