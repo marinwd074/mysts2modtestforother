@@ -56,6 +56,7 @@
 - 初始地图的可用节点是底部 `_startingPointNode` `(3,0)`；`VisitedMapCoords` 为空时，直接点击上方第一层敌人节点不会产生投票。A/B 组均改为双方先投票 `(3,0)` 后正常进入首战。
 - A/B 组本轮只验证到首战连接，不含 CombatSolver Probe；收集器按设计输出 `UNVERIFIED`，没有自动推断 PASS。进入战斗后未出牌、未结束回合、未作选择，也未发送自定义网络包。
 - `validate-phase0-results.ps1` 原先在单独校验 MP-0B 时会把空的 profile 要求展开成 `$null`，严格模式下访问 `.Count` 失败；现已用数组包装修复。矩阵实测结果为 MP-0A `PASS`、MP-0B `UNVERIFIED`，C 组 8 条 Probe 的 JSONL 契约为 `PASS`。
+- 单人回归已补齐最小证据：Release 编译 `0` 错误（保留 2 条既有 `CS9113`）、目标版本门禁 `0.107.1/0.107.1/STS2_01071`、合同测试 `5/5 PASS`；隔离 `FIRST_TURN` smoke 写出 `PASS: native 0.107.1 first-turn search; actions=20; incremental verification enabled`。专用 smoke 按既有设计不写常规 result，外层启动器以 `exit_code=0` 报收尾异常，不影响专用结果；普通 Release 已在测试后恢复。
 
 ## 仍然阻塞 MP-0 PASS
 
@@ -64,7 +65,7 @@
 - A/B/C 三组连接证据已填入 `../evidence/phase0-matrix-2026-09-19.json`，MP-0A 可独立校验；MP-0B 仍含未完成项，整体 MP-0 保持 `UNVERIFIED`。
 - Lobby、角色准备、战斗开始/结束、下一层、退出和重新加入的完整生命周期。
 - C 组中抽牌后的真实顺序、洗牌、Discard/Exhaust、敌人持续同步、队友动作导致的 world fingerprint 变化，以及跨生命周期保持只读边界。
-- 单人 Release/contract/smoke 回归证据。Local PlayCard、Local EndTurn 和连续快速动作属于后续 MP-2 Safe Execute，不在本轮启用。
+- Local PlayCard、Local EndTurn 和连续快速动作属于后续 MP-2 Safe Execute，不在本轮启用。
 
 ## 当前安全边界
 

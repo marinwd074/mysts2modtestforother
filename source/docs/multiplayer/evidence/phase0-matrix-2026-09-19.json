@@ -64,8 +64,8 @@
       "evidence": "Lobby and combat start covered; combat end, next floor, exit, and rejoin remain outstanding"
     },
     "singleplayerRegression": {
-      "status": "UNVERIFIED",
-      "evidence": "No Release/contract/smoke regression run attached to this matrix"
+      "status": "PASS",
+      "evidence": "2026-09-19: Release build 0 errors (2 existing CS9113 warnings), target gate 0.107.1/0.107.1/STS2_01071, contract tests 5/5 PASS, isolated FIRST_TURN smoke PASS with 20 actions and incremental verification; local result .local/multiplayer-lab/results/mp0-singleplayer-regression-20260919/first-turn.txt"
     }
   },
   "profiles": [
