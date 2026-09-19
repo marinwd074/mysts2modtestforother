@@ -92,6 +92,12 @@
 - 为补强 `enemyStateSync`，新增只读工具 `source/tools/multiplayer-lab/compare-probe-public-state.ps1`。它按 sequence/worldVersion 重置切分战斗段，只在两个独立 Client Probe 的 seed 和每段有序敌人状态集合完全相同时报告 `PASS`；采样窗口不同只报告 `UNVERIFIED`，不会修改 Phase 0 矩阵。
 - 第二个观察 Client 已准备到 `D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp-client-observer-20260919`，profile 为 `ClientCombatSolver`，使用与正式 C 组相同的 DLL；本轮未启动该实例，也未修改 Host、正式安装或网络协议。
 
+## 双 Client 本地 ID 阻塞及修复（2026-09-19）
+
+- 首次启动第二个观察 Client 时，A 与 B 都通过 `--force-steam=off` 进入原生 `FastMpJoin`；B 日志 `D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp-client-observer-20260919\logs\20260919-195142-client-9234aec5.log` 记录 `Sending handshake with net ID 1000`，Host 日志 `D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp-host-card-instance-20260919\logs\20260919-194948-host-c0485fd2.log` 多次记录 `Second client attempted to connect with peer ID 1000, disconnecting them`。因此失败是本机双客户端重复 peer ID，不是 CombatSolver wire 兼容性失败。
+- 只读 IL 检查确认游戏的 `FastMpJoin` 默认 `clientId=1000`，但支持命令行 `--clientId` 覆盖。已在 `source/tools/multiplayer-lab/start-client.ps1` / `start-instance.ps1` 增加可选 `-ClientId`，并将实际值写入启动结果与 ownership marker；提交 `0afcb42` 已推送。
+- B 已单独重启，启动日志 `D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp-client-observer-20260919\logs\20260919-200336-client-ffb78c11.log` 明确记录 `Command Line Args: --force-steam=off --clientId=1001`，且 CombatSolver 报告 `63 applied, 0 ignored, 0 failed`。当前尚未把手动重新加入计为证据，需用户在 B 窗口完成加入并继续同一 Host 测试。
+
 ## 仍然阻塞 MP-0 PASS
 
 以下证据当前仍缺失，必须保持 `UNVERIFIED`：
