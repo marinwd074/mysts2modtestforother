@@ -11,11 +11,11 @@
 - `D:\yingye\Multiplayer Apply\CombatSolver_full_repo_audit_multiplayer_readiness_2026-09-19.md`
 - `D:\yingye\Multiplayer Apply\CombatSolver_multiplayer_reduced_feature_strategy_2026-09-19.md`
 
-本交接对应的功能基线是 CombatSolver `0.40.2`、游戏 `0.107.1`、兼容符号 `STS2_01071`，功能证据基线提交为 `57ebfeb docs: finalize dual client phase0 evidence`。当前分支为 `main`；本文件提交后仍需以 `git log -1` 为准。
+本交接对应的功能基线是 CombatSolver `0.40.2`、游戏 `0.107.1`、兼容符号 `STS2_01071`；功能证据基线和本次审计提交均以当前 `main` 的 `git log -1` 为准。
 
 ## 当前结论
 
-MP-0 仍为 `UNVERIFIED`，不能开启 `MultiplayerAdvisor`、`MultiplayerSafeExecute`，也不能发送自定义网络包或控制其他玩家。
+MP-0 的完整矩阵仍为 `UNVERIFIED`，但已按 post-test audit 拆分为 **MP-0 Core = PASS**、**MP-0 Hardening = INCOMPLETE**。生命周期缺口不再阻塞 MP-1 Advisor 的受控实现入口；默认运行仍是 Probe，Advisor 只能显式 opt-in，Safe Execute 仍 blocked。
 
 - Phase 0 矩阵：14 项 `PASS`，仅 `lifecycle` 为 `UNVERIFIED`。
 - MP-0A 三组连接矩阵已通过：`HostVanilla + ClientVanilla`、`HostVanilla + ClientRitsuOnly`、`HostVanilla + ClientCombatSolver`。
@@ -23,6 +23,7 @@ MP-0 仍为 `UNVERIFIED`，不能开启 `MultiplayerAdvisor`、`MultiplayerSafeE
 - 双 Client 对照已通过：Host 使用 Vanilla，两个 CombatSolver Client 使用不同本地 ID `1000` / `1001`；两个独立 Client 的同 Seed 敌人公开状态集合差异为 `0/0`。
 - 该敌人状态结论只表示 Client-to-Client 公共状态对照，不表示自定义 Host 协议已经实现或验证。
 - 最终双 Client 归档时有三场战斗开始、两场结束，第三场已开始但未收尾；未捕获连接建立后的干净退出/重新加入闭环，进程停止本身不计作生命周期证据。
+- 已补齐的 post-test audit contract：本地私有与远端公开/Unknown 知识边界、local-player-only root、远端私有读取 fail closed、多人缩放脱离 live state、未建模远端遗物 hook fail closed、Probe Lab-only evidence、schema v2 的 `runSeed`/`combatSegmentId`、紧凑 fingerprint 快速路径和可选的每条证据 flush。
 
 ## 最终实机证据
 
@@ -40,11 +41,11 @@ MP-0 仍为 `UNVERIFIED`，不能开启 `MultiplayerAdvisor`、`MultiplayerSafeE
 
 `D:\yingye\CombatSolver\.local\multiplayer-lab\results\mp0-c-new-dll-20260919\20260919-193408-4dffbcd3`
 
-当前 DLL：[CombatSolver.dll](D:/yingye/CombatSolver/artifacts/CombatSolver/CombatSolver.dll)，约 `4,186,112` 字节。文档变更不需要重建或复制 DLL。
+当前 DLL：[CombatSolver.dll](D:/yingye/CombatSolver/artifacts/CombatSolver/CombatSolver.dll)，约 `4,196,352` 字节；本次源码审计已完成 Release 构建并复制到该路径。
 
-## 下一轮唯一优先事项：生命周期证据
+## 下一轮优先事项：Hardening 与 Advisor 受控验证
 
-下一轮需要用户手动操作游戏；启动新游戏前必须先告知用户，不能自动点击 UI。目标是捕获清晰的连接后生命周期闭环：
+生命周期仍是 MP-0 Hardening 的唯一未完成证据；下一轮需要用户手动操作游戏，启动新游戏前必须先告知用户，不能自动点击 UI。目标是捕获清晰的连接后生命周期闭环：
 
 1. 仅使用 D: 隔离实例启动 Vanilla Host、CombatSolver Client A 和 Client B。
 2. Client A 使用 `1000`，Client B 使用 `1001`；同一 Host 上不得让两个客户端使用原生默认的重复 ID `1000`。
@@ -87,8 +88,8 @@ pwsh -NoLogo -NoProfile -File "$toolRoot\start-client.ps1" `
 
 完成下一轮后，必须同时满足：
 
-- 生命周期检查从 `UNVERIFIED` 变为有日志和 Probe 支持的 `PASS`；
-- 矩阵整体状态才可从 `UNVERIFIED` 改为 `PASS`；
+- 若要宣布完整 MP-0 PASS，生命周期检查必须从 `UNVERIFIED` 变为有日志和 Probe 支持的 `PASS`，矩阵整体状态才可从 `UNVERIFIED` 改为 `PASS`；
+- 当前 post-test audit 交接可在不改变上述事实的前提下完成：Core/Hardening/Advisor/Safe Execute 状态必须明确，默认 Probe 与显式 Advisor 门禁必须保持可审计；
 - 保持 `probeReadOnly=true`、无自定义网络包、无自动出牌/结束回合；
 - 更新本阻碍文件和本交接文档，执行定向校验、`git diff --check`，提交并推送 GitHub；
 - 每轮对话继续提供当前 [CombatSolver.dll](D:/yingye/CombatSolver/artifacts/CombatSolver/CombatSolver.dll) 链接。

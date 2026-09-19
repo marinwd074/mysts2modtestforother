@@ -2,6 +2,12 @@
   "schemaVersion": 1,
   "phase": "MP-0",
   "status": "UNVERIFIED",
+  "coreStatus": "PASS",
+  "hardeningStatus": "INCOMPLETE",
+  "nextPhase": {
+    "mp1Advisor": "READY_FOR_IMPLEMENTATION",
+    "mp2SafeExecute": "BLOCKED"
+  },
   "checks": {
     "vanillaHostAcceptedClient": {
       "status": "PASS",
@@ -92,8 +98,8 @@
   ],
   "notes": [
     "MP-0A connection compatibility is explicitly evidenced for all three profiles.",
-    "Independent dual-Client public enemy-state comparison is now PASS; overall MP-0 remains UNVERIFIED because exit/rejoin lifecycle evidence is incomplete and the final third combat was not ended before collection.",
+    "MP-0 Core is PASS; full MP-0 remains UNVERIFIED because exit/rejoin lifecycle evidence is incomplete and the final third combat was not ended before collection. Lifecycle is retained as MP-0 Hardening and does not silently promote the default Probe profile.",
     "The enemy-state PASS is limited to two independent CombatSolver Clients observing the same Host run; it does not enable custom packets or infer Host-side mod behavior.",
-    "This matrix does not authorize MultiplayerAdvisor or MultiplayerSafeExecute."
+    "MultiplayerAdvisor is only an explicit process-scoped opt-in for the local current-turn, display-only path; MultiplayerSafeExecute remains blocked."
   ]
 }

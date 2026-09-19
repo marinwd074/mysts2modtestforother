@@ -1,8 +1,9 @@
 # Multiplayer Phase 0 lab
 
 本目录只提供可审计的 MP-0A/MP-0B 实机测试基础设施。它不会启动自动
-Lobby、修改能力表、启用 Multiplayer Advisor，也不会把 `UNVERIFIED` 推断为
-`PASS`。
+Lobby、修改能力表，也不会把 `UNVERIFIED` 推断为 `PASS`。Client 默认仍是
+Probe；只有显式传入 `-MultiplayerMode advisor` 才设置 Advisor 环境变量，且该
+入口仍只允许当前回合、本地玩家、只显示路线的搜索。
 
 ## 阶段边界
 
@@ -49,7 +50,8 @@ Lobby、wire 或战斗证据。
   加入、选角色和 Ready。`-ClientId` 只用于同一台机器上同时运行多个
   `FastMpJoin` 客户端；原生默认值是 `1000`，每个客户端必须使用不同的
   非零 ID。`-FastMpMode host|join` 只在显式指定时传给当前
-  二进制；它的结果仍是 UNVERIFIED，不构成连接证据。
+  二进制；`-MultiplayerMode probe|advisor` 只设置 CombatSolver 进程环境，
+  默认不设置；它的结果仍是 UNVERIFIED，不构成连接证据。
 - `stop-owned-instances.ps1` 只接受显式 instance root，并同时校验 marker、
   PID、进程出生时间和 executable path；没有 ownership 证据就停止。
 - `collect-results.ps1` 只复制指定实例的日志/Probe JSONL，并生成
@@ -63,6 +65,11 @@ Lobby、wire 或战斗证据。
 - `compare-probe-public-state.ps1` 只读比较两个独立 CombatSolver Client
   Probe 的分段敌人公开状态；只有每段 seed 和观察到的有序敌人状态集合完全相同
   才报告 `PASS`，采样窗口不同报告 `UNVERIFIED`，且不会自动修改 Phase 0 矩阵。
+  比较器优先使用 schema v2 的 `runSeed`/`combatSegmentId`，同时兼容旧的
+  schema v1 归档。
+
+Lab Client 会自动设置 `COMBATSOLVER_MULTIPLAYER_PROBE_EVIDENCE=1`，因此
+Probe JSONL 只落在实例诊断目录；普通桌面运行不会因为 Probe 观察而持续写证据。
 
 ## 推荐流程
 

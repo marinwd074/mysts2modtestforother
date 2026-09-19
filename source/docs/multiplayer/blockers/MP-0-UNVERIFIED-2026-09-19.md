@@ -1,6 +1,14 @@
 # MP-0 阻碍与未验证项（2026-09-19）
 
-本文件只记录当前多人适配的阻碍、失败和未验证事实；它不构成 PASS 证据，也不解除 `MultiplayerProbe` 门禁。
+本文件只记录当前多人适配的阻碍、失败和未验证事实；它不构成 PASS 证据。默认运行仍保持 `MultiplayerProbe`，但完整 MP-0 的生命周期缺口不再阻塞 MP-1 Advisor 的受控实现入口。
+
+## Post-test audit 状态（2026-09-19）
+
+- **MP-0 Core：PASS**：连接兼容、本地私有状态只读采集、远端公开战斗状态、双 Client 公共敌人状态对照和 Probe 只读契约均已有证据。
+- **MP-0 Hardening：INCOMPLETE**：连接建立后的退出/重新加入闭环以及完整第三场收尾仍未捕获；完整矩阵因此继续为 `UNVERIFIED`。
+- **MP-1 Advisor：READY FOR IMPLEMENTATION**：默认不启用；`COMBATSOLVER_MULTIPLAYER_MODE=advisor` 仅授予本地当前回合搜索和路线显示，不执行动作。远端私有字段保持 `Unknown`，未建模的远端遗物公开 hook fail closed。
+- **MP-2 Safe Execute：BLOCKED**：本地动作分类、世界版本自变更和原生动作证据尚未满足。
+- 针对早期 RitsuLib `CombatStartingEvent: Sequence contains more than one element` 提示，已对最终双 Client 归档的日志做定向检索；未发现该提示或新的 warning/error 匹配，保留为一次归档级确认而非新的实机生命周期证据。
 
 ## 已确认
 
@@ -112,11 +120,11 @@
 - A/B 共 `477/477` 条记录满足 `readOnly=true`、`searchStarted=false`、`actionsEnqueued=false`、`customNetworkPacketSent=false`；A/B 公开敌人状态对照报告为 `PASS`，报告路径为 `D:\yingye\CombatSolver\.local\multiplayer-lab\results\mp0-c-dual-client-20260919\20260919-201041-fbab53a5\enemy-state-comparison.json`，三段同 Seed `N1HHX05Q5U`，每段状态差集均为 `0`。
 - Host、A、B 日志均记录三场战斗开始和两场战斗结束；第三场已开始但收集时尚无结束记录。没有捕获连接建立后的退出/重新加入闭环，因此 `lifecycle` 继续保持 `UNVERIFIED`，进程停止本身不计为通过证据。
 
-## 仍然阻塞 MP-0 PASS
+## 仍然阻塞完整 MP-0 PASS（MP-0 Hardening）
 
 以下证据当前仍缺失，必须保持 `UNVERIFIED`：
 
-- A/B/C 三组连接证据已填入 `../evidence/phase0-matrix-2026-09-19.json`，MP-0A 可独立校验；MP-0B 仍含未完成项，整体 MP-0 保持 `UNVERIFIED`。
+- A/B/C 三组连接证据已填入 `../evidence/phase0-matrix-2026-09-19.json`，MP-0A 和 MP-0 Core 可独立校验；生命周期缺口使完整 MP-0 保持 `UNVERIFIED`。
 - C 组连接后的退出和重新加入，以及跨生命周期保持只读边界；当前双 Client 对照已经 PASS，但第三场战斗未收尾。
 - 直接从 Host 内部导出的逐时刻敌人公开状态没有单独采集；当前 `enemyStateSync` 的 PASS 严格限于两个独立 CombatSolver Client 对同一 Host 运行的公开状态集合对照，不涉及自定义 Host 协议。
 - 若要把整体 MP-0 从 `UNVERIFIED` 提升，仍需在下一轮有界运行中补齐退出/重新加入证据；本轮完成后不自动启动新游戏。
@@ -125,9 +133,9 @@
 ## 当前安全边界
 
 - Runtime 默认继续使用 `MultiplayerProbe`：只读采集，不搜索、不部署、不自动选牌、不自动 EndTurn、不发送自定义网络包。
-- 在完整 MP-0（尤其 lifecycle）证据通过前，不得切换 `MultiplayerAdvisor` 或 `MultiplayerSafeExecute`。
+- `MultiplayerAdvisor` 只能由显式 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 启用，且受当前回合、root capture contract 和 fail-closed 远端语义约束；`MultiplayerSafeExecute` 仍不可用。
 - 临时 Host 日志位于本机 `.local/multiplayer-lab/cli-probe-host/host.log`，未作为通过证据提交；如需复核，应重新运行并保存脱敏的成对 Host/Client 证据。
 
 ## 下一步
 
-现在 A/B/C 三组均已形成 MP-0A 连接矩阵，双 Client 的公开敌人状态对照已通过，C 组已补齐多场战斗的只读牌堆/远端变化证据；剩余阻碍是退出/重新加入生命周期证据和本轮第三场战斗收尾。完成前，整体 MP-0 仍保持 `UNVERIFIED`。
+现在 A/B/C 三组均已形成 MP-0A 连接矩阵，双 Client 的公开敌人状态对照已通过，C 组已补齐多场战斗的只读牌堆/远端变化证据；剩余阻碍是退出/重新加入生命周期证据和本轮第三场战斗收尾。完成前，整体 MP-0 仍保持 `UNVERIFIED`，但可在默认 Probe 不变的前提下继续实现和审计 Advisor。

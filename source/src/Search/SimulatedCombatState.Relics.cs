@@ -264,7 +264,7 @@ internal sealed partial class SimulatedCombatState
         CombatPredictionSimulator simulator)
     {
         fingerprint.Add('L');
-        foreach (Player player in Players)
+        foreach (Player player in _rootCapturedPlayers)
         {
             foreach (RelicModel relic in RelicsOf(player))
             {

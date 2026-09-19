@@ -24,9 +24,9 @@ internal sealed partial class SimulatedCombatState
     private List<RelicModel> RelicsParticipatingInSideTurn(IReadOnlyList<Creature> participants)
     {
         List<RelicModel> relics = [];
-        for (int playerIndex = 0; playerIndex < Players.Count; playerIndex++)
+        for (int playerIndex = 0; playerIndex < _rootCapturedPlayers.Count; playerIndex++)
         {
-            IReadOnlyList<RelicModel> owned = RelicsOf(Players[playerIndex]);
+            IReadOnlyList<RelicModel> owned = RelicsOf(_rootCapturedPlayers[playerIndex]);
             for (int relicIndex = 0; relicIndex < owned.Count; relicIndex++)
             {
                 RelicModel relic = owned[relicIndex];

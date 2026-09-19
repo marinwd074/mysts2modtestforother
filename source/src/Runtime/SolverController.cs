@@ -499,6 +499,11 @@ internal static partial class SolverController
     {
         AssertMainThread();
         ResetCore("combat_starting");
+        if (state is CombatState activeMultiplayerCombat
+            && SolverSessionCapabilities.Capture(activeMultiplayerCombat).IsMultiplayer)
+        {
+            MultiplayerClientProbe.BeginCombatSegment();
+        }
         _combat.FullAutoEnabled = !_solverDisabled
             && SolverSessionCapabilities.Capture(state as CombatState).CanFullAuto
             && state is CombatState { Players.Count: 1 }

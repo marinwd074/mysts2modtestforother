@@ -55,19 +55,27 @@ internal readonly record struct SolverSessionCapabilitySet(
 
 internal static class SolverSessionCapabilities
 {
+    internal const string MultiplayerModeEnvironmentVariable = "COMBATSOLVER_MULTIPLAYER_MODE";
+
     public static bool IsNetworkMultiplayer
         => RunManager.Instance.IsInProgress
            && RunManager.Instance.NetService.Type != NetGameType.Singleplayer;
 
+    internal static bool IsMultiplayerAdvisorOptedIn
+        => string.Equals(
+            Environment.GetEnvironmentVariable(MultiplayerModeEnvironmentVariable),
+            "advisor",
+            StringComparison.OrdinalIgnoreCase);
+
     /// <summary>
-    /// Multiplayer remains in read-only Probe until a real Host/Client evidence gate is
-    /// recorded. The Advisor and SafeExecute profiles are defined here but are not
-    /// activated by inference from player count or NetService type.
+    /// Multiplayer remains in read-only Probe by default. Advisor is an explicit,
+    /// process-scoped opt-in so a player count or transport type can never silently
+    /// grant a search capability to an ordinary multiplayer session.
     /// </summary>
     public static SolverSessionCapabilitySet Capture(CombatState? state)
     {
         if (IsNetworkMultiplayer || state != null && state.Players.Count != 1)
-            return MultiplayerProbe;
+            return IsMultiplayerAdvisorOptedIn ? MultiplayerAdvisor : MultiplayerProbe;
         return Singleplayer;
     }
 

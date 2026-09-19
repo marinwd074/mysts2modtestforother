@@ -26,7 +26,7 @@ Check(firstText.Contains("before upload") && !firstText.Contains("after upload")
 Check(second.History.Length == 1 && second.History[0].Errors == 1 && second.History[0].LastError == "after upload", "previous fight summary missing");
 string secondText = Encoding.UTF8.GetString(second.Events.JsonLines);
 Check(secondText.Contains("second battle") && !secondText.Contains("before upload") && !secondText.Contains("old callback"), "combat isolation failed");
-Check(second.Events.Error == null && second.Process.EventCount == 1, "journal write failed");
+Check(second.Events.Error == null && second.Process.EventCount >= 4, "journal write failed");
 Console.WriteLine("PASS frozen upload, historical summary, worker ownership and process isolation");
 
 journal.BeginCombat("third", "new run", "other-seed");
@@ -46,3 +46,15 @@ Check(!limited.TryAppend("over limit", 20), "queue must reject without waiting")
 EventLogSnapshot limit = await limited.CaptureAsync();
 Check(limit.Error == "event_pending_memory_limit", "missing explicit incomplete marker");
 Console.WriteLine("PASS overload is visible and nonblocking");
+
+string flushPath = Path.Combine(root, "flush-each.jsonl");
+using (AppendOnlyEventLog<string> flushed = new(
+           Encoding.UTF8.GetBytes,
+           outputPath: flushPath,
+           flushPolicy: EventLogFlushPolicy.FlushEachAppend))
+{
+    Check(flushed.TryAppend("visible", 64), "flush-policy append was rejected");
+    _ = await flushed.CaptureAsync();
+}
+Check(File.ReadAllText(flushPath).Contains("visible"), "flush-each append was not visible");
+Console.WriteLine("PASS explicit flush-each-append policy");

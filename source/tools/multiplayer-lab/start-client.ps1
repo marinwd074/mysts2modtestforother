@@ -8,6 +8,9 @@ param(
     [ValidateSet('', 'host', 'join')]
     [string]$FastMpMode = '',
 
+    [ValidateSet('', 'probe', 'advisor')]
+    [string]$MultiplayerMode = '',
+
     [UInt64]$ClientId = 0,
 
     [switch]$ForceSteamOff
@@ -18,6 +21,7 @@ try {
         -Role Client `
         -InstanceRoot $InstanceRoot `
         -FastMpMode $FastMpMode `
+        -MultiplayerMode $MultiplayerMode `
         -ClientId $ClientId `
         -ForceSteamOff:$ForceSteamOff
     if (-not $?) { exit 1 }

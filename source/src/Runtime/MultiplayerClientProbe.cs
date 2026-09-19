@@ -1,9 +1,12 @@
 using System.Text.Json;
+using System.Runtime.CompilerServices;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Cards;
+using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Potions;
 using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.Runs;
 using CombatSolver.Engine.Common;
@@ -16,6 +19,8 @@ internal sealed record MultiplayerProbeSnapshot(
     long CapturedAtUnixMilliseconds,
     int Sequence,
     long WorldVersion,
+    string RunSeed,
+    int CombatSegmentId,
     string Reason,
     string NetworkType,
     int PlayerCount,
@@ -55,6 +60,7 @@ internal static class MultiplayerClientProbe
 {
     private const int MinimumSampleIntervalMilliseconds = 100;
     private const int ProbeEvidenceEstimatedBytes = 16 * 1024;
+    private const string EvidenceEnvironmentVariable = "COMBATSOLVER_MULTIPLAYER_PROBE_EVIDENCE";
     private static readonly object EvidenceGate = new();
     private static readonly object CardIdentityGate = new();
     private static readonly Dictionary<CardModel, int> CardIdentityIds =
@@ -67,12 +73,34 @@ internal static class MultiplayerClientProbe
         $"multiplayer-probe-{Environment.ProcessId}-{Guid.NewGuid():N}.jsonl";
     private static long _lastSampleAt;
     private static int _observationSequence;
+    private static int _combatSegmentId;
     private static int _nextCardIdentityId;
     private static AppendOnlyEventLog<MultiplayerProbeSnapshot>? _evidenceLog;
     private static bool _evidenceDisabled;
 
+    private static bool EvidenceEnabled
+        => IsTruthy(Environment.GetEnvironmentVariable(EvidenceEnvironmentVariable));
+
+    private static bool IsTruthy(string? value)
+        => string.Equals(value, "1", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase);
+
     internal static void Reset()
     {
+        _lastSampleAt = 0;
+        _observationSequence = 0;
+        lock (CardIdentityGate)
+        {
+            CardIdentityIds.Clear();
+            _nextCardIdentityId = 0;
+        }
+        MultiplayerWorldTracker.Reset();
+    }
+
+    internal static void BeginCombatSegment()
+    {
+        _combatSegmentId = checked(_combatSegmentId + 1);
         _lastSampleAt = 0;
         _observationSequence = 0;
         lock (CardIdentityGate)
@@ -111,23 +139,29 @@ internal static class MultiplayerClientProbe
         _lastSampleAt = now;
 
         Player? localPlayer = LocalContext.GetMe(state);
-        string display = Describe(state, localPlayer);
-        string hardFingerprint = HardFingerprint(state, localPlayer);
-        bool changed = MultiplayerWorldTracker.ObserveSnapshot(hardFingerprint, reason);
+        StateFingerprint compactFingerprint = CompactFingerprint(state, localPlayer);
+        bool changed = MultiplayerWorldTracker.ObserveSnapshot(compactFingerprint, reason);
         if (!changed)
             return false;
 
         _observationSequence++;
-        WriteEvidence(CaptureSnapshot(
-            state,
-            localPlayer,
-            reason,
-            hardFingerprint,
-            _observationSequence));
+        string? display = null;
+        if (EvidenceEnabled)
+        {
+            string hardFingerprint = HardFingerprint(state, localPlayer);
+            WriteEvidence(CaptureSnapshot(
+                state,
+                localPlayer,
+                reason,
+                hardFingerprint,
+                _observationSequence));
+            display = Describe(state, localPlayer);
+        }
         Entry.Logger.Info(
             $"[CombatSolver/MultiplayerProbe] OBSERVED sequence={_observationSequence} " +
             $"world_version={MultiplayerWorldTracker.WorldVersion} reason={reason} " +
-            $"hard_changed=true {display}");
+            $"compact_changed=true fingerprint={compactFingerprint.First:X16}:{compactFingerprint.Second:X16}" +
+            (display is null ? string.Empty : $" {display}"));
         return true;
     }
 
@@ -140,10 +174,12 @@ internal static class MultiplayerClientProbe
     {
         PlayerCombatState? combat = localPlayer?.PlayerCombatState;
         return new(
-            SchemaVersion: 1,
+            SchemaVersion: 2,
             CapturedAtUnixMilliseconds: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
             Sequence: sequence,
             WorldVersion: MultiplayerWorldTracker.WorldVersion,
+            RunSeed: state.RunState.Rng.StringSeed,
+            CombatSegmentId: _combatSegmentId,
             Reason: reason,
             NetworkType: RunManager.Instance.NetService.Type.ToString(),
             PlayerCount: state.Players.Count,
@@ -183,6 +219,9 @@ internal static class MultiplayerClientProbe
 
     private static void WriteEvidence(MultiplayerProbeSnapshot snapshot)
     {
+        if (!EvidenceEnabled)
+            return;
+
         lock (EvidenceGate)
         {
             if (_evidenceDisabled)
@@ -194,7 +233,8 @@ internal static class MultiplayerClientProbe
                     value => JsonSerializer.SerializeToUtf8Bytes(value, EvidenceJson),
                     maximumPendingBytes: 2 * 1024 * 1024,
                     maximumFileBytes: 16 * 1024 * 1024,
-                    outputPath: Path.Combine(CombatBugReportPaths.ModLogsDirectory, EvidenceFileName));
+                    outputPath: Path.Combine(CombatBugReportPaths.ModLogsDirectory, EvidenceFileName),
+                    flushPolicy: EventLogFlushPolicy.FlushEachAppend);
                 _evidenceLog.TryAppend(snapshot, ProbeEvidenceEstimatedBytes);
             }
             catch (DirectoryNotFoundException)
@@ -210,6 +250,143 @@ internal static class MultiplayerClientProbe
                 _evidenceDisabled = true;
             }
         }
+    }
+
+    private static StateFingerprint CompactFingerprint(CombatState state, Player? localPlayer)
+    {
+        StateFingerprintBuilder fingerprint = new();
+        fingerprint.Add(RunManager.Instance.NetService.Type.ToString());
+        fingerprint.Add(state.Players.Count);
+        fingerprint.Add(state.RoundNumber);
+        fingerprint.Add(state.CurrentSide.ToString());
+        fingerprint.Add(state.RunState.Rng.StringSeed);
+        fingerprint.Add(state.MultiplayerScalingModel is null
+            ? -1
+            : state.MultiplayerScalingModel.ShouldReceiveCombatHooks ? 1 : 0);
+        fingerprint.Add(state.RunState.CardMultiplayerConstraint.ToString());
+        AppendCompactRng(ref fingerprint, state);
+
+        AppendCompactPlayer(ref fingerprint, localPlayer, includePrivateState: true);
+        foreach (Player player in state.Players)
+        {
+            if (localPlayer != null && player.NetId == localPlayer.NetId)
+                continue;
+            AppendCompactPlayer(ref fingerprint, player, includePrivateState: false);
+        }
+
+        fingerprint.Add(state.Enemies.Count);
+        foreach (Creature enemy in state.Enemies)
+        {
+            fingerprint.Add(enemy.CombatId?.ToString());
+            fingerprint.Add(enemy.Monster?.Id.Entry);
+            fingerprint.Add(enemy.CurrentHp);
+            fingerprint.Add(enemy.MaxHp);
+            fingerprint.Add(enemy.Block);
+            fingerprint.Add(enemy.Monster?.NextMove?.Id.ToString());
+            AppendCompactPowers(ref fingerprint, enemy.Powers);
+        }
+        return fingerprint.Finish();
+    }
+
+    private static void AppendCompactPlayer(
+        ref StateFingerprintBuilder fingerprint,
+        Player? player,
+        bool includePrivateState)
+    {
+        if (player == null)
+        {
+            fingerprint.Add(false);
+            return;
+        }
+
+        fingerprint.Add(true);
+        fingerprint.Add(player.NetId.ToString());
+        fingerprint.Add(player.Character.Id.Entry);
+        fingerprint.Add(player.Creature.CurrentHp);
+        fingerprint.Add(player.Creature.MaxHp);
+        fingerprint.Add(player.Creature.Block);
+        PlayerCombatState? combat = player.PlayerCombatState;
+        fingerprint.Add(combat != null);
+        if (combat == null)
+            return;
+
+        fingerprint.Add(combat.TurnNumber);
+        fingerprint.Add(combat.Phase.ToString());
+        if (includePrivateState)
+        {
+            fingerprint.Add(combat.Energy);
+            fingerprint.Add(combat.Stars);
+            AppendCompactCards(ref fingerprint, combat.Hand.Cards);
+            AppendCompactCards(ref fingerprint, combat.DrawPile.Cards);
+            AppendCompactCards(ref fingerprint, combat.DiscardPile.Cards);
+            AppendCompactCards(ref fingerprint, combat.ExhaustPile.Cards);
+            fingerprint.Add(player.PotionSlots.Count);
+            foreach (PotionModel? potion in player.PotionSlots)
+                fingerprint.Add(potion?.Id.Entry);
+        }
+        AppendCompactPowers(ref fingerprint, player.Creature.Powers);
+    }
+
+    private static void AppendCompactCards(
+        ref StateFingerprintBuilder fingerprint,
+        IEnumerable<CardModel> cards)
+    {
+        if (cards is IReadOnlyCollection<CardModel> collection)
+        {
+            fingerprint.Add(collection.Count);
+        }
+        else
+        {
+            int count = 0;
+            foreach (CardModel _ in cards)
+                count++;
+            fingerprint.Add(count);
+        }
+        foreach (CardModel card in cards)
+        {
+            fingerprint.Add(card.Id.Entry);
+            fingerprint.Add(card.CurrentUpgradeLevel);
+            fingerprint.Add(card.Enchantment?.Id.Entry);
+            fingerprint.Add(card.Affliction?.Id.Entry);
+            fingerprint.Add(card.Affliction?.Amount ?? 0);
+            fingerprint.Add(RuntimeHelpers.GetHashCode(card));
+        }
+    }
+
+    private static void AppendCompactPowers(
+        ref StateFingerprintBuilder fingerprint,
+        IEnumerable<PowerModel> powers)
+    {
+        if (powers is IReadOnlyCollection<PowerModel> collection)
+        {
+            fingerprint.Add(collection.Count);
+        }
+        else
+        {
+            int count = 0;
+            foreach (PowerModel _ in powers)
+                count++;
+            fingerprint.Add(count);
+        }
+        foreach (PowerModel power in powers)
+        {
+            fingerprint.Add(power.Id.Entry);
+            fingerprint.Add(power.Amount);
+        }
+    }
+
+    private static void AppendCompactRng(ref StateFingerprintBuilder fingerprint, CombatState state)
+    {
+        var rng = state.RunState.Rng;
+        fingerprint.Add(rng.Shuffle.Counter);
+        fingerprint.Add(rng.CombatCardGeneration.Counter);
+        fingerprint.Add(rng.CombatPotionGeneration.Counter);
+        fingerprint.Add(rng.CombatCardSelection.Counter);
+        fingerprint.Add(rng.CombatEnergyCosts.Counter);
+        fingerprint.Add(rng.CombatTargets.Counter);
+        fingerprint.Add(rng.CombatOrbGeneration.Counter);
+        fingerprint.Add(rng.MonsterAi.Counter);
+        fingerprint.Add(rng.Niche.Counter);
     }
 
     private static string Describe(CombatState state, Player? localPlayer)

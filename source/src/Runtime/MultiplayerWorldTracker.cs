@@ -9,7 +9,7 @@ internal static class MultiplayerWorldTracker
 {
     internal const int DefaultDebounceMilliseconds = 200;
 
-    private static string? _lastFingerprint;
+    private static StateFingerprint? _lastFingerprint;
     private static string _lastReason = "reset";
     private static long _worldVersion;
     private static long _stableAfter;
@@ -28,9 +28,9 @@ internal static class MultiplayerWorldTracker
         _dirty = false;
     }
 
-    internal static bool ObserveSnapshot(string fingerprint, string reason)
+    internal static bool ObserveSnapshot(StateFingerprint fingerprint, string reason)
     {
-        if (string.Equals(_lastFingerprint, fingerprint, StringComparison.Ordinal))
+        if (_lastFingerprint is { } previous && previous == fingerprint)
             return false;
 
         _lastFingerprint = fingerprint;

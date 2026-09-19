@@ -305,10 +305,9 @@ internal sealed partial class SimulatedCombatState
         {
             if (!_rootCapturedPlayers.Contains(player))
             {
-                // Teammate relics are public combat context, but their private mutable
-                // state is outside a local-player root. Keep the player key so public
-                // roster walks fail closed without retaining teammate relic models.
-                rootRelics.Add(player, []);
+                // Teammate relic inventory is not known to a local-player root. Do not
+                // represent Unknown as an empty inventory; RelicsOf(remote) must fail
+                // closed instead of silently erasing public teammate influence.
                 continue;
             }
             RelicModel[] relics = player.Relics
@@ -323,9 +322,9 @@ internal sealed partial class SimulatedCombatState
         }
         _rootRelics = rootRelics;
         _rootRelicSources = rootRelicSources;
-        _rootPotionSlotCounts = inner.Players.ToDictionary(
+        _rootPotionSlotCounts = _rootCapturedPlayers.ToDictionary(
             player => player,
-            player => _rootCapturedPlayers.Contains(player) ? player.PotionSlots.Count : 0);
+            player => player.PotionSlots.Count);
         _rootPlayerTurnNumbers = inner.Players.ToDictionary(
             player => player,
             player => player.PlayerCombatState is { } state
@@ -441,7 +440,7 @@ internal sealed partial class SimulatedCombatState
         _deathPhases = BuildInitialDeathPhases(inner.Enemies);
         _playerTurnNumbers = [];
         _simulatedPlayerGold = [];
-        foreach (Player player in _players)
+        foreach (Player player in _rootCapturedPlayers)
         {
             PlayerCombatState playerState = player.PlayerCombatState
                 ?? throw new InvalidOperationException($"Player {player.NetId} has no combat state to capture.");
@@ -1826,6 +1825,8 @@ internal sealed partial class SimulatedCombatState
     {
         if (owner.Player is { } player)
         {
+            if (!_rootCapturedPlayers.Contains(player))
+                return false;
             return listener is RelicModel relic && RelicsOf(player).Contains(relic)
                 || listener is PotionModel potion && ReferenceEquals(potion.Owner, player)
                 || listener is CardModel card && ReferenceEquals(card.Owner, player);
@@ -2162,6 +2163,11 @@ internal sealed partial class SimulatedCombatState
     internal bool RootMultiplayerScalingIsDetached => _multiplayerScalingModel is null
         || (MultiplayerScalingRunStateField.GetValue(_multiplayerScalingModel) is null
             && MultiplayerScalingCombatStateField.GetValue(_multiplayerScalingModel) is null);
+    internal int RootRemotePublicRelicListenerCount
+        => _rootHookListeners.Count(listener =>
+            listener is RelicModel relic
+            && relic.Owner is Player owner
+            && !_rootCapturedPlayers.Contains(owner));
 
     internal IReadOnlyList<RelicModel> RelicsOf(Player player)
         => _rootRelics.TryGetValue(player, out RelicModel[]? relics)
