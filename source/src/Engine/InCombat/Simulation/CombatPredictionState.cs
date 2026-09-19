@@ -105,6 +105,11 @@ internal sealed class CombatPredictionState
 
     public IReadOnlyList<Player> Players => CombatState.Players;
 
+    internal IReadOnlyList<Player> RootCapturedPlayers
+        => CombatState is ICombatPredictionRootCaptureBoundary boundary
+            ? boundary.RootCapturedPlayers
+            : Players;
+
     public IReadOnlyList<Creature> HittableEnemies => _hittableEnemies ??= new HittableEnemyView(this);
 
     public SimCreatureState GetCreature(Creature creature)
@@ -197,7 +202,7 @@ internal sealed class CombatPredictionState
     {
         foreach (Creature creature in CombatState.Creatures)
             _ = GetCreature(creature);
-        foreach (Player player in CombatState.Players)
+        foreach (Player player in RootCapturedPlayers)
         {
             if (player.Osty is { } osty)
                 _ = GetCreature(osty);

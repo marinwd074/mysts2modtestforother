@@ -47,7 +47,8 @@ internal sealed class PredictionModHookSubscriberCapture
 
     public static PredictionModHookSubscriberCapture Capture(
         RunState runState,
-        CombatState combat)
+        CombatState combat,
+        IReadOnlyList<Player>? capturedPlayers = null)
     {
         AbstractModel[] runSubscribers = ModHelper.IterateAllRunStateSubscribers(runState).ToArray();
         AbstractModel[] combatSubscribers = ModHelper.IterateAllCombatStateSubscribers(combat).ToArray();
@@ -58,10 +59,12 @@ internal sealed class PredictionModHookSubscriberCapture
             ValidateSubscriber(subscriber, "run");
         foreach (AbstractModel subscriber in combatSubscribers)
             ValidateSubscriber(subscriber, "combat");
-        AdaptedOnPlaySnapshot? onPlay = PredictionModPatchAudit.CaptureCardOnPlay(EnumerateAuditableCards(runState, combat));
+        AdaptedOnPlaySnapshot? onPlay = PredictionModPatchAudit.CaptureCardOnPlay(
+            EnumerateAuditableCards(runState, combat, capturedPlayers));
 
         Dictionary<Player, int> maxHandSizes = [];
-        foreach (Player player in combat.Players)
+        IEnumerable<Player> players = capturedPlayers ?? combat.Players;
+        foreach (Player player in players)
         {
             int maxHandSize = RitsuLibFramework.GetMaxHandSize(player);
             if (maxHandSize < 0)
@@ -71,7 +74,7 @@ internal sealed class PredictionModHookSubscriberCapture
 
         IReadOnlySet<Player> everyCardFreePlayers = CaptureEveryCardFreePlayers(
             combatSubscribers,
-            combat.Players);
+            players);
 
         return new PredictionModHookSubscriberCapture(
             runSubscribers,
@@ -91,7 +94,7 @@ internal sealed class PredictionModHookSubscriberCapture
 
     private static IReadOnlySet<Player> CaptureEveryCardFreePlayers(
         IReadOnlyList<AbstractModel> combatSubscribers,
-        IReadOnlyList<Player> players)
+        IEnumerable<Player> players)
     {
         AbstractModel? hook = combatSubscribers.SingleOrDefault(subscriber =>
             subscriber.GetType().FullName == LoadoutEveryCardFreeCombatHookTypeName);
@@ -132,14 +135,18 @@ internal sealed class PredictionModHookSubscriberCapture
     /// Every card type the root can reach without in-combat generation. Generated card types are not knowable at
     /// capture time, so they stay outside this audit.
     /// </summary>
-    private static IEnumerable<CardModel> EnumerateAuditableCards(RunState runState, CombatState combat)
+    private static IEnumerable<CardModel> EnumerateAuditableCards(
+        RunState runState,
+        CombatState combat,
+        IReadOnlyList<Player>? capturedPlayers)
     {
-        foreach (Player player in combat.Players)
+        IEnumerable<Player> players = capturedPlayers ?? combat.Players;
+        foreach (Player player in players)
         {
             foreach (CardModel card in player.PlayerCombatState?.AllCards ?? [])
                 yield return card;
         }
-        foreach (Player player in runState.Players)
+        foreach (Player player in capturedPlayers ?? runState.Players)
         {
             foreach (CardModel card in player.Deck.Cards)
                 yield return card;

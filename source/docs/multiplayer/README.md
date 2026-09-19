@@ -14,7 +14,7 @@
 已把后续 MP-1/MP-2 的受控路径接入源码，但仍由上述 Probe 门禁关闭：
 
 - Advisor/Safe Execute 允许时，`SearchPolicySnapshot.CurrentTurnOnly` 会截断首个本地回合层，关闭跨回合成长目标、远期 Novelty、路线缓存和 continuation reuse。
-- `CombatRootSnapshot` 在显式多人搜索能力开启前拒绝构造当前仍会捕获完整玩家集合的模拟根；local-player-only root 尚未完成队友牌堆/隐藏状态隔离，不会仅凭 `Players.Count` 放开 Beam。
+- `CombatRootSnapshot` 在显式多人搜索能力开启时会传入 local-player-only capture；`SimulatedCombatState` 与 `CombatPredictionState` 只物化根玩家的私有牌堆、遗物、药水、运行级牌组和 mod card audit，公共玩家名册仍可作为战斗上下文存在，访问未捕获队友私有 combat state 会显式失败。当前能力仍固定为 Probe，因此这条路径尚未被实机证据启用。
 - `MultiplayerSafeLocalActionClassifier` 只接受本地手牌的普通 `PlayCard`，目标仅限自身/敌人/无目标；药水、结束回合、选择、重复语义、多人专属卡、远端或未知目标形成连续前缀硬停止。
 - 搜索会记录启动时 `WorldVersion`，结果发布时若远端 fingerprint 已变化则丢弃旧结果；能力门禁打开后，Runtime 会取消旧搜索，等待原生动作队列稳定和 debounce，再只启动一次最新当前回合搜索。
 - Safe Execute 路径会在每个本地动作前复核 `WorldVersion`；远端世界变化会停止后续动作，不会自动 EndTurn 或跳过不安全动作继续执行。

@@ -137,7 +137,7 @@ internal sealed partial class SimulatedCombatState
     {
         if (_liveCardsAtSnapshot != null)
             throw new InvalidOperationException("Power affliction root cards were captured more than once.");
-        _liveCardsAtSnapshot = new HashSet<CardModel>(Players
+        _liveCardsAtSnapshot = new HashSet<CardModel>(_rootCapturedPlayers
             .SelectMany(player => simulator.State.GetPlayerCombatState(player).AllCards)
             .Select(card => card.Original));
     }
@@ -189,7 +189,7 @@ internal sealed partial class SimulatedCombatState
             _lastNormalizedVitalSparkAmount is int previousVitalSparkAmount
             && previousVitalSparkAmount != vitalSparkAmount;
         _lastNormalizedVitalSparkAmount = vitalSparkAmount;
-        IReadOnlyList<Player> players = Players;
+        IReadOnlyList<Player> players = _rootCapturedPlayers;
         for (int playerIndex = 0; playerIndex < players.Count; playerIndex++)
         {
             Player player = players[playerIndex];
@@ -247,7 +247,7 @@ internal sealed partial class SimulatedCombatState
 
     private void NormalizeSwordSageReplays(CombatPredictionSimulator simulator)
     {
-        IReadOnlyList<Player> players = Players;
+        IReadOnlyList<Player> players = _rootCapturedPlayers;
         for (int playerIndex = 0; playerIndex < players.Count; playerIndex++)
         {
             Player player = players[playerIndex];

@@ -46,6 +46,7 @@ internal sealed partial class SimulatedCombatState
     private readonly IRunState _runState;
     private readonly IReadOnlyList<Creature> _playerCreatures;
     private readonly IReadOnlyList<Player> _players;
+    private readonly IReadOnlyList<Player> _rootCapturedPlayers;
     private readonly IReadOnlyList<ModifierModel> _modifiers;
     private readonly MultiplayerScalingModel? _multiplayerScalingModel;
     private readonly EncounterModel? _encounter;
@@ -242,7 +243,8 @@ internal sealed partial class SimulatedCombatState
 
     public SimulatedCombatState(
         CombatState inner,
-        AbstractModel[]? capturedCombatHookListeners = null)
+        AbstractModel[]? capturedCombatHookListeners = null,
+        Player? localPlayerOnly = null)
     {
         if (!NGame.IsMainThread())
             throw new InvalidOperationException("Live combat state can only be captured on the main thread.");
@@ -254,11 +256,16 @@ internal sealed partial class SimulatedCombatState
         _cardMultiplayerConstraint = inner.RunState.CardMultiplayerConstraint;
         _playerCreatures = inner.PlayerCreatures.ToArray();
         _players = inner.Players.ToArray();
+        if (localPlayerOnly != null && !_players.Contains(localPlayerOnly))
+            throw new InvalidOperationException("本地玩家不在当前战斗玩家名册中。");
+        _rootCapturedPlayers = localPlayerOnly is null
+            ? _players
+            : [localPlayerOnly];
         _rootCardGenerationPools = RootCombatCardGenerationPoolSnapshot.Capture(
-            _players,
+            _rootCapturedPlayers,
             _cardMultiplayerConstraint);
         _rootTransformationPools = RootCombatTransformationPoolSnapshot.Capture(
-            _players,
+            _rootCapturedPlayers,
             _cardMultiplayerConstraint);
         _encounter = inner.Encounter;
         _encounterSlots = inner.Encounter?.Slots.ToArray() ?? [];
@@ -296,6 +303,14 @@ internal sealed partial class SimulatedCombatState
         Dictionary<RelicModel, RelicModel> rootRelicSources = [];
         foreach (Player player in inner.Players)
         {
+            if (!_rootCapturedPlayers.Contains(player))
+            {
+                // Teammate relics are public combat context, but their private mutable
+                // state is outside a local-player root. Keep the player key so public
+                // roster walks fail closed without retaining teammate relic models.
+                rootRelics.Add(player, []);
+                continue;
+            }
             RelicModel[] relics = player.Relics
                 .Select(relic => PredictionUtils.CreateRelic(relic, player))
                 .ToArray();
@@ -308,7 +323,9 @@ internal sealed partial class SimulatedCombatState
         }
         _rootRelics = rootRelics;
         _rootRelicSources = rootRelicSources;
-        _rootPotionSlotCounts = inner.Players.ToDictionary(player => player, player => player.PotionSlots.Count);
+        _rootPotionSlotCounts = inner.Players.ToDictionary(
+            player => player,
+            player => _rootCapturedPlayers.Contains(player) ? player.PotionSlots.Count : 0);
         _rootPlayerTurnNumbers = inner.Players.ToDictionary(
             player => player,
             player => player.PlayerCombatState is { } state
@@ -330,15 +347,16 @@ internal sealed partial class SimulatedCombatState
         _playerNames = inner.Players.ToDictionary(
             player => player,
             player => PlatformUtil.GetPlayerName(RunManager.Instance.NetService.Platform, player.NetId));
-        HashSet<CardModel> piledCards = inner.Players
+        HashSet<CardModel> piledCards = _rootCapturedPlayers
             .Where(player => player.PlayerCombatState != null)
             .SelectMany(player => player.PlayerCombatState!.AllCards)
             .ToHashSet();
         _rootFloatingCards = ((List<CardModel>)AllCombatCardsField.GetValue(inner)!)
+            .Where(card => card.Owner == null || _rootCapturedPlayers.Contains(card.Owner))
             .Where(card => !piledCards.Contains(card))
             .ToHashSet();
         _potionSlots = [];
-        foreach (Player player in _players)
+        foreach (Player player in _rootCapturedPlayers)
         {
             int slotCount = _rootPotionSlotCounts[player];
             for (int slot = 0; slot < slotCount; slot++)
@@ -358,7 +376,8 @@ internal sealed partial class SimulatedCombatState
             ?? throw new InvalidOperationException("Combat prediction requires a concrete RunState.");
         _modHookSubscribers = PredictionModHookSubscriberCapture.Capture(
             concreteRunState,
-            inner);
+            inner,
+            localPlayerOnly is null ? null : _rootCapturedPlayers);
         _rootMaxHandSizes = _modHookSubscribers.MaxHandSizes;
         int standardCombatListenerCount =
             liveCombatHookListeners.Length - _modHookSubscribers.CombatSubscribers.Length;
@@ -383,7 +402,10 @@ internal sealed partial class SimulatedCombatState
                 and not OrbModel)
             .ToArray();
         List<AbstractModel> rootRunHookListeners = [];
-        foreach (Player player in concreteRunState.Players.Where(player => player.IsActiveForHooks))
+        IEnumerable<Player> runHookPlayers = localPlayerOnly is null
+            ? concreteRunState.Players.Where(player => player.IsActiveForHooks)
+            : _rootCapturedPlayers.Where(player => player.IsActiveForHooks);
+        foreach (Player player in runHookPlayers)
         {
             foreach (CardModel card in player.Deck.Cards)
             {
@@ -447,6 +469,7 @@ internal sealed partial class SimulatedCombatState
         _rootTransformationPools = source._rootTransformationPools;
         _playerCreatures = source._playerCreatures;
         _players = source._players;
+        _rootCapturedPlayers = source._rootCapturedPlayers;
         _modifiers = source._modifiers;
         _multiplayerScalingModel = source._multiplayerScalingModel;
         _encounter = source._encounter;
@@ -525,6 +548,8 @@ internal sealed partial class SimulatedCombatState
     public IReadOnlyList<Creature> Creatures => _creatures ??= new CombinedRosterView(_allies, _enemies);
     public IReadOnlyList<Creature> PlayerCreatures => _playerCreatures;
     public IReadOnlyList<Player> Players => _players;
+    IReadOnlyList<Player> ICombatPredictionRootCaptureBoundary.RootCapturedPlayers
+        => _rootCapturedPlayers;
     public IReadOnlyList<ModifierModel> Modifiers => _modifiers;
     public MultiplayerScalingModel? MultiplayerScalingModel => _multiplayerScalingModel;
     public int RoundNumber
@@ -1454,7 +1479,7 @@ internal sealed partial class SimulatedCombatState
         if (expectedUpgradeLevel == 0)
             return;
 
-        foreach (Player player in Players)
+        foreach (Player player in _rootCapturedPlayers)
         {
             foreach (PredictedCard card in simulator.State.GetPlayerCombatState(player).AllCards)
             {
@@ -1470,7 +1495,7 @@ internal sealed partial class SimulatedCombatState
 
     public void NormalizeCardAfflictions(CombatPredictionSimulator simulator)
     {
-        foreach (Player player in Players)
+        foreach (Player player in _rootCapturedPlayers)
         {
             int hex = GetAmount<HexPower>(player.Creature);
             int tangled = GetAmount<TangledPower>(player.Creature);
@@ -1576,7 +1601,7 @@ internal sealed partial class SimulatedCombatState
         if (_predictionState != null && !ReferenceEquals(_predictionState, predictionState))
             throw new InvalidOperationException("Combat prediction state is already attached.");
         _predictionState = predictionState;
-        foreach (Player player in predictionState.Players)
+        foreach (Player player in predictionState.RootCapturedPlayers)
         {
             predictionState.GetPlayerCombatState(player).OrbQueue
                 .SetMutationObserver(InvalidateCardAndOrbHookListenersObserver);
@@ -1831,7 +1856,7 @@ internal sealed partial class SimulatedCombatState
         if (CanReuseHookListenerCache && _baseHookListeners != null)
             return _baseHookListeners;
         IReadOnlyList<AbstractModel> prefix = GetBaseHookListenerPrefix();
-        IReadOnlyList<Player> players = Players;
+        IReadOnlyList<Player> players = _rootCapturedPlayers;
         CombatPredictionState predictionState = _predictionState
             ?? throw new InvalidOperationException("Combat prediction state is not attached.");
         int capacity = (CanReuseHookListenerCache ? 0 : prefix.Count)
@@ -1935,7 +1960,7 @@ internal sealed partial class SimulatedCombatState
         }
         // 下面几处原来用接口类型 foreach / LINQ Where 走 Players、Creatures 与已注册卡表，
         // 每次重建都要装箱枚举器并新建闭包。改成按下标推进，遍历顺序与筛选条件都不变。
-        IReadOnlyList<Player> players = Players;
+        IReadOnlyList<Player> players = _rootCapturedPlayers;
         for (int playerIndex = 0; playerIndex < players.Count; playerIndex++)
         {
             Player player = players[playerIndex];
@@ -2005,7 +2030,7 @@ internal sealed partial class SimulatedCombatState
         if (!NGame.IsMainThread())
             throw new InvalidOperationException("Combat prediction root can only be materialized on the main thread.");
         simulator.State.MaterializeRoot();
-        _registeredCombatCards = simulator.State.Players
+        _registeredCombatCards = simulator.State.RootCapturedPlayers
             .SelectMany(player => simulator.State.GetPlayerCombatState(player).AllCards)
             .ToList();
         CaptureReturningCardEligibility(simulator);
@@ -2030,7 +2055,7 @@ internal sealed partial class SimulatedCombatState
             if (power is DampenPower dampen)
                 CaptureDampenRootState(simulator, dampen);
         }
-        foreach (Player player in Players)
+        foreach (Player player in _rootCapturedPlayers)
         {
             _ = GetPlayerTurnNumber(player);
             _ = GetPlayerGold(player);
@@ -2088,7 +2113,7 @@ internal sealed partial class SimulatedCombatState
             foreach (Creature receiver in Creatures)
                 _ = GetPoweredAttackHitsThisTurn(creature, receiver);
         }
-        foreach (Player player in Players)
+        foreach (Player player in _rootCapturedPlayers)
         {
             _ = GetEnergySpentThisTurn(player);
             _ = GetStarsGainedThisTurn(player);
@@ -2109,7 +2134,7 @@ internal sealed partial class SimulatedCombatState
         {
             // Capture after the built-in root is materialized. Adapter factories may resolve
             // live card references to predicted cards, but must not retain live mutable state.
-            foreach (Player player in Players)
+            foreach (Player player in _rootCapturedPlayers)
                 foreach (RelicModel relic in RelicsOf(player))
                     ModelPredictionStateMirrors.CaptureRootState(simulator, relic, _rootRelicSources![relic]);
             for (int slot = 0; slot < _modifiers.Count; slot++)

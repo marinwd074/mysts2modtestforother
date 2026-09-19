@@ -50,7 +50,7 @@ Harmony 参数形状的条件编译位于回合补丁入口；这是当前兼容
 
 搜索 worker 接收 `CombatRootSnapshot`、`SearchPolicySnapshot`、诊断 sink、帧压力信号和取消令牌。它不读取全局设置、控制器、UI 或无人测试状态。
 
-当前多人适配仍处于 MP-0 只读探针阶段。`SolverSessionCapabilities` 是 Runtime 的唯一能力合同：网络多人默认进入 `MultiplayerProbe`，搜索、部署、回合准备接管、选择驱动、药水、Full Auto、Instant、跨回合复用和 Showcase 均关闭；`MultiplayerAdvisor` 与 `MultiplayerSafeExecute` 只声明后续阶段的显式能力，不会根据玩家数或网络类型自动启用。受控代码路径已准备好当前回合截断、world version 结果失效、稳定 debounce 和 `MultiplayerSafeLocalActionClassifier` 的安全动作前缀；当前根快照仍会捕获完整玩家集合，因此在 local-player-only 隔离完成前显式拒绝多人搜索。`MultiplayerClientProbe` 只在主线程读取本地玩家、敌方和远端公开状态，`MultiplayerWorldTracker` 只维护观察 fingerprint、world version 和稳定确认窗口，不拥有网络、不修改 live state、不发送动作。
+当前多人适配仍处于 MP-0 只读探针阶段。`SolverSessionCapabilities` 是 Runtime 的唯一能力合同：网络多人默认进入 `MultiplayerProbe`，搜索、部署、回合准备接管、选择驱动、药水、Full Auto、Instant、跨回合复用和 Showcase 均关闭；`MultiplayerAdvisor` 与 `MultiplayerSafeExecute` 只声明后续阶段的显式能力，不会根据玩家数或网络类型自动启用。受控代码路径已准备好当前回合截断、world version 结果失效、稳定 debounce 和 `MultiplayerSafeLocalActionClassifier` 的安全动作前缀。多人 local-player-only root 已隔离私有玩家牌堆、遗物、药水、运行级牌组和 mod card audit；公共玩家/生物仍可作为战斗上下文存在，但未捕获队友私有 combat state 会显式失败。`MultiplayerClientProbe` 只在主线程读取本地玩家、敌方和远端公开状态，`MultiplayerWorldTracker` 只维护观察 fingerprint、world version 和稳定确认窗口，不拥有网络、不修改 live state、不发送动作。
 
 成长策略由 `GrowthBudgets` 随请求冻结，每次实际收益按对应来源取得 HP 额度，中间保路和终局排序沿用同一份额度；成长侧栏只编辑原有额度和忽略收益开关。`CardMechanismFacts` 提供小刀数量、攻击命中与消耗抽牌的纯值估计，`StrategicEffectModel` 消费分支状态；StateEvaluation 的首攻击估值只在原版致命消费者存在或外部战略登记表非空时构建，外部既有字段上下文保持；当前没有奖励／商店评分模块。
 

@@ -136,8 +136,17 @@ internal sealed class CombatRootSnapshot
         Engine.InCombat.Mirrors.Hooks.TurnEnd.AfterSideTurnEndLateMirrors.Seal();
         Stopwatch stopwatch = Stopwatch.StartNew();
 
+        Player player = LocalContext.GetMe(state)
+            ?? throw new InvalidOperationException("找不到本地玩家。");
+        PlayerCombatState playerState = player.PlayerCombatState
+            ?? throw new InvalidOperationException("玩家没有战斗状态。");
+        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
+        IReadOnlyList<Player>? rootCapturedPlayers = capabilities.IsMultiplayer && capabilities.CanSearch
+            ? [player]
+            : null;
+
         PowerDynamicVarWarmup.EnsureMaterialized(state);
-        CardDynamicVarWarmup.EnsureMaterialized(state);
+        CardDynamicVarWarmup.EnsureMaterialized(state, rootCapturedPlayers);
 
         // Listener enumeration and third-party owner discovery are part of root capture.
         // Take the baseline first so any semantic mutation in those callbacks is rejected by
@@ -145,27 +154,20 @@ internal sealed class CombatRootSnapshot
         ContinuationStamp continuationBefore = ContinuationStamp.CaptureLive(state);
         LiveCombatStamp liveBefore = LiveCombatStamp.FromContinuation(continuationBefore);
 
-        Player player = LocalContext.GetMe(state)
-            ?? throw new InvalidOperationException("找不到本地玩家。");
-        PlayerCombatState playerState = player.PlayerCombatState
-            ?? throw new InvalidOperationException("玩家没有战斗状态。");
-        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
-        if (capabilities.IsMultiplayer && capabilities.CanSearch)
-        {
-            throw new NotSupportedException(
-                "多人 local-player-only root 尚未隔离队友牌堆与隐藏状态；保持能力门禁关闭。");
-        }
         AbstractModel[] liveCombatHookListeners = state.IterateHookListeners().ToArray();
         if (liveCombatHookListeners.Any(PredictionModModelSupport.IsBaseLibCardModifier))
         {
             PredictionModModelSupport.RegisterBaseLibCardModifierOwners(
-                state.Players
+                (rootCapturedPlayers ?? state.Players)
                     .Where(candidate => candidate.PlayerCombatState != null)
                     .SelectMany(candidate => candidate.PlayerCombatState!.AllCards));
         }
         IntentForecast forecast = IntentForecaster.Build(state, SolverWeights.SetupValueHorizonTurns);
 
-        SimulatedCombatState simulatedCombat = new(state, liveCombatHookListeners);
+        SimulatedCombatState simulatedCombat = new(
+            state,
+            liveCombatHookListeners,
+            rootCapturedPlayers is { } ? player : null);
         CombatPredictionSimulator simulator = new(simulatedCombat);
         ContinuationStamp projected = ContinuationStamp.CapturePredicted(
             player,
@@ -218,7 +220,7 @@ internal sealed class CombatRootSnapshot
             if (state.Enemies[index].IsAlive)
                 aliveEnemyMask |= 1UL << index;
         }
-        int cardCount = state.Players
+        int cardCount = (rootCapturedPlayers ?? state.Players)
             .Where(candidate => candidate.PlayerCombatState != null)
             .Sum(candidate => candidate.PlayerCombatState!.AllCards.Count());
         int powerCount = state.Creatures.Sum(creature => creature.Powers.Count);
