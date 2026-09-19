@@ -36,9 +36,12 @@ if ([string]::IsNullOrWhiteSpace($Instance)) {
     $Instance = 'mp-' + $Profile.ToLowerInvariant()
 }
 if ([string]::IsNullOrWhiteSpace($RuntimeRoot)) {
-    $RuntimeRoot = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) "CombatSolver\multiplayer-lab\$Instance"
+    $RuntimeRoot = Join-Path $repositoryRoot ".local\multiplayer-lab\runtime-$Instance"
 }
 $RuntimeRoot = Get-HeadlessCanonicalPath $RuntimeRoot
+if ($RuntimeRoot -notlike 'D:\*') {
+    throw "Multiplayer Lab runtime must be on D:; received $RuntimeRoot"
+}
 $Sts2GameRoot = Get-HeadlessCanonicalPath $Sts2GameRoot
 $RitsuWorkshopRoot = Get-HeadlessCanonicalPath $RitsuWorkshopRoot
 $CombatSolverBuildDir = Get-HeadlessCanonicalPath $CombatSolverBuildDir

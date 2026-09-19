@@ -41,7 +41,9 @@ Lobby、wire 或战斗证据。
 - `prepare-instances.ps1` 使用 `headless-runtime.ps1` 创建带 ownership marker
   的私有 Host/Client game snapshot。支持 `HostVanilla`、`ClientVanilla`、
   `ClientRitsuOnly`、`ClientCombatSolver`，不会修改正式 Steam 安装或正式
-  `MODS`。
+  `MODS`。默认实例根目录为仓库 D: 盘下的
+  `.local/multiplayer-lab/runtime-<instance>`；脚本会拒绝 C: 或其他盘符，避免
+  把大型测试快照写入系统盘。
 - `start-host.ps1` / `start-client.ps1` 只启动指定私有 snapshot，使用独立
   `APPDATA`、`LOCALAPPDATA` 和日志；默认保留可见 UI，允许用户手动建房、
   加入、选角色和 Ready。`-FastMpMode host|join` 只在显式指定时传给当前
