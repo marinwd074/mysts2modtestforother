@@ -8,6 +8,13 @@
 
 <!-- project-versions -->
 
+## 1.21 — 多人：只读 Probe 与隔离验证环境
+
+2026-09-19 · 大更新 · `project-v1.21`
+
+- 新增：建立多人会话能力、WorldVersion、硬指纹与只读 Probe。
+- 新增：提供隔离 Host/Client 实例、Phase 0 采集和证据验证器。
+
 ## 1.11 — 架构：拆分搜索与运行职责
 
 2026-09-19 · 大更新 · `project-v1.11`

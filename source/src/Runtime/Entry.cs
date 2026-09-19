@@ -70,6 +70,7 @@ public static class Entry
                 host.AddChild(new CombatShowcaseUploadNode());
                 host.TreeExiting += PreCombatForecastWorker.StopSessionAtProcessExit;
                 host.TreeExiting += Logger.Journal.Dispose;
+                host.TreeExiting += MultiplayerClientProbe.Dispose;
             }
             UnattendedTestRunner.TryStart(host);
         }
@@ -77,11 +78,17 @@ public static class Entry
 
     private static void OnTurnStarted(CombatState state)
     {
+        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
         if (!Enabled
             || state.CurrentSide != CombatSide.Player
             || NGame.Instance == null
-            || SolverController.IsMultiplayerSession)
+            || !capabilities.CanSearch)
             return;
+        if (capabilities.IsMultiplayer)
+        {
+            Logger.Info("[CombatSolver/MultiplayerAdvisor] AUTO_SEARCH_DEFERRED reason=world_debounce");
+            return;
+        }
         if (SolverController.SolverDisabled)
         {
             SolverOverlay.ShowDisabled(NGame.Instance);
@@ -131,7 +138,7 @@ public static class Entry
 
         if (!Enabled
             || SolverController.SolverDisabled
-            || SolverController.IsMultiplayerSession
+            || !SolverSessionCapabilities.Capture(state).CanSearch
             || !UnattendedTestRunner.AutomaticTurnSearchEnabled
             || !SolverController.AutomaticCalculationEnabled
             || SolverController.AutomaticSearchPaused

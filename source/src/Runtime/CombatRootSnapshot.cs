@@ -27,6 +27,11 @@ internal sealed class CombatRootSnapshot
     public LiveCombatStamp LiveStamp { get; }
     public ContinuationStamp ContinuationStamp { get; }
     public int PlayerCount { get; }
+    /// <summary>
+    /// The root was captured for an explicitly approved local-player-only multiplayer
+    /// capability. This is deliberately false for the current read-only Probe profile.
+    /// </summary>
+    public bool AllowsLocalPlayerOnlySearch { get; }
     public int StartTurnNumber { get; }
     public int InitialPlayerHp { get; }
     public int InitialPlayerMaxHp { get; }
@@ -66,6 +71,7 @@ internal sealed class CombatRootSnapshot
         ContinuationStamp continuationStamp,
         CombatPredictionSimulator rootSimulator,
         int playerCount,
+        bool allowsLocalPlayerOnlySearch,
         int startTurnNumber,
         int initialPlayerHp,
         int initialPlayerMaxHp,
@@ -94,6 +100,7 @@ internal sealed class CombatRootSnapshot
         ContinuationStamp = continuationStamp;
         _rootSimulator = rootSimulator;
         PlayerCount = playerCount;
+        AllowsLocalPlayerOnlySearch = allowsLocalPlayerOnlySearch;
         StartTurnNumber = startTurnNumber;
         InitialPlayerHp = initialPlayerHp;
         InitialPlayerMaxHp = initialPlayerMaxHp;
@@ -129,30 +136,38 @@ internal sealed class CombatRootSnapshot
         Engine.InCombat.Mirrors.Hooks.TurnEnd.AfterSideTurnEndLateMirrors.Seal();
         Stopwatch stopwatch = Stopwatch.StartNew();
 
-        PowerDynamicVarWarmup.EnsureMaterialized(state);
-        CardDynamicVarWarmup.EnsureMaterialized(state);
-
-        // Listener enumeration and third-party owner discovery are part of root capture.
-        // Take the baseline first so any semantic mutation in those callbacks is rejected by
-        // the existing after-capture stamp without paying for another full serialization.
-        ContinuationStamp continuationBefore = ContinuationStamp.CaptureLive(state);
-        LiveCombatStamp liveBefore = LiveCombatStamp.FromContinuation(continuationBefore);
-
         Player player = LocalContext.GetMe(state)
             ?? throw new InvalidOperationException("找不到本地玩家。");
         PlayerCombatState playerState = player.PlayerCombatState
             ?? throw new InvalidOperationException("玩家没有战斗状态。");
+        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
+        IReadOnlyList<Player>? rootCapturedPlayers = capabilities.IsMultiplayer && capabilities.CanSearch
+            ? [player]
+            : null;
+
+        PowerDynamicVarWarmup.EnsureMaterialized(state);
+        CardDynamicVarWarmup.EnsureMaterialized(state, rootCapturedPlayers);
+
+        // Listener enumeration and third-party owner discovery are part of root capture.
+        // Take the baseline first so any semantic mutation in those callbacks is rejected by
+        // the existing after-capture stamp without paying for another full serialization.
+        ContinuationStamp continuationBefore = ContinuationStamp.CaptureLive(state, rootCapturedPlayers);
+        LiveCombatStamp liveBefore = LiveCombatStamp.FromContinuation(continuationBefore);
+
         AbstractModel[] liveCombatHookListeners = state.IterateHookListeners().ToArray();
         if (liveCombatHookListeners.Any(PredictionModModelSupport.IsBaseLibCardModifier))
         {
             PredictionModModelSupport.RegisterBaseLibCardModifierOwners(
-                state.Players
+                (rootCapturedPlayers ?? state.Players)
                     .Where(candidate => candidate.PlayerCombatState != null)
                     .SelectMany(candidate => candidate.PlayerCombatState!.AllCards));
         }
         IntentForecast forecast = IntentForecaster.Build(state, SolverWeights.SetupValueHorizonTurns);
 
-        SimulatedCombatState simulatedCombat = new(state, liveCombatHookListeners);
+        SimulatedCombatState simulatedCombat = new(
+            state,
+            liveCombatHookListeners,
+            rootCapturedPlayers is { } ? player : null);
         CombatPredictionSimulator simulator = new(simulatedCombat);
         ContinuationStamp projected = ContinuationStamp.CapturePredicted(
             player,
@@ -188,7 +203,7 @@ internal sealed class CombatRootSnapshot
                 continuationBefore.DescribeFirstDifference(projected));
         }
 
-        ContinuationStamp continuationAfter = ContinuationStamp.CaptureLive(state);
+        ContinuationStamp continuationAfter = ContinuationStamp.CaptureLive(state, rootCapturedPlayers);
         LiveCombatStamp liveAfter = LiveCombatStamp.FromContinuation(continuationAfter);
         if (!string.Equals(liveBefore.StateText, liveAfter.StateText, StringComparison.Ordinal)
             || !string.Equals(
@@ -205,7 +220,7 @@ internal sealed class CombatRootSnapshot
             if (state.Enemies[index].IsAlive)
                 aliveEnemyMask |= 1UL << index;
         }
-        int cardCount = state.Players
+        int cardCount = (rootCapturedPlayers ?? state.Players)
             .Where(candidate => candidate.PlayerCombatState != null)
             .Sum(candidate => candidate.PlayerCombatState!.AllCards.Count());
         int powerCount = state.Creatures.Sum(creature => creature.Powers.Count);
@@ -219,6 +234,7 @@ internal sealed class CombatRootSnapshot
             continuationBefore,
             simulator,
             state.Players.Count,
+            capabilities.IsMultiplayer && capabilities.CanSearch,
             playerState.TurnNumber,
             player.Creature.CurrentHp,
             player.Creature.MaxHp,

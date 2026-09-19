@@ -149,14 +149,17 @@ internal static class ModelPredictionStateMirrors
             ? state!.Value
             : throw new InvalidOperationException($"No captured {typeof(TState).FullName} for {model.GetType().FullName}.");
 
-    internal static void AppendLiveContinuation(StringBuilder text, ICombatState combat)
+    internal static void AppendLiveContinuation(
+        StringBuilder text,
+        ICombatState combat,
+        IReadOnlyList<Player>? capturedPlayers = null)
     {
         Seal();
         if (Registry.Count == 0)
             return;
         ModelPredictionStateWriter writer = new(new StateFingerprintBuilder(), text);
-        writer.BindCardReferences(combat, null);
-        foreach (Player player in combat.Players)
+        writer.BindCardReferences(combat, null, capturedPlayers);
+        foreach (Player player in capturedPlayers ?? combat.Players)
         {
             int slot = 0;
             foreach (RelicModel relic in player.Relics)
@@ -173,10 +176,13 @@ internal static class ModelPredictionStateMirrors
         if (Registry.Count == 0)
             return;
         ModelPredictionStateWriter writer = new(fingerprint, text);
-        writer.BindCardReferences(combat, simulator);
-        for (int playerIndex = 0; playerIndex < combat.Players.Count; playerIndex++)
+        IReadOnlyList<Player> capturedPlayers = combat is ICombatPredictionRootCaptureBoundary boundary
+            ? boundary.RootCapturedPlayers
+            : combat.Players;
+        writer.BindCardReferences(combat, simulator, capturedPlayers);
+        for (int playerIndex = 0; playerIndex < capturedPlayers.Count; playerIndex++)
         {
-            Player player = combat.Players[playerIndex];
+            Player player = capturedPlayers[playerIndex];
             IReadOnlyList<RelicModel> relics = combat.RelicsOf(player);
             for (int slot = 0; slot < relics.Count; slot++)
                 AppendModel(relics[slot], "relic", player.NetId, slot, simulator, text, ref writer);

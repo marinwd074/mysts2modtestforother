@@ -24,6 +24,12 @@ internal static partial class SolverController
     public static void RequestSearch(NGame host, CombatState state, SearchReason reason, bool deployWhenReady = false)
     {
         AssertMainThread();
+        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
+        if (!capabilities.CanSearch)
+        {
+            Entry.Logger.Info($"[CombatSolver/MultiplayerProbe] SEARCH_REJECT reason={capabilities.SearchRejection}");
+            return;
+        }
         if (_combat.ShowcaseMode && reason != SearchReason.AutoTurnStart)
         {
             StopShowcaseRoute(host, "战斗状态与录像路线不一致，已停止执行。");
@@ -164,7 +170,9 @@ internal static partial class SolverController
                     CombatBugReportExporter.LastCompletedSearchRootId);
             }
             setupStage = "continuation";
-            ContinuationStamp? continuationStamp = reason == SearchReason.AutoTurnStart && _combat.ContinuationSource != null
+            ContinuationStamp? continuationStamp = reason == SearchReason.AutoTurnStart
+                && capabilities.CanCrossTurnReuse
+                && _combat.ContinuationSource != null
                 ? ContinuationStamp.CaptureLive(state)
                 : null;
             if (continuationStamp != null
@@ -269,6 +277,9 @@ internal static partial class SolverController
             {
                 ReplanCause = replanCause,
                 StartTurnNumber = searchTurn!.Value,
+                WorldVersion = capabilities.IsMultiplayer
+                    ? MultiplayerWorldTracker.WorldVersion
+                    : 0,
             };
             _search = search;
             CancellationToken token = search.Cancellation.Token;
@@ -352,7 +363,8 @@ internal static partial class SolverController
             SolvedRouteCache routeCache = SolvedRouteCache.Capture(state, rootSnapshot, searchPolicy, battleDamage);
             Task<SolverResult> solveTask = Task.Run(() =>
             {
-                if (!searchPolicy.VerifyIncrementalSearch && !searchPolicy.MeasurePhasePerformance
+                if (!searchPolicy.CurrentTurnOnly
+                    && !searchPolicy.VerifyIncrementalSearch && !searchPolicy.MeasurePhasePerformance
                     && reason is SearchReason.AutoTurnStart or SearchReason.Deploy or SearchReason.FullAuto
                     && routeCache.Read(rootSnapshot.Forecast) is { } cached)
                 {
@@ -381,7 +393,7 @@ internal static partial class SolverController
                         progress => PublishSearchProgress(search, progress));
                     finalizedResult = search.Interaction.FinalizeWorkerResult(result);
                     token.ThrowIfCancellationRequested();
-                    if (!search.Interaction.StopRequested)
+                    if (!search.Interaction.StopRequested && !searchPolicy.CurrentTurnOnly)
                         routeCache.StoreFirst(finalizedResult);
                     return finalizedResult;
                 }
@@ -580,6 +592,8 @@ internal static partial class SolverController
         CombatState? currentState = CombatManager.Instance.DebugOnlyGetState();
         if (!ReferenceEquals(currentState, searchedState)
             || !CanSolve(searchedState, out _)
+            || search.WorldVersion != 0
+                && MultiplayerWorldTracker.WorldVersion != search.WorldVersion
             || LiveCombatStamp.Capture(searchedState) != searchedStamp)
         {
             _combat.BugReportIssues.Record(

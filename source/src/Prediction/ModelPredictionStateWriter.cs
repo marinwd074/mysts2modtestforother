@@ -15,6 +15,7 @@ internal partial struct ModelPredictionStateWriter
     private readonly StringBuilder? _text;
     private MegaCrit.Sts2.Core.Combat.ICombatState? _referenceCombat;
     private CombatSolver.Engine.InCombat.Simulation.CombatPredictionSimulator? _referenceSimulator;
+    private IReadOnlyList<MegaCrit.Sts2.Core.Entities.Players.Player>? _referencePlayers;
     private Dictionary<object, CardPosition>? _cardPositions;
 
     internal ModelPredictionStateWriter(StateFingerprintBuilder fingerprint, StringBuilder? text = null)

@@ -63,6 +63,13 @@ internal static class CombatBugReportPaths
 
     private static string ResolveRootDirectory()
     {
+        string? multiplayerInstance = Environment.GetEnvironmentVariable("COMBATSOLVER_MULTIPLAYER_INSTANCE");
+        if (!string.IsNullOrWhiteSpace(multiplayerInstance))
+        {
+            string instanceRoot = Path.GetFullPath(multiplayerInstance);
+            return Path.Combine(instanceRoot, "diagnostics", RootFolderName);
+        }
+
         string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
         if (string.IsNullOrWhiteSpace(desktop))
             throw new DirectoryNotFoundException("无法定位桌面目录。");

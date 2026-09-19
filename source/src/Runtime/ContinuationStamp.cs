@@ -65,10 +65,15 @@ internal sealed record ContinuationStamp(string StateText)
         return differences;
     }
 
-    public static ContinuationStamp CaptureLive(CombatState state)
+    public static ContinuationStamp CaptureLive(
+        CombatState state,
+        IReadOnlyList<Player>? capturedPlayers = null)
     {
         Player player = LocalContext.GetMe(state)
             ?? throw new InvalidOperationException("找不到本地玩家。");
+        if (capturedPlayers is null
+            && SolverSessionCapabilities.Capture(state).IsMultiplayer)
+            capturedPlayers = [player];
         PlayerCombatState pcs = player.PlayerCombatState
             ?? throw new InvalidOperationException("玩家没有战斗状态。");
         StringBuilder text = Begin(
@@ -96,7 +101,7 @@ internal sealed record ContinuationStamp(string StateText)
         AppendPotions(text, player, player.GetPotionAtSlotIndex);
         SimulatedCombatState.AppendLiveStatefulRelics(text, player);
         RelicPredictionStateSupport.AppendLiveContinuation(text, player);
-        ModelPredictionStateMirrors.AppendLiveContinuation(text, state);
+        ModelPredictionStateMirrors.AppendLiveContinuation(text, state, capturedPlayers);
         if (AdaptedCardOnPlayMirrors.CaptureLiveStamp() is { } onPlayStamp)
             text.Append(";onplay_configuration=").Append(onPlayStamp);
         AppendPowers(text, state.Creatures.SelectMany(creature => creature.Powers));

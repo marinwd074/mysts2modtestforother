@@ -47,7 +47,9 @@ internal sealed record PreCombatLiveStateSnapshot(
             throw new InvalidOperationException("Pre-combat requests must be captured on the game main thread.");
         if (!ReferenceEquals(RunManager.Instance.DebugOnlyGetState(), run))
             throw new InvalidOperationException("The supplied run is not the active run.");
-        if (!RunManager.Instance.IsSingleplayerOrFakeMultiplayer || run.Players.Count != 1)
+        if (!SolverSessionCapabilities.CaptureRun(run).CanPreCombatForecast
+            || !RunManager.Instance.IsSingleplayerOrFakeMultiplayer
+            || run.Players.Count != 1)
             throw new NotSupportedException("Pre-combat forecasts currently support single-player runs only.");
         if (CombatManager.Instance.IsInProgress)
             throw new NotSupportedException("Pre-combat forecasts cannot be captured while a combat is active.");

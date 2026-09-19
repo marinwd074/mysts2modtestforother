@@ -122,6 +122,11 @@ internal static class NativeChoiceRuntime
         Player player,
         string owner)
     {
+        if (!SolverSessionCapabilities.Capture(combat).CanDriveChoices)
+        {
+            throw new InvalidOperationException(
+                "当前会话不允许 CombatSolver 驱动原生选牌。多人模式必须由玩家手动完成选择。");
+        }
         NativeChoiceSession session = new(combat, player, owner);
         Sessions.Add(session);
         return session;

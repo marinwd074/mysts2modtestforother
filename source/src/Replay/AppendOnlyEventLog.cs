@@ -112,6 +112,7 @@ internal sealed class AppendOnlyEventLog<T> : IDisposable
                     if (file.Length + bytes.Length + 1 > _maximumFileBytes) { SetError("event_file_size_limit"); continue; }
                     file.Write(bytes);
                     file.WriteByte((byte)'\n');
+                    file.Flush();
                     count++;
                 }
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or NotSupportedException)

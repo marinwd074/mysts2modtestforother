@@ -66,7 +66,9 @@ internal sealed partial class OnlinePresence : Node
             _displayedUpdate = AvailableUpdateVersion;
             SolverOverlay.RefreshControls();
         }
-        if (!SolverSettings.Current.OnlineStatisticsEnabled || SolverController.IsMultiplayerSession || UnattendedTestRunner.IsActive) return;
+        if (!SolverSettings.Current.OnlineStatisticsEnabled
+            || !SolverSessionCapabilities.CaptureRun(RunManager.Instance.DebugOnlyGetState()).CanUploadRunStatistics
+            || UnattendedTestRunner.IsActive) return;
         SolverResult? result = SolverController.CurrentResultForBugReport;
         if (CombatManager.Instance.IsInProgress && result?.CombatEndedTurn.HasValue == true && result != _capturedResult)
         {

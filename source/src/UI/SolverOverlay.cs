@@ -101,6 +101,8 @@ internal static partial class SolverOverlay
     private static Control? _cornerResizeHandle;
     private static PanelContainer? _feedbackBanner;
     private static Label? _feedbackBannerLabel;
+    private static PanelContainer? _multiplayerModeBanner;
+    private static Label? _multiplayerModeBannerLabel;
     private static HBoxContainer? _theftPolicyControls;
     private static Button? _preserveResourcesButton;
     private static Button? _letEscapeButton;
@@ -128,6 +130,7 @@ internal static partial class SolverOverlay
     private static bool _lastDeploymentEndedTurn;
     private static bool _waitingForNextTurnPlan;
     private static bool _themeRefreshQueued;
+    private static bool _multiplayerSession;
     private static int _remainingLayoutPasses;
     private static long _lastResizeLayoutAt;
     private static BossHpRelief _activeBossHpRelief;
@@ -1163,6 +1166,8 @@ internal static partial class SolverOverlay
         RefreshFeedbackBanner();
         RefreshGuidanceHints();
 
+        CombatState? capabilityState = CombatManager.Instance.DebugOnlyGetState();
+        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(capabilityState);
         bool solverDisabled = SolverController.SolverDisabled;
         if (_solverEnabledButton != null)
             _solverEnabledButton.Text = SolverText.Get(solverDisabled ? "求解器：关" : "求解器：开");
@@ -1175,7 +1180,7 @@ internal static partial class SolverOverlay
             && !SolverController.HasCalculatedThisCombat
                 ? SolverText.Get("开始计算")
                 : SolverText.Get("重新计算");
-        _recalculateButton.Disabled = solverDisabled || searching
+        _recalculateButton.Disabled = solverDisabled || !capabilities.CanSearch || searching
             || SolverController.IsDeploying || adoptingRoute;
         _stopSearchButton.Disabled = solverDisabled || !searching || SolverController.IsStoppingSearch;
         _adoptRouteButton.Disabled = solverDisabled || !canAdoptRoute || adoptingRoute;
@@ -1212,11 +1217,21 @@ internal static partial class SolverOverlay
             _renderedExecuteButtonStyle = executeStyle;
         }
 
-        _fullAutoButton.Text = SolverText.Get(SolverController.FullAutoEnabled ? "全自动：开" : "全自动：关");
-        SolverUiTokens.ApplyButtonStyle(_fullAutoButton, SolverController.FullAutoEnabled ? SolverButtonStyle.Positive : SolverButtonStyle.Secondary);
-        _fullAutoButton.Disabled = solverDisabled || adoptingRoute;
+        _fullAutoButton.Text = SolverText.Get(_multiplayerSession
+            ? "全自动：不可用"
+            : SolverController.FullAutoEnabled ? "全自动：开" : "全自动：关");
+        SolverUiTokens.ApplyButtonStyle(_fullAutoButton,
+            _multiplayerSession || !SolverController.FullAutoEnabled
+                ? SolverButtonStyle.Secondary
+                : SolverButtonStyle.Positive);
+        _fullAutoButton.Disabled = _multiplayerSession || solverDisabled || adoptingRoute;
         if (_autoEnableFullAutoSwitch != null)
-            _autoEnableFullAutoSwitch.ButtonPressed = SolverSettings.Current.AutoEnableFullAuto;
+        {
+            _autoEnableFullAutoSwitch.Disabled = _multiplayerSession;
+            _autoEnableFullAutoSwitch.ButtonPressed = _multiplayerSession
+                ? false
+                : SolverSettings.Current.AutoEnableFullAuto;
+        }
         _actionBar?.Refresh(new SolverActionBarState(_collapsed, searching, canAdoptRoute || adoptingRoute));
         _executeButton.TooltipText = SolverText.Get(solverDisabled ? "求解器已关闭，请从标题栏开启。"
             : adoptingRoute ? "正在采用路线，请等待完成。"
@@ -1226,21 +1241,57 @@ internal static partial class SolverOverlay
 
         CombatState? combat = CombatManager.Instance.DebugOnlyGetState();
         bool combatActive = combat != null && CombatManager.Instance.IsInProgress;
+        bool previousMultiplayerSession = _multiplayerSession;
+        _multiplayerSession = capabilities.IsMultiplayer;
+        if (_multiplayerSession)
+        {
+            _potionStrategyVisible = false;
+            _growthStrategyVisible = false;
+            _relicStrategyVisible = false;
+        }
+        if (_multiplayerSession != previousMultiplayerSession)
+            ApplyContentVisibility();
+        RefreshMultiplayerModeBanner(capabilities);
+        // Re-apply the button state after the live session capability is captured.
+        _fullAutoButton.Text = SolverText.Get(_multiplayerSession
+            ? "全自动：不可用"
+            : SolverController.FullAutoEnabled ? "全自动：开" : "全自动：关");
+        _fullAutoButton.Disabled = _multiplayerSession || solverDisabled || adoptingRoute;
+        SolverUiTokens.ApplyButtonStyle(_fullAutoButton,
+            _multiplayerSession || !SolverController.FullAutoEnabled
+                ? SolverButtonStyle.Secondary
+                : SolverButtonStyle.Positive);
+        if (_autoEnableFullAutoSwitch != null)
+        {
+            _autoEnableFullAutoSwitch.Disabled = _multiplayerSession;
+            _autoEnableFullAutoSwitch.ButtonPressed = _multiplayerSession
+                ? false
+                : SolverSettings.Current.AutoEnableFullAuto;
+        }
         if (_growthStrategyButton != null)
         {
-            _growthStrategyButton.Disabled = !combatActive;
+            _growthStrategyButton.Disabled = !combatActive || _multiplayerSession;
+            _growthStrategyButton.TooltipText = SolverText.Get(_multiplayerSession
+                ? "多人精简模式不提供跨回合成长策略。"
+                : "打开成长策略。");
             _growthStrategyButton.AddThemeColorOverride("font_color", _growthStrategyVisible ? Accent : SolverUiTokens.Palette.TextSecondary);
         }
         _growthStrategyPanel?.Refresh(SolverController.IsDeploying);
         if (_relicStrategyButton != null)
         {
-            _relicStrategyButton.Disabled = !combatActive;
+            _relicStrategyButton.Disabled = !combatActive || _multiplayerSession;
+            _relicStrategyButton.TooltipText = SolverText.Get(_multiplayerSession
+                ? "多人精简模式不提供跨回合遗物策略。"
+                : "打开遗物策略。");
             _relicStrategyButton.AddThemeColorOverride("font_color", _relicStrategyVisible ? Accent : SolverUiTokens.Palette.TextSecondary);
         }
         if (_relicStrategyVisible) _relicStrategyPanel?.Refresh(SolverController.IsDeploying);
         if (_potionStrategyButton != null)
         {
-            _potionStrategyButton.Disabled = !combatActive;
+            _potionStrategyButton.Disabled = !combatActive || _multiplayerSession;
+            _potionStrategyButton.TooltipText = SolverText.Get(_multiplayerSession
+                ? "多人精简模式不提供药水策略。"
+                : "打开药水策略。");
             _potionStrategyButton.AddThemeColorOverride(
                 "font_color",
                 _potionStrategyVisible || SolverUiTokens.IsLightTheme
@@ -1453,6 +1504,7 @@ internal static partial class SolverOverlay
         panel.AddChild(root);
 
         root.AddChild(CreateHeader());
+        root.AddChild(CreateMultiplayerModeBanner());
         root.AddChild(CreateSpeedXWarning());
         root.AddChild(CreateNoveltyPortfolioHint());
         root.AddChild(CreateSearchLimitHint());
@@ -1972,6 +2024,36 @@ internal static partial class SolverOverlay
             QueueResponsiveLayout();
     }
 
+    private static void RefreshMultiplayerModeBanner(SolverSessionCapabilitySet capabilities)
+    {
+        if (_multiplayerModeBanner == null || _multiplayerModeBannerLabel == null)
+            return;
+
+        bool visible = capabilities.IsMultiplayer;
+        _multiplayerModeBanner.Visible = visible;
+        if (!visible)
+            return;
+
+        string banner = capabilities.Kind switch
+        {
+            SolverSessionKind.MultiplayerProbe
+                => "多人精简模式：当前仅记录只读状态，未启用多人搜索。",
+            SolverSessionKind.MultiplayerAdvisor
+                => "多人精简模式：仅搜索本地玩家当前回合并显示建议；不会自动执行。",
+            SolverSessionKind.MultiplayerSafeExecute
+                => "多人精简模式：仅执行已分类的本地普通牌；请手动选择、用药和结束回合。",
+            _ => "多人精简模式：当前能力受限。",
+        };
+        _multiplayerModeBannerLabel.Text = SolverText.Get(banner);
+        _multiplayerModeBannerLabel.AddThemeColorOverride("font_color", Warning);
+        _multiplayerModeBanner.AddThemeStyleboxOverride("panel", SolverUiTokens.CreateBox(
+            SolverUiTokens.IsLightTheme ? Warning.Lightened(0.86f) : Warning.Darkened(0.78f),
+            SolverUiTokens.IsLightTheme ? new Color(Warning, 0.45f) : Warning.Darkened(0.12f),
+            SolverUiTokens.Radius.Medium,
+            SolverUiTokens.Spacing.Md,
+            SolverUiTokens.Spacing.Sm));
+    }
+
     internal static void RefreshGuidanceHints(
         bool? speedXPresentForTesting = null,
         int? projectedBattleHpLostForTesting = null)
@@ -2076,6 +2158,9 @@ internal static partial class SolverOverlay
 
     private static void TogglePotionStrategy()
     {
+        CombatState? currentState = CombatManager.Instance.DebugOnlyGetState();
+        if (_multiplayerSession || SolverSessionCapabilities.Capture(currentState).IsMultiplayer)
+            return;
         _relicStrategyVisible = false;
         if (_settingsVisible && _settingsPanel?.CommitPending() == false)
             return;
@@ -2296,10 +2381,11 @@ internal static partial class SolverOverlay
         _actionBar?.Refresh(new SolverActionBarState(_collapsed, SolverController.IsSearching,
             SolverController.CanAdoptCurrentRoute || SolverController.IsAdoptingCurrentRoute));
         if (_potionStrategyButton != null)
-            _potionStrategyButton.Visible = !_collapsed;
+            _potionStrategyButton.Visible = !_collapsed && !_multiplayerSession;
         if (_growthStrategyButton != null)
-            _growthStrategyButton.Visible = !_collapsed;
-        if (_relicStrategyButton != null) _relicStrategyButton.Visible = !_collapsed;
+            _growthStrategyButton.Visible = !_collapsed && !_multiplayerSession;
+        if (_relicStrategyButton != null)
+            _relicStrategyButton.Visible = !_collapsed && !_multiplayerSession;
         if (_settingsButton != null)
             _settingsButton.Visible = !_collapsed;
         // Keep the same outcome controls and presentation state in both layouts.
@@ -2327,11 +2413,14 @@ internal static partial class SolverOverlay
         if (_settingsPanel != null)
             _settingsPanel.Visible = !_collapsed && _settingsVisible;
         if (_potionStrategyPanel != null)
-            _potionStrategyPanel.Visible = !_collapsed && !_settingsVisible && _potionStrategyVisible;
+            _potionStrategyPanel.Visible = !_collapsed && !_settingsVisible
+                && !_multiplayerSession && _potionStrategyVisible;
         if (_growthStrategyPanel != null)
-            _growthStrategyPanel.Visible = !_collapsed && !_settingsVisible && _growthStrategyVisible;
+            _growthStrategyPanel.Visible = !_collapsed && !_settingsVisible
+                && !_multiplayerSession && _growthStrategyVisible;
         if (_relicStrategyPanel != null)
-            _relicStrategyPanel.Visible = !_collapsed && !_settingsVisible && _relicStrategyVisible;
+            _relicStrategyPanel.Visible = !_collapsed && !_settingsVisible
+                && !_multiplayerSession && _relicStrategyVisible;
         RefreshBossHpStrategyHint();
         if (_settingsButton != null)
         {
@@ -2677,6 +2766,8 @@ internal static partial class SolverOverlay
         Entry.Logger.Info("[CombatSolver/Test] UI_ACTION action=full_auto_toggle");
         NGame? host = NGame.Instance;
         CombatState? state = CombatManager.Instance.DebugOnlyGetState();
+        if (_multiplayerSession || SolverSessionCapabilities.Capture(state).IsMultiplayer)
+            return;
         if (host == null || state == null || !CombatManager.Instance.IsInProgress)
         {
             if (host != null)
@@ -2863,6 +2954,9 @@ internal static partial class SolverOverlay
 
     private static void ToggleGrowthStrategy()
     {
+        if (_multiplayerSession || SolverSessionCapabilities.Capture(
+                CombatManager.Instance.DebugOnlyGetState()).IsMultiplayer)
+            return;
         _relicStrategyVisible = false;
         if (_settingsVisible && _settingsPanel?.CommitPending() == false)
             return;
@@ -2894,6 +2988,9 @@ internal static partial class SolverOverlay
 
     private static void ToggleRelicStrategy()
     {
+        if (_multiplayerSession || SolverSessionCapabilities.Capture(
+                CombatManager.Instance.DebugOnlyGetState()).IsMultiplayer)
+            return;
         if (_settingsVisible && _settingsPanel?.CommitPending() == false) return;
         if (_collapsed) SetCollapsed(false);
         _settingsVisible = false;
