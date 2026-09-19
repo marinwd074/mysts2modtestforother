@@ -324,8 +324,14 @@ function Set-HeadlessGameSnapshot([hashtable]$Context, [hashtable]$Plan) {
                 throw "A source payload changed while the private game was being frozen: $($file.source)"
             }
         }
-        $dependency = Join-Path $staging 'mods\.combatsolver-headless-ritsulib'
-        Set-Content -LiteralPath (Join-Path $dependency '.combatsolver-headless-only') -Value 'CombatSolver private frozen dependency' -Encoding UTF8
+        $hasPrivateRitsuDependency = @($Plan.files | Where-Object {
+                [string]$_.relative -like 'mods\.combatsolver-headless-ritsulib\*'
+            }).Count -gt 0
+        if ($hasPrivateRitsuDependency) {
+            $dependency = Join-Path $staging 'mods\.combatsolver-headless-ritsulib'
+            New-Item -ItemType Directory -Path $dependency -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $dependency '.combatsolver-headless-only') -Value 'CombatSolver private frozen dependency' -Encoding UTF8
+        }
         Write-HeadlessJson (Join-Path $staging '.combatsolver-frozen-game.json') @{
             schemaVersion = 1; artifactId = $Plan.id; runtimeRoot = $Context.Root; files = $Plan.files
         }

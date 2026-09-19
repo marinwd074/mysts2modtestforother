@@ -17,6 +17,14 @@
 - `validate-phase0-results.ps1` 已拆分 MP-0A（连接兼容）和 MP-0B（只读状态）；`localPlayCardSync`、`localEndTurnSync`、`fastActionStress` 不再阻塞 MP-0，移至 MP-2 Safe Execute。
 - 本轮仅完成 PowerShell 语法和差异检查，没有运行新的双实例；上述脚本实现不构成 MP-0 证据。
 
+## 隔离启动实测（仍不是 MP-0 证据）
+
+- `HostVanilla` 私有快照已准备到 `D:\yingye\CombatSolver\.local\multiplayer-lab\instances\mp-host-20260919`；`ClientVanilla`、`ClientRitsuOnly` 和 `ClientCombatSolver` 私有快照也已准备完成。正式 Steam 安装的 `MODS` 项数仍为 0。
+- 首次 Host 快照准备暴露了共享 snapshot 函数对无 RitsuLib profile 无条件写 marker 的错误；已修正为仅在 plan 含 RitsuLib 文件时创建 marker。失败 staging 已由 ownership 清理，源游戏未变更。
+- Host 私有实例可启动到主菜单并由 marker 安全停止；Client 私有实例能识别 RitsuLib/CombatSolver manifest，启动日志显示 Mod 排序为 RitsuLib → CombatSolver。
+- 使用当前二进制已确认的 `--fastmp=host` 和 `--fastmp=join` 做了有界双实例启动探针：Host 日志为 `D:\yingye\CombatSolver\.local\multiplayer-lab\instances\mp-host-20260919\logs\20260919-130414-host-0d3b45eb.log`，只确认启动到主菜单，未出现已确认的 ENet listener/lobby；Client 日志为 `D:\yingye\CombatSolver\.local\multiplayer-lab\instances\mp-client-solver-20260919\logs\20260919-130431-client-13bd112a.log`，进入 `ENetClientConnectionInitializer` 后出现 `Connection timed out`。两实例均已通过 ownership marker 停止。
+- Client 首次启动还停在原生“尚未确认 Mod 警告”弹窗；因此没有进入战斗，也没有产生可用于 MP-0B 的 Probe JSONL、DrawPile、敌人同步或生命周期证据。
+
 ## 仍然阻塞 MP-0 PASS
 
 以下证据当前均缺失，必须保持 `UNVERIFIED`：
@@ -35,4 +43,4 @@
 
 ## 下一步
 
-现在已有能准备隔离快照、启动可见 Host/Client、停止自有进程和收集证据的基础设施；仍需要人工完成 A/B/C 三组真实 lobby/角色/Ready/战斗流程，并将日志和 Probe JSONL 填入 MP-0A/MP-0B 矩阵。完成前，不能把 FastMP 入口探针或单进程启动结果升级为 MP-0 通过。
+现在已有能准备隔离快照、启动可见 Host/Client、停止自有进程和收集证据的基础设施；仍需要解决 Host 监听/Join 超时，并人工完成 A/B/C 三组真实 lobby/角色/Ready/战斗流程，再将日志和 Probe JSONL 填入 MP-0A/MP-0B 矩阵。完成前，不能把 FastMP 入口探针或单进程启动结果升级为 MP-0 通过。

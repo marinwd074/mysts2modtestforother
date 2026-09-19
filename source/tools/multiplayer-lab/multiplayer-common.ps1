@@ -97,6 +97,21 @@ function Get-MultiplayerProcessIdentity {
     }
 }
 
+function ConvertTo-MultiplayerUtcDateTime {
+    param([Parameter(Mandatory = $true)][object]$Value)
+
+    if ($Value -is [DateTime]) {
+        return $Value.ToUniversalTime()
+    }
+    if ($Value -is [DateTimeOffset]) {
+        return $Value.UtcDateTime
+    }
+    return ([DateTimeOffset]::Parse(
+            [string]$Value,
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::RoundtripKind)).UtcDateTime
+}
+
 function Get-MultiplayerOwnedProcessState {
     param([Parameter(Mandatory = $true)][System.Collections.IDictionary]$Instance)
 
@@ -130,7 +145,7 @@ function Get-MultiplayerOwnedProcessState {
     if (-not [String]::Equals($actualExecutable, [string]$Instance.GameExe, [StringComparison]::OrdinalIgnoreCase)) {
         throw "Process marker PID $pidValue is live but has a different executable; preserving it."
     }
-    $expectedBirth = [DateTimeOffset]::Parse([string]$marker.processStartTimeUtc).UtcDateTime
+    $expectedBirth = ConvertTo-MultiplayerUtcDateTime $marker.processStartTimeUtc
     $actualBirth = $candidate.StartTime.ToUniversalTime()
     if ([Math]::Abs(($actualBirth - $expectedBirth).TotalSeconds) -gt 1) {
         throw "Process marker PID $pidValue was reused; preserving the marker and process."

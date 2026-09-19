@@ -74,14 +74,15 @@ pwsh -NoLogo -NoProfile -File .\start-client.ps1 -InstanceRoot "$env:LOCALAPPDAT
 
 ~~~powershell
 pwsh -NoLogo -NoProfile -File .\stop-owned-instances.ps1 `
-  -InstanceRoot "$env:LOCALAPPDATA\CombatSolver\multiplayer-lab\mp-host", "$env:LOCALAPPDATA\CombatSolver\multiplayer-lab\mp-client-solver"
+  -InstanceRoot "$env:LOCALAPPDATA\CombatSolver\multiplayer-lab\mp-host"
+pwsh -NoLogo -NoProfile -File .\stop-owned-instances.ps1 `
+  -InstanceRoot "$env:LOCALAPPDATA\CombatSolver\multiplayer-lab\mp-client-solver"
 ~~~
 
 收集和校验：
 
 ~~~powershell
-pwsh -NoLogo -NoProfile -File .\collect-results.ps1 `
-  -InstanceRoot "$env:LOCALAPPDATA\CombatSolver\multiplayer-lab\mp-host", "$env:LOCALAPPDATA\CombatSolver\multiplayer-lab\mp-client-solver"
+pwsh -NoLogo -NoProfile -Command "& '.\collect-results.ps1' -InstanceRoot @('$env:LOCALAPPDATA\CombatSolver\multiplayer-lab\mp-host', '$env:LOCALAPPDATA\CombatSolver\multiplayer-lab\mp-client-solver')"
 pwsh -NoLogo -NoProfile -File .\validate-phase0-results.ps1 `
   -Phase MP-0A -MatrixPath .\.local\multiplayer-lab\results\<run>\phase0-matrix.template.json
 ~~~
