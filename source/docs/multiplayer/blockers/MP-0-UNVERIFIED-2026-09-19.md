@@ -96,30 +96,38 @@
 
 - 首次启动第二个观察 Client 时，A 与 B 都通过 `--force-steam=off` 进入原生 `FastMpJoin`；B 日志 `D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp-client-observer-20260919\logs\20260919-195142-client-9234aec5.log` 记录 `Sending handshake with net ID 1000`，Host 日志 `D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp-host-card-instance-20260919\logs\20260919-194948-host-c0485fd2.log` 多次记录 `Second client attempted to connect with peer ID 1000, disconnecting them`。因此失败是本机双客户端重复 peer ID，不是 CombatSolver wire 兼容性失败。
 - 只读 IL 检查确认游戏的 `FastMpJoin` 默认 `clientId=1000`，但支持命令行 `--clientId` 覆盖。已在 `source/tools/multiplayer-lab/start-client.ps1` / `start-instance.ps1` 增加可选 `-ClientId`，并将实际值写入启动结果与 ownership marker；提交 `0afcb42` 已推送。
-- B 已单独重启，启动日志 `D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp-client-observer-20260919\logs\20260919-200336-client-ffb78c11.log` 明确记录 `Command Line Args: --force-steam=off --clientId=1001`，且 CombatSolver 报告 `63 applied, 0 ignored, 0 failed`。当前尚未把手动重新加入计为证据，需用户在 B 窗口完成加入并继续同一 Host 测试。
+- B 已单独重启，启动日志 `D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp-client-observer-20260919\logs\20260919-200336-client-ffb78c11.log` 明确记录 `Command Line Args: --force-steam=off --clientId=1001`，且 CombatSolver 报告 `63 applied, 0 ignored, 0 failed`；随后已在同一 Host 成功加入，详见下面的双 Client 对照实机运行记录。
 
 ## 双 Client 对照实机运行（2026-09-19）
 
 - 随后 B 以 `clientId=1001` 成功加入仍在运行的 Host；Host 日志同时记录 peer `1000` 与 `1001`，B 收到 `ClientLobbyJoinResponseMessage Players: 3` 并绑定 `netId=1001`。三端随后进入同一场战斗，Host 日志记录了 `1000` 和 `1001` 的出牌、结束回合及敌方回合同步动作。
 - 当前 A Probe 为 `D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp-client-card-instance-20260919\diagnostics\CombatSolver-BugReports\logs\CombatSolver\multiplayer-probe-11596-247995a14b8e46878453c36a9faf40d6.jsonl`，B Probe 为 `D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp-client-observer-20260919\diagnostics\CombatSolver-BugReports\logs\CombatSolver\multiplayer-probe-23588-1758225456bb40c5864144bddd6c3e3c.jsonl`；只读对照当时读到 `138/152` 条记录、两段同一 Seed `N1HHX05Q5U`。
 - `compare-probe-public-state.ps1` 的中间结果为 `UNVERIFIED`：第一段两端有序敌人状态集合 `31` 项完全相同；第二段 A 为 `26` 条、B 为 `34` 条，B 多出 `2` 个状态，属于采样窗口不一致。该报告没有修改矩阵，`enemyStateSync` 仍不得记为 PASS；需在本轮继续采样或收尾后重新比较。
+- 继续手动推进后重新比较同一对 Probe，结果已为 `PASS`：两端均有 `3` 个分段、Seed 均为 `N1HHX05Q5U`，各段有序敌人状态集合分别为 `31`、`34`、`1` 项，双方差集均为 `0`。这是独立 Client-to-Client 的公开状态证据；报告仍未自动修改矩阵，最终需以收尾归档后的报告为准，且不替代 Host/Client 生命周期证据。
+
+## 双 Client 对照最终收尾快照（2026-09-19）
+
+- 用户确认可以完成后，先从仍运行的 D: 隔离实例收集，再停止实例；归档根目录为 `D:\yingye\CombatSolver\.local\multiplayer-lab\results\mp0-c-dual-client-20260919\20260919-201041-fbab53a5`。Host、Client A 和 Client B 均使用 D: 私有快照，正式 Steam 安装未修改。
+- A Probe 为 `D:\yingye\CombatSolver\.local\multiplayer-lab\results\mp0-c-dual-client-20260919\20260919-201041-fbab53a5\clientcombatsolver\probe\multiplayer-probe-11596-247995a14b8e46878453c36a9faf40d6.jsonl`，234 条记录、本地 `netId=1000`、`playerCount=3`；B Probe 为 `D:\yingye\CombatSolver\.local\multiplayer-lab\results\mp0-c-dual-client-20260919\20260919-201041-fbab53a5\clientcombatsolver\probe\multiplayer-probe-23588-1758225456bb40c5864144bddd6c3e3c.jsonl`，243 条记录、本地 `netId=1001`、`playerCount=3`。两端均有 3 个战斗段，牌 token 均包含对象引用实例编号。
+- A/B 共 `477/477` 条记录满足 `readOnly=true`、`searchStarted=false`、`actionsEnqueued=false`、`customNetworkPacketSent=false`；A/B 公开敌人状态对照报告为 `PASS`，报告路径为 `D:\yingye\CombatSolver\.local\multiplayer-lab\results\mp0-c-dual-client-20260919\20260919-201041-fbab53a5\enemy-state-comparison.json`，三段同 Seed `N1HHX05Q5U`，每段状态差集均为 `0`。
+- Host、A、B 日志均记录三场战斗开始和两场战斗结束；第三场已开始但收集时尚无结束记录。没有捕获连接建立后的退出/重新加入闭环，因此 `lifecycle` 继续保持 `UNVERIFIED`，进程停止本身不计为通过证据。
 
 ## 仍然阻塞 MP-0 PASS
 
 以下证据当前仍缺失，必须保持 `UNVERIFIED`：
 
 - A/B/C 三组连接证据已填入 `../evidence/phase0-matrix-2026-09-19.json`，MP-0A 可独立校验；MP-0B 仍含未完成项，整体 MP-0 保持 `UNVERIFIED`。
-- C 组最后一场战斗的结束、退出和重新加入，以及跨生命周期保持只读边界。
-- C 组敌人状态的独立 Host/Client 公共状态对照；当前只有 Client Probe 的 74 次变化和配对日志动作，尚无同一时刻的公共状态逐项对照。
-- 下一轮需在同一 Host 下让两个 Client 同时加入并完成可比战斗，再运行上述对照器；同时继续收集最后一场结束和退出/重新加入日志。
+- C 组连接后的退出和重新加入，以及跨生命周期保持只读边界；当前双 Client 对照已经 PASS，但第三场战斗未收尾。
+- 直接从 Host 内部导出的逐时刻敌人公开状态没有单独采集；当前 `enemyStateSync` 的 PASS 严格限于两个独立 CombatSolver Client 对同一 Host 运行的公开状态集合对照，不涉及自定义 Host 协议。
+- 若要把整体 MP-0 从 `UNVERIFIED` 提升，仍需在下一轮有界运行中补齐退出/重新加入证据；本轮完成后不自动启动新游戏。
 - Local PlayCard、Local EndTurn 和连续快速动作属于后续 MP-2 Safe Execute，不在本轮启用。
 
 ## 当前安全边界
 
 - Runtime 默认继续使用 `MultiplayerProbe`：只读采集，不搜索、不部署、不自动选牌、不自动 EndTurn、不发送自定义网络包。
-- 没有真实 Host/Client 证据前，不得切换 `MultiplayerAdvisor` 或 `MultiplayerSafeExecute`。
+- 在完整 MP-0（尤其 lifecycle）证据通过前，不得切换 `MultiplayerAdvisor` 或 `MultiplayerSafeExecute`。
 - 临时 Host 日志位于本机 `.local/multiplayer-lab/cli-probe-host/host.log`，未作为通过证据提交；如需复核，应重新运行并保存脱敏的成对 Host/Client 证据。
 
 ## 下一步
 
-现在 A/B/C 三组均已形成 MP-0A 连接矩阵，C 组已补齐多场战斗的只读牌堆/远端变化证据；下一步仍需补齐敌人 Host/Client 公共状态逐项对照、完整战斗收尾和退出/重新加入。完成前，不能把当前部分结果升级为完整 MP-0 通过。
+现在 A/B/C 三组均已形成 MP-0A 连接矩阵，双 Client 的公开敌人状态对照已通过，C 组已补齐多场战斗的只读牌堆/远端变化证据；剩余阻碍是退出/重新加入生命周期证据和本轮第三场战斗收尾。完成前，整体 MP-0 仍保持 `UNVERIFIED`。

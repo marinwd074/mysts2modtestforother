@@ -13,15 +13,15 @@
     },
     "noCustomNetworkPackets": {
       "status": "PASS",
-      "evidence": "C final Probe records customNetworkPacketSent=false for all 339 records; A/B contain no CombatSolver; see blockers/MP-0-UNVERIFIED-2026-09-19.md#c-组新-dll-最终收尾快照2026-09-19"
+      "evidence": "Final dual-Client A/B Probes contain 477 records total; customNetworkPacketSent=false, actionsEnqueued=false and searchStarted=false for every record; HostVanilla remained unmodified; archive .local/multiplayer-lab/results/mp0-c-dual-client-20260919/20260919-201041-fbab53a5"
     },
     "wireModelCompatibility": {
       "status": "PASS",
-      "evidence": "All A/B/C profiles completed lobby, ready, synchronized MapCoord (3,0), NCombatRoom creation, and Combat started; final C run also reached three combat ends and later map moves; see blockers/MP-0-UNVERIFIED-2026-09-19.md"
+      "evidence": "All A/B/C profiles completed lobby, ready, synchronized MapCoord (3,0), NCombatRoom creation, and Combat started; final dual-Client C run had Host plus Client netIds 1000 and 1001, three combat starts and two combat ends; see blockers/MP-0-UNVERIFIED-2026-09-19.md#双-client-对照最终收尾快照-2026-09-19"
     },
     "localPlayerIdentity": {
       "status": "PASS",
-      "evidence": "C final Probe 339/339 records: Client netId=1000, playerCount=2, character=IRONCLAD; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-193408-4dffbcd3"
+      "evidence": "Final dual-Client archive A Probe 234/234 records localNetId=1000 and playerCount=3; B Probe 243/243 records localNetId=1001 and playerCount=3; both character=IRONCLAD; archive .local/multiplayer-lab/results/mp0-c-dual-client-20260919/20260919-201041-fbab53a5"
     },
     "localHand": {
       "status": "PASS",
@@ -44,8 +44,8 @@
       "evidence": "C final new-DLL Probe observed 70 Discard transitions and 4 Exhaust transitions with instance tokens; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-193408-4dffbcd3"
     },
     "enemyStateSync": {
-      "status": "UNVERIFIED",
-      "evidence": "C final new-DLL Probe observed 74 enemy-state changes while paired Host/Client logs recorded multiplayer actions; independent Host/Client public-state comparison remains outstanding"
+      "status": "PASS",
+      "evidence": "Independent A/B CombatSolver Client public-state comparison PASS: three same-seed segments, ordered enemy-state set differences 0/0 in every segment; report .local/multiplayer-lab/results/mp0-c-dual-client-20260919/20260919-201041-fbab53a5/enemy-state-comparison.json. This is Client-to-Client public-state evidence and does not claim a custom Host protocol."
     },
     "multiplayerScaling": {
       "status": "PASS",
@@ -57,11 +57,11 @@
     },
     "probeReadOnly": {
       "status": "PASS",
-      "evidence": "C final new-DLL Probe 339/339 records: readOnly=true, searchStarted=false, actionsEnqueued=false, customNetworkPacketSent=false; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-193408-4dffbcd3"
+      "evidence": "Final dual-Client A/B Probes 477/477 records have readOnly=true, searchStarted=false, actionsEnqueued=false and customNetworkPacketSent=false; archive .local/multiplayer-lab/results/mp0-c-dual-client-20260919/20260919-201041-fbab53a5"
     },
     "lifecycle": {
       "status": "UNVERIFIED",
-      "evidence": "C final run covered lobby, four combat starts (NIBBITS_WEAK, SLIMES_WEAK, SHRINKER_BEETLE_WEAK, INKLETS_NORMAL), three combat ends, three reward sets and map moves through (3,4); the fourth combat, exit and rejoin were not captured"
+      "evidence": "Final dual-Client run recorded three combat starts and two combat ends; the third combat had started when collection completed. No verified post-connection exit/rejoin cycle was captured, so process termination is not counted as lifecycle evidence."
     },
     "singleplayerRegression": {
       "status": "PASS",
@@ -87,12 +87,13 @@
     {
       "name": "HostVanilla + ClientCombatSolver",
       "status": "PASS",
-      "evidence": "D final archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-193408-4dffbcd3; Seed AQUAAUS9FR; four combat starts with three completed reward/map transitions; 339-record non-empty read-only Probe with instance tokens"
+      "evidence": "D final dual-Client archive .local/multiplayer-lab/results/mp0-c-dual-client-20260919/20260919-201041-fbab53a5; Host plus Client netIds 1000/1001 joined the same Seed N1HHX05Q5U; A/B Probes contain 234/243 records with instance tokens and both completed the lobby/combat synchronization path"
     }
   ],
   "notes": [
     "MP-0A connection compatibility is explicitly evidenced for all three profiles.",
-    "Overall MP-0 remains UNVERIFIED because independent enemy Host/Client comparison and exit/rejoin lifecycle evidence are incomplete.",
+    "Independent dual-Client public enemy-state comparison is now PASS; overall MP-0 remains UNVERIFIED because exit/rejoin lifecycle evidence is incomplete and the final third combat was not ended before collection.",
+    "The enemy-state PASS is limited to two independent CombatSolver Clients observing the same Host run; it does not enable custom packets or infer Host-side mod behavior.",
     "This matrix does not authorize MultiplayerAdvisor or MultiplayerSafeExecute."
   ]
 }
