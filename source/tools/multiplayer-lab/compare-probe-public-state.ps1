@@ -31,7 +31,11 @@ function Get-RecordValue {
 function Read-ProbeRecords {
     param([Parameter(Mandatory = $true)][string]$Path)
 
-    $resolved = (Resolve-Path -LiteralPath $Path -ErrorAction Stop).Path
+    $resolvedPaths = @(Resolve-Path -Path $Path -ErrorAction Stop)
+    if ($resolvedPaths.Count -ne 1) {
+        throw "Probe path must resolve to exactly one file: $Path"
+    }
+    $resolved = $resolvedPaths[0].Path
     if (-not (Test-Path -LiteralPath $resolved -PathType Leaf)) {
         throw "Probe path is not a file: $resolved"
     }
