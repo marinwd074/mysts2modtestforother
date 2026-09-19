@@ -22,6 +22,7 @@ internal sealed class CombatRootSnapshot
     private readonly CombatPredictionSimulator _rootSimulator;
 
     public Player PlayerIdentity { get; }
+    public SolverPerspective Perspective { get; }
     public IReadOnlyList<Creature> Enemies { get; }
     public IntentForecast Forecast { get; }
     public LiveCombatStamp LiveStamp { get; }
@@ -65,6 +66,7 @@ internal sealed class CombatRootSnapshot
 
     private CombatRootSnapshot(
         Player playerIdentity,
+        SolverPerspective perspective,
         IReadOnlyList<Creature> enemies,
         IntentForecast forecast,
         LiveCombatStamp liveStamp,
@@ -94,6 +96,7 @@ internal sealed class CombatRootSnapshot
         PostCombatRelicHealProfile postCombatRelicHeal)
     {
         PlayerIdentity = playerIdentity;
+        Perspective = perspective;
         Enemies = enemies;
         Forecast = forecast;
         LiveStamp = liveStamp;
@@ -141,6 +144,10 @@ internal sealed class CombatRootSnapshot
         PlayerCombatState playerState = player.PlayerCombatState
             ?? throw new InvalidOperationException("玩家没有战斗状态。");
         SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
+        SolverPerspective perspective = SolverPerspective.Capture(
+            player,
+            state.Players.Count,
+            capabilities.IsMultiplayer);
         IReadOnlyList<Player>? rootCapturedPlayers = capabilities.IsMultiplayer && capabilities.CanSearch
             ? [player]
             : null;
@@ -169,6 +176,8 @@ internal sealed class CombatRootSnapshot
             liveCombatHookListeners,
             rootCapturedPlayers is { } ? player : null);
         CombatPredictionSimulator simulator = new(simulatedCombat);
+        if (capabilities.IsMultiplayer && capabilities.CanSearch)
+            MultiplayerRootCaptureContracts.Verify(state, simulator, player);
         ContinuationStamp projected = ContinuationStamp.CapturePredicted(
             player,
             simulator,
@@ -228,6 +237,7 @@ internal sealed class CombatRootSnapshot
 
         return new CombatRootSnapshot(
             player,
+            perspective,
             Array.AsReadOnly(state.Enemies.ToArray()),
             forecast,
             liveBefore,

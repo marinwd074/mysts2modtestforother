@@ -12,7 +12,7 @@ internal sealed partial class SimulatedCombatState
         if (creatures.Count == 0)
             return;
         Dictionary<Player, int> fatalCounts = [];
-        foreach (Player player in Players)
+        foreach (Player player in _rootCapturedPlayers)
         {
             int count = creatures.Count(creature => creature != player.Creature
                 && EffectivePowers()

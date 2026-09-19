@@ -70,7 +70,7 @@ internal sealed partial class SimulatedCombatState
     private void AppendRelicResourceFingerprint(ref StateFingerprintBuilder fingerprint)
     {
         fingerprint.Add('G');
-        foreach (Player player in Players)
+        foreach (Player player in _rootCapturedPlayers)
         {
             fingerprint.Add(player.NetId);
             fingerprint.Add(GetPlayerGold(player));

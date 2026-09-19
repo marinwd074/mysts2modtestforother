@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "status": "PASS_CONTROLLED_REJOIN_NO_POTION",
+  "scope": "advisor-stability-rejoin-controlled",
+  "observedAt": "2026-09-20T01:00:05+08:00",
+  "sourceCommit": "1b6028502ab00e9c1394e51ffd3cb1661fcd533c",
+  "runtimeDllSha256": "864EC2A8276845B0C412106259D75AE2D30333826D415BE03A7371FD3A3B474F",
+  "instance": "runtime-mp-advisor-stability-20260920-client",
+  "lifecycle": {
+    "status": "PASS",
+    "protocol": "host-quit-create-room-client-join",
+    "initialEncounter": "NIBBITS_WEAK",
+    "rejoinEncounter": "SLIMES_WEAK",
+    "hostEvidence": {
+      "hostQuit": ".local/multiplayer-lab/runtime-mp-advisor-stability-20260920-host/logs/20260920-004457-host-07bc9d2d.log#L535",
+      "newHandshakeAndLoadJoin": ".local/multiplayer-lab/runtime-mp-advisor-stability-20260920-host/logs/20260920-004457-host-07bc9d2d.log#L548-L552",
+      "ready": ".local/multiplayer-lab/runtime-mp-advisor-stability-20260920-host/logs/20260920-004457-host-07bc9d2d.log#L559-L563",
+      "combatStarted": ".local/multiplayer-lab/runtime-mp-advisor-stability-20260920-host/logs/20260920-004457-host-07bc9d2d.log#L607"
+    },
+    "clientEvidence": {
+      "disconnected": ".local/multiplayer-lab/runtime-mp-advisor-stability-20260920-client/logs/20260920-004611-client-b869e6ab.log#L669",
+      "rejoinHandshake": ".local/multiplayer-lab/runtime-mp-advisor-stability-20260920-client/logs/20260920-004611-client-b869e6ab.log#L696-L706",
+      "loadJoin": ".local/multiplayer-lab/runtime-mp-advisor-stability-20260920-client/logs/20260920-004611-client-b869e6ab.log#L716-L726",
+      "ready": ".local/multiplayer-lab/runtime-mp-advisor-stability-20260920-client/logs/20260920-004611-client-b869e6ab.log#L732-L737",
+      "combatStarted": ".local/multiplayer-lab/runtime-mp-advisor-stability-20260920-client/logs/20260920-004611-client-b869e6ab.log#L782"
+    }
+  },
+  "advisor": {
+    "searchStart": 4,
+    "rootCaptureBegin": 4,
+    "searchComplete": 3,
+    "searchStartedWithoutCompletion": 1,
+    "searchStale": 0,
+    "failClosed": 0,
+    "searchFailure": 0,
+    "worldChanged": 20,
+    "worldInvalidated": 20,
+    "searchDebounced": 8,
+    "searchDebouncedStart": 4,
+    "searchDebouncedCancel": 0,
+    "routeReplay": 3,
+    "routeAction": 7,
+    "uiSearching": 4,
+    "uiReady": 3,
+    "completionNotification": "not_captured",
+    "scope": "CurrentTurnAdoption",
+    "liveActionExecution": false
+  },
+  "probe": {
+    "records": 130,
+    "readOnlyTrue": 130,
+    "actionsEnqueuedTrue": 0,
+    "customNetworkPacketSentTrue": 0,
+    "searchStartedTrue": 0,
+    "localPotionStates": ["-,-,-"],
+    "combatSegments": [
+      {
+        "segment": 1,
+        "encounters": ["NIBBIT"],
+        "records": 32,
+        "localEndPhaseSamples": 1,
+        "remoteStateVariants": 7
+      },
+      {
+        "segment": 2,
+        "encounters": ["NIBBIT"],
+        "records": 78,
+        "localEndPhaseSamples": 2,
+        "remoteStateVariants": 20
+      },
+      {
+        "segment": 3,
+        "encounters": ["LEAF_SLIME_S", "TWIG_SLIME_M", "TWIG_SLIME_S"],
+        "records": 20,
+        "localEndPhaseSamples": 0,
+        "remoteStateVariants": 7
+      }
+    ]
+  },
+  "stability": {
+    "status": "PASS_CONTROLLED_NO_REMOTE_POTION",
+    "overallMp1Stability": "PARTIAL",
+    "remotePrivatePotionScenario": "not_exercised; local potion slots stayed empty and remote private potion state remains unavailable",
+    "remoteStateChanged": true,
+    "localEndTurnPhaseObserved": true,
+    "noLiveActions": true,
+    "note": "This run proves a successful Advisor search and read-only route display after the required Host-recreate/Client-rejoin lifecycle. It does not close the separate non-empty remote-private-potion blocker."
+  },
+  "evidencePaths": [
+    ".local/multiplayer-lab/runtime-mp-advisor-stability-20260920-host/logs/20260920-004457-host-07bc9d2d.log",
+    ".local/multiplayer-lab/runtime-mp-advisor-stability-20260920-client/logs/20260920-004611-client-b869e6ab.log",
+    ".local/multiplayer-lab/runtime-mp-advisor-stability-20260920-client/diagnostics/CombatSolver-BugReports/logs/CombatSolver/34436-971c42391b154dc0b96f155da89ba270/combat-f84c47013e0143189d5d84b485ae41de.jsonl",
+    ".local/multiplayer-lab/runtime-mp-advisor-stability-20260920-client/diagnostics/CombatSolver-BugReports/logs/CombatSolver/34436-971c42391b154dc0b96f155da89ba270/process.jsonl",
+    ".local/multiplayer-lab/runtime-mp-advisor-stability-20260920-client/diagnostics/CombatSolver-BugReports/logs/CombatSolver/multiplayer-probe-34436-590849eacace43e9a1557a6b99ee88a9.jsonl"
+  ]
+}

@@ -124,7 +124,7 @@ internal sealed partial class SimulatedCombatState
             AppendPlayerPotionFingerprint(ref fingerprint, Players[0]);
             return;
         }
-        foreach (Player player in Players.OrderBy(player => player.NetId))
+        foreach (Player player in _rootCapturedPlayers.OrderBy(player => player.NetId))
             AppendPlayerPotionFingerprint(ref fingerprint, player);
     }
 

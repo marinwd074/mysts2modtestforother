@@ -5,6 +5,12 @@ namespace CombatSolver.Replay;
 internal sealed record EventLogSnapshot(byte[] JsonLines, long EventCount, string? Error,
     long PeakPendingBytes, long WrittenBytes);
 
+internal enum EventLogFlushPolicy
+{
+    Buffered,
+    FlushEachAppend,
+}
+
 // One background writer owns the temporary file. Append never waits for disk I/O;
 // snapshots are FIFO barriers and preserve their prefix even while combat continues.
 internal sealed class AppendOnlyEventLog<T> : IDisposable
@@ -16,6 +22,7 @@ internal sealed class AppendOnlyEventLog<T> : IDisposable
     private readonly long _maximumPendingBytes;
     private readonly long _maximumFileBytes;
     private readonly string? _outputPath;
+    private readonly EventLogFlushPolicy _flushPolicy;
     private long _pendingBytes;
     private long _peakPendingBytes;
     private int _pendingSnapshots;
@@ -24,12 +31,14 @@ internal sealed class AppendOnlyEventLog<T> : IDisposable
     public Task Completion { get; }
 
     public AppendOnlyEventLog(Func<T, byte[]> serialize, long maximumPendingBytes = 8L * 1024 * 1024,
-        long maximumFileBytes = 32L * 1024 * 1024, string? outputPath = null)
+        long maximumFileBytes = 32L * 1024 * 1024, string? outputPath = null,
+        EventLogFlushPolicy flushPolicy = EventLogFlushPolicy.Buffered)
     {
         _serialize = serialize;
         _maximumPendingBytes = maximumPendingBytes;
         _maximumFileBytes = maximumFileBytes;
         _outputPath = outputPath;
+        _flushPolicy = flushPolicy;
         Completion = Task.Run(WriteAsync);
     }
 
@@ -112,7 +121,8 @@ internal sealed class AppendOnlyEventLog<T> : IDisposable
                     if (file.Length + bytes.Length + 1 > _maximumFileBytes) { SetError("event_file_size_limit"); continue; }
                     file.Write(bytes);
                     file.WriteByte((byte)'\n');
-                    file.Flush();
+                    if (_flushPolicy == EventLogFlushPolicy.FlushEachAppend)
+                        file.Flush();
                     count++;
                 }
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or NotSupportedException)

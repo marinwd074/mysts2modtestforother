@@ -58,7 +58,7 @@ function Read-ProbeRecords {
         if ($record -isnot [System.Collections.IDictionary]) {
             throw "Probe record is not an object at $resolved`:$lineNumber"
         }
-        if ((Get-RecordValue $record 'schemaVersion') -ne 1) {
+        if ((Get-RecordValue $record 'schemaVersion') -notin @(1, 2)) {
             throw "Unsupported Probe schemaVersion at $resolved`:$lineNumber"
         }
         if (-not ($record.Contains('sequence') -and $record.Contains('worldVersion'))) {
@@ -87,12 +87,24 @@ function Get-ProbeSegments {
     $current = [Collections.Generic.List[object]]::new()
     $previousSequence = $null
     $previousWorldVersion = $null
+    $previousCombatSegmentId = $null
+    $useExplicitSegment = @($Records | Where-Object {
+            $_.Contains('combatSegmentId') -and $null -ne (Get-RecordValue $_ 'combatSegmentId')
+        }).Count -eq $Records.Count
 
     foreach ($record in $Records) {
         [long]$sequence = Get-RecordValue $record 'sequence'
         [long]$worldVersion = Get-RecordValue $record 'worldVersion'
-        if ($current.Count -gt 0 -and
-            ($sequence -le $previousSequence -or $worldVersion -le $previousWorldVersion)) {
+        $segmentChanged = $false
+        if ($useExplicitSegment) {
+            [int]$combatSegmentId = Get-RecordValue $record 'combatSegmentId'
+            $segmentChanged = $current.Count -gt 0 -and $combatSegmentId -ne $previousCombatSegmentId
+            $previousCombatSegmentId = $combatSegmentId
+        } else {
+            $segmentChanged = $current.Count -gt 0 -and
+                ($sequence -le $previousSequence -or $worldVersion -le $previousWorldVersion)
+        }
+        if ($segmentChanged) {
             $segments.Add(@($current))
             $current = [Collections.Generic.List[object]]::new()
         }
@@ -111,6 +123,10 @@ function Get-ProbeSegments {
 function Get-Seed {
     param([Parameter(Mandatory = $true)]$Record)
 
+    $runSeed = [string](Get-RecordValue $Record 'runSeed')
+    if (-not [string]::IsNullOrWhiteSpace($runSeed)) {
+        return $runSeed
+    }
     $fingerprint = [string](Get-RecordValue $Record 'hardFingerprint')
     if ($fingerprint -match '(?:^|;)seed=([^;]+)') {
         return $Matches[1]
@@ -192,7 +208,7 @@ $allStatesEqual = $allSegmentsComparable -and
 $status = if ($allStatesEqual) { 'PASS' } else { 'UNVERIFIED' }
 
 $result = [ordered]@{
-    schemaVersion = 1
+    schemaVersion = 2
     status = $status
     comparison = 'independent-client-public-enemy-state'
     leftProbe = $left.Path

@@ -15,7 +15,12 @@ internal sealed partial class CombatPredictionSimulator
     /// </summary>
     internal bool SimulateEndPlayerTurnBeforeOrbPassives(int playerTurn)
     {
-        var playersEndingTurn = State.CombatState.Players;
+        // Advisor roots capture only the local player's private turn state. The
+        // public combat roster still contains teammates, but their hand/pile
+        // phases must not be materialized while searching the local turn.
+        var playersEndingTurn = MultiplayerAdvisorBoundaryContracts.SelectEndTurnPlayers(
+            State.Players,
+            State.RootCapturedPlayers);
 
         foreach (var player in playersEndingTurn)
         {
@@ -44,7 +49,9 @@ internal sealed partial class CombatPredictionSimulator
     {
         if (IsOverOrEnding)
             return true;
-        var playersEndingTurn = State.CombatState.Players;
+        var playersEndingTurn = MultiplayerAdvisorBoundaryContracts.SelectEndTurnPlayers(
+            State.Players,
+            State.RootCapturedPlayers);
 
         foreach (var player in playersEndingTurn)
         {

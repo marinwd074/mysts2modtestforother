@@ -24,9 +24,10 @@ internal sealed partial class SimulatedCombatState
     private List<RelicModel> RelicsParticipatingInSideTurn(IReadOnlyList<Creature> participants)
     {
         List<RelicModel> relics = [];
-        for (int playerIndex = 0; playerIndex < Players.Count; playerIndex++)
+        IReadOnlyList<Player> players = CapturedSideTurnPlayers(participants);
+        for (int playerIndex = 0; playerIndex < players.Count; playerIndex++)
         {
-            IReadOnlyList<RelicModel> owned = RelicsOf(Players[playerIndex]);
+            IReadOnlyList<RelicModel> owned = RelicsOf(players[playerIndex]);
             for (int relicIndex = 0; relicIndex < owned.Count; relicIndex++)
             {
                 RelicModel relic = owned[relicIndex];
@@ -47,6 +48,25 @@ internal sealed partial class SimulatedCombatState
             }
         }
         return relics;
+    }
+
+    /// <summary>
+    /// Side-turn relic phases may only enumerate players whose inventories were
+    /// captured into a local-player-only root. A remote player in the phase is
+    /// an unsupported semantic boundary, not an empty inventory.
+    /// </summary>
+    private IReadOnlyList<Player> CapturedSideTurnPlayers(IReadOnlyList<Creature> participants)
+    {
+        List<Player> players = [];
+        foreach (Creature participant in participants)
+        {
+            if (participant.Player is not { } player)
+                continue;
+            MultiplayerAdvisorBoundaryContracts.RequireCapturedPlayer(_rootCapturedPlayers, player);
+            if (!players.Contains(player))
+                players.Add(player);
+        }
+        return players;
     }
 
     public bool PrepareRelicsBeforeSideTurnStart(
@@ -465,7 +485,7 @@ internal sealed partial class SimulatedCombatState
         CombatPredictionSimulator simulator,
         IReadOnlyList<Creature> participants)
     {
-        foreach (PaelsTears relic in Players
+        foreach (PaelsTears relic in CapturedSideTurnPlayers(participants)
                      .SelectMany(RelicsOf)
                      .OfType<PaelsTears>()
                      .Where(relic => !relic.IsMelted && participants.Contains(relic.Owner.Creature)))
@@ -480,7 +500,7 @@ internal sealed partial class SimulatedCombatState
         IReadOnlyList<Creature> participants,
         int etherealExhaustCount)
     {
-        foreach (ArtOfWar relic in Players
+        foreach (ArtOfWar relic in CapturedSideTurnPlayers(participants)
                      .SelectMany(RelicsOf)
                      .OfType<ArtOfWar>()
                      .Where(relic => !relic.IsMelted && participants.Contains(relic.Owner.Creature)))

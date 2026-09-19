@@ -499,6 +499,11 @@ internal static partial class SolverController
     {
         AssertMainThread();
         ResetCore("combat_starting");
+        if (state is CombatState activeMultiplayerCombat
+            && SolverSessionCapabilities.Capture(activeMultiplayerCombat).IsMultiplayer)
+        {
+            MultiplayerClientProbe.BeginCombatSegment();
+        }
         _combat.FullAutoEnabled = !_solverDisabled
             && SolverSessionCapabilities.Capture(state as CombatState).CanFullAuto
             && state is CombatState { Players.Count: 1 }
@@ -1244,6 +1249,14 @@ internal static partial class SolverController
             _multiplayerInertSessionObserved = true;
             if (enteredMultiplayerSession || multiplayerWorldChanged)
             {
+                if (multiplayerWorldChanged
+                    && capabilities.Kind == SolverSessionKind.MultiplayerAdvisor)
+                {
+                    Entry.Logger.Info(
+                        $"[CombatSolver/MultiplayerAdvisor] MP_ADVISOR_WORLD_CHANGED " +
+                        $"world_version={MultiplayerWorldTracker.WorldVersion} " +
+                        $"reason={MultiplayerWorldTracker.LastReason}");
+                }
                 if (enteredMultiplayerSession)
                 {
                     Entry.Logger.Info(

@@ -1,6 +1,16 @@
 # CombatSolver 开发笔记（当前索引）
 
-> 本文只保留最近维护批次的变更摘要、当前边界和维护入口；完整时间线与旧版本证据见 [开发笔记历史归档](history/development/DEVELOPMENT_NOTES-2026-09-19.md)。当前架构规范以 [`source/AGENTS.md`](../AGENTS.md) 和 [`ARCHITECTURE.md`](ARCHITECTURE.md) 为准。
+> 本文只保留最近维护批次的变更摘要、当前边界和维护入口；退役快照由 [文档历史索引](history/README.md) 说明并可从 Git 历史恢复。当前架构规范以 [`source/AGENTS.md`](../AGENTS.md) 和 [`ARCHITECTURE.md`](ARCHITECTURE.md) 为准。
+
+## 2026-09-19：多人阶段收口与当前边界
+
+- Vanilla Host + CombatSolver Client 的连接、只读 Probe、远端公开状态、双 Client 对照，以及按游戏规则由 Host 重建房间后 Client 重新加入的生命周期证据，已写入 [`docs/multiplayer/evidence/phase0-matrix-2026-09-19.json`](multiplayer/evidence/phase0-matrix-2026-09-19.json)。MP-0 Core 与受控 Hardening lifecycle 均为 `PASS`；重连后的 Advisor 私有药水语义仍按合同 fail-closed。
+- MP-1 Advisor controlled Smoke 已 `PASS`：fresh `-bbfix` 运行记录 `SEARCH_COMPLETE=5`、`SEARCH_STALE=1`、`FAIL_CLOSED=0`、`SEARCH_FAILURE=0`；Probe `51/51` 为只读且无动作入队/自定义网络包。摘要见 [`mp1-advisor-smoke-2026-09-19.json`](multiplayer/evidence/mp1-advisor-smoke-2026-09-19.json)。
+- 2026-09-20 新一轮 Advisor Stability 在 Host 重建房间、Client 重新加入后的无药水战斗中记录 `SEARCH_START=4`、`SEARCH_COMPLETE=3`、`FAIL_CLOSED=0`、`SEARCH_FAILURE=0`；Probe `130/130` 只读且无 live action/自定义网络包。该轮为受控无药水通过，不解除远端私有药水的总体 `PARTIAL` 阻碍；摘要见 [`mp1-advisor-stability-2026-09-20.json`](multiplayer/evidence/mp1-advisor-stability-2026-09-20.json)。
+- 2026-09-20 非空远端药水复验实际观察到远端 `FIRE_POTION` / `COLORLESS_POTION`；药水仍在远端私有库存时 `FAIL_CLOSED=7`、`SEARCH_SETUP_FAILURE=7`，消耗后 generation 45/46 成功。Probe `259/259` 仍只读；该轮确认 fail-closed 合同，不解除总体 `PARTIAL` 阻碍。摘要见 [`mp1-advisor-potion-2026-09-20.json`](multiplayer/evidence/mp1-advisor-potion-2026-09-20.json)。
+- post-MP1 固定工作量单人 spot 对照已完成：当前源码 3 个独立 `COMPAT1071` 样本均保持 `expanded=3528`、`transitions=10156`，路线/结果 identity 与历史 baseline 一致，Gen2 与 >50/100 ms 帧均为 0；非交错样本不外推稳定加速。证据见 [`runtime-evidence/20260920-post-mp1-performance`](../runtime-evidence/20260920-post-mp1-performance/)。
+- Runtime 默认 `MultiplayerProbe`；`COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才启用只读 Advisor 入口，`MultiplayerSafeExecute` 仍 blocked。当前边界包括 `SolverPerspective`、local-player-only root contracts、schema v2 Probe 证据和 Lab-only flush 策略；重连后远端私有药水库存不可见时保持 fail-closed。
+- 本次收口以 `source/CombatSolver.json` 为唯一 manifest 来源；已解决问题单、旧适配审计和完整快照不再作为当前入口，历史内容由 Git history 保留。
 
 ## 2026-09-18：0.40.2 三份新问题包共因修复
 
@@ -262,4 +272,4 @@
 - 新的工程规则、职责迁移、版本基线和发布证据分别写入 `source/AGENTS.md`、`ARCHITECTURE.md`、`TEST_MATRIX.md` 和对应专题归档。
 - 新增批次应给出验证入口与已知缺口；未重跑的旧结果不能代替当前构建或运行证据。
 
-完整原始时间线：[开发笔记历史归档](history/development/DEVELOPMENT_NOTES-2026-09-19.md)
+完整旧版本可由 Git history 恢复；当前历史入口：[文档历史索引](history/README.md)

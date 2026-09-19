@@ -214,8 +214,26 @@ foreach ($probeFile in $probeFiles) {
             continue
         }
 
-        if ((Get-MapValue $record 'schemaVersion') -ne 1) {
+        $schemaVersion = [int](Get-MapValue $record 'schemaVersion')
+        if ($schemaVersion -notin @(1, 2)) {
             $probeFailures.Add(('{0}:{1} unsupported schemaVersion' -f $probeFile, $lineNumber))
+        }
+        if ($schemaVersion -eq 2) {
+            if ([string]::IsNullOrWhiteSpace([string](Get-MapValue $record 'runSeed'))) {
+                $probeFailures.Add(('{0}:{1} schema v2 missing runSeed' -f $probeFile, $lineNumber))
+            }
+            if (-not (Has-MapKey $record 'combatSegmentId')) {
+                $probeFailures.Add(('{0}:{1} schema v2 missing combatSegmentId' -f $probeFile, $lineNumber))
+            } else {
+                try {
+                    $combatSegmentId = [int](Get-MapValue $record 'combatSegmentId')
+                    if ($combatSegmentId -lt 0) {
+                        $probeFailures.Add(('{0}:{1} schema v2 combatSegmentId is negative' -f $probeFile, $lineNumber))
+                    }
+                } catch {
+                    $probeFailures.Add(('{0}:{1} schema v2 combatSegmentId is invalid' -f $probeFile, $lineNumber))
+                }
+            }
         }
         if ([string]::IsNullOrWhiteSpace([string](Get-MapValue $record 'hardFingerprint'))) {
             $probeFailures.Add(('{0}:{1} missing hardFingerprint' -f $probeFile, $lineNumber))

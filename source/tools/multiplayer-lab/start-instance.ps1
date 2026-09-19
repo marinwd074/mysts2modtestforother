@@ -12,6 +12,9 @@ param(
     [ValidateSet('', 'host', 'join')]
     [string]$FastMpMode = '',
 
+    [ValidateSet('', 'probe', 'advisor')]
+    [string]$MultiplayerMode = '',
+
     [UInt64]$ClientId = 0,
 
     [switch]$ForceSteamOff
@@ -82,6 +85,13 @@ $startInfo.WindowStyle = [Diagnostics.ProcessWindowStyle]::Normal
 $startInfo.Environment['APPDATA'] = $instance.RoamingRoot
 $startInfo.Environment['LOCALAPPDATA'] = $instance.LocalRoot
 $startInfo.Environment['COMBATSOLVER_MULTIPLAYER_INSTANCE'] = $instance.Root
+if ($Role -eq 'Client') {
+    # Probe evidence is deliberately Lab-only; ordinary desktop launches stay quiet.
+    $startInfo.Environment['COMBATSOLVER_MULTIPLAYER_PROBE_EVIDENCE'] = '1'
+}
+if (-not [string]::IsNullOrWhiteSpace($MultiplayerMode)) {
+    $startInfo.Environment['COMBATSOLVER_MULTIPLAYER_MODE'] = $MultiplayerMode
+}
 foreach ($argument in $arguments) {
     [void]$startInfo.ArgumentList.Add($argument)
 }
@@ -107,6 +117,7 @@ try {
         startedUtc = $startedUtc.ToString('O')
         logPath = $logPath
         fastMpMode = if ([string]::IsNullOrWhiteSpace($FastMpMode)) { $null } else { $FastMpMode }
+        multiplayerMode = if ([string]::IsNullOrWhiteSpace($MultiplayerMode)) { $null } else { $MultiplayerMode }
         clientId = if ($ClientId -eq 0) { $null } else { $ClientId }
         forceSteamOff = $ForceSteamOff.IsPresent
         runtimeEvidenceEligible = $false
@@ -120,6 +131,7 @@ try {
         processId = $identity.pid
         logPath = $logPath
         processMarkerPath = $instance.ProcessMarkerPath
+        multiplayerMode = if ([string]::IsNullOrWhiteSpace($MultiplayerMode)) { $null } else { $MultiplayerMode }
         clientId = if ($ClientId -eq 0) { $null } else { $ClientId }
         runtimeEvidenceEligible = $false
     }
