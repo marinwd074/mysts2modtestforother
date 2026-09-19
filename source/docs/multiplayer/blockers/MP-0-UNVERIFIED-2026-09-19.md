@@ -72,13 +72,20 @@
 - 失败根目录是本轮创建的精确临时路径：`C:\Users\WUHU\AppData\Local\CombatSolver\multiplayer-lab\mp-host-card-instance-20260919`（约 242 字节）和 `C:\Users\WUHU\AppData\Local\CombatSolver\multiplayer-lab\mp-client-card-instance-20260919`（约 246 字节），目前只含 `instance.json`。用户随后要求清除 C: 测试文件，但精确 `Remove-Item` 操作再次被当前执行策略拒绝，因此这些目录仍可恢复，未改用其他删除方法。
 - 用户已确认以后只在 D: 测试。新 DLL 的 `HostVanilla` 和 `ClientCombatSolver` 快照现已准备到 `D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp-host-card-instance-20260919` 与 `D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp-client-card-instance-20260919`，两者均尚未启动游戏；启动前仍必须先通知用户。
 
+## C 组新 DLL 手动实测快照（2026-09-19）
+
+- 用户确认后，D: 隔离 Host/Client 启动成功；Client 首次 Mod 确认重启后加载 RitsuLib `0.6.2` 与 CombatSolver `0.40.2`，CombatSolver `63/63` 补丁成功。双方进入 Seed `AQUAAUS9FR`，先后创建 `NIBBITS_WEAK` 与 `SLIMES_WEAK` 战斗。
+- 中间快照为 `D:\yingye\CombatSolver\.local\multiplayer-lab\results\mp0-c-new-dll-20260919\20260919-192854-166e5f24`。Client Probe 有 `134` 条记录、两个战斗段，所有 `134/134` 条满足 `readOnly=true`、`searchStarted=false`、`actionsEnqueued=false`、`customNetworkPacketSent=false`；`probeJsonlContract=PASS`。
+- 新 token 使牌序分析可复核：`35/35` 次抽牌前缀与 Hand 增量精确匹配；捕获 `2` 次 Discard→Draw reshuffle 且 Shuffle RNG counter 增长、`29` 次 Discard 变化、`1` 次 Exhaust 变化、`35` 次敌人变化和 `33` 次远端玩家摘要变化。矩阵已只把这些直接有证据的检查提升为 PASS。
+- 该快照仍是中间快照，用户操作尚未声明完成；敌人状态尚缺独立 Host/Client 公共状态对照，完整战斗结束/下一层/退出/重新加入也未完成，因此总体 MP-0 继续保持 `UNVERIFIED`，能力门禁不变。
+
 ## 仍然阻塞 MP-0 PASS
 
 以下证据当前仍缺失，必须保持 `UNVERIFIED`：
 
 - A/B/C 三组连接证据已填入 `../evidence/phase0-matrix-2026-09-19.json`，MP-0A 可独立校验；MP-0B 仍含未完成项，整体 MP-0 保持 `UNVERIFIED`。
 - Lobby、角色准备、战斗开始/结束、下一层、退出和重新加入的完整生命周期。
-- C 组中抽牌后的真实顺序、洗牌、Discard/Exhaust、敌人持续同步、队友动作导致的 world fingerprint 变化，以及跨生命周期保持只读边界。
+- C 组敌人状态的独立 Host/Client 公共状态对照、战斗结束/下一层/退出/重新加入，以及跨生命周期保持只读边界。
 - Local PlayCard、Local EndTurn 和连续快速动作属于后续 MP-2 Safe Execute，不在本轮启用。
 
 ## 当前安全边界

@@ -48,7 +48,7 @@ MP-0B 在 MP-0A 成立后，继续验证：
 项，移到 MP-2 Safe Execute。FastMP 命令行启动本身也不能代替 Lobby 或 wire
 证据。
 
-本仓库已取得 A/B/C 三组连接到首战的成对日志，并取得一份 C 组（Vanilla Host + CombatSolver Client）的非空、只读 Probe 证据。连接结果已写入 [`evidence/phase0-matrix-2026-09-19.json`](evidence/phase0-matrix-2026-09-19.json)，用于独立校验 MP-0A；MP-0B 的状态变化、完整生命周期与单人回归仍未完成，因此本阶段仍不能把 MultiplayerProbe 改成 Advisor，也不能解除多人硬门禁。
+本仓库已取得 A/B/C 三组连接到首战的成对日志，并取得一份 D: 新 DLL C 组（Vanilla Host + CombatSolver Client）的非空、只读 Probe 证据：134 条记录、每张牌带有每场战斗稳定的实例 token，覆盖抽牌、两次洗牌、弃牌、消耗和远端摘要变化。连接结果和当前部分状态结果已写入 [`evidence/phase0-matrix-2026-09-19.json`](evidence/phase0-matrix-2026-09-19.json)，用于独立校验 MP-0A/MP-0B；敌人跨 Host 对照、完整生命周期、退出/重新加入仍未完成，因此本阶段仍不能把 MultiplayerProbe 改成 Advisor，也不能解除多人硬门禁。
 
 当前阻碍和未验证项集中记录在 [`blockers/MP-0-UNVERIFIED-2026-09-19.md`](blockers/MP-0-UNVERIFIED-2026-09-19.md)。
 

@@ -25,43 +25,43 @@
     },
     "localHand": {
       "status": "PASS",
-      "evidence": "C probe contract contains local Hand in all 8 records; local archive mp0-c-evidence-20260919/20260919-143255-4399f135"
+      "evidence": "C new-DLL Probe contains local Hand in 134 records; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-192854-166e5f24"
     },
     "localDrawPile": {
       "status": "PASS",
-      "evidence": "C probe contract contains ordered local DrawPile in all 8 records; local archive mp0-c-evidence-20260919/20260919-143255-4399f135"
+      "evidence": "C new-DLL Probe contains ordered local DrawPile and per-card instance tokens in 134 records; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-192854-166e5f24"
     },
     "drawAfterDraw": {
-      "status": "UNVERIFIED",
-      "evidence": "Only opening draw changes observed; actual post-draw ordering comparison remains outstanding"
+      "status": "PASS",
+      "evidence": "C new-DLL Probe analysis matched 35/35 DrawPile-prefix removals to Hand additions using per-combat instance tokens; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-192854-166e5f24"
     },
     "shuffleOrder": {
-      "status": "UNVERIFIED",
-      "evidence": "No shuffle scenario captured"
+      "status": "PASS",
+      "evidence": "C new-DLL Probe captured 2 Discard-to-Draw reshuffles with increasing Shuffle RNG counters; post-reshuffle draw transitions are included in the 35/35 exact matches; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-192854-166e5f24"
     },
     "localDiscardExhaust": {
-      "status": "UNVERIFIED",
-      "evidence": "Fields captured but no discard/exhaust transition scenario completed"
+      "status": "PASS",
+      "evidence": "C new-DLL Probe observed 29 Discard transitions and 1 Exhaust transition with instance tokens; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-192854-166e5f24"
     },
     "enemyStateSync": {
       "status": "UNVERIFIED",
-      "evidence": "Three enemies captured at combat start; sustained synchronization comparison remains outstanding"
+      "evidence": "C new-DLL Probe observed 35 enemy-state changes while the Host log recorded the corresponding multiplayer actions; independent Host/Client public-state comparison remains outstanding"
     },
     "multiplayerScaling": {
       "status": "PASS",
       "evidence": "C probe 8/8 records report multiplayerScalingHooks=true; local archive mp0-c-evidence-20260919/20260919-143255-4399f135"
     },
     "remoteWorldDelta": {
-      "status": "UNVERIFIED",
-      "evidence": "No controlled teammate action scenario captured"
+      "status": "PASS",
+      "evidence": "C new-DLL Probe observed 33 remote-player summary changes while Client and Host logs recorded remote PlayCard/EndTurn actions; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-192854-166e5f24"
     },
     "probeReadOnly": {
       "status": "PASS",
-      "evidence": "C probe 8/8 records: readOnly=true, searchStarted=false, actionsEnqueued=false, customNetworkPacketSent=false"
+      "evidence": "C new-DLL Probe 134/134 records: readOnly=true, searchStarted=false, actionsEnqueued=false, customNetworkPacketSent=false; archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-192854-166e5f24"
     },
     "lifecycle": {
       "status": "UNVERIFIED",
-      "evidence": "Lobby and combat start covered; combat end, next floor, exit, and rejoin remain outstanding"
+      "evidence": "C new-DLL run covered lobby and two combat starts, but combat end/next floor/exit/rejoin have not yet been collected in the final snapshot"
     },
     "singleplayerRegression": {
       "status": "PASS",
@@ -87,7 +87,7 @@
     {
       "name": "HostVanilla + ClientCombatSolver",
       "status": "PASS",
-      "evidence": "local archive mp0-c-evidence-20260919/20260919-143255-4399f135; Seed NCP5BET83Z; SLIMES_WEAK; non-empty read-only probe"
+      "evidence": "D archive .local/multiplayer-lab/results/mp0-c-new-dll-20260919/20260919-192854-166e5f24; Seed AQUAAUS9FR; NIBBITS_WEAK then SLIMES_WEAK; 134-record non-empty read-only Probe with instance tokens"
     }
   ],
   "notes": [
