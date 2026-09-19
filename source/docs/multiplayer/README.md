@@ -8,7 +8,7 @@
 
 - **MP-0 Core：PASS**。连接兼容、本地私有状态只读采集、远端公开战斗状态、双 Client 对照和 Probe 只读契约均有证据。
 - **MP-0 Hardening：INCOMPLETE**。连接建立后的退出/重新加入闭环仍未捕获；因此完整矩阵仍保持 `UNVERIFIED`，不能把进程停止当作生命周期通过。
-- **MP-1 Advisor：READY FOR VALIDATION**。静态合同与 Release 构建已通过；默认仍是 Probe，只有显式设置 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才会授予当前回合、本地玩家、只显示路线的搜索能力，绝不会自动执行动作。真实多人 Smoke 尚未完成。
+- **MP-1 Advisor：READY FOR VALIDATION**。静态合同与 Release 构建已通过；默认仍是 Probe，只有显式设置 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才会授予当前回合、本地玩家、只显示路线的搜索能力，绝不会自动执行动作。首轮真实多人 Smoke 已完成连接与战斗入口验证，但搜索在远端公开遗物 hook 处按合同 fail closed，尚未形成可显示路线。
 - **MP-2 Safe Execute：BLOCKED**。本地动作分类、原生动作证据和世界版本自变更保护尚未满足。
 
 ## 已实现
@@ -77,6 +77,13 @@ pwsh -NoLogo -NoProfile -File "$toolRoot\start-client.ps1" `
 ```
 
 验证时应看到 `MP_ADVISOR_SEARCH_START` / `MP_ADVISOR_SEARCH_COMPLETE`；队友动作应产生 `MP_ADVISOR_WORLD_CHANGED` 并使旧结果出现 `MP_ADVISOR_SEARCH_STALE`。Advisor 只能显示当前本地回合路线，不能自动出牌、结束回合、用药、驱动选择或发送自定义网络包。收集前由用户手动完成一次正常退出/重新加入；停止进程本身不计作 lifecycle 证据。运行日志和 Probe 仍留在 `.local/`，不直接提交。
+
+### MP-1 Advisor 首轮 Smoke 结果（2026-09-19）
+
+- Vanilla Host 与 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` Client 成功完成 Lobby、Ready、MapCoord 和普通战斗创建；此前 `CombatReplayOutcome` 的 `state.Players.Single()` 崩溃已修正为本地玩家选择。
+- Client 的 Advisor combat log 产生 `MP_ADVISOR_SEARCH_START` 16 次、`MP_ADVISOR_SEARCH_COMPLETE` 0 次；16 次均在 `root_capture` 因未建模的远端公开 `RELIC.BURNING_BLOOD` hook 触发 `MP_ADVISOR_FAIL_CLOSED`。未绕过该合同，也未发布路线。
+- 同一轮 Probe 134 条记录全部保持 `readOnly=true`、`actionsEnqueued=false`、`customNetworkPacketSent=false`；因此本轮没有 Solver 自动动作或自定义网络包证据。该结果是 Advisor 的真实阻塞证据，不应记为 Smoke PASS。
+- 下一步只针对该具体公开语义建立受限 capture（或选择没有该 hook 的明确场景）；不捕获队友全部遗物/牌组，不扩大到 Safe Execute。
 
 ## 下一阶段
 

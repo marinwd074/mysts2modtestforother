@@ -6,7 +6,7 @@
 
 - **MP-0 Core：PASS**：A/B/C 连接矩阵、本地私有状态只读采集、远端公开战斗状态、双 Client 公共敌人状态对照和 Probe 只读契约均有证据。
 - **MP-0 Hardening：INCOMPLETE**：连接建立后的退出/重新加入闭环尚未捕获；第三场战斗在最终归档时尚未结束，进程停止不计作生命周期证据。
-- **MP-1 Advisor：READY FOR VALIDATION**：静态合同与 Release 构建已通过；默认仍是 Probe，只有 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才进入当前回合的只读路线显示，不执行动作。真实多人 Smoke 尚未完成；远端私有字段保持 `Unknown`，未建模遗物 hook fail closed。
+- **MP-1 Advisor：READY FOR VALIDATION**：静态合同与 Release 构建已通过；默认仍是 Probe，只有 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才进入当前回合的只读路线显示，不执行动作。首轮真实多人 Smoke 已完成连接与战斗入口，但搜索在未建模遗物 hook 处 fail closed；远端私有字段保持 `Unknown`。
 - **MP-2 Safe Execute：BLOCKED**：本地动作分类、世界版本自变更和原生动作证据仍未满足。
 
 ## AB 组连接实机结果（2026-09-19）
@@ -25,10 +25,18 @@
 - 独立 Client-to-Client 的公开敌人状态报告为 `PASS`，三段同 Seed、状态差集均为 `0`。这不是自定义 Host 协议证据。
 - Host、A、B 均记录三场战斗开始、两场结束；未捕获连接后的干净退出/重新加入闭环，因此 lifecycle 仍为 `UNVERIFIED`。
 
+## MP-1 Advisor 首轮 Smoke（2026-09-19）
+
+- Vanilla Host 与 Advisor Client 成功完成 Lobby、Ready、MapCoord 和普通战斗创建；Client 端加载 CombatSolver `0.40.2`，63 个补丁全部成功。
+- Advisor combat log 记录 `MP_ADVISOR_SEARCH_START=16`、`MP_ADVISOR_SEARCH_COMPLETE=0`、`MP_ADVISOR_FAIL_CLOSED(root_capture)=16`。每次失败均为 `PredictionUnsupportedException`：远端玩家的 `RELIC.BURNING_BLOOD` hook 尚无公开语义 capture。
+- Client Probe 本轮 134/134 条仍为 `readOnly=true`，且 `searchStarted=false`、`actionsEnqueued=false`、`customNetworkPacketSent=false`；未产生 Solver 动作或自定义网络包。
+- 已修正多人诊断路径的单人假设：`CombatReplayOutcome` 改为观察本地玩家；该修复已提交并推送。当前仍保持远端遗物 fail-closed，不把本轮记为 Advisor Smoke PASS。
+
 ## Active blockers
 
 - 补齐连接建立后的退出/重新加入，并在重新加入后再次取得 Probe 或 Lobby 顺序证据；在此之前不要把完整矩阵升级为 PASS。
 - 直接 Host 逐时刻敌人公开状态导出仍未单独采集；当前 `enemyStateSync` 仅表示两个独立 CombatSolver Client 的公开状态集合对照。
+- MP-1 Advisor 需针对 `RELIC.BURNING_BLOOD` 建立最小公开语义 capture，或取得无该 hook 的明确 Smoke 场景；在此之前不得宣称 `SEARCH_COMPLETE`/路线显示通过。
 - Local PlayCard、Local EndTurn 和连续快速动作属于后续 MP-2 Safe Execute，不在本阶段启用。
 
 ## 当前安全边界
