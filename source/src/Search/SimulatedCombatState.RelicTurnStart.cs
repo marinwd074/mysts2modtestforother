@@ -62,11 +62,7 @@ internal sealed partial class SimulatedCombatState
         {
             if (participant.Player is not { } player)
                 continue;
-            if (!_rootCapturedPlayers.Contains(player))
-            {
-                throw new PredictionUnsupportedException(
-                    $"Side-turn relic hooks require captured inventory for player {player.NetId}.");
-            }
+            MultiplayerAdvisorBoundaryContracts.RequireCapturedPlayer(_rootCapturedPlayers, player);
             if (!players.Contains(player))
                 players.Add(player);
         }

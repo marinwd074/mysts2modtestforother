@@ -8,6 +8,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../src/Engine/Common/PredictionUnsupportedException.cs" Link="PredictionUnsupportedException.cs" />
+    <Compile Include="../../src/Engine/Common/MultiplayerAdvisorBoundaryContracts.cs" Link="MultiplayerAdvisorBoundaryContracts.cs" />
     <Compile Include="../../src/Runtime/MultiplayerRemotePublicRelicSupport.cs" Link="MultiplayerRemotePublicRelicSupport.cs" />
     <Reference Include="sts2" HintPath="$(Sts2DataDir)/sts2.dll" />
     <Reference Include="GodotSharp" HintPath="$(Sts2DataDir)/GodotSharp.dll" />

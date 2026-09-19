@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "status": "PASS",
+  "scope": "controlled-smoke",
+  "sourceCommit": "37592ca",
+  "runtimeDllSha256": "281A286A109F4A2EC428290E0CAEF9B05A034DE837C6793533590EF695BC4A75",
+  "instance": "runtime-mp-advisor-client-20260919-bbfix",
+  "advisor": {
+    "searchStart": 10,
+    "rootCaptureBegin": 10,
+    "searchComplete": 5,
+    "searchStale": 1,
+    "failClosed": 0,
+    "searchFailure": 0,
+    "succeededNativeShown": 1,
+    "routeReplay": 6,
+    "routeAction": 17,
+    "uiReady": 5
+  },
+  "probe": {
+    "records": 51,
+    "readOnlyTrue": 51,
+    "actionsEnqueuedTrue": 0,
+    "customNetworkPacketSentTrue": 0
+  },
+  "boundaries": {
+    "advisorScope": "CurrentTurnAdoption",
+    "safeExecute": false,
+    "automaticEndTurn": false,
+    "unknownRemoteRelics": "fail-closed",
+    "remotePrivateInventory": "unavailable"
+  },
+  "evidencePaths": [
+    ".local/multiplayer-lab/runtime-mp-advisor-client-20260919-bbfix/diagnostics/CombatSolver-BugReports/logs/CombatSolver/40228-d303f91cf2004ad5a218de87817320ee/combat-0d424ca7506b4f3ea73a8a31b570756b.jsonl",
+    ".local/multiplayer-lab/runtime-mp-advisor-client-20260919-bbfix/diagnostics/CombatSolver-BugReports/logs/CombatSolver/multiplayer-probe-40228-043c207f9f414d5b8a926898133ace03.jsonl"
+  ]
+}

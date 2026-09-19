@@ -66,8 +66,10 @@ MP-0B 在 MP-0A 成立后，继续验证：
 以下 D: 快照已装入当前 `CombatSolver.dll`；命令只启动可见隔离实例，不自动创建 Lobby、选择角色或点击 UI。启动后由用户手动完成 Join、Ready、进入普通战斗，并观察建议模式：
 
 ```powershell
-$labRoot = 'D:\yingye\CombatSolver\.local\multiplayer-lab'
-$toolRoot = 'D:\yingye\CombatSolver\source\tools\multiplayer-lab'
+# Run from the repository root.
+$repoRoot = (Get-Location).Path
+$labRoot = Join-Path $repoRoot '.local\multiplayer-lab'
+$toolRoot = Join-Path $repoRoot 'source\tools\multiplayer-lab'
 
 pwsh -NoLogo -NoProfile -File "$toolRoot\start-host.ps1" `
   -InstanceRoot "$labRoot\runtime-mp-advisor-host-20260919-bbfix" -ForceSteamOff
@@ -104,6 +106,7 @@ pwsh -NoLogo -NoProfile -File "$toolRoot\start-client.ps1" `
 - 原生完成通知记录 `SEARCH_COMPLETION_NOTIFICATION kind=Succeeded native=shown`；同时有 `ROUTE_REPLAY=6`、`ROUTE_ACTION=17`、`UI_STATE state=ready`（5 次）的路线发布/回放记录。`MP_ADVISOR_SEARCH_STALE=1` 后出现后续 generation 完成，且记录了 world-version 变化，满足本轮 stale/re-search 观察目标。
 - 同一 client 的 Probe `51/51` 条记录为 `readOnly=true`，`actionsEnqueued=true` 为 `0`，`customNetworkPacketSent=true` 为 `0`；本轮没有 Safe Execute、自动出牌、自动 EndTurn、药水或选择入口。路线中的 PlayCard/EndTurn 仅为模拟回放证据，不是 live action enqueue。
 - 证据保留在 `.local/multiplayer-lab/runtime-mp-advisor-client-20260919-bbfix/diagnostics/`；退出/重新加入生命周期仍属于 MP-0 Hardening，未知远端遗物 fail-closed 和远端私有清单不可访问的合同继续有效。
+- 机器可读摘要：[mp1-advisor-smoke-2026-09-19.json](evidence/mp1-advisor-smoke-2026-09-19.json)。完整日志仍只保留在 `.local/`，不进入仓库。
 
 ## 下一阶段
 

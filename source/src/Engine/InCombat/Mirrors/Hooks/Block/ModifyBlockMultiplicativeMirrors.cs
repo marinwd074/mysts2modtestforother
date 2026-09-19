@@ -78,9 +78,10 @@ internal static class ModifyBlockMultiplicativeMirrors
         // Match the native hook's early exits before consulting multiplayer
         // scaling. A local-player-only Advisor root may still replay a player
         // block card; that path never needs the enemy-only multiplayer factor.
-        if (!context.Target.IsPrimaryEnemy
-            && !context.Target.IsSecondaryEnemy
-            || !ValuePropExtensions.IsPoweredCardOrMonsterMoveBlock(context.Props))
+        if (!MultiplayerAdvisorBoundaryContracts.ShouldApplyEnemyBlockScaling(
+                context.Target.IsPrimaryEnemy,
+                context.Target.IsSecondaryEnemy,
+                ValuePropExtensions.IsPoweredCardOrMonsterMoveBlock(context.Props)))
         {
             return 1m;
         }
