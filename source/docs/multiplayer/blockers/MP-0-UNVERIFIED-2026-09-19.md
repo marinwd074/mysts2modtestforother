@@ -69,8 +69,8 @@
 ## 新 DLL 隔离实例准备阻碍（2026-09-19）
 
 - 为验证卡牌实例 token，尝试准备新的 `HostVanilla` 与 `ClientCombatSolver` 隔离快照时，默认 `C:` 盘在 Client 快照复制到 `SlayTheSpire2.exe` 时报告“磁盘空间不足”。失败 staging 已由脚本移除，并报告 `source_game_preserved=true`；没有启动新游戏，也没有修改正式 Steam 安装。
-- 失败根目录是本轮创建的精确临时路径：`C:\Users\WUHU\AppData\Local\CombatSolver\multiplayer-lab\mp-host-card-instance-20260919`（约 242 字节）和 `C:\Users\WUHU\AppData\Local\CombatSolver\multiplayer-lab\mp-client-card-instance-20260919`（约 246 字节），目前只含 `instance.json`。按清理规则尝试删除这两个目录时被当前执行策略拒绝，因此它们仍可恢复，未再尝试替代删除方法。
-- 检查时 `C:` 可用约 `2.14 GB`，`D:` 可用约 `68.5 GB`。下一次新 DLL 实测需要在用户确认后改用显式 `-RuntimeRoot D:\...`，或由用户先释放 C: 空间；启动游戏前仍必须先通知用户。
+- 失败根目录是本轮创建的精确临时路径：`C:\Users\WUHU\AppData\Local\CombatSolver\multiplayer-lab\mp-host-card-instance-20260919`（约 242 字节）和 `C:\Users\WUHU\AppData\Local\CombatSolver\multiplayer-lab\mp-client-card-instance-20260919`（约 246 字节），目前只含 `instance.json`。用户随后要求清除 C: 测试文件，但精确 `Remove-Item` 操作再次被当前执行策略拒绝，因此这些目录仍可恢复，未改用其他删除方法。
+- 用户已确认以后只在 D: 测试。新 DLL 的 `HostVanilla` 和 `ClientCombatSolver` 快照现已准备到 `D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp-host-card-instance-20260919` 与 `D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp-client-card-instance-20260919`，两者均尚未启动游戏；启动前仍必须先通知用户。
 
 ## 仍然阻塞 MP-0 PASS
 
