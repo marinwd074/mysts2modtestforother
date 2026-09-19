@@ -108,6 +108,12 @@ pwsh -NoLogo -NoProfile -File "$toolRoot\start-client.ps1" `
 - 证据保留在 `.local/multiplayer-lab/runtime-mp-advisor-client-20260919-bbfix/diagnostics/`；Host 重建房间后的退出/重新加入生命周期已通过。重连后的 SLIMES/PHROG 战斗中，Advisor 对远端私有药水库存缺失按合同 fail-closed，未发布路线；未知远端遗物 fail-closed 和远端私有清单不可访问的合同继续有效。
 - 机器可读摘要：[mp1-advisor-smoke-2026-09-19.json](evidence/mp1-advisor-smoke-2026-09-19.json)。完整日志仍只保留在 `.local/`，不进入仓库。
 
+### MP-1 post-Smoke 固定工作量对照（2026-09-20）
+
+- 当前源码 `a6ab8ff` 的 CompatibilitySmoke 构建在固定 `COMPAT1071` / `IRONCLAD` / `NIBBITS_NORMAL` / Medium beam 60 / DOP1 / 5000 ms 条件下完成 3 个独立样本；三次均为 `expanded=3528`、`transitions=10156`、路线和结果 identity 与历史 Batch 7 baseline 完全一致。
+- 当前样本平均 `2961.759 ms / 373,990,581 B`；历史 baseline 平均 `3169.203 ms / 370,614,600 B`。当前 spot 对照为耗时 `-6.546%`、分配 `+0.911%`，没有 Gen2 或 >50/100 ms 帧尾部；由于不是与重建的 pre-MP1 二进制交错运行，不宣称稳定加速，只记录固定工作量无回归。
+- 逐样本 JSON 与口径说明保留在 [`runtime-evidence/20260920-post-mp1-performance`](../../runtime-evidence/20260920-post-mp1-performance/)；专用 smoke 的 launcher `exit_code=0` 收尾提示不改变 JSON 结果判定。
+
 ### MP-0 生命周期与重连后边界（2026-09-19）
 
 - Host 日志先记录 `Stopping host. Reason: Quit` 与 Client 断开，随后新握手、`ClientLoadJoinRequestMessage`、Client Ready、run load 和 `Combat started`；Client 日志同步记录 Quit、再次 Join、epoch 4、Ready、run load 和 `PHROG_PARASITE_ELITE` 战斗开始。
@@ -117,4 +123,4 @@ pwsh -NoLogo -NoProfile -File "$toolRoot\start-client.ps1" `
 
 ## 下一阶段
 
-MP-0 生命周期证据已收口；Advisor 继续维持显式 opt-in，只搜索本地玩家当前回合、只显示路线、不自动执行。重连后遇到未捕获远端私有药水时继续 fail-closed；在固定工作量性能对照和更广稳定性完成前，不评估 `SafeLocalAction` 分类器和 MP-2 Safe Execute。
+MP-0 生命周期证据已收口；固定工作量单人对照已完成受限 spot 验证，但更广 Advisor 稳定性仍为 `PARTIAL`：重连后遇到未捕获远端私有药水时继续 fail-closed。Advisor 继续维持显式 opt-in，只搜索本地玩家当前回合、只显示路线、不自动执行；在更广稳定性收口前，不评估 `SafeLocalAction` 分类器和 MP-2 Safe Execute。

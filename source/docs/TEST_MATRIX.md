@@ -9,6 +9,7 @@
 - Advisor root/phase 合同：`MultiplayerRootCaptureChecks` 15 项通过；精确 `BurningBlood` 可省略，未知远端遗物继续 fail closed，远端私有遗物清单仍不可访问，EndTurn/side-turn/block scaling 边界及单人 EndTurn 保持均有窄合同。
 - Advisor 复验修正：side-turn relic 只读取已捕获参与者；原生多人 block scaling 仅在 enemy/powered-block 路径计算；EndTurn replay 只处理 `RootCapturedPlayers`，未知远端 turn 仍 fail closed。
 - Advisor Smoke 只读合同：首轮 Probe `51/51` 条为 `readOnly=true`，`actionsEnqueued=0`、`customNetworkPacketSent=0`；生命周期复验追加 Probe `257/257` 只读、无动作入队/自定义网络包。路线动作仅为模拟回放，未启用 Safe Execute、自动 EndTurn、药水或选择。
+- post-MP1 固定工作量单人 spot 对照：当前源码 3 个独立样本均为 `expanded=3528`、`transitions=10156`，路线/结果 identity 与历史 Batch 7 baseline 一致，Gen2 与 >50/100 ms 帧均为 0；耗时/分配仅作非交错对照，不宣称稳定加速。证据见 [`runtime-evidence/20260920-post-mp1-performance`](../../runtime-evidence/20260920-post-mp1-performance/)。
 - Advisor Smoke 机器可读摘要：[mp1-advisor-smoke-2026-09-19.json](multiplayer/evidence/mp1-advisor-smoke-2026-09-19.json)；完整运行日志仍保留在本地 `.local/`。
 - 机器事实与证据索引：[phase0-matrix-2026-09-19.json](multiplayer/evidence/phase0-matrix-2026-09-19.json)；运行器：[tools/multiplayer-lab/](../tools/multiplayer-lab/)。
 - 定向复跑：`validate-phase0-results.ps1 -Phase MP-0A` / `-Phase All`；双 Client 公开状态使用 `compare-probe-public-state.ps1`。这些入口不会绕过真实生命周期或只读证据门禁。

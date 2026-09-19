@@ -99,6 +99,26 @@
       "localEndTurnPhaseObserved": true,
       "noLiveActions": true,
       "note": "Probe and lifecycle remained healthy; Advisor after rejoin stayed fail-closed because remote private potion inventory is unavailable."
+    },
+    "performance": {
+      "status": "PASS_FIXED_WORK_SPOT",
+      "sourceCommit": "a6ab8ffa289bb37034d7625ad4e785c93257c522",
+      "runtimeDllSha256": "864EC2A8276845B0C412106259D75AE2D30333826D415BE03A7371FD3A3B474F",
+      "samples": 3,
+      "expanded": 3528,
+      "transitions": 10156,
+      "currentAverageElapsedMs": 2961.759,
+      "currentAverageAllocatedBytes": 373990581,
+      "historicalBaselineAverageElapsedMs": 3169.203,
+      "historicalBaselineAverageAllocatedBytes": 370614600,
+      "elapsedChangePercent": -6.546,
+      "allocationChangePercent": 0.911,
+      "gen2Collections": 0,
+      "framesOver50Ms": 0,
+      "framesOver100Ms": 0,
+      "routeAndResultIdentityMatchHistoricalBaseline": true,
+      "comparisonType": "non-interleaved spot comparison; no speedup claim",
+      "evidence": "runtime-evidence/20260920-post-mp1-performance/metadata.md"
     }
   },
   "boundaries": {
@@ -113,6 +133,10 @@
     ".local/multiplayer-lab/runtime-mp-advisor-client-20260919-bbfix/logs/20260919-231734-client-6036b22f.log",
     ".local/multiplayer-lab/runtime-mp-advisor-client-20260919-bbfix/diagnostics/CombatSolver-BugReports/logs/CombatSolver/multiplayer-probe-40228-043c207f9f414d5b8a926898133ace03.jsonl",
     ".local/multiplayer-lab/runtime-mp-advisor-client-20260919-bbfix/diagnostics/CombatSolver-BugReports/CombatSolver-0.40.2-SLIMES_WEAK-eb153506b529456ab2847dbba149e5bc.zip",
-    ".local/multiplayer-lab/runtime-mp-advisor-client-20260919-bbfix/diagnostics/CombatSolver-BugReports/CombatSolver-0.40.2-PHROG_PARASITE_ELITE-20ff3b11430a497baaf5c60877b74aaf.zip"
+    ".local/multiplayer-lab/runtime-mp-advisor-client-20260919-bbfix/diagnostics/CombatSolver-BugReports/CombatSolver-0.40.2-PHROG_PARASITE_ELITE-20ff3b11430a497baaf5c60877b74aaf.zip",
+    "runtime-evidence/20260920-post-mp1-performance/metadata.md",
+    "runtime-evidence/20260920-post-mp1-performance/post-mp1-current-01.json",
+    "runtime-evidence/20260920-post-mp1-performance/post-mp1-current-02.json",
+    "runtime-evidence/20260920-post-mp1-performance/post-mp1-current-03.json"
   ]
 }
