@@ -15,7 +15,7 @@
 - 原先直接向正式游戏 `MODS` 暂存 Client 的启动探针已撤掉，不再作为测试路径。
 - 已加入 `source/tools/multiplayer-lab/prepare-instances.ps1`、`start-host.ps1`、`start-client.ps1`、`stop-owned-instances.ps1` 和 `collect-results.ps1`；它们复用 `headless-runtime.ps1` 的私有快照与 ownership marker，并把 Host/Client 的 APPDATA、LOCALAPPDATA、日志隔离到实例目录。
 - `validate-phase0-results.ps1` 已拆分 MP-0A（连接兼容）和 MP-0B（只读状态）；`localPlayCardSync`、`localEndTurnSync`、`fastActionStress` 不再阻塞 MP-0，移至 MP-2 Safe Execute。
-- 本轮仅完成 PowerShell 语法和差异检查，没有运行新的双实例；上述脚本实现不构成 MP-0 证据。
+- 早期仅完成 PowerShell 语法和差异检查时，上述脚本实现不构成 MP-0 证据；后续双实例实测结果见下节。
 
 ## 隔离启动实测（仍不是 MP-0 证据）
 
@@ -27,6 +27,16 @@
 - 对 `data_sts2_windows_x86_64\sts2.dll` 的只读 IL 检查确认：`CheckCommandLineArgs` 接受 `host`、`host_standard`、`host_daily`、`host_custom`、`load`、`join`；`fastmp=host` 的非 Steam 路径调用 `StartENetHost(33771, 4)`，`fastmp=join` 固定使用 `127.0.0.1:33771`。因此当前不是“参数值未知”。
 - 再次启动 Host 并等待进入主菜单后，`Get-NetUDPEndpoint -LocalPort 33771`、`Get-NetTCPConnection -LocalPort 33771` 和 `netstat -ano` 均未观察到 33771 监听；Host 进程本身仍存活并已由 ownership marker 停止。下一步需确认原生 Host UI 的启动时序或游戏网络初始化失败原因，不能用端口缺失推断 Mod/Probe 兼容性结论。
 - 在隔离的 `ClientCombatSolver` 快照中预置 `settings.save` 的 `mod_settings.player_agreed_to_mod_loading=true` 和空 `mod_list` 后重新启动，日志 `D:\yingye\CombatSolver\.local\multiplayer-lab\instances\mp-client-solver-20260919\logs\20260919-131817-client-00e5a4b0.log` 仍报告 `user has not yet seen the mods warning`；未进入战斗，也未产生 Probe JSONL。该尝试只改了私有快照，正式安装和正式用户数据未改动。
+
+## 交接后实现与复测（2026-09-19）
+
+- 通过只读 IL 检查确认 `ModSettings.PlayerAgreedToModLoading` 的存档键是 `mods_enabled`；使用该键预置私有 Client 快照后，RitsuLib 与 CombatSolver 均加载，日志报告 CombatSolver `63` 个补丁应用、`0` 个 ignored、`0` 个 failed。正式安装未改动。
+- 原生多人 UI 已成功创建 Standard Host；Host 监听 UDP `33771`，Client 完成握手并取得本地 `netId=1000`。Client 收到 `Version: v0.107.1 Hash: 3954186980 Type: Standard State: InLobby`；仅报告非 Gameplay Mod mismatch，允许继续。
+- 两端完成角色选择和 Ready，Host/Client 进入同一局 Seed `1SCQBUB9V1`；双方日志均进入 `EVENT.NEOW` 开局奖励页。该轮自动化输入在奖励页未能推进，因此没有把地图/战斗结果误记为新的 MP-0 证据。
+- 已实现三处运行时修复：CombatStarting/CombatEnded 重置 `MultiplayerClientProbe`；`SolverDispatcher` 在主线程、战斗进行中调用只读 `MultiplayerClientProbe.Observe`；`AppendOnlyEventLog` 每条 JSONL 写入后执行 `Flush`，使运行中的证据可观察。
+- 修复前一轮曾真实进入 `SLIMES_WEAK` 战斗并创建 `C:\Users\WUHU\Desktop\CombatSolver-BugReports\logs\CombatSolver\multiplayer-probe-14036-a2dd7ca66c974469a3eafc5b3a3e446f.jsonl`，但文件为 `0` 字节；这是调用链存在的线索，不是 MP-0B 通过证据。`Flush` 修复后的非零 Probe 文件尚未取得。
+- 当前复测仍遇到独立输入阻碍：在全屏开局奖励页，`WM_MOUSEMOVE`/`WM_LBUTTONDOWN`/`WM_LBUTTONUP` 以及焦点 `Tab`/`Enter` 消息均未触发选项确认；两实例已通过 ownership marker 停止。该阻碍不改变只读探针安全边界。
+- 旧战斗复测还出现 RitsuLib 生命周期警告 `Sequence contains more than one element`，但未阻止进入战斗；需与 Probe 证据分开跟踪。
 
 ## 仍然阻塞 MP-0 PASS
 

@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using Godot;
+using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Nodes;
 
 namespace CombatSolver;
@@ -47,6 +48,11 @@ internal sealed partial class SolverDispatcher : Node
             }
         }
         SolverController.MonitorCombatPresence();
+        if (CombatManager.Instance.IsInProgress
+            && CombatManager.Instance.DebugOnlyGetState() is CombatState combat)
+        {
+            MultiplayerClientProbe.Observe(combat, "main_frame");
+        }
         SolverController.RefreshSearchProgress();
         if (PerformanceRecording.Enabled)
             PerformanceRecording.Dispatcher(Stopwatch.GetElapsedTime(now).TotalMilliseconds,

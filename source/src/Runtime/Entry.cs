@@ -49,8 +49,17 @@ public static class Entry
         SolverUiTokens.ConfigureTheme(SolverSettings.Current.OverlayTheme);
         SolverController.ApplyPersistentSettings(SolverSettings.Capture());
         ModTypeDiscoveryHub.RegisterModAssembly(ModId, Assembly.GetExecutingAssembly());
-        RitsuLibFramework.SubscribeLifecycle<CombatStartingEvent>(evt => { RunStatistics.Battle(evt.CombatState); SolverController.BeginCombat(evt.CombatState); });
-        RitsuLibFramework.SubscribeLifecycle<CombatEndedEvent>(_ => SolverController.Reset("combat_ended"));
+        RitsuLibFramework.SubscribeLifecycle<CombatStartingEvent>(evt =>
+        {
+            MultiplayerClientProbe.Reset();
+            RunStatistics.Battle(evt.CombatState);
+            SolverController.BeginCombat(evt.CombatState);
+        });
+        RitsuLibFramework.SubscribeLifecycle<CombatEndedEvent>(_ =>
+        {
+            MultiplayerClientProbe.Reset();
+            SolverController.Reset("combat_ended");
+        });
         CombatManager.Instance.TurnStarted += OnTurnStarted;
 
         PatchRegistration.ApplyRequiredPatches(ModId, DisableMod);
