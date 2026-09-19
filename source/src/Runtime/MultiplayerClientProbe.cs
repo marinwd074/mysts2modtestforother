@@ -223,12 +223,16 @@ internal static class MultiplayerClientProbe
         return $"net_type={RunManager.Instance.NetService.Type} players={state.Players.Count} " +
                $"round={state.RoundNumber} side={state.CurrentSide} " +
                $"seed={state.RunState.Rng.StringSeed} " +
+               $"multiplayer_scaling_hooks={state.MultiplayerScalingModel?.ShouldReceiveCombatHooks.ToString() ?? "-"} " +
+               $"card_multiplayer_constraint={state.RunState.CardMultiplayerConstraint} " +
                $"rng={RngCounters(state)} enemies={enemies} remote_players={RemotePlayers(state, localPlayer)} {local}";
     }
 
     private static string HardFingerprint(CombatState state, Player? localPlayer)
         => $"net_type={RunManager.Instance.NetService.Type};players={state.Players.Count};" +
            $"round={state.RoundNumber};side={state.CurrentSide};seed={state.RunState.Rng.StringSeed};" +
+           $"multiplayer_scaling_hooks={state.MultiplayerScalingModel?.ShouldReceiveCombatHooks.ToString() ?? "-"};" +
+           $"card_multiplayer_constraint={state.RunState.CardMultiplayerConstraint};" +
            $"rng={RngStates(state)};enemies={Enemies(state)};" +
            $"remote_players={RemotePlayers(state, localPlayer)};local={LocalPlayer(localPlayer)}";
 
