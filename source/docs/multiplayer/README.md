@@ -8,7 +8,7 @@
 
 - **MP-0 Core：PASS**。连接兼容、本地私有状态只读采集、远端公开战斗状态、双 Client 对照和 Probe 只读契约均有证据。
 - **MP-0 Hardening：INCOMPLETE**。连接建立后的退出/重新加入闭环仍未捕获；因此完整矩阵仍保持 `UNVERIFIED`，不能把进程停止当作生命周期通过。
-- **MP-1 Advisor：READY FOR VALIDATION**。静态合同与 Release 构建已通过；默认仍是 Probe，只有显式设置 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才会授予当前回合、本地玩家、只显示路线的搜索能力，绝不会自动执行动作。首轮 Smoke 的 `BurningBlood` blocker 已完成最小公开语义收敛，fresh build/snapshot 已准备，真实复验仍待手动进入战斗，尚未形成 `SEARCH_COMPLETE` 证据。
+- **MP-1 Advisor：READY FOR VALIDATION**。静态合同与 Release 构建已通过；默认仍是 Probe，只有显式设置 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才会授予当前回合、本地玩家、只显示路线的搜索能力，绝不会自动执行动作。`BurningBlood` 与首轮实机暴露的 side-turn relic / block-scaling 边界均已收敛，fresh client 已重启，真实复验仍待手动进入战斗，尚未形成 `SEARCH_COMPLETE` 证据。
 - **MP-2 Safe Execute：BLOCKED**。本地动作分类、原生动作证据和世界版本自变更保护尚未满足。
 
 ## 已实现
@@ -90,6 +90,12 @@ pwsh -NoLogo -NoProfile -File "$toolRoot\start-client.ps1" `
 - 原生反射与 IL 审计确认：`BurningBlood` 仅声明 `AfterCombatVictory(CombatRoom)`，逻辑是胜利后治疗持有者；它不参与当前回合战斗 hook、当前敌人状态或当前路线评分。
 - `afa6a64` 增加精确类型 allow-list：远端 `BurningBlood` 不进入 local-player-only root listener 表；未知远端遗物仍保留并由 root contract fail closed，远端 `RelicsOf(remote)` 仍不可用。
 - `MultiplayerRootCaptureChecks` 通过 4 项合同检查；Release DLL SHA-256 为 `507FAFDCAF72E3E56ED537BCB3A4B15BCC99A63277308F3714B910C2BBA85E11`。全新隔离快照为 `runtime-mp-advisor-host-20260919-bbfix` / `runtime-mp-advisor-client-20260919-bbfix`，尚未把手动 Smoke 结果记为 PASS。
+
+### MP-1 Advisor side-turn / block scaling 修复（2026-09-19）
+
+- `BurningBlood` root 修复后的首次实机复验已进入 combat；随后 generation 6 暴露未捕获远端 `RelicsOf(remote)` 被 side-turn relic phase 误枚举，generation 7 暴露 `ModifyBlockMultiplicative` 对本地 `DEFEND` 也提前拒绝双玩家。
+- `ffad49b` 让 side-turn relic 只枚举参与且已捕获的玩家，远端 turn 仍显式 fail-closed；多人 block mirror 先复刻原生 enemy/powered-block early-exit，再调用原生 scaling table，不保留 live RunState/CombatState。
+- 新 Release/runtime DLL SHA-256 为 `70FA663D661056317093EE9F6FAFE7FA37699FEB3681B16FF5B9FD420A6D384C`；`-bbfix` client 快照已替换并于 23:06 重启，下一轮真实 Smoke 仍待手动完成 Lobby/战斗。
 
 ## 下一阶段
 

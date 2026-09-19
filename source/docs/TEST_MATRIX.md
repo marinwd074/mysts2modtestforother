@@ -5,8 +5,9 @@
 ## Multiplayer Lab（当前）
 
 - MP-0 Core：`PASS`；MP-0 Hardening：`INCOMPLETE`（退出/重新加入生命周期证据缺口），完整 MP-0 矩阵保持 `UNVERIFIED`。
-- MP-1 Advisor：`READY_FOR_VALIDATION`（静态合同/Release 已通过；已完成 `BURNING_BLOOD` 原生语义审计与最小 root allow-list，fresh build/snapshot 已准备，真实复验尚无 `SEARCH_COMPLETE`），默认仍是 Probe，只有 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 显式 opt-in；MP-2 Safe Execute：`BLOCKED`。
+- MP-1 Advisor：`READY_FOR_VALIDATION`（静态合同/Release 已通过；`BURNING_BLOOD`、side-turn relic 和多人 block-scaling 边界已修正并部署，真实复验尚无 `SEARCH_COMPLETE`），默认仍是 Probe，只有 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 显式 opt-in；MP-2 Safe Execute：`BLOCKED`。
 - Advisor root 合同：`MultiplayerRootCaptureChecks` 4 项通过；精确 `BurningBlood` 可省略，未知远端遗物继续 fail closed，远端私有遗物清单仍不可访问。
+- Advisor 复验修正：side-turn relic 只读取已捕获参与者；原生多人 block scaling 仅在 enemy/powered-block 路径计算，未知远端 turn 仍 fail closed。
 - 机器事实与证据索引：[phase0-matrix-2026-09-19.json](multiplayer/evidence/phase0-matrix-2026-09-19.json)；运行器：[tools/multiplayer-lab/](../tools/multiplayer-lab/)。
 - 定向复跑：`validate-phase0-results.ps1 -Phase MP-0A` / `-Phase All`；双 Client 公开状态使用 `compare-probe-public-state.ps1`。这些入口不会把缺失生命周期证据自动升级为 PASS。
 

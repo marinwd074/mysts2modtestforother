@@ -6,7 +6,7 @@
 
 - **MP-0 Core：PASS**：A/B/C 连接矩阵、本地私有状态只读采集、远端公开战斗状态、双 Client 公共敌人状态对照和 Probe 只读契约均有证据。
 - **MP-0 Hardening：INCOMPLETE**：连接建立后的退出/重新加入闭环尚未捕获；第三场战斗在最终归档时尚未结束，进程停止不计作生命周期证据。
-- **MP-1 Advisor：READY FOR VALIDATION**：静态合同与 Release 构建已通过；默认仍是 Probe，只有 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才进入当前回合的只读路线显示，不执行动作。首轮 Smoke 的 `BurningBlood` blocker 已完成最小公开语义收敛，fresh build/snapshot 已准备，真实复验尚未形成 `SEARCH_COMPLETE`；远端私有字段保持 `Unknown`。
+- **MP-1 Advisor：READY FOR VALIDATION**：静态合同与 Release 构建已通过；默认仍是 Probe，只有 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才进入当前回合的只读路线显示，不执行动作。`BurningBlood`、side-turn relic 和多人 block-scaling 边界均已完成受限修正，fresh client 已重启，真实复验尚未形成 `SEARCH_COMPLETE`；远端私有字段保持 `Unknown`。
 - **MP-2 Safe Execute：BLOCKED**：本地动作分类、世界版本自变更和原生动作证据仍未满足。
 
 ## AB 组连接实机结果（2026-09-19）
@@ -38,11 +38,17 @@
 - `afa6a64` 只允许精确 `BurningBlood` 从远端 root listener 表省略；未知远端遗物仍由 `RootUnsupportedRemotePublicRelicListenerCount` fail closed，未捕获的远端 `RelicsOf(remote)` 仍抛出，避免私有清单读取和 live listener 泄漏。
 - `MultiplayerRootCaptureChecks` 4 项通过；新 DLL SHA-256 为 `507FAFDCAF72E3E56ED537BCB3A4B15BCC99A63277308F3714B910C2BBA85E11`。新的 Host/Client 快照目录带 `-bbfix` 后缀，真实 Advisor Smoke 仍待手动进入战斗复验。
 
+## MP-1 Advisor side-turn / block scaling 修复（2026-09-19）
+
+- BurningBlood 修复后的首轮实机已进入 combat，但 generation 6 报告 `RelicsOf(remote)` 被 side-turn relic phase 误访问，generation 7 报告多人 block mirror 对本地 `DEFEND` 过早抛出 single-player guard；两者均保持 fail-closed，未发布路线。
+- `ffad49b` 只让 side-turn relic 遍历参与且已捕获玩家；原生 block mirror 复刻 enemy/powered-block early-exit，并复用原生 scaling table。未知远端 turn 仍抛出 `PredictionUnsupportedException`，没有读取远端私有遗物。
+- 新 DLL SHA-256 为 `70FA663D661056317093EE9F6FAFE7FA37699FEB3681B16FF5B9FD420A6D384C`；`-bbfix` client 已替换并重启，下一轮真实 Smoke 仍待手动复验。
+
 ## Active blockers
 
 - 补齐连接建立后的退出/重新加入，并在重新加入后再次取得 Probe 或 Lobby 顺序证据；在此之前不要把完整矩阵升级为 PASS。
 - 直接 Host 逐时刻敌人公开状态导出仍未单独采集；当前 `enemyStateSync` 仅表示两个独立 CombatSolver Client 的公开状态集合对照。
-- MP-1 Advisor 需在 fresh `-bbfix` 快照上取得真实 `SEARCH_COMPLETE`/路线显示证据；在此之前不得宣称 Advisor Smoke 通过。未知远端遗物的 fail-closed 门禁不可移除。
+- MP-1 Advisor 需在已部署 `ffad49b` 的 fresh `-bbfix` 快照上取得真实 `SEARCH_COMPLETE`/路线显示证据；在此之前不得宣称 Advisor Smoke 通过。未知远端遗物的 fail-closed 门禁不可移除。
 - Local PlayCard、Local EndTurn 和连续快速动作属于后续 MP-2 Safe Execute，不在本阶段启用。
 
 ## 当前安全边界
