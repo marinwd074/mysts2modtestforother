@@ -35,19 +35,25 @@
 - 两端完成角色选择和 Ready，Host/Client 进入同一局 Seed `1SCQBUB9V1`；双方日志均进入 `EVENT.NEOW` 开局奖励页。该轮自动化输入在奖励页未能推进，因此没有把地图/战斗结果误记为新的 MP-0 证据。
 - 已确认现有 `SolverController.MonitorCombatPresence` 已在主线程、战斗进行中调用只读 `MultiplayerClientProbe.Observe`，`BeginCombat/Reset` 已负责生命周期重置；本轮真正修复的是 `AppendOnlyEventLog` 每条 JSONL 写入后的 `Flush`，使运行中的证据可观察。
 - 又修正了实机证据路径：普通安装仍写桌面 `CombatSolver-BugReports`，隔离 Lab 通过 `COMBATSOLVER_MULTIPLAYER_INSTANCE` 写入实例自有的 `diagnostics/CombatSolver-BugReports`，`collect-results.ps1` 已按该路径收集，避免跨运行误收集桌面文件。新 DLL 启动探针已确认实例诊断目录创建；该次未进入战斗，所以只产生进程日志，没有新的 Probe JSONL。
-- 修复前一轮曾真实进入 `SLIMES_WEAK` 战斗并创建 `C:\Users\WUHU\Desktop\CombatSolver-BugReports\logs\CombatSolver\multiplayer-probe-14036-a2dd7ca66c974469a3eafc5b3a3e446f.jsonl`，但文件为 `0` 字节；这是调用链存在的线索，不是 MP-0B 通过证据。`Flush` 修复后的非零 Probe 文件尚未取得。
-- 当前复测仍遇到独立输入阻碍：在全屏开局奖励页，`WM_MOUSEMOVE`/`WM_LBUTTONDOWN`/`WM_LBUTTONUP` 以及焦点 `Tab`/`Enter` 消息均未触发选项确认；两实例已通过 ownership marker 停止。该阻碍不改变只读探针安全边界。
+- 修复前一轮曾真实进入 `SLIMES_WEAK` 战斗并创建 `C:\Users\WUHU\Desktop\CombatSolver-BugReports\logs\CombatSolver\multiplayer-probe-14036-a2dd7ca66c974469a3eafc5b3a3e446f.jsonl`，但文件为 `0` 字节；这是调用链存在的线索，不是 MP-0B 通过证据。本轮已取得 `Flush` 修复后的非零 Probe，详情见下方 C 组结果。
+- 上述输入阻碍只适用于此前奖励页的异步 `PostMessage` 尝试；本轮通过手动/同步 UI 输入推进到地图并进入战斗，不能再作为当前进入战斗的阻碍，但仍不构成完整生命周期证据。
 - 旧战斗复测还出现 RitsuLib 生命周期警告 `Sequence contains more than one element`，但未阻止进入战斗；需与 Probe 证据分开跟踪。
+
+## C 组非空 Probe 实机结果（2026-09-19）
+
+- 本轮为 `Vanilla Host + CombatSolver Client`，Host 未加载 CombatSolver；两端进入同一局 Seed `NCP5BET83Z`，日志均记录 `SLIMES_WEAK` 和 `Combat started`。对应日志为 `.local/multiplayer-lab/instances/mp-host-20260919/logs/20260919-142646-host-90c5bbe6.log` 与 `.local/multiplayer-lab/instances/mp-client-solver-20260919/logs/20260919-142647-client-36cfd07c.log`。
+- Client 产生第一份非空 Probe：`D:\yingye\CombatSolver\.local\multiplayer-lab\results\mp0-c-evidence-20260919\20260919-143255-4399f135\clientcombatsolver\probe\multiplayer-probe-21080-f04ebba86c30455a9902f323f3dd31a1.jsonl`，原文件 `43,300` 字节、`8` 条记录，`sequence/worldVersion` 均为 `1..8`。每条记录均为 `networkType=Client`、`playerCount=2`、本地 `netId=1000`、`IRONCLAD`，并包含 Hand/DrawPile/Discard/Exhaust、3 个敌人、9 组 RNG、远端玩家摘要、`multiplayerScalingHooks=true` 和 `cardMultiplayerConstraint=MultiplayerOnly`。
+- 8 条记录的只读契约均为 `readOnly=true`、`searchStarted=false`、`actionsEnqueued=false`、`customNetworkPacketSent=false`；本轮只观察了开局抽牌变化，没有执行 PlayCard、EndTurn、洗牌、Discard/Exhaust 或制造队友动作。因此这证明的是 C 组连接后的只读观察部分，不是 MP-0 PASS。
+- 校验器对该归档结果给出 `probeJsonlContract=PASS`，整体仍为 `UNVERIFIED`；归档目录为 `.local/multiplayer-lab/results/mp0-c-evidence-20260919/20260919-143255-4399f135`。当前保留的独立警告是 Client 的 RitsuLib `CombatStartingEvent: Sequence contains more than one element`，它没有阻止本轮进入战斗。
 
 ## 仍然阻塞 MP-0 PASS
 
-以下证据当前均缺失，必须保持 `UNVERIFIED`：
+以下证据当前仍缺失，必须保持 `UNVERIFIED`：
 
-- Vanilla Host 接受只安装 RitsuLib/CombatSolver 的 Client，且 Host 不需要 CombatSolver。
+- A/B/C 三组完整矩阵、Vanilla Host 与 Vanilla/RitsuLib/CombatSolver Client 的对照，以及正式 wire/model compatibility 结论；本轮只覆盖 C 组的一次战斗。
 - Lobby、角色准备、战斗开始/结束、下一层、退出和重新加入的完整生命周期。
-- Client 唯一识别本地玩家、真实 Hand/DrawPile 顺序、抽牌、洗牌、Discard/Exhaust、Enemy 状态和 MultiplayerScaling。
-- 队友动作产生可观察的 world fingerprint，且 Probe 全程不修改真实 `CombatState` 或 RNG。
-- Local PlayCard、Local EndTurn、连续快速动作和 wire/model compatibility 的 Host/Client 对照结果。
+- C 组中抽牌后的真实顺序、洗牌、Discard/Exhaust、敌人持续同步、队友动作导致的 world fingerprint 变化，以及跨生命周期保持只读边界。
+- 单人 Release/contract/smoke 回归证据。Local PlayCard、Local EndTurn 和连续快速动作属于后续 MP-2 Safe Execute，不在本轮启用。
 
 ## 当前安全边界
 
@@ -57,4 +63,4 @@
 
 ## 下一步
 
-现在已有能准备隔离快照、启动可见 Host/Client、停止自有进程和收集证据的基础设施；仍需要解决 Host 监听/Join 超时，并人工完成 A/B/C 三组真实 lobby/角色/Ready/战斗流程，再将日志和 Probe JSONL 填入 MP-0A/MP-0B 矩阵。完成前，不能把 FastMP 入口探针或单进程启动结果升级为 MP-0 通过。
+现在已有能准备隔离快照、启动可见 Host/Client、停止自有进程和收集证据的基础设施；下一步是补齐 A/B 组和 C 组剩余的只读场景，再将成对日志和 Probe JSONL 填入 MP-0A/MP-0B 矩阵。完成前，不能把本轮 C 组部分结果升级为 MP-0 通过。
