@@ -5,8 +5,10 @@ param(
     [Parameter(Mandatory)]
     [string]$MatrixPath,
 
-    [Parameter(Mandatory)]
     [string[]]$ProbePath,
+
+    [ValidateSet('MP-0A', 'MP-0B', 'MP-0', 'All')]
+    [string]$Phase = 'All',
 
     [switch]$Json
 )
@@ -14,10 +16,13 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$requiredChecks = @(
+$connectionChecks = @(
     'vanillaHostAcceptedClient',
     'hostUnaware',
     'noCustomNetworkPackets',
+    'wireModelCompatibility'
+)
+$readOnlyChecks = @(
     'localPlayerIdentity',
     'localHand',
     'localDrawPile',
@@ -28,12 +33,17 @@ $requiredChecks = @(
     'multiplayerScaling',
     'remoteWorldDelta',
     'probeReadOnly',
-    'singleplayerRegression',
-    'localEndTurnSync',
-    'localPlayCardSync',
-    'fastActionStress',
-    'wireModelCompatibility'
+    'lifecycle',
+    'singleplayerRegression'
 )
+$requiredChecks = if ($Phase -eq 'MP-0A') {
+    $connectionChecks
+} elseif ($Phase -eq 'MP-0B') {
+    $readOnlyChecks
+} else {
+    $connectionChecks + $readOnlyChecks
+}
+$probeRequired = $Phase -in @('MP-0B', 'MP-0', 'All')
 
 function Get-MapValue {
     param(
@@ -63,7 +73,8 @@ function Resolve-InputFile {
 }
 
 $matrixFile = Resolve-InputFile $MatrixPath
-$probeFiles = @($ProbePath | ForEach-Object { Resolve-InputFile $_ })
+$probeFiles = @($ProbePath | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+    ForEach-Object { Resolve-InputFile $_ })
 $matrix = Get-Content -LiteralPath $matrixFile -Raw | ConvertFrom-Json -AsHashtable
 if ((Get-MapValue $matrix 'schemaVersion') -ne 1) {
     throw "Phase 0 matrix schemaVersion must be 1: $matrixFile"
@@ -189,7 +200,9 @@ foreach ($probeFile in $probeFiles) {
     }
 }
 
-$probeStatus = if ($probeRecordCount -eq 0) {
+$probeStatus = if ($probeFiles.Count -eq 0 -and -not $probeRequired) {
+    'NOT_REQUIRED'
+} elseif ($probeRecordCount -eq 0) {
     'UNVERIFIED'
 } elseif ($probeFailures.Count -gt 0) {
     'FAIL'
@@ -201,7 +214,13 @@ $allResults = @($matrixResults) + @([pscustomobject]@{
         Name = 'probeJsonlContract'
         Status = $probeStatus
         Evidence = ($probeFiles -join ';')
-        Detail = if ($probeFailures.Count -eq 0) { $null } else { $probeFailures -join ' | ' }
+        Detail = if ($probeFiles.Count -eq 0 -and $probeRequired) {
+            'MP-0B requires at least one real Client Probe JSONL file'
+        } elseif ($probeFailures.Count -eq 0) {
+            $null
+        } else {
+            $probeFailures -join ' | '
+        }
     })
 $status = if (@($allResults | Where-Object Status -eq 'FAIL').Count -gt 0) {
     'FAIL'
@@ -214,6 +233,7 @@ $status = if (@($allResults | Where-Object Status -eq 'FAIL').Count -gt 0) {
 $result = [ordered]@{
     schemaVersion = 1
     status = $status
+    phase = $Phase
     matrixPath = $matrixFile
     probeFiles = $probeFiles
     probeFileCount = $probeFileCount
@@ -231,7 +251,7 @@ $result = [ordered]@{
 if ($Json) {
     $result | ConvertTo-Json -Depth 8
 } else {
-    Write-Output "MULTIPLAYER_PHASE0_$status matrix=$matrixFile probe_records=$probeRecordCount"
+    Write-Output "MULTIPLAYER_$Phase`_$status matrix=$matrixFile probe_records=$probeRecordCount"
     foreach ($item in $allResults) {
         $suffix = if ([string]::IsNullOrWhiteSpace([string]$item.Detail)) { '' } else { " detail=$($item.Detail)" }
         Write-Output ("{0} {1}{2}" -f $item.Status, $item.Name, $suffix)

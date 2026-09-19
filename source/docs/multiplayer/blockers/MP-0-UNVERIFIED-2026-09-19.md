@@ -10,6 +10,13 @@
 - 客户端 Mod 加载探针未执行：包含临时安装与递归清理的命令被执行策略拒绝，命令在启动前失败，没有修改游戏 `MODS`，没有启动客户端，也没有产生待清理副本。
 - 本轮 Host 临时日志的显式清理命令也被执行策略拒绝；`D:\yingye\CombatSolver\.local\multiplayer-lab\cli-probe-host\host.log`（7,640 字节）仍在本机，未提交到 GitHub。
 
+## 本轮已处理的问题
+
+- 原先直接向正式游戏 `MODS` 暂存 Client 的启动探针已撤掉，不再作为测试路径。
+- 已加入 `source/tools/multiplayer-lab/prepare-instances.ps1`、`start-host.ps1`、`start-client.ps1`、`stop-owned-instances.ps1` 和 `collect-results.ps1`；它们复用 `headless-runtime.ps1` 的私有快照与 ownership marker，并把 Host/Client 的 APPDATA、LOCALAPPDATA、日志隔离到实例目录。
+- `validate-phase0-results.ps1` 已拆分 MP-0A（连接兼容）和 MP-0B（只读状态）；`localPlayCardSync`、`localEndTurnSync`、`fastActionStress` 不再阻塞 MP-0，移至 MP-2 Safe Execute。
+- 本轮仅完成 PowerShell 语法和差异检查，没有运行新的双实例；上述脚本实现不构成 MP-0 证据。
+
 ## 仍然阻塞 MP-0 PASS
 
 以下证据当前均缺失，必须保持 `UNVERIFIED`：
@@ -28,4 +35,4 @@
 
 ## 下一步
 
-需要一个能实际完成 lobby/角色/Ready/战斗动作的双实例驱动器，并分别隔离 Host 无 Mod 与 Client 带 Mod 的安装目录；驱动器完成前，不能把 FastMP 入口探针升级为 MP-0 通过。
+现在已有能准备隔离快照、启动可见 Host/Client、停止自有进程和收集证据的基础设施；仍需要人工完成 A/B/C 三组真实 lobby/角色/Ready/战斗流程，并将日志和 Probe JSONL 填入 MP-0A/MP-0B 矩阵。完成前，不能把 FastMP 入口探针或单进程启动结果升级为 MP-0 通过。

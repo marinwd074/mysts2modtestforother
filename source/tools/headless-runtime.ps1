@@ -182,6 +182,96 @@ function Get-HeadlessSnapshotPlan(
     return @{ id = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)); files = $files }
 }
 
+function Get-HeadlessMultiplayerSnapshotPlan(
+    [hashtable]$Context,
+    [string]$Profile,
+    [string]$CombatSolverDll,
+    [string]$CombatSolverManifest,
+    [string]$MemoryCleaner,
+    [string]$RitsuRoot,
+    [string]$RitsuManifest,
+    [string]$RitsuLibTargetVersion
+) {
+    if ($Profile -notin @('HostVanilla', 'ClientVanilla', 'ClientRitsuOnly', 'ClientCombatSolver')) {
+        throw "Unsupported multiplayer snapshot profile: $Profile"
+    }
+
+    $needsRitsu = $Profile -in @('ClientRitsuOnly', 'ClientCombatSolver')
+    $needsSolver = $Profile -eq 'ClientCombatSolver'
+    $sources = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($item in Get-ChildItem -LiteralPath $Context.SourceGameRoot -Recurse -Force) {
+        if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Cannot freeze a multiplayer game tree containing a reparse point: $($item.FullName)"
+        }
+        if (-not $item.PSIsContainer) {
+            $relative = [IO.Path]::GetRelativePath($Context.SourceGameRoot, $item.FullName).Replace('/', '\')
+            $rootSegment = $relative.Split('\')[0]
+            if ([string]::Equals($rootSegment, 'mods', [StringComparison]::OrdinalIgnoreCase)) {
+                continue
+            }
+            $sources[$relative] = $item.FullName
+        }
+    }
+
+    if ($needsRitsu) {
+        if (-not (Test-Path -LiteralPath $RitsuRoot -PathType Container)) {
+            throw "RitsuLib workshop directory was not found: $RitsuRoot"
+        }
+        if (-not (Test-Path -LiteralPath $RitsuManifest -PathType Leaf)) {
+            throw "RitsuLib manifest was not found: $RitsuManifest"
+        }
+        $sources['mods\.combatsolver-headless-ritsulib\STS2-RitsuLib.json'] = $RitsuManifest
+        $variantManifest = Join-Path $RitsuRoot 'ritsulib-variants.manifest'
+        if (Test-Path -LiteralPath $variantManifest -PathType Leaf) {
+            foreach ($item in Get-ChildItem -LiteralPath $RitsuRoot -Recurse -Force) {
+                if ($item.PSIsContainer -or $item.Name -in @('mod_manifest.json', 'RitsuLib.References.props')) {
+                    continue
+                }
+                if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                    throw "Cannot freeze a RitsuLib bundle containing a reparse point: $($item.FullName)"
+                }
+                $relative = [IO.Path]::GetRelativePath($RitsuRoot, $item.FullName).Replace('/', '\')
+                $sources[(Join-Path 'mods\.combatsolver-headless-ritsulib' $relative)] = $item.FullName
+            }
+        }
+        else {
+            $legacyDll = Join-Path $RitsuRoot (Join-Path 'lib' (Join-Path $RitsuLibTargetVersion 'STS2-RitsuLib.dll'))
+            $sources['mods\.combatsolver-headless-ritsulib\STS2-RitsuLib.dll'] = $legacyDll
+        }
+    }
+
+    if ($needsSolver) {
+        foreach ($requiredSource in @($CombatSolverDll, $CombatSolverManifest, $MemoryCleaner)) {
+            if (-not (Test-Path -LiteralPath $requiredSource -PathType Leaf)) {
+                throw "CombatSolver snapshot input was not found: $requiredSource"
+            }
+        }
+        $sources['mods\CombatSolver\CombatSolver.dll'] = $CombatSolverDll
+        $sources['mods\CombatSolver\CombatSolver.json'] = $CombatSolverManifest
+        $sources['mods\CombatSolver\CombatSolver.MemoryCleaner.exe'] = $MemoryCleaner
+    }
+
+    $files = [Collections.Generic.List[object]]::new()
+    $identity = [Text.StringBuilder]::new()
+    $cancellationCheck = Get-Command Assert-LauncherNotCancelled -ErrorAction SilentlyContinue
+    foreach ($relative in @($sources.Keys | Sort-Object -CaseSensitive)) {
+        if ($null -ne $cancellationCheck) {
+            Assert-LauncherNotCancelled
+        }
+        $source = $sources[$relative]
+        Assert-HeadlessNoReparsePoint $source
+        $fileHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
+        $files.Add(@{ relative = $relative; source = $source; sha256 = $fileHash })
+        [void]$identity.Append($relative).Append([char]0).Append($fileHash).Append([char]0)
+    }
+    $bytes = [Text.Encoding]::UTF8.GetBytes($identity.ToString())
+    return @{
+        id = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
+        profile = $Profile
+        files = $files
+    }
+}
+
 function Remove-HeadlessOwnedGameTree([hashtable]$Context, [string]$Path) {
     $pathFull = Get-HeadlessCanonicalPath $Path
     $parent = [IO.Path]::GetDirectoryName($pathFull)
