@@ -186,7 +186,7 @@ internal static partial class SolverController
         {
             actions = plannedTurnActions.Where(action => action.IsExecutable).ToList();
         }
-        PlanAction? plannedEndTurn = safeExecute
+        PlanAction? plannedEndTurn = safeExecute || !capabilities.CanEndTurnAutomatically
             ? null
             : plannedTurnActions.FirstOrDefault(action => action.Kind == PlanActionKind.EndTurn);
         FastModeType originalFastMode = SaveManager.Instance.PrefsSave.FastMode;
