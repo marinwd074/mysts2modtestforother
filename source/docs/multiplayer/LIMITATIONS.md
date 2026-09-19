@@ -1,6 +1,6 @@
-# MP-0 当前阻碍与事实（2026-09-19）
+# Multiplayer 当前限制与验证事实（2026-09-20）
 
-本文件只保留当前多人阶段的可审计结论和仍未完成的阻碍。机器事实以 [Phase 0 矩阵](../evidence/phase0-matrix-2026-09-19.json) 为准：MP-0 Core 与受控生命周期 Hardening 为 `PASS`；重连后的 Advisor 远端私有药水语义仍按合同 fail-closed，MP-2 继续 blocked。
+本文件只保留当前多人阶段的可审计结论和仍有效的限制。机器事实以 [Phase 0 矩阵](../evidence/phase0-matrix-2026-09-19.json) 为准：MP-0 Core 与受控生命周期 Hardening 为 `PASS`；重连后的 Advisor 远端私有药水语义仍按合同 fail-closed，MP-2 继续 blocked。
 
 ## 当前状态
 
@@ -70,9 +70,8 @@
 - 远端药水消耗后，`generation=45`/`46` 成功完成当前回合搜索；Probe `259/259` 仍只读，无动作入队或自定义网络包。机器摘要见 [`evidence/mp1-advisor-potion-2026-09-20.json`](../evidence/mp1-advisor-potion-2026-09-20.json)。
 - 正常退出时游戏写入 `progress.save` 等实例存档；退出收尾另出现 `RunManager.ToSave_Patch1` 经 `CombatBugReportExporter` 的 `NullReferenceException`，这是独立的诊断/存档导出问题，未改变前述 Advisor fail-closed 结论。
 
-## Active blockers
+## 当前限制
 
-- 当前生命周期闭环已通过；后续不再把 Host-quit/create-room/Client-join 误判为缺失证据。
 - 直接 Host 逐时刻敌人公开状态导出仍未单独采集；当前 `enemyStateSync` 仅表示两个独立 CombatSolver Client 的公开状态集合对照。
 - MP-1 Advisor 的首轮真实 Smoke 已通过受控验收；无药水重连场景和非空远端药水 fail-closed 场景均已实机覆盖；固定工作量单人 post-MP1 spot 对照已完成且路线/工作量无回归，但更广稳定性仍待收口，未知远端遗物和远端私有药水的 fail-closed 门禁不可移除。对照证据见 `runtime-evidence/20260920-post-mp1-performance/`。
 - 重连后的远端私有药水库存仍不可访问，Advisor 必须保持 fail-closed；如需支持正向搜索语义，应另立受控 public-state 设计与合同，不在本次 MP-0 生命周期收口中静默放开。退出阶段的 `CombatBugReportExporter` `NullReferenceException` 另需独立 triage。

@@ -59,7 +59,7 @@ MP-0B 在 MP-0A 成立后，继续验证：
 
 为补强敌人公开状态证据，Lab 新增 `compare-probe-public-state.ps1`，并准备了第二个 D: 盘 `ClientCombatSolver` 观察实例；它只比较同一局两个独立 Client Probe，不修改网络协议或自动提升矩阵状态。
 
-当前阻碍和未验证项集中记录在 [`blockers/MP-0-UNVERIFIED-2026-09-19.md`](blockers/MP-0-UNVERIFIED-2026-09-19.md)。
+当前仍有效的多人限制集中记录在 [`LIMITATIONS.md`](LIMITATIONS.md)。
 
 ## MP-1 Advisor 手动验证入口（当前）
 
