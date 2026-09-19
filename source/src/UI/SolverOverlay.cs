@@ -1166,6 +1166,8 @@ internal static partial class SolverOverlay
         RefreshFeedbackBanner();
         RefreshGuidanceHints();
 
+        CombatState? capabilityState = CombatManager.Instance.DebugOnlyGetState();
+        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(capabilityState);
         bool solverDisabled = SolverController.SolverDisabled;
         if (_solverEnabledButton != null)
             _solverEnabledButton.Text = SolverText.Get(solverDisabled ? "求解器：关" : "求解器：开");
@@ -1178,7 +1180,7 @@ internal static partial class SolverOverlay
             && !SolverController.HasCalculatedThisCombat
                 ? SolverText.Get("开始计算")
                 : SolverText.Get("重新计算");
-        _recalculateButton.Disabled = solverDisabled || searching
+        _recalculateButton.Disabled = solverDisabled || !capabilities.CanSearch || searching
             || SolverController.IsDeploying || adoptingRoute;
         _stopSearchButton.Disabled = solverDisabled || !searching || SolverController.IsStoppingSearch;
         _adoptRouteButton.Disabled = solverDisabled || !canAdoptRoute || adoptingRoute;
@@ -1239,7 +1241,6 @@ internal static partial class SolverOverlay
 
         CombatState? combat = CombatManager.Instance.DebugOnlyGetState();
         bool combatActive = combat != null && CombatManager.Instance.IsInProgress;
-        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(combat);
         bool previousMultiplayerSession = _multiplayerSession;
         _multiplayerSession = capabilities.IsMultiplayer;
         if (_multiplayerSession)
