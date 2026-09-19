@@ -114,6 +114,13 @@ pwsh -NoLogo -NoProfile -File "$toolRoot\start-client.ps1" `
 - 当前样本平均 `2961.759 ms / 373,990,581 B`；历史 baseline 平均 `3169.203 ms / 370,614,600 B`。当前 spot 对照为耗时 `-6.546%`、分配 `+0.911%`，没有 Gen2 或 >50/100 ms 帧尾部；由于不是与重建的 pre-MP1 二进制交错运行，不宣称稳定加速，只记录固定工作量无回归。
 - 逐样本 JSON 与口径说明保留在 [`runtime-evidence/20260920-post-mp1-performance`](../../runtime-evidence/20260920-post-mp1-performance/)；专用 smoke 的 launcher `exit_code=0` 收尾提示不改变 JSON 结果判定。
 
+### MP-1 Advisor Stability 新一轮（2026-09-20）
+
+- 使用当前源码构建（commit `1b6028502ab00e9c1394e51ffd3cb1661fcd533c`，DLL SHA-256 `864EC2A8276845B0C412106259D75AE2D30333826D415BE03A7371FD3A3B474F`）完成新一轮隔离实机；Host 按游戏规则退出并重建房间，Client 重新加入、Ready，并再次进入 `SLIMES_WEAK` 战斗。
+- 重连后的 Advisor combat journal 记录 `MP_ADVISOR_SEARCH_START=4`、`MP_ADVISOR_ROOT_CAPTURE_BEGIN=4`、`MP_ADVISOR_SEARCH_COMPLETE=3`、`MP_ADVISOR_FAIL_CLOSED=0`、`SEARCH_FAILURE=0`；其中 1 个 generation 在 world invalidation/debounce 期间未发布，未记录为成功完成。成功路线有 `ROUTE_REPLAY=3`、`ROUTE_ACTION=7`、`UI_STATE state=ready=3`，全部为当前回合 `CurrentTurnAdoption`。
+- 同一 Client Probe 共 `130` 条，`readOnly=true` 为 `130/130`，`actionsEnqueued=true` 为 `0`，`customNetworkPacketSent=true` 为 `0`，`searchStarted=true` 为 `0`；远端状态 fingerprint 持续变化，未发生 live action 或自定义网络包。
+- 本轮是 `PASS_CONTROLLED_REJOIN_NO_POTION`：本地药水槽全程为空，未覆盖“重连后远端存在私有药水”的场景，因此总体 Advisor Stability 仍为 `PARTIAL`，既有 fail-closed 阻碍不解除。机器摘要见 [`evidence/mp1-advisor-stability-2026-09-20.json`](evidence/mp1-advisor-stability-2026-09-20.json)。
+
 ### MP-0 生命周期与重连后边界（2026-09-19）
 
 - Host 日志先记录 `Stopping host. Reason: Quit` 与 Client 断开，随后新握手、`ClientLoadJoinRequestMessage`、Client Ready、run load 和 `Combat started`；Client 日志同步记录 Quit、再次 Join、epoch 4、Ready、run load 和 `PHROG_PARASITE_ELITE` 战斗开始。

@@ -57,11 +57,17 @@
 - 重连后的 Probe `257/257` 保持 `readOnly=true`，`actionsEnqueued=0`、`customNetworkPacketSent=0`；NIBBIT、SLIMES、PHROG 战斗均重新取得公开状态和回合变化。
 - 重连后的 Advisor 记录 `MP_ADVISOR_SEARCH_START=7`、`ROOT_CAPTURE_BEGIN=7`、`FAIL_CLOSED=7`、`SEARCH_COMPLETE=0`，原因是远端私有药水库存不可见。这是当前 Unknown 私有语义的预期 fail-closed 边界，不把该轮误记为 Advisor 搜索通过。
 
+## MP-1 Advisor Stability 新一轮（2026-09-20）
+
+- 当前源码构建（commit `1b6028502ab00e9c1394e51ffd3cb1661fcd533c`，DLL SHA-256 `864EC2A8276845B0C412106259D75AE2D30333826D415BE03A7371FD3A3B474F`）在新的隔离 Host/Client 上完成了 Host 重建房间后的 Client 重新加入，并再次进入 `SLIMES_WEAK` 战斗。
+- 重连后的 combat journal 记录 `SEARCH_START=4`、`ROOT_CAPTURE_BEGIN=4`、`SEARCH_COMPLETE=3`、`FAIL_CLOSED=0`、`SEARCH_FAILURE=0`；成功路线有 `ROUTE_REPLAY=3`、`ROUTE_ACTION=7`、`UI_STATE=ready=3`。1 个 generation 在 world invalidation/debounce 期间未发布，不把它计作成功。
+- Probe `130/130` 为 `readOnly=true`，动作入队和自定义网络包均为 `0`；本轮本地药水槽为空，因此只证明“无远端私有药水”的受控重连稳定性，不覆盖既有的非空远端私有药水阻碍。机器摘要见 [`evidence/mp1-advisor-stability-2026-09-20.json`](../evidence/mp1-advisor-stability-2026-09-20.json)。
+
 ## Active blockers
 
 - 当前生命周期闭环已通过；后续不再把 Host-quit/create-room/Client-join 误判为缺失证据。
 - 直接 Host 逐时刻敌人公开状态导出仍未单独采集；当前 `enemyStateSync` 仅表示两个独立 CombatSolver Client 的公开状态集合对照。
-- MP-1 Advisor 的首轮真实 Smoke 已通过受控验收；固定工作量单人 post-MP1 spot 对照已完成且路线/工作量无回归，更广稳定性仍待收口，未知远端遗物的 fail-closed 门禁不可移除。对照证据见 `runtime-evidence/20260920-post-mp1-performance/`。
+- MP-1 Advisor 的首轮真实 Smoke 已通过受控验收；本轮追加的重连后无药水场景也通过受控验证；固定工作量单人 post-MP1 spot 对照已完成且路线/工作量无回归，但更广稳定性仍待收口，未知远端遗物和远端私有药水的 fail-closed 门禁不可移除。对照证据见 `runtime-evidence/20260920-post-mp1-performance/`。
 - 重连后的远端私有药水库存仍不可访问，Advisor 必须保持 fail-closed；如需支持该语义，应另立受控 public-state 设计与合同，不在本次 MP-0 生命周期收口中静默放开。
 - Local PlayCard、Local EndTurn 和连续快速动作属于后续 MP-2 Safe Execute，不在本阶段启用。
 

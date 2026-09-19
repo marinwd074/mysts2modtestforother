@@ -101,6 +101,7 @@
     "MP-0 Core and the required Host-quit/create-room/Client-join lifecycle are PASS. The follow-up Probe remained read-only; Advisor still fails closed after rejoin when a remote private potion inventory is required, which is recorded in mp1-advisor-smoke-2026-09-19.json and does not enable Safe Execute.",
     "The enemy-state PASS is limited to two independent CombatSolver Clients observing the same Host run; it does not enable custom packets or infer Host-side mod behavior.",
     "A direct Host-side per-timestep enemy export is still not separately captured; this is an evidence limitation, not a lifecycle failure.",
-    "MultiplayerAdvisor is only an explicit process-scoped opt-in for the local current-turn, display-only path; MultiplayerSafeExecute remains blocked."
+    "MultiplayerAdvisor is only an explicit process-scoped opt-in for the local current-turn, display-only path; MultiplayerSafeExecute remains blocked.",
+    "2026-09-20 controlled Advisor Stability round passed the no-remote-potion rejoin case (4 starts, 3 completes, 0 fail-closed, Probe 130/130 read-only); the non-empty remote-private-potion case remains unverified and overall MP-1 stability stays PARTIAL. See evidence/mp1-advisor-stability-2026-09-20.json."
   ]
 }

@@ -119,6 +119,12 @@
       "routeAndResultIdentityMatchHistoricalBaseline": true,
       "comparisonType": "non-interleaved spot comparison; no speedup claim",
       "evidence": "runtime-evidence/20260920-post-mp1-performance/metadata.md"
+    },
+    "advisorStabilityRound20260920": {
+      "status": "PASS_CONTROLLED_REJOIN_NO_POTION",
+      "overallMp1Stability": "PARTIAL",
+      "evidence": "evidence/mp1-advisor-stability-2026-09-20.json",
+      "note": "The required Host-recreate/Client-rejoin path produced successful current-turn Advisor routes with no live actions; the non-empty remote-private-potion case remains unexercised."
     }
   },
   "boundaries": {
@@ -137,6 +143,7 @@
     "runtime-evidence/20260920-post-mp1-performance/metadata.md",
     "runtime-evidence/20260920-post-mp1-performance/post-mp1-current-01.json",
     "runtime-evidence/20260920-post-mp1-performance/post-mp1-current-02.json",
-    "runtime-evidence/20260920-post-mp1-performance/post-mp1-current-03.json"
+    "runtime-evidence/20260920-post-mp1-performance/post-mp1-current-03.json",
+    "evidence/mp1-advisor-stability-2026-09-20.json"
   ]
 }
