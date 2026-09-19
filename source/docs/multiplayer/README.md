@@ -39,6 +39,8 @@
 
 本仓库当前没有 Host/Client 实机证据，因此本阶段不能把 MultiplayerProbe 改成 Advisor，也不能解除多人硬门禁。
 
+当前阻碍和未验证项集中记录在 [`blockers/MP-0-UNVERIFIED-2026-09-19.md`](blockers/MP-0-UNVERIFIED-2026-09-19.md)。
+
 ## 下一阶段
 
 先补齐并保存 MP-0 实机证据，再将能力表切到 Advisor：只搜索本地玩家当前回合、只显示路线、不自动执行。只有 Advisor 稳定后，才评估 `SafeLocalAction` 分类器和远端变化防抖的实际接入。

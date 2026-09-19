@@ -66,3 +66,6 @@ Exit codes are 0 for PASS, 1 for a contradiction or invalid Probe record, and
 2 for missing or still-unverified evidence. The checker never changes the
 runtime gate; source/docs/multiplayer/README.md remains the authoritative phase
 boundary.
+
+Current blockers and unverified runtime facts are recorded under
+`source/docs/multiplayer/blockers/`.
