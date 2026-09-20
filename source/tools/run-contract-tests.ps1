@@ -27,15 +27,20 @@ function Invoke-PowerShellContract {
 function Invoke-DotnetContract {
     param(
         [Parameter(Mandatory)][string]$Name,
-        [Parameter(Mandatory)][string]$Project
+        [Parameter(Mandatory)][string]$Project,
+        [string[]]$Arguments = @()
     )
 
     Write-Output "RUN: $Name"
-    $arguments = @('run', '--project', (Join-Path $repositoryRoot $Project), '-c', 'Release')
+    $dotnetArguments = @('run', '--project', (Join-Path $repositoryRoot $Project), '-c', 'Release')
     if ($NoRestore) {
-        $arguments += '--no-restore'
+        $dotnetArguments += '--no-restore'
     }
-    & dotnet @arguments
+    if ($Arguments.Count -gt 0) {
+        $dotnetArguments += '--'
+        $dotnetArguments += $Arguments
+    }
+    & dotnet @dotnetArguments
     $exitCode = $LASTEXITCODE
     $results.Add([pscustomobject]@{ Name = $Name; Status = if ($exitCode -eq 0) { 'PASS' } else { 'FAIL' } })
 }
@@ -51,6 +56,7 @@ try {
     Invoke-DotnetContract 'MultiplayerCarryRankingChecks' 'tools/MultiplayerCarryRankingChecks/MultiplayerCarryRankingChecks.csproj'
     Invoke-DotnetContract 'MultiplayerLocalCrossTurnChecks' 'tools/MultiplayerLocalCrossTurnChecks/MultiplayerLocalCrossTurnChecks.csproj'
     Invoke-DotnetContract 'MultiplayerRootCaptureChecks' 'tools/MultiplayerRootCaptureChecks/MultiplayerRootCaptureChecks.csproj'
+    Invoke-DotnetContract 'Sts2LocalInspectorChecks' 'tools/Sts2LocalInspector/Sts2LocalInspector.csproj' -Arguments @('--self-test')
     Invoke-PowerShellContract 'MultiplayerSafeExecuteEvidenceChecks' 'tools/multiplayer-lab/test-mp2a-validator.ps1'
     Invoke-PowerShellContract 'MultiplayerSafeExecuteMp2BEvidenceChecks' 'tools/multiplayer-lab/test-mp2b-validator.ps1'
     Invoke-PowerShellContract 'MultiplayerSafeExecuteMp2BInterferenceChecks' 'tools/multiplayer-lab/test-mp2b-interference-validator.ps1'
