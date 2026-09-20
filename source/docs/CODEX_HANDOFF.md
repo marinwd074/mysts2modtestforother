@@ -62,6 +62,13 @@ PASS 必须同时满足：
 
 `custom_network_api_used=false` 只证明 CombatSolver 该执行路径使用原生动作链，不等同独立抓包工具的 wire capture。
 
+## 当前进行中的 MP-2A Lab 运行
+
+- 当前源码 `cd533c6` 已完成 Release 构建；Host/Client 使用同一构建产物。
+- Host 实例：`D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp2a-host-20260920`，运行日志为 `logs/20260920-095743-host-7deb23e7.log`。
+- Client 实例：`D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp2a-client-20260920`，运行日志为 `logs/20260920-095845-client-7b394cae.log`，启动模式为 `safe-execute-lab`、ClientId `1000`。
+- Client 首次启动只完成了原生 Mod 确认并按游戏规则退出；第二次启动已加载 RitsuLib 与 CombatSolver，当前等待人工完成 Lobby、Ready、战斗和一次“执行本回合”。以上日志尚未形成 MP-2A 证据，不能记为 PASS。
+
 ## 当前唯一主要未完成项
 
 当前 ChatGPT 会话能够读写 GitHub 仓库和检查 GitHub Actions，但**没有用户电脑的桌面/Steam/STS2 进程控制能力**。
