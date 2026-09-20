@@ -87,7 +87,7 @@
 ## 当前安全边界
 
 - Runtime 默认 `MultiplayerProbe`：只读采集，不搜索、不部署、不自动选牌、不自动 EndTurn、不发送自定义网络包；Carry Ranking 不在 Probe 模式启用。
-- Advisor 仅显式环境变量 opt-in，并受 local-player root capture contract 和远端 fail-closed 语义约束；Safe Execute 也仅显式 opt-in，MP-2C 的实机通过范围仅限当前回合最多六张连续本地普通牌及已验证的远端变化中止。Local Cross-Turn 的源码合同和 X1 精确复用机制已有实机证据，但独立 X2 仍不在已验证能力范围内。
+- Advisor 仅显式环境变量 opt-in，并受 local-player root capture contract 和远端 fail-closed 语义约束；Safe Execute 也仅显式 opt-in。MP-2C bounded N-action、Reactive Carry、Local Cross-Turn T3/X2 与 Shared-RNG Shuffle Boundary 均已有实机证据；Carry Ranking R1/R2 仍需独立 runtime evidence。
 - 证据文件仅由 Lab 环境写入；schema v2 使用 `runSeed` / `combatSegmentId`，紧凑 fingerprint 不能替代缺失的生命周期证据。
 
 ## Source of truth

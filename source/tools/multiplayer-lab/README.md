@@ -105,6 +105,7 @@ Lobby、wire 或战斗证据。
   包含多次尝试，可用 `-RequestId <deployment-request-id>` 选择完整 session；
   `test-mp2b-interference-validator.ps1` 当前覆盖 6 个合成用例，其中包含“两张牌后中止”；
   它与正常 bounded N-action 验证器不能互相替代。
+- `validate-carry-ranking-results.ps1` 只读验证 Carry Ranking R1/R2 runtime journal。R1 要求真实 root 至少出现一个 `all_player_threats>0` 的公开原版攻击威胁；R2 要求最终选中路线真实出现 `carryPreference>0`、`threatsRemoved>0` 且 `remoteRiskAfter<remoteRiskBefore`。某局没有形成正向 Carry 选择返回 `UNVERIFIED`，不误报实现失败；证据自相矛盾才返回 `FAIL`。`test-carry-ranking-validator.ps1` 覆盖 PASS/UNVERIFIED/FAIL 三类合成解析并接入 L1 CI；合成日志不能替代 Host/Client 实机证据。
 
 ### Snapshot 同步合同
 
@@ -321,6 +322,21 @@ pwsh -NoLogo -NoProfile -File .\validate-reactive-carry-results.ps1 `
 Smoke A/B 在同一 journal 含有额外尝试时传 `-RequestId`；Smoke C 不传该参数并要求至少
 3 个 distinct request/turn。2026-09-20 A/B/C 均 PASS，摘要见
 [`reactive-carry-smoke-2026-09-20.json`](../../docs/multiplayer/evidence/reactive-carry-smoke-2026-09-20.json)。
+
+## Multiplayer Carry Ranking v1 R1/R2 Smoke
+
+R1/R2 使用显式 `advisor` 或 `safe-execute` 的 CombatSolver Client；默认 Probe 不运行 Carry Ranking。R1 只需要在普通原版怪物显示攻击 Intent 的本地搜索根中观察公开威胁分类；R2 需要该次搜索最终选中一条消灭至少一个已证明 `AllPlayers` 威胁的路线。无需让队友按预定路线出牌，也不读取队友手牌、能量、药水或私有遗物。
+
+验证命令：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-carry-ranking-results.ps1 `
+  -LogPath '<client-combat-journal.jsonl>' `
+  -Phase All `
+  -OutputPath '.\.local\multiplayer-lab\results\carry-ranking-r1-r2.json'
+~~~
+
+R1 PASS 但 R2 UNVERIFIED 时，不要在同一无效场景反复刷很多次；最多换一个普通多敌人早期战斗，让当前本地牌序自然存在“击杀一个正在攻击的敌人”和“不击杀”的候选。只有验证器返回 `MULTIPLAYER_CARRY_RANKING_All_PASS` 才把 R1/R2 一并登记为实机 PASS。
 
 退出码：0 为 PASS，1 为矛盾/无效证据，2 为缺失或仍为 UNVERIFIED。真实
 Host/Client 运行证据必须带可审查的日志位置；单进程模拟和合成 JSON 不可作为
