@@ -115,7 +115,7 @@ internal static partial class SolverController
         if (capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute)
         {
             IReadOnlyList<PlanAction> safeActions =
-                MultiplayerSafeLocalActionClassifier.TakeSafePrefix(
+                MultiplayerSafeLocalActionClassifier.TakeMp2ADeploymentSlice(
                     state,
                     plannedTurnActions,
                     out SafeLocalActionDecision stop);
@@ -171,7 +171,7 @@ internal static partial class SolverController
         SafeLocalActionDecision safeStop = SafeLocalActionDecision.Allow;
         if (safeExecute)
         {
-            actions = [.. MultiplayerSafeLocalActionClassifier.TakeSafePrefix(
+            actions = [.. MultiplayerSafeLocalActionClassifier.TakeMp2ADeploymentSlice(
                 state,
                 plannedTurnActions,
                 out safeStop)];

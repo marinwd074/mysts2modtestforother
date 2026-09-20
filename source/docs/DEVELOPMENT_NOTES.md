@@ -10,6 +10,7 @@
 - 2026-09-20 非空远端药水复验实际观察到远端 `FIRE_POTION` / `COLORLESS_POTION`；药水仍在远端私有库存时 `FAIL_CLOSED=7`、`SEARCH_SETUP_FAILURE=7`，消耗后 generation 45/46 成功。Probe `259/259` 仍只读；该轮确认 fail-closed 合同，不解除总体 `PARTIAL` 阻碍。摘要见 [`mp1-advisor-potion-2026-09-20.json`](multiplayer/evidence/mp1-advisor-potion-2026-09-20.json)。
 - post-MP1 固定工作量单人 spot 对照已完成：当前源码 3 个独立 `COMPAT1071` 样本均保持 `expanded=3528`、`transitions=10156`，路线/结果 identity 与历史 baseline 一致，Gen2 与 >50/100 ms 帧均为 0；非交错样本不外推稳定加速。证据见 [`runtime-evidence/20260920-post-mp1-performance`](../../runtime-evidence/20260920-post-mp1-performance/)。
 - Runtime 默认 `MultiplayerProbe`；`COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才启用只读 Advisor 入口，`MultiplayerSafeExecute` 仍 blocked。当前边界包括 `SolverPerspective`、local-player-only root contracts、schema v2 Probe 证据和 Lab-only flush 策略；重连后远端私有药水库存不可见时保持 fail-closed。
+- MP-2A 先落 dormant 的单动作执行边界：安全策略拆成纯合同，部署路径即使未来进入 Safe Execute 也一次最多取 1 张本地普通安全牌，然后停止等待新的世界观察/重算；不新增 `safe-execute` opt-in，不开放自动 EndTurn、药水、选择、Replay、队友目标、Full Auto、Instant 或连续多牌。连续执行前必须单独解决本地预期变化与远端并发变化的 WorldVersion 归因。
 - 多人正常退出曾在诊断取证调用 `RunManager.ToSave(null)` 时触发原生 `NullReferenceException`；诊断导出现在先检查 run 生命周期，并把原生保存失败转换为显式的 checkpoint capture failure，不再让取证路径把退出竞争升级成游戏级异常。
 - 本次收口以 `source/CombatSolver.json` 为唯一 manifest 来源；已解决问题单、旧适配审计和完整快照不再作为当前入口，历史内容由 Git history 保留。
 

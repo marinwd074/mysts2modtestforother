@@ -33,6 +33,7 @@
 - [docs/TESTING_LAYERS.md](docs/TESTING_LAYERS.md)：测试层级。
 - [docs/TEST_MATRIX.md](docs/TEST_MATRIX.md)：当前测试目录和重跑方式。
 - [docs/DEVELOPMENT_NOTES.md](docs/DEVELOPMENT_NOTES.md)：当前开发状态与未发布行为变化。
+- [docs/CODEX_HANDOFF.md](docs/CODEX_HANDOFF.md)：当前对话结束时覆盖更新的 Codex 接手入口；不是历史记录。
 - [docs/compat/0.107.1/README.md](docs/compat/0.107.1/README.md)：目标版本兼容资料。
 - [docs/CHECKPOINT_REPLAY.md](docs/CHECKPOINT_REPLAY.md)、[docs/HEADLESS_TESTING.md](docs/HEADLESS_TESTING.md)：回放和隔离测试边界。
 
@@ -94,3 +95,5 @@ docs/pr/  docs/history/  runtime-evidence/  .local/decompiled/
 ## 7. 完成汇报
 
 汇报功能层面的变化、所属职责层、实际执行的验证和未执行项。必须区分本轮证据、静态阅读、旧测试记录和未验证结果；不能把编译或聚合 HP 比较写成语义等价，也不能把旧报告写成本轮通过。
+
+任务结束前覆盖更新 `docs/CODEX_HANDOFF.md`，并在最终回复输出同用途的 Markdown 交接。交接只写当前状态和下一步，不复制完整历史。
