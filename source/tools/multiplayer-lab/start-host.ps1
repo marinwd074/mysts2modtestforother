@@ -8,7 +8,9 @@ param(
     [ValidateSet('', 'host', 'join')]
     [string]$FastMpMode = '',
 
-    [switch]$ForceSteamOff
+    [switch]$ForceSteamOff,
+
+    [switch]$AllowSteam
 )
 
 try {
@@ -16,7 +18,8 @@ try {
         -Role Host `
         -InstanceRoot $InstanceRoot `
         -FastMpMode $FastMpMode `
-        -ForceSteamOff:$ForceSteamOff
+        -ForceSteamOff:$ForceSteamOff `
+        -AllowSteam:$AllowSteam
     if (-not $?) { exit 1 }
     exit 0
 }

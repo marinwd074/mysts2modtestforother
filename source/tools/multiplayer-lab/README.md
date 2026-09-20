@@ -6,6 +6,10 @@ Probe；显式传入 `-MultiplayerMode advisor` 只启用 Advisor 搜索。MP-2A
 另提供 **Lab-only** 的 `-MultiplayerMode safe-execute-lab`：它只允许由本目录
 创建的 `ClientCombatSolver` 私有实例获得单牌执行能力，不是正式玩家 opt-in。
 
+> 开始任何 Host/Client 实机运行前先读
+> [多人实机运行手册](../../docs/multiplayer/RUNBOOK.md)。其中记录了必须关闭
+> Steam transport、Mod 首次加载后重启、ClientId、Graceful 停止等已知操作事实。
+
 ## 阶段边界
 
 MP-0A 只验证连接兼容：
@@ -47,7 +51,10 @@ Lobby、wire 或战斗证据。
   `.local/multiplayer-lab/runtime-<instance>`；脚本会拒绝 C: 或其他盘符，避免
   把大型测试快照写入系统盘。
 - `start-host.ps1` / `start-client.ps1` 只启动指定私有 snapshot，使用独立
-  `APPDATA`、`LOCALAPPDATA` 和日志；默认保留可见 UI，允许用户手动建房、
+  `APPDATA`、`LOCALAPPDATA` 和日志；同机 Lab **默认自动传入
+  `--force-steam=off`**，即使调用方忘记 `-ForceSteamOff` 也不会重新踩坑。
+  `-ForceSteamOff` 仍可显式写出以强调意图；只有专门验证 Steam transport
+  时才使用 `-AllowSteam`。默认保留可见 UI，允许用户手动建房、
   加入、选角色和 Ready。`-ClientId` 只用于同一台机器上同时运行多个
   `FastMpJoin` 客户端；原生默认值是 `1000`，每个客户端必须使用不同的
   非零 ID。`-FastMpMode host|join` 只在显式指定时传给当前二进制。
@@ -55,6 +62,10 @@ Lobby、wire 或战斗证据。
   `safe-execute-lab` 额外要求 `ClientCombatSolver` ownership/profile marker
   和 Lab Probe evidence 环境，普通桌面进程或手写 `safe-execute` token 不会
   获得执行能力。
+- 当前 Modded Client 的固定流程是：**第一次启动只用于加载 Mod；完成 Mod 加载并
+  重启一次游戏后，第二次启动才进入正式 Host/Join/Smoke**。第一次启动不得作为
+  multiplayer runtime evidence。重新准备/重建 Client snapshot、替换 Mod payload，
+  或游戏再次提示需要重启时，重复这一步。
 - 同一 `InstanceRoot` 的 `Roaming`/`Local` 目录会跨进程保留，后续可直接复用
   已准备的实例而不重新复制游戏快照；进程真正重启时仍会重新加载 Mod DLL，
   未写入存档的当前战斗或房间状态不保证恢复。只有更换构建产物时才需要重新
@@ -101,10 +112,12 @@ pwsh -NoLogo -NoProfile -File .\prepare-instances.ps1 -Profile ClientCombatSolve
 ~~~powershell
 $labRoot = 'D:\yingye\CombatSolver\.local\multiplayer-lab'
 pwsh -NoLogo -NoProfile -File .\start-host.ps1 `
-  -InstanceRoot "$labRoot\runtime-mp-host"
+  -InstanceRoot "$labRoot\runtime-mp-host" `
+  -ForceSteamOff
 pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
   -InstanceRoot "$labRoot\runtime-mp-client-solver" `
-  -ClientId 1000
+  -ClientId 1000 `
+  -ForceSteamOff
 ~~~
 
 同一 Host 上启动第二个本地 Client 时，必须使用不同的 ID，例如
@@ -148,6 +161,7 @@ pwsh -NoLogo -NoProfile -File .\compare-probe-public-state.ps1 `
 pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
   -InstanceRoot "$labRoot\runtime-mp-client-solver" `
   -ClientId 1000 `
+  -ForceSteamOff `
   -MultiplayerMode safe-execute-lab
 ~~~
 

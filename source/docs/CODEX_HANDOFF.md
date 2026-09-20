@@ -21,6 +21,14 @@
 - 只在产品方向、不可逆删除、外部账号/费用、正式发布、公开协议/数据格式或正式多人能力范围变化时需要额外确认。
 - 保留安全与正确性硬边界：不泄密、不破坏用户数据、不强推/改写历史、不擅自发布、不用性能预算掩盖语义错误、多人实验能力不在缺少实机证据时直接转正式。
 
+## 多人实机固定操作（新对话不要重新试错）
+
+- 任何 Multiplayer Lab 运行前先读 `docs/multiplayer/RUNBOOK.md`。
+- 同机 Host/Client Lab 必须关闭 Steam transport。启动脚本现已默认 `--force-steam=off`；命令仍建议显式写 `-ForceSteamOff`。只有专门测试 Steam transport 才用 `-AllowSteam`。
+- `ClientRitsuOnly` / `ClientCombatSolver` 的第一次启动是 Mod 加载 warm-up：让游戏加载 Mod 并重启一次；**重启后的第二次启动才是正式 Host/Join/Smoke 运行**。warm-up 不能作为 multiplayer evidence。
+- Client snapshot 被重新准备/重建、Mod payload 被替换，或游戏再次要求重启时，重新做 warm-up。
+- 正式测试结束继续使用 Graceful stop；不要用强杀运行当完整 journal 证据。
+
 ## 当前下一步
 
 重新做一轮新的 MP-2A Host + Client Smoke：

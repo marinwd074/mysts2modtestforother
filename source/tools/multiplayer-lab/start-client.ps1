@@ -13,7 +13,9 @@ param(
 
     [UInt64]$ClientId = 0,
 
-    [switch]$ForceSteamOff
+    [switch]$ForceSteamOff,
+
+    [switch]$AllowSteam
 )
 
 try {
@@ -23,7 +25,8 @@ try {
         -FastMpMode $FastMpMode `
         -MultiplayerMode $MultiplayerMode `
         -ClientId $ClientId `
-        -ForceSteamOff:$ForceSteamOff
+        -ForceSteamOff:$ForceSteamOff `
+        -AllowSteam:$AllowSteam
     if (-not $?) { exit 1 }
     exit 0
 }

@@ -20,6 +20,11 @@
 - 正确性优先于性能；不得通过扩大 Beam、节点、时间、内存或 GC 预算掩盖模拟错误。
 - Multiplayer Lab / Probe / Advisor / Safe Execute 等能力必须按证据逐级开放；未达到既定实机证据门槛时，不把实验能力静默升级为正式玩家默认能力。
 
+## Multiplayer 实机操作记忆
+
+- 任何 Multiplayer Lab / Host+Client 实机操作开始前，必须先读 `source/docs/multiplayer/RUNBOOK.md`；该文件记录已经踩过的启动/重启/Steam/证据收集事实，优先于重新试错。
+- 已写入 RUNBOOK 的稳定操作事实不得在新对话中重新“探索”一遍。只有当前版本或脚本行为明确变化时才重新验证并更新它。
+
 ## 3. Git 与同步
 
 - 默认在任务完成后提交并推送当前分支；用户明确要求只读、仅本地或不推送时除外。

@@ -58,6 +58,7 @@ Agent 可以在当前目标需要时自主：
 - `docs/compat/0.107.1/README.md`
 - `docs/CHECKPOINT_REPLAY.md`
 - `docs/HEADLESS_TESTING.md`
+- `docs/multiplayer/RUNBOOK.md`：多人实机启动的固定操作事实；进行任何 Host/Client Lab 运行前先读。
 
 历史目录、`runtime-evidence/` 和 `.local/` 不再“默认禁止读取”。需要定位回归、比较基线或核对旧结论时可以直接定向检索；仍应避免无目的全仓库扫描。
 
@@ -75,6 +76,7 @@ Agent 可以在当前目标需要时自主：
 
 ## 6. Multiplayer
 
+- 任何多人实机操作前先读 `docs/multiplayer/RUNBOOK.md`，不要重新试错已记录的 Steam、Mod 重启、ClientId、停止和证据流程。
 - 当前正式产品仍以单人能力为稳定基线；多人能力通过 Probe / Advisor / Lab gate 分阶段推进。
 - 可以自主开发、重构和验证多人实验能力，但在对应真实 Host/Client 证据通过前，不把 Lab-only 能力改成正式默认或普通玩家入口。
 - 不发送 CombatSolver 自定义网络包、不控制其他玩家，除非未来项目方向明确改变并单独设计协议与验证。
