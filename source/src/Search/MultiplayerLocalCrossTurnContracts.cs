@@ -71,6 +71,14 @@ internal static class MultiplayerLocalCrossTurnContracts
             && action.Turn == currentTurn
             && !action.IsEndTurn);
 
+    internal static bool PreferCurrentTurnPlayableRoute(
+        SearchRoutePolicy routePolicy,
+        bool candidateHasCurrentTurnCard,
+        bool currentHasCurrentTurnCard)
+        => routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
+            && candidateHasCurrentTurnCard
+            && !currentHasCurrentTurnCard;
+
     internal static bool ShouldHoldPendingContinuation(
         bool awaitingContinuation,
         bool hasContinuationSource,

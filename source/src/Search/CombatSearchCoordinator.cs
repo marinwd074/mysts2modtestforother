@@ -1817,9 +1817,10 @@ internal static partial class CombatSearchCoordinator
         SearchPolicySnapshot policy,
         SolverResult candidate,
         SolverResult current)
-        => policy.RoutePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
-            && HasCurrentTurnCardAction(candidate)
-            && !HasCurrentTurnCardAction(current);
+        => MultiplayerLocalCrossTurnContracts.PreferCurrentTurnPlayableRoute(
+            policy.RoutePolicy,
+            HasCurrentTurnCardAction(candidate),
+            HasCurrentTurnCardAction(current));
 
     private static bool HasCurrentTurnCardAction(SolverResult result)
         => result.BestNode.Actions.Any(action =>

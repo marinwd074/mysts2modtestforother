@@ -132,4 +132,23 @@ Check(
             localTurnPlayable: false),
     "A pending route waits only off the local playable boundary; a playable local turn with no cached continuation must fall through to fresh search.");
 
+Check(
+    MultiplayerLocalCrossTurnContracts.PreferCurrentTurnPlayableRoute(
+        SearchRoutePolicy.MultiplayerLocalCrossTurn,
+        candidateHasCurrentTurnCard: true,
+        currentHasCurrentTurnCard: false)
+        && !MultiplayerLocalCrossTurnContracts.PreferCurrentTurnPlayableRoute(
+            SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            candidateHasCurrentTurnCard: false,
+            currentHasCurrentTurnCard: true)
+        && !MultiplayerLocalCrossTurnContracts.PreferCurrentTurnPlayableRoute(
+            SearchRoutePolicy.SinglePlayerFullRoute,
+            candidateHasCurrentTurnCard: true,
+            currentHasCurrentTurnCard: false)
+        && !MultiplayerLocalCrossTurnContracts.PreferCurrentTurnPlayableRoute(
+            SearchRoutePolicy.MultiplayerCurrentTurnOnly,
+            candidateHasCurrentTurnCard: true,
+            currentHasCurrentTurnCard: false),
+    "Local cross-turn tie-breaking prefers a current-turn card over an EndTurn-only route without changing single-player or current-turn-only policies.");
+
 Console.WriteLine($"PASS: {checks} multiplayer local-cross-turn contract checks");
