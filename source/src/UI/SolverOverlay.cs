@@ -1063,7 +1063,10 @@ internal static partial class SolverOverlay
         _lastDeploymentActionCount = actionCount;
         _lastDeploymentEndedTurn = endedTurn;
         EnsureCreated(host);
-        ShowDeploymentStep(actionCount, actionCount, null);
+        // An abort can finish with fewer actions than the bounded route exposes. Keep the
+        // route's planned capsule count for rendering while marking only completed actions.
+        int renderedActionCount = Math.Max(actionCount, RouteRows[0].DeploymentActionCount);
+        ShowDeploymentStep(Math.Min(actionCount, renderedActionCount), renderedActionCount, null);
         RouteRows[0].SetEndTurnDeploymentState(active: false, completed: endedTurn);
         _deployQueued = false;
         SetStatus(SolverText.Get("执行完成"), Accent, SolverText.Format($"第 {turn} 回合"));
