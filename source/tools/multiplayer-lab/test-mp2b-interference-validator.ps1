@@ -25,6 +25,8 @@ function Invoke-Case {
 try {
     $base = @(
         '[CombatSolver/MultiplayerSafeExecute] MP2B_CAPABILITY enabled=true max_actions=2 attribution=revalidation automatic_end_turn=false custom_network_api=false',
+        '[CombatSolver/Evidence] ROUTE_REPLAY {"actionCount":4}',
+        '[CombatSolver/Evidence] ROUTE_ACTION {"index":3,"action":{"Kind":"EndTurn"}}',
         '[CombatSolver/MultiplayerSafeExecute] MP2B_DEPLOY_START turn=1 request_id=12 route_generation=4 action_count=2 max_actions=2 search_world_version=4 stop_reason=mp2b_two_action_limit',
         '[CombatSolver/MultiplayerSafeExecute] NATIVE_ACTION_CAPTURED request_id=12 action_index=0 type=PlayCardAction turn=1 card=STRIKE local_net_id=1000 custom_network_api_used=false',
         '[CombatSolver/MultiplayerSafeExecute] MP2B_ACTION_RECONCILED request_id=12 action_index=0 card=STRIKE decision=SafeToContinue reason=safe_to_continue before_world_version=4 after_world_version=5 observation_sequence=8',

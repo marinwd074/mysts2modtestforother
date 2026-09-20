@@ -125,14 +125,20 @@ if ($end.Count -eq 1) {
     Add-Check 'twoActionDeploymentEnd' FAIL (Join-Evidence $end) 'A normal MP2B smoke must contain exactly one bounded deployment completion.'
 }
 
+$deploymentStartIndex = if ($start.Count -eq 1) { [int]$start[0].Index } else { 0 }
+$deploymentEndIndex = if ($end.Count -eq 1) { [int]$end[0].Index } else { [int]::MaxValue }
+$deploymentRecords = @($records | Where-Object {
+        $_.Index -ge $deploymentStartIndex -and $_.Index -le $deploymentEndIndex
+    })
 $forbidden = @($records | Where-Object {
+        $_.Text -match 'EndPlayerTurnAction' -or
+        $_.Text -match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_DEPLOY_END .*end_turn=true' -or
+        $_.Text -match 'MP2B_REMOTE_DELTA_ABORT'
+    }) + @($deploymentRecords | Where-Object {
         $_.Text -match '\[CombatSolver/Test\] DEPLOY_ACTION .*potion=' -or
         $_.Text -match 'DEPLOY_CHOICE_PLAN' -or
         $_.Text -match 'DEPLOY_END_TURN' -or
-        $_.Text -match 'EndPlayerTurnAction' -or
-        $_.Text -match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_DEPLOY_END .*end_turn=true' -or
-        $_.Text -match 'Replay' -or
-        $_.Text -match 'MP2B_REMOTE_DELTA_ABORT'
+        $_.Text -match 'Replay'
     })
 if ($forbidden.Count -eq 0) {
     Add-Check 'forbiddenActionsAbsent' PASS

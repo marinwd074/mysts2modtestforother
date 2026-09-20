@@ -26,6 +26,9 @@ try {
     $base = @(
         '[CombatSolver/MultiplayerSafeExecute] FORMAL_CAPABILITY enabled=true scope=explicit_opt_in max_actions=2 automatic_end_turn=false custom_network_api=false',
         '[CombatSolver/MultiplayerSafeExecute] MP2B_CAPABILITY enabled=true max_actions=2 attribution=revalidation automatic_end_turn=false custom_network_api=false',
+        '[CombatSolver/Evidence] ROUTE_REPLAY {"actionCount":4}',
+        '[CombatSolver/Evidence] ROUTE_ACTION {"index":3,"action":{"Kind":"EndTurn"}}',
+        '[CombatSolver/Test] RESULT replays=2 choice_replay_attempts=0',
         '[CombatSolver/MultiplayerSafeExecute] MP2B_DEPLOY_START turn=1 request_id=9 route_generation=4 action_count=2 max_actions=2 search_world_version=4 stop_reason=mp2b_two_action_limit',
         '[CombatSolver/MultiplayerSafeExecute] NATIVE_ACTION_CAPTURED request_id=9 action_index=0 type=PlayCardAction turn=1 card=STRIKE local_net_id=1000 custom_network_api_used=false',
         '[CombatSolver/MultiplayerSafeExecute] MP2B_ACTION_RECONCILED request_id=9 action_index=0 card=STRIKE decision=SafeToContinue reason=safe_to_continue before_world_version=4 after_world_version=5 observation_sequence=8',
@@ -44,7 +47,7 @@ try {
     $duplicate = @($base[0..5] + $base[5] + $base[6..8])
     Invoke-Case -Name 'duplicate-action' -Lines $duplicate -ExpectedExitCode 1
 
-    $missingResearch = @($base[0..7])
+    $missingResearch = @($base | Where-Object { $_ -notmatch 'SEARCH_DEBOUNCED_START' })
     Invoke-Case -Name 'missing-research' -Lines $missingResearch -ExpectedExitCode 2
 
     $manualEndTurn = $base + @(

@@ -125,14 +125,20 @@ if ($abort.Count -eq 1 -and $abortRequestMatches.Count -eq 1 -and $abortComplete
     Add-Check 'remoteAbort' FAIL (Join-Evidence $abort) 'The abort must belong to the deployment request and report one completed action.'
 }
 
+$abortIndex = if ($abort.Count -eq 1) { [int]$abort[0].Index } else { [int]::MaxValue }
+$deploymentStartIndex = if ($start.Count -eq 1) { [int]$start[0].Index } else { 0 }
+$deploymentRecords = @($records | Where-Object {
+        $_.Index -ge $deploymentStartIndex -and $_.Index -le $abortIndex
+    })
 $forbidden = @($records | Where-Object {
         $_.Text -match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_DEPLOY_END' -or
+        $_.Text -match 'custom_network_api_used=true\b' -or
+        $_.Text -match 'NATIVE_ACTION_CAPTURED .*action_index=1\b'
+    }) + @($deploymentRecords | Where-Object {
         $_.Text -match 'DEPLOY_END_TURN' -or
         $_.Text -match '\[CombatSolver/Test\] DEPLOY_ACTION .*potion=' -or
         $_.Text -match 'DEPLOY_CHOICE_PLAN' -or
-        $_.Text -match 'Replay' -or
-        $_.Text -match 'custom_network_api_used=true\b' -or
-        $_.Text -match 'NATIVE_ACTION_CAPTURED .*action_index=1\b'
+        $_.Text -match 'Replay'
     })
 if ($forbidden.Count -eq 0) {
     Add-Check 'noSecondOrForbiddenAction' PASS
