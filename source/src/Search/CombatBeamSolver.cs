@@ -116,6 +116,8 @@ internal sealed partial class CombatBeamSolver(
         _minimumPotionUses,
         policy.Diagnostics,
         _detailedDiagnostics,
+        policy.RoutePolicy,
+        _startTurnNumber,
         root.CarryRankingContext,
         battleDamage,
         _run.PotionStrategicCosts);

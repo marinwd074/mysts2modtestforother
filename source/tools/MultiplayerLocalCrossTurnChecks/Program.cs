@@ -96,6 +96,12 @@ Check(
 Check(
     MultiplayerLocalCrossTurnContracts.IsCurrentTurnAction(1, 1)
         && !MultiplayerLocalCrossTurnContracts.IsCurrentTurnAction(2, 1)
+        && !MultiplayerLocalCrossTurnContracts.HasCurrentTurnPlayableAction(
+            [new(1, IsLocalAction: true, IsEndTurn: true)],
+            currentTurn: 1)
+        && MultiplayerLocalCrossTurnContracts.HasCurrentTurnPlayableAction(
+            [new(1, IsLocalAction: true, IsEndTurn: false), new(1, IsLocalAction: true, IsEndTurn: true)],
+            currentTurn: 1)
         && MultiplayerLocalCrossTurnContracts.CanPreserveFutureRoute(
             canReuse: true,
             awaitingContinuation: true,

@@ -63,6 +63,14 @@ internal static class MultiplayerLocalCrossTurnContracts
     internal static bool IsCurrentTurnAction(int actionTurn, int currentTurn)
         => actionTurn == currentTurn;
 
+    internal static bool HasCurrentTurnPlayableAction(
+        IReadOnlyList<MultiplayerProjectedAction> actions,
+        int currentTurn)
+        => actions.Any(action =>
+            action.IsLocalAction
+            && action.Turn == currentTurn
+            && !action.IsEndTurn);
+
     internal static bool IsExactContinuation(MultiplayerContinuationMatchInput input)
         => DescribeContinuationMismatch(input) is null;
 

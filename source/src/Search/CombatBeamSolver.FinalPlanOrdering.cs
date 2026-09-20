@@ -15,6 +15,8 @@ internal sealed partial class CombatBeamSolver
         int minimumPotionUses,
         SearchDiagnosticsSink diagnostics,
         bool detailedDiagnostics,
+        SearchRoutePolicy routePolicy,
+        int startTurnNumber,
         MultiplayerCarryRankingContext carryRankingContext,
         BattleDamageSnapshot battleDamage,
         PotionStrategicCostLookup? potionStrategicCosts = null)
@@ -144,7 +146,10 @@ internal sealed partial class CombatBeamSolver
                         OptionalPotionStrategicCost: optionalPotionStrategicCost,
                         OptionalAmbergrisCount: optionalAmbergrisCount,
                         EffectivePotionPolicy: effectivePotionPolicy,
-                        CarryEvaluation: carryEvaluation);
+                        CarryEvaluation: carryEvaluation,
+                        HasCurrentTurnCardAction: candidate.Node.Actions.Any(action =>
+                            action.Turn == startTurnNumber
+                            && action.Kind == PlanActionKind.PlayCard));
                 })
                 .ToList();
             if (emitDiagnostics && detailedDiagnostics)
@@ -314,6 +319,12 @@ internal sealed partial class CombatBeamSolver
                 // potion, and enemy-health ordering. It cannot outrank hard local quality.
                 .ThenByDescending(candidate => candidate.CarryEvaluation.CarryPreference)
                 .ThenByDescending(candidate => candidate.Score)
+                // A local-cross-turn route is deployed one turn at a time. When all
+                // preceding quality keys tie, keep an actual current-turn card action
+                // instead of letting the shorter-action tie-break turn a playable turn
+                // into an empty recommendation followed by EndTurn.
+                .ThenByDescending(candidate => routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
+                    && candidate.HasCurrentTurnCardAction)
                 .ThenBy(candidate => candidate.Features.ActionCount)
                 .ToList();
             if (selected.Count == 0)
@@ -340,6 +351,7 @@ internal sealed partial class CombatBeamSolver
                         $"unknownRiskCount={carry.UnknownRiskCount} " +
                         $"carryPreference={carry.CarryPreference} " +
                         $"carryPreferenceReason={carry.Reason} " +
+                        $"current_turn_card={candidate.HasCurrentTurnCardAction.ToString().ToLowerInvariant()} " +
                         $"actions={string.Join(',', candidate.Node.Actions.Select(CombatBeamSolver.PolicyActionToken))}");
                 }
             }
