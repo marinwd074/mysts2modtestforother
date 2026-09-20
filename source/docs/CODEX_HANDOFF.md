@@ -93,6 +93,7 @@
 - 独立 X2 已收口：三人 `F23XG9KSJD` / `FUZZY_WURM_CRAWLER_WEAK` 中，Client 1001 以 `STRIKE_IRONCLAD` 改变公开敌方 HP `180→171`；旧 route `bb5892f2e2ff47e78ac0915a9f0013c9` 被拒绝，随后 Fresh Probe/Root/Search 生成 route `01216d8159a241949ba5dbe6cd8e0f71`，request 2 建立新 authorization 并执行新 T2 牌序，旧 future action 未入原生队列。证据见 [`local-cross-turn-x2-smoke-2026-09-20.json`](multiplayer/evidence/local-cross-turn-x2-smoke-2026-09-20.json)。
 - Shared-RNG Shuffle Boundary 已实机收口：基线 `22050da` 的两人 Host/Client 运行中，T1 route `aa917965cd3f4569a03125db7034ec82` 保存 1 个 T2 continuation；T1→T2 以 `remote_public_soft_reuse` 精确复用并确认旧 authorization 失效。T2 EndTurn 后由于未来 T3 首次需要共享 `Shuffle RNG`，`continuation_pending=false`；真实 T3 以新 route `c1b69a31dd934fe5a5a41d4701ba25` Fresh Search，`cross_turn_reuse=false`，无 `local_state_mismatch`、旧 future action 入队或 `SEARCH_SETUP_FAILURE`。证据见 [`local-cross-turn-shuffle-boundary-smoke-2026-09-20.json`](multiplayer/evidence/local-cross-turn-shuffle-boundary-smoke-2026-09-20.json)。
 - `MP_LOCAL_XTURN_CONTINUATION_MISSING` 的自然 Host/Client 运行夹具仍未触发（`continuation_missing=0`）。调度语义现已收敛到运行时直接消费的 `MultiplayerContinuationScheduleDecision`：远端回合保持 route；本地 Play 且当前 turn 缺失 continuation 时明确要求 Fresh Search，并同时清除 Awaiting/source ownership。该决策由第 12 项 Local Cross-Turn CI 合同直接覆盖；真实日志 marker 仍保留为可选 L3 证据，不再依赖随机对局证明核心状态转换。有效 EndTurn-only 同样由 12 项合同保持允许。
+- Missing-continuation 本机编译证据已收口：`91ed6da4` 在真实 STS2/RitsuLib `0.107.1` 环境 Release build PASS（0 errors、2 warnings），`MultiplayerLocalCrossTurnChecks` 12/12 PASS；测试未启动游戏，也未修改源码/文档或创建提交。
 
 ## 当前下一步
 
