@@ -342,9 +342,9 @@ internal sealed partial class CombatBeamSolver
             }
             bool hasPlannedNextTurn = path
                 .Skip(pathIndex + 1)
-                // A continuation is the next local turn (or a later one), so the
-                // first action after this EndTurn must advance the turn number.
-                .Any(later => later.Action?.Turn > node.Turn);
+                // EndTurn nodes carry the post-boundary SearchNode.Turn, while their
+                // following local actions retain that same turn in PlanAction.Turn.
+                .Any(later => later.Action?.Turn == node.Turn);
             if (!hasPlannedNextTurn)
                 continue;
             int forecastOffset = node.Turn - _startTurnNumber;
