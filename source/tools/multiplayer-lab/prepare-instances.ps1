@@ -93,9 +93,17 @@ try {
         gameExecutable = Join-Path $context.GameRoot 'SlayTheSpire2.exe'
         artifactId = $snapshotPlan.id
         snapshotSchemaVersion = 2
-        baseSnapshotId = $snapshotPlan.baseSnapshotId
+        baseGameId = $snapshotPlan.baseGameId
+        ritsuArtifactId = $snapshotPlan.ritsuArtifactId
+        combatSolverArtifactId = $snapshotPlan.combatSolverArtifactId
+        baseSnapshotId = $snapshotPlan.baseGameId
         overlayId = $snapshotPlan.overlayId
         syncMode = [string]$syncResult.syncMode
+        snapshotAction = [string]$syncResult.snapshotAction
+        baseGameAction = [string]$syncResult.baseGameAction
+        ritsuAction = [string]$syncResult.ritsuAction
+        combatSolverAction = [string]$syncResult.combatSolverAction
+        copiedFiles = [int]$syncResult.copiedFiles
         targetGameVersion = $targetGameVersion
         targetRitsuLibVersion = $targetRitsuLibVersion
         preparedUtc = [DateTimeOffset]::UtcNow.ToString('O')
@@ -116,9 +124,17 @@ try {
         gameRoot = $context.GameRoot
         artifactId = $snapshotPlan.id
         snapshotSchemaVersion = 2
-        baseSnapshotId = $snapshotPlan.baseSnapshotId
+        baseGameId = $snapshotPlan.baseGameId
+        ritsuArtifactId = $snapshotPlan.ritsuArtifactId
+        combatSolverArtifactId = $snapshotPlan.combatSolverArtifactId
+        baseSnapshotId = $snapshotPlan.baseGameId
         overlayId = $snapshotPlan.overlayId
         syncMode = [string]$syncResult.syncMode
+        snapshotAction = [string]$syncResult.snapshotAction
+        baseGameAction = [string]$syncResult.baseGameAction
+        ritsuAction = [string]$syncResult.ritsuAction
+        combatSolverAction = [string]$syncResult.combatSolverAction
+        copiedFiles = [int]$syncResult.copiedFiles
         profilePath = $profilePath
         runtimeEvidenceEligible = $false
     }

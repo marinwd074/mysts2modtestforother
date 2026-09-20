@@ -61,12 +61,14 @@ if ($MultiplayerSnapshot) {
     }
     try {
         New-Item -ItemType Directory -Path $sourceGame, $ritsuRoot, $buildRoot -Force | Out-Null
-        Set-Content -LiteralPath (Join-Path $sourceGame 'SlayTheSpire2.exe') -Value 'base-executable-v1' -Encoding UTF8
+        Copy-Item -LiteralPath (Join-Path $env:WINDIR 'System32\cmd.exe') -Destination (Join-Path $sourceGame 'SlayTheSpire2.exe') -Force
         Set-Content -LiteralPath (Join-Path $sourceGame 'data.bin') -Value 'base-data-v1' -Encoding UTF8
         Set-Content -LiteralPath (Join-Path $sourceGame 'build.version') -Value '0.107.1' -Encoding UTF8
         Set-Content -LiteralPath (Join-Path $ritsuRoot 'mod_manifest.json') -Value '{"id":"RitsuLib"}' -Encoding UTF8
+        Set-Content -LiteralPath (Join-Path $ritsuRoot 'ritsulib-variants.manifest') -Value '{"variant":"test"}' -Encoding UTF8
         New-Item -ItemType Directory -Path (Join-Path $ritsuRoot 'lib\0.107.1') -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $ritsuRoot 'lib\0.107.1\STS2-RitsuLib.dll') -Value 'ritsu-v1' -Encoding UTF8
+        Set-Content -LiteralPath (Join-Path $ritsuRoot 'lib\0.107.1\RitsuExtra.dat') -Value 'ritsu-extra-v1' -Encoding UTF8
         Set-Content -LiteralPath (Join-Path $buildRoot 'CombatSolver.dll') -Value 'solver-v1' -Encoding UTF8
         Set-Content -LiteralPath (Join-Path $buildRoot 'CombatSolver.json') -Value '{"version":"solver-v1"}' -Encoding UTF8
         Set-Content -LiteralPath (Join-Path $buildRoot 'CombatSolver.MemoryCleaner.exe') -Value 'cleaner-v1' -Encoding UTF8
@@ -83,12 +85,14 @@ if ($MultiplayerSnapshot) {
         $hostPlan = Get-HeadlessMultiplayerSnapshotPlan @solverPlanArgs
         $hostSync = Set-HeadlessGameSnapshot $context $hostPlan
         Assert-HostFixture ($hostSync.syncMode -eq 'full-rebuild') 'initial HostVanilla snapshot was not a full build'
+        Assert-HostFixture ($hostSync.snapshotAction -eq 'FULL_REBUILD' -and $hostSync.baseGameAction -eq 'REBUILT') 'initial snapshot action was not FULL_REBUILD'
         Assert-HostFixture ($hostSync.copiedBaseFiles -eq 3) 'initial base snapshot file count was incorrect'
 
         Set-Content -LiteralPath (Join-Path $buildRoot 'CombatSolver.dll') -Value 'solver-v2' -Encoding UTF8
         $hostPlanAfterSolverChange = Get-HeadlessMultiplayerSnapshotPlan @solverPlanArgs
         $hostSyncAfterSolverChange = Set-HeadlessGameSnapshot $context $hostPlanAfterSolverChange
         Assert-HostFixture ($hostSyncAfterSolverChange.syncMode -eq 'unchanged') 'HostVanilla rebuilt for a CombatSolver-only change'
+        Assert-HostFixture ($hostSyncAfterSolverChange.snapshotAction -eq 'REUSED' -and $hostSyncAfterSolverChange.copiedFiles -eq 0) 'HostVanilla did not report complete reuse'
         Assert-HostFixture ($hostSyncAfterSolverChange.copiedBaseFiles -eq 0) 'HostVanilla copied base files after a CombatSolver-only change'
         Assert-HostFixture ($hostSyncAfterSolverChange.copiedOverlayFiles -eq 0) 'HostVanilla copied overlay files after a CombatSolver-only change'
 
@@ -103,8 +107,17 @@ if ($MultiplayerSnapshot) {
             -RitsuRoot $ritsuRoot -RitsuManifest $ritsuManifest -RitsuLibTargetVersion '0.107.1' -BaseGameVersion '0.107.1'
         $clientSync = Set-HeadlessGameSnapshot $context $clientPlan
         Assert-HostFixture ($clientSync.syncMode -eq 'overlay-incremental') 'ClientCombatSolver did not add its profile overlay incrementally'
+        Assert-HostFixture ($clientSync.snapshotAction -eq 'OVERLAY_UPDATED' -and $clientSync.baseGameAction -eq 'REUSED') 'Client overlay install action was not reported'
+        Assert-HostFixture ($clientSync.ritsuAction -eq 'INSTALLED' -and $clientSync.combatSolverAction -eq 'INSTALLED') 'Client overlay install actions were incomplete'
         Assert-HostFixture ($clientSync.copiedBaseFiles -eq 0) 'adding a profile overlay recopied the base snapshot'
+        Assert-HostFixture ($clientSync.copiedFiles -eq 7) 'initial client overlay copied an unexpected file count'
+        $clientRepeatPlan = Get-HeadlessMultiplayerSnapshotPlan -Context $context -Profile 'ClientCombatSolver' `
+            -CombatSolverDll $solverPlanArgs[2] -CombatSolverManifest $solverPlanArgs[3] -MemoryCleaner $solverPlanArgs[4] `
+            -RitsuRoot $ritsuRoot -RitsuManifest $ritsuManifest -RitsuLibTargetVersion '0.107.1' -BaseGameVersion '0.107.1'
+        $clientRepeatSync = Set-HeadlessGameSnapshot $context $clientRepeatPlan
+        Assert-HostFixture ($clientRepeatSync.snapshotAction -eq 'REUSED' -and $clientRepeatSync.copiedFiles -eq 0) 'second client prepare did not fully reuse the snapshot'
         $baseHashBeforeOverlayUpdate = (Get-FileHash -LiteralPath (Join-Path $context.GameRoot 'data.bin') -Algorithm SHA256).Hash
+        $baseWriteTimeBeforeOverlayUpdate = (Get-Item -LiteralPath (Join-Path $context.GameRoot 'data.bin')).LastWriteTimeUtc
 
         Set-Content -LiteralPath (Join-Path $buildRoot 'CombatSolver.dll') -Value 'solver-v3' -Encoding UTF8
         $clientPlanAfterSolverChange = Get-HeadlessMultiplayerSnapshotPlan -Context $context -Profile 'ClientCombatSolver' `
@@ -112,21 +125,39 @@ if ($MultiplayerSnapshot) {
             -RitsuRoot $ritsuRoot -RitsuManifest $ritsuManifest -RitsuLibTargetVersion '0.107.1' -BaseGameVersion '0.107.1'
         $clientSyncAfterSolverChange = Set-HeadlessGameSnapshot $context $clientPlanAfterSolverChange
         Assert-HostFixture ($clientSyncAfterSolverChange.syncMode -eq 'overlay-incremental') 'CombatSolver change did not use overlay sync'
+        Assert-HostFixture ($clientSyncAfterSolverChange.snapshotAction -eq 'OVERLAY_UPDATED' -and $clientSyncAfterSolverChange.baseGameAction -eq 'REUSED') 'CombatSolver overlay action was not reported'
+        Assert-HostFixture ($clientSyncAfterSolverChange.ritsuAction -eq 'REUSED' -and $clientSyncAfterSolverChange.combatSolverAction -eq 'UPDATED') 'CombatSolver-only action classification was incorrect'
         Assert-HostFixture ($clientSyncAfterSolverChange.copiedBaseFiles -eq 0) 'CombatSolver change recopied the base snapshot'
-        Assert-HostFixture ($clientSyncAfterSolverChange.copiedOverlayFiles -eq 1) 'CombatSolver change copied more than its changed payload'
+        Assert-HostFixture ($clientSyncAfterSolverChange.copiedOverlayFiles -eq 3 -and $clientSyncAfterSolverChange.copiedFiles -eq 3) 'CombatSolver change did not replace exactly its managed payload'
         Assert-HostFixture ((Get-Content -LiteralPath (Join-Path $context.GameRoot 'mods\CombatSolver\CombatSolver.dll') -Raw).Trim() -eq 'solver-v3') 'CombatSolver payload was not updated'
         Assert-HostFixture ((Get-FileHash -LiteralPath (Join-Path $context.GameRoot 'data.bin') -Algorithm SHA256).Hash -eq $baseHashBeforeOverlayUpdate) 'base snapshot changed during CombatSolver overlay sync'
+        Assert-HostFixture ((Get-Item -LiteralPath (Join-Path $context.GameRoot 'data.bin')).LastWriteTimeUtc -eq $baseWriteTimeBeforeOverlayUpdate) 'base snapshot file was rewritten during CombatSolver overlay sync'
 
         Set-Content -LiteralPath (Join-Path $ritsuRoot 'lib\0.107.1\STS2-RitsuLib.dll') -Value 'ritsu-v2' -Encoding UTF8
+        Remove-Item -LiteralPath (Join-Path $ritsuRoot 'lib\0.107.1\RitsuExtra.dat') -Force
         $clientPlanAfterRitsuChange = Get-HeadlessMultiplayerSnapshotPlan -Context $context -Profile 'ClientCombatSolver' `
             -CombatSolverDll $solverPlanArgs[2] -CombatSolverManifest $solverPlanArgs[3] -MemoryCleaner $solverPlanArgs[4] `
             -RitsuRoot $ritsuRoot -RitsuManifest $ritsuManifest -RitsuLibTargetVersion '0.107.1' -BaseGameVersion '0.107.1'
         $clientSyncAfterRitsuChange = Set-HeadlessGameSnapshot $context $clientPlanAfterRitsuChange
         Assert-HostFixture ($clientSyncAfterRitsuChange.syncMode -eq 'overlay-incremental') 'RitsuLib change did not use overlay sync'
+        Assert-HostFixture ($clientSyncAfterRitsuChange.snapshotAction -eq 'OVERLAY_UPDATED' -and $clientSyncAfterRitsuChange.baseGameAction -eq 'REUSED') 'Ritsu overlay action was not reported'
+        Assert-HostFixture ($clientSyncAfterRitsuChange.ritsuAction -eq 'UPDATED' -and $clientSyncAfterRitsuChange.combatSolverAction -eq 'REUSED') 'Ritsu-only action classification was incorrect'
         Assert-HostFixture ($clientSyncAfterRitsuChange.copiedBaseFiles -eq 0) 'RitsuLib change recopied the base snapshot'
-        Assert-HostFixture ($clientSyncAfterRitsuChange.copiedOverlayFiles -eq 1) 'RitsuLib change copied more than its changed payload'
-        Assert-HostFixture ((Get-Content -LiteralPath (Join-Path $context.GameRoot 'mods\.combatsolver-headless-ritsulib\STS2-RitsuLib.dll') -Raw).Trim() -eq 'ritsu-v2') 'RitsuLib payload was not updated'
+        Assert-HostFixture ($clientSyncAfterRitsuChange.copiedOverlayFiles -eq 3 -and $clientSyncAfterRitsuChange.copiedFiles -eq 3) 'Ritsu change did not replace exactly its managed payload'
+        Assert-HostFixture ((Get-Content -LiteralPath (Join-Path $context.GameRoot 'mods\.combatsolver-headless-ritsulib\lib\0.107.1\STS2-RitsuLib.dll') -Raw).Trim() -eq 'ritsu-v2') 'RitsuLib payload was not updated'
+        Assert-HostFixture (-not (Test-Path -LiteralPath (Join-Path $context.GameRoot 'mods\.combatsolver-headless-ritsulib\lib\0.107.1\RitsuExtra.dat')) -and
+            -not (Test-Path -LiteralPath (Join-Path $context.GameRoot 'mods\.combatsolver-headless-ritsulib\RitsuExtra.dat'))) 'stale Ritsu managed file was not removed'
         Assert-HostFixture ((Get-Content -LiteralPath (Join-Path $context.GameRoot 'mods\CombatSolver\CombatSolver.dll') -Raw).Trim() -eq 'solver-v3') 'RitsuLib update disturbed the CombatSolver payload'
+
+        $hostPlanAfterClient = Get-HeadlessMultiplayerSnapshotPlan @solverPlanArgs
+        $hostSyncAfterClient = Set-HeadlessGameSnapshot $context $hostPlanAfterClient
+        Assert-HostFixture ($hostSyncAfterClient.snapshotAction -eq 'OVERLAY_UPDATED' -and
+            $hostSyncAfterClient.ritsuAction -eq 'UPDATED' -and $hostSyncAfterClient.combatSolverAction -eq 'UPDATED') 'switching to HostVanilla did not remove managed overlays'
+        Assert-HostFixture (-not (Test-Path -LiteralPath (Join-Path $context.GameRoot 'mods\.combatsolver-headless-ritsulib'))) 'Ritsu managed overlay remained after HostVanilla switch'
+        Assert-HostFixture (-not (Test-Path -LiteralPath (Join-Path $context.GameRoot 'mods\CombatSolver'))) 'CombatSolver managed overlay remained after HostVanilla switch'
+        $clientRestoreSync = Set-HeadlessGameSnapshot $context $clientPlanAfterRitsuChange
+        Assert-HostFixture ($clientRestoreSync.ritsuAction -eq 'INSTALLED' -and $clientRestoreSync.combatSolverAction -eq 'INSTALLED' -and
+            $clientRestoreSync.copiedFiles -eq 6) 'client overlays were not restored after HostVanilla switch'
 
         Set-Content -LiteralPath (Join-Path $sourceGame 'data.bin') -Value 'base-data-v2' -Encoding UTF8
         $planAfterBaseChange = Get-HeadlessMultiplayerSnapshotPlan -Context $context -Profile 'ClientCombatSolver' `
@@ -134,7 +165,41 @@ if ($MultiplayerSnapshot) {
             -RitsuRoot $ritsuRoot -RitsuManifest $ritsuManifest -RitsuLibTargetVersion '0.107.1' -BaseGameVersion '0.107.1'
         $syncAfterBaseChange = Set-HeadlessGameSnapshot $context $planAfterBaseChange
         Assert-HostFixture ($syncAfterBaseChange.syncMode -eq 'full-rebuild') 'base-game change did not trigger a full rebuild'
+        Assert-HostFixture ($syncAfterBaseChange.snapshotAction -eq 'FULL_REBUILD' -and $syncAfterBaseChange.baseGameAction -eq 'REBUILT') 'base-game change did not report FULL_REBUILD'
         Assert-HostFixture ((Get-Content -LiteralPath (Join-Path $context.GameRoot 'data.bin') -Raw).Trim() -eq 'base-data-v2') 'full base rebuild did not update the base payload'
+
+        $forcedSync = Set-HeadlessGameSnapshot $context $planAfterBaseChange -ForceFullRebuild
+        Assert-HostFixture ($forcedSync.syncMode -eq 'full-rebuild' -and $forcedSync.snapshotAction -eq 'FULL_REBUILD') '-ForceRebuild did not force a full rebuild'
+        Assert-HostFixture ($forcedSync.copiedFiles -eq 9) '-ForceRebuild copied an unexpected file count'
+
+        Set-Content -LiteralPath (Join-Path $buildRoot 'CombatSolver.dll') -Value 'solver-v4' -Encoding UTF8
+        $liveProcess = $null
+        try {
+            $liveProcess = Start-Process -FilePath (Join-Path $context.GameRoot 'SlayTheSpire2.exe') `
+                -ArgumentList @('/c', 'ping', '127.0.0.1', '-n', '30') -PassThru
+            Start-Sleep -Milliseconds 300
+            $liveProcess.Refresh()
+            Assert-HostFixture (-not $liveProcess.HasExited) 'live snapshot fixture process exited early'
+            $liveRejected = $false
+            try {
+                $livePlan = Get-HeadlessMultiplayerSnapshotPlan -Context $context -Profile 'ClientCombatSolver' `
+                    -CombatSolverDll $solverPlanArgs[2] -CombatSolverManifest $solverPlanArgs[3] -MemoryCleaner $solverPlanArgs[4] `
+                    -RitsuRoot $ritsuRoot -RitsuManifest $ritsuManifest -RitsuLibTargetVersion '0.107.1' -BaseGameVersion '0.107.1'
+                Set-HeadlessGameSnapshot $context $livePlan | Out-Null
+            }
+            catch {
+                if ($_.Exception.Message -notlike '*process is alive*' -and $_.Exception.Message -notlike '*live*') { throw }
+                $liveRejected = $true
+            }
+            Assert-HostFixture $liveRejected 'live private game did not fail closed for overlay update'
+        }
+        finally {
+            if ($null -ne $liveProcess) {
+                $liveProcess.Refresh()
+                if (-not $liveProcess.HasExited) { Stop-Process -Id $liveProcess.Id -Force }
+                $liveProcess.WaitForExit()
+            }
+        }
 
         $solverOverlayPath = Join-Path $context.GameRoot 'mods\CombatSolver\CombatSolver.dll'
         Remove-Item -LiteralPath $solverOverlayPath -Force
@@ -148,7 +213,6 @@ if ($MultiplayerSnapshot) {
             $reparseFixtureAvailable = $false
         }
         if ($reparseFixtureAvailable) {
-            Set-Content -LiteralPath (Join-Path $buildRoot 'CombatSolver.dll') -Value 'solver-v4' -Encoding UTF8
             $reparseRejected = $false
             try {
                 $planAfterReparse = Get-HeadlessMultiplayerSnapshotPlan -Context $context -Profile 'ClientCombatSolver' `
@@ -167,15 +231,78 @@ if ($MultiplayerSnapshot) {
             $reparseEvidence = 'reparse-rejection-skipped-no-link-privilege'
         }
 
+        if ($reparseFixtureAvailable) {
+            Remove-Item -LiteralPath $solverOverlayPath -Force
+        }
+        $recoveredPlan = Get-HeadlessMultiplayerSnapshotPlan -Context $context -Profile 'ClientCombatSolver' `
+            -CombatSolverDll $solverPlanArgs[2] -CombatSolverManifest $solverPlanArgs[3] -MemoryCleaner $solverPlanArgs[4] `
+            -RitsuRoot $ritsuRoot -RitsuManifest $ritsuManifest -RitsuLibTargetVersion '0.107.1' -BaseGameVersion '0.107.1'
+        $recoveredSync = Set-HeadlessGameSnapshot $context $recoveredPlan
+        Assert-HostFixture ($recoveredSync.combatSolverAction -eq 'UPDATED' -and
+            (Get-Content -LiteralPath $solverOverlayPath -Raw).Trim() -eq 'solver-v4') 'overlay recovery did not restore the Solver payload'
+
+        $markerPath = Join-Path $context.GameRoot '.combatsolver-frozen-game.json'
+        $validMarkerRaw = Get-Content -LiteralPath $markerPath -Raw
+        $invalidMarker = $validMarkerRaw | ConvertFrom-Json -AsHashtable
+        $invalidMarker.runtimeRoot = Join-Path $snapshotFixture 'foreign-instance'
+        Write-HeadlessJson $markerPath $invalidMarker
+        $ownershipRejected = $false
+        try {
+            Set-HeadlessGameSnapshot $context $recoveredPlan | Out-Null
+        }
+        catch {
+            if ($_.Exception.Message -notlike '*does not match this runtime*') { throw }
+            $ownershipRejected = $true
+        }
+        Assert-HostFixture $ownershipRejected 'snapshot ownership mismatch was not rejected'
+        Assert-HostFixture (Test-Path -LiteralPath (Join-Path $context.GameRoot 'SlayTheSpire2.exe') -PathType Leaf) 'ownership mismatch removed the private game'
+        Set-Content -LiteralPath $markerPath -Value $validMarkerRaw -Encoding UTF8
+
         $marker = Get-Content -LiteralPath (Join-Path $context.GameRoot '.combatsolver-frozen-game.json') -Raw | ConvertFrom-Json -AsHashtable
         Assert-HostFixture ($marker.schemaVersion -eq 2 -and $marker.snapshotKind -eq 'base-plus-profile-overlay') 'incremental snapshot marker was incomplete'
-        Assert-HostFixture (@($marker.baseFiles).Count -eq 3 -and @($marker.overlayFiles).Count -eq 5) 'snapshot marker file topology was incomplete'
-        Write-Output "MULTIPLAYER_SNAPSHOT_SYNC_SELFTEST_PASS base-persistence/solver-overlay/ritsu-overlay/host-isolation/base-rebuild/$reparseEvidence"
+        Assert-HostFixture ($marker.baseGameId -and $marker.ritsuArtifactId -and $marker.combatSolverArtifactId) 'snapshot marker did not contain split artifact identities'
+        Assert-HostFixture (@($marker.baseFiles).Count -eq 3 -and @($marker.ritsuFiles).Count -eq 3 -and @($marker.combatSolverFiles).Count -eq 3) 'snapshot marker file topology was incomplete'
+
+        $prepareRuntimeBase = Join-Path (Get-HeadlessCanonicalPath (Join-Path $PSScriptRoot '..\..\..')) `
+            ('.local\multiplayer-snapshot-contract-' + [Guid]::NewGuid().ToString('N'))
+        $prepareScript = Join-Path $PSScriptRoot 'multiplayer-lab\prepare-instances.ps1'
+        function Invoke-PrepareContract {
+            param([string]$Profile, [string]$RuntimeRoot, [switch]$Force)
+            $childArgs = @(
+                '-NoLogo', '-NoProfile', '-File', $prepareScript,
+                '-Profile', $Profile, '-Instance', ('contract-' + $Profile.ToLowerInvariant()),
+                '-RuntimeRoot', $RuntimeRoot, '-Sts2GameRoot', $sourceGame,
+                '-RitsuWorkshopRoot', $ritsuRoot, '-CombatSolverBuildDir', $buildRoot
+            )
+            if ($Force.IsPresent) { $childArgs += '-ForceRebuild' }
+            $childOutput = @(& pwsh @childArgs)
+            if ($LASTEXITCODE -ne 0) {
+                throw "prepare-instances contract failed for ${Profile}: $($childOutput -join ' ')"
+            }
+            return (($childOutput -join [Environment]::NewLine) | ConvertFrom-Json)
+        }
+        $hostPrepare = Invoke-PrepareContract 'HostVanilla' (Join-Path $prepareRuntimeBase 'host')
+        Assert-HostFixture ($hostPrepare.snapshotAction -eq 'FULL_REBUILD' -and $hostPrepare.copiedFiles -eq 3) 'prepare output did not report initial Host full rebuild'
+        Set-Content -LiteralPath (Join-Path $buildRoot 'CombatSolver.dll') -Value 'solver-v5' -Encoding UTF8
+        $hostPrepareReuse = Invoke-PrepareContract 'HostVanilla' (Join-Path $prepareRuntimeBase 'host')
+        Assert-HostFixture ($hostPrepareReuse.snapshotAction -eq 'REUSED' -and $hostPrepareReuse.baseGameAction -eq 'REUSED' -and
+            $hostPrepareReuse.combatSolverAction -eq 'REUSED' -and $hostPrepareReuse.copiedFiles -eq 0) 'prepare output did not report Host reuse'
+        $clientPrepare = Invoke-PrepareContract 'ClientCombatSolver' (Join-Path $prepareRuntimeBase 'client')
+        Assert-HostFixture ($clientPrepare.snapshotAction -eq 'FULL_REBUILD' -and $clientPrepare.copiedFiles -eq 9) 'prepare output did not report initial Client full rebuild'
+        Set-Content -LiteralPath (Join-Path $buildRoot 'CombatSolver.dll') -Value 'solver-v6' -Encoding UTF8
+        $clientPrepareOverlay = Invoke-PrepareContract 'ClientCombatSolver' (Join-Path $prepareRuntimeBase 'client')
+        Assert-HostFixture ($clientPrepareOverlay.snapshotAction -eq 'OVERLAY_UPDATED' -and
+            $clientPrepareOverlay.baseGameAction -eq 'REUSED' -and $clientPrepareOverlay.ritsuAction -eq 'REUSED' -and
+            $clientPrepareOverlay.combatSolverAction -eq 'UPDATED' -and $clientPrepareOverlay.copiedFiles -eq 3) 'prepare output did not report Solver-only overlay update'
+        Write-Output "MULTIPLAYER_SNAPSHOT_SYNC_SELFTEST_PASS base-persistence/solver-overlay/ritsu-overlay/host-isolation/base-rebuild/force-rebuild/live-rejection/ownership-rejection/prepare-output/$reparseEvidence"
         return
     }
     finally {
         if (Test-Path -LiteralPath $snapshotFixture) {
             Remove-Item -LiteralPath $snapshotFixture -Recurse -Force
+        }
+        if ($null -ne $prepareRuntimeBase -and (Test-Path -LiteralPath $prepareRuntimeBase)) {
+            Remove-Item -LiteralPath $prepareRuntimeBase -Recurse -Force
         }
     }
 }

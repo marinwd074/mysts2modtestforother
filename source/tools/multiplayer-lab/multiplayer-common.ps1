@@ -54,6 +54,17 @@ function Read-MultiplayerInstance {
         -not (Test-Path -LiteralPath $frozenMarker -PathType Leaf)) {
         throw "Multiplayer game snapshot is missing or unowned: $gameRoot"
     }
+    Assert-HeadlessNoReparsePoint $frozenMarker
+    $frozen = Get-Content -LiteralPath $frozenMarker -Raw | ConvertFrom-Json -AsHashtable
+    if ($frozen.schemaVersion -ne 2 -or
+        -not [String]::Equals([string]$frozen.snapshotKind, 'base-plus-profile-overlay', [StringComparison]::Ordinal) -or
+        -not [String]::Equals([string]$frozen.runtimeRoot, $root, [StringComparison]::OrdinalIgnoreCase) -or
+        -not [String]::Equals([string]$frozen.profile, [string]$profile.profile, [StringComparison]::OrdinalIgnoreCase) -or
+        [string]::IsNullOrWhiteSpace([string]$frozen.baseGameId) -or
+        -not $frozen.ContainsKey('ritsuArtifactId') -or
+        -not $frozen.ContainsKey('combatSolverArtifactId')) {
+        throw "Multiplayer game snapshot ownership/profile marker does not match: $frozenMarker"
+    }
     if (-not [String]::Equals([string]$profile.gameRoot, $gameRoot, [StringComparison]::OrdinalIgnoreCase)) {
         throw "Multiplayer profile game root does not match its instance: $profilePath"
     }

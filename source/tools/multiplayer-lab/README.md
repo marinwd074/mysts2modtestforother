@@ -114,9 +114,14 @@ base-game snapshot，并把 RitsuLib/CombatSolver 放在 profile overlay 中：
 - 游戏版本或底座文件变化、旧 schema、底座完整性校验失败，才执行 staging 全量重建。
 - CombatSolver 构建变化只更新 CombatSolver overlay 文件；RitsuLib 变化只更新 RitsuLib
   overlay 文件。`HostVanilla` 没有这些 overlay，因此不会因 CombatSolver 构建变化重建。
-- `syncMode` 会写入 `multiplayer-profile.json` 和命令结果，值为
-  `full-rebuild`、`overlay-incremental` 或 `unchanged`。`-ForceRebuild` 仍可显式要求全量
-  重建，也用于切换已有实例的 profile。
+- marker 会拆开保存 `baseGameId`、`ritsuArtifactId`、`combatSolverArtifactId`；输出中的
+  `snapshotAction` 为 `FULL_REBUILD`、`OVERLAY_UPDATED` 或 `REUSED`，并分别给出
+  `baseGameAction`、`ritsuAction`、`combatSolverAction` 和 `copiedFiles`。`syncMode` 保留
+  `full-rebuild`、`overlay-incremental`、`unchanged` 供兼容审计。`-ForceRebuild` 仍可显式
+  要求全量重建，也用于切换已有实例的 profile。
+- Overlay 先复制到带 hash 校验的临时 managed tree，再在停止游戏后 rename 替换；Ritsu
+  和 CombatSolver 的 DLL/JSON/辅助文件不会在同一 managed overlay 内出现半更新状态，失败
+  会回滚旧目录。
 - 增量更新仍只在私有 owned root 内进行，逐文件拒绝 reparse point，并在目标游戏进程运行
   时禁止覆盖；正式证据仍与 snapshot/运行目录隔离，不会写入 Steam 安装或正式 `MODS`。
 

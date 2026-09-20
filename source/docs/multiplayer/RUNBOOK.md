@@ -49,7 +49,12 @@ base-game snapshot，RitsuLib 与 CombatSolver 作为 profile overlay 增量同�
 游戏版本/底座变化、底座完整性失败或旧 schema 才会触发 staging 全量重建；CombatSolver
 构建变化只更新 CombatSolver payload，RitsuLib 变化只更新 Ritsu payload，HostVanilla
 不会因为 CombatSolver 构建变化重建。输出中的 `syncMode` 会标明
-`full-rebuild`、`overlay-incremental` 或 `unchanged`。
+`full-rebuild`、`overlay-incremental` 或 `unchanged`；`snapshotAction` 会标明
+`FULL_REBUILD`、`OVERLAY_UPDATED` 或 `REUSED`，并同时给出 `baseGameAction`、
+`ritsuAction`、`combatSolverAction`、三个独立 identity 和 `copiedFiles`。
+
+RitsuLib 与 CombatSolver overlay 都先在临时 managed tree 中完成 SHA-256 校验，再执行
+目录级 rename；目标进程仍运行时不会进入替换阶段，失败会保留/恢复旧 managed tree。
 
 仍须使用现有 `-ForceRebuild` 处理显式全量重建或 profile 切换。增量同步不改变既有安全
 合同：只操作带 ownership marker 的 D: 私有 root，拒绝 reparse point，运行中的目标游戏
