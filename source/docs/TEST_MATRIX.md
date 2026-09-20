@@ -12,7 +12,7 @@
 - MP-2B 合同：`MultiplayerSafeExecuteChecks` 当前 39 项通过，覆盖两动作上限、`Authorized → Executing → AwaitingWorldUpdate → Revalidating` 会话、WorldVersion 冲突/单调接受、旧授权中止、预期本地变化、远端/未知变化、动作不匹配和不稳定世界的 fail-closed 判定；当前仅为实现/合同 PASS。
 - MP-2B 真实 Smoke：两动作 Host/Client 正常运行 `UNVERIFIED/BLOCKED`；两动作之间远端干扰 `UNVERIFIED/BLOCKED`。两组日志必须由用户完成并通过 MP2B 验证器后，才可升级实机状态。
 - MP-2A 证据验证器：`test-mp2a-validator.ps1` 在 CI 中只验证 parser 的 PASS/FAIL/UNVERIFIED 判定；真实运行使用 `validate-mp2a-results.ps1`，必须看到 Safe Execute capability、恰好一个原生 `PlayCardAction`、无药水/自动 EndTurn、动作后 WorldVersion 失效和新搜索，才能报告 Smoke PASS。
-- MP-2B 证据验证器：`test-mp2b-validator.ps1` 的 5 个合成用例通过；真实运行使用 `validate-mp2b-results.ps1`，必须看到同一 request ID 的两个原生 `PlayCardAction`、两次动作重验证、无 EndTurn/药水/Choice/Replay、每次 WorldVersion 前进及动作后新搜索，才能报告正常两动作 Smoke PASS。远端干扰场景必须单独确认 `MP2B_REMOTE_DELTA_ABORT` 且没有第二个原生动作，不得套用正常 Smoke PASS。
+- MP-2B 证据验证器：`test-mp2b-validator.ps1` 的正常 Smoke 5 个合成用例和 `test-mp2b-interference-validator.ps1` 的远端干扰 5 个合成用例均通过；真实运行分别使用 `validate-mp2b-results.ps1` 与 `validate-mp2b-interference-results.ps1`。正常 Smoke 必须看到同一 request ID 的两个原生 `PlayCardAction`、两次动作重验证、无 EndTurn/药水/Choice/Replay、每次 WorldVersion 前进及动作后新搜索；远端干扰必须确认 `MP2B_REMOTE_DELTA_ABORT` 且没有第二个原生动作。
 - MP-2A 日志落盘门禁：`DiagnosticLogTests` 已纳入 L1 合同套件，覆盖 journal 正常退出时排空后台写队列；Multiplayer Lab 默认优雅停止 owned 进程，`-Mode Force` 仅用于显式清理且不能作为完整 journal 证据。
 - Advisor 复验修正：side-turn relic 只读取已捕获参与者；原生多人 block scaling 仅在 enemy/powered-block 路径计算；EndTurn replay 只处理 `RootCapturedPlayers`，未知远端 turn 仍 fail closed。
 - Advisor Smoke 只读合同：首轮 Probe `51/51` 条为 `readOnly=true`，`actionsEnqueued=0`、`customNetworkPacketSent=0`；生命周期复验追加 Probe `257/257` 只读、无动作入队/自定义网络包。路线动作仅为模拟回放，未启用 Safe Execute、自动 EndTurn、药水或选择。

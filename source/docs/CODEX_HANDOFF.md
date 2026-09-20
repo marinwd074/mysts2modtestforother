@@ -6,7 +6,7 @@
 - MP-0 Core / lifecycle：PASS。
 - MP-1 Advisor：受控 Smoke PASS。
 - MP-2A：显式 `safe-execute`/`safe-execute-lab` 的一动作 Host/Client Smoke 已 PASS，作为历史基线保留；该证据不等于两动作能力已通过。
-- MP-2B：当前工作树已实现两动作上限、显式 SafeExecutionSession、动作后稳定世界等待和本地/远端变化重验证；`MultiplayerSafeExecuteChecks` 39 项、MP2B 验证器 5 项和 Release 构建已通过，但尚无真实两动作 Host/Client 或远端干扰证据，状态仍为 `BLOCKED/UNVERIFIED`。
+- MP-2B：当前工作树已实现两动作上限、显式 SafeExecutionSession、动作后稳定世界等待和本地/远端变化重验证；`MultiplayerSafeExecuteChecks` 39 项、正常/远端干扰验证器各 5 项和 Release 构建已通过，但尚无真实两动作 Host/Client 或远端干扰证据，状态仍为 `BLOCKED/UNVERIFIED`。
 - Multiplayer Instant、自动 EndTurn、Potion、Choice、Full Auto、跨回合和队友目标继续关闭；默认多人仍保持 Probe。
 - 本轮没有为 MP2B 声明新的 GitHub Actions 结果；当前实现/合同结果仅代表本地定向验证，不能替代实机 Smoke。
 

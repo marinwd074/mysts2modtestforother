@@ -9,7 +9,7 @@
 - **MP-1 Advisor：SMOKE PASS（受控范围）**：静态合同与 Release 构建已通过；默认仍是 Probe，只有 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才进入当前回合的只读路线显示，不执行动作。fresh `-bbfix` client 已形成 `SEARCH_COMPLETE=5`、原生完成通知和路线回放证据，Probe 保持只读；远端私有字段保持 `Unknown`，未知远端遗物仍 fail closed。
 - **MP-2A Safe Execute Lab Smoke：PASS（受控范围，2026-09-20）**：HostVanilla + ClientCombatSolver 在 `safe-execute-lab` 中完成一次本地普通牌的原生 `PlayCardAction`；能量/手牌/敌方生命按预期变化，且验证器 7 项检查全部 PASS。
 - **MP-2A Safe Execute：PASS（显式一动作范围，2026-09-20）**：正式 `safe-execute` token 已在 HostVanilla + ClientCombatSolver 中完成一次本地普通牌 Smoke；验证器 7 项检查全部 PASS。摘要见 [`evidence/mp2-safe-execute-formal-2026-09-20.json`](../evidence/mp2-safe-execute-formal-2026-09-20.json)。这是 MP2B 之前的一动作基线，不代表当前两动作实机已通过。
-- **MP-2B Safe Execute：实现/合同完成，实机 UNVERIFIED**：当前源码已加入显式 SafeExecutionSession、两动作上限、动作后稳定世界等待、预期本地变化与远端/未知变化归因；`MultiplayerSafeExecuteChecks` 39 项和 MP2B 验证器 5 项合成检查通过。Host/Client 两动作正常 Smoke、两动作之间远端干扰 Smoke 仍待用户执行并留存日志。
+- **MP-2B Safe Execute：实现/合同完成，实机 UNVERIFIED**：当前源码已加入显式 SafeExecutionSession、两动作上限、动作后稳定世界等待、预期本地变化与远端/未知变化归因；`MultiplayerSafeExecuteChecks` 39 项通过，正常 Smoke 与远端干扰验证器各 5 项合成检查通过。Host/Client 两动作正常 Smoke、两动作之间远端干扰 Smoke 仍待用户执行并留存日志。
 
 ## AB 组连接实机结果（2026-09-19）
 

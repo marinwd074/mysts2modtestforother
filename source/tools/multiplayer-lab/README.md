@@ -96,6 +96,10 @@ Lobby、wire 或战斗证据。
   同一请求的两个原生 `PlayCardAction`、两次动作后重验证、无 EndTurn/药水/Choice/
   Replay、单调 WorldVersion 以及动作后的新搜索。`test-mp2b-validator.ps1` 只测试
   该验证器的 5 个合成用例；二者都不能替代真实 Host/Client 证据。
+- `validate-mp2b-interference-results.ps1` 单独校验远端干扰场景：第一张牌完成后
+  记录 `MP2B_REMOTE_DELTA_ABORT`、不捕获第二张原生牌、没有 EndTurn/药水/Choice/
+  Replay，并在中止后重新搜索。`test-mp2b-interference-validator.ps1` 覆盖 5 个
+  合成用例；它与正常两动作验证器不能互相替代。
 
 Lab Client 会自动设置 `COMBATSOLVER_MULTIPLAYER_PROBE_EVIDENCE=1`，因此
 Probe JSONL 只落在实例诊断目录；普通桌面运行不会因为 Probe 观察而持续写证据。
@@ -215,7 +219,15 @@ pwsh -NoLogo -NoProfile -File .\validate-mp2b-results.ps1 `
 正常 Smoke 通过要求验证器返回 `MULTIPLAYER_MP-2B_PASS`。另做一次远端干扰场景：
 第一张牌完成、第二张牌尚未执行时，由另一 Client 进行一次公开动作；预期当前 Client
 记录 `MP2B_REMOTE_DELTA_ABORT`、不再捕获第二个原生动作并重新搜索。该场景是安全边界
-证据，不应按正常两动作 PASS 计数。
+证据，不应按正常两动作 PASS 计数。验证远端干扰日志：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-mp2b-interference-results.ps1 `
+  -LogPath '<post-restart-client-log>' `
+  -OutputPath '.\.local\multiplayer-lab\results\mp2b-interference-summary.json'
+~~~
+
+验证器返回 `MULTIPLAYER_MP-2B_REMOTE_ABORT_PASS` 才表示安全中止证据完整。
 
 退出码：0 为 PASS，1 为矛盾/无效证据，2 为缺失或仍为 UNVERIFIED。真实
 Host/Client 运行证据必须带可审查的日志位置；单进程模拟和合成 JSON 不可作为

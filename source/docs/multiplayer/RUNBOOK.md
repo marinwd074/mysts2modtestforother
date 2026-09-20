@@ -118,7 +118,16 @@ pwsh -NoLogo -NoProfile -File .\validate-mp2b-results.ps1 `
 身份与 UI 行为后才能记为 PASS。另做一次远端干扰 Smoke：第一张牌完成、第二张牌尚未
 执行时，由另一 Client 进行一次公开动作；预期当前 Client 记录
 `MP2B_REMOTE_DELTA_ABORT`，不再捕获第二个原生动作，并启动新的搜索。该场景只证明
-安全中止与重搜，不计入正常两动作 PASS。
+安全中止与重搜，不计入正常两动作 PASS。远端干扰日志使用独立验证器：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-mp2b-interference-results.ps1 `
+  -LogPath '<post-restart-client-log>' `
+  -OutputPath '.\.local\multiplayer-lab\results\mp2b-interference-summary.json'
+~~~
+
+只有返回 `MULTIPLAYER_MP-2B_REMOTE_ABORT_PASS` 才能记为安全中止证据；正常两动作
+验证器不能替代这个场景。
 
 ## MP-2A 收尾
 
