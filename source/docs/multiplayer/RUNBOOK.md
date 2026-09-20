@@ -92,7 +92,7 @@ pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
 `PlayCardAction`、动作后 `WorldVersion` 失效和新的 debounce search。它不代表当前
 MP-2B 两动作实机已通过。
 
-## MP-2B 两动作 Smoke（当前待实机）
+## MP-2B 两动作 Smoke（已完成实机；复验步骤）
 
 正式 Client 第二次启动继续使用上面的 `HostVanilla + ClientCombatSolver`、Steam
 transport off 和 Mod warm-up 后的隔离实例，但模式必须是：
@@ -133,6 +133,13 @@ pwsh -NoLogo -NoProfile -File .\validate-mp2b-interference-results.ps1 `
 只有返回 `MULTIPLAYER_MP-2B_REMOTE_ABORT_PASS` 才能记为安全中止证据；正常两动作
 验证器不能替代这个场景。
 
+2026-09-20 实机结果：正常两动作验证器返回 `MULTIPLAYER_MP-2B_PASS`，同一 deployment
+完成 `DEFEND_IRONCLAD`、`STRIKE_IRONCLAD` 两张本地普通牌；远端干扰验证器对真实
+`request_id=1` 返回 `MULTIPLAYER_MP-2B_REMOTE_ABORT_PASS`，第一张牌完成后捕获到
+远端公开变化，未捕获第二张原生牌，并启动新的搜索。摘要见
+[`evidence/mp2b-smoke-2026-09-20.json`](evidence/mp2b-smoke-2026-09-20.json)。同一日志若包含
+多次用户尝试，干扰验证器可用 `-RequestId <deployment-request-id>` 选择一个完整 session。
+
 ## MP-2A 收尾
 
 游戏进程停止仍由 Codex/Agent 负责，默认使用 Graceful；只有游戏窗口中的点击交给用户。
@@ -151,5 +158,5 @@ pwsh -NoLogo -NoProfile -File .\validate-mp2a-results.ps1 `
 ~~~
 
 默认安装仍不因本手册自动进入 Safe Execute；Multiplayer Instant、Potion、Choice、
-自动 EndTurn、Full Auto、跨回合和队友目标也保持关闭。MP2B 在两组实机证据完成前仍
-是 `UNVERIFIED/BLOCKED`。
+自动 EndTurn、Full Auto、跨回合和队友目标也保持关闭。MP2B 当前已在上述受控范围内
+通过；后续扩大能力边界仍需独立计划和独立实机证据。

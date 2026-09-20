@@ -11,11 +11,16 @@ function Invoke-Case {
     param(
         [Parameter(Mandatory)][string]$Name,
         [Parameter(Mandatory)][string[]]$Lines,
-        [Parameter(Mandatory)][int]$ExpectedExitCode
+        [Parameter(Mandatory)][int]$ExpectedExitCode,
+        [int]$RequestId = 0
     )
     $path = Join-Path $root "$Name.log"
     [IO.File]::WriteAllLines($path, $Lines, [Text.UTF8Encoding]::new($false))
-    $output = & pwsh -NoLogo -NoProfile -File $validator -LogPath $path -Json 2>&1
+    if ($RequestId -gt 0) {
+        $output = & pwsh -NoLogo -NoProfile -File $validator -LogPath $path -RequestId $RequestId -Json 2>&1
+    } else {
+        $output = & pwsh -NoLogo -NoProfile -File $validator -LogPath $path -Json 2>&1
+    }
     $exitCode = $LASTEXITCODE
     if ($exitCode -ne $ExpectedExitCode) {
         throw "$Name expected exit $ExpectedExitCode but received $exitCode. Output: $($output -join ' ')"
@@ -34,6 +39,11 @@ try {
         '[CombatSolver/MultiplayerAdvisor] SEARCH_DEBOUNCED_START world_version=5 request_id=13'
     )
     Invoke-Case -Name 'pass-after-first-action' -Lines $base -ExpectedExitCode 0
+
+    $secondSession = @($base | Where-Object { $_ -notmatch 'MP2B_CAPABILITY' } | ForEach-Object {
+            $_ -replace 'request_id=12\b', 'request_id=13'
+        })
+    Invoke-Case -Name 'request-id-selects-one-session' -Lines ($base + $secondSession) -ExpectedExitCode 0 -RequestId 12
 
     $duringRevalidation = @($base | ForEach-Object {
             $_ -replace 'decision=SafeToContinue reason=safe_to_continue', 'decision=RemoteOrUnknownChange reason=remote_or_unknown_change'

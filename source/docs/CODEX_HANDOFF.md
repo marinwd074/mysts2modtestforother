@@ -6,9 +6,9 @@
 - MP-0 Core / lifecycle：PASS。
 - MP-1 Advisor：受控 Smoke PASS。
 - MP-2A：显式 `safe-execute`/`safe-execute-lab` 的一动作 Host/Client Smoke 已 PASS，作为历史基线保留；该证据不等于两动作能力已通过。
-- MP-2B：当前工作树已实现两动作上限、显式 SafeExecutionSession、动作后稳定世界等待和本地/远端变化重验证；`MultiplayerSafeExecuteChecks` 39 项、正常/远端干扰验证器各 5 项和 Release 构建已通过，但尚无真实两动作 Host/Client 或远端干扰证据，状态仍为 `BLOCKED/UNVERIFIED`。
+- MP-2B：两动作上限、显式 SafeExecutionSession、动作后稳定世界等待和本地/远端变化重验证已完成；`MultiplayerSafeExecuteChecks` 39 项、正常/远端干扰验证器合成回归和 Release 构建已通过，真实正常两动作与远端干扰 Smoke 也已分别返回 PASS。摘要见 [`mp2b-smoke-2026-09-20.json`](multiplayer/evidence/mp2b-smoke-2026-09-20.json)。
 - Multiplayer Instant、自动 EndTurn、Potion、Choice、Full Auto、跨回合和队友目标继续关闭；默认多人仍保持 Probe。
-- 本轮没有为 MP2B 声明新的 GitHub Actions 结果；当前实现/合同结果仅代表本地定向验证，不能替代实机 Smoke。
+- 本轮没有为 MP2B 声明新的 GitHub Actions 结果；实机结论来自隔离 Multiplayer Lab 的 Host/Client journal 与对应验证器，不等同于 GitHub Actions 结果。
 
 ## 项目规则已放宽
 
@@ -44,8 +44,12 @@
 - 两个隔离实例均使用默认 `Graceful` 停止。以上 Lab 证据与本轮正式 token 证据均只收口单张本地普通牌边界；正式 token 运行的机器摘要见 [`mp2-safe-execute-formal-2026-09-20.json`](multiplayer/evidence/mp2-safe-execute-formal-2026-09-20.json)。
 - 正式 token 运行使用 Seed `QPMEQDJ5AQ`、Encounter `NIBBITS_WEAK`；一次 `DEFEND_IRONCLAD` 原生 `PlayCardAction` 完成后，Probe 观察到能量 `3 -> 2`、手牌 `5 -> 4`、弃牌堆增加该牌。验证器返回 `MULTIPLAYER_MP-2A_PASS`，7 项检查全部 PASS。
 
+## 本轮 MP-2B 实机证据（2026-09-20）
+
+- 正常 Smoke：`HostVanilla + ClientCombatSolver`、Steam off、Mod warm-up 排除；同一 deployment 捕获两次本地原生 `PlayCardAction`，两次动作重验证通过，`end_turn=false`，验证器返回 `MULTIPLAYER_MP-2B_PASS`。
+- 远端干扰 Smoke：三方 Host/Client 运行中，真实 `request_id=1` 在第一张牌后观察到远端公开变化，记录 `MP2B_REMOTE_DELTA_ABORT`，没有第二个 `NATIVE_ACTION_CAPTURED`，随后出现新的 debounce search；验证器返回 `MULTIPLAYER_MP-2B_REMOTE_ABORT_PASS`。
+- 证据摘要：[`mp2b-smoke-2026-09-20.json`](multiplayer/evidence/mp2b-smoke-2026-09-20.json)。本轮三个 owned 进程均以 `Graceful` 停止。
+
 ## 当前下一步
 
-- 构建并装入当前 Release DLL 后，按 RUNBOOK 完成一次两动作 `safe-execute` Smoke，再完成一次两动作之间的远端干扰 Smoke；运行 `validate-mp2b-results.ps1`，在两组实机证据齐全前不要把 MP2B 升级为 PASS。
-
-继续保持默认 Probe，以及 Multiplayer Instant、自动 EndTurn、Potion、Choice、Full Auto、跨回合和队友目标关闭。
+MP-2B 当前受控范围已完成；继续保持默认 Probe，以及 Multiplayer Instant、自动 EndTurn、Potion、Choice、Full Auto、跨回合和队友目标关闭。任何超出“两张本地普通牌/当前回合/远端变化中止”的扩展，另立计划并重新获取实机证据。

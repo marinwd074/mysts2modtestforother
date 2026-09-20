@@ -8,6 +8,8 @@ param(
 
     [string]$OutputPath = '',
 
+    [int]$RequestId = 0,
+
     [switch]$Json
 )
 
@@ -69,7 +71,15 @@ if ($capability.Count -eq 1) {
     Add-Check 'mp2bCapability' FAIL (Join-Evidence $capability) 'A single client run must expose one MP2B capability marker.'
 }
 
-$start = @($records | Where-Object Text -Match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_DEPLOY_START .*action_count=2 .*max_actions=2')
+$startPattern = '\[CombatSolver/MultiplayerSafeExecute\] MP2B_DEPLOY_START .*action_count=2 .*max_actions=2'
+$start = if ($RequestId -gt 0) {
+    @($records | Where-Object {
+            $_.Text -match $startPattern -and
+            $_.Text -match ('request_id=' + [regex]::Escape([string]$RequestId) + '\b')
+        })
+} else {
+    @($records | Where-Object Text -Match $startPattern)
+}
 if ($start.Count -eq 1) {
     Add-Check 'twoActionDeploymentStart' PASS (Format-Evidence $start[0])
 } elseif ($start.Count -eq 0) {
@@ -83,7 +93,27 @@ if ($start.Count -eq 1 -and $start[0].Text -match 'request_id=(\d+)') {
     $requestId = [int]$Matches[1]
 }
 
-$native = @($records | Where-Object Text -Match '\[CombatSolver/MultiplayerSafeExecute\] NATIVE_ACTION_CAPTURED')
+$sessionRecords = $records
+if ($RequestId -gt 0) {
+    if ($start.Count -eq 1) {
+        $sessionStartIndex = [int]$start[0].Index
+        $nextStart = @($records | Where-Object {
+                $_.Index -gt $sessionStartIndex -and $_.Text -match $startPattern
+            } | Sort-Object Index | Select-Object -First 1)
+        $sessionEndIndex = if ($nextStart.Count -eq 1) {
+            [int]$nextStart[0].Index - 1
+        } else {
+            [int]::MaxValue
+        }
+        $sessionRecords = @($records | Where-Object {
+                $_.Index -ge $sessionStartIndex -and $_.Index -le $sessionEndIndex
+            })
+    } else {
+        $sessionRecords = @()
+    }
+}
+
+$native = @($sessionRecords | Where-Object Text -Match '\[CombatSolver/MultiplayerSafeExecute\] NATIVE_ACTION_CAPTURED')
 $nativeAction0 = @($native | Where-Object Text -Match 'action_index=0\b')
 $nativeAction1 = @($native | Where-Object Text -Match 'action_index=1\b')
 $invalidNative = @($native | Where-Object {
@@ -98,7 +128,7 @@ if ($native.Count -eq 1 -and $nativeAction0.Count -eq 1 -and $nativeAction1.Coun
     Add-Check 'singleNativeActionBeforeAbort' FAIL (Join-Evidence $native) 'Remote interference must stop before a second native PlayCardAction.'
 }
 
-$reconciled = @($records | Where-Object Text -Match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_ACTION_RECONCILED')
+$reconciled = @($sessionRecords | Where-Object Text -Match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_ACTION_RECONCILED')
 $firstReconciliation = @($reconciled | Where-Object {
         $_.Text -match 'action_index=0\b' -and
         $_.Text -match 'decision=(?:SafeToContinue|RemoteOrUnknownChange)\b'
@@ -112,7 +142,7 @@ if ($reconciled.Count -eq 1 -and $firstReconciliation.Count -eq 1 -and $unexpect
     Add-Check 'firstActionRevalidation' FAIL (Join-Evidence $reconciled) 'The interference run must revalidate action 1 and must not revalidate a second action.'
 }
 
-$abort = @($records | Where-Object Text -Match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_REMOTE_DELTA_ABORT')
+$abort = @($sessionRecords | Where-Object Text -Match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_REMOTE_DELTA_ABORT')
 $abortRequestMatches = @($abort | Where-Object {
         $null -ne $requestId -and $_.Text -match ("request_id=" + [regex]::Escape([string]$requestId) + '\b')
     })
@@ -127,10 +157,10 @@ if ($abort.Count -eq 1 -and $abortRequestMatches.Count -eq 1 -and $abortComplete
 
 $abortIndex = if ($abort.Count -eq 1) { [int]$abort[0].Index } else { [int]::MaxValue }
 $deploymentStartIndex = if ($start.Count -eq 1) { [int]$start[0].Index } else { 0 }
-$deploymentRecords = @($records | Where-Object {
+$deploymentRecords = @($sessionRecords | Where-Object {
         $_.Index -ge $deploymentStartIndex -and $_.Index -le $abortIndex
     })
-$forbidden = @($records | Where-Object {
+$forbidden = @($sessionRecords | Where-Object {
         $_.Text -match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_DEPLOY_END' -or
         $_.Text -match 'custom_network_api_used=true\b' -or
         $_.Text -match 'NATIVE_ACTION_CAPTURED .*action_index=1\b'
@@ -164,7 +194,7 @@ if ($research.Count -gt 0) {
 }
 
 if ($null -ne $requestId) {
-    $sessionLines = @($records | Where-Object {
+    $sessionLines = @($sessionRecords | Where-Object {
             ($_.Text -match 'request_id=(\d+)') -and
             ($_.Text -match 'MP2B_(?:DEPLOY_START|NATIVE_ACTION_CAPTURED|ACTION_RECONCILED|REMOTE_DELTA_ABORT|DEPLOY_ABORT)')
         })
@@ -193,6 +223,7 @@ $result = [ordered]@{
     phase = 'MP-2B-remote-interference'
     status = $status
     validatedUtc = [DateTimeOffset]::UtcNow.ToString('O')
+    requestId = if ($RequestId -gt 0) { $RequestId } else { $requestId }
     logFiles = @($LogPath | ForEach-Object { (Resolve-Path -LiteralPath $_).Path })
     checks = @($checks)
     limitations = @(
