@@ -98,8 +98,9 @@ Lobby、wire 或战斗证据。
   该验证器的 5 个合成用例；二者都不能替代真实 Host/Client 证据。
 - `validate-mp2b-interference-results.ps1` 单独校验远端干扰场景：第一张牌完成后
   记录 `MP2B_REMOTE_DELTA_ABORT`、不捕获第二张原生牌、没有 EndTurn/药水/Choice/
-  Replay，并在中止后重新搜索。`test-mp2b-interference-validator.ps1` 覆盖 5 个
-  合成用例；它与正常两动作验证器不能互相替代。
+  Replay，并在中止后重新搜索。若一个 Client journal 包含多次尝试，可用
+  `-RequestId <deployment-request-id>` 选择一个完整 session；`test-mp2b-interference-validator.ps1`
+  覆盖 5 个合成用例；它与正常两动作验证器不能互相替代。
 
 Lab Client 会自动设置 `COMBATSOLVER_MULTIPLAYER_PROBE_EVIDENCE=1`，因此
 Probe JSONL 只落在实例诊断目录；普通桌面运行不会因为 Probe 观察而持续写证据。
@@ -191,7 +192,7 @@ MP-2A 真实 Smoke 证据。`safe-execute-lab` 与正式 `safe-execute` 是两�
 token；正式 token 的一动作 Host/Client Smoke 已通过，证据摘要见
 `docs/multiplayer/evidence/mp2-safe-execute-formal-2026-09-20.json`。
 
-## MP-2B 两动作 Smoke（当前待实机）
+## MP-2B 两动作 Smoke（已完成实机；复验步骤）
 
 MP2B 使用同一套 HostVanilla + ClientCombatSolver、Steam transport off 和 Mod
 warm-up 后的正式第二次 Client 启动；正式入口命令为：
@@ -224,10 +225,13 @@ pwsh -NoLogo -NoProfile -File .\validate-mp2b-results.ps1 `
 ~~~powershell
 pwsh -NoLogo -NoProfile -File .\validate-mp2b-interference-results.ps1 `
   -LogPath '<post-restart-client-log>' `
+  -RequestId '<deployment-request-id>' `
   -OutputPath '.\.local\multiplayer-lab\results\mp2b-interference-summary.json'
 ~~~
 
-验证器返回 `MULTIPLAYER_MP-2B_REMOTE_ABORT_PASS` 才表示安全中止证据完整。
+验证器返回 `MULTIPLAYER_MP-2B_REMOTE_ABORT_PASS` 才表示安全中止证据完整。2026-09-20
+实机正常 Smoke 与远端干扰 Smoke 均已通过，摘要见
+`docs/multiplayer/evidence/mp2b-smoke-2026-09-20.json`。
 
 退出码：0 为 PASS，1 为矛盾/无效证据，2 为缺失或仍为 UNVERIFIED。真实
 Host/Client 运行证据必须带可审查的日志位置；单进程模拟和合成 JSON 不可作为
