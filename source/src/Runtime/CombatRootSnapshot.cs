@@ -248,11 +248,16 @@ internal sealed class CombatRootSnapshot
 
         if (carryRankingContext.Enabled)
         {
+            int allPlayerThreats = carryRankingContext.Enemies.Count(enemy =>
+                enemy.ThreatTarget == MultiplayerCarryThreatTarget.AllPlayers);
+            int unknownThreats = carryRankingContext.Enemies.Count(enemy =>
+                enemy.ThreatTarget == MultiplayerCarryThreatTarget.Unknown);
             Entry.Logger.Info(
                 $"[CombatSolver/MultiplayerCarry] MP_CARRY_CONTEXT_CAPTURE " +
                 $"world_version={carryRankingContext.WorldVersion} " +
                 $"remote_players={carryRankingContext.RemotePlayers.Count} " +
                 $"enemies={carryRankingContext.Enemies.Count} " +
+                $"all_player_threats={allPlayerThreats} unknown_threats={unknownThreats} " +
                 "remote_private=false context_reused=false " +
                 $"public_fingerprint={carryRankingContext.PublicFingerprint}");
         }
