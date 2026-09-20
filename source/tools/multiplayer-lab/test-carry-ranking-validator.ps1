@@ -27,18 +27,18 @@ function Invoke-Validator {
 try {
     Invoke-Validator -ExpectedExitCode 0 -ExpectedToken 'MULTIPLAYER_CARRY_RANKING_All_PASS' -Lines @(
         '[CombatSolver/MultiplayerCarry] MP_CARRY_CONTEXT_CAPTURE world_version=10 remote_players=1 enemies=2 all_player_threats=1 unknown_threats=1 remote_private=false context_reused=false public_fingerprint=fixture',
-        '[CombatSolver/MultiplayerCarry] MP_CARRY_RANKING rank=1 selected=true enabled=true remoteRiskBefore=5 remoteRiskAfter=4 threatsRemoved=1 unknownRiskCount=0 carryPreference=1 carryPreferenceReason=public_remote_threat_removed current_turn_card=true actions=PlayCard:STRIKE',
-        '[CombatSolver/MultiplayerCarry] MP_CARRY_RANKING rank=2 selected=false enabled=true remoteRiskBefore=4 remoteRiskAfter=4 threatsRemoved=0 unknownRiskCount=1 carryPreference=0 carryPreferenceReason=unknown_enemy_targeting_neutral current_turn_card=true actions=PlayCard:DEFEND'
+        '[CombatSolver/MultiplayerCarry] MP_CARRY_RANKING rank=1 selected=true enabled=true remoteRiskBefore=5 remoteRiskAfter=4 threatsRemoved=1 unknownRiskCount=0 carryPreference=1 carryPreferenceReason=public_remote_threat_removed carryDecisive=true carryBaselineDifferent=true carryBaselinePreference=0 current_turn_card=true actions=PlayCard:STRIKE',
+        '[CombatSolver/MultiplayerCarry] MP_CARRY_RANKING rank=2 selected=false enabled=true remoteRiskBefore=4 remoteRiskAfter=4 threatsRemoved=0 unknownRiskCount=1 carryPreference=0 carryPreferenceReason=unknown_enemy_targeting_neutral carryDecisive=false carryBaselineDifferent=false carryBaselinePreference=0 current_turn_card=true actions=PlayCard:DEFEND'
     )
 
     Invoke-Validator -ExpectedExitCode 2 -ExpectedToken 'MULTIPLAYER_CARRY_RANKING_All_UNVERIFIED' -Lines @(
         '[CombatSolver/MultiplayerCarry] MP_CARRY_CONTEXT_CAPTURE world_version=10 remote_players=1 enemies=1 all_player_threats=1 unknown_threats=0 remote_private=false context_reused=false public_fingerprint=fixture',
-        '[CombatSolver/MultiplayerCarry] MP_CARRY_RANKING rank=1 selected=true enabled=true remoteRiskBefore=1 remoteRiskAfter=1 threatsRemoved=0 unknownRiskCount=0 carryPreference=0 carryPreferenceReason=no_meaningful_team_risk_difference current_turn_card=true actions=PlayCard:DEFEND'
+        '[CombatSolver/MultiplayerCarry] MP_CARRY_RANKING rank=1 selected=true enabled=true remoteRiskBefore=1 remoteRiskAfter=1 threatsRemoved=0 unknownRiskCount=0 carryPreference=0 carryPreferenceReason=no_meaningful_team_risk_difference carryDecisive=false carryTieCompetitor=true carryTieCompetitorPreference=0 current_turn_card=true actions=PlayCard:DEFEND'
     )
 
     Invoke-Validator -ExpectedExitCode 1 -ExpectedToken 'MULTIPLAYER_CARRY_RANKING_All_FAIL' -Lines @(
         '[CombatSolver/MultiplayerCarry] MP_CARRY_CONTEXT_CAPTURE world_version=10 remote_players=1 enemies=1 all_player_threats=1 unknown_threats=0 remote_private=true context_reused=false public_fingerprint=fixture',
-        '[CombatSolver/MultiplayerCarry] MP_CARRY_RANKING rank=1 selected=true enabled=true remoteRiskBefore=1 remoteRiskAfter=0 threatsRemoved=0 unknownRiskCount=0 carryPreference=1 carryPreferenceReason=public_remote_threat_removed current_turn_card=true actions=PlayCard:STRIKE'
+        '[CombatSolver/MultiplayerCarry] MP_CARRY_RANKING rank=1 selected=true enabled=true remoteRiskBefore=1 remoteRiskAfter=0 threatsRemoved=0 unknownRiskCount=0 carryPreference=1 carryPreferenceReason=public_remote_threat_removed carryDecisive=true carryTieCompetitor=true carryTieCompetitorPreference=0 current_turn_card=true actions=PlayCard:STRIKE'
     )
 
     Write-Output 'MULTIPLAYER_CARRY_RANKING_VALIDATOR_PASS'

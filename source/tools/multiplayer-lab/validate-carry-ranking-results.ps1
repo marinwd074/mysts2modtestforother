@@ -156,14 +156,16 @@ if ($Phase -in @('R2', 'All')) {
             $_.Text -match '\benabled=true\b' -and
             (Get-IntToken $_.Text 'carryPreference') -gt 0 -and
             (Get-IntToken $_.Text 'threatsRemoved') -gt 0 -and
-            (Get-IntToken $_.Text 'remoteRiskAfter') -lt (Get-IntToken $_.Text 'remoteRiskBefore')
+            (Get-IntToken $_.Text 'remoteRiskAfter') -lt (Get-IntToken $_.Text 'remoteRiskBefore') -and
+            $_.Text -match '\bcarryDecisive=true\b' -and
+            $_.Text -match '\bcarryBaselineDifferent=true\b'
         })
     if ($rankingContradictions.Count -gt 0) {
         Add-Check 'R2PositiveCarrySelection' FAIL (Join-Evidence $rankingContradictions) 'Ranking evidence is internally inconsistent.'
     } elseif ($positiveSelected.Count -gt 0) {
-        Add-Check 'R2PositiveCarrySelection' PASS (Format-Evidence $positiveSelected[0]) 'The selected real route removed a proven public team threat and received positive carry preference.'
+        Add-Check 'R2PositiveCarrySelection' PASS (Format-Evidence $positiveSelected[0]) 'The selected real route removed a proven public team threat and removing Carry would select a different route from the same complete pre-carry quality group.'
     } elseif ($rankings.Count -gt 0) {
-        Add-Check 'R2PositiveCarrySelection' UNVERIFIED (Join-Evidence @($rankings | Select-Object -First 5)) 'Ranking ran, but this fixture did not select a route with positive Carry preference.'
+        Add-Check 'R2PositiveCarrySelection' UNVERIFIED (Join-Evidence @($rankings | Select-Object -First 5)) 'Ranking ran, but this fixture did not produce a decisive positive Carry tie-break.'
     } else {
         Add-Check 'R2PositiveCarrySelection' UNVERIFIED '' 'No ranking result was emitted.'
     }

@@ -146,4 +146,48 @@ Check(
             hasAttackIntent: true) == MultiplayerCarryThreatTarget.Unknown,
     "Only a proven base-game attack intent becomes an all-player public threat; non-attacks and third-party monsters stay Unknown.");
 
+MultiplayerCarryCompatibilityKey compatibility = new(
+    CompleteVictory: false,
+    DeadFallbackRank: 0,
+    DeathSaveUseCount: 0,
+    PreservedStolenResource: 0,
+    StrategicHpDeficit: 0,
+    StrategyGoalHpCredit: 0,
+    StrategyGoalCount: 0,
+    CombatEndedTurn: int.MaxValue,
+    PolicyHpDeficit: 0,
+    HealthResourceCost: 0,
+    LongTermResourceValue: 0,
+    AngerCopiesGenerated: 0,
+    BoundaryRank: 0,
+    OptionalPotionCount: 0,
+    StrategicSold: 0,
+    EnemyHp: 20);
+Check(
+    MultiplayerCarryRankingContracts.IsDecisiveTieBreak(
+        compatibility,
+        selectedCarryPreference: 1,
+        compatibility,
+        carryFreeWinnerPreference: 0,
+        selectedWouldAlreadyWinWithoutCarry: false)
+        && !MultiplayerCarryRankingContracts.IsDecisiveTieBreak(
+            compatibility with { EnemyHp = 19 },
+            selectedCarryPreference: 2,
+            compatibility,
+            carryFreeWinnerPreference: 0,
+            selectedWouldAlreadyWinWithoutCarry: false)
+        && !MultiplayerCarryRankingContracts.IsDecisiveTieBreak(
+            compatibility,
+            selectedCarryPreference: 1,
+            compatibility,
+            carryFreeWinnerPreference: 0,
+            selectedWouldAlreadyWinWithoutCarry: true)
+        && !MultiplayerCarryRankingContracts.IsDecisiveTieBreak(
+            compatibility,
+            selectedCarryPreference: 0,
+            compatibility,
+            carryFreeWinnerPreference: 1,
+            selectedWouldAlreadyWinWithoutCarry: false),
+    "Carry is decisive only when the complete pre-carry quality key ties, the selected preference is higher, and removing Carry would choose a different winner.");
+
 Console.WriteLine($"PASS: {checks} Multiplayer Carry Ranking checks");

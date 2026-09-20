@@ -248,6 +248,37 @@ internal readonly record struct MultiplayerCarryEvaluation(
         => new(false, 0, 0, 0, 0, 0, reason);
 }
 
+internal readonly record struct MultiplayerCarryCompatibilityKey(
+    bool CompleteVictory,
+    int DeadFallbackRank,
+    int DeathSaveUseCount,
+    int PreservedStolenResource,
+    int StrategicHpDeficit,
+    int StrategyGoalHpCredit,
+    int StrategyGoalCount,
+    int CombatEndedTurn,
+    int PolicyHpDeficit,
+    int HealthResourceCost,
+    int LongTermResourceValue,
+    int AngerCopiesGenerated,
+    int BoundaryRank,
+    int OptionalPotionCount,
+    int StrategicSold,
+    int EnemyHp);
+
+internal static class MultiplayerCarryRankingContracts
+{
+    internal static bool IsDecisiveTieBreak(
+        MultiplayerCarryCompatibilityKey selectedKey,
+        int selectedCarryPreference,
+        MultiplayerCarryCompatibilityKey carryFreeWinnerKey,
+        int carryFreeWinnerPreference,
+        bool selectedWouldAlreadyWinWithoutCarry)
+        => selectedKey == carryFreeWinnerKey
+            && selectedCarryPreference > carryFreeWinnerPreference
+            && !selectedWouldAlreadyWinWithoutCarry;
+}
+
 /// <summary>
 /// Pure, deterministic Carry Ranking evaluator. It scores no teammate action and assigns
 /// no guessed damage/block value. Unknown enemy targeting stays outside the preference score.

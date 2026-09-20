@@ -147,6 +147,31 @@ internal sealed partial class CombatBeamSolver
                         OptionalAmbergrisCount: optionalAmbergrisCount,
                         EffectivePotionPolicy: effectivePotionPolicy,
                         CarryEvaluation: carryEvaluation,
+                        CarryCompatibility: new MultiplayerCarryCompatibilityKey(
+                            CompleteVictory: completeVictory,
+                            DeadFallbackRank: !completeVictory
+                                && (candidate.Snapshot.PlayerDead
+                                    || candidate.Snapshot.ProjectedPlayerHp <= 0)
+                                    ? 1
+                                    : 0,
+                            DeathSaveUseCount: candidate.Snapshot.ProjectedDeathSaveUseCount,
+                            PreservedStolenResource: theftPolicy == SolverTheftPolicy.PreserveResources
+                                ? features.OutstandingStolenResource
+                                : 0,
+                            StrategicHpDeficit: strategicHpDeficit,
+                            StrategyGoalHpCredit: candidate.Snapshot.StrategyGoalHpCredit,
+                            StrategyGoalCount: candidate.Snapshot.StrategyGoalCount,
+                            CombatEndedTurn: completeVictory
+                                ? candidate.Snapshot.CombatEndedTurn ?? int.MaxValue
+                                : int.MaxValue,
+                            PolicyHpDeficit: policyHpDeficit,
+                            HealthResourceCost: healthResourceCost,
+                            LongTermResourceValue: features.LongTermResourceValue,
+                            AngerCopiesGenerated: features.AngerCopiesGenerated,
+                            BoundaryRank: CombatBeamSolver.PolicyBoundaryRank(features.BoundaryReason),
+                            OptionalPotionCount: optionalPotionCount,
+                            StrategicSold: strategicSold,
+                            EnemyHp: features.EnemyHp),
                         HasCurrentTurnCardAction: candidate.Node.Actions.Any(action =>
                             action.Turn == startTurnNumber
                             && action.Kind == PlanActionKind.PlayCard));
@@ -336,6 +361,24 @@ internal sealed partial class CombatBeamSolver
                         ? "本场药水策略要求至少使用一瓶，但搜索没有找到可执行的用药路线。"
                         : "本场药水策略没有可执行路线。");
             }
+            var selectedCandidate = selected[0];
+            var carryFreeWinner = policyEligibleCandidates
+                .Where(candidate =>
+                    candidate.CarryCompatibility == selectedCandidate.CarryCompatibility)
+                .OrderByDescending(candidate => candidate.Score)
+                .ThenByDescending(candidate =>
+                    routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
+                    && candidate.HasCurrentTurnCardAction)
+                .ThenBy(candidate => candidate.Features.ActionCount)
+                .First();
+            bool selectedWouldAlreadyWinWithoutCarry =
+                ReferenceEquals(selectedCandidate.Node, carryFreeWinner.Node);
+            bool carryDecisive = MultiplayerCarryRankingContracts.IsDecisiveTieBreak(
+                selectedCandidate.CarryCompatibility,
+                selectedCandidate.CarryEvaluation.CarryPreference,
+                carryFreeWinner.CarryCompatibility,
+                carryFreeWinner.CarryEvaluation.CarryPreference,
+                selectedWouldAlreadyWinWithoutCarry);
             if (emitDiagnostics && carryRankingContext.Enabled)
             {
                 foreach (var (candidate, index) in selected.Take(3).Select((item, index) => (item, index)))
@@ -351,11 +394,13 @@ internal sealed partial class CombatBeamSolver
                         $"unknownRiskCount={carry.UnknownRiskCount} " +
                         $"carryPreference={carry.CarryPreference} " +
                         $"carryPreferenceReason={carry.Reason} " +
+                        $"carryDecisive={(index == 0 && carryDecisive).ToString().ToLowerInvariant()} " +
+                        $"carryBaselineDifferent={(index == 0 && !selectedWouldAlreadyWinWithoutCarry).ToString().ToLowerInvariant()} " +
+                        $"carryBaselinePreference={(index == 0 ? carryFreeWinner.CarryEvaluation.CarryPreference : 0)} " +
                         $"current_turn_card={candidate.HasCurrentTurnCardAction.ToString().ToLowerInvariant()} " +
                         $"actions={string.Join(',', candidate.Node.Actions.Select(CombatBeamSolver.PolicyActionToken))}");
                 }
             }
-            var selectedCandidate = selected[0];
             int potionBranchesRejected = policyCandidates.Count(candidate => candidate.PotionCount > 0)
                 - policyEligibleCandidates.Count(candidate => candidate.PotionCount > 0);
             int potionHpSaved = selectedCandidate.PotionCount == 0
