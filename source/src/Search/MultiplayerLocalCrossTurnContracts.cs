@@ -89,6 +89,20 @@ internal static class MultiplayerLocalCrossTurnContracts
             && !hasCurrentTurnContinuation
             && !localTurnPlayable;
 
+    /// <summary>
+    /// A future local hand must not be projected through the shared Shuffle RNG after
+    /// yielding the local turn. Teammate actions are intentionally not simulated and may
+    /// advance that RNG, so the post-shuffle order is not locally knowable. Root setup is
+    /// exempt because it starts from the freshly captured live state.
+    /// </summary>
+    internal static bool ShouldStopBeforeSharedRngShuffle(
+        SearchRoutePolicy routePolicy,
+        bool rootSetup,
+        bool willShuffle)
+        => routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
+            && !rootSetup
+            && willShuffle;
+
     internal static bool IsExactContinuation(MultiplayerContinuationMatchInput input)
         => DescribeContinuationMismatch(input) is null;
 

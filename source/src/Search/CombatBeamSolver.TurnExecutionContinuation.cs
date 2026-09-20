@@ -48,6 +48,12 @@ internal sealed partial class CombatBeamSolver
                 Progress, Stage) == SearchBoundaryReason.None;
     }
 
+    private bool ShouldStopBeforeSharedRngShuffle(bool rootSetup, bool willShuffle)
+        => MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
+            policy.RoutePolicy,
+            rootSetup,
+            willShuffle);
+
     private static SearchBoundaryReason ContinuePlayerStart(CombatPredictionSimulator simulator,
         SimulatedCombatState combat, PlayerStartProgress progress, PlayerStartStage stage,
         CombatBeamSolver? captureOwner = null, RoundReplayCheckpointCapture? capture = null,
@@ -98,6 +104,12 @@ internal sealed partial class CombatBeamSolver
             }
             int effectiveDraw = Math.Min(progress.DrawCount, combat.GetMaxHandSize(player) - playerState.Hand.Cards.Count);
             progress.WillShuffle = effectiveDraw > playerState.DrawPile.Cards.Count && !playerState.DiscardPile.IsEmpty;
+            if (captureOwner?.ShouldStopBeforeSharedRngShuffle(
+                    progress.RootSetup,
+                    progress.WillShuffle) == true)
+            {
+                return SearchBoundaryReason.Shuffle;
+            }
             capture?.CaptureBeforeHandDraw(captureOwner!, simulator, combat, choices, progress.Deaths,
                 progress.ShufflesCrossed, progress.TakingExtraTurn, progress.SideStarted, progress.DrawCount, progress.WillShuffle);
         }

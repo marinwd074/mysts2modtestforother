@@ -40,6 +40,29 @@ Check(
     "Singleplayer, Probe/current-turn, and multiplayer local-cross-turn route policies stay distinct; persistent route cache remains singleplayer-only.");
 
 Check(
+    MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
+        SearchRoutePolicy.MultiplayerLocalCrossTurn,
+        rootSetup: false,
+        willShuffle: true)
+        && !MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
+            SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            rootSetup: true,
+            willShuffle: true)
+        && !MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
+            SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            rootSetup: false,
+            willShuffle: false)
+        && !MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
+            SearchRoutePolicy.SinglePlayerFullRoute,
+            rootSetup: false,
+            willShuffle: true)
+        && !MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
+            SearchRoutePolicy.MultiplayerCurrentTurnOnly,
+            rootSetup: false,
+            willShuffle: true),
+    "Only a future multiplayer local-cross-turn hand stops before consuming the shared Shuffle RNG.");
+
+Check(
     MultiplayerLocalCrossTurnContracts.ValidateLocalOnlyProjection(
         [
             new(1, IsLocalAction: true, IsEndTurn: false),
