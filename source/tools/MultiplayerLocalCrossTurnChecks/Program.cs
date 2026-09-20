@@ -148,23 +148,42 @@ Check(
             scope: MultiplayerSearchResultScope.CurrentTurnOnly),
     "Deployment admits only the current local turn, while a non-current-turn route is preserved only as future data.");
 
-Check(
-    MultiplayerLocalCrossTurnContracts.ShouldHoldPendingContinuation(
+MultiplayerContinuationScheduleDecision heldContinuation =
+    MultiplayerLocalCrossTurnContracts.DecidePendingContinuationScheduling(
         awaitingContinuation: true,
         hasContinuationSource: true,
         hasCurrentTurnContinuation: false,
-        localTurnPlayable: false)
-        && !MultiplayerLocalCrossTurnContracts.ShouldHoldPendingContinuation(
-            awaitingContinuation: true,
-            hasContinuationSource: true,
-            hasCurrentTurnContinuation: false,
-            localTurnPlayable: true)
-        && !MultiplayerLocalCrossTurnContracts.ShouldHoldPendingContinuation(
-            awaitingContinuation: false,
-            hasContinuationSource: true,
-            hasCurrentTurnContinuation: false,
-            localTurnPlayable: false),
-    "A pending route waits only off the local playable boundary; a playable local turn with no cached continuation must fall through to fresh search.");
+        localTurnPlayable: false);
+MultiplayerContinuationScheduleDecision missingPlayableContinuation =
+    MultiplayerLocalCrossTurnContracts.DecidePendingContinuationScheduling(
+        awaitingContinuation: true,
+        hasContinuationSource: true,
+        hasCurrentTurnContinuation: false,
+        localTurnPlayable: true);
+MultiplayerContinuationScheduleDecision currentTurnContinuation =
+    MultiplayerLocalCrossTurnContracts.DecidePendingContinuationScheduling(
+        awaitingContinuation: true,
+        hasContinuationSource: true,
+        hasCurrentTurnContinuation: true,
+        localTurnPlayable: true);
+MultiplayerContinuationScheduleDecision noContinuationSource =
+    MultiplayerLocalCrossTurnContracts.DecidePendingContinuationScheduling(
+        awaitingContinuation: true,
+        hasContinuationSource: false,
+        hasCurrentTurnContinuation: false,
+        localTurnPlayable: true);
+Check(
+    heldContinuation.HoldPendingRoute
+        && !heldContinuation.FreshSearchMissingCurrentTurn
+        && !heldContinuation.ClearAwaitingContinuation
+        && !heldContinuation.ClearContinuationSource
+        && !missingPlayableContinuation.HoldPendingRoute
+        && missingPlayableContinuation.FreshSearchMissingCurrentTurn
+        && missingPlayableContinuation.ClearAwaitingContinuation
+        && missingPlayableContinuation.ClearContinuationSource
+        && currentTurnContinuation == default
+        && noContinuationSource == default,
+    "The scheduler holds a missing future turn only while local play is unavailable; once playable it fresh-searches and clears both pending-route ownership fields.");
 
 Check(
     MultiplayerLocalCrossTurnContracts.PreferCurrentTurnPlayableRoute(

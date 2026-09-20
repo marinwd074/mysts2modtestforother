@@ -1437,15 +1437,13 @@ internal static partial class SolverController
         bool hasCurrentTurnContinuation =
             pendingRoute?.Continuations.Any(item => item.StartTurnNumber == currentTurn) == true;
         bool localTurnPlayable = CanSolve(state, out _);
-        bool pendingContinuationMissingCurrentTurn =
-            _combat.AwaitingMultiplayerContinuation
-            && pendingRoute != null
-            && !hasCurrentTurnContinuation;
-        if (MultiplayerLocalCrossTurnContracts.ShouldHoldPendingContinuation(
+        MultiplayerContinuationScheduleDecision continuationSchedule =
+            MultiplayerLocalCrossTurnContracts.DecidePendingContinuationScheduling(
                 _combat.AwaitingMultiplayerContinuation,
                 pendingRoute != null,
                 hasCurrentTurnContinuation,
-                localTurnPlayable))
+                localTurnPlayable);
+        if (continuationSchedule.HoldPendingRoute)
         {
             // Remote turns may advance WorldVersion while the local player is still
             // waiting. Hold the immutable future route only until a local playable
@@ -1465,14 +1463,16 @@ internal static partial class SolverController
         {
             return;
         }
-        if (pendingContinuationMissingCurrentTurn)
+        if (continuationSchedule.FreshSearchMissingCurrentTurn)
         {
             Entry.Logger.Info(
                 $"[CombatSolver/Test] MP_LOCAL_XTURN_CONTINUATION_MISSING " +
                 $"turn={currentTurn} route_identity={pendingRoute?.RouteIdentity ?? "-"} " +
                 "local_playable=true action=fresh_search");
-            _combat.AwaitingMultiplayerContinuation = false;
-            _combat.ContinuationSource = null;
+            if (continuationSchedule.ClearAwaitingContinuation)
+                _combat.AwaitingMultiplayerContinuation = false;
+            if (continuationSchedule.ClearContinuationSource)
+                _combat.ContinuationSource = null;
         }
 
         CancelMultiplayerDebouncedSearch();

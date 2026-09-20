@@ -15,6 +15,12 @@ internal enum MultiplayerSearchResultScope
     CurrentTurnOnly,
 }
 
+internal readonly record struct MultiplayerContinuationScheduleDecision(
+    bool HoldPendingRoute,
+    bool FreshSearchMissingCurrentTurn,
+    bool ClearAwaitingContinuation,
+    bool ClearContinuationSource);
+
 internal readonly record struct MultiplayerContinuationMatchInput(
     string ExpectedCombatIdentity,
     string ActualCombatIdentity,
@@ -79,15 +85,34 @@ internal static class MultiplayerLocalCrossTurnContracts
             && candidateHasCurrentTurnCard
             && !currentHasCurrentTurnCard;
 
-    internal static bool ShouldHoldPendingContinuation(
+    internal static MultiplayerContinuationScheduleDecision DecidePendingContinuationScheduling(
         bool awaitingContinuation,
         bool hasContinuationSource,
         bool hasCurrentTurnContinuation,
         bool localTurnPlayable)
-        => awaitingContinuation
-            && hasContinuationSource
-            && !hasCurrentTurnContinuation
-            && !localTurnPlayable;
+    {
+        if (!awaitingContinuation
+            || !hasContinuationSource
+            || hasCurrentTurnContinuation)
+        {
+            return default;
+        }
+
+        if (!localTurnPlayable)
+        {
+            return new MultiplayerContinuationScheduleDecision(
+                HoldPendingRoute: true,
+                FreshSearchMissingCurrentTurn: false,
+                ClearAwaitingContinuation: false,
+                ClearContinuationSource: false);
+        }
+
+        return new MultiplayerContinuationScheduleDecision(
+            HoldPendingRoute: false,
+            FreshSearchMissingCurrentTurn: true,
+            ClearAwaitingContinuation: true,
+            ClearContinuationSource: true);
+    }
 
     /// <summary>
     /// A future local hand must not be projected through the shared Shuffle RNG after
