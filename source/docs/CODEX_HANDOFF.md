@@ -74,9 +74,17 @@ PASS 必须同时满足：
 - 本轮机器摘要留在 `.local/multiplayer-lab/results/mp2a-20260920-fix1-summary.json`，journal 留在 `runtime-mp2a-client-20260920-fix1/diagnostics/CombatSolver-BugReports/logs/CombatSolver/21664-8e3d1237e7c34f49b7129968c3d57029/combat-a518725aebe94412bf0799f37cc327a5.jsonl`；不作为正式 multiplayer evidence。
 - 验证器已排除普通网络/手动 `EndPlayerTurnAction` 的误报，只把 CombatSolver 自己的自动结束回合标记视为禁用动作证据；`test-mp2a-validator.ps1` 当前 `checks=4` 通过。
 
+## 本轮 MP-2A Smoke（2026-09-20，`fix2`）
+
+- Host/Client 使用 `b9177a9` 的同一 Release 构建；Client 实例为 `ClientCombatSolver`，运行参数为 `safe-execute-lab`。本轮 Host/Client 已在记录后停止，未遗留 owned 进程。
+- 未点击“执行本回合”时，截图 `/.local/multiplayer-lab/screen-fix2.png` 显示手牌未变化，未发生自动出牌；点击一次后，`/.local/multiplayer-lab/screen-fix2-after-click.png` 显示“执行完成／已打出 1 张牌”。
+- 原生游戏日志 `runtime-mp2a-client-20260920-fix2/logs/20260920-103058-client-1d722745.log` 记录了一次 Client 请求、入队、执行并完成 `PlayCardAction card: CARD.DEFEND_IRONCLAD`（约 02:36:31）；没有 CombatSolver 自定义网络动作。
+- Probe `runtime-mp2a-client-20260920-fix2/diagnostics/CombatSolver-BugReports/logs/CombatSolver/multiplayer-probe-3680-598e16dc7f6f4440bb18ecb4f0537fad.jsonl` 的序列 7→9 显示 `world_version` 7→9、能量 3→2、格挡 0→5，`DEFEND_IRONCLAD instance=2` 从手牌进入弃牌；`customNetworkPacketSent=false`。
+- 这次只能记为行为 Smoke `UNVERIFIED`：combat journal 与 process journal 均为 0 字节，`validate-mp2a-results.ps1` 因缺少 Solver 事件链返回 `UNVERIFIED`。原因是本轮停止脚本强制终止进程，异步 journal 尚未落盘；该结果不能证明产品行为失败，也不能替代正式 PASS。
+
 ## 当前唯一主要未完成项
 
-真实 MP-2A 单牌 Smoke 仍未取得 PASS。`b9177a9` 已修复 Overlay 单牌切片、自动部署和本地 WorldVersion 取消边界；下一次必须使用新构建验证两条互斥行为：未点击时不出现 `MP2A_DEPLOY_START`/原生动作，明确点击一次后恰好出现一个 `NATIVE_ACTION_CAPTURED`、`DEPLOY_END`、WorldVersion 失效和新搜索。没有这条完整事件链时，不能升级正式 Safe Execute 入口。
+真实 MP-2A 单牌 Smoke 仍未取得 PASS。`b9177a9` 的行为修复已由本轮截图、原生游戏日志和 Probe 支持，但缺少已落盘的 Solver 事件链。下一次应使用优雅退出（或先让 journal 完成落盘）重新验证两条互斥行为：未点击时不出现 `MP2A_DEPLOY_START`/原生动作，明确点击一次后恰好出现一个 `NATIVE_ACTION_CAPTURED`、`DEPLOY_END`、WorldVersion 失效和新搜索。没有这条完整事件链时，不能升级正式 Safe Execute 入口。
 
 ## 下一步实机步骤
 
