@@ -1,99 +1,93 @@
-# CombatSolver 仓库工作指令
+# CombatSolver 源码工作规则
 
-> 当前基线：CombatSolver `0.40.2`，目标游戏与 RitsuLib `0.107.1`，兼容符号 `STS2_01071`，运行时为 .NET 9 / Godot 4.5.1。分支和提交以当前 `main` HEAD 为准。
+> 当前目标基线：CombatSolver `0.40.2`，游戏 / RitsuLib `0.107.1`，`STS2_01071`，.NET 9 / Godot 4.5.1。实际分支与提交以当前仓库为准。
 
-本文件只保留项目硬边界和任务路由；详细架构、测试协议和发布流程以当前文档或对应 skill 为准。历史记录是证据，不是当前任务指令。
+本文件只保留真正影响正确性、兼容性和产品边界的技术规则。实现方式和验证规模由 Agent 按风险自主决定。
 
-## 1. 不可违反的边界
+## 1. 技术硬边界
 
-- 生产功能默认只支持单人战斗；允许在独立的 Multiplayer Probe / 显式能力门禁下开发客户端本地玩家适配。在多人能力通过对应实机验证前，不解除默认 inert gate、不自动部署、不改变网络协议、不发送自定义网络包、不控制其他玩家。使用仓库内嵌模拟引擎，不重新引入 RandomForeseer 运行时依赖。
-- 后台搜索不得读取会随实机推进而变化的 live 值，也不得修改真实战斗。分支可变值必须属于根快照、影子状态、克隆 Model 或 `PredictionStateStore`。
-- 未知语义必须显式失败或形成明确搜索边界；禁止宽泛异常捕获后继续、返回默认值、跳过候选或伪造相等。
-- 正确性优先于搜索质量和性能；不得用扩大 Beam、节点、时间或 No-GC 预算掩盖模拟偏差。
-- 源码、测试和文档改动直接提交当前任务分支；完成相称验证后推送已配置的 GitHub 远端。保留不属于当前任务的用户改动。
+- 后台搜索不得读取会随真实战斗推进而变化的 live 可变值，也不得修改真实战斗。搜索分支的可变状态必须来自根快照、影子状态、克隆 Model 或 `PredictionStateStore`。
+- 真实 Player / Creature / Card / Power / Relic / Monster 的 HP、格挡、能量、牌堆、RNG、行动和其他分支可变状态不得被搜索线程当作分支状态直接读取。
+- 未知语义应 fail closed、形成明确搜索边界或明确报错；禁止吞异常后继续、伪造默认值或假装状态等价。
+- Fork 相关可变引用必须正确 remap；同一分支使用一致的 `PredictionForkContext`，需要写入的 Preview 先取得可写副本。
+- 正确性优先于搜索质量和性能；不得通过单纯扩大搜索预算掩盖语义偏差。
 
-当前职责地图见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。源码入口按职责归属：`src/Runtime` 编排 live 生命周期，`src/Search` 拥有搜索策略，`src/Engine` 拥有通用模拟，`src/Prediction` 提供领域补偿，`src/UI` 只渲染只读快照，`src/Testing` 只承载游戏内测试夹具。Release 构建按设计排除 `src/Testing`；生产 DLL 不能单独证明无人测试协议通过。
+## 2. 架构与自主修改
 
-## 2. 任务路由与当前事实
+职责默认保持：
 
-先读与任务直接相关的源码和当前文档，不为“完整了解仓库”扫描历史目录。
+- `src/Runtime`：真实战斗生命周期和编排。
+- `src/Search`：搜索策略与搜索会话。
+- `src/Engine`：通用模拟。
+- `src/Prediction`：领域预测与状态补偿。
+- `src/UI`：展示和交互，不拥有搜索语义。
+- `src/Testing`：游戏内测试夹具；Release 按设计不依赖它。
 
-- 玩家问题包、日志和复现包：`.agents/skills/issue-bundle-triage/SKILL.md`。
-- 策略回放迭代：`.agents/skills/strategy-replay-iteration/SKILL.md`。
-- 战斗语义、Power、卡牌、遗物、药水、球、RNG、Fork 和跨回合：`.agents/skills/combat-semantic-change/SKILL.md`。
-- Beam、评分、剪枝、预算、GC 和卡顿：`.agents/skills/search-performance-optimization/SKILL.md`。
-- Runtime/Search/UI/Testing/registry 职责迁移：`.agents/skills/architecture-boundary-refactor/SKILL.md`。
-- 玩家可见文案和本地化：`.agents/skills/ui-localization/SKILL.md`。
-- 版本、ZIP、标签、创意工坊或完整发布门禁：`.agents/skills/release-gate/SKILL.md`。
+Agent 可以在当前目标需要时自主：
 
-当前事实入口：
+- 拆分或合并文件、移动职责、删除死代码；
+- 修复同一根因下的相邻缺陷；
+- 增加内部诊断、合同测试、辅助脚本和临时迁移代码；
+- 扩大到相关目录或历史证据进行检索；
+- 修改架构文档和测试入口以保持事实一致。
 
-- [docs/README.md](docs/README.md)：当前入口和专题目录。
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)：职责、依赖方向和状态所有权。
-- [docs/TESTING_LAYERS.md](docs/TESTING_LAYERS.md)：测试层级。
-- [docs/TEST_MATRIX.md](docs/TEST_MATRIX.md)：当前测试目录和重跑方式。
-- [docs/DEVELOPMENT_NOTES.md](docs/DEVELOPMENT_NOTES.md)：当前开发状态与未发布行为变化。
-- [docs/CODEX_HANDOFF.md](docs/CODEX_HANDOFF.md)：当前对话结束时覆盖更新的 Codex 接手入口；不是历史记录。
-- [docs/compat/0.107.1/README.md](docs/compat/0.107.1/README.md)：目标版本兼容资料。
-- [docs/CHECKPOINT_REPLAY.md](docs/CHECKPOINT_REPLAY.md)、[docs/HEADLESS_TESTING.md](docs/HEADLESS_TESTING.md)：回放和隔离测试边界。
+只有明显改变产品方向、公开 API/协议、用户数据格式、正式多人能力范围或发布行为时才需要先请求用户决定。
 
-默认不得扫描以下目录：
+## 3. 状态所有权要求
 
-```text
-docs/performance/  docs/issues/  docs/releases/  docs/audits/
-docs/pr/  docs/history/  runtime-evidence/  .local/decompiled/
-```
+只有当改动真正涉及模拟状态、Fork、跨回合续用、live/runtime 生命周期或并发所有权时，才需要核对以下问题；普通 UI、文档、脚本和局部纯函数无需机械填写清单：
 
-只有用户明确要求、任务直接引用、当前 Bug/commit/测试输入指向，或必须取得历史 A/B/回归证据时，才读取其中的具体文件。默认顺序是：`AGENTS.md` → 目标源码 → 目标测试 → `ARCHITECTURE.md` 对应章节 → 当前 compat 文档。
+1. 根状态何时、由谁捕获；
+2. 可变状态属于哪一层；
+3. Fork/COW/remap 是否隔离；
+4. 是否影响合法性、状态键或 continuation；
+5. actual/simulated 差分如何暴露；
+6. 生命周期和清理边界是否完整。
 
-## 3. 状态所有权与错误处理
+运行时为保护玩家状态拦截异常时，应停止受影响的搜索/部署并留下可诊断事件，而不是继续执行不可信动作。
 
-新增或修改分支状态时，必须说明：
+## 4. 当前事实与检索
 
-1. 主线程根从哪里、何时捕获；
-2. 状态属于哪一层，Fork 是深拷贝、COW 还是不可变共享；
-3. 对象引用如何通过同一个 `PredictionForkContext` 重映射；
-4. 是否影响动作合法性、状态键或跨回合 `ContinuationStamp`；
-5. actual/simulated 差分如何捕获；
-6. 创建、叠加、移除、清空和事务边界。
+优先使用现有真源：
 
-真实 Player、Creature、CardModel、PowerModel、RelicModel、MonsterModel 的 HP、格挡、能量、牌堆、Power、RNG、行动、召唤/死亡、遗物和药水等分支可变值不得从 live 对象读取。Fork 子结构共享同一个上下文；可变引用优先 `RequireRemap`。`PredictedCard.Preview` 写入前必须取得 `MutablePreview`。
+- `docs/ARCHITECTURE.md`
+- `docs/TESTING_LAYERS.md`
+- `docs/TEST_MATRIX.md`
+- `docs/DEVELOPMENT_NOTES.md`
+- `docs/CODEX_HANDOFF.md`
+- `docs/compat/0.107.1/README.md`
+- `docs/CHECKPOINT_REPLAY.md`
+- `docs/HEADLESS_TESTING.md`
 
-推断式 mirror 构建失败可以归类为未支持；执行中失败必须中止当前搜索或部署，保留动作、事务和状态上下文。运行时为保护玩家状态拦截异常时，应停止会话、输出稳定失败事件，并让无人测试得到 Failed。
+历史目录、`runtime-evidence/` 和 `.local/` 不再“默认禁止读取”。需要定位回归、比较基线或核对旧结论时可以直接定向检索；仍应避免无目的全仓库扫描。
 
-## 4. 最小验证选择
+旧规则中引用的 `.agents/skills/.../SKILL.md` 当前仓库并不存在，不再把它们作为任务前置条件。
 
-每个阶段只取一次直接证据。输入和产物未变化时，不重复同一测试、构建、复制、打包、上传、fetch/status 或解包检查。
+## 5. 验证
 
-- **L0 文档/规则/静态结构**：定向路径、链接、格式检查与 `git diff --check`。不得自动 Release build、启动游戏、复制 DLL、完整 smoke、性能 benchmark、发布打包或生成 runtime evidence。
-- **CI/静态脚本**：只运行修改的脚本及对应 gate；不自动构建 CombatSolver，不复制 DLL。
-- **纯 refactor / 文件移动 / 同一职责内 partial 拆分**：必要时只做 Release 构建和结构门禁；只有实际跨 Runtime 边界或改变可观察行为才加一个代表 smoke，不生成历史报告或 runtime evidence。
-- **普通战斗语义**：L1 最小 actual/simulated 差分；确实新增跨回合、Fork、续用或部署状态才升到 L2。不要因普通 Power、牌堆或历史修复自动跑完整战斗。
-- **Search / Beam / 排序**：固定短 benchmark、结果身份和工作量一致性；完整场景仅限最终候选或用户明确要求。
-- **发布**：只有用户明确说“准备发版”“发版/发布”“上传/更新创意工坊”或“完整发布门禁”才进入发布流程。
+- 按改动风险选择最小充分验证；没有固定测试数量限制，也没有一刀切的 120 秒上限。
+- 文档/规则改动通常做链接、格式、静态门禁即可；CI 自动运行的合同测试无需为了形式在本地重复。
+- 纯重构优先结构门禁和编译；行为变化再增加代表性合同/运行测试。
+- 战斗语义优先 actual/simulated 差分和最窄复现场景；跨回合、Fork、部署、多人同步等高风险修改应提高验证层级。
+- Search / Beam / 排序修改应固定输入比较结果身份与工作量，必要时再做 benchmark。
+- 失败可以直接诊断、修复并重跑；不要因为首个方案失败就停工。
+- Release DLL、静态检查、合同测试、headless 和可见 Steam 是不同证据层，报告时明确区分。
 
-单个 unattended 请求默认不超过 `120` 秒；达到上限应记录未验证，不把超时扩大到 `180/360` 秒等待。生产 Release DLL 不包含 `src/Testing` 时，不得把通用无人测试启动器的超时或无响应写成语义结论。
+## 6. Multiplayer
 
-## 5. 文档、规则与署名
+- 当前正式产品仍以单人能力为稳定基线；多人能力通过 Probe / Advisor / Lab gate 分阶段推进。
+- 可以自主开发、重构和验证多人实验能力，但在对应真实 Host/Client 证据通过前，不把 Lab-only 能力改成正式默认或普通玩家入口。
+- 不发送 CombatSolver 自定义网络包、不控制其他玩家，除非未来项目方向明确改变并单独设计协议与验证。
+- MP-2B 等连续多动作能力必须解决本地预期变化与远端并发变化的归因，不能用简单 WorldVersion reset/rebase 规避。
 
-- `DEVELOPMENT_NOTES.md` 只在玩家可见行为、运行时语义、能力、重要兼容变化或重要性能结论改变时更新。
-- `TEST_MATRIX.md` 只在测试入口、fixture 行为或覆盖范围改变时更新；普通修复的本轮通过结果不持续追加到巨型历史表。
-- 纯文件移动、partial 拆分、CI gate 和文档整理不自动新建 performance report、开发记录或测试矩阵历史条目。
-- 只有模块职责、依赖方向、状态所有权或公开入口变化时，才同步 `ARCHITECTURE.md`、相关 skill、结构门禁或重构路线。
-- 面向玩家的更新日志使用当前游戏官方译名；不要把类名、runId、内部算法、GC/内存细节或测试流水账写进玩家更新说明。
-- 当前有效文件中的旧 CombatSolver 作者署名、旧 Maintainer/Contact、旧仓库归属和不再适用的历史约束应删除或改成匿名技术描述。明确属于第三方依赖的许可证、来源和版权文本保留；不为此全量扫描历史目录或改写 Git 历史。
+## 7. 文档、Git 与发布
 
-## 6. Git、发布与临时文件
+- `DEVELOPMENT_NOTES.md`、`TEST_MATRIX.md`、`ARCHITECTURE.md` 只在对应事实真的改变时更新，不写流水账。
+- 普通开发可按需要使用一个或多个逻辑 commit，完成后推送当前分支。
+- 临时输出、完整日志、Profiler、`.local/`、`bin/`、`obj/` 和 `.godot/` 不进入源码树；确有长期价值的关键证据例外。
+- Agent 可以清理无引用的旧文档、测试产物和一次性工具，但不得删除用户数据或正式游戏安装。
+- 只有用户明确要求准备发版、发布、打标签或上传创意工坊时才进入对应发布动作；普通开发不要自动发布。
 
-- 一个用户请求对应一个逻辑 commit；只读审计或无文件改动不创建空提交。
-- 普通开发完成后，显式暂存当前任务文件并推送当前分支；不得清空工作区或覆盖用户改动。
-- 活动发布批次内只记录到指定“开发中”文档，不逐项升版本、构建、打包、打标签或上传。
-- `准备发版` 完成版本同步、更新日志、提交、一次 Release 构建和最小 ZIP，但不创建标签、不上传、不推送；`发版/发布` 才执行正式发布；`上传/更新创意工坊` 只上传已经定版版本。
-- 发布包、完整日志、问题包、Profiler、`.local/`、`bin/`、`obj/` 和 `.godot/` 不进入源码目录；只有新失败模式、新验证结论或关键证据才整理进 `runtime-evidence/`。
-- 只清理由当前任务创建的临时文件、副本和测试产物。额外清理须由用户明确要求、由本任务创建大型副本，或由临时产物阻碍当前工作触发。清理前列出精确绝对路径、用途和占用；不得递归删除工作区、用户数据、凭据、活动运行数据或不明缓存。删除后报告回收空间和可恢复性。
+## 8. 完成汇报
 
-## 7. 完成汇报
-
-汇报功能层面的变化、所属职责层、实际执行的验证和未执行项。必须区分本轮证据、静态阅读、旧测试记录和未验证结果；不能把编译或聚合 HP 比较写成语义等价，也不能把旧报告写成本轮通过。
-
-任务结束前覆盖更新 `docs/CODEX_HANDOFF.md`，并在最终回复输出同用途的 Markdown 交接。交接只写当前状态和下一步，不复制完整历史。
+只报告当前任务真正改变的行为、实际验证结果和仍存在的风险。无需为每个任务强制生成 handoff 或 Markdown；项目状态发生明显变化时再更新 `docs/CODEX_HANDOFF.md`。
