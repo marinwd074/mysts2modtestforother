@@ -138,6 +138,7 @@ internal sealed class SolverCombatSession
     public int? AutomaticSearchPausedTurn { get; set; }
     public bool ManualSearchAfterTurnSetupRequested { get; set; }
     public int? DeployAfterTurnSetupTurn { get; set; }
+    public bool MultiplayerSafeExecuteDeploymentRequested { get; set; }
     public CombatState? TurnSetupResumeState { get; set; }
     public Dictionary<ReplanCause, int> ReplanCounts { get; } = [];
     public HashSet<SolverResult> ReviewedWorldlineResults { get; } = [];
@@ -233,6 +234,7 @@ internal sealed class SolverDeploymentSession
     public CombatState? State { get; init; }
     public int StartTurnNumber { get; init; }
     public long WorldVersion { get; init; }
+    public bool ExpectedWorldChangeInFlight { get; set; }
     public CancellationTokenSource Cancellation { get; } = new();
     public Task Operation { get; set; } = Task.CompletedTask;
     public int ReferenceReleaseState;

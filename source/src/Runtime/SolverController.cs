@@ -705,10 +705,15 @@ internal static partial class SolverController
         }
         await WaitForTurnStartDeploymentDelayAsync(host, result.StartTurnNumber, token);
         token.ThrowIfCancellationRequested();
+        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
+        bool safeExecuteDeploymentRequested = capabilities.Kind != SolverSessionKind.MultiplayerSafeExecute
+            || _combat.MultiplayerSafeExecuteDeploymentRequested;
         if (!_combat.FullAutoEnabled
+            && safeExecuteDeploymentRequested
             && ReferenceEquals(_combat.LatestResult, result)
             && IsSamePlayableTurn(state, result.StartTurnNumber))
         {
+            _combat.MultiplayerSafeExecuteDeploymentRequested = false;
             StartDeployment(host, state, result);
         }
     }
@@ -752,6 +757,8 @@ internal static partial class SolverController
             Entry.Logger.Info("[CombatSolver/Test] DEPLOY_REJECT reason=already_deploying");
             return;
         }
+        if (capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute)
+            _combat.MultiplayerSafeExecuteDeploymentRequested = true;
         _combat.AutomaticSearchPaused = false;
         _combat.AutomaticSearchPausedTurn = null;
         if (PlayerTurnSetupCoordinator.TryContinuePlannedChoice(
@@ -780,6 +787,7 @@ internal static partial class SolverController
         LiveCombatStamp current = LiveCombatStamp.Capture(state);
         if (_combat.LatestResult != null && _combat.LatestStamp == current)
         {
+            _combat.MultiplayerSafeExecuteDeploymentRequested = false;
             StartDeployment(host, state, _combat.LatestResult);
             return;
         }
@@ -1324,7 +1332,14 @@ internal static partial class SolverController
         CancelMultiplayerDebouncedSearch();
         CancelDeferredSearch();
         CancelSearch();
-        CancelDeployment();
+        bool preserveExpectedSafeDeployment =
+            SolverSessionCapabilities.Capture(state).Kind == SolverSessionKind.MultiplayerSafeExecute
+            && _deployment?.ExpectedWorldChangeInFlight == true;
+        if (!preserveExpectedSafeDeployment)
+        {
+            CancelDeployment();
+            _combat.MultiplayerSafeExecuteDeploymentRequested = false;
+        }
         Task turnSetupRelease = PlayerTurnSetupCoordinator.Reset("multiplayer_capability");
         PendingCombatDeferredOperations.RemoveAll(static task => task.IsCompleted);
         if (!turnSetupRelease.IsCompleted)

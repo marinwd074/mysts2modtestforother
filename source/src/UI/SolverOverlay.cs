@@ -1000,6 +1000,7 @@ internal static partial class SolverOverlay
             _progressText.Visible = false;
         if (_searchProgressBar != null)
             _searchProgressBar.Visible = false;
+        RouteRows[0].SetDeploymentActionLimit(actionCount);
         ShowDeploymentStep(0, actionCount, null);
         if (_routeScroll != null)
             _routeScroll.ScrollVertical = 0;

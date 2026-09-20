@@ -121,6 +121,7 @@ internal static partial class SolverController
                     out SafeLocalActionDecision stop);
             if (safeActions.Count == 0 && plannedTurnActions.Count > 0)
             {
+                _combat.MultiplayerSafeExecuteDeploymentRequested = false;
                 Entry.Logger.Info(
                     $"[CombatSolver/MultiplayerSafeExecute] DEPLOY_STOP " +
                     $"turn={result.StartTurnNumber} reason={stop.Reason}");
@@ -337,6 +338,8 @@ internal static partial class SolverController
                             deployWhenReady: !_combat.FullAutoEnabled);
                         return;
                     }
+                    if (safeExecute)
+                        deployment.ExpectedWorldChangeInFlight = true;
                     GameAction queuedAction = await EnqueueAndCaptureActionAsync(
                         candidate => candidate is PlayCardAction playCard
                             && ReferenceEquals(playCard.NetCombatCard.ToCardModelOrNull(), card),
@@ -368,6 +371,7 @@ internal static partial class SolverController
                     // deploy the next planned action only after the native queue is idle.
                     await RunManager.Instance.ActionExecutor.FinishedExecutingActions().WaitAsync(token);
                     RunStatistics.Activity(state, execution: true, auto: _combat.FullAutoEnabled);
+                    deployment.ExpectedWorldChangeInFlight = false;
                 }
                 catch (NativeChoicePlanMismatchException)
                 {
@@ -631,6 +635,7 @@ internal static partial class SolverController
             }
             finally
             {
+                deployment.ExpectedWorldChangeInFlight = false;
                 CompleteDeployment(deployment);
                 DisposeDeploymentCancellationOnce(deployment);
                 SolverOverlay.RefreshControls();
