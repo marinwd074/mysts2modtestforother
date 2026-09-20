@@ -11,10 +11,5 @@
     <Compile Include="../../src/Engine/Common/PredictionUnsupportedException.cs" Link="PredictionUnsupportedException.cs" />
     <Compile Include="../../src/Engine/Common/MultiplayerAdvisorBoundaryContracts.cs" Link="MultiplayerAdvisorBoundaryContracts.cs" />
     <Compile Include="../../src/Runtime/MultiplayerRemotePublicRelicSupport.cs" Link="MultiplayerRemotePublicRelicSupport.cs" />
-    <Reference Include="sts2" HintPath="$(Sts2DataDir)/sts2.dll" />
-    <Reference Include="GodotSharp" HintPath="$(Sts2DataDir)/GodotSharp.dll" />
   </ItemGroup>
-  <Target Name="ValidateReferences" BeforeTargets="ResolveAssemblyReferences">
-    <Error Condition="!Exists('$(Sts2DataDir)/sts2.dll')" Text="请通过 local.props 或 -p:Sts2DataDir=... 指定当前游戏数据目录。" />
-  </Target>
 </Project>
