@@ -13,11 +13,13 @@ internal sealed partial class CombatBeamSolver
     // One branch owns the progress object. All frames and the replay accounting refer to
     // the same forked copy; an early side-start callback is never stored in a frame.
     private sealed class PlayerStartProgress(Player player, int turnNumber, bool rootSetup,
-        bool takingExtraTurn, ISet<uint> deaths, int shufflesCrossed, int beforeHandShuffles)
+        SearchRoutePolicy routePolicy, bool takingExtraTurn, ISet<uint> deaths,
+        int shufflesCrossed, int beforeHandShuffles)
     {
         public Player Player { get; } = player;
         public int TurnNumber { get; } = turnNumber;
         public bool RootSetup { get; } = rootSetup;
+        public SearchRoutePolicy RoutePolicy { get; } = routePolicy;
         public bool TakingExtraTurn { get; } = takingExtraTurn;
         public ISet<uint> Deaths { get; private set; } = deaths;
         public int ShufflesCrossed = shufflesCrossed;
@@ -47,12 +49,6 @@ internal sealed partial class CombatBeamSolver
             => ContinuePlayerStart(simulator, (SimulatedCombatState)simulator.State.CombatState,
                 Progress, Stage) == SearchBoundaryReason.None;
     }
-
-    private bool ShouldStopBeforeSharedRngShuffle(bool rootSetup, bool willShuffle)
-        => MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
-            policy.RoutePolicy,
-            rootSetup,
-            willShuffle);
 
     private static SearchBoundaryReason ContinuePlayerStart(CombatPredictionSimulator simulator,
         SimulatedCombatState combat, PlayerStartProgress progress, PlayerStartStage stage,
@@ -104,9 +100,10 @@ internal sealed partial class CombatBeamSolver
             }
             int effectiveDraw = Math.Min(progress.DrawCount, combat.GetMaxHandSize(player) - playerState.Hand.Cards.Count);
             progress.WillShuffle = effectiveDraw > playerState.DrawPile.Cards.Count && !playerState.DiscardPile.IsEmpty;
-            if (captureOwner?.ShouldStopBeforeSharedRngShuffle(
+            if (MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
+                    progress.RoutePolicy,
                     progress.RootSetup,
-                    progress.WillShuffle) == true)
+                    progress.WillShuffle))
             {
                 return SearchBoundaryReason.Shuffle;
             }
