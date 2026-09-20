@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "phase": "Multiplayer Carry Ranking R1/R2 Runtime",
+  "status": "PARTIAL",
+  "validatedDate": "2026-09-20",
+  "commit": "b697e08fbbddb3f77459bdc49d93d77bdb6ed7b8",
+  "releaseBuild": "PASS",
+  "releaseErrors": 0,
+  "carryContracts": "PASS",
+  "carryContractCount": 10,
+  "validatorSelfTest": "PASS",
+  "fixture": "SLIMES_WEAK",
+  "r1": {
+    "status": "PASS",
+    "remotePlayers": 1,
+    "enemies": 3,
+    "allPlayerThreats": 2,
+    "unknownThreats": 1,
+    "publicContextOnly": true
+  },
+  "r2": {
+    "status": "UNVERIFIED",
+    "carryPreference": 1,
+    "threatsRemoved": 1,
+    "remoteRiskBefore": 4,
+    "remoteRiskAfter": 3,
+    "unknownRiskCount": 1,
+    "carryDecisive": false,
+    "carryBaselineDifferent": false,
+    "conclusion": "Carry produced a positive public-team-risk signal, but removing Carry would still select the same route in this fixture."
+  },
+  "safety": {
+    "remotePrivateObserved": false,
+    "searchSetupFailure": false,
+    "customNetworkApiUsed": false
+  },
+  "nextFixture": {
+    "rule": "Threat HP must equal the local attack's actual damage D so killing the threat and hitting another target reduce total EnemyHp by the same amount.",
+    "starterIroncladExample": "With no Strength/Vulnerable and Strike damage 6, prepare an AllPlayers threat to exactly 6 HP and keep an Unknown/non-attacking enemy above 6 HP.",
+    "retryLimit": "At most one additional ordinary multi-enemy fixture if the first exact-damage fixture remains UNVERIFIED."
+  }
+}
