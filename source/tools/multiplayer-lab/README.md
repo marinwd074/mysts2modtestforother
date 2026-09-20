@@ -67,8 +67,9 @@ Lobby、wire 或战斗证据。
   或游戏再次提示需要重启时，重复这一步。
 - 同一 `InstanceRoot` 的 `Roaming`/`Local` 目录会跨进程保留，后续可直接复用
   已准备的实例而不重新复制游戏快照；进程真正重启时仍会重新加载 Mod DLL，
-  未写入存档的当前战斗或房间状态不保证恢复。只有更换构建产物时才需要重新
-  `prepare-instances.ps1`，同一产物的启动/停止不应删除实例根目录。
+  未写入存档的当前战斗或房间状态不保证恢复。更换构建产物或游戏底座时重新运行
+  `prepare-instances.ps1`；同一产物的启动/停止不应删除实例根目录，未变化时准备命令
+  会保持 snapshot 不变。
 - `stop-owned-instances.ps1` 只接受显式 instance root，并同时校验 marker、
   PID、进程出生时间和 executable path；没有 ownership 证据就停止。默认使用
   `Graceful` 关闭窗口并等待游戏正常退出，让 CombatSolver journal 有机会排空；
@@ -104,6 +105,20 @@ Lobby、wire 或战斗证据。
   包含多次尝试，可用 `-RequestId <deployment-request-id>` 选择完整 session；
   `test-mp2b-interference-validator.ps1` 当前覆盖 6 个合成用例，其中包含“两张牌后中止”；
   它与正常 bounded N-action 验证器不能互相替代。
+
+### Snapshot 同步合同
+
+`prepare-instances.ps1` 使用 snapshot schema 2，将实例 game root 视为持久的
+base-game snapshot，并把 RitsuLib/CombatSolver 放在 profile overlay 中：
+
+- 游戏版本或底座文件变化、旧 schema、底座完整性校验失败，才执行 staging 全量重建。
+- CombatSolver 构建变化只更新 CombatSolver overlay 文件；RitsuLib 变化只更新 RitsuLib
+  overlay 文件。`HostVanilla` 没有这些 overlay，因此不会因 CombatSolver 构建变化重建。
+- `syncMode` 会写入 `multiplayer-profile.json` 和命令结果，值为
+  `full-rebuild`、`overlay-incremental` 或 `unchanged`。`-ForceRebuild` 仍可显式要求全量
+  重建，也用于切换已有实例的 profile。
+- 增量更新仍只在私有 owned root 内进行，逐文件拒绝 reparse point，并在目标游戏进程运行
+  时禁止覆盖；正式证据仍与 snapshot/运行目录隔离，不会写入 Steam 安装或正式 `MODS`。
 
 Lab Client 会自动设置 `COMBATSOLVER_MULTIPLAYER_PROBE_EVIDENCE=1`，因此
 Probe JSONL 只落在实例诊断目录；普通桌面运行不会因为 Probe 观察而持续写证据。

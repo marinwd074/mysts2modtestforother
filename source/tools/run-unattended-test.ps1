@@ -1296,7 +1296,7 @@ if (Test-Path -LiteralPath $processMarkerPath -PathType Leaf) {
 }
 Enter-HeadlessHostLease $runtimeContext $process
 if ($null -eq $process) {
-    Set-HeadlessGameSnapshot $runtimeContext $snapshotPlan
+    Set-HeadlessGameSnapshot $runtimeContext $snapshotPlan | Out-Null
 }
 $snapshotPlan = $null
 Write-Host "UNATTENDED_RUNTIME instance=$($runtimeContext.Instance) root=$headlessRoot artifact=$($runtimeContext.ArtifactId)"

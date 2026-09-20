@@ -79,10 +79,10 @@ try {
     $ritsuManifest = Join-Path $RitsuWorkshopRoot 'mod_manifest.json'
     $snapshotPlan = Get-HeadlessMultiplayerSnapshotPlan $context $Profile `
         $combatSolverDll $combatSolverManifest $memoryCleaner `
-        $RitsuWorkshopRoot $ritsuManifest $targetRitsuLibVersion
+        $RitsuWorkshopRoot $ritsuManifest $targetRitsuLibVersion $targetGameVersion
     $context.ArtifactId = $snapshotPlan.id
 
-    Set-HeadlessGameSnapshot $context $snapshotPlan
+    $syncResult = Set-HeadlessGameSnapshot $context $snapshotPlan -ForceFullRebuild:$ForceRebuild.IsPresent
     $profileRecord = [ordered]@{
         schemaVersion = 1
         profile = $Profile
@@ -92,6 +92,10 @@ try {
         sourceGameRoot = $context.SourceGameRoot
         gameExecutable = Join-Path $context.GameRoot 'SlayTheSpire2.exe'
         artifactId = $snapshotPlan.id
+        snapshotSchemaVersion = 2
+        baseSnapshotId = $snapshotPlan.baseSnapshotId
+        overlayId = $snapshotPlan.overlayId
+        syncMode = [string]$syncResult.syncMode
         targetGameVersion = $targetGameVersion
         targetRitsuLibVersion = $targetRitsuLibVersion
         preparedUtc = [DateTimeOffset]::UtcNow.ToString('O')
@@ -111,6 +115,10 @@ try {
         runtimeRoot = $context.Root
         gameRoot = $context.GameRoot
         artifactId = $snapshotPlan.id
+        snapshotSchemaVersion = 2
+        baseSnapshotId = $snapshotPlan.baseSnapshotId
+        overlayId = $snapshotPlan.overlayId
+        syncMode = [string]$syncResult.syncMode
         profilePath = $profilePath
         runtimeEvidenceEligible = $false
     }

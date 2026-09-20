@@ -182,6 +182,169 @@ function Get-HeadlessSnapshotPlan(
     return @{ id = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)); files = $files }
 }
 
+function Invoke-HeadlessCancellationCheck {
+    $cancellationCheck = Get-Command Assert-LauncherNotCancelled -ErrorAction SilentlyContinue
+    if ($null -ne $cancellationCheck) {
+        Assert-LauncherNotCancelled
+    }
+}
+
+function New-HeadlessSnapshotFileSet(
+    [System.Collections.IDictionary]$Sources,
+    [string]$IdentityPrefix = ''
+) {
+    $files = [Collections.Generic.List[object]]::new()
+    $identity = [Text.StringBuilder]::new()
+    [void]$identity.Append($IdentityPrefix)
+    $relativePaths = @()
+    if ($Sources.Count -gt 0) {
+        $relativePaths = @($Sources.Keys | Sort-Object -CaseSensitive)
+    }
+    foreach ($relative in $relativePaths) {
+        Invoke-HeadlessCancellationCheck
+        $source = [string]$Sources[$relative]
+        Assert-HeadlessNoReparsePoint $source
+        if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+            throw "Snapshot input is not a file: $source"
+        }
+        $fileHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
+        [void]$files.Add([ordered]@{
+                relative = [string]$relative
+                source = $source
+                sha256 = $fileHash
+            })
+        [void]$identity.Append([string]$relative).Append([char]0).Append($fileHash).Append([char]0)
+    }
+    $bytes = [Text.Encoding]::UTF8.GetBytes($identity.ToString())
+    return @{
+        id = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
+        files = [object[]]$files
+    }
+}
+
+function Get-HeadlessSnapshotManifestValue([object]$Manifest, [string]$Name) {
+    if ($null -eq $Manifest) { return }
+    if ($Manifest -is [System.Collections.IDictionary] -and $Manifest.Contains($Name)) {
+        $value = $Manifest[$Name]
+        if ($null -eq $value) { return }
+        return $value
+    }
+    $property = $Manifest.PSObject.Properties[$Name]
+    if ($null -ne $property) {
+        if ($null -eq $property.Value) { return }
+        return $property.Value
+    }
+    return
+}
+
+function ConvertTo-HeadlessSnapshotManifestFiles([object[]]$Files) {
+    $manifestFiles = [Collections.Generic.List[object]]::new()
+    foreach ($file in @($Files)) {
+        if ($null -eq $file) { continue }
+        [void]$manifestFiles.Add([ordered]@{
+                relative = [string]$file.relative
+                sha256 = [string]$file.sha256
+            })
+    }
+    return ,([object[]]$manifestFiles)
+}
+
+function Assert-HeadlessSnapshotRelativePath([string]$RelativePath) {
+    if ([string]::IsNullOrWhiteSpace($RelativePath) -or
+        [IO.Path]::IsPathRooted($RelativePath) -or
+        $RelativePath -match '(^|[\\/])\.\.([\\/]|$)' -or
+        $RelativePath -match '^[A-Za-z]:' -or
+        $RelativePath.Contains([char]0)) {
+        throw "Snapshot relative path is unsafe: $RelativePath"
+    }
+}
+
+function Get-HeadlessSnapshotTargetPath(
+    [hashtable]$Context,
+    [string]$RelativePath
+) {
+    Assert-HeadlessSnapshotRelativePath $RelativePath
+    $root = Get-HeadlessCanonicalPath $Context.GameRoot
+    $target = Get-HeadlessCanonicalPath (Join-Path $root ($RelativePath.Replace('/', '\')))
+    $rootPrefix = $root + [IO.Path]::DirectorySeparatorChar
+    if (-not $target.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Snapshot path escaped its owned game root: $RelativePath"
+    }
+    Assert-HeadlessNoReparsePoint $target
+    return $target
+}
+
+function Assert-HeadlessGameSnapshotNotRunning([hashtable]$Context) {
+    $expectedExecutable = Join-Path $Context.GameRoot 'SlayTheSpire2.exe'
+    foreach ($candidate in @(Get-Process -Name 'SlayTheSpire2' -ErrorAction SilentlyContinue)) {
+        $candidateHandle = $candidate.SafeHandle
+        if (-not $candidate.HasExited -and [string]::Equals($candidate.MainModule.FileName,
+                $expectedExecutable, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Cannot update a private game snapshot while its process is alive."
+        }
+    }
+}
+
+function Copy-HeadlessSnapshotFiles(
+    [hashtable]$Context,
+    [string]$DestinationRoot,
+    [object[]]$Files
+) {
+    foreach ($file in @($Files)) {
+        if ($null -eq $file) { continue }
+        Invoke-HeadlessCancellationCheck
+        $source = [string]$file.source
+        Assert-HeadlessNoReparsePoint $source
+        if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+            throw "Snapshot input is not a file: $source"
+        }
+        $relative = [string]$file.relative
+        Assert-HeadlessSnapshotRelativePath $relative
+        $destination = Get-HeadlessCanonicalPath (Join-Path $DestinationRoot ($relative.Replace('/', '\')))
+        New-Item -ItemType Directory -Path ([IO.Path]::GetDirectoryName($destination)) -Force | Out-Null
+        Assert-HeadlessNoReparsePoint $destination
+        [void](Copy-Item -LiteralPath $source -Destination $destination -Force -PassThru)
+        if ((Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash -ne [string]$file.sha256) {
+            throw "A source payload changed while the private game was being synchronized: $source"
+        }
+    }
+}
+
+function Remove-HeadlessSnapshotFiles(
+    [hashtable]$Context,
+    [object[]]$Files
+) {
+    foreach ($file in @($Files)) {
+        if ($null -eq $file) { continue }
+        $target = Get-HeadlessSnapshotTargetPath $Context ([string]$file.relative)
+        $item = Get-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+        if ($null -eq $item) { continue }
+        if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Refusing to remove a profile overlay through a reparse point: $target"
+        }
+        if ($item.PSIsContainer) {
+            throw "Refusing to remove a profile overlay directory as a file: $target"
+        }
+        Remove-Item -LiteralPath $target -Force -ErrorAction Stop
+    }
+}
+
+function Test-HeadlessSnapshotFilesMatch(
+    [hashtable]$Context,
+    [object[]]$Files
+) {
+    foreach ($file in @($Files)) {
+        if ($null -eq $file) { continue }
+        $target = Get-HeadlessSnapshotTargetPath $Context ([string]$file.relative)
+        $item = Get-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+        if ($null -eq $item -or $item.PSIsContainer) { return $false }
+        if ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -ne [string]$file.sha256) {
+            return $false
+        }
+    }
+    return $true
+}
+
 function Get-HeadlessMultiplayerSnapshotPlan(
     [hashtable]$Context,
     [string]$Profile,
@@ -190,7 +353,8 @@ function Get-HeadlessMultiplayerSnapshotPlan(
     [string]$MemoryCleaner,
     [string]$RitsuRoot,
     [string]$RitsuManifest,
-    [string]$RitsuLibTargetVersion
+    [string]$RitsuLibTargetVersion,
+    [string]$BaseGameVersion = ''
 ) {
     if ($Profile -notin @('HostVanilla', 'ClientVanilla', 'ClientRitsuOnly', 'ClientCombatSolver')) {
         throw "Unsupported multiplayer snapshot profile: $Profile"
@@ -198,7 +362,8 @@ function Get-HeadlessMultiplayerSnapshotPlan(
 
     $needsRitsu = $Profile -in @('ClientRitsuOnly', 'ClientCombatSolver')
     $needsSolver = $Profile -eq 'ClientCombatSolver'
-    $sources = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
+    Assert-HeadlessNoReparsePoint $Context.SourceGameRoot
+    $baseSources = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
     foreach ($item in Get-ChildItem -LiteralPath $Context.SourceGameRoot -Recurse -Force) {
         if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
             throw "Cannot freeze a multiplayer game tree containing a reparse point: $($item.FullName)"
@@ -209,18 +374,20 @@ function Get-HeadlessMultiplayerSnapshotPlan(
             if ([string]::Equals($rootSegment, 'mods', [StringComparison]::OrdinalIgnoreCase)) {
                 continue
             }
-            $sources[$relative] = $item.FullName
+            $baseSources[$relative] = $item.FullName
         }
     }
 
+    $overlaySources = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
     if ($needsRitsu) {
         if (-not (Test-Path -LiteralPath $RitsuRoot -PathType Container)) {
             throw "RitsuLib workshop directory was not found: $RitsuRoot"
         }
+        Assert-HeadlessNoReparsePoint $RitsuRoot
         if (-not (Test-Path -LiteralPath $RitsuManifest -PathType Leaf)) {
             throw "RitsuLib manifest was not found: $RitsuManifest"
         }
-        $sources['mods\.combatsolver-headless-ritsulib\STS2-RitsuLib.json'] = $RitsuManifest
+        $overlaySources['mods\.combatsolver-headless-ritsulib\STS2-RitsuLib.json'] = $RitsuManifest
         $variantManifest = Join-Path $RitsuRoot 'ritsulib-variants.manifest'
         if (Test-Path -LiteralPath $variantManifest -PathType Leaf) {
             foreach ($item in Get-ChildItem -LiteralPath $RitsuRoot -Recurse -Force) {
@@ -231,12 +398,12 @@ function Get-HeadlessMultiplayerSnapshotPlan(
                     throw "Cannot freeze a RitsuLib bundle containing a reparse point: $($item.FullName)"
                 }
                 $relative = [IO.Path]::GetRelativePath($RitsuRoot, $item.FullName).Replace('/', '\')
-                $sources[(Join-Path 'mods\.combatsolver-headless-ritsulib' $relative)] = $item.FullName
+                $overlaySources[(Join-Path 'mods\.combatsolver-headless-ritsulib' $relative)] = $item.FullName
             }
         }
         else {
             $legacyDll = Join-Path $RitsuRoot (Join-Path 'lib' (Join-Path $RitsuLibTargetVersion 'STS2-RitsuLib.dll'))
-            $sources['mods\.combatsolver-headless-ritsulib\STS2-RitsuLib.dll'] = $legacyDll
+            $overlaySources['mods\.combatsolver-headless-ritsulib\STS2-RitsuLib.dll'] = $legacyDll
         }
     }
 
@@ -246,29 +413,23 @@ function Get-HeadlessMultiplayerSnapshotPlan(
                 throw "CombatSolver snapshot input was not found: $requiredSource"
             }
         }
-        $sources['mods\CombatSolver\CombatSolver.dll'] = $CombatSolverDll
-        $sources['mods\CombatSolver\CombatSolver.json'] = $CombatSolverManifest
-        $sources['mods\CombatSolver\CombatSolver.MemoryCleaner.exe'] = $MemoryCleaner
+        $overlaySources['mods\CombatSolver\CombatSolver.dll'] = $CombatSolverDll
+        $overlaySources['mods\CombatSolver\CombatSolver.json'] = $CombatSolverManifest
+        $overlaySources['mods\CombatSolver\CombatSolver.MemoryCleaner.exe'] = $MemoryCleaner
     }
 
-    $files = [Collections.Generic.List[object]]::new()
-    $identity = [Text.StringBuilder]::new()
-    $cancellationCheck = Get-Command Assert-LauncherNotCancelled -ErrorAction SilentlyContinue
-    foreach ($relative in @($sources.Keys | Sort-Object -CaseSensitive)) {
-        if ($null -ne $cancellationCheck) {
-            Assert-LauncherNotCancelled
-        }
-        $source = $sources[$relative]
-        Assert-HeadlessNoReparsePoint $source
-        $fileHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
-        $files.Add(@{ relative = $relative; source = $source; sha256 = $fileHash })
-        [void]$identity.Append($relative).Append([char]0).Append($fileHash).Append([char]0)
-    }
-    $bytes = [Text.Encoding]::UTF8.GetBytes($identity.ToString())
+    $baseSet = New-HeadlessSnapshotFileSet $baseSources ("game_version=$BaseGameVersion" + [char]0)
+    $overlaySet = New-HeadlessSnapshotFileSet $overlaySources
+    $combinedIdentity = "profile=$Profile" + [char]0 + $baseSet.id + [char]0 + $overlaySet.id + [char]0
+    $bytes = [Text.Encoding]::UTF8.GetBytes($combinedIdentity)
     return @{
         id = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
         profile = $Profile
-        files = $files
+        baseSnapshotId = $baseSet.id
+        overlayId = $overlaySet.id
+        baseFiles = @($baseSet.files)
+        overlayFiles = @($overlaySet.files)
+        files = @($baseSet.files) + @($overlaySet.files)
     }
 }
 
@@ -280,7 +441,7 @@ function Remove-HeadlessOwnedGameTree([hashtable]$Context, [string]$Path) {
         throw "Refusing to remove an unowned private game snapshot: $pathFull"
     }
     $owner = Get-Content -LiteralPath (Join-Path $pathFull '.combatsolver-frozen-game.json') -Raw | ConvertFrom-Json -AsHashtable
-    if ($owner.schemaVersion -ne 1 -or $owner.runtimeRoot -ne $Context.Root) {
+    if ($owner.schemaVersion -notin @(1, 2) -or $owner.runtimeRoot -ne $Context.Root) {
         throw "Private game snapshot ownership does not match this runtime: $pathFull"
     }
     Assert-HeadlessNoReparsePoint $pathFull
@@ -293,56 +454,191 @@ function Remove-HeadlessOwnedGameTree([hashtable]$Context, [string]$Path) {
     Write-Host "UNATTENDED_SNAPSHOT_REMOVED path=$pathFull source_game_preserved=true"
 }
 
-function Set-HeadlessGameSnapshot([hashtable]$Context, [hashtable]$Plan) {
+function Set-HeadlessGameSnapshot(
+    [hashtable]$Context,
+    [hashtable]$Plan,
+    [switch]$ForceFullRebuild
+) {
+    # The ordinary unattended runner still supplies the legacy all-files
+    # snapshot plan. Keep its historical full-rebuild semantics while the
+    # Multiplayer Lab supplies the explicit base/overlay plan below.
+    if (-not $Plan.ContainsKey('baseSnapshotId')) {
+        $legacyFiles = @($Plan.files | Where-Object { $null -ne $_ })
+        $Plan = @{
+            id = [string]$Plan.id
+            profile = 'LegacyHeadless'
+            baseSnapshotId = [string]$Plan.id
+            overlayId = ''
+            baseFiles = $legacyFiles
+            overlayFiles = [object[]]@()
+        }
+    }
     Assert-HeadlessNoReparsePoint $Context.GameRoot
     $manifest = Join-Path $Context.GameRoot '.combatsolver-frozen-game.json'
+    $existing = $null
     if (Test-Path -LiteralPath $manifest -PathType Leaf) {
         $existing = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json -AsHashtable
-        if ($existing.artifactId -eq $Plan.id) { return }
+        $existingSchema = [int](Get-HeadlessSnapshotManifestValue $existing 'schemaVersion')
+        if ($existingSchema -notin @(1, 2) -or
+            -not [string]::Equals([string](Get-HeadlessSnapshotManifestValue $existing 'runtimeRoot'),
+                [string]$Context.Root, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Private game snapshot manifest does not match this runtime: $manifest"
+        }
     }
+
+    $existingSchema = if ($null -eq $existing) { 0 } else {
+        [int](Get-HeadlessSnapshotManifestValue $existing 'schemaVersion')
+    }
+    $existingBaseFiles = @(Get-HeadlessSnapshotManifestValue $existing 'baseFiles')
+    $existingOverlayFiles = @(Get-HeadlessSnapshotManifestValue $existing 'overlayFiles')
+    $baseFilesMatch = $existingSchema -eq 2 -and
+        @($existingBaseFiles).Count -eq @($Plan.baseFiles).Count -and
+        (Test-HeadlessSnapshotFilesMatch $Context $existingBaseFiles)
+    $baseSnapshotMatches = $existingSchema -eq 2 -and
+        [string]::Equals([string](Get-HeadlessSnapshotManifestValue $existing 'baseSnapshotId'),
+            [string]$Plan.baseSnapshotId, [StringComparison]::OrdinalIgnoreCase) -and
+        $baseFilesMatch -and
+        (Test-Path -LiteralPath (Join-Path $Context.GameRoot 'SlayTheSpire2.exe') -PathType Leaf)
+    $needsFullRebuild = $ForceFullRebuild.IsPresent -or -not $baseSnapshotMatches
+    $overlayFilesMatch = $existingSchema -eq 2 -and
+        @($existingOverlayFiles).Count -eq @($Plan.overlayFiles).Count -and
+        (Test-HeadlessSnapshotFilesMatch $Context $existingOverlayFiles)
+    $overlayMatches = $existingSchema -eq 2 -and
+        [string]::Equals([string](Get-HeadlessSnapshotManifestValue $existing 'overlayId'),
+            [string]$Plan.overlayId, [StringComparison]::OrdinalIgnoreCase) -and
+        [string]::Equals([string](Get-HeadlessSnapshotManifestValue $existing 'profile'),
+            [string]$Plan.profile, [StringComparison]::OrdinalIgnoreCase) -and
+        $overlayFilesMatch
+    if (-not $needsFullRebuild -and $overlayMatches) {
+        return [ordered]@{
+            syncMode = 'unchanged'
+            baseSnapshotId = $Plan.baseSnapshotId
+            overlayId = $Plan.overlayId
+            copiedBaseFiles = 0
+            copiedOverlayFiles = 0
+            removedOverlayFiles = 0
+        }
+    }
+
     # The caller has already stopped its old game and holds both the instance
     # lock and an admitted pending host lease. Never overwrite a loaded image.
-    foreach ($candidate in @(Get-Process -Name 'SlayTheSpire2' -ErrorAction SilentlyContinue)) {
-        $candidateHandle = $candidate.SafeHandle
-        if (-not $candidate.HasExited -and [string]::Equals($candidate.MainModule.FileName,
-                (Join-Path $Context.GameRoot 'SlayTheSpire2.exe'), [StringComparison]::OrdinalIgnoreCase)) {
-            throw "Cannot replace a private game snapshot while its process is alive."
-        }
+    Assert-HeadlessGameSnapshotNotRunning $Context
+
+    $baseManifestFiles = ConvertTo-HeadlessSnapshotManifestFiles $Plan.baseFiles
+    $overlayManifestFiles = ConvertTo-HeadlessSnapshotManifestFiles $Plan.overlayFiles
+    $manifestFiles = @($baseManifestFiles) + @($overlayManifestFiles)
+    $manifestValue = [ordered]@{
+        schemaVersion = 2
+        snapshotKind = 'base-plus-profile-overlay'
+        runtimeRoot = $Context.Root
+        profile = $Plan.profile
+        artifactId = $Plan.id
+        baseSnapshotId = $Plan.baseSnapshotId
+        overlayId = $Plan.overlayId
+        baseFiles = $baseManifestFiles
+        overlayFiles = $overlayManifestFiles
+        files = $manifestFiles
     }
-    $staging = Join-Path $Context.Root ('.game-stage-' + [Guid]::NewGuid().ToString('N'))
-    New-Item -ItemType Directory -Path $staging | Out-Null
-    Write-HeadlessJson (Join-Path $staging '.combatsolver-frozen-game.json') @{ schemaVersion = 1; artifactId = ''; runtimeRoot = $Context.Root }
-    try {
-        foreach ($file in $Plan.files) {
-            Assert-LauncherNotCancelled
-            $destination = Join-Path $staging $file.relative
-            New-Item -ItemType Directory -Path ([IO.Path]::GetDirectoryName($destination)) -Force | Out-Null
-            Copy-Item -LiteralPath $file.source -Destination $destination -Force
-            # This is a source-mutation check at the freeze boundary, not a
-            # second deployment verification: builds may run during the copy.
-            if ((Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash -ne $file.sha256) {
-                throw "A source payload changed while the private game was being frozen: $($file.source)"
+
+    if ($needsFullRebuild) {
+        $staging = Join-Path $Context.Root ('.game-stage-' + [Guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $staging | Out-Null
+        Write-HeadlessJson (Join-Path $staging '.combatsolver-frozen-game.json') @{
+            schemaVersion = 2; runtimeRoot = $Context.Root; snapshotKind = 'base-plus-profile-overlay'
+        }
+        try {
+            Copy-HeadlessSnapshotFiles $Context $staging $Plan.baseFiles
+            Copy-HeadlessSnapshotFiles $Context $staging $Plan.overlayFiles
+            $snapshotFiles = @($Plan.baseFiles) + @($Plan.overlayFiles)
+            $hasPrivateRitsuDependency = @($snapshotFiles | Where-Object {
+                    [string]$_.relative -like 'mods\.combatsolver-headless-ritsulib\*'
+                }).Count -gt 0
+            if ($hasPrivateRitsuDependency) {
+                $dependency = Join-Path $staging 'mods\.combatsolver-headless-ritsulib'
+                New-Item -ItemType Directory -Path $dependency -Force | Out-Null
+                Set-Content -LiteralPath (Join-Path $dependency '.combatsolver-headless-only') -Value 'CombatSolver private frozen dependency' -Encoding UTF8
+            }
+            Write-HeadlessJson (Join-Path $staging '.combatsolver-frozen-game.json') $manifestValue
+            if (Test-Path -LiteralPath $Context.GameRoot) {
+                Remove-HeadlessOwnedGameTree $Context $Context.GameRoot
+            }
+            Move-Item -LiteralPath $staging -Destination $Context.GameRoot
+            return [ordered]@{
+                syncMode = 'full-rebuild'
+                baseSnapshotId = $Plan.baseSnapshotId
+                overlayId = $Plan.overlayId
+                copiedBaseFiles = @($Plan.baseFiles).Count
+                copiedOverlayFiles = @($Plan.overlayFiles).Count
+                removedOverlayFiles = 0
+            }
+        } finally {
+            if (Test-Path -LiteralPath $staging -PathType Container) {
+                Remove-HeadlessOwnedGameTree $Context $staging
             }
         }
-        $hasPrivateRitsuDependency = @($Plan.files | Where-Object {
-                [string]$_.relative -like 'mods\.combatsolver-headless-ritsulib\*'
-            }).Count -gt 0
-        if ($hasPrivateRitsuDependency) {
-            $dependency = Join-Path $staging 'mods\.combatsolver-headless-ritsulib'
-            New-Item -ItemType Directory -Path $dependency -Force | Out-Null
-            Set-Content -LiteralPath (Join-Path $dependency '.combatsolver-headless-only') -Value 'CombatSolver private frozen dependency' -Encoding UTF8
+    }
+
+    $oldOverlayFiles = $existingOverlayFiles
+    $newRelative = @{}
+    foreach ($file in @($Plan.overlayFiles)) {
+        Assert-HeadlessSnapshotRelativePath ([string]$file.relative)
+        $newRelative[[string]$file.relative] = $true
+    }
+    $removedCount = 0
+    foreach ($oldFile in $oldOverlayFiles) {
+        $oldRelative = [string](Get-HeadlessSnapshotManifestValue $oldFile 'relative')
+        if (-not $newRelative.ContainsKey($oldRelative)) {
+            Remove-HeadlessSnapshotFiles $Context @($oldFile)
+            $removedCount++
         }
-        Write-HeadlessJson (Join-Path $staging '.combatsolver-frozen-game.json') @{
-            schemaVersion = 1; artifactId = $Plan.id; runtimeRoot = $Context.Root; files = $Plan.files
+    }
+
+    $copiedCount = 0
+    foreach ($file in @($Plan.overlayFiles)) {
+        $destination = Get-HeadlessSnapshotTargetPath $Context ([string]$file.relative)
+        $item = Get-Item -LiteralPath $destination -Force -ErrorAction SilentlyContinue
+        if ($null -ne $item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Refusing to update a profile overlay through a reparse point: $destination"
         }
-        if (Test-Path -LiteralPath $Context.GameRoot) {
-            Remove-HeadlessOwnedGameTree $Context $Context.GameRoot
+        $same = $null -ne $item -and -not $item.PSIsContainer -and
+            (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash -eq [string]$file.sha256
+        if (-not $same) {
+            Copy-HeadlessSnapshotFiles $Context $Context.GameRoot @($file)
+            $copiedCount++
         }
-        Move-Item -LiteralPath $staging -Destination $Context.GameRoot
-    } finally {
-        if (Test-Path -LiteralPath $staging -PathType Container) {
-            Remove-HeadlessOwnedGameTree $Context $staging
+    }
+
+    $oldHasPrivateRitsuDependency = @($oldOverlayFiles | Where-Object {
+            [string](Get-HeadlessSnapshotManifestValue $_ 'relative') -like 'mods\.combatsolver-headless-ritsulib\*'
+        }).Count -gt 0
+    $newHasPrivateRitsuDependency = @($Plan.overlayFiles | Where-Object {
+            [string]$_.relative -like 'mods\.combatsolver-headless-ritsulib\*'
+        }).Count -gt 0
+    $dependency = Get-HeadlessSnapshotTargetPath $Context 'mods\.combatsolver-headless-ritsulib'
+    $dependencyMarker = Join-Path $dependency '.combatsolver-headless-only'
+    if ($newHasPrivateRitsuDependency) {
+        New-Item -ItemType Directory -Path $dependency -Force | Out-Null
+        Assert-HeadlessNoReparsePoint $dependency
+        Assert-HeadlessNoReparsePoint $dependencyMarker
+        Set-Content -LiteralPath $dependencyMarker -Value 'CombatSolver private frozen dependency' -Encoding UTF8
+    }
+    elseif ($oldHasPrivateRitsuDependency) {
+        $markerItem = Get-Item -LiteralPath $dependencyMarker -Force -ErrorAction SilentlyContinue
+        if ($null -ne $markerItem) {
+            if (($markerItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Refusing to remove the RitsuLib overlay marker through a reparse point: $dependencyMarker"
+            }
+            Remove-Item -LiteralPath $dependencyMarker -Force
         }
+    }
+    Write-HeadlessJson $manifest $manifestValue
+    return [ordered]@{
+        syncMode = 'overlay-incremental'
+        baseSnapshotId = $Plan.baseSnapshotId
+        overlayId = $Plan.overlayId
+        copiedBaseFiles = 0
+        copiedOverlayFiles = $copiedCount
+        removedOverlayFiles = $removedCount
     }
 }
 

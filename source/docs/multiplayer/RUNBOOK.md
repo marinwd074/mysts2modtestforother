@@ -42,6 +42,19 @@
    - 使用 `stop-owned-instances.ps1` 默认模式。
    - `-Mode Force` 只用于清理卡死实例；强杀可能截断 CombatSolver journal，不能把该运行当完整证据。
 
+## 实例 snapshot 增量同步
+
+`prepare-instances.ps1` 的 game root 使用 schema 2：底座文件保留为持久
+base-game snapshot，RitsuLib 与 CombatSolver 作为 profile overlay 增量同步。
+游戏版本/底座变化、底座完整性失败或旧 schema 才会触发 staging 全量重建；CombatSolver
+构建变化只更新 CombatSolver payload，RitsuLib 变化只更新 Ritsu payload，HostVanilla
+不会因为 CombatSolver 构建变化重建。输出中的 `syncMode` 会标明
+`full-rebuild`、`overlay-incremental` 或 `unchanged`。
+
+仍须使用现有 `-ForceRebuild` 处理显式全量重建或 profile 切换。增量同步不改变既有安全
+合同：只操作带 ownership marker 的 D: 私有 root，拒绝 reparse point，运行中的目标游戏
+禁止覆盖，正式证据继续落在隔离的 diagnostics/results 路径而不是 game snapshot。
+
 ## 推荐启动顺序
 
 > 以下 Host/Client 启动、Mod warm-up 重启和 Graceful stop 均由 **Codex/Agent 执行**；只有进入游戏窗口后的点击交给用户。
