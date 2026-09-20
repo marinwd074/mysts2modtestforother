@@ -4,7 +4,7 @@
 
 ## 当前基线
 
-- MP-2A 实现提交：`fec5f43026378c92a8f8e6ffdea2c81b766f0c57`（`test: add MP-2A lab smoke gate`）。
+- MP-2A 实现基线：`a50673e`（`fix: allow choice-free MP2A actions`）。该修复让无选项的安全本地牌在多人 Safe Execute 中直接等待原生动作完成，不再错误创建被多人会话禁止的原生选牌驱动；带选项动作仍由安全策略 fail-closed。
 - GitHub Actions run：`35479112564`，`static-consistency=PASS`，`contract-tests=PASS`。
 - L1 总结果：`PASS: 8 / FAIL: 0 / SKIP: 0`。
 - `MultiplayerSafeExecuteChecks`：21 项通过。
@@ -64,15 +64,15 @@ PASS 必须同时满足：
 
 ## 最近一次 MP-2A Lab 运行（2026-09-20）
 
-- 当前源码 `cd533c6` 已完成 Release 构建；Host/Client 使用同一构建产物。
+- 修复前源码 `a7e3dc9` 已完成 Release 构建；Host/Client 使用同一构建产物。
 - Host/Client 已按 Lab 流程启动并进入 `NIBBITS_WEAK` 多人战斗；Client 已加载 RitsuLib 与 CombatSolver。
-- Client 日志 `runtime-mp2a-client-20260920/logs/20260920-095845-client-7b394cae.log` 未出现 `LAB_CAPABILITY`、`MP2A_DEPLOY_START`、`NATIVE_ACTION_CAPTURED` 或 `DEPLOY_END`，也没有观察到自动出牌；本轮验证结果为 `UNVERIFIED`，不是 MP-2A PASS。
+- 正确的 CombatSolver journal 观察到 `LAB_CAPABILITY` 与 `MP2A_DEPLOY_START`，但随后 `NativeChoiceRuntime.Begin` 因多人会话不允许驱动原生选牌而抛出 `DEPLOY_FAILURE`；没有 `NATIVE_ACTION_CAPTURED`、`DEPLOY_END` 或后续世界失效/重搜，因此本轮结果为 `UNVERIFIED`，不是 MP-2A PASS。
 - 已通过 ownership 脚本停止 Host/Client。机器摘要留在 `.local/multiplayer-lab/results/mp2a-20260920-no-auto-summary.json`，不作为正式 multiplayer evidence。
 - 验证器已排除普通网络/手动 `EndPlayerTurnAction` 的误报，只把 CombatSolver 自己的自动结束回合标记视为禁用动作证据；`test-mp2a-validator.ps1` 当前 `checks=4` 通过。
 
 ## 当前唯一主要未完成项
 
-真实 MP-2A 单牌 Smoke 仍未取得 PASS。下一次运行必须在 Client 的 Solver 路线稳定后明确点击一次“执行本回合”，并在点击后保持数秒；没有 `LAB_CAPABILITY` 与完整单牌事件链时，不能升级正式 Safe Execute 入口。
+真实 MP-2A 单牌 Smoke 仍未取得 PASS。`a50673e` 已修复上述部署前失败；当前 `runtime-mp2a-host-20260920-fix1` / `runtime-mp2a-client-20260920-fix1` 正在做修复后复测。下一次有效回放必须在 Client 的 Solver 路线稳定后明确点击一次“执行本回合”，并在点击后保持数秒；没有 `LAB_CAPABILITY` 与完整单牌事件链时，不能升级正式 Safe Execute 入口。
 
 ## 下一步实机步骤
 
