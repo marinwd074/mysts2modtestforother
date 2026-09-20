@@ -1,6 +1,6 @@
 # Multiplayer 适配阶段
 
-当前阶段：**MP-0 Core 与 Host 重建房间后的 Client 重新加入生命周期均已通过；MP-1 Advisor 受控 Smoke 已通过，重连后的远端私有药水语义保持 fail-closed；MP-2 Safe Execute 仍阻塞**。
+当前阶段：**MP-0 Core 与 Host 重建房间后的 Client 重新加入生命周期均已通过；MP-1 Advisor 受控 Smoke 已通过，重连后的远端私有药水语义保持 fail-closed；MP-2A 受控 Lab Smoke 已通过，但 MP-2 Safe Execute 正式入口仍阻塞**。
 
 本阶段依据 `Multiplayer Apply` 中的精简功能方案和修正版执行计划实现，目标是先用隔离的双实例完成真实 Host/Client 证据，不改变多人会话语义。
 
@@ -9,7 +9,7 @@
 - **MP-0 Core：PASS**。连接兼容、本地私有状态只读采集、远端公开战斗状态、双 Client 对照和 Probe 只读契约均有证据。
 - **MP-0 Hardening：PASS（受控生命周期）**。已按游戏规则由 Host 退出并重新创建房间，Client 收到 `Quit` 后重新握手、加入、Ready，并再次进入有效战斗；进程停止本身不计入证据。
 - **MP-1 Advisor：SMOKE PASS（受控范围）**。静态合同与 Release 构建已通过；默认仍是 Probe，只有显式设置 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才会授予当前回合、本地玩家、只显示路线的搜索能力，绝不会自动执行动作。`BurningBlood`、side-turn relic、多人 block-scaling 和 EndTurn replay 边界均已收敛；fresh `-bbfix` client 的真实复验记录 `SEARCH_COMPLETE=5`、`SEARCH_FAILURE=0`、`FAIL_CLOSED=0`，并有原生完成通知与路线回放证据。Probe 仍保持只读，MP-2 Safe Execute 不在本次通过范围内。
-- **MP-2 Safe Execute：BLOCKED（正式入口）**。MP-2A 已具备受控 `safe-execute-lab` 测试入口，但只在 Multiplayer Lab 创建的 `ClientCombatSolver` 实例、Probe evidence 已启用且 ownership/profile marker 匹配时授权；普通桌面进程与正式 `safe-execute` token 均保持拒绝。Lab 内一次 deployment 最多接受 1 张本地普通安全牌，随后重新观察并重算。自动 EndTurn、药水、选择、Replay/重复语义、队友目标、Full Auto、Instant 与连续多牌仍禁止。
+- **MP-2 Safe Execute：BLOCKED（正式入口）**。2026-09-20 的 HostVanilla + ClientCombatSolver `safe-execute-lab` 单牌 Smoke 已验证通过；该入口只在 Multiplayer Lab 创建的 `ClientCombatSolver` 实例、Probe evidence 已启用且 ownership/profile marker 匹配时授权。普通桌面进程与正式 `safe-execute` token 均保持拒绝。Lab 内一次 deployment 最多接受 1 张本地普通安全牌，随后重新观察并重算。自动 EndTurn、药水、选择、Replay/重复语义、队友目标、Full Auto、Instant 与连续多牌仍禁止。
 
 ## 已实现
 

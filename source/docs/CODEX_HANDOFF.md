@@ -5,8 +5,8 @@
 - CombatSolver `0.40.2`；目标游戏 / RitsuLib `0.107.1`；兼容符号 `STS2_01071`。
 - MP-0 Core / lifecycle：PASS。
 - MP-1 Advisor：受控 Smoke PASS。
-- MP-2 正式 Safe Execute：BLOCKED。
-- MP-2A：静态/合同 PASS，真实行为已有支持证据，但正式 Host/Client 事件链仍为 UNVERIFIED。
+- MP-2 正式 Safe Execute：BLOCKED（正式 `safe-execute` 入口仍关闭）。
+- MP-2A：静态/合同 PASS；2026-09-20 的正式 Host/Client `safe-execute-lab` Smoke 已 PASS。该 Lab 证据不等于开放正式入口。
 - MP-2B / Multiplayer Instant：BLOCKED。
 - 最近已验证实现基线：`18accc1`；GitHub Actions `35485393314` 为 `9 PASS / 0 FAIL / 0 SKIP`。随后文档收尾 `62f51ea` 的 CI `35485507892` 也全绿。
 
@@ -35,18 +35,16 @@
 - Codex/Agent 负责把环境准备到可点击状态，并在用户每完成一步后读取日志/结果继续判断。
 - 后续 MP-2A Smoke 应按 RUNBOOK 分成短步骤交给用户执行，而不是由 Codex 长时间尝试自动完成。
 
+## 本轮 MP-2A 实机证据（2026-09-20）
+
+- 已按远程 `d48065b` 的 Runbook 构建当前 Release，并使用 `HostVanilla + ClientCombatSolver`、Steam transport off、Mod warm-up 后第二次正式 Client 运行。
+- Host/Client 进入同一房间和战斗：MapCoord `(3,0)`、Encounter `NIBBITS_WEAK`、Seed `EJEBT4G7Y6`。用户确认点击前没有自动出牌。
+- 用户只点击一次“执行本回合”：原生 `PlayCardAction` 打出 `STRIKE_IRONCLAD`；能量 `3 -> 2`、手牌 `5 -> 4`、弃牌堆增加 1 张，敌方生命 `96 -> 90`，UI 进入“等待下一回合”。
+- `validate-mp2a-results.ps1` 返回 `MULTIPLAYER_MP-2A_PASS`，7 项检查全部 PASS：Lab capability、单动作部署、原生 PlayCardAction、无自动 EndTurn/药水、动作后 WorldVersion 失效和新的 debounce search。审计摘要位于 `.local/multiplayer-lab/results/mp2a-summary-20260920-user.json`；原始 CombatSolver journal 位于本轮 Client 的 `diagnostics/CombatSolver-BugReports/logs/CombatSolver/` 下。
+- 两个隔离实例均使用默认 `Graceful` 停止。以上证据只收口受控 `safe-execute-lab` 的单张本地普通牌 Smoke，不开放正式 `safe-execute`、MP-2B、Multiplayer Instant、自动 EndTurn、Potion、Choice 或 Full Auto。
+
 ## 当前下一步
 
-重新做一轮新的 MP-2A Host + Client Smoke：
+- MP-2A 受控 Lab Smoke 已收口为 PASS；若继续推进，应单独评审正式 Safe Execute 入口的实现与门禁，不把 Lab token 改名或直接推广为正式能力。
 
-1. 当前源码 Release build。
-2. Vanilla Host + ClientCombatSolver。
-3. Client 使用 `safe-execute-lab`。
-4. 未点击时确认不会自动出牌。
-5. 只点击一次“执行本回合”。
-6. 等待 PlayCardAction、WorldVersion 更新和新搜索。
-7. 使用默认 Graceful 停止，不使用 `-Mode Force`。
-8. 用 `validate-mp2a-results.ps1` 验证完整 journal。
-9. 只有全部 PASS 后才讨论正式 Safe Execute 入口。
-
-不要在这一步之前开放 MP-2B、Multiplayer Instant、自动 EndTurn、Potion、Choice 或 Full Auto。
+在新的正式入口决策前，继续保持 MP-2B、Multiplayer Instant、自动 EndTurn、Potion、Choice 和 Full Auto 关闭。
