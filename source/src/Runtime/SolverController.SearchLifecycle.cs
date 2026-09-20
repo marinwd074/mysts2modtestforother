@@ -736,7 +736,17 @@ internal static partial class SolverController
                 $"actions={result.BestNode.Actions.Count} continuations={result.Continuations.Count}");
         }
         Entry.Logger.Info(SolverDiagnostics.DescribeResult(result));
-        if (currentTurnAdopted || search.DeployWhenReady)
+        SolverSessionCapabilitySet completionCapabilities = SolverSessionCapabilities.Capture(searchedState);
+        bool deployWhenReady = currentTurnAdopted || search.DeployWhenReady;
+        if (completionCapabilities.Kind == SolverSessionKind.MultiplayerSafeExecute)
+        {
+            // Safe Execute is advisor-first: an automatic current-turn result must never
+            // drive a card. Only the explicit Execute button may arm this deployment.
+            deployWhenReady = _combat.MultiplayerSafeExecuteDeploymentRequested;
+            if (deployWhenReady)
+                _combat.MultiplayerSafeExecuteDeploymentRequested = false;
+        }
+        if (deployWhenReady)
             StartDeployment(host, searchedState, result);
         else if (_combat.FullAutoEnabled)
             StartFullAutoDeployment(host, searchedState, result);

@@ -54,6 +54,17 @@ function Read-MultiplayerInstance {
         -not (Test-Path -LiteralPath $frozenMarker -PathType Leaf)) {
         throw "Multiplayer game snapshot is missing or unowned: $gameRoot"
     }
+    Assert-HeadlessNoReparsePoint $frozenMarker
+    $frozen = Get-Content -LiteralPath $frozenMarker -Raw | ConvertFrom-Json -AsHashtable
+    if ($frozen.schemaVersion -ne 2 -or
+        -not [String]::Equals([string]$frozen.snapshotKind, 'base-plus-profile-overlay', [StringComparison]::Ordinal) -or
+        -not [String]::Equals([string]$frozen.runtimeRoot, $root, [StringComparison]::OrdinalIgnoreCase) -or
+        -not [String]::Equals([string]$frozen.profile, [string]$profile.profile, [StringComparison]::OrdinalIgnoreCase) -or
+        [string]::IsNullOrWhiteSpace([string]$frozen.baseGameId) -or
+        -not $frozen.ContainsKey('ritsuArtifactId') -or
+        -not $frozen.ContainsKey('combatSolverArtifactId')) {
+        throw "Multiplayer game snapshot ownership/profile marker does not match: $frozenMarker"
+    }
     if (-not [String]::Equals([string]$profile.gameRoot, $gameRoot, [StringComparison]::OrdinalIgnoreCase)) {
         throw "Multiplayer profile game root does not match its instance: $profilePath"
     }
@@ -165,24 +176,45 @@ function Remove-MultiplayerProcessMarker {
 }
 
 function Stop-MultiplayerOwnedProcess {
-    param([Parameter(Mandatory = $true)][System.Collections.IDictionary]$Instance)
+    param(
+        [Parameter(Mandatory = $true)][System.Collections.IDictionary]$Instance,
+
+        [ValidateSet('Graceful', 'Force')]
+        [string]$Mode = 'Graceful',
+
+        [ValidateRange(1, 60)]
+        [int]$GracefulTimeoutSeconds = 10
+    )
 
     $state = Get-MultiplayerOwnedProcessState $Instance
     if ($state.state -eq 'Absent') {
-        return [ordered]@{ state = 'Absent'; pid = $null }
+        return [ordered]@{ state = 'Absent'; pid = $null; mode = $Mode }
     }
     if ($state.state -eq 'Stale') {
         Remove-MultiplayerProcessMarker $Instance
-        return [ordered]@{ state = 'StaleRemoved'; pid = $state.marker.pid }
+        return [ordered]@{ state = 'StaleRemoved'; pid = $state.marker.pid; mode = $Mode }
     }
 
     $process = $state.process
-    Stop-Process -Id $process.Id -Force -ErrorAction Stop
-    [void]$process.WaitForExit(5000)
-    if (-not $process.HasExited) {
-        throw "Owned multiplayer process did not exit: PID $($process.Id)"
+    if ($Mode -eq 'Force') {
+        Stop-Process -Id $process.Id -Force -ErrorAction Stop
+        [void]$process.WaitForExit(5000)
+        if (-not $process.HasExited) {
+            throw "Owned multiplayer process did not exit after forced stop: PID $($process.Id)"
+        }
+        $stopState = 'StoppedForcefully'
     }
+    else {
+        if (-not $process.CloseMainWindow()) {
+            throw "Owned multiplayer process has no closable main window: PID $($process.Id). Close it in-game or rerun with -Mode Force; forced stop can lose buffered evidence."
+        }
+        if (-not $process.WaitForExit($GracefulTimeoutSeconds * 1000)) {
+            throw "Owned multiplayer process did not exit gracefully within $GracefulTimeoutSeconds seconds: PID $($process.Id). Preserve the process for inspection or rerun explicitly with -Mode Force."
+        }
+        $stopState = 'StoppedGracefully'
+    }
+
     $pidValue = $process.Id
     Remove-MultiplayerProcessMarker $Instance
-    return [ordered]@{ state = 'Stopped'; pid = $pidValue }
+    return [ordered]@{ state = $stopState; pid = $pidValue; mode = $Mode }
 }

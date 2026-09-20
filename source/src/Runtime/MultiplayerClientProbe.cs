@@ -52,6 +52,25 @@ internal sealed record MultiplayerProbeSnapshot(
     bool CustomNetworkPacketSent);
 
 /// <summary>
+/// Main-thread-only action boundary used by MP-2B. Local private state, remote public
+/// state and enemy state are kept separate so a local card can account for its own target
+/// mutation without silently accepting a concurrent remote-player mutation.
+/// </summary>
+internal sealed record MultiplayerSafeExecutionBoundary(
+    long WorldVersion,
+    int ObservationSequence,
+    string? LocalNetId,
+    int RoundNumber,
+    string CurrentSide,
+    int? LocalTurn,
+    string? LocalPhase,
+    int? LocalEnergy,
+    int? LocalStars,
+    StateFingerprint LocalFingerprint,
+    StateFingerprint RemotePublicFingerprint,
+    string[] Enemies);
+
+/// <summary>
 /// Read-only Phase 0 observation for a network multiplayer client. It records only the
 /// local player's visible combat state and public enemy state; it never starts a search,
 /// mutates CombatState/RNG, enqueues an action, or sends a packet.
@@ -126,6 +145,36 @@ internal static class MultiplayerClientProbe
     }
 
     internal static bool Observe(CombatState state, string reason)
+        => ObserveCore(state, reason, bypassSampleInterval: false);
+
+    /// <summary>
+    /// Captures an action-completion observation immediately. The ordinary Probe cadence
+    /// remains rate limited; Safe Execute must not let that cadence hide the local action's
+    /// world mutation before it decides whether another card is admissible.
+    /// </summary>
+    internal static bool ObserveActionBoundary(CombatState state, string reason)
+        => ObserveCore(state, reason, bypassSampleInterval: true);
+
+    internal static MultiplayerSafeExecutionBoundary CaptureSafeExecutionBoundary(CombatState state)
+    {
+        Player? localPlayer = LocalContext.GetMe(state);
+        PlayerCombatState? localCombat = localPlayer?.PlayerCombatState;
+        return new(
+            WorldVersion: MultiplayerWorldTracker.WorldVersion,
+            ObservationSequence: _observationSequence,
+            LocalNetId: localPlayer?.NetId.ToString(),
+            RoundNumber: state.RoundNumber,
+            CurrentSide: state.CurrentSide.ToString(),
+            LocalTurn: localCombat?.TurnNumber,
+            LocalPhase: localCombat?.Phase.ToString(),
+            LocalEnergy: localCombat?.Energy,
+            LocalStars: localCombat?.Stars,
+            LocalFingerprint: LocalBoundaryFingerprint(localPlayer),
+            RemotePublicFingerprint: RemotePublicBoundaryFingerprint(state, localPlayer),
+            Enemies: EnemyTokens(state));
+    }
+
+    private static bool ObserveCore(CombatState state, string reason, bool bypassSampleInterval)
     {
         if (!SolverSessionCapabilities.Capture(state).IsMultiplayer
             || !CombatManager.Instance.IsInProgress)
@@ -134,8 +183,10 @@ internal static class MultiplayerClientProbe
         }
 
         long now = Environment.TickCount64;
-        if (_lastSampleAt > 0 && now - _lastSampleAt < MinimumSampleIntervalMilliseconds)
-            return false;
+        if (!bypassSampleInterval
+            && _lastSampleAt > 0
+            && now - _lastSampleAt < MinimumSampleIntervalMilliseconds)
+        return false;
         _lastSampleAt = now;
 
         Player? localPlayer = LocalContext.GetMe(state);
@@ -163,6 +214,30 @@ internal static class MultiplayerClientProbe
             $"compact_changed=true fingerprint={compactFingerprint.First:X16}:{compactFingerprint.Second:X16}" +
             (display is null ? string.Empty : $" {display}"));
         return true;
+    }
+
+    private static StateFingerprint LocalBoundaryFingerprint(Player? localPlayer)
+    {
+        StateFingerprintBuilder fingerprint = new();
+        AppendCompactPlayer(ref fingerprint, localPlayer, includePrivateState: true);
+        return fingerprint.Finish();
+    }
+
+    private static StateFingerprint RemotePublicBoundaryFingerprint(
+        CombatState state,
+        Player? localPlayer)
+    {
+        StateFingerprintBuilder fingerprint = new();
+        fingerprint.Add(state.Players.Count);
+        fingerprint.Add(state.RoundNumber);
+        fingerprint.Add(state.CurrentSide.ToString());
+        fingerprint.Add(state.MultiplayerScalingModel is null
+            ? -1
+            : state.MultiplayerScalingModel.ShouldReceiveCombatHooks ? 1 : 0);
+        fingerprint.Add(state.RunState.CardMultiplayerConstraint.ToString());
+        foreach (string token in RemotePlayerTokens(state, localPlayer))
+            fingerprint.Add(token);
+        return fingerprint.Finish();
     }
 
     private static MultiplayerProbeSnapshot CaptureSnapshot(

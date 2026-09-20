@@ -12,12 +12,14 @@ param(
     [ValidateSet('', 'host', 'join')]
     [string]$FastMpMode = '',
 
-    [ValidateSet('', 'probe', 'advisor')]
+    [ValidateSet('', 'probe', 'advisor', 'safe-execute', 'safe-execute-lab')]
     [string]$MultiplayerMode = '',
 
     [UInt64]$ClientId = 0,
 
-    [switch]$ForceSteamOff
+    [switch]$ForceSteamOff,
+
+    [switch]$AllowSteam
 )
 
 Set-StrictMode -Version Latest
@@ -28,6 +30,15 @@ $ErrorActionPreference = 'Stop'
 
 $instance = Read-MultiplayerInstance $InstanceRoot
 $profileName = [string]$instance.Profile.profile
+if ($ForceSteamOff.IsPresent -and $AllowSteam.IsPresent) {
+    throw 'ForceSteamOff and AllowSteam are mutually exclusive.'
+}
+$forceSteamOffEffective = -not $AllowSteam.IsPresent
+$modRestartPolicy = if ($Role -eq 'Client' -and $profileName -in @('ClientRitsuOnly', 'ClientCombatSolver')) {
+    'warmup_mod_load_then_restart_before_evidence'
+} else {
+    'none'
+}
 if ($Role -eq 'Host' -and $profileName -ne 'HostVanilla') {
     throw "Host launcher requires HostVanilla, received $profileName."
 }
@@ -47,6 +58,8 @@ if ($existingState.state -eq 'Owned') {
         runtimeRoot = $instance.Root
         processId = $existingState.process.Id
         logPath = [string]$existingState.marker.logPath
+        forceSteamOff = if ($existingState.marker.ContainsKey('forceSteamOff')) { [bool]$existingState.marker.forceSteamOff } else { $null }
+        modRestartPolicy = if ($existingState.marker.ContainsKey('modRestartPolicy')) { [string]$existingState.marker.modRestartPolicy } else { $null }
         runtimeEvidenceEligible = $false
     } | ConvertTo-Json -Depth 8
     exit 0
@@ -63,7 +76,7 @@ $resultPath = Join-Path $instance.LogsRoot "$runId.start.json"
 $arguments = [Collections.Generic.List[string]]::new()
 [void]$arguments.Add('--log-file')
 [void]$arguments.Add($logPath)
-if ($ForceSteamOff.IsPresent) {
+if ($forceSteamOffEffective) {
     [void]$arguments.Add('--force-steam=off')
 }
 if (-not [string]::IsNullOrWhiteSpace($FastMpMode)) {
@@ -90,6 +103,10 @@ if ($Role -eq 'Client') {
     $startInfo.Environment['COMBATSOLVER_MULTIPLAYER_PROBE_EVIDENCE'] = '1'
 }
 if (-not [string]::IsNullOrWhiteSpace($MultiplayerMode)) {
+    if ($MultiplayerMode -in @('safe-execute', 'safe-execute-lab') -and
+        ($Role -ne 'Client' -or $profileName -ne 'ClientCombatSolver')) {
+        throw 'safe-execute modes are restricted to an owned ClientCombatSolver lab instance.'
+    }
     $startInfo.Environment['COMBATSOLVER_MULTIPLAYER_MODE'] = $MultiplayerMode
 }
 foreach ($argument in $arguments) {
@@ -119,7 +136,8 @@ try {
         fastMpMode = if ([string]::IsNullOrWhiteSpace($FastMpMode)) { $null } else { $FastMpMode }
         multiplayerMode = if ([string]::IsNullOrWhiteSpace($MultiplayerMode)) { $null } else { $MultiplayerMode }
         clientId = if ($ClientId -eq 0) { $null } else { $ClientId }
-        forceSteamOff = $ForceSteamOff.IsPresent
+        forceSteamOff = $forceSteamOffEffective
+        modRestartPolicy = $modRestartPolicy
         runtimeEvidenceEligible = $false
     }
     Write-HeadlessJson $instance.ProcessMarkerPath $marker
@@ -133,6 +151,8 @@ try {
         processMarkerPath = $instance.ProcessMarkerPath
         multiplayerMode = if ([string]::IsNullOrWhiteSpace($MultiplayerMode)) { $null } else { $MultiplayerMode }
         clientId = if ($ClientId -eq 0) { $null } else { $ClientId }
+        forceSteamOff = $forceSteamOffEffective
+        modRestartPolicy = $modRestartPolicy
         runtimeEvidenceEligible = $false
     }
     Write-HeadlessJson $resultPath $result

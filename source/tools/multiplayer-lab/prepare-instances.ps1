@@ -79,10 +79,10 @@ try {
     $ritsuManifest = Join-Path $RitsuWorkshopRoot 'mod_manifest.json'
     $snapshotPlan = Get-HeadlessMultiplayerSnapshotPlan $context $Profile `
         $combatSolverDll $combatSolverManifest $memoryCleaner `
-        $RitsuWorkshopRoot $ritsuManifest $targetRitsuLibVersion
+        $RitsuWorkshopRoot $ritsuManifest $targetRitsuLibVersion $targetGameVersion
     $context.ArtifactId = $snapshotPlan.id
 
-    Set-HeadlessGameSnapshot $context $snapshotPlan
+    $syncResult = Set-HeadlessGameSnapshot $context $snapshotPlan -ForceFullRebuild:$ForceRebuild.IsPresent
     $profileRecord = [ordered]@{
         schemaVersion = 1
         profile = $Profile
@@ -92,6 +92,18 @@ try {
         sourceGameRoot = $context.SourceGameRoot
         gameExecutable = Join-Path $context.GameRoot 'SlayTheSpire2.exe'
         artifactId = $snapshotPlan.id
+        snapshotSchemaVersion = 2
+        baseGameId = $snapshotPlan.baseGameId
+        ritsuArtifactId = $snapshotPlan.ritsuArtifactId
+        combatSolverArtifactId = $snapshotPlan.combatSolverArtifactId
+        baseSnapshotId = $snapshotPlan.baseGameId
+        overlayId = $snapshotPlan.overlayId
+        syncMode = [string]$syncResult.syncMode
+        snapshotAction = [string]$syncResult.snapshotAction
+        baseGameAction = [string]$syncResult.baseGameAction
+        ritsuAction = [string]$syncResult.ritsuAction
+        combatSolverAction = [string]$syncResult.combatSolverAction
+        copiedFiles = [int]$syncResult.copiedFiles
         targetGameVersion = $targetGameVersion
         targetRitsuLibVersion = $targetRitsuLibVersion
         preparedUtc = [DateTimeOffset]::UtcNow.ToString('O')
@@ -111,6 +123,18 @@ try {
         runtimeRoot = $context.Root
         gameRoot = $context.GameRoot
         artifactId = $snapshotPlan.id
+        snapshotSchemaVersion = 2
+        baseGameId = $snapshotPlan.baseGameId
+        ritsuArtifactId = $snapshotPlan.ritsuArtifactId
+        combatSolverArtifactId = $snapshotPlan.combatSolverArtifactId
+        baseSnapshotId = $snapshotPlan.baseGameId
+        overlayId = $snapshotPlan.overlayId
+        syncMode = [string]$syncResult.syncMode
+        snapshotAction = [string]$syncResult.snapshotAction
+        baseGameAction = [string]$syncResult.baseGameAction
+        ritsuAction = [string]$syncResult.ritsuAction
+        combatSolverAction = [string]$syncResult.combatSolverAction
+        copiedFiles = [int]$syncResult.copiedFiles
         profilePath = $profilePath
         runtimeEvidenceEligible = $false
     }

@@ -11,11 +11,11 @@
   "checks": {
     "vanillaHostAcceptedClient": {
       "status": "PASS",
-      "evidence": "blockers/MP-0-UNVERIFIED-2026-09-19.md#ab-组连接实机结果2026-09-19; local archives mp0-a2-evidence-20260919/20260919-155859-b3f851f0, mp0-b-evidence-20260919/20260919-162533-695eb7b2, mp0-c-evidence-20260919/20260919-143255-4399f135"
+      "evidence": "../LIMITATIONS.md#ab-组连接实机结果2026-09-19; local archives mp0-a2-evidence-20260919/20260919-155859-b3f851f0, mp0-b-evidence-20260919/20260919-162533-695eb7b2, mp0-c-evidence-20260919/20260919-143255-4399f135"
     },
     "hostUnaware": {
       "status": "PASS",
-      "evidence": "All three profiles used HostVanilla; see blockers/MP-0-UNVERIFIED-2026-09-19.md#ab-组连接实机结果2026-09-19 and #c-组非空-probe-实机结果2026-09-19"
+      "evidence": "All three profiles used HostVanilla; see ../LIMITATIONS.md#ab-组连接实机结果2026-09-19 and #c-组非空-probe-实机结果2026-09-19"
     },
     "noCustomNetworkPackets": {
       "status": "PASS",
@@ -23,7 +23,7 @@
     },
     "wireModelCompatibility": {
       "status": "PASS",
-      "evidence": "All A/B/C profiles completed lobby, ready, synchronized MapCoord (3,0), NCombatRoom creation, and Combat started; final dual-Client C run had Host plus Client netIds 1000 and 1001, three combat starts and two combat ends; see blockers/MP-0-UNVERIFIED-2026-09-19.md#双-client-对照最终收尾快照-2026-09-19"
+      "evidence": "All A/B/C profiles completed lobby, ready, synchronized MapCoord (3,0), NCombatRoom creation, and Combat started; final dual-Client C run had Host plus Client netIds 1000 and 1001, three combat starts and two combat ends; see ../LIMITATIONS.md#双-client-对照最终收尾快照-2026-09-19"
     },
     "localPlayerIdentity": {
       "status": "PASS",

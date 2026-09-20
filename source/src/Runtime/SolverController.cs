@@ -705,10 +705,15 @@ internal static partial class SolverController
         }
         await WaitForTurnStartDeploymentDelayAsync(host, result.StartTurnNumber, token);
         token.ThrowIfCancellationRequested();
+        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
+        bool safeExecuteDeploymentRequested = capabilities.Kind != SolverSessionKind.MultiplayerSafeExecute
+            || _combat.MultiplayerSafeExecuteDeploymentRequested;
         if (!_combat.FullAutoEnabled
+            && safeExecuteDeploymentRequested
             && ReferenceEquals(_combat.LatestResult, result)
             && IsSamePlayableTurn(state, result.StartTurnNumber))
         {
+            _combat.MultiplayerSafeExecuteDeploymentRequested = false;
             StartDeployment(host, state, result);
         }
     }
@@ -752,6 +757,7 @@ internal static partial class SolverController
             Entry.Logger.Info("[CombatSolver/Test] DEPLOY_REJECT reason=already_deploying");
             return;
         }
+        bool safeExecuteRequest = capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute;
         _combat.AutomaticSearchPaused = false;
         _combat.AutomaticSearchPausedTurn = null;
         if (PlayerTurnSetupCoordinator.TryContinuePlannedChoice(
@@ -759,6 +765,8 @@ internal static partial class SolverController
                 state,
                 deployAfterSetup: true))
         {
+            if (safeExecuteRequest)
+                _combat.MultiplayerSafeExecuteDeploymentRequested = true;
             Entry.Logger.Info("[CombatSolver/Test] DEPLOY_WAIT reason=turn_setup_choice");
             return;
         }
@@ -766,20 +774,27 @@ internal static partial class SolverController
         if (state.CurrentSide == CombatSide.Player
             && turnStartPlayer?.PlayerCombatState?.Phase == PlayerTurnPhase.Start)
         {
+            if (safeExecuteRequest)
+                _combat.MultiplayerSafeExecuteDeploymentRequested = true;
             _combat.DeployAfterTurnSetupTurn = turnStartPlayer.PlayerCombatState.TurnNumber;
             Entry.Logger.Info("[CombatSolver/Test] DEPLOY_WAIT reason=turn_setup_pending");
             return;
         }
         if (!CanSolve(state, out string rejection))
         {
+            if (safeExecuteRequest)
+                _combat.MultiplayerSafeExecuteDeploymentRequested = false;
             SolverOverlay.Show(host, $"[b]战斗路线求解器[/b]\n{rejection}");
             Entry.Logger.Info($"[CombatSolver/Test] DEPLOY_REJECT reason={rejection}");
             return;
         }
 
+        if (safeExecuteRequest)
+            _combat.MultiplayerSafeExecuteDeploymentRequested = true;
         LiveCombatStamp current = LiveCombatStamp.Capture(state);
         if (_combat.LatestResult != null && _combat.LatestStamp == current)
         {
+            _combat.MultiplayerSafeExecuteDeploymentRequested = false;
             StartDeployment(host, state, _combat.LatestResult);
             return;
         }
@@ -1249,16 +1264,41 @@ internal static partial class SolverController
             _multiplayerInertSessionObserved = true;
             if (enteredMultiplayerSession || multiplayerWorldChanged)
             {
-                if (multiplayerWorldChanged
-                    && capabilities.Kind == SolverSessionKind.MultiplayerAdvisor)
+                if (multiplayerWorldChanged)
                 {
-                    Entry.Logger.Info(
-                        $"[CombatSolver/MultiplayerAdvisor] MP_ADVISOR_WORLD_CHANGED " +
-                        $"world_version={MultiplayerWorldTracker.WorldVersion} " +
-                        $"reason={MultiplayerWorldTracker.LastReason}");
+                    if (capabilities.Kind == SolverSessionKind.MultiplayerAdvisor)
+                    {
+                        Entry.Logger.Info(
+                            $"[CombatSolver/MultiplayerAdvisor] MP_ADVISOR_WORLD_CHANGED " +
+                            $"world_version={MultiplayerWorldTracker.WorldVersion} " +
+                            $"reason={MultiplayerWorldTracker.LastReason}");
+                    }
+                    else if (capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute)
+                    {
+                        Entry.Logger.Info(
+                            $"[CombatSolver/MultiplayerSafeExecute] MP2B_WORLD_CHANGED " +
+                            $"world_version={MultiplayerWorldTracker.WorldVersion} " +
+                            $"reason={MultiplayerWorldTracker.LastReason} " +
+                            $"session_state={_deployment?.SafeExecutionSession?.State.ToString() ?? "-"}");
+                    }
                 }
                 if (enteredMultiplayerSession)
                 {
+                    if (capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute)
+                    {
+                        bool labCapability = SolverSessionCapabilities.IsMultiplayerSafeExecuteLabOptedIn;
+                        string capabilityMarker = labCapability ? "LAB_CAPABILITY" : "FORMAL_CAPABILITY";
+                        string capabilityScope = labCapability ? "owned_client_instance" : "explicit_opt_in";
+                        Entry.Logger.Info(
+                            $"[CombatSolver/MultiplayerSafeExecute] {capabilityMarker} " +
+                            $"enabled=true scope={capabilityScope} " +
+                            $"max_actions={MultiplayerSafeExecutePolicy.MaxActionsPerDeployment} " +
+                            "automatic_end_turn=false custom_network_api=false");
+                        Entry.Logger.Info(
+                            $"[CombatSolver/MultiplayerSafeExecute] MP2B_CAPABILITY " +
+                            $"enabled=true max_actions={MultiplayerSafeExecutePolicy.MaxActionsPerDeployment} " +
+                            "attribution=revalidation automatic_end_turn=false custom_network_api=false");
+                    }
                     Entry.Logger.Info(
                         "[CombatSolver/MultiplayerProbe] CAPABILITY_BOUNDARY " +
                         "entered=true search_cancel=true deployment_cancel=true turn_setup_reset=true");
@@ -1308,7 +1348,43 @@ internal static partial class SolverController
         CancelMultiplayerDebouncedSearch();
         CancelDeferredSearch();
         CancelSearch();
-        CancelDeployment();
+        MultiplayerSafeExecutionState? safeExecutionState = _deployment?.SafeExecutionSession?.State;
+        SolverDeploymentSession? remoteAbortDeployment = null;
+        int remoteAbortCompletedActions = 0;
+        bool preserveExpectedSafeDeployment =
+            SolverSessionCapabilities.Capture(state).Kind == SolverSessionKind.MultiplayerSafeExecute
+            && safeExecutionState is MultiplayerSafeExecutionState.Executing
+                or MultiplayerSafeExecutionState.AwaitingWorldUpdate
+                or MultiplayerSafeExecutionState.Revalidating;
+        if (!preserveExpectedSafeDeployment)
+        {
+            if (safeExecutionState == MultiplayerSafeExecutionState.Authorized
+                && _deployment?.SafeExecutionSession is { } safeSession)
+            {
+                remoteAbortDeployment = _deployment;
+                remoteAbortCompletedActions = safeSession.CompletedActions;
+                safeSession.Abort("remote_or_unknown_change");
+                Entry.Logger.Info(
+                    $"[CombatSolver/MultiplayerSafeExecute] MP2B_REMOTE_DELTA_ABORT " +
+                    $"request_id={safeSession.RequestId} " +
+                    $"turn={_deployment.StartTurnNumber} " +
+                    $"completed_actions={safeSession.CompletedActions} " +
+                    "reason=remote_or_unknown_change " +
+                    $"last_accepted_world_version={safeSession.LastAcceptedWorldVersion}");
+            }
+            CancelDeployment();
+            _combat.MultiplayerSafeExecuteDeploymentRequested = false;
+        }
+        if (remoteAbortDeployment is { } abortedDeployment
+            && NGame.Instance is { } host)
+        {
+            SolverOverlay.ShowDeploymentComplete(
+                host,
+                abortedDeployment.StartTurnNumber,
+                remoteAbortCompletedActions,
+                endedTurn: false,
+                completionMessage: "检测到多人状态变化，已停止后续执行并重新计算。");
+        }
         Task turnSetupRelease = PlayerTurnSetupCoordinator.Reset("multiplayer_capability");
         PendingCombatDeferredOperations.RemoveAll(static task => task.IsCompleted);
         if (!turnSetupRelease.IsCompleted)
@@ -1321,8 +1397,12 @@ internal static partial class SolverController
         _combat.PendingManualProjectionBaseline = null;
         InvalidateRenderedRouteAdoptionSeed();
         SolverOverlay.RefreshControls();
+        string invalidationPrefix = SolverSessionCapabilities.Capture(state).Kind
+            == SolverSessionKind.MultiplayerSafeExecute
+            ? "[CombatSolver/MultiplayerSafeExecute] MP2B_WORLD_INVALIDATED"
+            : "[CombatSolver/MultiplayerAdvisor] WORLD_INVALIDATED";
         Entry.Logger.Info(
-            $"[CombatSolver/MultiplayerAdvisor] WORLD_INVALIDATED " +
+            $"{invalidationPrefix} " +
             $"world_version={MultiplayerWorldTracker.WorldVersion} " +
             $"reason={MultiplayerWorldTracker.LastReason} " +
             $"turn={LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0}");

@@ -8,12 +8,14 @@ param(
     [ValidateSet('', 'host', 'join')]
     [string]$FastMpMode = '',
 
-    [ValidateSet('', 'probe', 'advisor')]
+    [ValidateSet('', 'probe', 'advisor', 'safe-execute', 'safe-execute-lab')]
     [string]$MultiplayerMode = '',
 
     [UInt64]$ClientId = 0,
 
-    [switch]$ForceSteamOff
+    [switch]$ForceSteamOff,
+
+    [switch]$AllowSteam
 )
 
 try {
@@ -23,7 +25,8 @@ try {
         -FastMpMode $FastMpMode `
         -MultiplayerMode $MultiplayerMode `
         -ClientId $ClientId `
-        -ForceSteamOff:$ForceSteamOff
+        -ForceSteamOff:$ForceSteamOff `
+        -AllowSteam:$AllowSteam
     if (-not $?) { exit 1 }
     exit 0
 }

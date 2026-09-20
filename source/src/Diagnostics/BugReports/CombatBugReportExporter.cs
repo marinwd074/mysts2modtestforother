@@ -1847,7 +1847,22 @@ internal static class CombatBugReportExporter
     }
 
     private static SerializableRun CaptureInMemoryRunSave()
-        => RunManager.Instance.ToSave(null);
+    {
+        RunManager manager = RunManager.Instance;
+        if (!manager.IsInProgress || manager.DebugOnlyGetState() is null)
+            throw new InvalidOperationException("原生跑局状态已进入释放阶段，无法采集内存保存快照。");
+
+        try
+        {
+            return manager.ToSave(null);
+        }
+        catch (NullReferenceException error)
+        {
+            // Diagnostic capture must not turn a native teardown/save race into a game-level
+            // exception. RecordCheckpointCore converts this explicit failure into evidence.
+            throw new InvalidOperationException("原生跑局保存快照采集失败。", error);
+        }
+    }
 
     private static byte[] SerializeInMemoryRunSave(SerializableRun save)
     {

@@ -146,11 +146,28 @@ internal sealed class CombatDiagnosticJournal : IDisposable
             await process.ConfigureAwait(false));
     public void Dispose()
     {
+        Task[] drainTasks;
         lock (_gate)
         {
+            if (_disposed)
+                return;
             _disposed = true;
             _session?.Log.Dispose();
             _process.Dispose();
+            drainTasks = _session == null
+                ? [_process.Completion]
+                : [_session.Log.Completion, _process.Completion];
+        }
+
+        // Producers stay non-blocking during play. On normal process shutdown, give the
+        // background writers a small bounded window to drain queued evidence before exit.
+        try
+        {
+            Task.WaitAll(drainTasks, TimeSpan.FromSeconds(2));
+        }
+        catch (AggregateException)
+        {
+            // Individual logs expose their own recording error. Shutdown must not crash the game.
         }
     }
 }

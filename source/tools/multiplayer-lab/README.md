@@ -1,9 +1,14 @@
 # Multiplayer Phase 0 lab
 
 本目录只提供可审计的 MP-0A/MP-0B 实机测试基础设施。它不会启动自动
-Lobby、修改能力表，也不会把 `UNVERIFIED` 推断为 `PASS`。Client 默认仍是
-Probe；只有显式传入 `-MultiplayerMode advisor` 才设置 Advisor 环境变量，且该
-入口仍只允许当前回合、本地玩家、只显示路线的搜索。
+Lobby，也不会把 `UNVERIFIED` 推断为 `PASS`。Client 默认仍是 Probe；显式传入
+`-MultiplayerMode advisor` 只启用 Advisor 搜索。MP-2 提供显式的
+`-MultiplayerMode safe-execute` opt-in，以及只接受本目录创建的
+`ClientCombatSolver` 私有实例、Probe evidence 的 `safe-execute-lab` 证据模式。
+
+> 开始任何 Host/Client 实机运行前先读
+> [多人实机运行手册](../../docs/multiplayer/RUNBOOK.md)。其中记录了必须关闭
+> Steam transport、Mod 首次加载后重启、ClientId、Graceful 停止等已知操作事实。
 
 ## 阶段边界
 
@@ -46,18 +51,29 @@ Lobby、wire 或战斗证据。
   `.local/multiplayer-lab/runtime-<instance>`；脚本会拒绝 C: 或其他盘符，避免
   把大型测试快照写入系统盘。
 - `start-host.ps1` / `start-client.ps1` 只启动指定私有 snapshot，使用独立
-  `APPDATA`、`LOCALAPPDATA` 和日志；默认保留可见 UI，允许用户手动建房、
+  `APPDATA`、`LOCALAPPDATA` 和日志；同机 Lab **默认自动传入
+  `--force-steam=off`**，即使调用方忘记 `-ForceSteamOff` 也不会重新踩坑。
+  `-ForceSteamOff` 仍可显式写出以强调意图；只有专门验证 Steam transport
+  时才使用 `-AllowSteam`。默认保留可见 UI，允许用户手动建房、
   加入、选角色和 Ready。`-ClientId` 只用于同一台机器上同时运行多个
   `FastMpJoin` 客户端；原生默认值是 `1000`，每个客户端必须使用不同的
-  非零 ID。`-FastMpMode host|join` 只在显式指定时传给当前
-  二进制；`-MultiplayerMode probe|advisor` 只设置 CombatSolver 进程环境，
-  默认不设置；它的结果仍是 UNVERIFIED，不构成连接证据。
+  非零 ID。`-FastMpMode host|join` 只在显式指定时传给当前二进制。
+  `-MultiplayerMode probe|advisor|safe-execute|safe-execute-lab` 只设置当前 Lab 进程环境；
+  `safe-execute-lab` 额外要求 `ClientCombatSolver` ownership/profile marker
+  和 Lab Probe evidence 环境；`safe-execute` 是明确的正式能力 opt-in。
+- 当前 Modded Client 的固定流程是：**第一次启动只用于加载 Mod；完成 Mod 加载并
+  重启一次游戏后，第二次启动才进入正式 Host/Join/Smoke**。第一次启动不得作为
+  multiplayer runtime evidence。重新准备/重建 Client snapshot、替换 Mod payload，
+  或游戏再次提示需要重启时，重复这一步。
 - 同一 `InstanceRoot` 的 `Roaming`/`Local` 目录会跨进程保留，后续可直接复用
   已准备的实例而不重新复制游戏快照；进程真正重启时仍会重新加载 Mod DLL，
-  未写入存档的当前战斗或房间状态不保证恢复。只有更换构建产物时才需要重新
-  `prepare-instances.ps1`，同一产物的启动/停止不应删除实例根目录。
+  未写入存档的当前战斗或房间状态不保证恢复。更换构建产物或游戏底座时重新运行
+  `prepare-instances.ps1`；同一产物的启动/停止不应删除实例根目录，未变化时准备命令
+  会保持 snapshot 不变。
 - `stop-owned-instances.ps1` 只接受显式 instance root，并同时校验 marker、
-  PID、进程出生时间和 executable path；没有 ownership 证据就停止。
+  PID、进程出生时间和 executable path；没有 ownership 证据就停止。默认使用
+  `Graceful` 关闭窗口并等待游戏正常退出，让 CombatSolver journal 有机会排空；
+  只有清理卡死实例时才显式使用 `-Mode Force`，强制结束可能丢失缓冲证据。
 - `collect-results.ps1` 只复制指定实例的日志/Probe JSONL，并生成
   `UNVERIFIED` matrix 模板，模板包含 Vanilla、RitsuLib、CombatSolver 三组
   `profileResults`；Lab 进程会把诊断写入实例下的
@@ -71,6 +87,43 @@ Lobby、wire 或战斗证据。
   才报告 `PASS`，采样窗口不同报告 `UNVERIFIED`，且不会自动修改 Phase 0 矩阵。
   比较器优先使用 schema v2 的 `runSeed`/`combatSegmentId`，同时兼容旧的
   schema v1 归档。
+- `validate-mp2a-results.ps1` 保留并校验历史单牌 Safe Execute 日志：Safe Execute
+  capability、恰好一个原生 `PlayCardAction`、无药水/自动 EndTurn、动作后
+  WorldVersion 失效以及新的 debounce 搜索。它可输出机器 JSON 摘要；缺少真实运行
+  证据返回 `UNVERIFIED`，不会把静态合同推断成实机 PASS。
+- `test-mp2a-validator.ps1` 只测试上述验证器本身的 PASS/FAIL/UNVERIFIED
+  判定，并由 L1 CI 调用；合成日志绝不作为多人实机证据。
+- `validate-mp2b-results.ps1` 已泛化为 bounded N-action Safe Execute 校验器：用
+  `-MinActions <n>` 要求最少动作数、`-MaxActions <ceiling>` 锁定有限上限，并按同一
+  request/session 校验连续 action index、每个原生 `PlayCardAction`、每次重验证、单调
+  WorldVersion、无 EndTurn/药水/Choice/Replay/远端目标和部署后的新搜索。默认参数仍
+  兼容历史 MP-2B 两动作日志；`test-mp2b-validator.ps1` 当前覆盖 6 个合成用例，其中
+  包含 5-action 正常通过；合成日志不能替代真实 Host/Client 证据。
+- `validate-mp2b-interference-results.ps1` 泛化校验任意动作 i 后的远端干扰：记录
+  `MP2B_REMOTE_DELTA_ABORT`，用 `-MinCompletedActions` 约束中止前已完成动作数，证明不捕获
+  action i+1、没有 EndTurn/药水/Choice/Replay，并在中止后重新搜索。若一个 Client journal
+  包含多次尝试，可用 `-RequestId <deployment-request-id>` 选择完整 session；
+  `test-mp2b-interference-validator.ps1` 当前覆盖 6 个合成用例，其中包含“两张牌后中止”；
+  它与正常 bounded N-action 验证器不能互相替代。
+
+### Snapshot 同步合同
+
+`prepare-instances.ps1` 使用 snapshot schema 2，将实例 game root 视为持久的
+base-game snapshot，并把 RitsuLib/CombatSolver 放在 profile overlay 中：
+
+- 游戏版本或底座文件变化、旧 schema、底座完整性校验失败，才执行 staging 全量重建。
+- CombatSolver 构建变化只更新 CombatSolver overlay 文件；RitsuLib 变化只更新 RitsuLib
+  overlay 文件。`HostVanilla` 没有这些 overlay，因此不会因 CombatSolver 构建变化重建。
+- marker 会拆开保存 `baseGameId`、`ritsuArtifactId`、`combatSolverArtifactId`；输出中的
+  `snapshotAction` 为 `FULL_REBUILD`、`OVERLAY_UPDATED` 或 `REUSED`，并分别给出
+  `baseGameAction`、`ritsuAction`、`combatSolverAction` 和 `copiedFiles`。`syncMode` 保留
+  `full-rebuild`、`overlay-incremental`、`unchanged` 供兼容审计。`-ForceRebuild` 仍可显式
+  要求全量重建，也用于切换已有实例的 profile。
+- Overlay 先复制到带 hash 校验的临时 managed tree，再在停止游戏后 rename 替换；Ritsu
+  和 CombatSolver 的 DLL/JSON/辅助文件不会在同一 managed overlay 内出现半更新状态，失败
+  会回滚旧目录。
+- 增量更新仍只在私有 owned root 内进行，逐文件拒绝 reparse point，并在目标游戏进程运行
+  时禁止覆盖；正式证据仍与 snapshot/运行目录隔离，不会写入 Steam 安装或正式 `MODS`。
 
 Lab Client 会自动设置 `COMBATSOLVER_MULTIPLAYER_PROBE_EVIDENCE=1`，因此
 Probe JSONL 只落在实例诊断目录；普通桌面运行不会因为 Probe 观察而持续写证据。
@@ -90,10 +143,12 @@ pwsh -NoLogo -NoProfile -File .\prepare-instances.ps1 -Profile ClientCombatSolve
 ~~~powershell
 $labRoot = 'D:\yingye\CombatSolver\.local\multiplayer-lab'
 pwsh -NoLogo -NoProfile -File .\start-host.ps1 `
-  -InstanceRoot "$labRoot\runtime-mp-host"
+  -InstanceRoot "$labRoot\runtime-mp-host" `
+  -ForceSteamOff
 pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
   -InstanceRoot "$labRoot\runtime-mp-client-solver" `
-  -ClientId 1000
+  -ClientId 1000 `
+  -ForceSteamOff
 ~~~
 
 同一 Host 上启动第二个本地 Client 时，必须使用不同的 ID，例如
@@ -129,9 +184,117 @@ pwsh -NoLogo -NoProfile -File .\compare-probe-public-state.ps1 `
 
 比较报告是辅助证据，仍需人工确认 Host/Client 身份、生命周期和安全边界。
 
-退出码：0 为 PASS，1 为矛盾/无效 Probe，2 为缺失或仍为 UNVERIFIED。真实
+## MP-2A 单牌 Smoke
+
+准备 Vanilla Host 与 CombatSolver Client 后，用 Lab-only 模式启动 Client：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
+  -InstanceRoot "$labRoot\runtime-mp-client-solver" `
+  -ClientId 1000 `
+  -ForceSteamOff `
+  -MultiplayerMode safe-execute-lab
+~~~
+
+进入战斗后等待路线稳定，只点击一次“执行本回合”。MP-2A Runtime 会只取第一张
+通过安全分类的本地普通牌；即使路线后面还有动作，也不会在同一 deployment 继续。
+完成后继续保留进程数秒，让 Probe 观察动作后的世界变化并触发新搜索，再使用
+默认 `Graceful` 模式停止实例。若优雅退出失败，先保留现场排查；不要为了取得
+Smoke 证据直接改用强制结束，因为 `-Mode Force` 可能截断异步 journal。
+
+使用启动输出中的本轮 `logPath` 验证：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-mp2a-results.ps1 `
+  -LogPath '<client-run.log>' `
+  -OutputPath '.\.local\multiplayer-lab\results\mp2a-summary.json'
+~~~
+
+只有验证器返回 `PASS`，并人工确认 Host/Client 身份与 UI 行为后，才可形成
+MP-2A 真实 Smoke 证据。`safe-execute-lab` 与正式 `safe-execute` 是两个独立
+token；正式 token 的一动作 Host/Client Smoke 已通过，证据摘要见
+`docs/multiplayer/evidence/mp2-safe-execute-formal-2026-09-20.json`。
+
+## MP-2B 两动作 Smoke（历史实机；复验步骤）
+
+MP2B 使用同一套 HostVanilla + ClientCombatSolver、Steam transport off 和 Mod
+warm-up 后的正式第二次 Client 启动；正式入口命令为：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
+  -InstanceRoot "$labRoot\runtime-mp-client-solver" `
+  -ClientId 1000 `
+  -ForceSteamOff `
+  -MultiplayerMode safe-execute
+~~~
+
+用户手动完成 Join、Ready、进入本地玩家回合，确认点击前没有自动出牌后只点击一次
+“执行本回合”。当前实现最多连续执行两张已分类为安全的本地普通牌；每张牌都应通过
+原生 `PlayCardAction`，费用/能量和手牌随实际动作变化，完成后不自动 EndTurn，界面
+应回到等待下一回合/可重新计算的安全边界。保留日志直到动作后的新 debounce search
+出现，再用默认 `Graceful` 停止实例。
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-mp2b-results.ps1 `
+  -LogPath '<post-restart-client-log>' `
+  -OutputPath '.\.local\multiplayer-lab\results\mp2b-summary.json'
+~~~
+
+正常 Smoke 通过要求验证器返回 `MULTIPLAYER_MP-2B_PASS`。另做一次远端干扰场景：
+第一张牌完成、第二张牌尚未执行时，由另一 Client 进行一次公开动作；预期当前 Client
+记录 `MP2B_REMOTE_DELTA_ABORT`、不再捕获第二个原生动作并重新搜索。该场景是安全边界
+证据，不应按正常两动作 PASS 计数。验证远端干扰日志：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-mp2b-interference-results.ps1 `
+  -LogPath '<post-restart-client-log>' `
+  -RequestId '<deployment-request-id>' `
+  -OutputPath '.\.local\multiplayer-lab\results\mp2b-interference-summary.json'
+~~~
+
+验证器返回 `MULTIPLAYER_MP-2B_REMOTE_ABORT_PASS` 才表示安全中止证据完整。2026-09-20
+实机正常 Smoke 与远端干扰 Smoke 均已通过，摘要见
+`docs/multiplayer/evidence/mp2b-smoke-2026-09-20.json`。
+
+## MP-2C bounded N-action Smoke
+
+MP-2C 使用上面的正式 `safe-execute` 启动方式，但一次用户点击可连续执行当前安全本地
+`PlayCard` 前缀，policy ceiling 为 6；每张牌都必须等待原生队列完成、稳定 `WorldVersion`
+并通过现有重验证，才允许下一张。用户只点击一次“执行本回合”，选择至少三张连续安全牌的
+回合；观察 UI 的 `正在执行 n/6`、费用/能量减少、手牌减少，以及完成后保持当前回合并重新
+计算最新路线。不得自动 EndTurn。
+
+正常验证命令：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-mp2b-results.ps1 `
+  -LogPath '<post-restart-client-log>' `
+  -MinActions 3 `
+  -MaxActions 6 `
+  -OutputPath '.\.local\multiplayer-lab\results\mp2c-summary.json'
+~~~
+
+应返回 `MULTIPLAYER_MP-2C_PASS`，并证明同一 request 的 `action_index=0..N-1`、每张牌
+后重验证、WorldVersion 单调前进、`end_turn=false`、无 forbidden action 和 fresh search。
+
+远端干扰验证：先让两张牌成功，再由另一 Client 在下一张牌前制造公开变化：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-mp2b-interference-results.ps1 `
+  -LogPath '<post-restart-client-log>' `
+  -RequestId '<deployment-request-id>' `
+  -MinCompletedActions 2 `
+  -MaxActions 6 `
+  -OutputPath '.\.local\multiplayer-lab\results\mp2c-interference-summary.json'
+~~~
+
+应返回 `MULTIPLAYER_MP-2C-remote-interference_PASS`，并证明中止后没有下一张原生动作且
+发生 fresh search。2026-09-20 的真实正常/干扰结果均已通过，摘要见
+`docs/multiplayer/evidence/mp2c-smoke-2026-09-20.json`。
+
+退出码：0 为 PASS，1 为矛盾/无效证据，2 为缺失或仍为 UNVERIFIED。真实
 Host/Client 运行证据必须带可审查的日志位置；单进程模拟和合成 JSON 不可作为
 通过证据。
 
-当前阻碍和未验证事实记录在
-`source/docs/multiplayer/blockers/`。
+当前能力边界与未验证事实以
+`source/docs/multiplayer/LIMITATIONS.md` 和 `source/docs/CODEX_HANDOFF.md` 为准。

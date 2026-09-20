@@ -10,13 +10,16 @@ internal sealed partial class SolverRouteRow : PanelContainer
     private CanvasItem? _endTurnAction;
     private SolverOverlayTurnSnapshot? _populatedTurn;
     private string? _populatedLanguage;
+    private int _deploymentActionLimit = -1;
 
     public Label TurnLabel { get; }
     public HFlowContainer ActionFlow { get; }
     public Label EnemyDamageLabel { get; }
     public Label OutcomeLabel { get; }
     public Label EnergyLabel { get; }
-    public int DeploymentActionCount => _deploymentActions.Count;
+    public int DeploymentActionCount => _deploymentActionLimit >= 0
+        ? _deploymentActionLimit
+        : _deploymentActions.Count;
 
     public SolverRouteRow(int index)
     {
@@ -119,6 +122,7 @@ internal sealed partial class SolverRouteRow : PanelContainer
 
     public void Populate(SolverOverlayTurnSnapshot turn)
     {
+        ResetDeploymentActionLimit();
         if (HasSameActions(turn))
         {
             // Populate starts a fresh presentation even when its controls survive.
@@ -183,15 +187,16 @@ internal sealed partial class SolverRouteRow : PanelContainer
 
     public void SetDeploymentProgress(int completedActions, int? activeActionIndex)
     {
-        if (completedActions < 0 || completedActions > _deploymentActions.Count)
+        int actionCount = DeploymentActionCount;
+        if (completedActions < 0 || completedActions > actionCount)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(completedActions),
                 completedActions,
-                $"路线只有 {_deploymentActions.Count} 个可执行动作胶囊。");
+                $"路线只有 {actionCount} 个可执行动作胶囊。");
         }
         if (activeActionIndex is { } active
-            && (active < completedActions || active >= _deploymentActions.Count))
+            && (active < completedActions || active >= actionCount))
         {
             throw new ArgumentOutOfRangeException(
                 nameof(activeActionIndex),
@@ -199,7 +204,7 @@ internal sealed partial class SolverRouteRow : PanelContainer
                 "当前动作必须是尚未完成的路线动作。");
         }
 
-        for (int index = 0; index < _deploymentActions.Count; index++)
+        for (int index = 0; index < actionCount; index++)
         {
             _deploymentActions[index].Modulate = index < completedActions
                 ? SolverUiTokens.Palette.CompletedActionModulate
@@ -207,6 +212,21 @@ internal sealed partial class SolverRouteRow : PanelContainer
                     ? SolverUiTokens.Palette.ActiveActionModulate
                     : Colors.White;
         }
+    }
+
+    public void SetDeploymentActionLimit(int actionCount)
+    {
+        if (actionCount < 0 || actionCount > _deploymentActions.Count)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(actionCount),
+                actionCount,
+                $"路线只有 {_deploymentActions.Count} 个可执行动作胶囊。");
+        }
+
+        _deploymentActionLimit = actionCount;
+        for (int index = 0; index < _deploymentActions.Count; index++)
+            _deploymentActions[index].Visible = index < actionCount;
     }
 
     public void SetEndTurnDeploymentState(bool active, bool completed)
@@ -242,6 +262,7 @@ internal sealed partial class SolverRouteRow : PanelContainer
     {
         _populatedTurn = null;
         _populatedLanguage = null;
+        _deploymentActionLimit = -1;
         _deploymentActions.Clear();
         _endTurnAction = null;
         foreach (Node child in ActionFlow.GetChildren())
@@ -249,5 +270,12 @@ internal sealed partial class SolverRouteRow : PanelContainer
             ActionFlow.RemoveChild(child);
             child.QueueFree();
         }
+    }
+
+    private void ResetDeploymentActionLimit()
+    {
+        _deploymentActionLimit = -1;
+        foreach (CanvasItem action in _deploymentActions)
+            action.Visible = true;
     }
 }
