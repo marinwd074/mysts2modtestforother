@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "phase": "Multiplayer Local Cross-Turn X2",
+  "status": "PASS",
+  "validatedDate": "2026-09-20",
+  "commit": "2f17443057f913dd308364c60b196e48d48a6a5f",
+  "runtime": {
+    "hostProfile": "HostVanilla",
+    "solverClientProfile": "ClientCombatSolver",
+    "observerClientProfile": "ClientCombatSolver",
+    "solverClientId": 1000,
+    "observerClientId": 1001,
+    "playerCount": 3,
+    "gameVersion": "0.107.1",
+    "seed": "F23XG9KSJD",
+    "encounter": "FUZZY_WURM_CRAWLER_WEAK",
+    "steamTransport": "off",
+    "solverMode": "safe-execute",
+    "observerMode": "probe",
+    "warmupExcluded": true,
+    "stopMode": "Graceful"
+  },
+  "remoteDelta": {
+    "status": "PASS",
+    "clientId": 1001,
+    "action": "STRIKE_IRONCLAD",
+    "target": "毛绒伏地虫",
+    "targetIndex": 3,
+    "hostObserved": true,
+    "remotePublicChanged": true,
+    "enemyHpBefore": 180,
+    "enemyHpAfter": 171
+  },
+  "continuation": {
+    "status": "PASS",
+    "oldRouteIdentity": "bb5892f2e2ff47e78ac0915a9f0013c9",
+    "oldContinuationTurn": 2,
+    "validationWorldVersion": 26,
+    "rejectedReason": "local_state_mismatch",
+    "rejectionDiff": "E0.hp expected={180} actual={171}",
+    "freshProbe": true,
+    "freshRootCapture": true,
+    "freshSearchGeneration": 2,
+    "newRouteIdentity": "01216d8159a241949ba5dbe6cd8e0f71",
+    "oldAuthorizationCleared": true,
+    "newAuthorization": true,
+    "newRequestId": 2,
+    "oldFutureActionEnqueued": false
+  },
+  "nativeActions": {
+    "requestId": 2,
+    "localTurn": 2,
+    "actions": [
+      "STRIKE_IRONCLAD",
+      "STRIKE_IRONCLAD",
+      "STRIKE_IRONCLAD",
+      "EndPlayerTurnAction"
+    ]
+  },
+  "guards": {
+    "searchSetupFailure": false,
+    "indexOutOfRange": false,
+    "worldVersionResetOrRebase": false,
+    "customNetworkPacket": false,
+    "oldFutureActionNativeEnqueue": false
+  },
+  "clientCombatJournal": ".local/multiplayer-lab/runtime-runtime-local-cross-turn-t3-fix-client/diagnostics/CombatSolver-BugReports/logs/CombatSolver/26520-41b2fff2c96a4388945039b8c31b109e/combat-baec55091be94d118c125521a8894b10.jsonl",
+  "clientCombatJournalSha256": "EA7016897197CB9A7D0E7F6E1915C59CB19E16A97FCE28034F09906D3390A89B",
+  "boundaries": [
+    "The observer changed only public combat state through the native multiplayer action path.",
+    "Fresh Probe/Root/Search is required after the public delta; the old future continuation is never executable.",
+    "This evidence does not predict teammate private hand, energy, potion, choice or behavior."
+  ]
+}

@@ -88,14 +88,12 @@
 - `ContinuationStamp` 已纳入战斗身份、本地身份、回合/阶段、资源、手牌/牌堆/RNG、敌人状态；另以远端公开 fingerprint、多人 scaling/牌约束及单调 `WorldVersion` 做严格续接门禁。精确续接保留 `RouteIdentity`，旧 SafeExecution authorization 已结束，当前回合重新创建 authorization；不匹配执行 Fresh Probe + Fresh Root + Fresh Search。
 - 续接校验崩溃已在 `94c6497` 修复：T2 `AutoTurnStart` 在 `CaptureContinuationValidation` 前强制 fresh Probe，继续保持严格 `ActualWorldVersion > max(ExpectedSourceWorldVersion, MinimumWorldVersion)`；续接拒绝按 `cached_turn_missing`、`local_state_mismatch`、`world_version_not_advanced`、`remote_public_mismatch` 等原因记录，空 local diff 不再访问 `[0]`。
 - Safe EndTurn 后未来路线只作为不可执行 continuation 保留，部署筛选仍只取当前本地回合；多人不读写 `SolvedRouteCache`，避免持久缓存携带多人完整状态。
-- `MultiplayerLocalCrossTurnChecks` 10 项、Release 构建（0 errors、2 条既有 `CS9113`）和 `git diff --check` 已通过。修复后的 X1 客户端确认 63 个补丁加载成功；本轮实机已完成 T1→T2→T3→T4，T2 自动执行 3 张牌并正常进入 T3，无 `SEARCH_SETUP_FAILURE`/越界异常。T1→T2 因 `local_state_exact=true reason=remote_public_mismatch` 按合同 fresh search，T2→T3 因 `local_state_exact=false reason=local_state_mismatch` 按合同 fresh search；随后无新增远端公开变化的 T3→T4 出现 `SEARCH_REUSED` 与 `MP_LOCAL_XTURN_CONTINUATION_REUSED`，T4 使用新的 `request_id=5` / `new_authorization=true` 执行原生牌，旧 request 已 `authorization_cleared=true`。精确复用机制已有实机证据；独立的“用户主动改变远端/目标”X2 仍未收口。
-- T3 空推荐已定位：搜索存在当前回合出牌候选，但最终路线在局部质量相同/等价时被 `ActionCount` 短路线 tie-break 选成 `T3:EndTurn`。多人本地跨回合的成员内排序和 Beam portfolio 结果比较均已加入“当前回合至少一张牌优先”的平局规则，并记录 `current_turn_card` 诊断；Release 与 10 项合同检查已通过，需用新构建复跑 T3 实机确认。
-- 当前 `main`/`origin/main` 均为 `279dbbd`；新构建已准备到 `.local/multiplayer-lab/runtime-runtime-local-cross-turn-t3-fix-host` 与 `.local/multiplayer-lab/runtime-runtime-local-cross-turn-t3-fix-client`，其中 Client 已完成 CombatSolver overlay 增量更新。旧 X1 Host/Client 进程仍在运行，故尚未启动新实例或宣称 T3 修复实机通过；下一对话先确认旧窗口退出，再启动新实例完成 T3 复测。
+- `MultiplayerLocalCrossTurnChecks` 10 项、Release 构建（0 errors、2 条既有 `CS9113`）和 `git diff --check` 已通过。新 T3 Fix Client 正式启动确认 63 个补丁加载成功；T3 复测在 `X7TJJK1T4W` / `NIBBITS_WEAK` 中通过：generation 3 的 route `140e6e10fd494b01a05287a5d478da25` 保留 `DEFEND_IRONCLAD`、两张 `STRIKE_IRONCLAD` 和 EndTurn，随后 request 3 以新授权执行原生动作。证据见 [`local-cross-turn-t3-fix-smoke-2026-09-20.json`](multiplayer/evidence/local-cross-turn-t3-fix-smoke-2026-09-20.json)。
+- T3 运行同时确认正常路径没有回归：T3→T4 出现 `SEARCH_REUSED` 与 `MP_LOCAL_XTURN_CONTINUATION_REUSED`，旧 authorization 已失效；`remote_public_mismatch`、`local_state_mismatch` 均按合同进入 Fresh Search，无 `SEARCH_SETUP_FAILURE`、越界、WorldVersion reset/rebase 或自定义网络包。
+- 独立 X2 已收口：三人 `F23XG9KSJD` / `FUZZY_WURM_CRAWLER_WEAK` 中，Client 1001 以 `STRIKE_IRONCLAD` 改变公开敌方 HP `180→171`；旧 route `bb5892f2e2ff47e78ac0915a9f0013c9` 被拒绝，随后 Fresh Probe/Root/Search 生成 route `01216d8159a241949ba5dbe6cd8e0f71`，request 2 建立新 authorization 并执行新 T2 牌序，旧 future action 未入原生队列。证据见 [`local-cross-turn-x2-smoke-2026-09-20.json`](multiplayer/evidence/local-cross-turn-x2-smoke-2026-09-20.json)。
+- `MP_LOCAL_XTURN_CONTINUATION_MISSING` 的专用运行夹具本轮未触发（`continuation_missing=0`），因此该分支只登记为 source contract PASS、runtime `UNVERIFIED`，不宣称已完成该项实机验收。有效 EndTurn-only 仍由 10 项 Local Cross-Turn contract 保持允许。
 
 ## 当前下一步
 
 [Reactive Carry Foundation](multiplayer/NEXT_REACTIVE_CARRY.md) 已完成；A/B/C 三轮真实
-Host/Client Smoke 和机器摘要已收口。当前交接下一步是按
-`CombatSolver_NEXT_CODEX_MULTIPLAYER_LOCAL_CROSS_TURN.md` 完成独立 Smoke X2；若要求严格复现方法文档中的 T1→T2 无变化夹具，再补该专门场景，之后再把
-结果写入多人证据。默认仍保持 Probe，Potion、Choice、Replay、队友控制、Instant 和 Full Auto
-继续关闭；不引入 teammate behavior model 或第二套 Solver。
+Host/Client Smoke 和机器摘要已收口。当前 T3 Fix 与独立 X2 的运行证据、机器摘要和文档已收口；唯一未闭合的是“本地 Play 且当前 turn 缺失 cached continuation”专用运行夹具，必须保持 `UNVERIFIED`，不能用普通 mismatch 运行替代。默认仍保持 Probe，Potion、Choice、Replay、队友控制、Instant 和 Full Auto 继续关闭；不引入 teammate behavior model 或第二套 Solver。
