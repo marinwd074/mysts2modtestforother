@@ -164,6 +164,21 @@ MultiplayerCarryCompatibilityKey compatibility = new(
     StrategicSold: 0,
     EnemyHp: 20);
 Check(
+    MultiplayerCarryRankingContracts.IsCurrentThreatWindowAction(
+        rootTurn: 3,
+        actionTurn: 3,
+        endsPlayerTurn: false)
+        && !MultiplayerCarryRankingContracts.IsCurrentThreatWindowAction(
+            rootTurn: 3,
+            actionTurn: 3,
+            endsPlayerTurn: true)
+        && !MultiplayerCarryRankingContracts.IsCurrentThreatWindowAction(
+            rootTurn: 3,
+            actionTurn: 4,
+            endsPlayerTurn: false),
+    "Carry observes threat removal only during the current local turn before EndTurn; future-turn actions cannot clear the current public threat.");
+
+Check(
     MultiplayerCarryRankingContracts.IsDecisiveTieBreak(
         compatibility,
         selectedCarryPreference: 1,

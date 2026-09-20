@@ -268,6 +268,12 @@ internal readonly record struct MultiplayerCarryCompatibilityKey(
 
 internal static class MultiplayerCarryRankingContracts
 {
+    internal static bool IsCurrentThreatWindowAction(
+        int rootTurn,
+        int actionTurn,
+        bool endsPlayerTurn)
+        => actionTurn == rootTurn && !endsPlayerTurn;
+
     internal static bool IsDecisiveTieBreak(
         MultiplayerCarryCompatibilityKey selectedKey,
         int selectedCarryPreference,

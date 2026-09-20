@@ -30,6 +30,31 @@ internal sealed partial class CombatBeamSolver
         private int ScalePotionCost(int strategicHpCost)
             => PotionUsePolicy.SmartRequiredHpSaved(strategicHpCost, bossHpRelief);
 
+        private static SearchNode CarryObservationNode(
+            SearchNode candidate,
+            int rootTurn)
+        {
+            SearchNode current = candidate;
+            while (current.Parent != null)
+            {
+                PlanAction? action = current.Action;
+                if (action != null && action.Turn == rootTurn)
+                {
+                    bool endsPlayerTurn = action.Kind == PlanActionKind.EndTurn;
+                    return MultiplayerCarryRankingContracts.IsCurrentThreatWindowAction(
+                            rootTurn,
+                            action.Turn,
+                            endsPlayerTurn)
+                        ? current
+                        : current.Parent;
+                }
+
+                current = current.Parent;
+            }
+
+            return current;
+        }
+
         private static MultiplayerCarryEvaluation EvaluateCarry(
             MultiplayerCarryRankingContext context,
             SimulationSnapshot snapshot,
@@ -128,10 +153,13 @@ internal sealed partial class CombatBeamSolver
                             ? PotionUsePolicy.AdditionalRequiredUseStrategicHpCost(
                                 optionalPotionStrategicCost)
                             : 0);
+                    SearchNode carryObservationNode =
+                        CarryObservationNode(candidate.Node, startTurnNumber);
+                    SimulationSnapshot carryObservationSnapshot = carryObservationNode.Snapshot;
                     MultiplayerCarryEvaluation carryEvaluation = EvaluateCarry(
                         carryRankingContext,
-                        candidate.Snapshot,
-                        features.AllEnemiesDead);
+                        carryObservationSnapshot,
+                        carryObservationSnapshot.AllEnemiesDead);
                     return (candidate.Node, candidate.Snapshot, Features: features,
                         CompleteVictory: completeVictory,
                         CombatEndedTurn: completeVictory ? candidate.Snapshot.CombatEndedTurn : null,
@@ -147,6 +175,7 @@ internal sealed partial class CombatBeamSolver
                         OptionalAmbergrisCount: optionalAmbergrisCount,
                         EffectivePotionPolicy: effectivePotionPolicy,
                         CarryEvaluation: carryEvaluation,
+                        CarryObservationActionCount: carryObservationNode.ActionCount,
                         CarryCompatibility: new MultiplayerCarryCompatibilityKey(
                             CompleteVictory: completeVictory,
                             DeadFallbackRank: !completeVictory
@@ -394,6 +423,8 @@ internal sealed partial class CombatBeamSolver
                         $"unknownRiskCount={carry.UnknownRiskCount} " +
                         $"carryPreference={carry.CarryPreference} " +
                         $"carryPreferenceReason={carry.Reason} " +
+                        "carryWindow=current_turn_pre_end " +
+                        $"carryObservationActionCount={candidate.CarryObservationActionCount} " +
                         $"carryDecisive={(index == 0 && carryDecisive).ToString().ToLowerInvariant()} " +
                         $"carryBaselineDifferent={(index == 0 && !selectedWouldAlreadyWinWithoutCarry).ToString().ToLowerInvariant()} " +
                         $"carryBaselinePreference={(index == 0 ? carryFreeWinner.CarryEvaluation.CarryPreference : 0)} " +
