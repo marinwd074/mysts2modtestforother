@@ -183,6 +183,34 @@ internal static class MultiplayerClientProbe
             Enemies: EnemyTokens(state));
     }
 
+    /// <summary>
+    /// Captures only the public teammate/scaling portion used to validate a local
+    /// cross-turn continuation. Round/side and enemy state are checked separately:
+    /// they may advance as part of the modeled local route without implying a
+    /// teammate action.
+    /// </summary>
+    internal static StateFingerprint CaptureContinuationRemotePublicFingerprint(
+        CombatState state)
+    {
+        Player? localPlayer = LocalContext.GetMe(state);
+        return ContinuationRemotePublicFingerprint(state, localPlayer);
+    }
+
+    internal static MultiplayerContinuationValidation CaptureContinuationValidation(
+        CombatState state,
+        long minimumWorldVersion)
+    {
+        Player? localPlayer = LocalContext.GetMe(state);
+        return new MultiplayerContinuationValidation(
+            ContinuationStamp.CaptureLiveCombatIdentity(state),
+            localPlayer?.NetId.ToString() ?? string.Empty,
+            ContinuationRemotePublicFingerprint(state, localPlayer),
+            state.MultiplayerScalingModel?.ShouldReceiveCombatHooks,
+            state.RunState.CardMultiplayerConstraint.ToString(),
+            MultiplayerWorldTracker.WorldVersion,
+            minimumWorldVersion);
+    }
+
     private static bool ObserveCore(CombatState state, string reason, bool bypassSampleInterval)
     {
         if (!SolverSessionCapabilities.Capture(state).IsMultiplayer
@@ -275,6 +303,30 @@ internal static class MultiplayerClientProbe
         fingerprint.Add(state.RunState.CardMultiplayerConstraint.ToString());
         foreach (string token in RemotePlayerTokens(state, localPlayer))
             fingerprint.Add(token);
+        return fingerprint.Finish();
+    }
+
+    private static StateFingerprint ContinuationRemotePublicFingerprint(
+        CombatState state,
+        Player? localPlayer)
+    {
+        StateFingerprintBuilder fingerprint = new();
+        fingerprint.Add(state.Players.Count);
+        fingerprint.Add(state.MultiplayerScalingModel is null
+            ? -1
+            : state.MultiplayerScalingModel.ShouldReceiveCombatHooks ? 1 : 0);
+        fingerprint.Add(state.RunState.CardMultiplayerConstraint.ToString());
+        foreach (Player player in state.Players
+                     .Where(candidate => localPlayer == null || candidate.NetId != localPlayer.NetId)
+                     .OrderBy(candidate => candidate.NetId))
+        {
+            fingerprint.Add(player.NetId.ToString());
+            fingerprint.Add(player.Character.Id.Entry);
+            fingerprint.Add(player.Creature.CurrentHp);
+            fingerprint.Add(player.Creature.MaxHp);
+            fingerprint.Add(player.Creature.Block);
+            AppendCompactPowers(ref fingerprint, player.Creature.Powers);
+        }
         return fingerprint.Finish();
     }
 

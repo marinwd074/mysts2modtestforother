@@ -607,6 +607,16 @@ internal sealed partial class CombatBeamSolver
             SolverResult result = new()
             {
                 ResultScope = resultScope,
+                MultiplayerScope = policy.RoutePolicy switch
+                {
+                    SearchRoutePolicy.MultiplayerCurrentTurnOnly
+                        => MultiplayerSearchResultScope.CurrentTurnOnly,
+                    SearchRoutePolicy.MultiplayerLocalCrossTurn
+                        => annotations.CombatEndedTurn.HasValue
+                            ? MultiplayerSearchResultScope.CompleteLocalBattleProjection
+                            : MultiplayerSearchResultScope.PartialLocalCrossTurnProjection,
+                    _ => MultiplayerSearchResultScope.NotMultiplayer,
+                },
                 DeterministicBlockPotionInserted = blockPotionInsertion != null,
                 TotalSearchElapsed = stopwatch.Elapsed,
                 TotalWorkerAllocatedBytes = workerAllocatedBytes,

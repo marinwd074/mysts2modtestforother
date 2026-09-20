@@ -8,6 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../src/Search/StateFingerprint.cs" Link="StateFingerprint.cs" />
-    <Compile Include="../../src/Search/MultiplayerCarryRanking.cs" Link="MultiplayerCarryRanking.cs" />
+    <Compile Include="../../src/Search/MultiplayerLocalCrossTurnContracts.cs" Link="MultiplayerLocalCrossTurnContracts.cs" />
   </ItemGroup>
 </Project>

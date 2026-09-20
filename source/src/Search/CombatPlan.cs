@@ -1402,15 +1402,35 @@ internal sealed record SolverSnapshot(
     public GrowthValues GrowthRewards { get; init; }
 }
 
+internal sealed record MultiplayerContinuationExpectation(
+    string CombatIdentity,
+    string LocalNetId,
+    StateFingerprint RemotePublicFingerprint,
+    bool? MultiplayerScalingHooks,
+    string CardMultiplayerConstraint,
+    long SourceWorldVersion);
+
+internal sealed record MultiplayerContinuationValidation(
+    string CombatIdentity,
+    string LocalNetId,
+    StateFingerprint RemotePublicFingerprint,
+    bool? MultiplayerScalingHooks,
+    string CardMultiplayerConstraint,
+    long CurrentWorldVersion,
+    long MinimumWorldVersion);
+
 internal sealed record CachedContinuation(
     ContinuationStamp ExpectedState,
     int StartTurnNumber,
-    int ForecastOffset);
+    int ForecastOffset,
+    MultiplayerContinuationExpectation? MultiplayerExpectation = null);
 
 internal sealed class SolverResult
 {
     public bool WasRestoredFromCache { get; internal set; }
     public SolverResultScope ResultScope { get; internal set; } = SolverResultScope.SearchCompletion;
+    public MultiplayerSearchResultScope MultiplayerScope { get; internal set; }
+    public string RouteIdentity { get; internal set; } = Guid.NewGuid().ToString("N");
     public bool DeterministicBlockPotionInserted { get; internal set; }
     public bool SingleSessionSearch { get; internal set; }
 
@@ -1606,6 +1626,7 @@ internal sealed class SolverResult
         ContinuationStamp actual,
         int currentHp,
         BattleDamageSnapshot battleDamage,
+        MultiplayerContinuationValidation? multiplayerValidation,
         out SolverResult? continuation)
     {
         CachedContinuation? cached = Continuations.FirstOrDefault(item => item.ExpectedState == actual);
@@ -1613,6 +1634,34 @@ internal sealed class SolverResult
         {
             continuation = null;
             return false;
+        }
+        if (multiplayerValidation != null && cached.MultiplayerExpectation is null)
+        {
+            continuation = null;
+            return false;
+        }
+        if (cached.MultiplayerExpectation is { } expected)
+        {
+            if (multiplayerValidation is not { } actualMultiplayer
+                || !MultiplayerLocalCrossTurnContracts.IsExactContinuation(
+                    new MultiplayerContinuationMatchInput(
+                        expected.CombatIdentity,
+                        actualMultiplayer.CombatIdentity,
+                        expected.LocalNetId,
+                        actualMultiplayer.LocalNetId,
+                        expected.RemotePublicFingerprint,
+                        actualMultiplayer.RemotePublicFingerprint,
+                        expected.MultiplayerScalingHooks,
+                        actualMultiplayer.MultiplayerScalingHooks,
+                        expected.CardMultiplayerConstraint,
+                        actualMultiplayer.CardMultiplayerConstraint,
+                        expected.SourceWorldVersion,
+                        actualMultiplayer.MinimumWorldVersion,
+                        actualMultiplayer.CurrentWorldVersion)))
+            {
+                continuation = null;
+                return false;
+            }
         }
         if (!BestNode.Actions.Any(action => action.Turn == cached.StartTurnNumber))
         {
@@ -1737,6 +1786,8 @@ internal sealed class SolverResult
             Continuations = Continuations.Where(item => item.StartTurnNumber > cached.StartTurnNumber).ToList(),
             WasReused = true,
             ReusedFromTurn = StartTurnNumber,
+            MultiplayerScope = MultiplayerScope,
+            RouteIdentity = RouteIdentity,
             RecalculatedAfterCompleteProjection = RecalculatedAfterCompleteProjection,
             PreviousProjectedBattleHpLost = PreviousProjectedBattleHpLost,
             RecalculationStateDifference = RecalculationStateDifference,

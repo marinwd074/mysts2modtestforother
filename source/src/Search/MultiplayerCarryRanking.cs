@@ -99,6 +99,7 @@ internal sealed class MultiplayerCarryRankingContext
         bool enabled,
         long worldVersion,
         string publicFingerprint,
+        StateFingerprint remotePublicFingerprint,
         IEnumerable<MultiplayerCarryRemotePlayerPublicState> remotePlayers,
         IEnumerable<MultiplayerCarryEnemyPublicState> enemies,
         bool? multiplayerScalingHooks,
@@ -107,6 +108,7 @@ internal sealed class MultiplayerCarryRankingContext
         Enabled = enabled;
         WorldVersion = worldVersion;
         PublicFingerprint = publicFingerprint ?? string.Empty;
+        RemotePublicFingerprint = remotePublicFingerprint;
         RemotePlayers = Array.AsReadOnly(remotePlayers.ToArray());
         Enemies = Array.AsReadOnly(enemies.ToArray());
         MultiplayerScalingHooks = multiplayerScalingHooks;
@@ -116,6 +118,12 @@ internal sealed class MultiplayerCarryRankingContext
     public bool Enabled { get; }
     public long WorldVersion { get; }
     public string PublicFingerprint { get; }
+    /// <summary>
+    /// Public teammate/scaling input that is expected to remain stable across a
+    /// local-only continuation. Enemy state is intentionally not included here;
+    /// it is validated by <see cref="ContinuationStamp"/> at the predicted turn.
+    /// </summary>
+    public StateFingerprint RemotePublicFingerprint { get; }
     public IReadOnlyList<MultiplayerCarryRemotePlayerPublicState> RemotePlayers { get; }
     public IReadOnlyList<MultiplayerCarryEnemyPublicState> Enemies { get; }
     public bool? MultiplayerScalingHooks { get; }
@@ -126,6 +134,7 @@ internal sealed class MultiplayerCarryRankingContext
             enabled: false,
             worldVersion: 0,
             publicFingerprint: string.Empty,
+            remotePublicFingerprint: default,
             remotePlayers: [],
             enemies: [],
             multiplayerScalingHooks: null,
@@ -139,10 +148,30 @@ internal sealed class MultiplayerCarryRankingContext
         IEnumerable<MultiplayerCarryEnemyPublicState> enemies,
         bool? multiplayerScalingHooks,
         string cardMultiplayerConstraint)
+        => Create(
+            enabled,
+            worldVersion,
+            publicFingerprint,
+            default,
+            remotePlayers,
+            enemies,
+            multiplayerScalingHooks,
+            cardMultiplayerConstraint);
+
+    public static MultiplayerCarryRankingContext Create(
+        bool enabled,
+        long worldVersion,
+        string publicFingerprint,
+        StateFingerprint remotePublicFingerprint,
+        IEnumerable<MultiplayerCarryRemotePlayerPublicState> remotePlayers,
+        IEnumerable<MultiplayerCarryEnemyPublicState> enemies,
+        bool? multiplayerScalingHooks,
+        string cardMultiplayerConstraint)
         => new(
             enabled,
             worldVersion,
             publicFingerprint,
+            remotePublicFingerprint,
             remotePlayers,
             enemies,
             multiplayerScalingHooks,

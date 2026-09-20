@@ -92,6 +92,27 @@ internal static class SolverDiagnostics
         GCMemoryInfo gcMemory = GC.GetGCMemoryInfo();
         using Process process = Process.GetCurrentProcess();
         StringBuilder text = new();
+        if (result.MultiplayerScope != MultiplayerSearchResultScope.NotMultiplayer)
+        {
+            string multiplayerBoundary = result.CombatEndedTurn.HasValue
+                ? "terminal"
+                : result.BoundaryReason != SearchBoundaryReason.None
+                    ? result.BoundaryReason.ToString()
+                    : "local_projection";
+            text.Append(Prefix).Append(" MP_LOCAL_CROSS_TURN_RESULT")
+                .Append(" scope=").Append(result.MultiplayerScope)
+                .Append(" start_turn=").Append(result.StartTurnNumber)
+                .Append(" predicted_until_turn=")
+                .Append(result.StartTurnNumber + Math.Max(0, result.SearchedTurns - 1))
+                .Append(" complete_battle=").Append(result.CombatEndedTurn.HasValue)
+                .Append(" actions=").Append(result.BestNode.Actions.Count)
+                .Append(" end_turn_count=").Append(result.BestNode.Actions.Count(action =>
+                    action.Kind == PlanActionKind.EndTurn || action.EndsPlayerTurn))
+                .Append(" projected_hp_loss=").Append(result.ProjectedBattleHpLost)
+                .Append(" boundary=").Append(multiplayerBoundary)
+                .Append(" route_identity=").Append(result.RouteIdentity)
+                .AppendLine();
+        }
         text.Append(Prefix).Append(" RESULT")
             .Append(" reused=").Append(result.WasReused)
             .Append(" reused_from_turn=").Append(result.ReusedFromTurn?.ToString() ?? "-")

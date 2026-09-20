@@ -314,6 +314,20 @@ internal sealed partial class CombatBeamSolver
         for (SearchNode? node = best; node?.Parent != null; node = node.Parent)
             path.Add(node);
         path.Reverse();
+        if (root.AllowsLocalPlayerOnlySearch
+            && !MultiplayerLocalCrossTurnContracts.ValidateLocalOnlyProjection(
+                path.Select(node => new MultiplayerProjectedAction(
+                    node.Action?.Turn ?? _startTurnNumber,
+                    IsLocalAction: true,
+                    IsEndTurn: node.Action is { } action
+                        && (action.Kind == PlanActionKind.EndTurn || action.EndsPlayerTurn)))
+                    .ToArray(),
+                _startTurnNumber,
+                out string projectionFailure))
+        {
+            throw new InvalidOperationException(
+                $"多人本地跨回合路线包含不允许的投影动作：{projectionFailure}。");
+        }
         for (int pathIndex = 0; pathIndex < path.Count; pathIndex++)
         {
             SearchNode node = path[pathIndex];
@@ -359,7 +373,21 @@ internal sealed partial class CombatBeamSolver
                     turnSetupRoot?.ReleaseSimulator();
                 }
             }
-            continuations.Add(new CachedContinuation(expected, node.Turn, forecastOffset));
+            MultiplayerContinuationExpectation? multiplayerExpectation =
+                root.AllowsLocalPlayerOnlySearch
+                    ? new MultiplayerContinuationExpectation(
+                        ContinuationStamp.CapturePredictedCombatIdentity(node.Snapshot.Simulator),
+                        _player.NetId.ToString(),
+                        root.CarryRankingContext.RemotePublicFingerprint,
+                        root.CarryRankingContext.MultiplayerScalingHooks,
+                        root.CarryRankingContext.CardMultiplayerConstraint,
+                        root.CarryRankingContext.WorldVersion)
+                    : null;
+            continuations.Add(new CachedContinuation(
+                expected,
+                node.Turn,
+                forecastOffset,
+                multiplayerExpectation));
         }
         return continuations;
     }

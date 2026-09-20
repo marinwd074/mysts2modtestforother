@@ -81,7 +81,7 @@ internal static partial class SolverController
             return;
         }
         bool hasCurrentTurnPlan = result.BestNode.Actions.Any(action =>
-            action.Turn == result.StartTurnNumber
+            MultiplayerLocalCrossTurnContracts.IsCurrentTurnAction(action.Turn, result.StartTurnNumber)
             && (action.IsExecutable || action.Kind == PlanActionKind.EndTurn));
         if (!hasCurrentTurnPlan)
         {
@@ -100,7 +100,9 @@ internal static partial class SolverController
         _combat.LatestStamp = null;
         CancelDeployment();
         IReadOnlyList<PlanAction> plannedTurnActions = result.BestNode.Actions
-            .Where(action => action.Turn == result.StartTurnNumber)
+            .Where(action => MultiplayerLocalCrossTurnContracts.IsCurrentTurnAction(
+                action.Turn,
+                result.StartTurnNumber))
             .ToArray();
         SolverDeploymentSession deployment = new()
         {
@@ -185,7 +187,9 @@ internal static partial class SolverController
         SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
         bool safeExecute = capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute;
         IReadOnlyList<PlanAction> plannedTurnActions = result.BestNode.Actions
-            .Where(action => action.Turn == turn)
+            .Where(action => MultiplayerLocalCrossTurnContracts.IsCurrentTurnAction(
+                action.Turn,
+                turn))
             .ToArray();
         List<PlanAction> actions;
         SafeLocalActionDecision safeStop = SafeLocalActionDecision.Allow;
@@ -231,6 +235,7 @@ internal static partial class SolverController
                 Entry.Logger.Info(
                     $"[CombatSolver/MultiplayerSafeExecute] MP2B_DEPLOY_START turn={turn} " +
                     $"request_id={safeSession?.RequestId ?? 0} route_generation={deployment.RouteGeneration} " +
+                    $"route_identity={result.RouteIdentity} new_authorization=true " +
                     $"action_count={actions.Count} max_actions={safeSession?.MaxActions ?? 0} " +
                     $"search_world_version={deployment.WorldVersion} stop_reason={safeStop.Reason}");
             }
@@ -928,12 +933,21 @@ internal static partial class SolverController
         MultiplayerClientProbe.ObserveActionBoundary(state, "safe_execute_end_turn_complete");
         long afterWorldVersion = MultiplayerWorldTracker.WorldVersion;
         int nextTurn = LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0;
+        SolverResult? futureRoute = _combat.ContinuationSource;
+        bool preserveFutureRoute = MultiplayerLocalCrossTurnContracts.CanPreserveFutureRoute(
+            SolverSessionCapabilities.Capture(state).CanCrossTurnReuse,
+            awaitingContinuation: true,
+            futureRoute?.Continuations.Count ?? 0,
+            futureRoute?.MultiplayerScope ?? MultiplayerSearchResultScope.CurrentTurnOnly);
         _combat.MultiplayerSafeExecuteDeploymentRequested = false;
-        _combat.ContinuationSource = null;
         _combat.LatestResult = null;
         _combat.LatestStamp = null;
         _combat.LastSafeEndTurnRequestId = safeSession.RequestId;
         _combat.LastSafeEndTurnNumber = turn;
+        _combat.LastSafeEndTurnWorldVersion = afterWorldVersion;
+        _combat.AwaitingMultiplayerContinuation = preserveFutureRoute;
+        if (!preserveFutureRoute)
+            _combat.ContinuationSource = null;
         InvalidateRenderedRouteAdoptionSeed();
         CompleteDeployment(deployment);
         SolverOverlay.ShowDeploymentComplete(host, turn, actionCount, endedTurn: true);
@@ -944,6 +958,8 @@ internal static partial class SolverController
             $"route_generation={deployment.RouteGeneration} " +
             $"before_world_version={current.WorldVersion} after_world_version={afterWorldVersion} " +
             $"next_local_turn={nextTurn} session_cleared=true authorization_cleared=true " +
+            $"continuation_pending={preserveFutureRoute.ToString().ToLowerInvariant()} " +
+            $"route_identity={futureRoute?.RouteIdentity ?? "-"} " +
             "automatic_end_turn=true custom_network_api_used=false");
     }
 

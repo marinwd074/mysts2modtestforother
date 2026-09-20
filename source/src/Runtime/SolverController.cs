@@ -447,6 +447,14 @@ internal static partial class SolverController
                 $"搜索并行度必须在 1..{SolverWeights.MaximumSearchMaxDegreeOfParallelism} 之间，" +
                 $"实际为 {maxDegreeOfParallelism}。");
         }
+        SearchRoutePolicy routePolicy = capabilities.Kind switch
+        {
+            SolverSessionKind.Singleplayer => SearchRoutePolicy.SinglePlayerFullRoute,
+            SolverSessionKind.MultiplayerProbe => SearchRoutePolicy.MultiplayerCurrentTurnOnly,
+            _ when capabilities.CanPlanLocalCrossTurn
+                => SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            _ => SearchRoutePolicy.MultiplayerCurrentTurnOnly,
+        };
         SearchPolicySnapshot policy = new(
             settings.Profile,
             effectivePotionPolicy,
@@ -469,7 +477,8 @@ internal static partial class SolverController
             new SearchMemoryPressureSignal())
         {
             Interaction = interaction,
-            CurrentTurnOnly = !capabilities.CanCrossTurnSearch,
+            RoutePolicy = routePolicy,
+            CurrentTurnOnly = MultiplayerLocalCrossTurnContracts.IsCurrentTurnOnly(routePolicy),
             UseNoveltyPortfolio = (settings.UseNoveltyPortfolio
                 || UnattendedTestRunner.UseNoveltyPortfolioOverride)
                 && capabilities.CanCrossTurnSearch,
@@ -1350,6 +1359,7 @@ internal static partial class SolverController
         CancelMultiplayerDebouncedSearch();
         CancelDeferredSearch();
         CancelSearch();
+        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
         MultiplayerSafeExecutionState? safeExecutionState = _deployment?.SafeExecutionSession?.State;
         SolverDeploymentSession? remoteAbortDeployment = null;
         int remoteAbortCompletedActions = 0;
@@ -1359,6 +1369,12 @@ internal static partial class SolverController
                 or MultiplayerSafeExecutionState.AwaitingWorldUpdate
                 or MultiplayerSafeExecutionState.Revalidating
                 or MultiplayerSafeExecutionState.EndTurnExecuting;
+        bool preservePendingContinuation = _deployment == null
+            && MultiplayerLocalCrossTurnContracts.CanPreserveFutureRoute(
+                capabilities.CanCrossTurnReuse,
+                _combat.AwaitingMultiplayerContinuation,
+                _combat.ContinuationSource?.Continuations.Count ?? 0,
+                _combat.ContinuationSource?.MultiplayerScope ?? MultiplayerSearchResultScope.CurrentTurnOnly);
         if (!preserveExpectedSafeDeployment)
         {
             if (safeExecutionState == MultiplayerSafeExecutionState.Authorized
@@ -1395,7 +1411,8 @@ internal static partial class SolverController
         _combat.FullAutoEnabled = false;
         _combat.LatestResult = null;
         _combat.LatestStamp = null;
-        _combat.ContinuationSource = null;
+        if (!preservePendingContinuation)
+            _combat.ContinuationSource = null;
         _combat.PendingCompleteProjectionBaseline = null;
         _combat.PendingManualProjectionBaseline = null;
         InvalidateRenderedRouteAdoptionSeed();
@@ -1408,11 +1425,23 @@ internal static partial class SolverController
             $"{invalidationPrefix} " +
             $"world_version={MultiplayerWorldTracker.WorldVersion} " +
             $"reason={MultiplayerWorldTracker.LastReason} " +
-            $"turn={LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0}");
+            $"turn={LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0} " +
+            $"continuation_preserved={preservePendingContinuation.ToString().ToLowerInvariant()} " +
+            $"route_identity={_combat.ContinuationSource?.RouteIdentity ?? "-"}");
     }
 
     private static void TryScheduleMultiplayerSearch(NGame? host, CombatState state)
     {
+        int currentTurn = LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0;
+        if (_combat.AwaitingMultiplayerContinuation
+            && _combat.ContinuationSource is { } pendingRoute
+            && !pendingRoute.Continuations.Any(item => item.StartTurnNumber == currentTurn))
+        {
+            // Remote turns may advance WorldVersion while the local player is still
+            // waiting. Hold the immutable future route until the next local turn;
+            // continuation validation then decides reuse versus fresh search.
+            return;
+        }
         if (host == null
             || _search != null
             || _deployment != null

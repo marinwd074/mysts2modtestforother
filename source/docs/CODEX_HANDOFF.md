@@ -10,7 +10,7 @@
 - MP-2C：已直接将 MP2B 泛化为当前回合 bounded N-action，policy ceiling 为 6；当前合同 40 项、正常/干扰验证器各 6 个合成用例和 Release 构建已通过。真实正常 Smoke 自动完成 3 张牌，真实远端干扰 Smoke 在完成 2 张后中止并重新搜索；摘要见 [`mp2c-smoke-2026-09-20.json`](multiplayer/evidence/mp2c-smoke-2026-09-20.json)。
 - Multiplayer Carry Ranking v1：已接入主线程捕获的公开远端/敌人上下文、纯确定性 evaluator 和最终路线排序 tie-break；8 项 Multiplayer Carry Ranking 离线合同与 Release 构建通过。仅显式 Advisor/Safe Execute 使用，默认 Probe/单人保持原排序；远端私有状态、队友行为预测和未知敌方目标均保持 fail-closed/neutral。本轮尚未把 R1/R2 写成实机 PASS。
 - Multiplayer Lab snapshot：已改为 schema 2 的持久 base-game snapshot + profile overlay 增量同步。marker 拆分 `baseGameId`、`ritsuArtifactId`、`combatSolverArtifactId`；游戏版本/底座变化、底座完整性失败或旧 schema 才全量重建，overlay 采用临时 managed tree + SHA-256 + rename/rollback。CombatSolver/RitsuLib 变化分别只更新各自 payload，HostVanilla 不因 CombatSolver 构建变化重建；`prepare-instances` 输出 `FULL_REBUILD` / `OVERLAY_UPDATED` / `REUSED` 和 `copiedFiles`。ownership、no-reparse-point、运行中禁止覆盖和正式证据隔离合同保持不变。
-- Multiplayer Instant、Potion、Choice、Replay、Full Auto、旧跨回合路线复用和队友目标继续关闭；Reactive Carry 仅在显式 Safe Execute 且最新安全路线边界成立时通过原生 EndTurn；默认多人仍保持 Probe。
+- Multiplayer Instant、Potion、Choice、Replay、Full Auto 和队友目标继续关闭；Reactive Carry 仅在显式 Safe Execute 且最新安全路线边界成立时通过原生 EndTurn。新实现已为显式 Advisor/Safe Execute 打开“只预测本地玩家”的跨回合路线，默认 Probe 仍保持只读当前回合边界；Safe Execute 仍只部署当前真实本地回合。
 - 本轮没有为 MP2B 声明新的 GitHub Actions 结果；实机结论来自隔离 Multiplayer Lab 的 Host/Client journal 与对应验证器，不等同于 GitHub Actions 结果。
 
 ## 项目规则已放宽
@@ -81,10 +81,18 @@
   网络 marker。机器摘要见
   [`reactive-carry-smoke-2026-09-20.json`](multiplayer/evidence/reactive-carry-smoke-2026-09-20.json)。
 
+## 本轮 Multiplayer Local Cross-Turn Planning 实施状态（2026-09-20）
+
+- 搜索策略明确区分 `SinglePlayerFullRoute`、`MultiplayerCurrentTurnOnly` 和 `MultiplayerLocalCrossTurn`；默认 Probe 不搜索，单人策略不变，显式 Advisor/Safe Execute 才允许本地跨回合预测。
+- 路线可以包含本地 T1→T2→T3 预测，但 root 只捕获本地玩家私有状态；投影动作必须全部是本地动作，不建立队友手牌、牌序或行动模型。未知 root/Hook 语义继续 fail-closed。
+- `ContinuationStamp` 已纳入战斗身份、本地身份、回合/阶段、资源、手牌/牌堆/RNG、敌人状态；另以远端公开 fingerprint、多人 scaling/牌约束及单调 `WorldVersion` 做严格续接门禁。精确续接保留 `RouteIdentity`，旧 SafeExecution authorization 已结束，当前回合重新创建 authorization；不匹配执行 Fresh Probe + Fresh Root + Fresh Search。
+- Safe EndTurn 后未来路线只作为不可执行 continuation 保留，部署筛选仍只取当前本地回合；多人不读写 `SolvedRouteCache`，避免持久缓存携带多人完整状态。
+- `MultiplayerLocalCrossTurnChecks` 8 项、Debug 构建（2 条既有 `CS9113`、0 errors）和 `git diff --check` 已通过。Smoke C 仍只是 Reactive Carry 证据；Smoke X1（精确续接复用）和 X2（队友公开变化后 fresh replan）尚未实机收口。
+
 ## 当前下一步
 
 [Reactive Carry Foundation](multiplayer/NEXT_REACTIVE_CARRY.md) 已完成；A/B/C 三轮真实
-Host/Client Smoke 和机器摘要已收口。外部计划 `CombatSolver_NEXT_CODEX_MULTIPLAYER_CARRY_RANKING_V1.md`
-当前已完成公开上下文/evaluator/离线合同与源码验证，待按计划决定是否需要最多两轮 R1/R2 实机。
-默认仍保持 Probe，Potion、Choice、Replay、队友控制、Instant 和旧跨回合路线复用关闭；不引入
-teammate behavior model 或 Full Auto。
+Host/Client Smoke 和机器摘要已收口。当前交接下一步是按
+`CombatSolver_NEXT_CODEX_MULTIPLAYER_LOCAL_CROSS_TURN.md` 准备并完成 Smoke X1/X2，之后再把
+结果写入多人证据。默认仍保持 Probe，Potion、Choice、Replay、队友控制、Instant 和 Full Auto
+继续关闭；不引入 teammate behavior model 或第二套 Solver。

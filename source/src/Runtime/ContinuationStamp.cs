@@ -83,7 +83,15 @@ internal sealed record ContinuationStamp(string StateText)
             player.Creature.Block,
             pcs.Energy,
             pcs.Stars,
-            player.Gold);
+            player.Gold,
+            state.RoundNumber,
+            state.CurrentSide,
+            pcs.Phase,
+            player.NetId,
+            BuildCombatIdentity(
+                state.RunState.Rng.StringSeed,
+                state.Players,
+                state.Enemies));
         AppendOsty(text, player.Osty, player.Osty?.CurrentHp ?? 0, player.Osty?.MaxHp ?? 0);
         AppendEnemies(text, state.Enemies,
             enemy => enemy.CurrentHp,
@@ -135,7 +143,15 @@ internal sealed record ContinuationStamp(string StateText)
             simulatedPlayer.Block,
             pcs.Energy,
             pcs.Stars,
-            combat.GetPlayerGold(player));
+            combat.GetPlayerGold(player),
+            combat.RoundNumber,
+            combat.CurrentSide,
+            pcs.Phase,
+            player.NetId,
+            BuildCombatIdentity(
+                combat.RunState.Rng.StringSeed,
+                combat.Players,
+                combat.Enemies));
         AppendOsty(
             text,
             combat.GetOsty(player),
@@ -181,11 +197,54 @@ internal sealed record ContinuationStamp(string StateText)
         return new ContinuationStamp(text.ToString());
     }
 
-    private static StringBuilder Begin(int turn, int hp, int maxHp, int block, int energy, int stars, int gold)
-        => new StringBuilder().Append("turn=").Append(turn)
+    internal static string CaptureLiveCombatIdentity(CombatState state)
+        => BuildCombatIdentity(state.RunState.Rng.StringSeed, state.Players, state.Enemies);
+
+    internal static string CapturePredictedCombatIdentity(
+        CombatPredictionSimulator simulator)
+    {
+        SimulatedCombatState combat = (SimulatedCombatState)simulator.State.CombatState;
+        return BuildCombatIdentity(
+            combat.RunState.Rng.StringSeed,
+            combat.Players,
+            combat.Enemies);
+    }
+
+    private static StringBuilder Begin(
+        int turn,
+        int hp,
+        int maxHp,
+        int block,
+        int energy,
+        int stars,
+        int gold,
+        int round,
+        CombatSide side,
+        PlayerTurnPhase phase,
+        ulong localNetId,
+        string combatIdentity)
+        => new StringBuilder().Append("combat_identity=").Append(combatIdentity)
+            .Append(";local_net_id=").Append(localNetId)
+            .Append(";round=").Append(round)
+            .Append(";side=").Append(side)
+            .Append(";phase=").Append(phase)
+            .Append(";turn=").Append(turn)
             .Append(";hp=").Append(hp).Append(";max_hp=").Append(maxHp).Append(";block=").Append(block)
             .Append(";energy=").Append(energy).Append(";stars=").Append(stars)
             .Append(";gold=").Append(gold);
+
+    private static string BuildCombatIdentity(
+        string seed,
+        IEnumerable<Player> players,
+        IEnumerable<Creature> enemies)
+    {
+        string playerIds = string.Join(',', players
+            .Select(player => player.NetId.ToString())
+            .OrderBy(value => value, StringComparer.Ordinal));
+        string enemyIds = string.Join(',', enemies.Select(enemy =>
+            $"{enemy.CombatId?.ToString() ?? "-"}:{enemy.Monster?.Id.Entry ?? "-"}"));
+        return $"seed={seed};players={playerIds};enemies={enemyIds}";
+    }
 
     private static (string Name, string Value) SplitField(string field)
     {

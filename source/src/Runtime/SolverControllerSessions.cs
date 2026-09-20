@@ -152,6 +152,8 @@ internal sealed class SolverCombatSession
     public bool ShowcaseMode { get; set; }
     public int? LastSafeEndTurnRequestId { get; set; }
     public int? LastSafeEndTurnNumber { get; set; }
+    public long? LastSafeEndTurnWorldVersion { get; set; }
+    public bool AwaitingMultiplayerContinuation { get; set; }
     public CombatBugReportIssueLedger BugReportIssues { get; } = new();
 }
 

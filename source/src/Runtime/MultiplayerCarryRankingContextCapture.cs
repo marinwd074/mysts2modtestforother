@@ -39,11 +39,14 @@ internal static class MultiplayerCarryRankingContextCapture
             cardConstraint,
             remotePlayers,
             enemies);
+        StateFingerprint remotePublicFingerprint =
+            MultiplayerClientProbe.CaptureContinuationRemotePublicFingerprint(state);
 
         return MultiplayerCarryRankingContext.Create(
             enabled: true,
             worldVersion,
             publicFingerprint,
+            remotePublicFingerprint,
             remotePlayers,
             enemies,
             scalingHooks,

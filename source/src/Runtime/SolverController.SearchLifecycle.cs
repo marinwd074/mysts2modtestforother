@@ -175,17 +175,29 @@ internal static partial class SolverController
                 && _combat.ContinuationSource != null
                 ? ContinuationStamp.CaptureLive(state)
                 : null;
+            MultiplayerContinuationValidation? multiplayerValidation = continuationStamp != null
+                && capabilities.IsMultiplayer
+                    ? MultiplayerClientProbe.CaptureContinuationValidation(
+                        state,
+                        _combat.LastSafeEndTurnWorldVersion ?? 0)
+                    : null;
             if (continuationStamp != null
                 && _combat.ContinuationSource!.TryCreateContinuation(
                     continuationStamp,
                     LocalContext.GetMe(state)!.Creature.CurrentHp,
                     battleDamage,
+                    multiplayerValidation,
                     out SolverResult? reused))
             {
                 CancelSearch();
                 _combat.State = state;
                 _combat.LatestResult = reused;
                 _combat.LatestStamp = stamp;
+                _combat.ContinuationSource = reused;
+                _combat.AwaitingMultiplayerContinuation = false;
+                _combat.LastSafeEndTurnWorldVersion = null;
+                _combat.LastSafeEndTurnRequestId = null;
+                _combat.LastSafeEndTurnNumber = null;
                 _combat.ContinuationsReused++;
                 if (UnattendedTestRunner.IsActive)
                 {
@@ -205,7 +217,12 @@ internal static partial class SolverController
                         reused!,
                         UnexpectedReplanCount > 0,
                         _combat.ReviewedWorldlinesTotal));
-                Entry.Logger.Info($"[CombatSolver/Test] SEARCH_REUSED from_turn={reused!.ReusedFromTurn} turn={reused.StartTurnNumber} validation=exact_state_text remaining_turns={reused.SearchedTurns}");
+                Entry.Logger.Info(
+                    $"[CombatSolver/Test] SEARCH_REUSED from_turn={reused!.ReusedFromTurn} " +
+                    $"turn={reused.StartTurnNumber} validation=exact_state_text " +
+                    $"remaining_turns={reused.SearchedTurns} route_identity={reused.RouteIdentity} " +
+                    $"old_authorization_dead={capabilities.IsMultiplayer.ToString().ToLowerInvariant()} " +
+                    $"new_authorization_pending={(deployWhenReady && capabilities.CanDeploySimpleLocalActions).ToString().ToLowerInvariant()}");
                 Entry.Logger.Info(SolverDiagnostics.DescribeResult(reused));
                 if (_combat.FullAutoEnabled)
                     StartFullAutoDeployment(host, state, reused);
@@ -260,6 +277,16 @@ internal static partial class SolverController
                             _combat.LastContinuationDifferences[index]);
                     }
                 }
+                if (capabilities.IsMultiplayer)
+                {
+                    bool freshProbeChanged = MultiplayerClientProbe.ObserveActionBoundary(
+                        state,
+                        "continuation_validation_mismatch");
+                    Entry.Logger.Info(
+                        $"[CombatSolver/MultiplayerProbe] MP_LOCAL_CROSS_TURN_FRESH_PROBE " +
+                        $"reason=continuation_validation_mismatch changed={freshProbeChanged.ToString().ToLowerInvariant()} " +
+                        $"world_version={MultiplayerWorldTracker.WorldVersion} fresh_probe=true");
+                }
             }
 
             if (_combat.ShowcaseMode)
@@ -268,6 +295,7 @@ internal static partial class SolverController
                 return;
             }
             _combat.ContinuationSource = null;
+            _combat.AwaitingMultiplayerContinuation = false;
             CancelSearch();
             SolverSearchSession search = new(
                 ++_nextSearchGeneration,
@@ -298,6 +326,7 @@ internal static partial class SolverController
             {
                 int? previousEndTurnRequestId = _combat.LastSafeEndTurnRequestId;
                 int? previousEndTurnNumber = _combat.LastSafeEndTurnNumber;
+                long? previousEndTurnWorldVersion = _combat.LastSafeEndTurnWorldVersion;
                 Entry.Logger.Info(
                     $"[CombatSolver/MultiplayerSafeExecute] MP_REACTIVE_FRESH_SEARCH " +
                     $"generation={generation} route_generation={_combat.SearchesStarted} " +
@@ -306,9 +335,11 @@ internal static partial class SolverController
                     $"after_safe_end_turn={(previousEndTurnRequestId.HasValue).ToString().ToLowerInvariant()} " +
                     $"previous_end_turn_request_id={previousEndTurnRequestId?.ToString() ?? "-"} " +
                     $"previous_end_turn_turn={previousEndTurnNumber?.ToString() ?? "-"} " +
+                    $"previous_end_turn_world_version={previousEndTurnWorldVersion?.ToString() ?? "-"} " +
                     "cross_turn_reuse=false");
                 _combat.LastSafeEndTurnRequestId = null;
                 _combat.LastSafeEndTurnNumber = null;
+                _combat.LastSafeEndTurnWorldVersion = null;
             }
             if (replanCause == ReplanCause.ManualDivergence)
                 MarkManualControlObserved("continuation_divergence");
@@ -401,7 +432,7 @@ internal static partial class SolverController
             SolvedRouteCache routeCache = SolvedRouteCache.Capture(state, rootSnapshot, searchPolicy, battleDamage);
             Task<SolverResult> solveTask = Task.Run(() =>
             {
-                if (!searchPolicy.CurrentTurnOnly
+                if (MultiplayerLocalCrossTurnContracts.CanUsePersistentRouteCache(searchPolicy.RoutePolicy)
                     && !searchPolicy.VerifyIncrementalSearch && !searchPolicy.MeasurePhasePerformance
                     && reason is SearchReason.AutoTurnStart or SearchReason.Deploy or SearchReason.FullAuto
                     && routeCache.Read(rootSnapshot.Forecast) is { } cached)
@@ -431,7 +462,9 @@ internal static partial class SolverController
                         progress => PublishSearchProgress(search, progress));
                     finalizedResult = search.Interaction.FinalizeWorkerResult(result);
                     token.ThrowIfCancellationRequested();
-                    if (!search.Interaction.StopRequested && !searchPolicy.CurrentTurnOnly)
+                    if (!search.Interaction.StopRequested
+                        && MultiplayerLocalCrossTurnContracts.CanUsePersistentRouteCache(
+                            searchPolicy.RoutePolicy))
                         routeCache.StoreFirst(finalizedResult);
                     return finalizedResult;
                 }
