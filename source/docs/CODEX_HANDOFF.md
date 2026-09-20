@@ -4,7 +4,7 @@
 
 ## 当前基线
 
-- MP-2A 实现基线：`a50673e`（`fix: allow choice-free MP2A actions`）。该修复让无选项的安全本地牌在多人 Safe Execute 中直接等待原生动作完成，不再错误创建被多人会话禁止的原生选牌驱动；带选项动作仍由安全策略 fail-closed。
+- MP-2A 实现基线：`b9177a9`（`fix: gate MP2A deployment and preserve local action completion`）。该修复让无选项的安全本地牌在多人 Safe Execute 中直接等待原生动作完成，限制 Overlay 到单牌安全切片，并且只有用户明确点击“执行本回合”才会部署；带选项动作仍由安全策略 fail-closed。
 - GitHub Actions run：`35479112564`，`static-consistency=PASS`，`contract-tests=PASS`。
 - L1 总结果：`PASS: 8 / FAIL: 0 / SKIP: 0`。
 - `MultiplayerSafeExecuteChecks`：21 项通过。
@@ -31,6 +31,8 @@
   - `instance.json` / `multiplayer-profile.json` schema 与 runtimeRoot 匹配
   - profile 精确为 `ClientCombatSolver`
 - 正式 `safe-execute` token 明确不能授权。
+- Safe Execute 自动搜索只展示建议，不会因 `CurrentTurnAdoption` 自动出牌；显式执行请求单独记录，避免最后一张牌在未点击时被部署。
+- Safe Execute 原生牌入队期间允许该牌自身造成的 WorldVersion 变化穿过监控取消边界；远端/非预期变化仍取消部署。
 - Lab launcher 已支持 `-MultiplayerMode safe-execute-lab`，且非 ClientCombatSolver 实例会被拒绝。
 - Safe Execute 运行时记录：
   - `LAB_CAPABILITY`
@@ -64,15 +66,17 @@ PASS 必须同时满足：
 
 ## 最近一次 MP-2A Lab 运行（2026-09-20）
 
-- 修复前源码 `a7e3dc9` 已完成 Release 构建；Host/Client 使用同一构建产物。
+- 修复前源码 `a50673e` 已完成 Release 构建；Host/Client 使用同一构建产物。
 - Host/Client 已按 Lab 流程启动并进入 `NIBBITS_WEAK` 多人战斗；Client 已加载 RitsuLib 与 CombatSolver。
-- 正确的 CombatSolver journal 观察到 `LAB_CAPABILITY` 与 `MP2A_DEPLOY_START`，但随后 `NativeChoiceRuntime.Begin` 因多人会话不允许驱动原生选牌而抛出 `DEPLOY_FAILURE`；没有 `NATIVE_ACTION_CAPTURED`、`DEPLOY_END` 或后续世界失效/重搜，因此本轮结果为 `UNVERIFIED`，不是 MP-2A PASS。
-- 已通过 ownership 脚本停止 Host/Client。机器摘要留在 `.local/multiplayer-lab/results/mp2a-20260920-no-auto-summary.json`，不作为正式 multiplayer evidence。
+- `runtime-mp2a-client-20260920-fix1` 的 CombatSolver journal 观察到 `LAB_CAPABILITY`，但每当路线超过 1 张牌时都抛出 `MAIN_THREAD_CALLBACK_FAILURE`：`部署动作数为 1，Overlay 动作胶囊数为 2/3`，所以第一次点击通常无反应。
+- 当路线恰好切到单牌时，journal 能捕获原生 `PlayCardAction`，但牌自身造成的 WorldVersion 变化又触发 `DEPLOY_CANCELED`，没有 `DEPLOY_END`；这对应“手动打前几张后最后一张自动/无反应”的现象。
+- 日志还证明未点击“执行本回合”时，`CurrentTurnAdoption` 结果会直接调用 `StartDeployment`，导致最后一张牌自动部署。以上三类错误均已在 `b9177a9` 修复；`fix1` 结果为 `FAIL`，不是 MP-2A PASS。
+- 本轮机器摘要留在 `.local/multiplayer-lab/results/mp2a-20260920-fix1-summary.json`，journal 留在 `runtime-mp2a-client-20260920-fix1/diagnostics/CombatSolver-BugReports/logs/CombatSolver/21664-8e3d1237e7c34f49b7129968c3d57029/combat-a518725aebe94412bf0799f37cc327a5.jsonl`；不作为正式 multiplayer evidence。
 - 验证器已排除普通网络/手动 `EndPlayerTurnAction` 的误报，只把 CombatSolver 自己的自动结束回合标记视为禁用动作证据；`test-mp2a-validator.ps1` 当前 `checks=4` 通过。
 
 ## 当前唯一主要未完成项
 
-真实 MP-2A 单牌 Smoke 仍未取得 PASS。`a50673e` 已修复上述部署前失败；当前 `runtime-mp2a-host-20260920-fix1` / `runtime-mp2a-client-20260920-fix1` 正在做修复后复测。下一次有效回放必须在 Client 的 Solver 路线稳定后明确点击一次“执行本回合”，并在点击后保持数秒；没有 `LAB_CAPABILITY` 与完整单牌事件链时，不能升级正式 Safe Execute 入口。
+真实 MP-2A 单牌 Smoke 仍未取得 PASS。`b9177a9` 已修复 Overlay 单牌切片、自动部署和本地 WorldVersion 取消边界；下一次必须使用新构建验证两条互斥行为：未点击时不出现 `MP2A_DEPLOY_START`/原生动作，明确点击一次后恰好出现一个 `NATIVE_ACTION_CAPTURED`、`DEPLOY_END`、WorldVersion 失效和新搜索。没有这条完整事件链时，不能升级正式 Safe Execute 入口。
 
 ## 下一步实机步骤
 
