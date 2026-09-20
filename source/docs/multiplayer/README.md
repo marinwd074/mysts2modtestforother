@@ -1,6 +1,6 @@
 # Multiplayer 适配阶段
 
-当前阶段：**MP-0 Core 与 Host 重建房间后的 Client 重新加入生命周期均已通过；MP-1 Advisor 受控 Smoke 已通过，重连后的远端私有药水语义保持 fail-closed；MP-2A 显式一动作 Safe Execute Smoke 与 MP-2B 两动作基线已通过；MP-2C bounded N-action 已完成源码/合同实现，>=3 张实机 Smoke 待本轮收口，默认多人仍保持 Probe**。
+当前阶段：**MP-0 Core 与 Host 重建房间后的 Client 重新加入生命周期均已通过；MP-1 Advisor 受控 Smoke 已通过，重连后的远端私有药水语义保持 fail-closed；MP-2A 显式一动作 Safe Execute Smoke、MP-2B 两动作基线和 MP-2C bounded N-action 实机 Smoke 均已通过，默认多人仍保持 Probe**。
 
 本阶段依据 `Multiplayer Apply` 中的精简功能方案和修正版执行计划实现，目标是先用隔离的双实例完成真实 Host/Client 证据，不改变多人会话语义。
 
@@ -11,7 +11,7 @@
 - **MP-1 Advisor：SMOKE PASS（受控范围）**。静态合同与 Release 构建已通过；默认仍是 Probe，只有显式设置 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才会授予当前回合、本地玩家、只显示路线的搜索能力，绝不会自动执行动作。`BurningBlood`、side-turn relic、多人 block-scaling 和 EndTurn replay 边界均已收敛；fresh `-bbfix` client 的真实复验记录 `SEARCH_COMPLETE=5`、`SEARCH_FAILURE=0`、`FAIL_CLOSED=0`，并有原生完成通知与路线回放证据。Probe 仍保持只读，MP-2 Safe Execute 不在本次通过范围内。
 - **MP-2A Safe Execute：PASS（历史一动作范围）**。2026-09-20 的 HostVanilla + ClientCombatSolver `safe-execute` 单牌 Smoke 已验证通过；该证据保留为一动作基线。默认多人仍是 Probe，只有精确 `COMBATSOLVER_MULTIPLAYER_MODE=safe-execute` 才进入显式 Safe Execute，`safe-execute-lab` 仍只在 Multiplayer Lab 创建的 `ClientCombatSolver` 实例、Probe evidence 已启用且 ownership/profile marker 匹配时授权。
 - **MP-2B Safe Execute：实机 PASS（受控范围）**。当前运行时使用显式 `Authorized → Executing → AwaitingWorldUpdate → Revalidating → next/Completed/Aborted` 会话，一次部署最多接受 2 张本地普通安全牌；每张原生动作完成后都会等待动作队列与 `WorldVersion` 稳定，复核本地手牌/资源/目标、敌人目标变化和远端公开状态。远端或未知变化会记录 `MP2B_REMOTE_DELTA_ABORT`、停止后续动作并重新搜索。正常两动作与远端干扰验证器均已在真实 Host/Client journal 上返回 PASS，摘要见 [`evidence/mp2b-smoke-2026-09-20.json`](evidence/mp2b-smoke-2026-09-20.json)。
-- **MP-2C bounded N-action：源码/合同已完成，实机待收口**。当前 Safe Execute 使用单一有限上限 `MaxActionsPerDeployment=6`，按当前安全本地 `PlayCard` 连续前缀取值；每张牌仍经过原生队列完成、稳定 `WorldVersion`、动作后重验证和同一 session 的下一动作授权。通用验证器支持 `-MinActions` / `-MaxActions`，正常实机必须至少捕获 3 张牌，远端干扰必须证明已完成至少 2 张后不存在下一张原生动作。
+- **MP-2C bounded N-action：实机 PASS（2026-09-20）**。当前 Safe Execute 使用单一有限上限 `MaxActionsPerDeployment=6`，按当前安全本地 `PlayCard` 连续前缀取值；每张牌仍经过原生队列完成、稳定 `WorldVersion`、动作后重验证和同一 session 的下一动作授权。正常 Smoke 自动打出 3 张本地普通牌且不 EndTurn；远端 Client 在主 Client 完成 2 张后制造公开变化，主 Client 停止第 3 张并重新搜索。两个验证器均 PASS，摘要见 [`evidence/mp2c-smoke-2026-09-20.json`](evidence/mp2c-smoke-2026-09-20.json)。
 - 正式一动作证据摘要见 [`evidence/mp2-safe-execute-formal-2026-09-20.json`](evidence/mp2-safe-execute-formal-2026-09-20.json)。
 
 ## 已实现
@@ -35,7 +35,7 @@
 
 ## 当前明确未启用
 
-多人 Safe Execute 仅通过精确的 `COMBATSOLVER_MULTIPLAYER_MODE=safe-execute` 显式开启，默认安装保持 Probe，不因玩家数或网络类型自动升级；MP-2C 当前只开放 bounded N-action 当前回合会话，实机 Smoke 尚待本轮收口。药水、选择驱动、自动结束回合、Full Auto、Instant、跨回合复用和 Route Repair 仍未开放。Advisor 仍受本地私有/远端公开 root contract、当前回合和 fail-closed 约束。
+多人 Safe Execute 仅通过精确的 `COMBATSOLVER_MULTIPLAYER_MODE=safe-execute` 显式开启，默认安装保持 Probe，不因玩家数或网络类型自动升级；MP-2C 当前只开放已实机验证的 bounded N-action 当前回合会话。药水、选择驱动、自动结束回合、Full Auto、Instant、跨回合复用和 Route Repair 仍未开放。Advisor 仍受本地私有/远端公开 root contract、当前回合和 fail-closed 约束。
 
 ## MP-2B 历史基线与 MP-2C 当前实现
 
@@ -43,7 +43,7 @@
 - MP-2B 历史基线的 `MultiplayerSafeLocalActionClassifier` 只取最多两张本地普通 `PlayCard`，不接受药水、EndTurn、Choice、Replay/重复语义、多人专属牌、队友目标或未知目标；第二张牌执行前仍会针对 live state 重新分类。
 - MP-2C 将该固定两动作切换为 `TakeBoundedSafePrefix` 与单一六动作 policy ceiling；遇到第一张不安全动作立即截断，不跳过 Potion/Choice/EndTurn/Replay/远端或未知目标去执行后面的安全牌。
 - 每张牌只通过原生 `PlayCardAction`；动作队列完成后强制进行一次 action-boundary Probe，并等待稳定 `WorldVersion`，再复核本地手牌/能量/星星、身份/目标、敌人非目标状态和远端公开 fingerprint。
-- MP2B 历史合同为 39 项 PASS；当前 bounded N-action 合同为 40 项 PASS，正常/远端干扰验证器各有 6 个合成用例 PASS。真实 MP2B 证据仍保留在 `evidence/mp2b-smoke-2026-09-20.json`；MP-2C 实机结果待本轮写入新的证据摘要。运行命令见 `tools/multiplayer-lab/README.md`，步骤见 `RUNBOOK.md`。
+- MP2B 历史合同为 39 项 PASS；当前 bounded N-action 合同为 40 项 PASS，正常/远端干扰验证器各有 6 个合成用例 PASS。真实 MP2B 证据仍保留在 `evidence/mp2b-smoke-2026-09-20.json`；MP-2C 正常 3-action 与两张牌后远端干扰证据见 `evidence/mp2c-smoke-2026-09-20.json`。运行命令见 `tools/multiplayer-lab/README.md`，步骤见 `RUNBOOK.md`。
 
 ## MP-0A / MP-0B 通过条件
 
@@ -149,4 +149,4 @@ pwsh -NoLogo -NoProfile -File "$toolRoot\start-client.ps1" `
 
 ## 下一阶段
 
-MP-0 生命周期证据已收口；固定工作量单人对照已完成受限 spot 验证，非空远端私有药水场景已实机复验并继续按合同 fail-closed，更广 Advisor 稳定性仍为 `PARTIAL`。MP2B 两动作正常与远端干扰 Smoke 作为历史基线保留；当前 MP-2C bounded N-action 已完成源码/合同实现，正在收口 >=3-action 正常与至少两动作后的远端干扰 Smoke，默认仍保持 Probe。
+MP-0 生命周期证据已收口；固定工作量单人对照已完成受限 spot 验证，非空远端私有药水场景已实机复验并继续按合同 fail-closed，更广 Advisor 稳定性仍为 `PARTIAL`。MP2B 两动作正常与远端干扰 Smoke 作为历史基线保留；MP-2C bounded N-action 的 >=3-action 正常与至少两动作后的远端干扰 Smoke 已收口，默认仍保持 Probe，下一阶段再单独评估 Safe EndTurn 等未开放边界。

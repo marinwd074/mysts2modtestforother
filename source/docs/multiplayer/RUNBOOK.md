@@ -176,8 +176,12 @@ pwsh -NoLogo -NoProfile -File .\validate-mp2b-interference-results.ps1 `
 ~~~
 
 验证器应返回 `MULTIPLAYER_MP-2C-remote-interference_PASS`。游戏内所有点击仍由用户完成；
-Codex 只负责启动/停止进程、读取 journal 和运行验证器。当前源码/合同已通过，正常与干扰
-实机结果在本轮完成后再补入本节和新的 evidence 摘要。
+Codex 只负责启动/停止进程、读取 journal 和运行验证器。2026-09-20 实机结果：正常运行
+由一次点击自动完成 3 张本地普通牌，牌后手牌/能量分别从 `5/3` 变为 `4/2`、`3/1`、
+`2/0`，返回 `MULTIPLAYER_MP-2C_PASS`；干扰运行在同一 `request_id=1` 完成前两张后，
+用户通过另一 Client 打出公开牌，主 Client 返回 `MP2B_REMOTE_DELTA_ABORT`，未捕获第 3 张
+原生动作并启动 fresh search，返回 `MULTIPLAYER_MP-2C-remote-interference_PASS`。摘要见
+[`evidence/mp2c-smoke-2026-09-20.json`](evidence/mp2c-smoke-2026-09-20.json)。
 
 ## MP-2A 收尾
 

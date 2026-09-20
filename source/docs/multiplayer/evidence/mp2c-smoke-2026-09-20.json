@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "phase": "MP-2C",
+  "status": "PASS",
+  "validatedDate": "2026-09-20",
+  "runtime": {
+    "hostProfile": "HostVanilla",
+    "solverClientProfile": "ClientCombatSolver",
+    "solverClientId": 1000,
+    "remoteClientId": 1001,
+    "gameVersion": "0.107.1",
+    "steamTransport": "off",
+    "multiplayerMode": "safe-execute",
+    "warmupExcluded": true,
+    "stopMode": "Graceful"
+  },
+  "normalSmoke": {
+    "status": "PASS",
+    "validator": "MULTIPLAYER_MP-2C_PASS",
+    "requestId": 1,
+    "plannedActionCount": 3,
+    "completedActionCount": 3,
+    "actions": [
+      "DEFEND_IRONCLAD",
+      "DEFEND_IRONCLAD",
+      "DEFEND_IRONCLAD"
+    ],
+    "automaticEndTurn": false,
+    "worldVersionsAfterActions": [9, 11, 13],
+    "observedState": {
+      "startHandCount": 5,
+      "startEnergy": 3,
+      "afterActionHandCounts": [4, 3, 2],
+      "afterActionEnergy": [2, 1, 0]
+    },
+    "clientCombatJournal": ".local/multiplayer-lab/runtime-mp2c-20260920b-client/diagnostics/CombatSolver-BugReports/logs/CombatSolver/22960-865360a07a574c879d3044ce0495f78a/combat-578554fb7ab1435dbba8c555e34897e0.jsonl",
+    "clientCombatJournalSha256": "227D6D21BBBBF9FC4863717A8045CA4382D57C7A1A6E2F4B86C4A66DB9B1F09F",
+    "validatorSummary": ".local/multiplayer-lab/results/mp2c-normal-20260920b-summary.json"
+  },
+  "remoteInterferenceSmoke": {
+    "status": "PASS",
+    "validator": "MULTIPLAYER_MP-2C-remote-interference_PASS",
+    "requestId": 1,
+    "plannedActionCount": 3,
+    "completedActionsBeforeAbort": 2,
+    "actions": [
+      "STRIKE_IRONCLAD",
+      "DEFEND_IRONCLAD"
+    ],
+    "secondActionReconciled": true,
+    "nextNativeActionCaptured": false,
+    "automaticEndTurn": false,
+    "abortReason": "remote_or_unknown_change",
+    "lastAcceptedWorldVersion": 12,
+    "postAbortResearch": true,
+    "clientCombatJournal": ".local/multiplayer-lab/runtime-mp2c-20260920c-client/diagnostics/CombatSolver-BugReports/logs/CombatSolver/2720-a5f6cce1316e456a9c65edc1ea4c81e8/combat-6d2b426fe9b14deead06287899d230d1.jsonl",
+    "clientCombatJournalSha256": "2B4A1F3586BEEC3A8883694C1129FC862941F57AAF14DAC30A39F2F072D2AE1A",
+    "validatorSummary": ".local/multiplayer-lab/results/mp2c-interference-20260920c-summary.json",
+    "userAction": "After the second local card completed, the user played a legal card in the other Client; the Solver Client stopped before the third planned card and recalculated."
+  },
+  "validatorChecks": {
+    "contract": "MultiplayerSafeExecuteChecks 40/40 PASS",
+    "normalSynthetic": "test-mp2b-validator.ps1 6/6 PASS",
+    "interferenceSynthetic": "test-mp2b-interference-validator.ps1 6/6 PASS",
+    "releaseBuild": "dotnet build source/CombatSolver.csproj -c Release --no-restore PASS"
+  },
+  "boundaries": [
+    "Default multiplayer remains Probe.",
+    "The formal token requires explicit COMBATSOLVER_MULTIPLAYER_MODE=safe-execute.",
+    "Automatic EndTurn, Potion, Choice, Replay, Full Auto, Instant, cross-turn execution and teammate targets remain disabled.",
+    "The remote action is attributed through the runtime WorldVersion/fingerprint boundary; this is not an independent packet capture."
+  ]
+}

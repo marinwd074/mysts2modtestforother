@@ -269,7 +269,8 @@ pwsh -NoLogo -NoProfile -File .\validate-mp2b-interference-results.ps1 `
 ~~~
 
 应返回 `MULTIPLAYER_MP-2C-remote-interference_PASS`，并证明中止后没有下一张原生动作且
-发生 fresh search。当前源码/合同已通过；实机结果由本轮运行后写入 evidence 摘要。
+发生 fresh search。2026-09-20 的真实正常/干扰结果均已通过，摘要见
+`docs/multiplayer/evidence/mp2c-smoke-2026-09-20.json`。
 
 退出码：0 为 PASS，1 为矛盾/无效证据，2 为缺失或仍为 UNVERIFIED。真实
 Host/Client 运行证据必须带可审查的日志位置；单进程模拟和合成 JSON 不可作为
