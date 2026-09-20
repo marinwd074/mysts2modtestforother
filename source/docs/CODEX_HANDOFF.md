@@ -21,7 +21,7 @@
 
 ## 下次对话入口（2026-09-20）
 
-- 当前仓库为 `main`、工作区干净，HEAD 为 `ccc7272`；生产源码行为基线仍是 `b9177a9`。当前没有 STS2 Host/Client 进程，不要从 `fix2` 运行目录直接续战。
+- 当前仓库为 `main`、工作区干净，HEAD 为 `506d868`；生产源码行为基线仍是 `b9177a9`。当前没有 STS2 Host/Client 进程，不要从 `fix2` 运行目录直接续战。
 - 当前结论是 `MP-2A 行为 Smoke=支持修复`、`正式事件验证=UNVERIFIED`，不是 PASS；在取得正式 PASS 前不要开放正式 `safe-execute`。
 - 下次第一项应修复证据落盘：`CombatDiagnosticJournal`/`AppendOnlyEventLog` 当前为异步 Buffered 写入，`stop-owned-instances.ps1` 通过 `Stop-Process -Force` 结束进程，导致本轮 combat/process journal 为 0 字节。优先检查 `source/src/Runtime/CombatDiagnosticJournal.cs`、`source/src/Replay/AppendOnlyEventLog.cs` 和 `source/tools/multiplayer-lab/multiplayer-common.ps1`；保持生产日志生产者非阻塞，并确保优雅退出或显式 flush 能完成写盘。先跑 `source/tools/DiagnosticLogTests` 及受影响的最窄构建/静态门禁，再推送。
 - 证据链修复后必须使用新的 runtime instance 重做一次：Host 创建房间 → Client 加入并进入战斗 → 先确认未点击“执行本回合”时手牌不变 → Client 只点击一次“执行本回合” → 等待数秒记录 WorldVersion/重新搜索 → 优雅停止进程 → 用 `source/tools/multiplayer-lab/validate-mp2a-results.ps1` 验证。只有七项检查全部 `PASS` 才能更新正式 multiplayer evidence。
