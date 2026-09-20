@@ -202,6 +202,13 @@ internal static partial class SolverController
                 $"[CombatSolver/Test] DEPLOY_START turn={turn} action_count={actions.Count} " +
                 $"fast_mode={allowedFastMode} " +
                 $"inter_action_delay_seconds={deploymentSettings.DeploymentInterActionDelaySeconds:0.###}");
+            if (safeExecute)
+            {
+                Entry.Logger.Info(
+                    $"[CombatSolver/MultiplayerSafeExecute] MP2A_DEPLOY_START turn={turn} " +
+                    $"action_count={actions.Count} search_world_version={deployment.WorldVersion} " +
+                    $"stop_reason={safeStop.Reason}");
+            }
             for (int actionIndex = 0; actionIndex < actions.Count; actionIndex++)
             {
                 PlanAction action = actions[actionIndex];
@@ -338,6 +345,13 @@ internal static partial class SolverController
                     LastDeployedActionStartedAtMillisecondsForTesting = System.Environment.TickCount64;
                     DeployedCardIdsForTesting.Add(card.Id.Entry);
                     Entry.Logger.Info($"[CombatSolver/Test] DEPLOY_ACTION turn={turn} card={action.CardId} target_index={action.TargetIndex} target_combat_id={action.TargetCombatId?.ToString() ?? "-"} choice={action.Choice?.Effect.ToString() ?? "-"}");
+                    if (safeExecute)
+                    {
+                        Entry.Logger.Info(
+                            $"[CombatSolver/MultiplayerSafeExecute] NATIVE_ACTION_CAPTURED " +
+                            $"type={queuedAction.GetType().Name} turn={turn} card={action.CardId} " +
+                            $"local_net_id={player.NetId} custom_network_api_used=false");
+                    }
                 }
                 try
                 {
@@ -380,6 +394,19 @@ internal static partial class SolverController
                             $"{power.Id.Entry}:{power.Amount}/{power.AmountOnTurnStart}"))}");
                 }
                 SolverOverlay.ShowDeploymentStep(actionIndex + 1, actions.Count, null);
+                if (safeExecute)
+                {
+                    CompleteDeployment(deployment);
+                    SolverOverlay.ShowDeploymentComplete(host, turn, actionIndex + 1, endedTurn: false);
+                    _combat.LastSolverDeployedTurn = turn;
+                    Entry.Logger.Info(
+                        $"[CombatSolver/MultiplayerSafeExecute] DEPLOY_END turn={turn} " +
+                        $"action_count={actionIndex + 1} end_turn=false stop_reason={safeStop.Reason} " +
+                        $"search_world_version={deployment.WorldVersion} " +
+                        $"current_world_version={MultiplayerWorldTracker.WorldVersion} " +
+                        $"automatic_end_turn=false custom_network_api_used=false");
+                    return;
+                }
                 await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
                 if (actionIndex + 1 < actions.Count
                     && deploymentSettings.DeploymentInterActionDelaySeconds > 0d)

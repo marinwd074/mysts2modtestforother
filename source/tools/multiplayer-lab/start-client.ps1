@@ -8,7 +8,7 @@ param(
     [ValidateSet('', 'host', 'join')]
     [string]$FastMpMode = '',
 
-    [ValidateSet('', 'probe', 'advisor')]
+    [ValidateSet('', 'probe', 'advisor', 'safe-execute-lab')]
     [string]$MultiplayerMode = '',
 
     [UInt64]$ClientId = 0,

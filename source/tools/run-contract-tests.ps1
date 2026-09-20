@@ -11,6 +11,18 @@ $ErrorActionPreference = 'Continue'
 $repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $results = [System.Collections.Generic.List[object]]::new()
 
+function Invoke-PowerShellContract {
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$Script
+    )
+
+    Write-Output "RUN: $Name"
+    & pwsh -NoLogo -NoProfile -File (Join-Path $repositoryRoot $Script)
+    $exitCode = $LASTEXITCODE
+    $results.Add([pscustomobject]@{ Name = $Name; Status = if ($exitCode -eq 0) { 'PASS' } else { 'FAIL' } })
+}
+
 function Invoke-DotnetContract {
     param(
         [Parameter(Mandatory)][string]$Name,
@@ -35,6 +47,7 @@ try {
     Invoke-DotnetContract 'PredictionStateStoreChecks' 'tools/PredictionStateStoreChecks/PredictionStateStoreChecks.csproj'
     Invoke-DotnetContract 'MultiplayerSafeExecuteChecks' 'tools/MultiplayerSafeExecuteChecks/MultiplayerSafeExecuteChecks.csproj'
     Invoke-DotnetContract 'MultiplayerRootCaptureChecks' 'tools/MultiplayerRootCaptureChecks/MultiplayerRootCaptureChecks.csproj'
+    Invoke-PowerShellContract 'MultiplayerSafeExecuteEvidenceChecks' 'tools/multiplayer-lab/test-mp2a-validator.ps1'
 
     if ($SkipPython) {
         $results.Add([pscustomobject]@{ Name = 'BeamRankSortChecks'; Status = 'SKIP' })

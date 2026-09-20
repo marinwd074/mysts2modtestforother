@@ -22,14 +22,20 @@ internal readonly record struct MultiplayerSafeActionResolvedFacts(
     bool IsAllowedTarget,
     bool HasIncompleteTargetIdentity);
 
+internal readonly record struct MultiplayerSafeExecuteLabFacts(
+    string? ModeToken,
+    bool ProbeEvidenceEnabled,
+    bool OwnedClientInstance);
+
 /// <summary>
-/// Pure admission policy for the dormant MP-2A tier. It contains no game objects so CI
-/// can pin fail-closed reasons independently from native/runtime integration.
+/// Pure admission policy for MP-2A. It contains no game objects so CI can pin both
+/// action fail-closed rules and the Lab-only capability boundary.
 /// </summary>
 internal static class MultiplayerSafeExecutePolicy
 {
     internal const int MaxActionsPerDeployment = 1;
     internal const string SingleActionLimitReason = "mp2a_single_action_limit";
+    internal const string LabModeToken = "safe-execute-lab";
 
     internal static SafeLocalActionDecision ClassifyStructural(
         MultiplayerSafeActionStructuralFacts facts)
@@ -76,4 +82,9 @@ internal static class MultiplayerSafeExecutePolicy
         => safeActionCount >= MaxActionsPerDeployment && plannedActionCount > safeActionCount
             ? new(false, SingleActionLimitReason)
             : SafeLocalActionDecision.Allow;
+
+    internal static bool CanGrantLabCapability(MultiplayerSafeExecuteLabFacts facts)
+        => string.Equals(facts.ModeToken, LabModeToken, StringComparison.OrdinalIgnoreCase)
+           && facts.ProbeEvidenceEnabled
+           && facts.OwnedClientInstance;
 }

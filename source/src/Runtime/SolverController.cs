@@ -1249,16 +1249,32 @@ internal static partial class SolverController
             _multiplayerInertSessionObserved = true;
             if (enteredMultiplayerSession || multiplayerWorldChanged)
             {
-                if (multiplayerWorldChanged
-                    && capabilities.Kind == SolverSessionKind.MultiplayerAdvisor)
+                if (multiplayerWorldChanged)
                 {
-                    Entry.Logger.Info(
-                        $"[CombatSolver/MultiplayerAdvisor] MP_ADVISOR_WORLD_CHANGED " +
-                        $"world_version={MultiplayerWorldTracker.WorldVersion} " +
-                        $"reason={MultiplayerWorldTracker.LastReason}");
+                    if (capabilities.Kind == SolverSessionKind.MultiplayerAdvisor)
+                    {
+                        Entry.Logger.Info(
+                            $"[CombatSolver/MultiplayerAdvisor] MP_ADVISOR_WORLD_CHANGED " +
+                            $"world_version={MultiplayerWorldTracker.WorldVersion} " +
+                            $"reason={MultiplayerWorldTracker.LastReason}");
+                    }
+                    else if (capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute)
+                    {
+                        Entry.Logger.Info(
+                            $"[CombatSolver/MultiplayerSafeExecute] MP2A_WORLD_CHANGED " +
+                            $"world_version={MultiplayerWorldTracker.WorldVersion} " +
+                            $"reason={MultiplayerWorldTracker.LastReason}");
+                    }
                 }
                 if (enteredMultiplayerSession)
                 {
+                    if (capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute)
+                    {
+                        Entry.Logger.Info(
+                            "[CombatSolver/MultiplayerSafeExecute] LAB_CAPABILITY " +
+                            "enabled=true scope=owned_client_instance max_actions=1 " +
+                            "automatic_end_turn=false custom_network_api=false");
+                    }
                     Entry.Logger.Info(
                         "[CombatSolver/MultiplayerProbe] CAPABILITY_BOUNDARY " +
                         "entered=true search_cancel=true deployment_cancel=true turn_setup_reset=true");

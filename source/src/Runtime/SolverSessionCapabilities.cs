@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Runs;
@@ -12,11 +13,6 @@ internal enum SolverSessionKind
     MultiplayerSafeExecute,
 }
 
-/// <summary>
-/// The session contract consumed by Runtime control surfaces. Multiplayer profiles are
-/// intentionally explicit so a future advisor or safe-execute rollout cannot silently
-/// inherit single-player choices, potions, turn setup, or end-turn behavior.
-/// </summary>
 internal readonly record struct SolverSessionCapabilitySet(
     SolverSessionKind Kind,
     bool CanSearch,
@@ -56,6 +52,9 @@ internal readonly record struct SolverSessionCapabilitySet(
 internal static class SolverSessionCapabilities
 {
     internal const string MultiplayerModeEnvironmentVariable = "COMBATSOLVER_MULTIPLAYER_MODE";
+    private const string ProbeEvidenceEnvironmentVariable = "COMBATSOLVER_MULTIPLAYER_PROBE_EVIDENCE";
+    private const string MultiplayerInstanceEnvironmentVariable = "COMBATSOLVER_MULTIPLAYER_INSTANCE";
+    private static readonly Lazy<bool> SafeExecuteLabAuthorized = new(EvaluateSafeExecuteLabAuthorization);
 
     public static bool IsNetworkMultiplayer
         => RunManager.Instance.IsInProgress
@@ -67,23 +66,20 @@ internal static class SolverSessionCapabilities
             "advisor",
             StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// Multiplayer remains in read-only Probe by default. Advisor is an explicit,
-    /// process-scoped opt-in so a player count or transport type can never silently
-    /// grant a search capability to an ordinary multiplayer session.
-    /// </summary>
+    internal static bool IsMultiplayerSafeExecuteLabOptedIn
+        => SafeExecuteLabAuthorized.Value;
+
     public static SolverSessionCapabilitySet Capture(CombatState? state)
     {
         if (IsNetworkMultiplayer || state != null && state.Players.Count != 1)
+        {
+            if (IsMultiplayerSafeExecuteLabOptedIn)
+                return MultiplayerSafeExecute;
             return IsMultiplayerAdvisorOptedIn ? MultiplayerAdvisor : MultiplayerProbe;
+        }
         return Singleplayer;
     }
 
-    /// <summary>
-    /// Captures the same boundary for run-level APIs that execute outside combat.
-    /// A run with multiple players or a non-singleplayer transport must not inherit
-    /// singleplayer-only forecast, replay, showcase, or telemetry capabilities.
-    /// </summary>
     public static SolverSessionCapabilitySet CaptureRun(RunState? run)
     {
         if (run is null)
@@ -91,16 +87,80 @@ internal static class SolverSessionCapabilities
         return CaptureRun(run.Players.Count);
     }
 
-    /// <summary>
-    /// Applies the run-level boundary to serialized/history shapes that expose only
-    /// their player count. The transport check still comes from the active session.
-    /// </summary>
     public static SolverSessionCapabilitySet CaptureRun(int playerCount)
     {
         if (IsNetworkMultiplayer || playerCount != 1)
             return MultiplayerProbe;
         return Singleplayer;
     }
+
+    private static bool EvaluateSafeExecuteLabAuthorization()
+    {
+        string? mode = Environment.GetEnvironmentVariable(MultiplayerModeEnvironmentVariable);
+        bool probeEvidence = IsTruthy(Environment.GetEnvironmentVariable(ProbeEvidenceEnvironmentVariable));
+        string? instanceRoot = Environment.GetEnvironmentVariable(MultiplayerInstanceEnvironmentVariable);
+        bool ownedClientInstance = IsOwnedCombatSolverClientInstance(instanceRoot);
+        return MultiplayerSafeExecutePolicy.CanGrantLabCapability(
+            new(mode, probeEvidence, ownedClientInstance));
+    }
+
+    private static bool IsOwnedCombatSolverClientInstance(string? instanceRoot)
+    {
+        if (string.IsNullOrWhiteSpace(instanceRoot))
+            return false;
+        try
+        {
+            string root = Path.GetFullPath(instanceRoot).TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar);
+            string ownerPath = Path.Combine(root, "instance.json");
+            string profilePath = Path.Combine(root, "multiplayer-profile.json");
+            if (!File.Exists(ownerPath) || !File.Exists(profilePath))
+                return false;
+
+            using JsonDocument owner = JsonDocument.Parse(File.ReadAllText(ownerPath));
+            using JsonDocument profile = JsonDocument.Parse(File.ReadAllText(profilePath));
+            JsonElement ownerRoot = owner.RootElement;
+            JsonElement profileRoot = profile.RootElement;
+            return ownerRoot.TryGetProperty("schemaVersion", out JsonElement ownerSchema)
+                   && ownerSchema.GetInt32() == 1
+                   && ownerRoot.TryGetProperty("runtimeRoot", out JsonElement ownerRuntime)
+                   && PathEquals(ownerRuntime.GetString(), root)
+                   && profileRoot.TryGetProperty("schemaVersion", out JsonElement profileSchema)
+                   && profileSchema.GetInt32() == 1
+                   && profileRoot.TryGetProperty("runtimeRoot", out JsonElement profileRuntime)
+                   && PathEquals(profileRuntime.GetString(), root)
+                   && profileRoot.TryGetProperty("profile", out JsonElement profileName)
+                   && string.Equals(
+                       profileName.GetString(),
+                       "ClientCombatSolver",
+                       StringComparison.Ordinal);
+        }
+        catch (Exception exception) when (exception is IOException
+            or UnauthorizedAccessException
+            or JsonException
+            or InvalidOperationException
+            or NotSupportedException
+            or ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    private static bool PathEquals(string? value, string expected)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+        string actual = Path.GetFullPath(value).TrimEnd(
+            Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar);
+        return string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsTruthy(string? value)
+        => string.Equals(value, "1", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase);
 
     public static SolverSessionCapabilitySet Singleplayer { get; } = new(
         SolverSessionKind.Singleplayer,

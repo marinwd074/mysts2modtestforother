@@ -56,5 +56,20 @@ Check(
 Check(
     MultiplayerSafeExecutePolicy.DeploymentStopAfter(1, 1).IsSafe,
     "A single planned action does not synthesize an extra stop reason.");
+Check(
+    MultiplayerSafeExecutePolicy.CanGrantLabCapability(
+        new(MultiplayerSafeExecutePolicy.LabModeToken, true, true)),
+    "The Lab capability requires the exact lab token plus evidence and an owned client instance.");
+Check(
+    !MultiplayerSafeExecutePolicy.CanGrantLabCapability(new("safe-execute", true, true)),
+    "A production-style safe-execute token is not accepted.");
+Check(
+    !MultiplayerSafeExecutePolicy.CanGrantLabCapability(
+        new(MultiplayerSafeExecutePolicy.LabModeToken, false, true)),
+    "The Lab capability is rejected without Probe evidence.");
+Check(
+    !MultiplayerSafeExecutePolicy.CanGrantLabCapability(
+        new(MultiplayerSafeExecutePolicy.LabModeToken, true, false)),
+    "The Lab capability is rejected outside an owned client instance.");
 
 Console.WriteLine($"PASS: {checks} multiplayer safe-execute policy checks");

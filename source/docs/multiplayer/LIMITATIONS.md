@@ -75,7 +75,7 @@
 - 直接 Host 逐时刻敌人公开状态导出仍未单独采集；当前 `enemyStateSync` 仅表示两个独立 CombatSolver Client 的公开状态集合对照。
 - MP-1 Advisor 的首轮真实 Smoke 已通过受控验收；无药水重连场景和非空远端药水 fail-closed 场景均已实机覆盖；固定工作量单人 post-MP1 spot 对照已完成且路线/工作量无回归，但更广稳定性仍待收口，未知远端遗物和远端私有药水的 fail-closed 门禁不可移除。对照证据见 `runtime-evidence/20260920-post-mp1-performance/`。
 - 重连后的远端私有药水库存仍不可访问，Advisor 必须保持 fail-closed；如需支持正向搜索语义，应另立受控 public-state 设计与合同，不在本次 MP-0 生命周期收口中静默放开。退出阶段的 `CombatBugReportExporter` `NullReferenceException` 另需独立 triage。
-- MP-2 Safe Execute 仍不可达。当前仅实现 dormant 的 MP-2A：未来若解除门禁，一次部署也最多执行 1 张已分类为安全的本地普通 PlayCard，然后停止并等待新的世界观察/搜索。Local EndTurn、药水、选择、Replay、队友目标和连续快速动作均未启用；连续多牌还需要区分本地预期状态变化与远端并发变化，不能直接复用当前全量 WorldVersion。
+- MP-2 Safe Execute 的**正式玩家入口仍不可达**。当前只增加 `safe-execute-lab` 受控测试入口：必须由 Multiplayer Lab 启动、存在匹配的 `ClientCombatSolver` ownership/profile marker 且 Probe evidence 已启用；普通桌面进程和 `safe-execute` token 均不会获得能力。Lab 内一次 deployment 最多执行 1 张已分类为安全的本地普通 PlayCard，然后停止并等待新的世界观察/搜索。Local EndTurn、药水、选择、Replay、队友目标和连续快速动作均未启用；连续多牌仍需要区分本地预期状态变化与远端并发变化。
 
 ## 当前安全边界
 
