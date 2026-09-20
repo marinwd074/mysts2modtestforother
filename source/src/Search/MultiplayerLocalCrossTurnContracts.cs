@@ -71,6 +71,16 @@ internal static class MultiplayerLocalCrossTurnContracts
             && action.Turn == currentTurn
             && !action.IsEndTurn);
 
+    internal static bool ShouldHoldPendingContinuation(
+        bool awaitingContinuation,
+        bool hasContinuationSource,
+        bool hasCurrentTurnContinuation,
+        bool localTurnPlayable)
+        => awaitingContinuation
+            && hasContinuationSource
+            && !hasCurrentTurnContinuation
+            && !localTurnPlayable;
+
     internal static bool IsExactContinuation(MultiplayerContinuationMatchInput input)
         => DescribeContinuationMismatch(input) is null;
 

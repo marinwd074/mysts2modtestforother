@@ -1433,13 +1433,23 @@ internal static partial class SolverController
     private static void TryScheduleMultiplayerSearch(NGame? host, CombatState state)
     {
         int currentTurn = LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0;
-        if (_combat.AwaitingMultiplayerContinuation
-            && _combat.ContinuationSource is { } pendingRoute
-            && !pendingRoute.Continuations.Any(item => item.StartTurnNumber == currentTurn))
+        SolverResult? pendingRoute = _combat.ContinuationSource;
+        bool hasCurrentTurnContinuation =
+            pendingRoute?.Continuations.Any(item => item.StartTurnNumber == currentTurn) == true;
+        bool localTurnPlayable = CanSolve(state, out _);
+        bool pendingContinuationMissingCurrentTurn =
+            _combat.AwaitingMultiplayerContinuation
+            && pendingRoute != null
+            && !hasCurrentTurnContinuation;
+        if (MultiplayerLocalCrossTurnContracts.ShouldHoldPendingContinuation(
+                _combat.AwaitingMultiplayerContinuation,
+                pendingRoute != null,
+                hasCurrentTurnContinuation,
+                localTurnPlayable))
         {
             // Remote turns may advance WorldVersion while the local player is still
-            // waiting. Hold the immutable future route until the next local turn;
-            // continuation validation then decides reuse versus fresh search.
+            // waiting. Hold the immutable future route only until a local playable
+            // boundary exists. At that point a missing cached turn must fresh-search.
             return;
         }
         if (host == null
@@ -1450,10 +1460,19 @@ internal static partial class SolverController
             || !AutomaticCalculationEnabled
             || !UnattendedTestRunner.AutomaticTurnSearchEnabled
             || _combat.AutomaticSearchPaused
-            || !CanSolve(state, out _)
+            || !localTurnPlayable
             || !MultiplayerWorldTracker.TryTakeStable(out long worldVersion))
         {
             return;
+        }
+        if (pendingContinuationMissingCurrentTurn)
+        {
+            Entry.Logger.Info(
+                $"[CombatSolver/Test] MP_LOCAL_XTURN_CONTINUATION_MISSING " +
+                $"turn={currentTurn} route_identity={pendingRoute?.RouteIdentity ?? "-"} " +
+                "local_playable=true action=fresh_search");
+            _combat.AwaitingMultiplayerContinuation = false;
+            _combat.ContinuationSource = null;
         }
 
         CancelMultiplayerDebouncedSearch();

@@ -114,4 +114,22 @@ Check(
             scope: MultiplayerSearchResultScope.CurrentTurnOnly),
     "Deployment admits only the current local turn, while a non-current-turn route is preserved only as future data.");
 
+Check(
+    MultiplayerLocalCrossTurnContracts.ShouldHoldPendingContinuation(
+        awaitingContinuation: true,
+        hasContinuationSource: true,
+        hasCurrentTurnContinuation: false,
+        localTurnPlayable: false)
+        && !MultiplayerLocalCrossTurnContracts.ShouldHoldPendingContinuation(
+            awaitingContinuation: true,
+            hasContinuationSource: true,
+            hasCurrentTurnContinuation: false,
+            localTurnPlayable: true)
+        && !MultiplayerLocalCrossTurnContracts.ShouldHoldPendingContinuation(
+            awaitingContinuation: false,
+            hasContinuationSource: true,
+            hasCurrentTurnContinuation: false,
+            localTurnPlayable: false),
+    "A pending route waits only off the local playable boundary; a playable local turn with no cached continuation must fall through to fresh search.");
+
 Console.WriteLine($"PASS: {checks} multiplayer local-cross-turn contract checks");
