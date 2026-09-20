@@ -1,71 +1,109 @@
 # Codex 当前交接
 
-> 本文件是单一当前 handoff；每次任务结束覆盖更新，不追加历史。分支为 `main`，精确提交以当前 HEAD 为准。
+> 本文件是单一当前 handoff；每次任务结束覆盖更新，不追加历史。分支为 `main`。
 
-## 当前状态
+## 当前基线
 
-- CombatSolver `0.40.2`，目标游戏 / RitsuLib `0.107.1`，兼容符号 `STS2_01071`。
-- MP-0 Core：PASS；MP-0 受控生命周期 Hardening：PASS。
+- MP-2A 实现提交：`fec5f43026378c92a8f8e6ffdea2c81b766f0c57`（`test: add MP-2A lab smoke gate`）。
+- GitHub Actions run：`35479112564`，`static-consistency=PASS`，`contract-tests=PASS`。
+- L1 总结果：`PASS: 8 / FAIL: 0 / SKIP: 0`。
+- `MultiplayerSafeExecuteChecks`：21 项通过。
+- `MultiplayerSafeExecuteEvidenceChecks`：验证器 PASS/FAIL/UNVERIFIED 三类自测通过。
+- CombatSolver `0.40.2`；目标游戏 / RitsuLib `0.107.1`；兼容符号 `STS2_01071`。
+
+## 当前多人状态
+
+- MP-0 Core：PASS。
+- MP-0 Hardening lifecycle：PASS。
 - MP-1 Advisor：受控 Smoke PASS；远端私有药水未知时继续 fail-closed。
-- MP-2 Safe Execute：正式玩家入口仍 BLOCKED。
-- 新增的 `safe-execute-lab` 只允许 Multiplayer Lab 创建的 `ClientCombatSolver` 私有实例进入 MP-2A；普通桌面运行与 `safe-execute` token 均不授权。
+- MP-2 Safe Execute：**正式玩家入口仍 BLOCKED**。
+- `safe-execute-lab` 仅用于真实 MP-2A Smoke，不是正式玩家模式。
 
-## 本轮实施
+## 已完成的 MP-2A 基础设施
 
-- MP-2A 安全策略继续限制一次 deployment 最多 1 张本地普通 PlayCard。
-- 新增 Lab-only capability gate：必须同时满足：
-  - mode = `safe-execute-lab`
-  - `COMBATSOLVER_MULTIPLAYER_PROBE_EVIDENCE` 已启用
-  - `COMBATSOLVER_MULTIPLAYER_INSTANCE` 指向真实 Lab instance
-  - `instance.json` 与 `multiplayer-profile.json` schema/runtimeRoot 匹配
-  - profile = `ClientCombatSolver`
-- `safe-execute` 字符串明确不能授予能力。
-- Safe Execute 捕获实际原生动作时记录 `NATIVE_ACTION_CAPTURED type=PlayCardAction`。
-- 单牌动作完成后立即结束 deployment，不等待下一动作；随后由主线程 Probe 观察世界变化、失效旧搜索并 debounce 新搜索。
-- 新增 `validate-mp2a-results.ps1`：从真实 Client log 生成 MP-2A 机器摘要。
-- 新增 `test-mp2a-validator.ps1`：仅测试验证器自身，合成日志不算实机证据。
-- Lab launcher 已支持 `-MultiplayerMode safe-execute-lab`，并拒绝在非 `ClientCombatSolver` 实例启用。
-- 自动 EndTurn、药水、Choice、Replay、队友目标、MultiplayerOnly 卡、Full Auto、Instant、连续多牌继续禁止。
+- 一次 deployment 最多执行 1 张安全本地普通 PlayCard。
+- 非 PlayCard、药水、自动 EndTurn、Choice、Replay、MultiplayerOnly 卡、队友/未知目标全部 fail-closed。
+- Full Auto、Fast/Instant 覆盖、跨回合搜索/复用继续关闭。
+- Lab-only capability gate 必须同时满足：
+  - `COMBATSOLVER_MULTIPLAYER_MODE=safe-execute-lab`
+  - Probe evidence 已启用
+  - `COMBATSOLVER_MULTIPLAYER_INSTANCE` 指向 Lab instance
+  - `instance.json` / `multiplayer-profile.json` schema 与 runtimeRoot 匹配
+  - profile 精确为 `ClientCombatSolver`
+- 正式 `safe-execute` token 明确不能授权。
+- Lab launcher 已支持 `-MultiplayerMode safe-execute-lab`，且非 ClientCombatSolver 实例会被拒绝。
+- Safe Execute 运行时记录：
+  - `LAB_CAPABILITY`
+  - `MP2A_DEPLOY_START`
+  - `NATIVE_ACTION_CAPTURED type=PlayCardAction`
+  - `DEPLOY_END ... end_turn=false`
+  - `MP2A_WORLD_CHANGED`
+  - 后续 `SEARCH_DEBOUNCED_START`
+- 单牌原生动作完成后 deployment 立即收束，不会等待或执行路线中的第二张牌。
+- 主线程随后重新观察世界；WorldVersion 改变会失效旧结果并触发新的 debounce 搜索。
 
-## MP-2A 真实 Smoke 判定
+## 真实 Smoke 验证器
 
-`validate-mp2a-results.ps1` 只有同时观察到以下条件才返回 PASS：
+入口：
 
-1. Lab-only capability marker。
-2. 恰好一个 MP-2A deployment。
-3. 恰好一个原生 `PlayCardAction`。
-4. CombatSolver 路径没有调用自定义网络 API。
-5. 没有 Potion / 自动 EndTurn 证据。
-6. 动作后 `WorldVersion` 大于搜索时版本。
+`source/tools/multiplayer-lab/validate-mp2a-results.ps1`
+
+PASS 必须同时满足：
+
+1. 观察到 Lab capability。
+2. 恰好一个单牌 MP-2A deployment。
+3. 恰好捕获一个原生 `PlayCardAction`。
+4. CombatSolver 该执行路径未使用自定义网络 API。
+5. 无 Potion / 自动 EndTurn 证据。
+6. 动作后的 WorldVersion 大于搜索时版本。
 7. 世界失效后启动新的 debounced search。
 
-注意：`custom_network_api_used=false` 证明 CombatSolver 该路径只走原生动作链，不等同于独立抓包工具的 wire capture。
+验证器可以输出机器 JSON 摘要。缺证据返回 `UNVERIFIED`，矛盾证据返回 `FAIL`。
 
-## 当前仍缺的证据
+`custom_network_api_used=false` 只证明 CombatSolver 该执行路径使用原生动作链，不等同独立抓包工具的 wire capture。
 
-当前会话无法启动用户电脑上的 Steam / STS2 GUI，也无法实际创建两个真实游戏进程。
+## 当前唯一主要未完成项
 
-因此现在只剩：
+当前 ChatGPT 会话能够读写 GitHub 仓库和检查 GitHub Actions，但**没有用户电脑的桌面/Steam/STS2 进程控制能力**。
 
-- 用本地游戏环境做一次 Vanilla Host + CombatSolver Client 真实运行；
-- Client 使用 `-MultiplayerMode safe-execute-lab`；
-- 进入战斗后只点击一次“执行本回合”；
-- 保持数秒等待 WorldVersion 观察与新搜索；
-- 对该次 Client log 跑 `validate-mp2a-results.ps1`；
-- 若 PASS，再把机器摘要作为新的 runtime evidence / multiplayer evidence 收口。
+因此无法在这里直接完成：
 
-在这一步完成前，不得把 MP-2A 写成真实支持或开放正式玩家入口。
+- 启动本机 Slay the Spire 2；
+- 建立真实 Vanilla Host；
+- 启动第二个 CombatSolver Client 游戏实例；
+- 手动进入 Lobby / Ready / 战斗；
+- 在真实游戏 UI 点击一次“执行本回合”。
 
-## 关键风险
+这不是代码缺口。
 
-- 当前 WorldVersion 同时覆盖本地和远端可见状态，因此 MP-2B 连续多牌仍无法安全归因。
-- 不要通过“执行后简单重置 WorldVersion”绕过该问题。
-- Instant 多人模式继续保持关闭。
+## 下一步实机步骤
 
-## 下一步
+在有 STS2 安装的本地仓库环境：
 
-1. 等本轮 GitHub Actions 全绿。
-2. 在有 STS2 本地安装的环境做 Release build。
-3. 按 `source/tools/multiplayer-lab/README.md` 执行一次 MP-2A 单牌真实 Smoke。
-4. 将验证器 JSON PASS 摘要写入多人 evidence。
-5. 只有上述证据完成后，再决定是否设计正式 Safe Execute opt-in。
+1. 用当前源码做 Release build。
+2. 用 `prepare-instances.ps1` 准备 Vanilla Host 与 ClientCombatSolver。
+3. 启动 Host。
+4. Client 使用：
+   `-MultiplayerMode safe-execute-lab`
+5. 正常进入一场简单多人战斗。
+6. 等求解路线稳定。
+7. 只点击一次“执行本回合”。
+8. 不再点击，保持 Client 数秒，让 Probe 记录 WorldVersion 变化和重新搜索。
+9. 停止 owned instances。
+10. 对本次 Client `logPath` 执行：
+    `validate-mp2a-results.ps1`
+11. 只有结果为 `PASS` 才把摘要写入正式 multiplayer evidence。
+
+## 不要做
+
+- 不要把 `safe-execute-lab` 改成正式 `safe-execute`。
+- 不要开放连续多牌 MP-2B。
+- 不要通过执行后直接重置 WorldVersion 来规避并发归因。
+- 不要开放 Multiplayer Instant、自动 EndTurn、药水、Choice 或 Full Auto。
+- 合成 validator 自测不能当实机多人证据。
+
+## 后续门槛
+
+只有真实 Host/Client MP-2A 单牌 Smoke 取得 PASS 后，才讨论正式 Safe Execute opt-in。
+
+MP-2B 连续多牌必须另行设计“本地预期变化 vs 远端并发变化”的 WorldVersion 来源归因。
