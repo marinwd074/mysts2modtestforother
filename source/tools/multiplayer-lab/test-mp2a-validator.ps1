@@ -39,7 +39,13 @@ try {
     $noResearch = @($base[0..4])
     Invoke-Case -Name 'missing-research' -Lines $noResearch -ExpectedExitCode 2
 
-    Write-Output 'MP2A_VALIDATOR_OK checks=3'
+    $nativeManualEndTurn = $base + @(
+        '[DEBUG] [ActionExecutor] Executing action: EndPlayerTurnAction for player 1000 turn 1',
+        '[DEBUG] [ActionExecutor] Completed execution of action EndPlayerTurnAction for player 1000 turn 1'
+    )
+    Invoke-Case -Name 'native-manual-end-turn-is-not-solver-evidence' -Lines $nativeManualEndTurn -ExpectedExitCode 0
+
+    Write-Output 'MP2A_VALIDATOR_OK checks=4'
 }
 finally {
     Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue

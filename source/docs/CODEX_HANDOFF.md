@@ -62,26 +62,17 @@ PASS 必须同时满足：
 
 `custom_network_api_used=false` 只证明 CombatSolver 该执行路径使用原生动作链，不等同独立抓包工具的 wire capture。
 
-## 当前进行中的 MP-2A Lab 运行
+## 最近一次 MP-2A Lab 运行（2026-09-20）
 
 - 当前源码 `cd533c6` 已完成 Release 构建；Host/Client 使用同一构建产物。
-- Host 实例：`D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp2a-host-20260920`，运行日志为 `logs/20260920-095743-host-7deb23e7.log`。
-- Client 实例：`D:\yingye\CombatSolver\.local\multiplayer-lab\runtime-mp2a-client-20260920`，运行日志为 `logs/20260920-095845-client-7b394cae.log`，启动模式为 `safe-execute-lab`、ClientId `1000`。
-- Client 首次启动只完成了原生 Mod 确认并按游戏规则退出；第二次启动已加载 RitsuLib 与 CombatSolver，当前等待人工完成 Lobby、Ready、战斗和一次“执行本回合”。以上日志尚未形成 MP-2A 证据，不能记为 PASS。
+- Host/Client 已按 Lab 流程启动并进入 `NIBBITS_WEAK` 多人战斗；Client 已加载 RitsuLib 与 CombatSolver。
+- Client 日志 `runtime-mp2a-client-20260920/logs/20260920-095845-client-7b394cae.log` 未出现 `LAB_CAPABILITY`、`MP2A_DEPLOY_START`、`NATIVE_ACTION_CAPTURED` 或 `DEPLOY_END`，也没有观察到自动出牌；本轮验证结果为 `UNVERIFIED`，不是 MP-2A PASS。
+- 已通过 ownership 脚本停止 Host/Client。机器摘要留在 `.local/multiplayer-lab/results/mp2a-20260920-no-auto-summary.json`，不作为正式 multiplayer evidence。
+- 验证器已排除普通网络/手动 `EndPlayerTurnAction` 的误报，只把 CombatSolver 自己的自动结束回合标记视为禁用动作证据；`test-mp2a-validator.ps1` 当前 `checks=4` 通过。
 
 ## 当前唯一主要未完成项
 
-当前 ChatGPT 会话能够读写 GitHub 仓库和检查 GitHub Actions，但**没有用户电脑的桌面/Steam/STS2 进程控制能力**。
-
-因此无法在这里直接完成：
-
-- 启动本机 Slay the Spire 2；
-- 建立真实 Vanilla Host；
-- 启动第二个 CombatSolver Client 游戏实例；
-- 手动进入 Lobby / Ready / 战斗；
-- 在真实游戏 UI 点击一次“执行本回合”。
-
-这不是代码缺口。
+真实 MP-2A 单牌 Smoke 仍未取得 PASS。下一次运行必须在 Client 的 Solver 路线稳定后明确点击一次“执行本回合”，并在点击后保持数秒；没有 `LAB_CAPABILITY` 与完整单牌事件链时，不能升级正式 Safe Execute 入口。
 
 ## 下一步实机步骤
 

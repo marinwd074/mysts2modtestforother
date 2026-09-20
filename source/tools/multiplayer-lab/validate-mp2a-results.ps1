@@ -104,7 +104,6 @@ if ($end.Count -eq 1) {
 $forbidden = @($records | Where-Object {
         $_.Text -match '\[CombatSolver/Test\] DEPLOY_ACTION .*potion=' -or
         $_.Text -match 'UI_DEPLOYMENT_END_TURN' -or
-        $_.Text -match 'EndPlayerTurnAction' -or
         $_.Text -match '\[CombatSolver/MultiplayerSafeExecute\] DEPLOY_END .*end_turn=true'
     })
 if ($forbidden.Count -eq 0) {
