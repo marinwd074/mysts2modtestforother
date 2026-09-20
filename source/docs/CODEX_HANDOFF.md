@@ -89,7 +89,8 @@
 - 续接校验崩溃已在 `94c6497` 修复：T2 `AutoTurnStart` 在 `CaptureContinuationValidation` 前强制 fresh Probe，继续保持严格 `ActualWorldVersion > max(ExpectedSourceWorldVersion, MinimumWorldVersion)`；续接拒绝按 `cached_turn_missing`、`local_state_mismatch`、`world_version_not_advanced`、`remote_public_mismatch` 等原因记录，空 local diff 不再访问 `[0]`。
 - Safe EndTurn 后未来路线只作为不可执行 continuation 保留，部署筛选仍只取当前本地回合；多人不读写 `SolvedRouteCache`，避免持久缓存携带多人完整状态。
 - `MultiplayerLocalCrossTurnChecks` 10 项、Release 构建（0 errors、2 条既有 `CS9113`）和 `git diff --check` 已通过。修复后的 X1 客户端确认 63 个补丁加载成功；本轮实机已完成 T1→T2→T3→T4，T2 自动执行 3 张牌并正常进入 T3，无 `SEARCH_SETUP_FAILURE`/越界异常。T1→T2 因 `local_state_exact=true reason=remote_public_mismatch` 按合同 fresh search，T2→T3 因 `local_state_exact=false reason=local_state_mismatch` 按合同 fresh search；随后无新增远端公开变化的 T3→T4 出现 `SEARCH_REUSED` 与 `MP_LOCAL_XTURN_CONTINUATION_REUSED`，T4 使用新的 `request_id=5` / `new_authorization=true` 执行原生牌，旧 request 已 `authorization_cleared=true`。精确复用机制已有实机证据；独立的“用户主动改变远端/目标”X2 仍未收口。
-- T3 空推荐已定位：搜索存在当前回合出牌候选，但最终路线在局部质量相同/等价时被 `ActionCount` 短路线 tie-break 选成 `T3:EndTurn`。多人本地跨回合的成员内排序和 Beam portfolio 结果比较均已加入“当前回合至少一张牌优先”的平局规则，并记录 `current_turn_card` 诊断；Release 与 9 项合同检查已通过，需用新构建复跑 T3 实机确认。
+- T3 空推荐已定位：搜索存在当前回合出牌候选，但最终路线在局部质量相同/等价时被 `ActionCount` 短路线 tie-break 选成 `T3:EndTurn`。多人本地跨回合的成员内排序和 Beam portfolio 结果比较均已加入“当前回合至少一张牌优先”的平局规则，并记录 `current_turn_card` 诊断；Release 与 10 项合同检查已通过，需用新构建复跑 T3 实机确认。
+- 当前 `main`/`origin/main` 均为 `279dbbd`；新构建已准备到 `.local/multiplayer-lab/runtime-runtime-local-cross-turn-t3-fix-host` 与 `.local/multiplayer-lab/runtime-runtime-local-cross-turn-t3-fix-client`，其中 Client 已完成 CombatSolver overlay 增量更新。旧 X1 Host/Client 进程仍在运行，故尚未启动新实例或宣称 T3 修复实机通过；下一对话先确认旧窗口退出，再启动新实例完成 T3 复测。
 
 ## 当前下一步
 
