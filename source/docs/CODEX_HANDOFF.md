@@ -6,7 +6,8 @@
 - MP-0 Core / lifecycle：PASS。
 - MP-1 Advisor：受控 Smoke PASS。
 - MP-2A：显式 `safe-execute`/`safe-execute-lab` 的一动作 Host/Client Smoke 已 PASS，作为历史基线保留；该证据不等于两动作能力已通过。
-- MP-2B：两动作上限、显式 SafeExecutionSession、动作后稳定世界等待和本地/远端变化重验证已完成；`MultiplayerSafeExecuteChecks` 39 项、正常/远端干扰验证器合成回归和 Release 构建已通过，真实正常两动作与远端干扰 Smoke 也已分别返回 PASS。摘要见 [`mp2b-smoke-2026-09-20.json`](multiplayer/evidence/mp2b-smoke-2026-09-20.json)。
+- MP-2B：两动作上限、显式 SafeExecutionSession、动作后稳定世界等待和本地/远端变化重验证已完成；历史 `MultiplayerSafeExecuteChecks` 39 项、正常/远端干扰验证器合成回归和 Release 构建已通过，真实正常两动作与远端干扰 Smoke 也已分别返回 PASS。摘要见 [`mp2b-smoke-2026-09-20.json`](multiplayer/evidence/mp2b-smoke-2026-09-20.json)。
+- MP-2C：已直接将 MP2B 泛化为当前回合 bounded N-action，policy ceiling 为 6；当前合同 40 项、正常/干扰验证器各 6 个合成用例和 Release 构建已通过。>=3-action 正常 Smoke 与至少两动作后的远端干扰 Smoke 尚待本轮实机收口。
 - Multiplayer Instant、自动 EndTurn、Potion、Choice、Full Auto、跨回合和队友目标继续关闭；默认多人仍保持 Probe。
 - 本轮没有为 MP2B 声明新的 GitHub Actions 结果；实机结论来自隔离 Multiplayer Lab 的 Host/Client journal 与对应验证器，不等同于 GitHub Actions 结果。
 
@@ -33,7 +34,7 @@
 
 - 游戏内所有 GUI 操作交给用户完成；Codex/Agent 不再尝试代操作游戏。
 - Codex/Agent 负责把环境准备到可点击状态，并在用户每完成一步后读取日志/结果继续判断。
-- 后续 MP-2B Smoke 应按 RUNBOOK 分成短步骤交给用户执行；游戏内 GUI 操作仍由用户完成，Codex 只负责读取日志和验证结果。
+- 后续 MP-2C Smoke 应按 RUNBOOK 分成短步骤交给用户执行；游戏内 GUI 操作仍由用户完成，Codex 只负责读取日志和验证结果。
 
 ## 本轮 MP-2A 实机证据（2026-09-20）
 
@@ -50,6 +51,12 @@
 - 远端干扰 Smoke：三方 Host/Client 运行中，真实 `request_id=1` 在第一张牌后观察到远端公开变化，记录 `MP2B_REMOTE_DELTA_ABORT`，没有第二个 `NATIVE_ACTION_CAPTURED`，随后出现新的 debounce search；验证器返回 `MULTIPLAYER_MP-2B_REMOTE_ABORT_PASS`。
 - 证据摘要：[`mp2b-smoke-2026-09-20.json`](multiplayer/evidence/mp2b-smoke-2026-09-20.json)。本轮三个 owned 进程均以 `Graceful` 停止。
 
+## 本轮 MP-2C 实施状态（2026-09-20）
+
+- `MaxActionsPerDeployment=6`，`TakeBoundedSafePrefix` 返回连续安全本地普通 `PlayCard` 前缀；第一个 Potion/Choice/EndTurn/Replay/远端或未知目标即硬停止，不跳过后续动作。
+- 同一个 SafeExecutionSession 继续执行 `Authorized → Executing → AwaitingWorldUpdate → Revalidating → Authorized ... → Completed/Aborted`；每张牌等待原生队列完成、稳定 `WorldVersion`，然后做现有 post-action revalidation，未 reset/rebase world version。
+- `validate-mp2b-results.ps1 -MinActions 3 -MaxActions 6` 和干扰校验器 `-MinCompletedActions 2 -MaxActions 6` 已支持本阶段；合成回归均 PASS。实机正常/干扰证据尚未写入，完成后新增 `multiplayer/evidence/mp2c-smoke-2026-09-20.json`。
+
 ## 当前下一步
 
-MP-2B 当前受控范围已完成；继续保持默认 Probe，以及 Multiplayer Instant、自动 EndTurn、Potion、Choice、Full Auto、跨回合和队友目标关闭。任何超出“两张本地普通牌/当前回合/远端变化中止”的扩展，另立计划并重新获取实机证据。
+MP-2C 实机收口前继续保持默认 Probe，以及 Multiplayer Instant、自动 EndTurn、Potion、Choice、Full Auto、跨回合和队友目标关闭。当前实机边界目标是“至少三张连续本地普通牌/当前回合/远端变化中止”；Safe EndTurn 仍留给下一阶段。

@@ -92,15 +92,18 @@ Lobby、wire 或战斗证据。
   证据返回 `UNVERIFIED`，不会把静态合同推断成实机 PASS。
 - `test-mp2a-validator.ps1` 只测试上述验证器本身的 PASS/FAIL/UNVERIFIED
   判定，并由 L1 CI 调用；合成日志绝不作为多人实机证据。
-- `validate-mp2b-results.ps1` 校验当前两动作 Safe Execute 日志：MP2B capability、
-  同一请求的两个原生 `PlayCardAction`、两次动作后重验证、无 EndTurn/药水/Choice/
-  Replay、单调 WorldVersion 以及动作后的新搜索。`test-mp2b-validator.ps1` 只测试
-  该验证器的 5 个合成用例；二者都不能替代真实 Host/Client 证据。
-- `validate-mp2b-interference-results.ps1` 单独校验远端干扰场景：第一张牌完成后
-  记录 `MP2B_REMOTE_DELTA_ABORT`、不捕获第二张原生牌、没有 EndTurn/药水/Choice/
-  Replay，并在中止后重新搜索。若一个 Client journal 包含多次尝试，可用
-  `-RequestId <deployment-request-id>` 选择一个完整 session；`test-mp2b-interference-validator.ps1`
-  覆盖 5 个合成用例；它与正常两动作验证器不能互相替代。
+- `validate-mp2b-results.ps1` 已泛化为 bounded N-action Safe Execute 校验器：用
+  `-MinActions <n>` 要求最少动作数、`-MaxActions <ceiling>` 锁定有限上限，并按同一
+  request/session 校验连续 action index、每个原生 `PlayCardAction`、每次重验证、单调
+  WorldVersion、无 EndTurn/药水/Choice/Replay/远端目标和部署后的新搜索。默认参数仍
+  兼容历史 MP-2B 两动作日志；`test-mp2b-validator.ps1` 当前覆盖 6 个合成用例，其中
+  包含 5-action 正常通过；合成日志不能替代真实 Host/Client 证据。
+- `validate-mp2b-interference-results.ps1` 泛化校验任意动作 i 后的远端干扰：记录
+  `MP2B_REMOTE_DELTA_ABORT`，用 `-MinCompletedActions` 约束中止前已完成动作数，证明不捕获
+  action i+1、没有 EndTurn/药水/Choice/Replay，并在中止后重新搜索。若一个 Client journal
+  包含多次尝试，可用 `-RequestId <deployment-request-id>` 选择完整 session；
+  `test-mp2b-interference-validator.ps1` 当前覆盖 6 个合成用例，其中包含“两张牌后中止”；
+  它与正常 bounded N-action 验证器不能互相替代。
 
 Lab Client 会自动设置 `COMBATSOLVER_MULTIPLAYER_PROBE_EVIDENCE=1`，因此
 Probe JSONL 只落在实例诊断目录；普通桌面运行不会因为 Probe 观察而持续写证据。
@@ -192,7 +195,7 @@ MP-2A 真实 Smoke 证据。`safe-execute-lab` 与正式 `safe-execute` 是两�
 token；正式 token 的一动作 Host/Client Smoke 已通过，证据摘要见
 `docs/multiplayer/evidence/mp2-safe-execute-formal-2026-09-20.json`。
 
-## MP-2B 两动作 Smoke（已完成实机；复验步骤）
+## MP-2B 两动作 Smoke（历史实机；复验步骤）
 
 MP2B 使用同一套 HostVanilla + ClientCombatSolver、Steam transport off 和 Mod
 warm-up 后的正式第二次 Client 启动；正式入口命令为：
@@ -232,6 +235,41 @@ pwsh -NoLogo -NoProfile -File .\validate-mp2b-interference-results.ps1 `
 验证器返回 `MULTIPLAYER_MP-2B_REMOTE_ABORT_PASS` 才表示安全中止证据完整。2026-09-20
 实机正常 Smoke 与远端干扰 Smoke 均已通过，摘要见
 `docs/multiplayer/evidence/mp2b-smoke-2026-09-20.json`。
+
+## MP-2C bounded N-action Smoke
+
+MP-2C 使用上面的正式 `safe-execute` 启动方式，但一次用户点击可连续执行当前安全本地
+`PlayCard` 前缀，policy ceiling 为 6；每张牌都必须等待原生队列完成、稳定 `WorldVersion`
+并通过现有重验证，才允许下一张。用户只点击一次“执行本回合”，选择至少三张连续安全牌的
+回合；观察 UI 的 `正在执行 n/6`、费用/能量减少、手牌减少，以及完成后保持当前回合并重新
+计算最新路线。不得自动 EndTurn。
+
+正常验证命令：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-mp2b-results.ps1 `
+  -LogPath '<post-restart-client-log>' `
+  -MinActions 3 `
+  -MaxActions 6 `
+  -OutputPath '.\.local\multiplayer-lab\results\mp2c-summary.json'
+~~~
+
+应返回 `MULTIPLAYER_MP-2C_PASS`，并证明同一 request 的 `action_index=0..N-1`、每张牌
+后重验证、WorldVersion 单调前进、`end_turn=false`、无 forbidden action 和 fresh search。
+
+远端干扰验证：先让两张牌成功，再由另一 Client 在下一张牌前制造公开变化：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-mp2b-interference-results.ps1 `
+  -LogPath '<post-restart-client-log>' `
+  -RequestId '<deployment-request-id>' `
+  -MinCompletedActions 2 `
+  -MaxActions 6 `
+  -OutputPath '.\.local\multiplayer-lab\results\mp2c-interference-summary.json'
+~~~
+
+应返回 `MULTIPLAYER_MP-2C-remote-interference_PASS`，并证明中止后没有下一张原生动作且
+发生 fresh search。当前源码/合同已通过；实机结果由本轮运行后写入 evidence 摘要。
 
 退出码：0 为 PASS，1 为矛盾/无效证据，2 为缺失或仍为 UNVERIFIED。真实
 Host/Client 运行证据必须带可审查的日志位置；单进程模拟和合成 JSON 不可作为

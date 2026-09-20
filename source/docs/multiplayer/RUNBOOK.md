@@ -34,7 +34,7 @@
 
 5. **正式证据只取重启后的运行。**
    - 记录第二次 Client 启动返回的 `logPath`。
-    - MP-2A 历史基线只在这次运行里点击一次“执行本回合”；当前 MP-2B Smoke 使用
+    - MP-2A 历史基线只在这次运行里点击一次“执行本回合”；当前 MP-2C Smoke 使用
       显式 `-MultiplayerMode safe-execute`，Lab 证据 Smoke 仍使用 `safe-execute-lab`。
    - 等待动作完成、WorldVersion 更新和新 debounce search 后再停止。
 
@@ -90,7 +90,7 @@ pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
 用户仍只做一次 Host/Join/Ready、进入战斗、确认未自动出牌后点击“执行本回合”。这段
 只用于复核 MP-2A 历史一动作基线；验证器会检查 `FORMAL_CAPABILITY`、单个原生
 `PlayCardAction`、动作后 `WorldVersion` 失效和新的 debounce search。它不代表当前
-MP-2B 两动作实机已通过。
+ MP-2C N-action 实机已通过。
 
 ## MP-2B 两动作 Smoke（已完成实机；复验步骤）
 
@@ -139,6 +139,45 @@ pwsh -NoLogo -NoProfile -File .\validate-mp2b-interference-results.ps1 `
 远端公开变化，未捕获第二张原生牌，并启动新的搜索。摘要见
 [`evidence/mp2b-smoke-2026-09-20.json`](evidence/mp2b-smoke-2026-09-20.json)。同一日志若包含
 多次用户尝试，干扰验证器可用 `-RequestId <deployment-request-id>` 选择一个完整 session。
+
+## MP-2C 当前回合 bounded N-action Smoke
+
+MP-2C 直接复用同一 SafeExecutionSession，把 MP-2B 的固定两动作改为有限上限
+`MaxActionsPerDeployment=6`。正常 Smoke 必须选择至少三张连续安全本地普通牌；用户只点击
+一次“执行本回合”，等待每张牌完成、费用/能量与手牌实际变化、UI 显示“正在执行 n/6”，
+最后显示保持当前回合并重新计算最新路线。它不会自动 EndTurn。
+
+正常日志验证：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-mp2b-results.ps1 `
+  -LogPath '<post-restart-client-log>' `
+  -MinActions 3 `
+  -MaxActions 6 `
+  -OutputPath '.\.local\multiplayer-lab\results\mp2c-summary.json'
+~~~
+
+必须看到同一 `request_id` 的连续 `action_index=0..N-1`，每张均为原生
+`PlayCardAction`，每张牌后有重验证且 `WorldVersion` 单调前进，最终 `end_turn=false`，
+无 Potion/Choice/Replay/Remote Target/EndTurn，部署后有 fresh search。验证器应返回
+`MULTIPLAYER_MP-2C_PASS`。
+
+干扰 Smoke 选择至少三张安全牌：前两张成功后，在下一张牌开始前由另一 Client 制造公开变化。
+预期当前 Client 记录 `MP2B_REMOTE_DELTA_ABORT`，完成动作数至少为 2，不出现下一个
+`NATIVE_ACTION_CAPTURED`，并在中止后重新搜索：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-mp2b-interference-results.ps1 `
+  -LogPath '<post-restart-client-log>' `
+  -RequestId '<deployment-request-id>' `
+  -MinCompletedActions 2 `
+  -MaxActions 6 `
+  -OutputPath '.\.local\multiplayer-lab\results\mp2c-interference-summary.json'
+~~~
+
+验证器应返回 `MULTIPLAYER_MP-2C-remote-interference_PASS`。游戏内所有点击仍由用户完成；
+Codex 只负责启动/停止进程、读取 journal 和运行验证器。当前源码/合同已通过，正常与干扰
+实机结果在本轮完成后再补入本节和新的 evidence 摘要。
 
 ## MP-2A 收尾
 
