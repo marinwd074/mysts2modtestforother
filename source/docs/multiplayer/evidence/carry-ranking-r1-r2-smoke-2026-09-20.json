@@ -7,7 +7,7 @@
   "releaseBuild": "PASS",
   "releaseErrors": 0,
   "carryContracts": "PASS",
-  "carryContractCount": 10,
+  "carryContractCount": 11,
   "validatorSelfTest": "PASS",
   "fixture": "SLIMES_WEAK",
   "r1": {
@@ -27,7 +27,8 @@
     "unknownRiskCount": 1,
     "carryDecisive": false,
     "carryBaselineDifferent": false,
-    "conclusion": "Carry produced a positive public-team-risk signal, but removing Carry would still select the same route in this fixture."
+    "conclusion": "The old positive signal was produced by a T2 kill of a threat captured at the T1 root. That delayed kill must not count as removing the current public threat; current code now evaluates the pre-EndTurn snapshot of the root turn.",
+    "semanticAudit": "INVALID_OLD_POSITIVE_SIGNAL"
   },
   "safety": {
     "remotePrivateObserved": false,
@@ -35,8 +36,9 @@
     "customNetworkApiUsed": false
   },
   "nextFixture": {
-    "rule": "Threat HP must equal the local attack's actual damage D so killing the threat and hitting another target reduce total EnemyHp by the same amount.",
-    "starterIroncladExample": "With no Strength/Vulnerable and Strike damage 6, prepare an AllPlayers threat to exactly 6 HP and keep an Unknown/non-attacking enemy above 6 HP.",
+    "rule": "The proven threat must be removed during the current root turn before EndTurn, and its remaining durability should equal the local attack's actual damage D so alternative targets preserve the same pre-carry EnemyHp key.",
+    "starterIroncladExample": "Use a current-turn Strike/Bash whose actual damage exactly matches an AllPlayers threat's remaining durability; keep an Unknown/non-attacking alternative target above that damage.",
     "retryLimit": "At most one additional ordinary multi-enemy fixture if the first exact-damage fixture remains UNVERIFIED."
-  }
+  },
+  "carryWindow": "current_turn_pre_end"
 }
