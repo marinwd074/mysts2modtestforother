@@ -137,6 +137,7 @@ try {
         multiplayerMode = if ([string]::IsNullOrWhiteSpace($MultiplayerMode)) { $null } else { $MultiplayerMode }
         clientId = if ($ClientId -eq 0) { $null } else { $ClientId }
         forceSteamOff = $forceSteamOffEffective
+        modRestartPolicy = $modRestartPolicy
         runtimeEvidenceEligible = $false
     }
     Write-HeadlessJson $instance.ProcessMarkerPath $marker
