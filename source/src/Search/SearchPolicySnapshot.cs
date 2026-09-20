@@ -20,9 +20,15 @@ internal sealed record SearchPolicySnapshot(
     SearchMemoryPressureSignal MemoryPressureSignal)
 {
     /// <summary>
-    /// Multiplayer Advisor/Safe Execute searches are intentionally bounded to the local
-    /// player's current turn. The capability gate is still responsible for deciding
-    /// whether such a search may be created at all.
+    /// Explicitly names the route horizon. Keep this separate from the legacy
+    /// <see cref="CurrentTurnOnly"/> switch so multiplayer local cross-turn planning
+    /// cannot be mistaken for either the read-only Probe or single-player policy.
+    /// </summary>
+    public SearchRoutePolicy RoutePolicy { get; init; } = SearchRoutePolicy.SinglePlayerFullRoute;
+
+    /// <summary>
+    /// Compatibility flag consumed by the search engine. New callers should select
+    /// <see cref="RoutePolicy"/> and let policy capture set this value consistently.
     /// </summary>
     public bool CurrentTurnOnly { get; init; }
     public bool UseNoveltyPortfolio { get; init; }

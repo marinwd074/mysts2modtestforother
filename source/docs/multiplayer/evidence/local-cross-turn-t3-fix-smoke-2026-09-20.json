@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "phase": "Multiplayer Local Cross-Turn T3 Fix",
+  "status": "PASS",
+  "validatedDate": "2026-09-20",
+  "commit": "2f17443057f913dd308364c60b196e48d48a6a5f",
+  "runtime": {
+    "hostProfile": "HostVanilla",
+    "solverClientProfile": "ClientCombatSolver",
+    "solverClientId": 1000,
+    "playerCount": 2,
+    "gameVersion": "0.107.1",
+    "seed": "X7TJJK1T4W",
+    "encounter": "NIBBITS_WEAK",
+    "steamTransport": "off",
+    "multiplayerMode": "safe-execute",
+    "warmupExcluded": true,
+    "stopMode": "Graceful"
+  },
+  "t3": {
+    "status": "PASS",
+    "localTurn": 3,
+    "searchGeneration": 3,
+    "routeIdentity": "140e6e10fd494b01a05287a5d478da25",
+    "selectedCurrentTurnCard": true,
+    "plannedCurrentTurnActions": [
+      "DEFEND_IRONCLAD",
+      "STRIKE_IRONCLAD",
+      "STRIKE_IRONCLAD"
+    ],
+    "endTurnPresent": true,
+    "continuations": 7,
+    "nativeRequestId": 3,
+    "nativeActions": [
+      "DEFEND_IRONCLAD",
+      "STRIKE_IRONCLAD",
+      "STRIKE_IRONCLAD",
+      "EndPlayerTurnAction"
+    ],
+    "newAuthorization": true
+  },
+  "normalFreshReplans": [
+    {
+      "turn": 2,
+      "reason": "remote_public_mismatch",
+      "localStateExact": true,
+      "freshSearchGeneration": 2
+    },
+    {
+      "turn": 3,
+      "reason": "local_state_mismatch",
+      "localStateExact": false,
+      "freshSearchGeneration": 3
+    }
+  ],
+  "continuationReuse": {
+    "status": "PASS",
+    "fromTurn": 3,
+    "toTurn": 4,
+    "routeIdentity": "140e6e10fd494b01a05287a5d478da25",
+    "validation": "exact_state_text",
+    "oldAuthorizationDead": true,
+    "newAuthorizationPending": false,
+    "nativeRequestId": 4
+  },
+  "validEndTurnOnly": {
+    "status": "CONTRACT_PASS",
+    "runtimeObserved": false,
+    "basis": "MultiplayerLocalCrossTurnChecks 10/10 PASS"
+  },
+  "missingContinuation": {
+    "status": "UNVERIFIED",
+    "runtimeObserved": false,
+    "observedCount": 0,
+    "sourceContract": "PASS",
+    "expectedMarker": "MP_LOCAL_XTURN_CONTINUATION_MISSING",
+    "replanSummaryCount": 0,
+    "note": "This smoke did not enter local Play with Awaiting continuation and no cached current-turn continuation; no runtime PASS is claimed for that fixture."
+  },
+  "guards": {
+    "searchSetupFailure": false,
+    "indexOutOfRange": false,
+    "worldVersionResetOrRebase": false,
+    "customNetworkPacket": false
+  },
+  "clientCombatJournal": ".local/multiplayer-lab/runtime-runtime-local-cross-turn-t3-fix-client/diagnostics/CombatSolver-BugReports/logs/CombatSolver/10080-514f329d6d0c48e88cb35817ba436279/combat-1c2cb7d7c2d847c287776fc420f47bcc.jsonl",
+  "clientCombatJournalSha256": "3583C9411AC98D2A73FF58AE4D5C10BFCE0FF94AB4E726B42A6CD50D0662DE80",
+  "boundaries": [
+    "Default multiplayer remains Probe.",
+    "Potion, Choice, Replay, Full Auto, Instant, teammate control and custom network packets remain disabled.",
+    "The runtime proves the current-turn playable tie-break and exact continuation reuse; it does not claim the dedicated missing-continuation fixture was exercised."
+  ]
+}

@@ -314,6 +314,20 @@ internal sealed partial class CombatBeamSolver
         for (SearchNode? node = best; node?.Parent != null; node = node.Parent)
             path.Add(node);
         path.Reverse();
+        if (root.AllowsLocalPlayerOnlySearch
+            && !MultiplayerLocalCrossTurnContracts.ValidateLocalOnlyProjection(
+                path.Select(node => new MultiplayerProjectedAction(
+                    node.Action?.Turn ?? _startTurnNumber,
+                    IsLocalAction: true,
+                    IsEndTurn: node.Action is { } action
+                        && (action.Kind == PlanActionKind.EndTurn || action.EndsPlayerTurn)))
+                    .ToArray(),
+                _startTurnNumber,
+                out string projectionFailure))
+        {
+            throw new InvalidOperationException(
+                $"多人本地跨回合路线包含不允许的投影动作：{projectionFailure}。");
+        }
         for (int pathIndex = 0; pathIndex < path.Count; pathIndex++)
         {
             SearchNode node = path[pathIndex];
@@ -328,6 +342,8 @@ internal sealed partial class CombatBeamSolver
             }
             bool hasPlannedNextTurn = path
                 .Skip(pathIndex + 1)
+                // EndTurn nodes carry the post-boundary SearchNode.Turn, while their
+                // following local actions retain that same turn in PlanAction.Turn.
                 .Any(later => later.Action?.Turn == node.Turn);
             if (!hasPlannedNextTurn)
                 continue;
@@ -359,9 +375,60 @@ internal sealed partial class CombatBeamSolver
                     turnSetupRoot?.ReleaseSimulator();
                 }
             }
-            continuations.Add(new CachedContinuation(expected, node.Turn, forecastOffset));
+            MultiplayerContinuationExpectation? multiplayerExpectation =
+                root.AllowsLocalPlayerOnlySearch
+                    ? CreateMultiplayerContinuationExpectation(expected)
+                    : null;
+            continuations.Add(new CachedContinuation(
+                expected,
+                node.Turn,
+                forecastOffset,
+                multiplayerExpectation));
+        }
+        if (_detailedDiagnostics && root.AllowsLocalPlayerOnlySearch)
+        {
+            List<string> boundaryDiagnostics = [];
+            for (int pathIndex = 0; pathIndex < path.Count; pathIndex++)
+            {
+                SearchNode node = path[pathIndex];
+                PlanAction? action = node.Action;
+                if (action == null || action.Kind != PlanActionKind.EndTurn && !action.EndsPlayerTurn)
+                    continue;
+                int sameTurnActions = path
+                    .Skip(pathIndex + 1)
+                    .Count(later => later.Action?.Turn == node.Turn);
+                int laterTurnActions = path
+                    .Skip(pathIndex + 1)
+                    .Count(later => later.Action?.Turn > action.Turn);
+                boundaryDiagnostics.Add(
+                    $"index={pathIndex} action_turn={action.Turn} node_turn={node.Turn} " +
+                    $"same_node_turn={sameTurnActions} later_action_turn={laterTurnActions} " +
+                    $"boundary={node.Snapshot.BoundaryReason} player_dead={node.Snapshot.PlayerDead} " +
+                    $"enemies_dead={node.Snapshot.AllEnemiesDead}");
+            }
+            policy.Diagnostics.Info(
+                "[CombatSolver/Debug] MP_CONTINUATION_BUILD " +
+                $"path_actions={path.Count} entries={continuations.Count} " +
+                $"boundaries={string.Join('|', boundaryDiagnostics)}");
         }
         return continuations;
+    }
+
+    private MultiplayerContinuationExpectation CreateMultiplayerContinuationExpectation(
+        ContinuationStamp expected)
+    {
+        if (string.IsNullOrWhiteSpace(expected.CombatIdentity))
+        {
+            throw new InvalidOperationException(
+                "多人续用路线的预测 continuation 缺少 combat identity。");
+        }
+        return new MultiplayerContinuationExpectation(
+            expected.CombatIdentity,
+            _player.NetId.ToString(),
+            root.CarryRankingContext.RemotePublicFingerprint,
+            root.CarryRankingContext.MultiplayerScalingHooks,
+            root.CarryRankingContext.CardMultiplayerConstraint,
+            root.CarryRankingContext.WorldVersion);
     }
 
 }

@@ -447,6 +447,14 @@ internal static partial class SolverController
                 $"搜索并行度必须在 1..{SolverWeights.MaximumSearchMaxDegreeOfParallelism} 之间，" +
                 $"实际为 {maxDegreeOfParallelism}。");
         }
+        SearchRoutePolicy routePolicy = capabilities.Kind switch
+        {
+            SolverSessionKind.Singleplayer => SearchRoutePolicy.SinglePlayerFullRoute,
+            SolverSessionKind.MultiplayerProbe => SearchRoutePolicy.MultiplayerCurrentTurnOnly,
+            _ when capabilities.CanPlanLocalCrossTurn
+                => SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            _ => SearchRoutePolicy.MultiplayerCurrentTurnOnly,
+        };
         SearchPolicySnapshot policy = new(
             settings.Profile,
             effectivePotionPolicy,
@@ -469,7 +477,8 @@ internal static partial class SolverController
             new SearchMemoryPressureSignal())
         {
             Interaction = interaction,
-            CurrentTurnOnly = !capabilities.CanCrossTurnSearch,
+            RoutePolicy = routePolicy,
+            CurrentTurnOnly = MultiplayerLocalCrossTurnContracts.IsCurrentTurnOnly(routePolicy),
             UseNoveltyPortfolio = (settings.UseNoveltyPortfolio
                 || UnattendedTestRunner.UseNoveltyPortfolioOverride)
                 && capabilities.CanCrossTurnSearch,
@@ -1293,11 +1302,13 @@ internal static partial class SolverController
                             $"[CombatSolver/MultiplayerSafeExecute] {capabilityMarker} " +
                             $"enabled=true scope={capabilityScope} " +
                             $"max_actions={MultiplayerSafeExecutePolicy.MaxActionsPerDeployment} " +
-                            "automatic_end_turn=false custom_network_api=false");
+                            $"automatic_end_turn={capabilities.CanEndTurnAutomatically.ToString().ToLowerInvariant()} " +
+                            "custom_network_api=false");
                         Entry.Logger.Info(
                             $"[CombatSolver/MultiplayerSafeExecute] MP2B_CAPABILITY " +
                             $"enabled=true max_actions={MultiplayerSafeExecutePolicy.MaxActionsPerDeployment} " +
-                            "attribution=revalidation automatic_end_turn=false custom_network_api=false");
+                            $"attribution=revalidation automatic_end_turn={capabilities.CanEndTurnAutomatically.ToString().ToLowerInvariant()} " +
+                            "custom_network_api=false");
                     }
                     Entry.Logger.Info(
                         "[CombatSolver/MultiplayerProbe] CAPABILITY_BOUNDARY " +
@@ -1348,6 +1359,7 @@ internal static partial class SolverController
         CancelMultiplayerDebouncedSearch();
         CancelDeferredSearch();
         CancelSearch();
+        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
         MultiplayerSafeExecutionState? safeExecutionState = _deployment?.SafeExecutionSession?.State;
         SolverDeploymentSession? remoteAbortDeployment = null;
         int remoteAbortCompletedActions = 0;
@@ -1355,7 +1367,14 @@ internal static partial class SolverController
             SolverSessionCapabilities.Capture(state).Kind == SolverSessionKind.MultiplayerSafeExecute
             && safeExecutionState is MultiplayerSafeExecutionState.Executing
                 or MultiplayerSafeExecutionState.AwaitingWorldUpdate
-                or MultiplayerSafeExecutionState.Revalidating;
+                or MultiplayerSafeExecutionState.Revalidating
+                or MultiplayerSafeExecutionState.EndTurnExecuting;
+        bool preservePendingContinuation = MultiplayerLocalCrossTurnContracts.CanPreserveFutureRoute(
+            capabilities.CanCrossTurnReuse,
+            awaitingContinuation: preserveExpectedSafeDeployment
+                || _combat.AwaitingMultiplayerContinuation,
+            _combat.ContinuationSource?.Continuations.Count ?? 0,
+            _combat.ContinuationSource?.MultiplayerScope ?? MultiplayerSearchResultScope.CurrentTurnOnly);
         if (!preserveExpectedSafeDeployment)
         {
             if (safeExecutionState == MultiplayerSafeExecutionState.Authorized
@@ -1392,7 +1411,8 @@ internal static partial class SolverController
         _combat.FullAutoEnabled = false;
         _combat.LatestResult = null;
         _combat.LatestStamp = null;
-        _combat.ContinuationSource = null;
+        if (!preservePendingContinuation)
+            _combat.ContinuationSource = null;
         _combat.PendingCompleteProjectionBaseline = null;
         _combat.PendingManualProjectionBaseline = null;
         InvalidateRenderedRouteAdoptionSeed();
@@ -1405,11 +1425,31 @@ internal static partial class SolverController
             $"{invalidationPrefix} " +
             $"world_version={MultiplayerWorldTracker.WorldVersion} " +
             $"reason={MultiplayerWorldTracker.LastReason} " +
-            $"turn={LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0}");
+            $"turn={LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0} " +
+            $"continuation_preserved={preservePendingContinuation.ToString().ToLowerInvariant()} " +
+            $"route_identity={_combat.ContinuationSource?.RouteIdentity ?? "-"}");
     }
 
     private static void TryScheduleMultiplayerSearch(NGame? host, CombatState state)
     {
+        int currentTurn = LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0;
+        SolverResult? pendingRoute = _combat.ContinuationSource;
+        bool hasCurrentTurnContinuation =
+            pendingRoute?.Continuations.Any(item => item.StartTurnNumber == currentTurn) == true;
+        bool localTurnPlayable = CanSolve(state, out _);
+        MultiplayerContinuationScheduleDecision continuationSchedule =
+            MultiplayerLocalCrossTurnContracts.DecidePendingContinuationScheduling(
+                _combat.AwaitingMultiplayerContinuation,
+                pendingRoute != null,
+                hasCurrentTurnContinuation,
+                localTurnPlayable);
+        if (continuationSchedule.HoldPendingRoute)
+        {
+            // Remote turns may advance WorldVersion while the local player is still
+            // waiting. Hold the immutable future route only until a local playable
+            // boundary exists. At that point a missing cached turn must fresh-search.
+            return;
+        }
         if (host == null
             || _search != null
             || _deployment != null
@@ -1418,10 +1458,21 @@ internal static partial class SolverController
             || !AutomaticCalculationEnabled
             || !UnattendedTestRunner.AutomaticTurnSearchEnabled
             || _combat.AutomaticSearchPaused
-            || !CanSolve(state, out _)
+            || !localTurnPlayable
             || !MultiplayerWorldTracker.TryTakeStable(out long worldVersion))
         {
             return;
+        }
+        if (continuationSchedule.FreshSearchMissingCurrentTurn)
+        {
+            Entry.Logger.Info(
+                $"[CombatSolver/Test] MP_LOCAL_XTURN_CONTINUATION_MISSING " +
+                $"turn={currentTurn} route_identity={pendingRoute?.RouteIdentity ?? "-"} " +
+                "local_playable=true action=fresh_search");
+            if (continuationSchedule.ClearAwaitingContinuation)
+                _combat.AwaitingMultiplayerContinuation = false;
+            if (continuationSchedule.ClearContinuationSource)
+                _combat.ContinuationSource = null;
         }
 
         CancelMultiplayerDebouncedSearch();

@@ -127,6 +127,7 @@ internal static partial class SolverOverlay
     private static SolverOverlayPresentation _presentation = SolverOverlayPresentation.Searching;
     private static int _lastDeploymentTurn;
     private static int _lastDeploymentActionCount;
+    private static bool _lastDeploymentWillEndTurn;
     private static bool _lastDeploymentEndedTurn;
     private static bool _waitingForNextTurnPlan;
     private static bool _themeRefreshQueued;
@@ -977,12 +978,17 @@ internal static partial class SolverOverlay
         }
     }
 
-    public static void ShowDeploying(Node host, int turn, int actionCount)
+    public static void ShowDeploying(
+        Node host,
+        int turn,
+        int actionCount,
+        bool willEndTurn = false)
     {
         _presentation = SolverOverlayPresentation.Deploying;
         _waitingForNextTurnPlan = false;
         _lastDeploymentTurn = turn;
         _lastDeploymentActionCount = actionCount;
+        _lastDeploymentWillEndTurn = willEndTurn;
         _lastDeploymentEndedTurn = false;
         EnsureCreated(host);
         _deployQueued = false;
@@ -994,7 +1000,7 @@ internal static partial class SolverOverlay
         if (_summaryText != null)
         {
             _summaryText.Visible = true;
-            string completionText = SolverController.CurrentSessionCapabilities.CanEndTurnAutomatically
+            string completionText = _lastDeploymentWillEndTurn
                 ? "完成后结束本回合。"
                 : "完成后保持当前回合。";
             _summaryText.Text = SolverText.Format(
@@ -1422,7 +1428,11 @@ internal static partial class SolverOverlay
         {
             ShowResult(host, snapshot);
             if (presentation == SolverOverlayPresentation.Deploying)
-                ShowDeploying(host, _lastDeploymentTurn, _lastDeploymentActionCount);
+                ShowDeploying(
+                    host,
+                    _lastDeploymentTurn,
+                    _lastDeploymentActionCount,
+                    _lastDeploymentWillEndTurn);
             else if (presentation == SolverOverlayPresentation.ExecutedHistory)
             {
                 ShowDeploymentComplete(
@@ -2058,7 +2068,7 @@ internal static partial class SolverOverlay
             SolverSessionKind.MultiplayerAdvisor
                 => "多人精简模式：仅搜索本地玩家当前回合并显示建议；不会自动执行。",
             SolverSessionKind.MultiplayerSafeExecute
-                => "多人精简模式：仅执行已分类的本地普通牌；请手动选择、用药和结束回合。",
+                => "多人精简模式：仅执行已分类的本地普通牌和安全结束回合；不会自动用药或处理选择。",
             _ => "多人精简模式：当前能力受限。",
         };
         _multiplayerModeBannerLabel.Text = SolverText.Get(banner);

@@ -77,6 +77,7 @@ Agent 可以在当前目标需要时自主：
 ## 6. Multiplayer
 
 - 任何多人实机操作前先读 `docs/multiplayer/RUNBOOK.md`，不要重新试错已记录的 Steam、Mod 重启、ClientId、停止和证据流程。
+- 必须实机验证的多人任务由 Codex/Agent 驱动技术全流程：构建、prepare、启动/重启、warm-up、Graceful stop、日志定位和 validator；用户只负责游戏窗口内的 GUI 点击与观察。
 - 当前正式产品仍以单人能力为稳定基线；多人能力通过 Probe / Advisor / Lab gate 分阶段推进。
 - 可以自主开发、重构和验证多人实验能力，但在对应真实 Host/Client 证据通过前，不把 Lab-only 能力改成正式默认或普通玩家入口。
 - 不发送 CombatSolver 自定义网络包、不控制其他玩家，除非未来项目方向明确改变并单独设计协议与验证。

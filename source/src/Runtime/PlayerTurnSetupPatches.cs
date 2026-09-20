@@ -1159,7 +1159,11 @@ internal static class PlayerTurnSetupCoordinator
         Task<SolverResult> solveTask = Task.Run(() =>
         {
             BeforeChoiceSearchForTesting?.Invoke(searchToken);
-            if (!manual && !context.SearchPolicy.VerifyIncrementalSearch && !context.SearchPolicy.MeasurePhasePerformance
+            if (!manual
+                && MultiplayerLocalCrossTurnContracts.CanUsePersistentRouteCache(
+                    context.SearchPolicy.RoutePolicy)
+                && !context.SearchPolicy.VerifyIncrementalSearch
+                && !context.SearchPolicy.MeasurePhasePerformance
                 && context.RouteCache.Read(context.RootSnapshot.Forecast) is { } cached)
             {
                 searchToken.ThrowIfCancellationRequested();
@@ -1178,7 +1182,11 @@ internal static class PlayerTurnSetupCoordinator
                     context.BattleDamage, context.SearchPolicy, searchToken, active.Interaction.PublishProgress);
                 SolverResult finalized = active.Interaction.FinalizeWorkerResult(result);
                 searchToken.ThrowIfCancellationRequested();
-                if (!manual && !active.Interaction.StopRequested) context.RouteCache.StoreFirst(finalized);
+                if (!manual
+                    && !active.Interaction.StopRequested
+                    && MultiplayerLocalCrossTurnContracts.CanUsePersistentRouteCache(
+                        context.SearchPolicy.RoutePolicy))
+                    context.RouteCache.StoreFirst(finalized);
                 return finalized;
             }
             finally { worker.Priority = priority; }

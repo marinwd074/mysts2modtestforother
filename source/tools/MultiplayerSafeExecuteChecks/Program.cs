@@ -126,10 +126,12 @@ for (int actionIndex = 0; actionIndex < 5; actionIndex++)
 {
     fiveActionRouteAccepted = fiveActionRouteAccepted
         && session.TryBeginAction(
-            actionIndex,
-            $"PlayCard:CARD_{actionIndex}:0:target=-",
-            4 + actionIndex,
-            out _)
+             actionIndex,
+             $"PlayCard:CARD_{actionIndex}:0:target=-",
+             1,
+             7,
+             4 + actionIndex,
+             out _)
         && session.MarkAwaitingWorldUpdate()
         && session.BeginRevalidation()
         && session.AcceptAction(5 + actionIndex, hasNextAction: actionIndex < 4);
@@ -145,11 +147,11 @@ MultiplayerSafeExecutionSession indexSession = new(
     startWorldVersion: 4,
     maxActions: MultiplayerSafeExecutePolicy.MaxActionsPerDeployment);
 Check(
-    indexSession.TryBeginAction(0, "PlayCard:STRIKE:0:target=-", 4, out _)
+    indexSession.TryBeginAction(0, "PlayCard:STRIKE:0:target=-", 1, 7, 4, out _)
         && indexSession.MarkAwaitingWorldUpdate()
         && indexSession.BeginRevalidation()
         && indexSession.AcceptAction(5, hasNextAction: true)
-        && !indexSession.TryBeginAction(2, "PlayCard:DEFEND:0:target=-", 5, out string indexReason)
+        && !indexSession.TryBeginAction(2, "PlayCard:DEFEND:0:target=-", 1, 7, 5, out string indexReason)
         && indexReason == "action_index_mismatch",
     "A stale or skipped action index is rejected after a successful earlier action.");
 MultiplayerSafeExecutionSession ceilingSession = new(
@@ -159,13 +161,19 @@ MultiplayerSafeExecutionSession ceilingSession = new(
     maxActions: 2);
 for (int actionIndex = 0; actionIndex < 2; actionIndex++)
 {
-    _ = ceilingSession.TryBeginAction(actionIndex, $"PlayCard:CARD_{actionIndex}:0:target=-", 4 + actionIndex, out _);
+    _ = ceilingSession.TryBeginAction(
+        actionIndex,
+        $"PlayCard:CARD_{actionIndex}:0:target=-",
+        1,
+        7,
+        4 + actionIndex,
+        out _);
     _ = ceilingSession.MarkAwaitingWorldUpdate();
     _ = ceilingSession.BeginRevalidation();
     _ = ceilingSession.AcceptAction(5 + actionIndex, hasNextAction: actionIndex == 0);
 }
 Check(
-    !ceilingSession.TryBeginAction(2, "PlayCard:EXTRA:0:target=-", 6, out string capReason)
+    !ceilingSession.TryBeginAction(2, "PlayCard:EXTRA:0:target=-", 1, 7, 6, out string capReason)
         && capReason == "session_state_Completed",
     "A completed bounded session rejects an action beyond its configured ceiling.");
 MultiplayerSafeExecutionSession conflictSession = new(
@@ -174,7 +182,7 @@ MultiplayerSafeExecutionSession conflictSession = new(
     startWorldVersion: 4,
     maxActions: MultiplayerSafeExecutePolicy.MaxActionsPerDeployment);
 Check(
-    !conflictSession.TryBeginAction(0, "PlayCard:STRIKE:0:target=-", 5, out string worldReason)
+    !conflictSession.TryBeginAction(0, "PlayCard:STRIKE:0:target=-", 1, 7, 5, out string worldReason)
         && worldReason == "world_version_not_accepted",
     "A WorldVersion conflict cannot consume a new action authorization.");
 
@@ -228,8 +236,134 @@ Check(
 conflictSession.Abort("remote_or_unknown_change");
 Check(
     conflictSession.State == MultiplayerSafeExecutionState.Aborted
-        && !conflictSession.TryBeginAction(0, "PlayCard:STRIKE:0:target=-", 4, out string abortReason)
+        && !conflictSession.TryBeginAction(0, "PlayCard:STRIKE:0:target=-", 1, 7, 4, out string abortReason)
         && abortReason == "session_state_Aborted",
     "An aborted session clears authorization and cannot leak into a later action.");
+
+MultiplayerSafeEndTurnFacts EndTurnFacts(bool allowed = true)
+    => new(
+        CurrentCombatLifecycle: allowed,
+        LocalPlayableTurn: allowed,
+        RouteGenerationCurrent: allowed,
+        RouteEndsWithEndTurn: allowed,
+        ActionQueueIdle: allowed,
+        NoPendingChoice: allowed,
+        LocalTurnIdentityStable: allowed,
+        WorldVersionMatchesAccepted: allowed,
+        WorldVersionStable: allowed,
+        NoPendingWorldObservation: allowed);
+
+Check(
+    MultiplayerSafeExecutePolicy.ValidateSafeEndTurn(EndTurnFacts())
+        == MultiplayerSafeEndTurnDecision.Safe,
+    "A fully revalidated accepted route may consume Safe EndTurn.");
+Check(
+    MultiplayerSafeExecutePolicy.ValidateSafeEndTurn(
+        EndTurnFacts() with { CurrentCombatLifecycle = false })
+        == MultiplayerSafeEndTurnDecision.CombatLifecycleChanged,
+    "A lifecycle change before EndTurn cancels the boundary.");
+Check(
+    MultiplayerSafeExecutePolicy.ValidateSafeEndTurn(
+        EndTurnFacts() with { RouteGenerationCurrent = false })
+        == MultiplayerSafeEndTurnDecision.RouteGenerationChanged,
+    "A stale route generation cannot authorize EndTurn.");
+Check(
+    MultiplayerSafeExecutePolicy.ValidateSafeEndTurn(
+        EndTurnFacts() with { RouteEndsWithEndTurn = false })
+        == MultiplayerSafeEndTurnDecision.RouteBoundaryMissing,
+    "Action exhaustion without an accepted EndTurn boundary cannot end the turn.");
+Check(
+    MultiplayerSafeExecutePolicy.ValidateSafeEndTurn(
+        EndTurnFacts() with { ActionQueueIdle = false })
+        == MultiplayerSafeEndTurnDecision.ActionQueuePending,
+    "A pending native action blocks Safe EndTurn.");
+Check(
+    MultiplayerSafeExecutePolicy.ValidateSafeEndTurn(
+        EndTurnFacts() with { NoPendingChoice = false })
+        == MultiplayerSafeEndTurnDecision.ChoicePending,
+    "A pending native choice blocks Safe EndTurn.");
+Check(
+    MultiplayerSafeExecutePolicy.ValidateSafeEndTurn(
+        EndTurnFacts() with { WorldVersionMatchesAccepted = false })
+        == MultiplayerSafeEndTurnDecision.WorldVersionNotAccepted,
+    "An observed world change not accepted by the session blocks EndTurn.");
+Check(
+    MultiplayerSafeExecutePolicy.ValidateSafeEndTurn(
+        EndTurnFacts() with { NoPendingWorldObservation = false })
+        == MultiplayerSafeEndTurnDecision.WorldObservationPending,
+    "A pending remote observation blocks Safe EndTurn.");
+
+MultiplayerSafeExecutionSession endTurnSession = new(
+    startTurnNumber: 1,
+    routeGeneration: 7,
+    startWorldVersion: 4,
+    maxActions: MultiplayerSafeExecutePolicy.MaxActionsPerDeployment);
+Check(
+    endTurnSession.TryBeginEndTurn(1, 7, 4, out string endTurnStartReason)
+        && endTurnStartReason == "end_turn_executing"
+        && endTurnSession.State == MultiplayerSafeExecutionState.EndTurnExecuting
+        && endTurnSession.CompleteEndTurn()
+        && endTurnSession.EndTurnConsumed
+        && !endTurnSession.TryBeginEndTurn(1, 7, 4, out string repeatEndTurnReason)
+        && repeatEndTurnReason == "end_turn_already_consumed",
+    "Safe EndTurn consumes its authorization exactly once.");
+
+MultiplayerSafeExecutionSession actionThenEndTurnSession = new(
+    startTurnNumber: 1,
+    routeGeneration: 7,
+    startWorldVersion: 4,
+    maxActions: MultiplayerSafeExecutePolicy.MaxActionsPerDeployment);
+Check(
+    actionThenEndTurnSession.TryBeginAction(0, "PlayCard:STRIKE:0:target=-", 1, 7, 4, out _)
+        && actionThenEndTurnSession.MarkAwaitingWorldUpdate()
+        && actionThenEndTurnSession.BeginRevalidation()
+        && actionThenEndTurnSession.AcceptAction(5, hasNextAction: false)
+        && actionThenEndTurnSession.TryBeginEndTurn(1, 7, 5, out _)
+        && actionThenEndTurnSession.CompleteEndTurn(),
+    "Safe EndTurn follows a completed local action sequence without reusing action authorization.");
+Check(
+    !actionThenEndTurnSession.TryBeginAction(
+        0,
+        "PlayCard:STALE:0:target=-",
+        2,
+        8,
+        6,
+        out string staleAfterEndTurnReason)
+        && staleAfterEndTurnReason == "session_state_Completed",
+    "The previous turn session cannot deploy after EndTurn.");
+
+MultiplayerSafeExecutionSession nextTurnSession = new(
+    startTurnNumber: 2,
+    routeGeneration: 8,
+    startWorldVersion: 6,
+    maxActions: MultiplayerSafeExecutePolicy.MaxActionsPerDeployment);
+Check(
+    nextTurnSession.TryBeginAction(
+        0,
+        "PlayCard:FRESH:0:target=-",
+        2,
+        8,
+        6,
+        out _),
+    "The next local turn requires a new session, turn identity, and route generation.");
+
+MultiplayerSafeExecutionSession repeatedRemoteChangeSession = new(
+    startTurnNumber: 1,
+    routeGeneration: 7,
+    startWorldVersion: 4,
+    maxActions: MultiplayerSafeExecutePolicy.MaxActionsPerDeployment);
+repeatedRemoteChangeSession.Abort("remote_or_unknown_change_1");
+repeatedRemoteChangeSession.Abort("remote_or_unknown_change_2");
+Check(
+    repeatedRemoteChangeSession.State == MultiplayerSafeExecutionState.Aborted
+        && !repeatedRemoteChangeSession.TryBeginAction(
+            0,
+            "PlayCard:STALE:0:target=-",
+            1,
+            7,
+            5,
+            out string repeatedRemoteReason)
+        && repeatedRemoteReason == "session_state_Aborted",
+    "Repeated remote changes never re-authorize an aborted deployment.");
 
 Console.WriteLine($"PASS: {checks} multiplayer safe-execute policy checks");

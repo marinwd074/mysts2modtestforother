@@ -1402,15 +1402,35 @@ internal sealed record SolverSnapshot(
     public GrowthValues GrowthRewards { get; init; }
 }
 
+internal sealed record MultiplayerContinuationExpectation(
+    string CombatIdentity,
+    string LocalNetId,
+    StateFingerprint RemotePublicFingerprint,
+    bool? MultiplayerScalingHooks,
+    string CardMultiplayerConstraint,
+    long SourceWorldVersion);
+
+internal sealed record MultiplayerContinuationValidation(
+    string CombatIdentity,
+    string LocalNetId,
+    StateFingerprint RemotePublicFingerprint,
+    bool? MultiplayerScalingHooks,
+    string CardMultiplayerConstraint,
+    long CurrentWorldVersion,
+    long MinimumWorldVersion);
+
 internal sealed record CachedContinuation(
     ContinuationStamp ExpectedState,
     int StartTurnNumber,
-    int ForecastOffset);
+    int ForecastOffset,
+    MultiplayerContinuationExpectation? MultiplayerExpectation = null);
 
 internal sealed class SolverResult
 {
     public bool WasRestoredFromCache { get; internal set; }
     public SolverResultScope ResultScope { get; internal set; } = SolverResultScope.SearchCompletion;
+    public MultiplayerSearchResultScope MultiplayerScope { get; internal set; }
+    public string RouteIdentity { get; internal set; } = Guid.NewGuid().ToString("N");
     public bool DeterministicBlockPotionInserted { get; internal set; }
     public bool SingleSessionSearch { get; internal set; }
 
@@ -1604,18 +1624,85 @@ internal sealed class SolverResult
 
     public bool TryCreateContinuation(
         ContinuationStamp actual,
+        int currentTurn,
         int currentHp,
         BattleDamageSnapshot battleDamage,
-        out SolverResult? continuation)
+        MultiplayerContinuationValidation? multiplayerValidation,
+        out SolverResult? continuation,
+        out string rejectionReason)
     {
-        CachedContinuation? cached = Continuations.FirstOrDefault(item => item.ExpectedState == actual);
+        rejectionReason = "none";
+        CachedContinuation? cached = Continuations.FirstOrDefault(
+            item => item.StartTurnNumber == currentTurn);
         if (cached == null)
         {
+            rejectionReason = "cached_turn_missing";
             continuation = null;
             return false;
         }
+        if (cached.ExpectedState != actual)
+        {
+            rejectionReason = "local_state_mismatch";
+            continuation = null;
+            return false;
+        }
+        if (multiplayerValidation != null && cached.MultiplayerExpectation is null)
+        {
+            rejectionReason = "missing_multiplayer_expectation";
+            continuation = null;
+            return false;
+        }
+        if (cached.MultiplayerExpectation is { } expected)
+        {
+            if (multiplayerValidation is not { } actualMultiplayer)
+            {
+                rejectionReason = "missing_multiplayer_validation";
+                continuation = null;
+                return false;
+            }
+            MultiplayerContinuationMatchInput matchInput = new(
+                expected.CombatIdentity,
+                actualMultiplayer.CombatIdentity,
+                expected.LocalNetId,
+                actualMultiplayer.LocalNetId,
+                expected.RemotePublicFingerprint,
+                actualMultiplayer.RemotePublicFingerprint,
+                expected.MultiplayerScalingHooks,
+                actualMultiplayer.MultiplayerScalingHooks,
+                expected.CardMultiplayerConstraint,
+                actualMultiplayer.CardMultiplayerConstraint,
+                expected.SourceWorldVersion,
+                actualMultiplayer.MinimumWorldVersion,
+                actualMultiplayer.CurrentWorldVersion);
+            string? mismatch =
+                MultiplayerLocalCrossTurnContracts.DescribeContinuationMismatch(matchInput);
+            if (mismatch is not null)
+            {
+                // ExpectedState == actual above is the hard local/enemy/RNG contract.
+                // ContinuationStamp.P also covers all public powers. Therefore a remaining
+                // remote_public_mismatch is auxiliary teammate HP/block drift; Carry Ranking
+                // v1 does not use that drift to change CarryPreference, so a full Beam rerun
+                // would throw away an otherwise exact local route without improving legality.
+                if (string.Equals(
+                        mismatch,
+                        "remote_public_mismatch",
+                        StringComparison.Ordinal)
+                    && MultiplayerLocalCrossTurnContracts.CanSoftReuseRemotePublicDelta(
+                        matchInput))
+                {
+                    rejectionReason = "remote_public_soft_reuse";
+                }
+                else
+                {
+                    rejectionReason = mismatch;
+                    continuation = null;
+                    return false;
+                }
+            }
+        }
         if (!BestNode.Actions.Any(action => action.Turn == cached.StartTurnNumber))
         {
+            rejectionReason = "continuation_action_missing";
             continuation = null;
             return false;
         }
@@ -1737,6 +1824,8 @@ internal sealed class SolverResult
             Continuations = Continuations.Where(item => item.StartTurnNumber > cached.StartTurnNumber).ToList(),
             WasReused = true,
             ReusedFromTurn = StartTurnNumber,
+            MultiplayerScope = MultiplayerScope,
+            RouteIdentity = RouteIdentity,
             RecalculatedAfterCompleteProjection = RecalculatedAfterCompleteProjection,
             PreviousProjectedBattleHpLost = PreviousProjectedBattleHpLost,
             RecalculationStateDifference = RecalculationStateDifference,

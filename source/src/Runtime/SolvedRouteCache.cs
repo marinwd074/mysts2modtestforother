@@ -16,6 +16,7 @@ internal sealed class SolvedRouteCache(string path)
 {
     private const int MaximumEntries = 64;
     public string Path { get; } = path;
+    internal static SolvedRouteCache Disabled { get; } = new(string.Empty);
 
     public static SolvedRouteCache Capture(
         CombatState state,
@@ -23,6 +24,8 @@ internal sealed class SolvedRouteCache(string path)
         SearchPolicySnapshot policy,
         BattleDamageSnapshot damage)
     {
+        if (!MultiplayerLocalCrossTurnContracts.CanUsePersistentRouteCache(policy.RoutePolicy))
+            return Disabled;
         PacketWriter writer = new() { WarnOnGrow = false };
         NetFullCombatState native = NetFullCombatState.FromRun(state.RunState, justFinishedAction: null);
         // These network sequencing counters change on reload without changing combat.
@@ -82,6 +85,8 @@ internal sealed class SolvedRouteCache(string path)
 
     public SolverResult? Read(IntentForecast currentForecast)
     {
+        if (string.IsNullOrEmpty(Path))
+            return null;
         if (!File.Exists(Path))
             return null;
         using FileStream stream = File.OpenRead(Path);
@@ -100,6 +105,8 @@ internal sealed class SolvedRouteCache(string path)
 
     public void StoreFirst(SolverResult result)
     {
+        if (string.IsNullOrEmpty(Path))
+            return;
         if (result.WasRestoredFromCache
             || result.ResultScope == SolverResultScope.CurrentTurnAdoption
             || File.Exists(Path))

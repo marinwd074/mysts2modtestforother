@@ -105,6 +105,7 @@ Lobby、wire 或战斗证据。
   包含多次尝试，可用 `-RequestId <deployment-request-id>` 选择完整 session；
   `test-mp2b-interference-validator.ps1` 当前覆盖 6 个合成用例，其中包含“两张牌后中止”；
   它与正常 bounded N-action 验证器不能互相替代。
+- `validate-carry-ranking-results.ps1` 只读验证 Carry Ranking R1/R2 runtime journal。R1 要求真实 root 至少出现一个 `all_player_threats>0` 的公开原版攻击威胁；R2 要求最终选中路线真实出现 `carryPreference>0`、`threatsRemoved>0` 且 `remoteRiskAfter<remoteRiskBefore`。某局没有形成正向 Carry 选择返回 `UNVERIFIED`，不误报实现失败；证据自相矛盾才返回 `FAIL`。`test-carry-ranking-validator.ps1` 覆盖 PASS/UNVERIFIED/FAIL 三类合成解析并接入 L1 CI；合成日志不能替代 Host/Client 实机证据。
 
 ### Snapshot 同步合同
 
@@ -262,7 +263,7 @@ MP-2C 使用上面的正式 `safe-execute` 启动方式，但一次用户点击�
 `PlayCard` 前缀，policy ceiling 为 6；每张牌都必须等待原生队列完成、稳定 `WorldVersion`
 并通过现有重验证，才允许下一张。用户只点击一次“执行本回合”，选择至少三张连续安全牌的
 回合；观察 UI 的 `正在执行 n/6`、费用/能量减少、手牌减少，以及完成后保持当前回合并重新
-计算最新路线。不得自动 EndTurn。
+计算最新路线。该段是 MP-2C 历史基线，不包含 Reactive Carry 的跨回合 Safe EndTurn。
 
 正常验证命令：
 
@@ -291,6 +292,51 @@ pwsh -NoLogo -NoProfile -File .\validate-mp2b-interference-results.ps1 `
 应返回 `MULTIPLAYER_MP-2C-remote-interference_PASS`，并证明中止后没有下一张原生动作且
 发生 fresh search。2026-09-20 的真实正常/干扰结果均已通过，摘要见
 `docs/multiplayer/evidence/mp2c-smoke-2026-09-20.json`。
+
+## Reactive Carry Foundation Smoke
+
+当前显式 `-MultiplayerMode safe-execute` 允许安全路线在最新边界通过原生
+`EndPlayerTurnAction` 结束本地回合。只有当前部署已完成、动作队列为空、WorldVersion
+稳定、没有待处理选择且 route/generation/本地玩家身份仍一致时才会消费一次 EndTurn
+授权；接受后旧 session、route 和 authorization 立即清除。下一本地回合必须重新
+Probe、capture、search、authorize。默认多人仍是 Probe，Potion、Choice、Replay、
+Instant、队友控制和旧跨回合路线复用仍关闭。
+
+本阶段的三轮实机 Smoke：
+
+- A：安全牌序列、原生 Safe EndTurn、多人推进、下一回合 Fresh Probe/Search。
+- B：EndTurn 后由观察 Client 做一次普通公开行动；用 `-RequestId` 选择完整 session，
+  验证公开变化出现在下一次 fresh search 前。
+- C：3 个不同 request/turn 的连续本地回合；观察 Client 只在 Solver 已结束回合后正常
+  行动，整份正式 journal 不得出现远端中止、旧授权复用或自定义网络 marker。
+
+验证命令：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-reactive-carry-results.ps1 `
+  -LogPath '<post-restart-client-combat-journal.jsonl>' `
+  -Smoke B -RequestId '<request-id>' `
+  -OutputPath '.\.local\multiplayer-lab\results\reactive-carry-summary.json'
+~~~
+
+Smoke A/B 在同一 journal 含有额外尝试时传 `-RequestId`；Smoke C 不传该参数并要求至少
+3 个 distinct request/turn。2026-09-20 A/B/C 均 PASS，摘要见
+[`reactive-carry-smoke-2026-09-20.json`](../../docs/multiplayer/evidence/reactive-carry-smoke-2026-09-20.json)。
+
+## Multiplayer Carry Ranking v1 R1/R2 Smoke
+
+R1/R2 使用显式 `advisor` 或 `safe-execute` 的 CombatSolver Client；默认 Probe 不运行 Carry Ranking。R1 只需要在普通原版怪物显示攻击 Intent 的本地搜索根中观察公开威胁分类；R2 需要该次搜索最终选中一条消灭至少一个已证明 `AllPlayers` 威胁的路线。无需让队友按预定路线出牌，也不读取队友手牌、能量、药水或私有遗物。
+
+验证命令：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-carry-ranking-results.ps1 `
+  -LogPath '<client-combat-journal.jsonl>' `
+  -Phase All `
+  -OutputPath '.\.local\multiplayer-lab\results\carry-ranking-r1-r2.json'
+~~~
+
+R1 已于 2026-09-20 的 `SLIMES_WEAK` Advisor fixture 实机 PASS。随后语义审计发现旧 R2 evaluator 会把未来 T2/T3 才发生的击杀提前记作当前公开威胁已移除；当前实现已改为只观察 `carryWindow=current_turn_pre_end`，因此 R2 的威胁击杀必须发生在当前本地回合、第一次 EndTurn 之前。R2 若为 UNVERIFIED，不要继续随机刷：必须构造完整 pre-carry 硬键相等的当前回合目标选择。最简单的 starter Ironclad fixture 是在没有 Strength/Vulnerable 等伤害修正时，把一个已识别的 `AllPlayers` 攻击怪准备到**恰好 6 HP**（当前 `Strike` 实际伤害），同时保留一个 HP>6 的 Unknown/非攻击敌人；Solver 手中有 `Strike` 后 fresh-search。这样 `Strike→威胁怪` 与 `Strike→另一怪` 都让总 `EnemyHp` 恰好减少 6，Carry 才有机会成为决定性 tie-break。若实际攻击伤害不是 6，则使用实时实际伤害值 D，并把威胁怪准备到恰好 D HP。最多再换一个普通多敌人 fixture；只有验证器返回 `MULTIPLAYER_CARRY_RANKING_All_PASS` 才登记 R2 PASS。
 
 退出码：0 为 PASS，1 为矛盾/无效证据，2 为缺失或仍为 UNVERIFIED。真实
 Host/Client 运行证据必须带可审查的日志位置；单进程模拟和合成 JSON 不可作为

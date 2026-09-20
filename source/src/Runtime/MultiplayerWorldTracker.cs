@@ -53,6 +53,15 @@ internal static class MultiplayerWorldTracker
     }
 
     /// <summary>
+    /// Checks whether the current version is settled without consuming a dirty
+    /// observation. A Safe EndTurn uses this after the last accepted local action
+    /// has already confirmed its observation.
+    /// </summary>
+    internal static bool IsStable(long worldVersion)
+        => worldVersion == _worldVersion
+           && (!_dirty || Environment.TickCount64 >= _stableAfter);
+
+    /// <summary>
     /// Consumes a stable dirty version only when it is still the current world
     /// version. A newer observation leaves the newer version dirty.
     /// </summary>

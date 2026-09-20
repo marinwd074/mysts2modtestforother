@@ -14,11 +14,12 @@ $results = [System.Collections.Generic.List[object]]::new()
 function Invoke-PowerShellContract {
     param(
         [Parameter(Mandatory)][string]$Name,
-        [Parameter(Mandatory)][string]$Script
+        [Parameter(Mandatory)][string]$Script,
+        [string[]]$Arguments = @()
     )
 
     Write-Output "RUN: $Name"
-    & pwsh -NoLogo -NoProfile -File (Join-Path $repositoryRoot $Script)
+    & pwsh -NoLogo -NoProfile -File (Join-Path $repositoryRoot $Script) @Arguments
     $exitCode = $LASTEXITCODE
     $results.Add([pscustomobject]@{ Name = $Name; Status = if ($exitCode -eq 0) { 'PASS' } else { 'FAIL' } })
 }
@@ -47,10 +48,15 @@ try {
     Invoke-DotnetContract 'PredictionStateStoreChecks' 'tools/PredictionStateStoreChecks/PredictionStateStoreChecks.csproj'
     Invoke-DotnetContract 'DiagnosticLogTests' 'tools/DiagnosticLogTests/DiagnosticLogTests.csproj'
     Invoke-DotnetContract 'MultiplayerSafeExecuteChecks' 'tools/MultiplayerSafeExecuteChecks/MultiplayerSafeExecuteChecks.csproj'
+    Invoke-DotnetContract 'MultiplayerCarryRankingChecks' 'tools/MultiplayerCarryRankingChecks/MultiplayerCarryRankingChecks.csproj'
+    Invoke-DotnetContract 'MultiplayerLocalCrossTurnChecks' 'tools/MultiplayerLocalCrossTurnChecks/MultiplayerLocalCrossTurnChecks.csproj'
     Invoke-DotnetContract 'MultiplayerRootCaptureChecks' 'tools/MultiplayerRootCaptureChecks/MultiplayerRootCaptureChecks.csproj'
     Invoke-PowerShellContract 'MultiplayerSafeExecuteEvidenceChecks' 'tools/multiplayer-lab/test-mp2a-validator.ps1'
     Invoke-PowerShellContract 'MultiplayerSafeExecuteMp2BEvidenceChecks' 'tools/multiplayer-lab/test-mp2b-validator.ps1'
     Invoke-PowerShellContract 'MultiplayerSafeExecuteMp2BInterferenceChecks' 'tools/multiplayer-lab/test-mp2b-interference-validator.ps1'
+    Invoke-PowerShellContract 'MultiplayerReactiveCarryEvidenceChecks' 'tools/multiplayer-lab/test-reactive-carry-validator.ps1'
+    Invoke-PowerShellContract 'MultiplayerCarryRankingEvidenceChecks' 'tools/multiplayer-lab/test-carry-ranking-validator.ps1'
+    Invoke-PowerShellContract 'MultiplayerSnapshotChecks' 'tools/test-headless-runtime.ps1' -Arguments @('-MultiplayerSnapshot')
 
     if ($SkipPython) {
         $results.Add([pscustomobject]@{ Name = 'BeamRankSortChecks'; Status = 'SKIP' })
