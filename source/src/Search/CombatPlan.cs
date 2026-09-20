@@ -1660,26 +1660,44 @@ internal sealed class SolverResult
                 continuation = null;
                 return false;
             }
-            string? mismatch = MultiplayerLocalCrossTurnContracts.DescribeContinuationMismatch(
-                new MultiplayerContinuationMatchInput(
-                    expected.CombatIdentity,
-                    actualMultiplayer.CombatIdentity,
-                    expected.LocalNetId,
-                    actualMultiplayer.LocalNetId,
-                    expected.RemotePublicFingerprint,
-                    actualMultiplayer.RemotePublicFingerprint,
-                    expected.MultiplayerScalingHooks,
-                    actualMultiplayer.MultiplayerScalingHooks,
-                    expected.CardMultiplayerConstraint,
-                    actualMultiplayer.CardMultiplayerConstraint,
-                    expected.SourceWorldVersion,
-                    actualMultiplayer.MinimumWorldVersion,
-                    actualMultiplayer.CurrentWorldVersion));
+            MultiplayerContinuationMatchInput matchInput = new(
+                expected.CombatIdentity,
+                actualMultiplayer.CombatIdentity,
+                expected.LocalNetId,
+                actualMultiplayer.LocalNetId,
+                expected.RemotePublicFingerprint,
+                actualMultiplayer.RemotePublicFingerprint,
+                expected.MultiplayerScalingHooks,
+                actualMultiplayer.MultiplayerScalingHooks,
+                expected.CardMultiplayerConstraint,
+                actualMultiplayer.CardMultiplayerConstraint,
+                expected.SourceWorldVersion,
+                actualMultiplayer.MinimumWorldVersion,
+                actualMultiplayer.CurrentWorldVersion);
+            string? mismatch =
+                MultiplayerLocalCrossTurnContracts.DescribeContinuationMismatch(matchInput);
             if (mismatch is not null)
             {
-                rejectionReason = mismatch;
-                continuation = null;
-                return false;
+                // ExpectedState == actual above is the hard local/enemy/RNG contract.
+                // ContinuationStamp.P also covers all public powers. Therefore a remaining
+                // remote_public_mismatch is auxiliary teammate HP/block drift; Carry Ranking
+                // v1 does not use that drift to change CarryPreference, so a full Beam rerun
+                // would throw away an otherwise exact local route without improving legality.
+                if (string.Equals(
+                        mismatch,
+                        "remote_public_mismatch",
+                        StringComparison.Ordinal)
+                    && MultiplayerLocalCrossTurnContracts.CanSoftReuseRemotePublicDelta(
+                        matchInput))
+                {
+                    rejectionReason = "remote_public_soft_reuse";
+                }
+                else
+                {
+                    rejectionReason = mismatch;
+                    continuation = null;
+                    return false;
+                }
             }
         }
         if (!BestNode.Actions.Any(action => action.Turn == cached.StartTurnNumber))

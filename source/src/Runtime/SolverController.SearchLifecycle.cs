@@ -254,9 +254,16 @@ internal static partial class SolverController
                         reused!,
                         UnexpectedReplanCount > 0,
                         _combat.ReviewedWorldlinesTotal));
+                bool softRemoteReuse = string.Equals(
+                    continuationRejectReason,
+                    "remote_public_soft_reuse",
+                    StringComparison.Ordinal);
+                string reuseValidation = softRemoteReuse
+                    ? "exact_local_state_remote_public_soft"
+                    : "exact_state_text";
                 Entry.Logger.Info(
                     $"[CombatSolver/Test] SEARCH_REUSED from_turn={reused!.ReusedFromTurn} " +
-                    $"turn={reused.StartTurnNumber} validation=exact_state_text " +
+                    $"turn={reused.StartTurnNumber} validation={reuseValidation} " +
                     $"remaining_turns={reused.SearchedTurns} route_identity={reused.RouteIdentity} " +
                     $"old_authorization_dead={capabilities.IsMultiplayer.ToString().ToLowerInvariant()} " +
                     $"new_authorization_pending={(deployWhenReady && capabilities.CanDeploySimpleLocalActions).ToString().ToLowerInvariant()}");
@@ -268,7 +275,7 @@ internal static partial class SolverController
                         $"source_world_version={expectedMultiplayer?.SourceWorldVersion.ToString() ?? "-"} " +
                         $"minimum_world_version={multiplayerValidation?.MinimumWorldVersion.ToString() ?? "-"} " +
                         $"actual_world_version={multiplayerValidation?.CurrentWorldVersion.ToString() ?? "-"} " +
-                        "local_state_exact=true reason=exact");
+                        $"local_state_exact=true reason={(softRemoteReuse ? "remote_public_soft_reuse" : "exact")}");
                 }
                 Entry.Logger.Info(SolverDiagnostics.DescribeResult(reused));
                 if (_combat.FullAutoEnabled)

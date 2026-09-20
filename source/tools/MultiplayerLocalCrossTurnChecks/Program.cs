@@ -88,6 +88,17 @@ Check(
     "A remote public delta or a non-advanced WorldVersion rejects future-route reuse with a precise reason.");
 
 Check(
+    MultiplayerLocalCrossTurnContracts.CanSoftReuseRemotePublicDelta(
+        Match(remote: Fingerprint(2)))
+        && !MultiplayerLocalCrossTurnContracts.CanSoftReuseRemotePublicDelta(
+            Match(remote: Fingerprint(1)))
+        && !MultiplayerLocalCrossTurnContracts.CanSoftReuseRemotePublicDelta(
+            Match(remote: Fingerprint(2), actualWorldVersion: 10))
+        && !MultiplayerLocalCrossTurnContracts.CanSoftReuseRemotePublicDelta(
+            Match(remote: Fingerprint(2), combatIdentity: "combat-b")),
+    "An exact local continuation may soft-reuse an auxiliary remote public delta, while world/combat identity gates remain strict.");
+
+Check(
     !MultiplayerLocalCrossTurnContracts.IsExactContinuation(Match(combatIdentity: "combat-without-target"))
         && MultiplayerLocalCrossTurnContracts.DescribeContinuationMismatch(
             Match(combatIdentity: "combat-without-target")) == "combat_identity_mismatch",
