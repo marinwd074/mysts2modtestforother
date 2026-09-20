@@ -99,6 +99,9 @@ internal static partial class SolverController
         _combat.LatestResult = null;
         _combat.LatestStamp = null;
         CancelDeployment();
+        IReadOnlyList<PlanAction> plannedTurnActions = result.BestNode.Actions
+            .Where(action => action.Turn == result.StartTurnNumber)
+            .ToArray();
         SolverDeploymentSession deployment = new()
         {
             State = state,
@@ -111,16 +114,14 @@ internal static partial class SolverController
             SafeExecutionSession = capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute
                 ? new MultiplayerSafeExecutionSession(
                     result.StartTurnNumber,
-                    _combat.SearchesStarted,
-                    capabilities.IsMultiplayer ? MultiplayerWorldTracker.WorldVersion : 0,
-                    MultiplayerSafeExecutePolicy.MaxActionsPerDeployment)
+                     _combat.SearchesStarted,
+                     capabilities.IsMultiplayer ? MultiplayerWorldTracker.WorldVersion : 0,
+                     MultiplayerSafeExecutePolicy.MaxActionsPerDeployment)
                 : null,
         };
         _deployment = deployment;
-        IReadOnlyList<PlanAction> plannedTurnActions = result.BestNode.Actions
-            .Where(action => action.Turn == result.StartTurnNumber)
-            .ToArray();
         int actionCount;
+        PlanAction? safeEndTurnAction = null;
         if (capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute)
         {
             IReadOnlyList<PlanAction> safeActions =
@@ -128,7 +129,8 @@ internal static partial class SolverController
                     state,
                     plannedTurnActions,
                     out SafeLocalActionDecision stop);
-            if (safeActions.Count == 0 && plannedTurnActions.Count > 0)
+            safeEndTurnAction = FindSafeEndTurnAction(plannedTurnActions, safeActions.Count);
+            if (safeActions.Count == 0 && plannedTurnActions.Count > 0 && safeEndTurnAction == null)
             {
                 _combat.MultiplayerSafeExecuteDeploymentRequested = false;
                 deployment.SafeExecutionSession?.Abort(stop.Reason);
@@ -144,8 +146,15 @@ internal static partial class SolverController
         {
             actionCount = plannedTurnActions.Count(action => action.IsExecutable);
         }
+        deployment.SafeEndTurnAction = safeEndTurnAction;
         SolverSettingsSnapshot deploymentSettings = SolverSettings.Capture();
-        SolverOverlay.ShowDeploying(host, result.StartTurnNumber, actionCount);
+        SolverOverlay.ShowDeploying(
+            host,
+            result.StartTurnNumber,
+            actionCount,
+            willEndTurn: safeEndTurnAction != null
+                || (capabilities.Kind != SolverSessionKind.MultiplayerSafeExecute
+                    && plannedTurnActions.Any(action => action.Kind == PlanActionKind.EndTurn)));
         Task deploymentTask = DeployCurrentTurn(
             host,
             state,
@@ -198,9 +207,12 @@ internal static partial class SolverController
         {
             actions = plannedTurnActions.Where(action => action.IsExecutable).ToList();
         }
-        PlanAction? plannedEndTurn = safeExecute || !capabilities.CanEndTurnAutomatically
-            ? null
-            : plannedTurnActions.FirstOrDefault(action => action.Kind == PlanActionKind.EndTurn);
+        PlanAction? plannedEndTurn = safeExecute
+            ? deployment.SafeEndTurnAction
+            : !capabilities.CanEndTurnAutomatically
+                ? null
+                : plannedTurnActions.FirstOrDefault(action => action.Kind == PlanActionKind.EndTurn);
+        MultiplayerSafeExecutionBoundary? lastAcceptedBoundary = null;
         FastModeType originalFastMode = SaveManager.Instance.PrefsSave.FastMode;
         SolverDeploymentFastMode allowedFastMode = capabilities.CanUseFastDeployment
             ? deploymentSettings.DeploymentFastMode
@@ -272,10 +284,12 @@ internal static partial class SolverController
                 }
                 if (safeExecute
                     && !safeSession!.TryBeginAction(
-                        actionIndex,
-                        DescribeSafeExecutionAction(action),
-                        beforeBoundary!.WorldVersion,
-                        out string sessionStartReason))
+                         actionIndex,
+                         DescribeSafeExecutionAction(action),
+                         turn,
+                         deployment.RouteGeneration,
+                         beforeBoundary!.WorldVersion,
+                         out string sessionStartReason))
                 {
                     AbortSafeExecution(host, deployment, turn, actionIndex, sessionStartReason);
                     return;
@@ -506,7 +520,14 @@ internal static partial class SolverController
                         AbortSafeExecution(host, deployment, turn, actionIndex, "session_accept_failed");
                         return;
                     }
-                    if (!hasNextAction || safeSession.State == MultiplayerSafeExecutionState.Completed)
+                    if (!MultiplayerWorldTracker.TryConfirmStable(afterBoundary.WorldVersion))
+                    {
+                        AbortSafeExecution(host, deployment, turn, actionIndex, "world_observation_pending");
+                        return;
+                    }
+                    lastAcceptedBoundary = afterBoundary;
+                    if ((!hasNextAction || safeSession.State == MultiplayerSafeExecutionState.Completed)
+                        && plannedEndTurn == null)
                     {
                         CompleteDeployment(deployment);
                         SolverOverlay.ShowDeploymentComplete(
@@ -554,6 +575,20 @@ internal static partial class SolverController
 
             if (safeExecute)
             {
+                if (plannedEndTurn != null)
+                {
+                    await ExecuteSafeEndTurnAsync(
+                        host,
+                        state,
+                        deployment,
+                        safeSession!,
+                        plannedEndTurn,
+                        turn,
+                        actions.Count,
+                        lastAcceptedBoundary,
+                        token);
+                    return;
+                }
                 if (CombatManager.Instance.IsInProgress && IsSamePlayableTurn(state, turn))
                 {
                     CompleteDeployment(deployment);
@@ -790,6 +825,145 @@ internal static partial class SolverController
             }
         }
     }
+
+    private static PlanAction? FindSafeEndTurnAction(
+        IReadOnlyList<PlanAction> plannedTurnActions,
+        int safeActionCount)
+    {
+        if (safeActionCount < 0 || safeActionCount >= plannedTurnActions.Count)
+            return null;
+
+        PlanAction candidate = plannedTurnActions[safeActionCount];
+        return candidate.Kind == PlanActionKind.EndTurn ? candidate : null;
+    }
+
+    private static async Task ExecuteSafeEndTurnAsync(
+        NGame host,
+        CombatState state,
+        SolverDeploymentSession deployment,
+        MultiplayerSafeExecutionSession safeSession,
+        PlanAction plannedEndTurn,
+        int turn,
+        int actionCount,
+        MultiplayerSafeExecutionBoundary? lastAcceptedBoundary,
+        CancellationToken token)
+    {
+        ActionExecutor actionExecutor = RunManager.Instance.ActionExecutor;
+        await actionExecutor.FinishedExecutingActions().WaitAsync(token);
+
+        lastAcceptedBoundary ??= CaptureSafeExecutionBoundaryAfterObservation(
+            state,
+            "safe_execute_pre_end_turn_baseline");
+        MultiplayerClientProbe.ObserveActionBoundary(state, "safe_execute_pre_end_turn");
+        MultiplayerSafeExecutionBoundary current =
+            MultiplayerClientProbe.CaptureSafeExecutionBoundary(state);
+        bool currentLifecycle = IsCurrentCombatLifecycle(
+            state,
+            deployment.CombatLifecycleGeneration);
+        bool actionQueueIdle = actionExecutor.CurrentlyRunningAction == null;
+        bool localIdentityStable = SafeExecutionBoundaryHasSameLocalTurn(
+            lastAcceptedBoundary,
+            current);
+        MultiplayerSafeEndTurnFacts facts = new(
+            CurrentCombatLifecycle: currentLifecycle,
+            LocalPlayableTurn: IsSamePlayableTurn(state, turn),
+            RouteGenerationCurrent: _combat.SearchesStarted == deployment.RouteGeneration,
+            RouteEndsWithEndTurn: plannedEndTurn.Kind == PlanActionKind.EndTurn,
+            ActionQueueIdle: actionQueueIdle,
+            NoPendingChoice: !PlayerTurnSetupCoordinator.IsManaging(state)
+                && !PlayerTurnSetupCoordinator.HasPendingPlannedChoice(state),
+            LocalTurnIdentityStable: localIdentityStable,
+            WorldVersionMatchesAccepted: current.WorldVersion == safeSession.LastAcceptedWorldVersion,
+            WorldVersionStable: MultiplayerWorldTracker.IsStable(current.WorldVersion),
+            NoPendingWorldObservation: !MultiplayerWorldTracker.IsDirty);
+        MultiplayerSafeEndTurnDecision decision =
+            MultiplayerSafeExecutePolicy.ValidateSafeEndTurn(facts);
+        string decisionReason = MultiplayerSafeExecutePolicy.SafeEndTurnReason(decision);
+        Entry.Logger.Info(
+            $"[CombatSolver/MultiplayerSafeExecute] MP2B_END_TURN_REVALIDATED " +
+            $"request_id={safeSession.RequestId} turn={turn} action_count={actionCount} " +
+            $"decision={decision} reason={decisionReason} " +
+            $"world_version={current.WorldVersion} " +
+            $"last_accepted_world_version={safeSession.LastAcceptedWorldVersion} " +
+            $"route_generation={deployment.RouteGeneration}");
+        if (decision != MultiplayerSafeEndTurnDecision.Safe)
+        {
+            AbortSafeExecution(host, deployment, turn, actionCount, decisionReason);
+            return;
+        }
+
+        if (!safeSession.TryBeginEndTurn(
+                turn,
+                deployment.RouteGeneration,
+                current.WorldVersion,
+                out string sessionReason))
+        {
+            AbortSafeExecution(host, deployment, turn, actionCount, sessionReason);
+            return;
+        }
+
+        SolverOverlay.ShowEndTurnDeploymentStep();
+        GameAction queuedAction = await EnqueueAndCaptureActionAsync(
+            candidate => candidate is EndPlayerTurnAction,
+            () =>
+            {
+                CombatManager.Instance.OnEndedTurnLocally();
+                RunManager.Instance.ActionQueueSynchronizer.RequestEnqueue(
+                    new EndPlayerTurnAction(LocalContext.GetMe(state)!, turn));
+            },
+            token);
+        Entry.Logger.Info(
+            $"[CombatSolver/MultiplayerSafeExecute] NATIVE_ACTION_CAPTURED " +
+            $"request_id={safeSession.RequestId} action_index={actionCount} " +
+            $"type={queuedAction.GetType().Name} turn={turn} card=- " +
+            $"local_net_id={LocalContext.GetMe(state)?.NetId} custom_network_api_used=false");
+        await queuedAction.CompletionTask.WaitAsync(token);
+        await actionExecutor.FinishedExecutingActions().WaitAsync(token);
+        if (!safeSession.CompleteEndTurn())
+        {
+            AbortSafeExecution(host, deployment, turn, actionCount, "end_turn_completion_failed");
+            return;
+        }
+
+        MultiplayerClientProbe.ObserveActionBoundary(state, "safe_execute_end_turn_complete");
+        long afterWorldVersion = MultiplayerWorldTracker.WorldVersion;
+        int nextTurn = LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0;
+        _combat.MultiplayerSafeExecuteDeploymentRequested = false;
+        _combat.ContinuationSource = null;
+        _combat.LatestResult = null;
+        _combat.LatestStamp = null;
+        _combat.LastSafeEndTurnRequestId = safeSession.RequestId;
+        _combat.LastSafeEndTurnNumber = turn;
+        InvalidateRenderedRouteAdoptionSeed();
+        CompleteDeployment(deployment);
+        SolverOverlay.ShowDeploymentComplete(host, turn, actionCount, endedTurn: true);
+        _combat.LastSolverDeployedTurn = turn;
+        Entry.Logger.Info(
+            $"[CombatSolver/MultiplayerSafeExecute] MP2B_SAFE_END_TURN_ACCEPTED " +
+            $"request_id={safeSession.RequestId} turn={turn} action_count={actionCount} " +
+            $"route_generation={deployment.RouteGeneration} " +
+            $"before_world_version={current.WorldVersion} after_world_version={afterWorldVersion} " +
+            $"next_local_turn={nextTurn} session_cleared=true authorization_cleared=true " +
+            "automatic_end_turn=true custom_network_api_used=false");
+    }
+
+    private static MultiplayerSafeExecutionBoundary CaptureSafeExecutionBoundaryAfterObservation(
+        CombatState state,
+        string reason)
+    {
+        MultiplayerClientProbe.ObserveActionBoundary(state, reason);
+        return MultiplayerClientProbe.CaptureSafeExecutionBoundary(state);
+    }
+
+    private static bool SafeExecutionBoundaryHasSameLocalTurn(
+        MultiplayerSafeExecutionBoundary before,
+        MultiplayerSafeExecutionBoundary after)
+        => string.Equals(before.LocalNetId, after.LocalNetId, StringComparison.Ordinal)
+           && before.RoundNumber == after.RoundNumber
+           && string.Equals(before.CurrentSide, after.CurrentSide, StringComparison.Ordinal)
+           && before.LocalTurn == after.LocalTurn
+           && string.Equals(before.LocalPhase, after.LocalPhase, StringComparison.Ordinal)
+           && before.LocalFingerprint == after.LocalFingerprint;
 
     private static async Task<MultiplayerSafeExecutionBoundary?>
         WaitForStableSafeExecutionWorldAsync(

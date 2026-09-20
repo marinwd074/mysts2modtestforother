@@ -262,7 +262,7 @@ MP-2C 使用上面的正式 `safe-execute` 启动方式，但一次用户点击�
 `PlayCard` 前缀，policy ceiling 为 6；每张牌都必须等待原生队列完成、稳定 `WorldVersion`
 并通过现有重验证，才允许下一张。用户只点击一次“执行本回合”，选择至少三张连续安全牌的
 回合；观察 UI 的 `正在执行 n/6`、费用/能量减少、手牌减少，以及完成后保持当前回合并重新
-计算最新路线。不得自动 EndTurn。
+计算最新路线。该段是 MP-2C 历史基线，不包含 Reactive Carry 的跨回合 Safe EndTurn。
 
 正常验证命令：
 
@@ -291,6 +291,36 @@ pwsh -NoLogo -NoProfile -File .\validate-mp2b-interference-results.ps1 `
 应返回 `MULTIPLAYER_MP-2C-remote-interference_PASS`，并证明中止后没有下一张原生动作且
 发生 fresh search。2026-09-20 的真实正常/干扰结果均已通过，摘要见
 `docs/multiplayer/evidence/mp2c-smoke-2026-09-20.json`。
+
+## Reactive Carry Foundation Smoke
+
+当前显式 `-MultiplayerMode safe-execute` 允许安全路线在最新边界通过原生
+`EndPlayerTurnAction` 结束本地回合。只有当前部署已完成、动作队列为空、WorldVersion
+稳定、没有待处理选择且 route/generation/本地玩家身份仍一致时才会消费一次 EndTurn
+授权；接受后旧 session、route 和 authorization 立即清除。下一本地回合必须重新
+Probe、capture、search、authorize。默认多人仍是 Probe，Potion、Choice、Replay、
+Instant、队友控制和旧跨回合路线复用仍关闭。
+
+本阶段的三轮实机 Smoke：
+
+- A：安全牌序列、原生 Safe EndTurn、多人推进、下一回合 Fresh Probe/Search。
+- B：EndTurn 后由观察 Client 做一次普通公开行动；用 `-RequestId` 选择完整 session，
+  验证公开变化出现在下一次 fresh search 前。
+- C：3 个不同 request/turn 的连续本地回合；观察 Client 只在 Solver 已结束回合后正常
+  行动，整份正式 journal 不得出现远端中止、旧授权复用或自定义网络 marker。
+
+验证命令：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-reactive-carry-results.ps1 `
+  -LogPath '<post-restart-client-combat-journal.jsonl>' `
+  -Smoke B -RequestId '<request-id>' `
+  -OutputPath '.\.local\multiplayer-lab\results\reactive-carry-summary.json'
+~~~
+
+Smoke A/B 在同一 journal 含有额外尝试时传 `-RequestId`；Smoke C 不传该参数并要求至少
+3 个 distinct request/turn。2026-09-20 A/B/C 均 PASS，摘要见
+[`reactive-carry-smoke-2026-09-20.json`](../../docs/multiplayer/evidence/reactive-carry-smoke-2026-09-20.json)。
 
 退出码：0 为 PASS，1 为矛盾/无效证据，2 为缺失或仍为 UNVERIFIED。真实
 Host/Client 运行证据必须带可审查的日志位置；单进程模拟和合成 JSON 不可作为

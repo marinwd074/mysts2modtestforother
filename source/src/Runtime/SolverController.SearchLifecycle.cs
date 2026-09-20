@@ -293,6 +293,23 @@ internal static partial class SolverController
             }
             _combat.SearchesStarted++;
             _combat.ReplanCounts[replanCause] = _combat.ReplanCounts.GetValueOrDefault(replanCause) + 1;
+            if (capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute
+                && reason == SearchReason.AutoTurnStart)
+            {
+                int? previousEndTurnRequestId = _combat.LastSafeEndTurnRequestId;
+                int? previousEndTurnNumber = _combat.LastSafeEndTurnNumber;
+                Entry.Logger.Info(
+                    $"[CombatSolver/MultiplayerSafeExecute] MP_REACTIVE_FRESH_SEARCH " +
+                    $"generation={generation} route_generation={_combat.SearchesStarted} " +
+                    $"world_version={search.WorldVersion} turn={search.StartTurnNumber} " +
+                    $"reason={reason} fresh_probe=true fresh_capture=true " +
+                    $"after_safe_end_turn={(previousEndTurnRequestId.HasValue).ToString().ToLowerInvariant()} " +
+                    $"previous_end_turn_request_id={previousEndTurnRequestId?.ToString() ?? "-"} " +
+                    $"previous_end_turn_turn={previousEndTurnNumber?.ToString() ?? "-"} " +
+                    "cross_turn_reuse=false");
+                _combat.LastSafeEndTurnRequestId = null;
+                _combat.LastSafeEndTurnNumber = null;
+            }
             if (replanCause == ReplanCause.ManualDivergence)
                 MarkManualControlObserved("continuation_divergence");
             setupStage = "display_names";

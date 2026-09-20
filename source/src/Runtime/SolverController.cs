@@ -1293,11 +1293,13 @@ internal static partial class SolverController
                             $"[CombatSolver/MultiplayerSafeExecute] {capabilityMarker} " +
                             $"enabled=true scope={capabilityScope} " +
                             $"max_actions={MultiplayerSafeExecutePolicy.MaxActionsPerDeployment} " +
-                            "automatic_end_turn=false custom_network_api=false");
+                            $"automatic_end_turn={capabilities.CanEndTurnAutomatically.ToString().ToLowerInvariant()} " +
+                            "custom_network_api=false");
                         Entry.Logger.Info(
                             $"[CombatSolver/MultiplayerSafeExecute] MP2B_CAPABILITY " +
                             $"enabled=true max_actions={MultiplayerSafeExecutePolicy.MaxActionsPerDeployment} " +
-                            "attribution=revalidation automatic_end_turn=false custom_network_api=false");
+                            $"attribution=revalidation automatic_end_turn={capabilities.CanEndTurnAutomatically.ToString().ToLowerInvariant()} " +
+                            "custom_network_api=false");
                     }
                     Entry.Logger.Info(
                         "[CombatSolver/MultiplayerProbe] CAPABILITY_BOUNDARY " +
@@ -1355,7 +1357,8 @@ internal static partial class SolverController
             SolverSessionCapabilities.Capture(state).Kind == SolverSessionKind.MultiplayerSafeExecute
             && safeExecutionState is MultiplayerSafeExecutionState.Executing
                 or MultiplayerSafeExecutionState.AwaitingWorldUpdate
-                or MultiplayerSafeExecutionState.Revalidating;
+                or MultiplayerSafeExecutionState.Revalidating
+                or MultiplayerSafeExecutionState.EndTurnExecuting;
         if (!preserveExpectedSafeDeployment)
         {
             if (safeExecutionState == MultiplayerSafeExecutionState.Authorized

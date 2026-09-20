@@ -1,6 +1,6 @@
 ---
 codex_task: REACTIVE-CARRY-FOUNDATION
-status: READY
+status: DONE
 priority: P0
 scope: multiplayer-runtime
 baseline: 4be1edba56f3e75ce393dcbfc091fb6a12d76f50
@@ -254,6 +254,25 @@ remote public change
 
 <!-- /CODEX:REAL_GAME -->
 
+## 2026-09-20 实机结果
+
+三轮代表性 Host/Client Smoke 已由 Codex 驱动进程、warm-up、Graceful stop、journal
+定位和 validator；用户只完成 Host/Join/Ready、战斗操作和观察 Client 的 GUI 行为。
+
+- Smoke A：`MULTIPLAYER_REACTIVE_CARRY_A_PASS`。`request_id=1` 在本地回合 1 完成
+  3 张安全牌，经 Safe EndTurn revalidation 后捕获原生 `EndPlayerTurnAction`，清除
+  session/authorization，并在下一回合完成 Fresh Probe + Fresh Search。
+- Smoke B：`MULTIPLAYER_REACTIVE_CARRY_B_PASS`。干净的 `request_id=2` 完成 2 张牌和
+  原生 EndTurn；EndTurn 后、下一次 fresh search 前观察到队友公开世界变化，随后以新
+  回合/新搜索继续。日志中的早期干扰尝试未纳入该 request 的验证范围。
+- Smoke C：`MULTIPLAYER_REACTIVE_CARRY_C_PASS`。`request_id=1/2/3` 对应本地
+  `turn=1/2/3`，连续完成 `3/3/2` 张牌、三次原生 EndTurn 和三次 fresh search；无
+  `MP2B_REMOTE_DELTA_ABORT`、旧授权复用或自定义网络路径。
+
+机器可读摘要见
+[`evidence/reactive-carry-smoke-2026-09-20.json`](evidence/reactive-carry-smoke-2026-09-20.json)。
+日志和 validator 输出继续隔离在 `.local/multiplayer-lab/`，不复制进正式游戏目录。
+
 ## Validation / Evidence
 
 Codex 自行选择最小充分的 validator 结构。
@@ -278,18 +297,18 @@ next local deployment
 
 ## Done When
 
-- [ ] Snapshot 专用 selftest 已在标准 contract suite 中持续运行。
-- [ ] Safe EndTurn 只有在最新可证明边界上执行。
-- [ ] EndTurn 后旧 session / route / authorization 不可跨回合复用。
-- [ ] 下一本地回合必经 Fresh Probe + Fresh Search。
-- [ ] 远端已发生的公开变化会使相关旧结果失效。
-- [ ] 自动合同覆盖 turn boundary / stale authorization / reactive replan。
-- [ ] Release / relevant static gates PASS。
-- [ ] Smoke A PASS。
-- [ ] Smoke B PASS。
-- [ ] Smoke C PASS（至少 3 个本地回合）。
-- [ ] 三轮实机均由 Codex 驱动进程、日志和 validator，用户只做 GUI。
-- [ ] 默认多人能力没有静默扩大到未验证的 Potion/Choice/Replay/teammate control/Instant。
+- [x] Snapshot 专用 selftest 已在标准 contract suite 中持续运行。
+- [x] Safe EndTurn 只有在最新可证明边界上执行。
+- [x] EndTurn 后旧 session / route / authorization 不可跨回合复用。
+- [x] 下一本地回合必经 Fresh Probe + Fresh Search。
+- [x] 远端已发生的公开变化会使相关旧结果失效。
+- [x] 自动合同覆盖 turn boundary / stale authorization / reactive replan。
+- [x] Release / relevant static gates PASS。
+- [x] Smoke A PASS。
+- [x] Smoke B PASS。
+- [x] Smoke C PASS（至少 3 个本地回合）。
+- [x] 三轮实机均由 Codex 驱动进程、日志和 validator，用户只做 GUI。
+- [x] 默认多人能力没有静默扩大到未验证的 Potion/Choice/Replay/teammate control/Instant。
 
 <!-- /CODEX:DONE_WHEN -->
 

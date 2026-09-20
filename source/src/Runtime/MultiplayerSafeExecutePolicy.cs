@@ -33,6 +33,7 @@ internal enum MultiplayerSafeExecutionState
     Executing,
     AwaitingWorldUpdate,
     Revalidating,
+    EndTurnExecuting,
     Completed,
     Aborted,
 }
@@ -58,6 +59,33 @@ internal readonly record struct MultiplayerSafeActionRevalidationFacts(
     bool WorldVersionAdvanced,
     bool WorldVersionStable,
     bool HasNextAction);
+
+internal readonly record struct MultiplayerSafeEndTurnFacts(
+    bool CurrentCombatLifecycle,
+    bool LocalPlayableTurn,
+    bool RouteGenerationCurrent,
+    bool RouteEndsWithEndTurn,
+    bool ActionQueueIdle,
+    bool NoPendingChoice,
+    bool LocalTurnIdentityStable,
+    bool WorldVersionMatchesAccepted,
+    bool WorldVersionStable,
+    bool NoPendingWorldObservation);
+
+internal enum MultiplayerSafeEndTurnDecision
+{
+    Safe,
+    CombatLifecycleChanged,
+    NotLocalPlayableTurn,
+    RouteGenerationChanged,
+    RouteBoundaryMissing,
+    ActionQueuePending,
+    ChoicePending,
+    LocalTurnIdentityChanged,
+    WorldVersionNotAccepted,
+    WorldUnstable,
+    WorldObservationPending,
+}
 
 /// <summary>
 /// Explicit lifecycle for one user-authorized multiplayer Safe Execute request.
@@ -97,16 +125,29 @@ internal sealed class MultiplayerSafeExecutionSession
     internal string? ExpectedActionToken { get; private set; }
     internal string? AbortReason { get; private set; }
     internal MultiplayerSafeExecutionState State { get; private set; }
+    internal bool EndTurnConsumed { get; private set; }
 
     internal bool TryBeginAction(
         int actionIndex,
         string actionToken,
+        int currentTurnNumber,
+        int currentRouteGeneration,
         long worldVersion,
         out string reason)
     {
         if (State != MultiplayerSafeExecutionState.Authorized)
         {
             reason = $"session_state_{State}";
+            return false;
+        }
+        if (currentTurnNumber != StartTurnNumber)
+        {
+            reason = "turn_identity_mismatch";
+            return false;
+        }
+        if (currentRouteGeneration != RouteGeneration)
+        {
+            reason = "route_generation_changed";
             return false;
         }
         if (CompletedActions >= MaxActions)
@@ -134,6 +175,56 @@ internal sealed class MultiplayerSafeExecutionSession
         ExpectedActionToken = actionToken;
         State = MultiplayerSafeExecutionState.Executing;
         reason = "executing";
+        return true;
+    }
+
+    internal bool TryBeginEndTurn(
+        int currentTurnNumber,
+        int currentRouteGeneration,
+        long worldVersion,
+        out string reason)
+    {
+        if (EndTurnConsumed)
+        {
+            reason = "end_turn_already_consumed";
+            return false;
+        }
+        if ((State == MultiplayerSafeExecutionState.Authorized && CompletedActions != 0)
+            || (State != MultiplayerSafeExecutionState.Authorized
+                && State != MultiplayerSafeExecutionState.Completed))
+        {
+            reason = $"session_state_{State}";
+            return false;
+        }
+        if (currentTurnNumber != StartTurnNumber)
+        {
+            reason = "turn_identity_mismatch";
+            return false;
+        }
+        if (currentRouteGeneration != RouteGeneration)
+        {
+            reason = "route_generation_changed";
+            return false;
+        }
+        if (worldVersion != LastAcceptedWorldVersion)
+        {
+            reason = "world_version_not_accepted";
+            return false;
+        }
+
+        EndTurnConsumed = true;
+        State = MultiplayerSafeExecutionState.EndTurnExecuting;
+        reason = "end_turn_executing";
+        return true;
+    }
+
+    internal bool CompleteEndTurn()
+    {
+        if (State != MultiplayerSafeExecutionState.EndTurnExecuting)
+            return false;
+
+        ExpectedActionToken = null;
+        State = MultiplayerSafeExecutionState.Completed;
         return true;
     }
 
@@ -328,6 +419,49 @@ internal static class MultiplayerSafeExecutePolicy
                 => "world_unstable",
             MultiplayerSafeActionRevalidationDecision.SafeToContinue
                 => "safe_to_continue",
+            _ => throw new ArgumentOutOfRangeException(nameof(decision), decision, null),
+        };
+
+    internal static MultiplayerSafeEndTurnDecision ValidateSafeEndTurn(
+        MultiplayerSafeEndTurnFacts facts)
+    {
+        if (!facts.CurrentCombatLifecycle)
+            return MultiplayerSafeEndTurnDecision.CombatLifecycleChanged;
+        if (!facts.LocalPlayableTurn)
+            return MultiplayerSafeEndTurnDecision.NotLocalPlayableTurn;
+        if (!facts.RouteGenerationCurrent)
+            return MultiplayerSafeEndTurnDecision.RouteGenerationChanged;
+        if (!facts.RouteEndsWithEndTurn)
+            return MultiplayerSafeEndTurnDecision.RouteBoundaryMissing;
+        if (!facts.ActionQueueIdle)
+            return MultiplayerSafeEndTurnDecision.ActionQueuePending;
+        if (!facts.NoPendingChoice)
+            return MultiplayerSafeEndTurnDecision.ChoicePending;
+        if (!facts.LocalTurnIdentityStable)
+            return MultiplayerSafeEndTurnDecision.LocalTurnIdentityChanged;
+        if (!facts.WorldVersionMatchesAccepted)
+            return MultiplayerSafeEndTurnDecision.WorldVersionNotAccepted;
+        if (!facts.WorldVersionStable)
+            return MultiplayerSafeEndTurnDecision.WorldUnstable;
+        if (!facts.NoPendingWorldObservation)
+            return MultiplayerSafeEndTurnDecision.WorldObservationPending;
+        return MultiplayerSafeEndTurnDecision.Safe;
+    }
+
+    internal static string SafeEndTurnReason(MultiplayerSafeEndTurnDecision decision)
+        => decision switch
+        {
+            MultiplayerSafeEndTurnDecision.Safe => "safe_end_turn",
+            MultiplayerSafeEndTurnDecision.CombatLifecycleChanged => "combat_lifecycle_changed",
+            MultiplayerSafeEndTurnDecision.NotLocalPlayableTurn => "not_local_playable_turn",
+            MultiplayerSafeEndTurnDecision.RouteGenerationChanged => "route_generation_changed",
+            MultiplayerSafeEndTurnDecision.RouteBoundaryMissing => "route_boundary_missing",
+            MultiplayerSafeEndTurnDecision.ActionQueuePending => "action_queue_pending",
+            MultiplayerSafeEndTurnDecision.ChoicePending => "choice_pending",
+            MultiplayerSafeEndTurnDecision.LocalTurnIdentityChanged => "local_turn_identity_changed",
+            MultiplayerSafeEndTurnDecision.WorldVersionNotAccepted => "world_version_not_accepted",
+            MultiplayerSafeEndTurnDecision.WorldUnstable => "world_unstable",
+            MultiplayerSafeEndTurnDecision.WorldObservationPending => "world_observation_pending",
             _ => throw new ArgumentOutOfRangeException(nameof(decision), decision, null),
         };
 

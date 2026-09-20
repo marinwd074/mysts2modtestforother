@@ -94,6 +94,9 @@ internal static class MultiplayerClientProbe
     private static int _observationSequence;
     private static int _combatSegmentId;
     private static int _nextCardIdentityId;
+    private static string? _lastTurnIdentity;
+    private static StateFingerprint? _lastReactivePublicFingerprint;
+    private static StateFingerprint? _lastLocalBoundaryFingerprint;
     private static AppendOnlyEventLog<MultiplayerProbeSnapshot>? _evidenceLog;
     private static bool _evidenceDisabled;
 
@@ -109,6 +112,9 @@ internal static class MultiplayerClientProbe
     {
         _lastSampleAt = 0;
         _observationSequence = 0;
+        _lastTurnIdentity = null;
+        _lastReactivePublicFingerprint = null;
+        _lastLocalBoundaryFingerprint = null;
         lock (CardIdentityGate)
         {
             CardIdentityIds.Clear();
@@ -122,6 +128,9 @@ internal static class MultiplayerClientProbe
         _combatSegmentId = checked(_combatSegmentId + 1);
         _lastSampleAt = 0;
         _observationSequence = 0;
+        _lastTurnIdentity = null;
+        _lastReactivePublicFingerprint = null;
+        _lastLocalBoundaryFingerprint = null;
         lock (CardIdentityGate)
         {
             CardIdentityIds.Clear();
@@ -191,11 +200,40 @@ internal static class MultiplayerClientProbe
 
         Player? localPlayer = LocalContext.GetMe(state);
         StateFingerprint compactFingerprint = CompactFingerprint(state, localPlayer);
+        StateFingerprint reactivePublicFingerprint = ReactivePublicFingerprint(state, localPlayer);
+        StateFingerprint localBoundaryFingerprint = LocalBoundaryFingerprint(localPlayer);
         bool changed = MultiplayerWorldTracker.ObserveSnapshot(compactFingerprint, reason);
         if (!changed)
             return false;
 
         _observationSequence++;
+        StateFingerprint? previousReactivePublicFingerprint = _lastReactivePublicFingerprint;
+        StateFingerprint? previousLocalBoundaryFingerprint = _lastLocalBoundaryFingerprint;
+        _lastReactivePublicFingerprint = reactivePublicFingerprint;
+        _lastLocalBoundaryFingerprint = localBoundaryFingerprint;
+        if (previousReactivePublicFingerprint is { } previousReactive
+            && previousLocalBoundaryFingerprint is { } previousLocal)
+        {
+            Entry.Logger.Info(
+                $"[CombatSolver/MultiplayerProbe] MP_REACTIVE_WORLD_DELTA " +
+                $"world_version={MultiplayerWorldTracker.WorldVersion} reason={reason} " +
+                $"remote_public_changed={(previousReactive != reactivePublicFingerprint).ToString().ToLowerInvariant()} " +
+                $"local_private_changed={(previousLocal != localBoundaryFingerprint).ToString().ToLowerInvariant()} " +
+                "fresh_probe=true");
+        }
+        string currentTurnIdentity = TurnIdentityToken(state, localPlayer);
+        string? previousTurnIdentity = _lastTurnIdentity;
+        _lastTurnIdentity = currentTurnIdentity;
+        if (previousTurnIdentity != null
+            && !string.Equals(previousTurnIdentity, currentTurnIdentity, StringComparison.Ordinal))
+        {
+            Entry.Logger.Info(
+                $"[CombatSolver/MultiplayerProbe] MP_REACTIVE_TURN_BOUNDARY " +
+                $"previous={previousTurnIdentity} current={currentTurnIdentity} " +
+                $"world_version={MultiplayerWorldTracker.WorldVersion} " +
+                $"observation_sequence={_observationSequence} " +
+                "fresh_probe=true fresh_capture=true");
+        }
         string? display = null;
         if (EvidenceEnabled)
         {
@@ -236,6 +274,19 @@ internal static class MultiplayerClientProbe
             : state.MultiplayerScalingModel.ShouldReceiveCombatHooks ? 1 : 0);
         fingerprint.Add(state.RunState.CardMultiplayerConstraint.ToString());
         foreach (string token in RemotePlayerTokens(state, localPlayer))
+            fingerprint.Add(token);
+        return fingerprint.Finish();
+    }
+
+    private static StateFingerprint ReactivePublicFingerprint(
+        CombatState state,
+        Player? localPlayer)
+    {
+        StateFingerprintBuilder fingerprint = new();
+        StateFingerprint remote = RemotePublicBoundaryFingerprint(state, localPlayer);
+        fingerprint.Add(remote.First);
+        fingerprint.Add(remote.Second);
+        foreach (string token in EnemyTokens(state))
             fingerprint.Add(token);
         return fingerprint.Finish();
     }
@@ -492,6 +543,15 @@ internal static class MultiplayerClientProbe
                $"multiplayer_scaling_hooks={state.MultiplayerScalingModel?.ShouldReceiveCombatHooks.ToString() ?? "-"} " +
                $"card_multiplayer_constraint={state.RunState.CardMultiplayerConstraint} " +
                $"rng={RngCounters(state)} enemies={enemies} remote_players={RemotePlayers(state, localPlayer)} {local}";
+    }
+
+    private static string TurnIdentityToken(CombatState state, Player? localPlayer)
+    {
+        PlayerCombatState? combat = localPlayer?.PlayerCombatState;
+        return $"round={state.RoundNumber};side={state.CurrentSide};" +
+               $"local_net_id={localPlayer?.NetId.ToString() ?? "-"};" +
+               $"turn={combat?.TurnNumber.ToString() ?? "-"};" +
+               $"phase={combat?.Phase.ToString() ?? "-"}";
     }
 
     private static string HardFingerprint(CombatState state, Player? localPlayer)

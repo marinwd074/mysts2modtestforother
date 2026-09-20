@@ -34,8 +34,8 @@
 
 5. **正式证据只取重启后的运行。**
    - 记录第二次 Client 启动返回的 `logPath`。
-    - MP-2A 历史基线只在这次运行里点击一次“执行本回合”；当前 MP-2C Smoke 使用
-      显式 `-MultiplayerMode safe-execute`，Lab 证据 Smoke 仍使用 `safe-execute-lab`。
+    - MP-2A/MP-2C 历史基线按各自入口运行；当前 Reactive Carry Smoke 使用显式
+      `-MultiplayerMode safe-execute`。
    - 等待动作完成、WorldVersion 更新和新 debounce search 后再停止。
 
 6. **停止默认 Graceful。**
@@ -125,10 +125,10 @@ pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
 ~~~
 
 用户手动完成 Host/Join/Ready 并进入本地玩家回合；确认点击前没有自动出牌后，只点击
-一次“执行本回合”。MP2B 一次 deployment 最多执行两张通过安全分类的本地普通牌，
-每张都必须通过原生 `PlayCardAction`。观察费用/能量减少、手牌减少和动作完成后的
-稳定世界；不会自动 EndTurn，完成后 UI 应回到“等待下一回合”或可重新计算的安全边界。
-保留 Client 日志直到动作后的新 debounce search 出现，再用默认 `Graceful` 停止。
+一次“执行本回合”。MP2B 历史基线一次 deployment 最多执行两张通过安全分类的本地
+普通牌，每张都必须通过原生 `PlayCardAction`；该历史 Smoke 不包含 Reactive Carry
+的自动 EndTurn。观察费用/能量减少、手牌减少和动作完成后的稳定世界；保留 Client
+日志直到动作后的新 debounce search 出现，再用默认 `Graceful` 停止。
 
 ~~~powershell
 pwsh -NoLogo -NoProfile -File .\validate-mp2b-results.ps1 `
@@ -160,10 +160,11 @@ pwsh -NoLogo -NoProfile -File .\validate-mp2b-interference-results.ps1 `
 
 ## MP-2C 当前回合 bounded N-action Smoke
 
-MP-2C 直接复用同一 SafeExecutionSession，把 MP-2B 的固定两动作改为有限上限
-`MaxActionsPerDeployment=6`。正常 Smoke 必须选择至少三张连续安全本地普通牌；用户只点击
-一次“执行本回合”，等待每张牌完成、费用/能量与手牌实际变化、UI 显示“正在执行 n/6”，
-最后显示保持当前回合并重新计算最新路线。它不会自动 EndTurn。
+MP-2C 历史 bounded N-action Smoke 直接复用同一 SafeExecutionSession，把 MP-2B 的固定
+两动作改为有限上限 `MaxActionsPerDeployment=6`。正常 Smoke 必须选择至少三张连续安全
+本地普通牌；用户只点击一次“执行本回合”，等待每张牌完成、费用/能量与手牌实际变化、
+UI 显示“正在执行 n/6”，最后保持当前回合并重新计算最新路线。该历史运行不自动
+EndTurn；跨回合能力见下面的 Reactive Carry。
 
 正常日志验证：
 
@@ -201,6 +202,37 @@ Codex 只负责启动/停止进程、读取 journal 和运行验证器。2026-09
 原生动作并启动 fresh search，返回 `MULTIPLAYER_MP-2C-remote-interference_PASS`。摘要见
 [`evidence/mp2c-smoke-2026-09-20.json`](evidence/mp2c-smoke-2026-09-20.json)。
 
+## Reactive Carry Foundation Smoke
+
+Reactive Carry 是当前显式 `safe-execute` 的跨回合边界。一次部署的安全本地牌序列若以
+当前路线的 `EndTurn` 结束，Runtime 只在最后一次边界复核成功后通过原生
+`EndPlayerTurnAction` 结束回合；随后旧 session、route generation 和 authorization
+全部失效。下一本地回合必须重新 Probe、capture、search、authorize，不从上一回合恢复。
+Potion、Choice、Replay、队友控制、Instant 和旧跨回合路线复用仍关闭。
+
+本阶段固定做三轮代表性真实 Smoke：
+
+- **A**：本地安全牌序列 → 原生 Safe EndTurn → 多人推进 → 下一回合 Fresh Probe/Search。
+- **B**：Safe EndTurn 后、下一本地决策前由观察 Client 做一次普通公开行动；验证公开
+  变化被观察且下一决策来自 fresh search。若同一 journal 有多次尝试，使用
+  `-RequestId` 只选择一个完整 session。
+- **C**：连续 3 个本地回合，每回合一次 Solver“执行本回合”；观察 Client 只在 Solver
+  已结束回合后正常行动，不在部署期间制造远端干扰。要求 3 个 distinct request/turn、
+  每回合 native EndTurn 和 fresh search，且没有 abort/stale/custom-network marker。
+
+通用验证器：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-reactive-carry-results.ps1 `
+  -LogPath '<post-restart-client-combat-journal.jsonl>' `
+  -Smoke A -RequestId '<request-id-when-journal-has-extra-attempts>' `
+  -OutputPath '.\.local\multiplayer-lab\results\reactive-carry-summary.json'
+~~~
+
+Smoke C 不传 `-RequestId`，以便验证整份正式 journal 没有中止或旧授权复用。退出码仍为
+0=PASS、1=FAIL、2=UNVERIFIED。2026-09-20 的 A/B/C 均已通过，机器摘要见
+[`evidence/reactive-carry-smoke-2026-09-20.json`](evidence/reactive-carry-smoke-2026-09-20.json)。
+
 ## MP-2A 收尾
 
 游戏进程停止仍由 Codex/Agent 负责，默认使用 Graceful；只有游戏窗口中的点击交给用户。
@@ -218,6 +250,7 @@ pwsh -NoLogo -NoProfile -File .\validate-mp2a-results.ps1 `
   -OutputPath '.\.local\multiplayer-lab\results\mp2a-summary.json'
 ~~~
 
-默认安装仍不因本手册自动进入 Safe Execute；Multiplayer Instant、Potion、Choice、
-自动 EndTurn、Full Auto、跨回合和队友目标也保持关闭。MP2B 当前已在上述受控范围内
-通过；后续扩大能力边界仍需独立计划和独立实机证据。
+默认安装仍不因本手册自动进入 Safe Execute；只有 Reactive Carry 的显式 Safe Execute
+会在最新安全路线边界上调用原生 EndTurn。Multiplayer Instant、Potion、Choice、Full
+Auto、旧跨回合路线和队友目标仍保持关闭。MP2B/MP2C 历史边界与 Reactive Carry 当前
+证据分别见上文；后续扩大能力边界仍需独立计划和独立实机证据。

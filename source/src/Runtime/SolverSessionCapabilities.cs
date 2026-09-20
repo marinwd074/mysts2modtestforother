@@ -228,7 +228,7 @@ internal static class SolverSessionCapabilities
         SolverSessionKind.MultiplayerSafeExecute,
         CanSearch: true,
         CanDeploySimpleLocalActions: true,
-        CanEndTurnAutomatically: false,
+        CanEndTurnAutomatically: true,
         CanDriveChoices: false,
         CanInterceptTurnSetup: false,
         CanCrossTurnSearch: false,

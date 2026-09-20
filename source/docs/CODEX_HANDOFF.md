@@ -9,7 +9,7 @@
 - MP-2B：两动作上限、显式 SafeExecutionSession、动作后稳定世界等待和本地/远端变化重验证已完成；历史 `MultiplayerSafeExecuteChecks` 39 项、正常/远端干扰验证器合成回归和 Release 构建已通过，真实正常两动作与远端干扰 Smoke 也已分别返回 PASS。摘要见 [`mp2b-smoke-2026-09-20.json`](multiplayer/evidence/mp2b-smoke-2026-09-20.json)。
 - MP-2C：已直接将 MP2B 泛化为当前回合 bounded N-action，policy ceiling 为 6；当前合同 40 项、正常/干扰验证器各 6 个合成用例和 Release 构建已通过。真实正常 Smoke 自动完成 3 张牌，真实远端干扰 Smoke 在完成 2 张后中止并重新搜索；摘要见 [`mp2c-smoke-2026-09-20.json`](multiplayer/evidence/mp2c-smoke-2026-09-20.json)。
 - Multiplayer Lab snapshot：已改为 schema 2 的持久 base-game snapshot + profile overlay 增量同步。marker 拆分 `baseGameId`、`ritsuArtifactId`、`combatSolverArtifactId`；游戏版本/底座变化、底座完整性失败或旧 schema 才全量重建，overlay 采用临时 managed tree + SHA-256 + rename/rollback。CombatSolver/RitsuLib 变化分别只更新各自 payload，HostVanilla 不因 CombatSolver 构建变化重建；`prepare-instances` 输出 `FULL_REBUILD` / `OVERLAY_UPDATED` / `REUSED` 和 `copiedFiles`。ownership、no-reparse-point、运行中禁止覆盖和正式证据隔离合同保持不变。
-- Multiplayer Instant、自动 EndTurn、Potion、Choice、Full Auto、跨回合和队友目标继续关闭；默认多人仍保持 Probe。
+- Multiplayer Instant、Potion、Choice、Replay、Full Auto、旧跨回合路线复用和队友目标继续关闭；Reactive Carry 仅在显式 Safe Execute 且最新安全路线边界成立时通过原生 EndTurn；默认多人仍保持 Probe。
 - 本轮没有为 MP2B 声明新的 GitHub Actions 结果；实机结论来自隔离 Multiplayer Lab 的 Host/Client journal 与对应验证器，不等同于 GitHub Actions 结果。
 
 ## 项目规则已放宽
@@ -36,7 +36,7 @@
 - 游戏内所有 GUI 操作交给用户完成；Codex/Agent 不代操作游戏 GUI。
 - 必须实机验证的任务由 Codex/Agent 驱动技术全流程：构建、prepare、启动/重启、warm-up、Graceful stop、日志定位、validator、证据分析和修复；不得把启动命令或进程管理反交给用户。
 - 到达 GUI 节点时只告诉用户当前要点击/观察的一步；用户反馈后 Codex/Agent 继续余下流程。
-- MP-2C 正常/干扰 Smoke 已收口，不为下一阶段重复同一证据。
+- MP-2C 正常/干扰 Smoke 已收口，不为 Reactive Carry 重复同一 deployment 中途干扰证据。
 
 ## 本轮 MP-2A 实机证据（2026-09-20）
 
@@ -59,6 +59,30 @@
 - 同一个 SafeExecutionSession 继续执行 `Authorized → Executing → AwaitingWorldUpdate → Revalidating → Authorized ... → Completed/Aborted`；每张牌等待原生队列完成、稳定 `WorldVersion`，然后做现有 post-action revalidation，未 reset/rebase world version。
 - `validate-mp2b-results.ps1 -MinActions 3 -MaxActions 6` 和干扰校验器 `-MinCompletedActions 2 -MaxActions 6` 已支持本阶段；合成回归均 PASS。两次实机结果均已通过对应验证器，证据为 `multiplayer/evidence/mp2c-smoke-2026-09-20.json`。
 
+## 本轮 Reactive Carry Foundation 状态（2026-09-20）
+
+- Safe Execute 现在在 bounded safe local prefix 后识别路线中的真实 EndTurn；只有
+  lifecycle、local turn、route/generation、queue、pending choice、local identity、
+  accepted WorldVersion、稳定 world 和 dirty observation 全部重新通过时，才通过原生
+  `EndPlayerTurnAction` 结束回合。
+- EndTurn 接受后旧 `SafeExecutionSession`、deployment authorization、route seed 和
+  continuation 清除；WorldVersion 不 reset/rebase。下一本地回合从 Fresh Probe/capture
+  和 Fresh Search 重新建立，旧 request/route 不得部署。
+- `MultiplayerSafeExecuteChecks` 已扩展到 53 项 PASS；新增 Reactive Carry validator
+  的合成自测 PASS；Release、target-version、refactor-boundary 和完整 contract suite
+  均 PASS。
+- Smoke A PASS：request 1 / local turn 1，3 张牌后 native EndTurn，下一回合 fresh
+  Probe/Search；日志中有后续尝试，摘要按 request scope 验证。
+- Smoke B PASS：request 2 / local turn 1，2 张牌后 native EndTurn；EndTurn 后下一次
+  fresh search 前观察到队友公开世界变化；同一日志中的早期干扰 request 被排除。
+- Smoke C PASS：requests 1/2/3 对应 local turns 1/2/3，完成 3/3/2 张牌、三次 native
+  EndTurn 和三次 fresh search；整份正式 journal 无 remote abort、旧授权复用或自定义
+  网络 marker。机器摘要见
+  [`reactive-carry-smoke-2026-09-20.json`](multiplayer/evidence/reactive-carry-smoke-2026-09-20.json)。
+
 ## 当前下一步
 
-当前目标见 [Reactive Carry Foundation](multiplayer/NEXT_REACTIVE_CARRY.md)：把 Safe EndTurn、Turn Boundary 和远端真实变化后的 reactive replan 合并成一个阶段，不再拆 3-action/4-action 等微阶段。Snapshot 专用自测已接入标准 contract suite；当前仍保持默认 Probe，Potion、Choice、Replay、队友控制、Instant 和跨回合旧路线复用关闭。完成标准包含 3 轮必要真实 Host/Client Smoke，技术全流程由 Codex/Agent 驱动，用户只做 GUI。
+[Reactive Carry Foundation](multiplayer/NEXT_REACTIVE_CARRY.md) 已完成；A/B/C 三轮真实
+Host/Client Smoke 和机器摘要已收口。默认仍保持 Probe，Potion、Choice、Replay、队友控制、
+Instant 和旧跨回合路线复用关闭。下一阶段如继续推进，应另立计划评估 uncertainty-aware
+ranking 或 teammate behavior model，不把未验证的预测或 Full Auto 混入当前 Safe Execute。

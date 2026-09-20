@@ -150,6 +150,8 @@ internal sealed class SolverCombatSession
     public int? LastSolverDeployedTurn { get; set; }
     public bool ManualControlObserved { get; set; }
     public bool ShowcaseMode { get; set; }
+    public int? LastSafeEndTurnRequestId { get; set; }
+    public int? LastSafeEndTurnNumber { get; set; }
     public CombatBugReportIssueLedger BugReportIssues { get; } = new();
 }
 
@@ -237,6 +239,7 @@ internal sealed class SolverDeploymentSession
     public int RouteGeneration { get; init; }
     public int CombatLifecycleGeneration { get; init; }
     public MultiplayerSafeExecutionSession? SafeExecutionSession { get; init; }
+    public PlanAction? SafeEndTurnAction { get; set; }
     public CancellationTokenSource Cancellation { get; } = new();
     public Task Operation { get; set; } = Task.CompletedTask;
     public int ReferenceReleaseState;
