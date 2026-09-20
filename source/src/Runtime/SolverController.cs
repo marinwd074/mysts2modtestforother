@@ -1285,9 +1285,12 @@ internal static partial class SolverController
                 {
                     if (capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute)
                     {
+                        bool labCapability = SolverSessionCapabilities.IsMultiplayerSafeExecuteLabOptedIn;
+                        string capabilityMarker = labCapability ? "LAB_CAPABILITY" : "FORMAL_CAPABILITY";
+                        string capabilityScope = labCapability ? "owned_client_instance" : "explicit_opt_in";
                         Entry.Logger.Info(
-                            "[CombatSolver/MultiplayerSafeExecute] LAB_CAPABILITY " +
-                            "enabled=true scope=owned_client_instance max_actions=1 " +
+                            $"[CombatSolver/MultiplayerSafeExecute] {capabilityMarker} " +
+                            $"enabled=true scope={capabilityScope} max_actions=1 " +
                             "automatic_end_turn=false custom_network_api=false");
                     }
                     Entry.Logger.Info(

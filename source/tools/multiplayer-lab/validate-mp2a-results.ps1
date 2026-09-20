@@ -57,11 +57,11 @@ function Format-Evidence {
     return '{0}:{1}: {2}' -f $Record.Path, $Record.LineNumber, $Record.Text
 }
 
-$lab = @($records | Where-Object Text -Match '\[CombatSolver/MultiplayerSafeExecute\] LAB_CAPABILITY .*enabled=true')
-if ($lab.Count -gt 0) {
-    Add-Check 'labCapability' PASS (Format-Evidence $lab[0])
+$capability = @($records | Where-Object Text -Match '\[CombatSolver/MultiplayerSafeExecute\] (?:LAB_CAPABILITY|FORMAL_CAPABILITY) .*enabled=true')
+if ($capability.Count -gt 0) {
+    Add-Check 'safeExecuteCapability' PASS (Format-Evidence $capability[0])
 } else {
-    Add-Check 'labCapability' UNVERIFIED '' 'No Lab-only Safe Execute capability marker was observed.'
+    Add-Check 'safeExecuteCapability' UNVERIFIED '' 'No Safe Execute capability marker was observed.'
 }
 
 $start = @($records | Where-Object Text -Match '\[CombatSolver/MultiplayerSafeExecute\] MP2A_DEPLOY_START .*action_count=1')

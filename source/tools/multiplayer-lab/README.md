@@ -1,10 +1,10 @@
 # Multiplayer Phase 0 lab
 
 本目录只提供可审计的 MP-0A/MP-0B 实机测试基础设施。它不会启动自动
-Lobby、修改能力表，也不会把 `UNVERIFIED` 推断为 `PASS`。Client 默认仍是
-Probe；显式传入 `-MultiplayerMode advisor` 只启用 Advisor 搜索。MP-2A
-另提供 **Lab-only** 的 `-MultiplayerMode safe-execute-lab`：它只允许由本目录
-创建的 `ClientCombatSolver` 私有实例获得单牌执行能力，不是正式玩家 opt-in。
+Lobby，也不会把 `UNVERIFIED` 推断为 `PASS`。Client 默认仍是 Probe；显式传入
+`-MultiplayerMode advisor` 只启用 Advisor 搜索。MP-2 提供显式的
+`-MultiplayerMode safe-execute` opt-in，以及只接受本目录创建的
+`ClientCombatSolver` 私有实例、Probe evidence 的 `safe-execute-lab` 证据模式。
 
 > 开始任何 Host/Client 实机运行前先读
 > [多人实机运行手册](../../docs/multiplayer/RUNBOOK.md)。其中记录了必须关闭
@@ -58,10 +58,9 @@ Lobby、wire 或战斗证据。
   加入、选角色和 Ready。`-ClientId` 只用于同一台机器上同时运行多个
   `FastMpJoin` 客户端；原生默认值是 `1000`，每个客户端必须使用不同的
   非零 ID。`-FastMpMode host|join` 只在显式指定时传给当前二进制。
-  `-MultiplayerMode probe|advisor|safe-execute-lab` 只设置当前 Lab 进程环境；
+  `-MultiplayerMode probe|advisor|safe-execute|safe-execute-lab` 只设置当前 Lab 进程环境；
   `safe-execute-lab` 额外要求 `ClientCombatSolver` ownership/profile marker
-  和 Lab Probe evidence 环境，普通桌面进程或手写 `safe-execute` token 不会
-  获得执行能力。
+  和 Lab Probe evidence 环境；`safe-execute` 是明确的正式能力 opt-in。
 - 当前 Modded Client 的固定流程是：**第一次启动只用于加载 Mod；完成 Mod 加载并
   重启一次游戏后，第二次启动才进入正式 Host/Join/Smoke**。第一次启动不得作为
   multiplayer runtime evidence。重新准备/重建 Client snapshot、替换 Mod payload，
@@ -87,7 +86,7 @@ Lobby、wire 或战斗证据。
   才报告 `PASS`，采样窗口不同报告 `UNVERIFIED`，且不会自动修改 Phase 0 矩阵。
   比较器优先使用 schema v2 的 `runSeed`/`combatSegmentId`，同时兼容旧的
   schema v1 归档。
-- `validate-mp2a-results.ps1` 校验单牌 Safe Execute 日志：Lab capability、
+- `validate-mp2a-results.ps1` 校验单牌 Safe Execute 日志：Safe Execute capability、
   恰好一个原生 `PlayCardAction`、无药水/自动 EndTurn、动作后 WorldVersion
   失效以及新的 debounce 搜索。它可输出机器 JSON 摘要；缺少真实运行证据返回
   `UNVERIFIED`，不会把静态合同推断成实机 PASS。
@@ -180,8 +179,9 @@ pwsh -NoLogo -NoProfile -File .\validate-mp2a-results.ps1 `
 ~~~
 
 只有验证器返回 `PASS`，并人工确认 Host/Client 身份与 UI 行为后，才可形成
-MP-2A 真实 Smoke 证据。该 Lab token 不得改名或推广为正式 `safe-execute`
-玩家入口。
+MP-2A 真实 Smoke 证据。`safe-execute-lab` 与正式 `safe-execute` 是两个独立
+token；正式 token 的一动作 Host/Client Smoke 已通过，证据摘要见
+`docs/multiplayer/evidence/mp2-safe-execute-formal-2026-09-20.json`。
 
 退出码：0 为 PASS，1 为矛盾/无效证据，2 为缺失或仍为 UNVERIFIED。真实
 Host/Client 运行证据必须带可审查的日志位置；单进程模拟和合成 JSON 不可作为

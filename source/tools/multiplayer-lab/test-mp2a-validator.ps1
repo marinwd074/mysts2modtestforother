@@ -33,6 +33,9 @@ try {
     )
     Invoke-Case -Name 'pass' -Lines $base -ExpectedExitCode 0
 
+    $formal = @($base | ForEach-Object { $_ -replace 'LAB_CAPABILITY', 'FORMAL_CAPABILITY' })
+    Invoke-Case -Name 'formal-capability-pass' -Lines $formal -ExpectedExitCode 0
+
     $duplicate = @($base[0..2] + $base[2] + $base[3..5])
     Invoke-Case -Name 'duplicate-action' -Lines $duplicate -ExpectedExitCode 1
 
@@ -45,7 +48,7 @@ try {
     )
     Invoke-Case -Name 'native-manual-end-turn-is-not-solver-evidence' -Lines $nativeManualEndTurn -ExpectedExitCode 0
 
-    Write-Output 'MP2A_VALIDATOR_OK checks=4'
+    Write-Output 'MP2A_VALIDATOR_OK checks=5'
 }
 finally {
     Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue

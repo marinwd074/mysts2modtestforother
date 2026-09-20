@@ -33,7 +33,8 @@
 
 5. **正式证据只取重启后的运行。**
    - 记录第二次 Client 启动返回的 `logPath`。
-   - MP-2A 只在这次运行里点击一次“执行本回合”。
+   - MP-2A 只在这次运行里点击一次“执行本回合”；正式 token Smoke 使用显式
+     `-MultiplayerMode safe-execute`，Lab 证据 Smoke 使用 `safe-execute-lab`。
    - 等待动作完成、WorldVersion 更新和新 debounce search 后再停止。
 
 6. **停止默认 Graceful。**
@@ -69,6 +70,25 @@ pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
 
 然后再进行 Host/Join/Ready 和对应 Smoke。
 
+## MP-2 Safe Execute 正式 token Smoke
+
+正式 token 只接受明确的 `COMBATSOLVER_MULTIPLAYER_MODE=safe-execute` opt-in，
+默认多人仍保持 Probe。为保持实例隔离，第一轮正式 token Smoke 仍使用本目录
+准备的 `HostVanilla + ClientCombatSolver`，但 Client 第二次启动改为：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
+  -InstanceRoot "$labRoot\runtime-mp-client-solver" `
+  -ClientId 1000 `
+  -ForceSteamOff `
+  -MultiplayerMode safe-execute
+~~~
+
+用户仍只做一次 Host/Join/Ready、进入战斗、确认未自动出牌后点击“执行本回合”。
+验证器会检查 `FORMAL_CAPABILITY`、单个原生 `PlayCardAction`、动作后
+`WorldVersion` 失效和新的 debounce search；本轮 Smoke 通过不打开 MP-2B、Potion、
+Choice、自动 EndTurn、Full Auto 或 Instant。
+
 ## MP-2A 收尾
 
 ~~~powershell
@@ -84,4 +104,5 @@ pwsh -NoLogo -NoProfile -File .\validate-mp2a-results.ps1 `
   -OutputPath '.\.local\multiplayer-lab\results\mp2a-summary.json'
 ~~~
 
-当前生产 Safe Execute、MP-2B、Multiplayer Instant 仍不因本手册而开放。
+默认安装仍不因本手册自动进入 Safe Execute；MP-2B、Multiplayer Instant、Potion、
+Choice、自动 EndTurn 和 Full Auto 也保持关闭。

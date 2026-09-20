@@ -35,6 +35,7 @@ internal static class MultiplayerSafeExecutePolicy
 {
     internal const int MaxActionsPerDeployment = 1;
     internal const string SingleActionLimitReason = "mp2a_single_action_limit";
+    internal const string FormalModeToken = "safe-execute";
     internal const string LabModeToken = "safe-execute-lab";
 
     internal static SafeLocalActionDecision ClassifyStructural(
@@ -87,4 +88,7 @@ internal static class MultiplayerSafeExecutePolicy
         => string.Equals(facts.ModeToken, LabModeToken, StringComparison.OrdinalIgnoreCase)
            && facts.ProbeEvidenceEnabled
            && facts.OwnedClientInstance;
+
+    internal static bool CanGrantFormalCapability(string? modeToken)
+        => string.Equals(modeToken, FormalModeToken, StringComparison.OrdinalIgnoreCase);
 }

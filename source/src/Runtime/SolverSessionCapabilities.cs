@@ -54,6 +54,7 @@ internal static class SolverSessionCapabilities
     internal const string MultiplayerModeEnvironmentVariable = "COMBATSOLVER_MULTIPLAYER_MODE";
     private const string ProbeEvidenceEnvironmentVariable = "COMBATSOLVER_MULTIPLAYER_PROBE_EVIDENCE";
     private const string MultiplayerInstanceEnvironmentVariable = "COMBATSOLVER_MULTIPLAYER_INSTANCE";
+    private static readonly Lazy<bool> SafeExecuteFormalOptedIn = new(EvaluateSafeExecuteFormalOptIn);
     private static readonly Lazy<bool> SafeExecuteLabAuthorized = new(EvaluateSafeExecuteLabAuthorization);
 
     public static bool IsNetworkMultiplayer
@@ -69,11 +70,17 @@ internal static class SolverSessionCapabilities
     internal static bool IsMultiplayerSafeExecuteLabOptedIn
         => SafeExecuteLabAuthorized.Value;
 
+    internal static bool IsMultiplayerSafeExecuteFormalOptedIn
+        => SafeExecuteFormalOptedIn.Value;
+
+    internal static bool IsMultiplayerSafeExecuteOptedIn
+        => IsMultiplayerSafeExecuteFormalOptedIn || IsMultiplayerSafeExecuteLabOptedIn;
+
     public static SolverSessionCapabilitySet Capture(CombatState? state)
     {
         if (IsNetworkMultiplayer || state != null && state.Players.Count != 1)
         {
-            if (IsMultiplayerSafeExecuteLabOptedIn)
+            if (IsMultiplayerSafeExecuteOptedIn)
                 return MultiplayerSafeExecute;
             return IsMultiplayerAdvisorOptedIn ? MultiplayerAdvisor : MultiplayerProbe;
         }
@@ -103,6 +110,10 @@ internal static class SolverSessionCapabilities
         return MultiplayerSafeExecutePolicy.CanGrantLabCapability(
             new(mode, probeEvidence, ownedClientInstance));
     }
+
+    private static bool EvaluateSafeExecuteFormalOptIn()
+        => MultiplayerSafeExecutePolicy.CanGrantFormalCapability(
+            Environment.GetEnvironmentVariable(MultiplayerModeEnvironmentVariable));
 
     private static bool IsOwnedCombatSolverClientInstance(string? instanceRoot)
     {

@@ -12,7 +12,7 @@ param(
     [ValidateSet('', 'host', 'join')]
     [string]$FastMpMode = '',
 
-    [ValidateSet('', 'probe', 'advisor', 'safe-execute-lab')]
+    [ValidateSet('', 'probe', 'advisor', 'safe-execute', 'safe-execute-lab')]
     [string]$MultiplayerMode = '',
 
     [UInt64]$ClientId = 0,
@@ -103,9 +103,9 @@ if ($Role -eq 'Client') {
     $startInfo.Environment['COMBATSOLVER_MULTIPLAYER_PROBE_EVIDENCE'] = '1'
 }
 if (-not [string]::IsNullOrWhiteSpace($MultiplayerMode)) {
-    if ($MultiplayerMode -eq 'safe-execute-lab' -and
+    if ($MultiplayerMode -in @('safe-execute', 'safe-execute-lab') -and
         ($Role -ne 'Client' -or $profileName -ne 'ClientCombatSolver')) {
-        throw 'safe-execute-lab is restricted to an owned ClientCombatSolver lab instance.'
+        throw 'safe-execute modes are restricted to an owned ClientCombatSolver lab instance.'
     }
     $startInfo.Environment['COMBATSOLVER_MULTIPLAYER_MODE'] = $MultiplayerMode
 }

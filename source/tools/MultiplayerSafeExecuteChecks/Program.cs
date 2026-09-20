@@ -62,7 +62,7 @@ Check(
     "The Lab capability requires the exact lab token plus evidence and an owned client instance.");
 Check(
     !MultiplayerSafeExecutePolicy.CanGrantLabCapability(new("safe-execute", true, true)),
-    "A production-style safe-execute token is not accepted.");
+    "The Lab gate rejects the formal safe-execute token.");
 Check(
     !MultiplayerSafeExecutePolicy.CanGrantLabCapability(
         new(MultiplayerSafeExecutePolicy.LabModeToken, false, true)),
@@ -71,5 +71,11 @@ Check(
     !MultiplayerSafeExecutePolicy.CanGrantLabCapability(
         new(MultiplayerSafeExecutePolicy.LabModeToken, true, false)),
     "The Lab capability is rejected outside an owned client instance.");
+Check(
+    MultiplayerSafeExecutePolicy.CanGrantFormalCapability(MultiplayerSafeExecutePolicy.FormalModeToken),
+    "The formal Safe Execute capability requires the exact explicit safe-execute token.");
+Check(
+    !MultiplayerSafeExecutePolicy.CanGrantFormalCapability(MultiplayerSafeExecutePolicy.LabModeToken),
+    "The Lab token is not silently promoted to the formal capability.");
 
 Console.WriteLine($"PASS: {checks} multiplayer safe-execute policy checks");

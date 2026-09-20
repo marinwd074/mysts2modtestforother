@@ -5,11 +5,11 @@
 ## Multiplayer Lab（当前）
 
 - MP-0 Core：`PASS`；MP-0 Hardening lifecycle：`PASS`（Host 退出并重建房间后 Client 重新加入、Ready、再次进入战斗）；当前受控 MP-0 矩阵为 `PASS`，Host 重建后的证据见 Phase 0 JSON。
-- MP-1 Advisor：`SMOKE_PASS`（受控范围；静态合同/Release 已通过，fresh `-bbfix` 真实复验 `SEARCH_COMPLETE=5`、`SEARCH_STALE=1`、`FAIL_CLOSED=0`、`SEARCH_FAILURE=0`，并有原生完成通知与路线回放），默认仍是 Probe，只有 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 显式 opt-in；MP-2 Safe Execute：`BLOCKED`。
+- MP-1 Advisor：`SMOKE_PASS`（受控范围；静态合同/Release 已通过，fresh `-bbfix` 真实复验 `SEARCH_COMPLETE=5`、`SEARCH_STALE=1`、`FAIL_CLOSED=0`、`SEARCH_FAILURE=0`，并有原生完成通知与路线回放），默认仍是 Probe，只有 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 显式 opt-in；MP-2 Safe Execute 显式一动作 Smoke `PASS`，默认仍是 Probe。
 - MP-1 Advisor Stability 追加受控轮（2026-09-20）：Host 重建房间后 Client 重新加入的无药水战斗记录 `SEARCH_START=4`、`SEARCH_COMPLETE=3`、`FAIL_CLOSED=0`、`SEARCH_FAILURE=0`，Probe `130/130` 全部只读且无动作入队/自定义网络包；随后非空远端药水复验记录 `FAIL_CLOSED=7`、`SEARCH_SETUP_FAILURE=7`，消耗药水后再完成 2 次搜索，整体稳定性仍为 `PARTIAL`。证据见 `multiplayer/evidence/mp1-advisor-potion-2026-09-20.json`。
 - Advisor root/phase 合同：`MultiplayerRootCaptureChecks` 15 项通过；精确 `BurningBlood` 可省略，未知远端遗物继续 fail closed，远端私有遗物清单仍不可访问，EndTurn/side-turn/block scaling 边界及单人 EndTurn 保持均有窄合同。
-- MP-2A 合同：`MultiplayerSafeExecuteChecks` 固定非 PlayCard、缺卡、本地所有权、自动 EndTurn、Replay、选择、多人专属卡、缺失/队友目标、单次最多 1 动作，以及 Lab-only capability token/evidence/owned-instance 三重门禁；正式玩家入口仍 blocked。
-- MP-2A 证据验证器：`test-mp2a-validator.ps1` 在 CI 中只验证 parser 的 PASS/FAIL/UNVERIFIED 判定；真实运行使用 `validate-mp2a-results.ps1`，必须看到 Lab capability、恰好一个原生 `PlayCardAction`、无药水/自动 EndTurn、动作后 WorldVersion 失效和新搜索，才能报告 Smoke PASS。
+- MP-2A 合同：`MultiplayerSafeExecuteChecks` 固定非 PlayCard、缺卡、本地所有权、自动 EndTurn、Replay、选择、多人专属卡、缺失/队友目标、单次最多 1 动作，以及正式精确 token 与 Lab-only capability token/evidence/owned-instance 三重门禁；正式 Host/Client Smoke `PASS`。
+- MP-2A 证据验证器：`test-mp2a-validator.ps1` 在 CI 中只验证 parser 的 PASS/FAIL/UNVERIFIED 判定；真实运行使用 `validate-mp2a-results.ps1`，必须看到 Safe Execute capability、恰好一个原生 `PlayCardAction`、无药水/自动 EndTurn、动作后 WorldVersion 失效和新搜索，才能报告 Smoke PASS。
 - MP-2A 日志落盘门禁：`DiagnosticLogTests` 已纳入 L1 合同套件，覆盖 journal 正常退出时排空后台写队列；Multiplayer Lab 默认优雅停止 owned 进程，`-Mode Force` 仅用于显式清理且不能作为完整 journal 证据。
 - Advisor 复验修正：side-turn relic 只读取已捕获参与者；原生多人 block scaling 仅在 enemy/powered-block 路径计算；EndTurn replay 只处理 `RootCapturedPlayers`，未知远端 turn 仍 fail closed。
 - Advisor Smoke 只读合同：首轮 Probe `51/51` 条为 `readOnly=true`，`actionsEnqueued=0`、`customNetworkPacketSent=0`；生命周期复验追加 Probe `257/257` 只读、无动作入队/自定义网络包。路线动作仅为模拟回放，未启用 Safe Execute、自动 EndTurn、药水或选择。
