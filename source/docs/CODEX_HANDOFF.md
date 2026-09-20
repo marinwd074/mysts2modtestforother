@@ -86,8 +86,9 @@
 - 搜索策略明确区分 `SinglePlayerFullRoute`、`MultiplayerCurrentTurnOnly` 和 `MultiplayerLocalCrossTurn`；默认 Probe 不搜索，单人策略不变，显式 Advisor/Safe Execute 才允许本地跨回合预测。
 - 路线可以包含本地 T1→T2→T3 预测，但 root 只捕获本地玩家私有状态；投影动作必须全部是本地动作，不建立队友手牌、牌序或行动模型。未知 root/Hook 语义继续 fail-closed。
 - `ContinuationStamp` 已纳入战斗身份、本地身份、回合/阶段、资源、手牌/牌堆/RNG、敌人状态；另以远端公开 fingerprint、多人 scaling/牌约束及单调 `WorldVersion` 做严格续接门禁。精确续接保留 `RouteIdentity`，旧 SafeExecution authorization 已结束，当前回合重新创建 authorization；不匹配执行 Fresh Probe + Fresh Root + Fresh Search。
+- 续接校验崩溃已在 `94c6497` 修复：T2 `AutoTurnStart` 在 `CaptureContinuationValidation` 前强制 fresh Probe，继续保持严格 `ActualWorldVersion > max(ExpectedSourceWorldVersion, MinimumWorldVersion)`；续接拒绝按 `cached_turn_missing`、`local_state_mismatch`、`world_version_not_advanced`、`remote_public_mismatch` 等原因记录，空 local diff 不再访问 `[0]`。
 - Safe EndTurn 后未来路线只作为不可执行 continuation 保留，部署筛选仍只取当前本地回合；多人不读写 `SolvedRouteCache`，避免持久缓存携带多人完整状态。
-- `MultiplayerLocalCrossTurnChecks` 8 项、Debug 构建（2 条既有 `CS9113`、0 errors）和 `git diff --check` 已通过。Smoke C 仍只是 Reactive Carry 证据；Smoke X1（精确续接复用）和 X2（队友公开变化后 fresh replan）尚未实机收口。
+- `MultiplayerLocalCrossTurnChecks` 8 项、Release 构建（0 errors、2 条既有 `CS9113`）和 `git diff --check` 已通过。修复后的 X1 客户端确认 63 个补丁加载成功；本轮实机已完成 T1→T2→T3，T2 自动执行 3 张牌并正常进入 T3，无 `SEARCH_SETUP_FAILURE`/越界异常。T2 校验记录 `local_state_exact=true reason=remote_public_mismatch` 后按合同 fresh search，T3 校验记录 `local_state_exact=false reason=local_state_mismatch`；因此本轮证明了拒绝并安全重规划，尚未证明精确 `SEARCH_REUSED`，X1 精确复用与独立 X2 仍未收口。
 
 ## 当前下一步
 
