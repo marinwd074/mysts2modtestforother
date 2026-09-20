@@ -29,6 +29,12 @@
 - Client snapshot 被重新准备/重建、Mod payload 被替换，或游戏再次要求重启时，重新做 warm-up。
 - 正式测试结束继续使用 Graceful stop；不要用强杀运行当完整 journal 证据。
 
+## 当前实验职责
+
+- 游戏内所有 GUI 操作交给用户完成；Codex/Agent 不再尝试代操作游戏。
+- Codex/Agent 负责把环境准备到可点击状态，并在用户每完成一步后读取日志/结果继续判断。
+- 后续 MP-2A Smoke 应按 RUNBOOK 分成短步骤交给用户执行，而不是由 Codex 长时间尝试自动完成。
+
 ## 当前下一步
 
 重新做一轮新的 MP-2A Host + Client Smoke：
