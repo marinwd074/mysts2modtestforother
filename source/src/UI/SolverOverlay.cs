@@ -994,7 +994,11 @@ internal static partial class SolverOverlay
         if (_summaryText != null)
         {
             _summaryText.Visible = true;
-            _summaryText.Text = SolverText.Format($"[color={SolverUiTokens.Palette.TextSecondaryHex}]按推荐顺序执行 [b]{actionCount}[/b] 张牌，完成后结束本回合。[/color]");
+            string completionText = SolverController.CurrentSessionCapabilities.CanEndTurnAutomatically
+                ? "完成后结束本回合。"
+                : "完成后保持当前回合。";
+            _summaryText.Text = SolverText.Format(
+                $"[color={SolverUiTokens.Palette.TextSecondaryHex}]按推荐顺序执行 [b]{actionCount}[/b] 张牌，{completionText}[/color]");
         }
         if (_progressText != null)
             _progressText.Visible = false;

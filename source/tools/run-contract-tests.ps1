@@ -45,6 +45,7 @@ try {
     Invoke-DotnetContract 'CardHookReceiverChecks' 'tools/CardHookReceiverChecks/CardHookReceiverChecks.csproj'
     Invoke-DotnetContract 'TurnPhaseMirrorChecks' 'tools/TurnPhaseMirrorChecks/TurnPhaseMirrorChecks.csproj'
     Invoke-DotnetContract 'PredictionStateStoreChecks' 'tools/PredictionStateStoreChecks/PredictionStateStoreChecks.csproj'
+    Invoke-DotnetContract 'DiagnosticLogTests' 'tools/DiagnosticLogTests/DiagnosticLogTests.csproj'
     Invoke-DotnetContract 'MultiplayerSafeExecuteChecks' 'tools/MultiplayerSafeExecuteChecks/MultiplayerSafeExecuteChecks.csproj'
     Invoke-DotnetContract 'MultiplayerRootCaptureChecks' 'tools/MultiplayerRootCaptureChecks/MultiplayerRootCaptureChecks.csproj'
     Invoke-PowerShellContract 'MultiplayerSafeExecuteEvidenceChecks' 'tools/multiplayer-lab/test-mp2a-validator.ps1'

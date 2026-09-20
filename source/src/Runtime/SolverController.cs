@@ -757,8 +757,7 @@ internal static partial class SolverController
             Entry.Logger.Info("[CombatSolver/Test] DEPLOY_REJECT reason=already_deploying");
             return;
         }
-        if (capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute)
-            _combat.MultiplayerSafeExecuteDeploymentRequested = true;
+        bool safeExecuteRequest = capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute;
         _combat.AutomaticSearchPaused = false;
         _combat.AutomaticSearchPausedTurn = null;
         if (PlayerTurnSetupCoordinator.TryContinuePlannedChoice(
@@ -766,6 +765,8 @@ internal static partial class SolverController
                 state,
                 deployAfterSetup: true))
         {
+            if (safeExecuteRequest)
+                _combat.MultiplayerSafeExecuteDeploymentRequested = true;
             Entry.Logger.Info("[CombatSolver/Test] DEPLOY_WAIT reason=turn_setup_choice");
             return;
         }
@@ -773,17 +774,23 @@ internal static partial class SolverController
         if (state.CurrentSide == CombatSide.Player
             && turnStartPlayer?.PlayerCombatState?.Phase == PlayerTurnPhase.Start)
         {
+            if (safeExecuteRequest)
+                _combat.MultiplayerSafeExecuteDeploymentRequested = true;
             _combat.DeployAfterTurnSetupTurn = turnStartPlayer.PlayerCombatState.TurnNumber;
             Entry.Logger.Info("[CombatSolver/Test] DEPLOY_WAIT reason=turn_setup_pending");
             return;
         }
         if (!CanSolve(state, out string rejection))
         {
+            if (safeExecuteRequest)
+                _combat.MultiplayerSafeExecuteDeploymentRequested = false;
             SolverOverlay.Show(host, $"[b]战斗路线求解器[/b]\n{rejection}");
             Entry.Logger.Info($"[CombatSolver/Test] DEPLOY_REJECT reason={rejection}");
             return;
         }
 
+        if (safeExecuteRequest)
+            _combat.MultiplayerSafeExecuteDeploymentRequested = true;
         LiveCombatStamp current = LiveCombatStamp.Capture(state);
         if (_combat.LatestResult != null && _combat.LatestStamp == current)
         {

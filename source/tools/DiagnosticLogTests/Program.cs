@@ -58,3 +58,16 @@ using (AppendOnlyEventLog<string> flushed = new(
 }
 Check(File.ReadAllText(flushPath).Contains("visible"), "flush-each append was not visible");
 Console.WriteLine("PASS explicit flush-each-append policy");
+
+
+string drainRoot = Path.Combine(Path.GetTempPath(), "CombatSolver-journal-drain-" + Guid.NewGuid().ToString("N"));
+CombatDiagnosticJournal draining = new(drainRoot);
+draining.BeginCombat("drain", "退出落盘", "seed");
+for (int i = 0; i < 2000; i++) draining.Write("info", $"drain-event-{i}");
+draining.Write("info", "drain-tail-marker");
+draining.Dispose();
+string[] drainedCombatLogs = Directory.GetFiles(drainRoot, "combat-drain.jsonl", SearchOption.AllDirectories);
+Check(drainedCombatLogs.Length == 1, "shutdown drain combat log missing");
+string drainedText = File.ReadAllText(drainedCombatLogs[0]);
+Check(drainedText.Contains("drain-tail-marker"), "shutdown drain lost queued journal tail");
+Console.WriteLine("PASS journal Dispose drains queued evidence before normal shutdown");

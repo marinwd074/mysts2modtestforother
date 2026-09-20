@@ -60,7 +60,9 @@ Lobby、wire 或战斗证据。
   未写入存档的当前战斗或房间状态不保证恢复。只有更换构建产物时才需要重新
   `prepare-instances.ps1`，同一产物的启动/停止不应删除实例根目录。
 - `stop-owned-instances.ps1` 只接受显式 instance root，并同时校验 marker、
-  PID、进程出生时间和 executable path；没有 ownership 证据就停止。
+  PID、进程出生时间和 executable path；没有 ownership 证据就停止。默认使用
+  `Graceful` 关闭窗口并等待游戏正常退出，让 CombatSolver journal 有机会排空；
+  只有清理卡死实例时才显式使用 `-Mode Force`，强制结束可能丢失缓冲证据。
 - `collect-results.ps1` 只复制指定实例的日志/Probe JSONL，并生成
   `UNVERIFIED` matrix 模板，模板包含 Vanilla、RitsuLib、CombatSolver 三组
   `profileResults`；Lab 进程会把诊断写入实例下的
@@ -151,7 +153,9 @@ pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
 
 进入战斗后等待路线稳定，只点击一次“执行本回合”。MP-2A Runtime 会只取第一张
 通过安全分类的本地普通牌；即使路线后面还有动作，也不会在同一 deployment 继续。
-完成后继续保留进程数秒，让 Probe 观察动作后的世界变化并触发新搜索，再停止实例。
+完成后继续保留进程数秒，让 Probe 观察动作后的世界变化并触发新搜索，再使用
+默认 `Graceful` 模式停止实例。若优雅退出失败，先保留现场排查；不要为了取得
+Smoke 证据直接改用强制结束，因为 `-Mode Force` 可能截断异步 journal。
 
 使用启动输出中的本轮 `logPath` 验证：
 

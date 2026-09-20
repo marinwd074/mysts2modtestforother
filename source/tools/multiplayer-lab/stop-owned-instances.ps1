@@ -4,7 +4,13 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidateNotNullOrEmpty()]
-    [string[]]$InstanceRoot
+    [string[]]$InstanceRoot,
+
+    [ValidateSet('Graceful', 'Force')]
+    [string]$Mode = 'Graceful',
+
+    [ValidateRange(1, 60)]
+    [int]$GracefulTimeoutSeconds = 10
 )
 
 Set-StrictMode -Version Latest
@@ -21,7 +27,7 @@ foreach ($root in $InstanceRoot) {
         $results.Add([ordered]@{
                 instanceRoot = $instance.Root
                 profile = [string]$instance.Profile.profile
-                result = Stop-MultiplayerOwnedProcess $instance
+                result = Stop-MultiplayerOwnedProcess $instance -Mode $Mode -GracefulTimeoutSeconds $GracefulTimeoutSeconds
                 runtimeEvidenceEligible = $false
             })
     }

@@ -165,24 +165,45 @@ function Remove-MultiplayerProcessMarker {
 }
 
 function Stop-MultiplayerOwnedProcess {
-    param([Parameter(Mandatory = $true)][System.Collections.IDictionary]$Instance)
+    param(
+        [Parameter(Mandatory = $true)][System.Collections.IDictionary]$Instance,
+
+        [ValidateSet('Graceful', 'Force')]
+        [string]$Mode = 'Graceful',
+
+        [ValidateRange(1, 60)]
+        [int]$GracefulTimeoutSeconds = 10
+    )
 
     $state = Get-MultiplayerOwnedProcessState $Instance
     if ($state.state -eq 'Absent') {
-        return [ordered]@{ state = 'Absent'; pid = $null }
+        return [ordered]@{ state = 'Absent'; pid = $null; mode = $Mode }
     }
     if ($state.state -eq 'Stale') {
         Remove-MultiplayerProcessMarker $Instance
-        return [ordered]@{ state = 'StaleRemoved'; pid = $state.marker.pid }
+        return [ordered]@{ state = 'StaleRemoved'; pid = $state.marker.pid; mode = $Mode }
     }
 
     $process = $state.process
-    Stop-Process -Id $process.Id -Force -ErrorAction Stop
-    [void]$process.WaitForExit(5000)
-    if (-not $process.HasExited) {
-        throw "Owned multiplayer process did not exit: PID $($process.Id)"
+    if ($Mode -eq 'Force') {
+        Stop-Process -Id $process.Id -Force -ErrorAction Stop
+        [void]$process.WaitForExit(5000)
+        if (-not $process.HasExited) {
+            throw "Owned multiplayer process did not exit after forced stop: PID $($process.Id)"
+        }
+        $stopState = 'StoppedForcefully'
     }
+    else {
+        if (-not $process.CloseMainWindow()) {
+            throw "Owned multiplayer process has no closable main window: PID $($process.Id). Close it in-game or rerun with -Mode Force; forced stop can lose buffered evidence."
+        }
+        if (-not $process.WaitForExit($GracefulTimeoutSeconds * 1000)) {
+            throw "Owned multiplayer process did not exit gracefully within $GracefulTimeoutSeconds seconds: PID $($process.Id). Preserve the process for inspection or rerun explicitly with -Mode Force."
+        }
+        $stopState = 'StoppedGracefully'
+    }
+
     $pidValue = $process.Id
     Remove-MultiplayerProcessMarker $Instance
-    return [ordered]@{ state = 'Stopped'; pid = $pidValue }
+    return [ordered]@{ state = $stopState; pid = $pidValue; mode = $Mode }
 }
