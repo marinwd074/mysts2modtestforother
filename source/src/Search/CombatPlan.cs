@@ -1624,47 +1624,67 @@ internal sealed class SolverResult
 
     public bool TryCreateContinuation(
         ContinuationStamp actual,
+        int currentTurn,
         int currentHp,
         BattleDamageSnapshot battleDamage,
         MultiplayerContinuationValidation? multiplayerValidation,
-        out SolverResult? continuation)
+        out SolverResult? continuation,
+        out string rejectionReason)
     {
-        CachedContinuation? cached = Continuations.FirstOrDefault(item => item.ExpectedState == actual);
+        rejectionReason = "none";
+        CachedContinuation? cached = Continuations.FirstOrDefault(
+            item => item.StartTurnNumber == currentTurn);
         if (cached == null)
         {
+            rejectionReason = "cached_turn_missing";
+            continuation = null;
+            return false;
+        }
+        if (cached.ExpectedState != actual)
+        {
+            rejectionReason = "local_state_mismatch";
             continuation = null;
             return false;
         }
         if (multiplayerValidation != null && cached.MultiplayerExpectation is null)
         {
+            rejectionReason = "missing_multiplayer_expectation";
             continuation = null;
             return false;
         }
         if (cached.MultiplayerExpectation is { } expected)
         {
-            if (multiplayerValidation is not { } actualMultiplayer
-                || !MultiplayerLocalCrossTurnContracts.IsExactContinuation(
-                    new MultiplayerContinuationMatchInput(
-                        expected.CombatIdentity,
-                        actualMultiplayer.CombatIdentity,
-                        expected.LocalNetId,
-                        actualMultiplayer.LocalNetId,
-                        expected.RemotePublicFingerprint,
-                        actualMultiplayer.RemotePublicFingerprint,
-                        expected.MultiplayerScalingHooks,
-                        actualMultiplayer.MultiplayerScalingHooks,
-                        expected.CardMultiplayerConstraint,
-                        actualMultiplayer.CardMultiplayerConstraint,
-                        expected.SourceWorldVersion,
-                        actualMultiplayer.MinimumWorldVersion,
-                        actualMultiplayer.CurrentWorldVersion)))
+            if (multiplayerValidation is not { } actualMultiplayer)
             {
+                rejectionReason = "missing_multiplayer_validation";
+                continuation = null;
+                return false;
+            }
+            string? mismatch = MultiplayerLocalCrossTurnContracts.DescribeContinuationMismatch(
+                new MultiplayerContinuationMatchInput(
+                    expected.CombatIdentity,
+                    actualMultiplayer.CombatIdentity,
+                    expected.LocalNetId,
+                    actualMultiplayer.LocalNetId,
+                    expected.RemotePublicFingerprint,
+                    actualMultiplayer.RemotePublicFingerprint,
+                    expected.MultiplayerScalingHooks,
+                    actualMultiplayer.MultiplayerScalingHooks,
+                    expected.CardMultiplayerConstraint,
+                    actualMultiplayer.CardMultiplayerConstraint,
+                    expected.SourceWorldVersion,
+                    actualMultiplayer.MinimumWorldVersion,
+                    actualMultiplayer.CurrentWorldVersion));
+            if (mismatch is not null)
+            {
+                rejectionReason = mismatch;
                 continuation = null;
                 return false;
             }
         }
         if (!BestNode.Actions.Any(action => action.Turn == cached.StartTurnNumber))
         {
+            rejectionReason = "continuation_action_missing";
             continuation = null;
             return false;
         }

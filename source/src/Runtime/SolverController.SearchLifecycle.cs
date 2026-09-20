@@ -175,19 +175,56 @@ internal static partial class SolverController
                 && _combat.ContinuationSource != null
                 ? ContinuationStamp.CaptureLive(state)
                 : null;
+            SolverResult? continuationSource = continuationStamp == null
+                ? null
+                : _combat.ContinuationSource;
+            int? continuationTurn = continuationStamp == null
+                ? null
+                : LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber
+                    ?? throw new InvalidOperationException("续接校验时找不到本地回合。");
+            bool freshProbeChanged = false;
+            if (continuationStamp != null && capabilities.IsMultiplayer)
+            {
+                freshProbeChanged = MultiplayerClientProbe.ObserveActionBoundary(
+                    state,
+                    "continuation_validation");
+                Entry.Logger.Info(
+                    $"[CombatSolver/MultiplayerProbe] MP_LOCAL_CROSS_TURN_FRESH_PROBE " +
+                    $"reason=continuation_validation changed={freshProbeChanged.ToString().ToLowerInvariant()} " +
+                    $"world_version={MultiplayerWorldTracker.WorldVersion} fresh_probe=true");
+            }
             MultiplayerContinuationValidation? multiplayerValidation = continuationStamp != null
                 && capabilities.IsMultiplayer
                     ? MultiplayerClientProbe.CaptureContinuationValidation(
                         state,
                         _combat.LastSafeEndTurnWorldVersion ?? 0)
                     : null;
+            CachedContinuation? expectedContinuation = continuationTurn is { } validationTurn
+                ? continuationSource?.Continuations
+                    .FirstOrDefault(item => item.StartTurnNumber == validationTurn)
+                : null;
+            MultiplayerContinuationExpectation? expectedMultiplayer =
+                expectedContinuation?.MultiplayerExpectation;
+            string continuationRejectReason = "none";
+            if (continuationStamp != null && capabilities.IsMultiplayer)
+            {
+                Entry.Logger.Info(
+                    $"[CombatSolver/Test] MP_LOCAL_XTURN_CONTINUATION_VALIDATE " +
+                    $"turn={continuationTurn} route_identity={_combat.ContinuationSource?.RouteIdentity ?? "-"} " +
+                    $"source_world_version={expectedMultiplayer?.SourceWorldVersion.ToString() ?? "-"} " +
+                    $"minimum_world_version={multiplayerValidation?.MinimumWorldVersion.ToString() ?? "-"} " +
+                    $"actual_world_version={multiplayerValidation?.CurrentWorldVersion.ToString() ?? "-"} " +
+                    $"fresh_probe_changed={freshProbeChanged.ToString().ToLowerInvariant()}");
+            }
             if (continuationStamp != null
-                && _combat.ContinuationSource!.TryCreateContinuation(
+                && continuationSource!.TryCreateContinuation(
                     continuationStamp,
+                    continuationTurn!.Value,
                     LocalContext.GetMe(state)!.Creature.CurrentHp,
                     battleDamage,
                     multiplayerValidation,
-                    out SolverResult? reused))
+                    out SolverResult? reused,
+                    out continuationRejectReason))
             {
                 CancelSearch();
                 _combat.State = state;
@@ -223,6 +260,16 @@ internal static partial class SolverController
                     $"remaining_turns={reused.SearchedTurns} route_identity={reused.RouteIdentity} " +
                     $"old_authorization_dead={capabilities.IsMultiplayer.ToString().ToLowerInvariant()} " +
                     $"new_authorization_pending={(deployWhenReady && capabilities.CanDeploySimpleLocalActions).ToString().ToLowerInvariant()}");
+                if (capabilities.IsMultiplayer)
+                {
+                    Entry.Logger.Info(
+                        $"[CombatSolver/Test] MP_LOCAL_XTURN_CONTINUATION_REUSED " +
+                        $"turn={reused.StartTurnNumber} route_identity={reused.RouteIdentity} " +
+                        $"source_world_version={expectedMultiplayer?.SourceWorldVersion.ToString() ?? "-"} " +
+                        $"minimum_world_version={multiplayerValidation?.MinimumWorldVersion.ToString() ?? "-"} " +
+                        $"actual_world_version={multiplayerValidation?.CurrentWorldVersion.ToString() ?? "-"} " +
+                        "local_state_exact=true reason=exact");
+                }
                 Entry.Logger.Info(SolverDiagnostics.DescribeResult(reused));
                 if (_combat.FullAutoEnabled)
                     StartFullAutoDeployment(host, state, reused);
@@ -234,13 +281,19 @@ internal static partial class SolverController
             if (continuationStamp != null)
             {
                 _combat.PendingCompleteProjectionBaseline = null;
-                int currentTurn = LocalContext.GetMe(state)!.PlayerCombatState!.TurnNumber;
-                CachedContinuation? expected = _combat.ContinuationSource!.Continuations
-                    .FirstOrDefault(item => item.StartTurnNumber == currentTurn);
+                SolverResult source = continuationSource
+                    ?? throw new InvalidOperationException("续接校验源路线已丢失。");
+                int currentTurn = continuationTurn!.Value;
+                CachedContinuation? expected = expectedContinuation;
                 _combat.LastContinuationDifferences = expected == null
                     ? ["field=continuation expected={cached_turn_missing} actual={live_turn_present}"]
                     : expected.ExpectedState.DescribeDifferences(continuationStamp);
-                string difference = _combat.LastContinuationDifferences[0];
+                bool localStateExact = expected != null
+                    && _combat.LastContinuationDifferences.Count == 0;
+                string difference = _combat.LastContinuationDifferences.FirstOrDefault()
+                    ?? (expected == null
+                        ? "field=continuation expected={cached_turn_missing} actual={live_turn_present}"
+                        : $"field=multiplayer_validation reason={continuationRejectReason}");
                 bool followedBySolver = _combat.LastSolverDeployedTurn == currentTurn - 1;
                 replanCause = !followedBySolver
                     ? ReplanCause.ManualDivergence
@@ -250,24 +303,27 @@ internal static partial class SolverController
                 if (replanCause == ReplanCause.ManualDivergence)
                 {
                     _combat.PendingManualProjectionBaseline = new ManualProjectionBaseline(
-                        _combat.ContinuationSource.StartTurnNumber,
-                        _combat.ContinuationSource.ProjectedBattleHpLost,
+                        source.StartTurnNumber,
+                        source.ProjectedBattleHpLost,
                         difference,
                         CombatBugReportExporter.LastCompletedSearchRootId);
                 }
                 if (followedBySolver
-                    && _combat.ContinuationSource.BoundaryReason == SearchBoundaryReason.None
-                    && _combat.ContinuationSource.CombatEndedTurn.HasValue)
+                    && source.BoundaryReason == SearchBoundaryReason.None
+                    && source.CombatEndedTurn.HasValue)
                 {
                     _combat.PendingCompleteProjectionBaseline = new CompleteProjectionBaseline(
-                        _combat.ContinuationSource.StartTurnNumber,
-                        _combat.ContinuationSource.ProjectedBattleHpLost,
+                        source.StartTurnNumber,
+                        source.ProjectedBattleHpLost,
                         difference);
                 }
                 Entry.Logger.Info(
                     $"[CombatSolver/Test] SEARCH_REUSE_MISS turn={currentTurn} " +
-                    $"reason={CauseToken(replanCause)} cached_turns={_combat.ContinuationSource.Continuations.Count} " +
-                    $"previous_boundary={_combat.ContinuationSource.BoundaryReason} diff_count={_combat.LastContinuationDifferences.Count} {difference}");
+                    $"reason={CauseToken(replanCause)} cached_turns={source.Continuations.Count} " +
+                    $"previous_boundary={source.BoundaryReason} " +
+                    $"continuation_reject_reason={continuationRejectReason} " +
+                    $"local_state_exact={localStateExact.ToString().ToLowerInvariant()} " +
+                    $"diff_count={_combat.LastContinuationDifferences.Count} {difference}");
                 if (_combat.LastContinuationDifferences.Count > 0)
                 {
                     for (int index = 0; index < _combat.LastContinuationDifferences.Count; index++)
@@ -279,13 +335,14 @@ internal static partial class SolverController
                 }
                 if (capabilities.IsMultiplayer)
                 {
-                    bool freshProbeChanged = MultiplayerClientProbe.ObserveActionBoundary(
-                        state,
-                        "continuation_validation_mismatch");
                     Entry.Logger.Info(
-                        $"[CombatSolver/MultiplayerProbe] MP_LOCAL_CROSS_TURN_FRESH_PROBE " +
-                        $"reason=continuation_validation_mismatch changed={freshProbeChanged.ToString().ToLowerInvariant()} " +
-                        $"world_version={MultiplayerWorldTracker.WorldVersion} fresh_probe=true");
+                        $"[CombatSolver/Test] MP_LOCAL_XTURN_CONTINUATION_REJECTED " +
+                        $"turn={currentTurn} route_identity={source.RouteIdentity} " +
+                        $"source_world_version={expectedMultiplayer?.SourceWorldVersion.ToString() ?? "-"} " +
+                        $"minimum_world_version={multiplayerValidation?.MinimumWorldVersion.ToString() ?? "-"} " +
+                        $"actual_world_version={multiplayerValidation?.CurrentWorldVersion.ToString() ?? "-"} " +
+                        $"local_state_exact={localStateExact.ToString().ToLowerInvariant()} " +
+                        $"reason={continuationRejectReason}");
                 }
             }
 

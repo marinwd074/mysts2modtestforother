@@ -74,16 +74,23 @@ Check(
     "A projected teammate action is rejected instead of being fabricated into the local route.");
 
 Check(
-    MultiplayerLocalCrossTurnContracts.IsExactContinuation(Match()),
+    MultiplayerLocalCrossTurnContracts.IsExactContinuation(Match())
+        && MultiplayerLocalCrossTurnContracts.DescribeContinuationMismatch(Match()) is null,
     "An exact local continuation requires a strictly advanced WorldVersion and matching public inputs.");
 
 Check(
     !MultiplayerLocalCrossTurnContracts.IsExactContinuation(Match(remote: Fingerprint(2)))
-        && !MultiplayerLocalCrossTurnContracts.IsExactContinuation(Match(actualWorldVersion: 10)),
-    "A remote public delta or a non-advanced WorldVersion rejects future-route reuse.");
+        && MultiplayerLocalCrossTurnContracts.DescribeContinuationMismatch(Match(remote: Fingerprint(2)))
+            == "remote_public_mismatch"
+        && !MultiplayerLocalCrossTurnContracts.IsExactContinuation(Match(actualWorldVersion: 10))
+        && MultiplayerLocalCrossTurnContracts.DescribeContinuationMismatch(Match(actualWorldVersion: 10))
+            == "world_version_not_advanced",
+    "A remote public delta or a non-advanced WorldVersion rejects future-route reuse with a precise reason.");
 
 Check(
-    !MultiplayerLocalCrossTurnContracts.IsExactContinuation(Match(combatIdentity: "combat-without-target")),
+    !MultiplayerLocalCrossTurnContracts.IsExactContinuation(Match(combatIdentity: "combat-without-target"))
+        && MultiplayerLocalCrossTurnContracts.DescribeContinuationMismatch(
+            Match(combatIdentity: "combat-without-target")) == "combat_identity_mismatch",
     "A combat identity change such as teammate removal of the planned target rejects the old route.");
 
 Check(

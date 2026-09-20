@@ -64,23 +64,44 @@ internal static class MultiplayerLocalCrossTurnContracts
         => actionTurn == currentTurn;
 
     internal static bool IsExactContinuation(MultiplayerContinuationMatchInput input)
-        => input.ActualWorldVersion > Math.Max(
+        => DescribeContinuationMismatch(input) is null;
+
+    internal static string? DescribeContinuationMismatch(
+        MultiplayerContinuationMatchInput input)
+    {
+        if (input.ActualWorldVersion <= Math.Max(
                 input.ExpectedSourceWorldVersion,
-                input.MinimumWorldVersion)
-            && string.Equals(
+                input.MinimumWorldVersion))
+        {
+            return "world_version_not_advanced";
+        }
+        if (!string.Equals(
                 input.ExpectedCombatIdentity,
                 input.ActualCombatIdentity,
-                StringComparison.Ordinal)
-            && string.Equals(
+                StringComparison.Ordinal))
+        {
+            return "combat_identity_mismatch";
+        }
+        if (!string.Equals(
                 input.ExpectedLocalNetId,
                 input.ActualLocalNetId,
-                StringComparison.Ordinal)
-            && input.ExpectedRemotePublicFingerprint == input.ActualRemotePublicFingerprint
-            && input.ExpectedMultiplayerScalingHooks == input.ActualMultiplayerScalingHooks
-            && string.Equals(
+                StringComparison.Ordinal))
+        {
+            return "local_net_id_mismatch";
+        }
+        if (input.ExpectedRemotePublicFingerprint != input.ActualRemotePublicFingerprint)
+            return "remote_public_mismatch";
+        if (input.ExpectedMultiplayerScalingHooks != input.ActualMultiplayerScalingHooks)
+            return "scaling_mismatch";
+        if (!string.Equals(
                 input.ExpectedCardMultiplayerConstraint,
                 input.ActualCardMultiplayerConstraint,
-                StringComparison.Ordinal);
+                StringComparison.Ordinal))
+        {
+            return "card_constraint_mismatch";
+        }
+        return null;
+    }
 
     internal static bool ValidateLocalOnlyProjection(
         IReadOnlyList<MultiplayerProjectedAction> actions,
