@@ -81,8 +81,8 @@
 - MP-1 Advisor 的首轮真实 Smoke 已通过受控验收；无药水重连场景和非空远端药水 fail-closed 场景均已实机覆盖；固定工作量单人 post-MP1 spot 对照已完成且路线/工作量无回归，但更广稳定性仍待收口，未知远端遗物和远端私有药水的 fail-closed 门禁不可移除。对照证据见 `runtime-evidence/20260920-post-mp1-performance/`。
 - 重连后的远端私有药水库存仍不可访问，Advisor 必须保持 fail-closed；如需支持正向搜索语义，应另立受控 public-state 设计与合同，不在本次 MP-0 生命周期收口中静默放开。退出阶段的 `CombatBugReportExporter` `NullReferenceException` 另需独立 triage。
 - MP-2 Safe Execute 的正式能力只接受显式 `COMBATSOLVER_MULTIPLAYER_MODE=safe-execute` opt-in；一动作与两动作 Host/Client Smoke 是历史基线，当前 MP-2C 运行时最多执行 6 张连续安全本地普通 PlayCard，并在每张牌后做动作归因与重验证。默认多人仍是 Probe；`safe-execute-lab` 继续要求 Multiplayer Lab、匹配的 `ClientCombatSolver` ownership/profile marker 和 Probe evidence。Safe EndTurn 已在显式 `safe-execute` 下通过；药水、选择、Replay、队友目标、Full Auto 和 Instant 仍关闭。Local Cross-Turn 的 T3 Fix/X2 已有本轮实机证据，但默认多人仍不改变为自动执行模式。
-- Multiplayer Carry Ranking v1 只使用远端公开 HP/MaxHP/Block/回合阶段、公开 Powers、敌人公开状态和公开多人约束；不读取或预测远端手牌、牌堆、能量、药水、私有遗物或下一张牌。无明确目标语义的敌方风险保持 Unknown/neutral，且只在本地质量兼容候选之间观察/比较。
-- Multiplayer Local Cross-Turn 当前限制：搜索结果可包含本地未来回合，但只允许部署当前真实本地回合；Safe EndTurn 后旧 authorization 必须失效，只有对本地/敌人/远端公开 fingerprint、多人约束和单调 WorldVersion 完成严格对账后才复用 continuation。任何不匹配都必须 Fresh Probe + Fresh Root + Fresh Search；队友私有行为不作为确定输入。T3 Fix 与 X2 已完成实机验证；仍未完成的是专门让本地 Play 阶段出现“Awaiting continuation 且当前 turn 无 cached continuation”的运行夹具，因此 `MP_LOCAL_XTURN_CONTINUATION_MISSING` 仍保持 runtime `UNVERIFIED`，不得用普通 mismatch 证据替代。
+- Multiplayer Carry Ranking v1 只使用远端公开 HP/MaxHP/Block/回合阶段、公开 Powers、敌人公开状态和公开多人约束；不读取或预测远端手牌、牌堆、能量、药水、私有遗物或下一张牌。原版怪物公开 AttackIntent 依据 0.107.1 `AttackCommand.FromMonster` 的 all-opponents 合同标为 `AllPlayers`；非攻击和第三方怪物仍保持 Unknown/neutral，且 Carry 只在本地质量兼容候选之间比较。
+- Multiplayer Local Cross-Turn 当前限制：搜索结果可包含本地未来回合，但只允许部署当前真实本地回合；Safe EndTurn 后旧 authorization 必须失效，只有对本地/敌人/远端公开 fingerprint、多人约束和单调 WorldVersion 完成严格对账后才复用 continuation。任何不匹配都必须 Fresh Probe + Fresh Root + Fresh Search；队友私有行为不作为确定输入。T3 Fix 与 X2 已完成实机验证；本地 Play 且当前 turn 缺失 cached continuation 的核心调度状态转换已由运行时共用 `MultiplayerContinuationScheduleDecision` 和 12 项合同收口；自然 Host/Client marker 仅保留为可选额外证据。
 
 ## 当前安全边界
 

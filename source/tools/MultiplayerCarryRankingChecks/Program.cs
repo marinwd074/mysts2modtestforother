@@ -134,4 +134,16 @@ Check(
         && freshContext.IsFreshFor(10, "public-v2"),
     "A world-version or public-fingerprint change invalidates the old ranking context.");
 
+Check(
+    MultiplayerCarryThreatTargetContracts.ClassifyBaseGameMove(
+        isBaseGameMonster: true,
+        hasAttackIntent: true) == MultiplayerCarryThreatTarget.AllPlayers
+        && MultiplayerCarryThreatTargetContracts.ClassifyBaseGameMove(
+            isBaseGameMonster: true,
+            hasAttackIntent: false) == MultiplayerCarryThreatTarget.Unknown
+        && MultiplayerCarryThreatTargetContracts.ClassifyBaseGameMove(
+            isBaseGameMonster: false,
+            hasAttackIntent: true) == MultiplayerCarryThreatTarget.Unknown,
+    "Only a proven base-game attack intent becomes an all-player public threat; non-attacks and third-party monsters stay Unknown.");
+
 Console.WriteLine($"PASS: {checks} Multiplayer Carry Ranking checks");

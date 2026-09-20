@@ -13,6 +13,22 @@ internal enum MultiplayerCarryThreatTarget
     AllPlayers,
 }
 
+internal static class MultiplayerCarryThreatTargetContracts
+{
+    /// <summary>
+    /// STS2 0.107.1 base-game monster attacks are created through
+    /// AttackCommand.FromMonster(), whose public targeting contract is all opponents.
+    /// Third-party monsters are deliberately excluded because their execution semantics
+    /// are not proven by the base-game assembly contract.
+    /// </summary>
+    internal static MultiplayerCarryThreatTarget ClassifyBaseGameMove(
+        bool isBaseGameMonster,
+        bool hasAttackIntent)
+        => isBaseGameMonster && hasAttackIntent
+            ? MultiplayerCarryThreatTarget.AllPlayers
+            : MultiplayerCarryThreatTarget.Unknown;
+}
+
 internal sealed class MultiplayerCarryPowerPublicState
 {
     public MultiplayerCarryPowerPublicState(string powerId, int amount)

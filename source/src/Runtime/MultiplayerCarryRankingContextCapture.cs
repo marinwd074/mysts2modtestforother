@@ -4,6 +4,7 @@ using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Powers;
+using MegaCrit.Sts2.Core.MonsterMoves.Intents;
 using MegaCrit.Sts2.Core.Nodes;
 
 namespace CombatSolver;
@@ -68,14 +69,26 @@ internal static class MultiplayerCarryRankingContextCapture
     }
 
     private static MultiplayerCarryEnemyPublicState CaptureEnemy(Creature enemy)
-        => new(
+    {
+        MonsterModel? monster = enemy.Monster;
+        bool isBaseGameMonster = monster != null
+            && monster.GetType().Assembly == typeof(MonsterModel).Assembly;
+        bool hasAttackIntent = monster?.NextMove?.Intents.Any(intent => intent is AttackIntent) == true;
+        MultiplayerCarryThreatTarget threatTarget =
+            MultiplayerCarryThreatTargetContracts.ClassifyBaseGameMove(
+                isBaseGameMonster,
+                hasAttackIntent);
+
+        return new MultiplayerCarryEnemyPublicState(
             enemy.CombatId ?? uint.MaxValue,
-            enemy.Monster?.Id.Entry ?? string.Empty,
+            monster?.Id.Entry ?? string.Empty,
             enemy.CurrentHp,
             enemy.MaxHp,
             enemy.Block,
-            enemy.Monster?.NextMove?.Id.ToString() ?? string.Empty,
-            PublicPowers(enemy.Powers));
+            monster?.NextMove?.Id.ToString() ?? string.Empty,
+            PublicPowers(enemy.Powers),
+            threatTarget);
+    }
 
     private static MultiplayerCarryPowerPublicState[] PublicPowers(
         IEnumerable<PowerModel> powers)
@@ -102,7 +115,8 @@ internal static class MultiplayerCarryRankingContextCapture
             enemies.Select(item =>
                 $"{item.CombatId}:{item.MonsterId}:" +
                 $"hp={item.CurrentHp}/{item.MaxHp}:block={item.Block}:" +
-                $"next={item.NextMoveId}:powers={PowerTokens(item.Powers)}"));
+                $"next={item.NextMoveId}:target={item.ThreatTarget}:" +
+                $"powers={PowerTokens(item.Powers)}"));
         return $"scaling_hooks={scalingHooks?.ToString() ?? "-"};" +
                $"card_constraint={cardConstraint};remote={remote};enemies={enemy}";
     }
