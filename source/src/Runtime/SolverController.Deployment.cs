@@ -257,11 +257,16 @@ internal static partial class SolverController
                             $"{choice.Effect}:{string.Join(',', choice.Cards.Select(card =>
                                 $"{card.CardId}+{card.UpgradeLevel}#src{card.SourceOccurrence}/opt{card.OptionOccurrence}"))}"))}");
                 }
-                using NativeChoiceSession choiceSession = NativeChoiceRuntime.Begin(
-                    state,
-                    player,
-                    $"deployment:{turn}:{actionIndex}:{action.CardId ?? action.PotionId}");
-                choiceSession.SetPlanAndStartDriving(host, actionChoices, token);
+                // Safe Execute only admits no-choice local actions. Creating a native choice
+                // driver for those actions is both unnecessary and forbidden in multiplayer.
+                using NativeChoiceSession? choiceSession =
+                    safeExecute && actionChoices.Count == 0
+                        ? null
+                        : NativeChoiceRuntime.Begin(
+                            state,
+                            player,
+                            $"deployment:{turn}:{actionIndex}:{action.CardId ?? action.PotionId}");
+                choiceSession?.SetPlanAndStartDriving(host, actionChoices, token);
                 long actionStartedAt = measureDeploymentTiming
                     ? Stopwatch.GetTimestamp()
                     : 0;
@@ -355,7 +360,10 @@ internal static partial class SolverController
                 }
                 try
                 {
-                    await choiceSession.AwaitProducerAndCompleteAsync(actionCompletion);
+                    if (choiceSession is { } activeChoiceSession)
+                        await activeChoiceSession.AwaitProducerAndCompleteAsync(actionCompletion);
+                    else
+                        await actionCompletion;
                     // The root action can complete before nested card/potion actions settle;
                     // deploy the next planned action only after the native queue is idle.
                     await RunManager.Instance.ActionExecutor.FinishedExecutingActions().WaitAsync(token);
@@ -363,12 +371,12 @@ internal static partial class SolverController
                 }
                 catch (NativeChoicePlanMismatchException)
                 {
-                    choiceSession.ReleaseVisibleSurface();
+                    choiceSession?.ReleaseVisibleSurface();
                     throw;
                 }
                 catch (NativeChoiceSurfaceMismatchException)
                 {
-                    choiceSession.ReleaseVisibleSurface();
+                    choiceSession?.ReleaseVisibleSurface();
                     throw;
                 }
                 if (measureDeploymentTiming)
