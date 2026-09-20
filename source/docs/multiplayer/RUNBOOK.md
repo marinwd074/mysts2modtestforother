@@ -5,9 +5,10 @@
 
 ## 职责分工
 
-- **用户负责游戏内操作**：Host/Join、角色选择、Ready、进入战斗、等待路线稳定、点击“执行本回合”、观察卡牌/能量/格挡/UI 是否变化。
-- **Codex/Agent 不负责代操作游戏 GUI**。它只负责准备环境、启动命令、代码修改、日志定位、证据收集与验证。
-- 实验进行时一次只给用户一个短步骤，并说明“完成后告诉我看到什么/是否出现某状态”；避免让 Codex 自己绕远路操作游戏。
+- **用户负责全部游戏进程与游戏内操作**：执行 Host/Client 启动命令、Mod warm-up 后重启、必要时停止游戏，以及 Host/Join、角色选择、Ready、进入战斗、点击“执行本回合”和观察 UI/牌/能量/格挡等。
+- **Codex/Agent 不得启动、重启或关闭游戏进程，也不得代操作游戏 GUI。** 不执行 `start-host.ps1`、`start-client.ps1`、`stop-owned-instances.ps1` 或其他会创建/关闭 STS2 进程的命令。
+- Codex/Agent 只负责：构建代码、准备/刷新隔离实例、生成准确的用户执行命令、定位日志、运行离线 validator、分析证据和修复代码。
+- 需要游戏操作时，Codex/Agent 一次只给用户一个短步骤，并明确标记 **“用户执行”**；用户反馈结果或完成操作后再继续。
 
 ## 固定前置条件
 
@@ -43,7 +44,10 @@
 
 ## 推荐启动顺序
 
+> 以下所有启动/重启/停止游戏命令均由**用户在本机执行**。Codex/Agent 只生成命令，不执行。
+
 ~~~powershell
+# 用户执行
 $labRoot = 'D:\yingye\CombatSolver\.local\multiplayer-lab'
 
 pwsh -NoLogo -NoProfile -File .\start-host.ps1 `
@@ -60,7 +64,7 @@ pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
 让 Client 完成 Mod 加载并重启。不要把这次当正式测试。
 
 ~~~powershell
-# Client 第二次：正式运行
+# 用户执行：Client 第二次正式运行
 pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
   -InstanceRoot "$labRoot\runtime-mp-client-solver" `
   -ClientId 1000 `
@@ -74,9 +78,10 @@ pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
 
 正式 token 只接受明确的 `COMBATSOLVER_MULTIPLAYER_MODE=safe-execute` opt-in，
 默认多人仍保持 Probe。为保持实例隔离，第一轮正式 token Smoke 仍使用本目录
-准备的 `HostVanilla + ClientCombatSolver`，但 Client 第二次启动改为：
+准备的 `HostVanilla + ClientCombatSolver`，但 Client 第二次启动改为。**以下命令由用户执行：**
 
 ~~~powershell
+# 用户执行
 pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
   -InstanceRoot "$labRoot\runtime-mp-client-solver" `
   -ClientId 1000 `
@@ -92,9 +97,10 @@ MP-2B 两动作实机已通过。
 ## MP-2B 两动作 Smoke（当前待实机）
 
 正式 Client 第二次启动继续使用上面的 `HostVanilla + ClientCombatSolver`、Steam
-transport off 和 Mod warm-up 后的隔离实例，但模式必须是：
+transport off 和 Mod warm-up 后的隔离实例，但模式必须是。**以下命令由用户执行：**
 
 ~~~powershell
+# 用户执行
 pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
   -InstanceRoot "$labRoot\runtime-mp-client-solver" `
   -ClientId 1000 `
@@ -131,7 +137,10 @@ pwsh -NoLogo -NoProfile -File .\validate-mp2b-interference-results.ps1 `
 
 ## MP-2A 收尾
 
+停止游戏仍由用户负责。Codex/Agent 不执行停止脚本。
+
 ~~~powershell
+# 用户执行
 pwsh -NoLogo -NoProfile -File .\stop-owned-instances.ps1 `
   -InstanceRoot "$labRoot\runtime-mp-client-solver"
 ~~~
