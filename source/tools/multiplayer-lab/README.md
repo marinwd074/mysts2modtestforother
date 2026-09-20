@@ -336,7 +336,7 @@ pwsh -NoLogo -NoProfile -File .\validate-carry-ranking-results.ps1 `
   -OutputPath '.\.local\multiplayer-lab\results\carry-ranking-r1-r2.json'
 ~~~
 
-R1 已于 2026-09-20 的 `SLIMES_WEAK` Advisor fixture 实机 PASS。R2 若为 UNVERIFIED，不要继续随机刷：必须构造完整 pre-carry 硬键相等的目标选择。最简单的 starter Ironclad fixture 是在没有 Strength/Vulnerable 等伤害修正时，把一个已识别的 `AllPlayers` 攻击怪准备到**恰好 6 HP**（当前 `Strike` 实际伤害），同时保留一个 HP>6 的 Unknown/非攻击敌人；Solver 手中有 `Strike` 后 fresh-search。这样 `Strike→威胁怪` 与 `Strike→另一怪` 都让总 `EnemyHp` 恰好减少 6，Carry 才有机会成为决定性 tie-break。若实际攻击伤害不是 6，则使用实时实际伤害值 D，并把威胁怪准备到恰好 D HP。最多再换一个普通多敌人 fixture；只有验证器返回 `MULTIPLAYER_CARRY_RANKING_All_PASS` 才登记 R2 PASS。
+R1 已于 2026-09-20 的 `SLIMES_WEAK` Advisor fixture 实机 PASS。随后语义审计发现旧 R2 evaluator 会把未来 T2/T3 才发生的击杀提前记作当前公开威胁已移除；当前实现已改为只观察 `carryWindow=current_turn_pre_end`，因此 R2 的威胁击杀必须发生在当前本地回合、第一次 EndTurn 之前。R2 若为 UNVERIFIED，不要继续随机刷：必须构造完整 pre-carry 硬键相等的当前回合目标选择。最简单的 starter Ironclad fixture 是在没有 Strength/Vulnerable 等伤害修正时，把一个已识别的 `AllPlayers` 攻击怪准备到**恰好 6 HP**（当前 `Strike` 实际伤害），同时保留一个 HP>6 的 Unknown/非攻击敌人；Solver 手中有 `Strike` 后 fresh-search。这样 `Strike→威胁怪` 与 `Strike→另一怪` 都让总 `EnemyHp` 恰好减少 6，Carry 才有机会成为决定性 tie-break。若实际攻击伤害不是 6，则使用实时实际伤害值 D，并把威胁怪准备到恰好 D HP。最多再换一个普通多敌人 fixture；只有验证器返回 `MULTIPLAYER_CARRY_RANKING_All_PASS` 才登记 R2 PASS。
 
 退出码：0 为 PASS，1 为矛盾/无效证据，2 为缺失或仍为 UNVERIFIED。真实
 Host/Client 运行证据必须带可审查的日志位置；单进程模拟和合成 JSON 不可作为

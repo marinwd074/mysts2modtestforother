@@ -87,7 +87,7 @@
 ## 当前安全边界
 
 - Runtime 默认 `MultiplayerProbe`：只读采集，不搜索、不部署、不自动选牌、不自动 EndTurn、不发送自定义网络包；Carry Ranking 不在 Probe 模式启用。
-- Advisor 仅显式环境变量 opt-in，并受 local-player root capture contract 和远端 fail-closed 语义约束；Safe Execute 也仅显式 opt-in。MP-2C bounded N-action、Reactive Carry、Local Cross-Turn T3/X2 与 Shared-RNG Shuffle Boundary 均已有实机证据。Carry Ranking R1 已真实 PASS；R2 仍为 `UNVERIFIED`，已有正向团队风险改善但尚未证明 Carry 改变了完整 pre-carry 质量平局的赢家。
+- Advisor 仅显式环境变量 opt-in，并受 local-player root capture contract 和远端 fail-closed 语义约束；Safe Execute 也仅显式 opt-in。MP-2C bounded N-action、Reactive Carry、Local Cross-Turn T3/X2 与 Shared-RNG Shuffle Boundary 均已有实机证据。Carry Ranking R1 已真实 PASS；R2 仍为 `UNVERIFIED`。旧 R2 journal 中的正向风险改善来自未来 T2 才击杀 T1 威胁，不能作为有效 Carry 证据；当前实现已将 Carry outcome 限制到 startTurn 的 EndTurn 前快照。
 - 证据文件仅由 Lab 环境写入；schema v2 使用 `runSeed` / `combatSegmentId`，紧凑 fingerprint 不能替代缺失的生命周期证据。
 
 ## Source of truth
