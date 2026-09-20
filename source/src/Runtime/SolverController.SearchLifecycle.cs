@@ -540,9 +540,14 @@ internal static partial class SolverController
                 host,
                 FormatSearchSetupFailure(ex));
             SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Failed);
-            Entry.Logger.Error(
+            string failure =
                 $"[CombatSolver/Test] SEARCH_SETUP_FAILURE stage={setupStage} " +
-                $"reason={reason} exception={ex}");
+                $"reason={reason} exception={ex}";
+            // The asynchronous combat journal can be saturated by a large completed-route
+            // record. Keep the setup stack in the native game log as a last-resort diagnostic
+            // so a second-turn initialization failure remains actionable.
+            GD.PrintErr(failure);
+            Entry.Logger.Error(failure);
         }
     }
 
