@@ -234,7 +234,9 @@ internal sealed class SolverDeploymentSession
     public CombatState? State { get; init; }
     public int StartTurnNumber { get; init; }
     public long WorldVersion { get; init; }
-    public bool ExpectedWorldChangeInFlight { get; set; }
+    public int RouteGeneration { get; init; }
+    public int CombatLifecycleGeneration { get; init; }
+    public MultiplayerSafeExecutionSession? SafeExecutionSession { get; init; }
     public CancellationTokenSource Cancellation { get; } = new();
     public Task Operation { get; set; } = Task.CompletedTask;
     public int ReferenceReleaseState;

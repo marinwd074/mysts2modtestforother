@@ -88,9 +88,46 @@ internal static class MultiplayerSafeLocalActionClassifier
     }
 
     /// <summary>
-    /// Dormant MP-2A executes at most one safe local card. A fresh observation/search
-    /// is required before another deployment, avoiding ambiguous local-vs-remote
-    /// WorldVersion changes during a multi-card sequence.
+    /// MP-2B takes a bounded prefix only. Each returned action is classified again against
+    /// the live state immediately before execution; the post-action session revalidation
+    /// is the authority for admitting the next action.
+    /// </summary>
+    public static IReadOnlyList<PlanAction> TakeMp2BDeploymentSlice(
+        CombatState state,
+        IReadOnlyList<PlanAction> actions,
+        out SafeLocalActionDecision stop)
+    {
+        if (actions.Count == 0)
+        {
+            stop = SafeLocalActionDecision.Allow;
+            return [];
+        }
+
+        List<PlanAction> safe = [];
+        foreach (PlanAction action in actions)
+        {
+            if (safe.Count >= MultiplayerSafeExecutePolicy.MaxActionsPerDeployment)
+            {
+                stop = MultiplayerSafeExecutePolicy.DeploymentStopAfter(safe.Count, actions.Count);
+                return safe;
+            }
+
+            SafeLocalActionDecision decision = Classify(state, action);
+            if (!decision.IsSafe)
+            {
+                stop = decision;
+                return safe;
+            }
+            safe.Add(action);
+        }
+
+        stop = MultiplayerSafeExecutePolicy.DeploymentStopAfter(safe.Count, actions.Count);
+        return safe;
+    }
+
+    /// <summary>
+    /// Retained for the MP-2A validator's historical contract. New runtime deployments
+    /// use <see cref="TakeMp2BDeploymentSlice"/> and the explicit execution session.
     /// </summary>
     public static IReadOnlyList<PlanAction> TakeMp2ADeploymentSlice(
         CombatState state,
@@ -111,7 +148,9 @@ internal static class MultiplayerSafeLocalActionClassifier
             return [];
         }
 
-        stop = MultiplayerSafeExecutePolicy.DeploymentStopAfter(1, actions.Count);
+        stop = actions.Count > 1
+            ? new(false, MultiplayerSafeExecutePolicy.SingleActionLimitReason)
+            : SafeLocalActionDecision.Allow;
         return [first];
     }
 }

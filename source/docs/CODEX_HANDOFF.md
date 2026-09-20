@@ -5,10 +5,10 @@
 - CombatSolver `0.40.2`；目标游戏 / RitsuLib `0.107.1`；兼容符号 `STS2_01071`。
 - MP-0 Core / lifecycle：PASS。
 - MP-1 Advisor：受控 Smoke PASS。
-- MP-2 正式 Safe Execute：显式 `safe-execute` token 的一动作边界 Host/Client Smoke 已 PASS；默认多人仍保持 Probe，MP-2B 及更宽能力继续关闭。
-- MP-2A：静态/合同 PASS；2026-09-20 的正式 Host/Client `safe-execute-lab` Smoke 已 PASS。该 Lab 证据不等于开放正式入口。
-- MP-2B / Multiplayer Instant：BLOCKED。
-- 最近已验证实现基线：`18accc1`；GitHub Actions `35485393314` 为 `9 PASS / 0 FAIL / 0 SKIP`。随后文档收尾 `62f51ea` 的 CI `35485507892` 也全绿。
+- MP-2A：显式 `safe-execute`/`safe-execute-lab` 的一动作 Host/Client Smoke 已 PASS，作为历史基线保留；该证据不等于两动作能力已通过。
+- MP-2B：当前工作树已实现两动作上限、显式 SafeExecutionSession、动作后稳定世界等待和本地/远端变化重验证；`MultiplayerSafeExecuteChecks` 35 项、MP2B 验证器 5 项和 Release 构建已通过，但尚无真实两动作 Host/Client 或远端干扰证据，状态仍为 `BLOCKED/UNVERIFIED`。
+- Multiplayer Instant、自动 EndTurn、Potion、Choice、Full Auto、跨回合和队友目标继续关闭；默认多人仍保持 Probe。
+- 本轮没有为 MP2B 声明新的 GitHub Actions 结果；当前实现/合同结果仅代表本地定向验证，不能替代实机 Smoke。
 
 ## 项目规则已放宽
 
@@ -33,7 +33,7 @@
 
 - 游戏内所有 GUI 操作交给用户完成；Codex/Agent 不再尝试代操作游戏。
 - Codex/Agent 负责把环境准备到可点击状态，并在用户每完成一步后读取日志/结果继续判断。
-- 后续 MP-2A Smoke 应按 RUNBOOK 分成短步骤交给用户执行，而不是由 Codex 长时间尝试自动完成。
+- 后续 MP-2B Smoke 应按 RUNBOOK 分成短步骤交给用户执行；游戏内 GUI 操作仍由用户完成，Codex 只负责读取日志和验证结果。
 
 ## 本轮 MP-2A 实机证据（2026-09-20）
 
@@ -46,6 +46,6 @@
 
 ## 当前下一步
 
-- MP-2 正式 Safe Execute 的显式一动作边界已收口为 PASS；下一阶段如继续，应另立 MP-2B 多动作/回合边界目标，不扩大本轮能力范围。
+- 构建并装入当前 Release DLL 后，按 RUNBOOK 完成一次两动作 `safe-execute` Smoke，再完成一次两动作之间的远端干扰 Smoke；运行 `validate-mp2b-results.ps1`，在两组实机证据齐全前不要把 MP2B 升级为 PASS。
 
-继续保持默认 Probe，以及 MP-2B、Multiplayer Instant、自动 EndTurn、Potion、Choice 和 Full Auto 关闭。
+继续保持默认 Probe，以及 Multiplayer Instant、自动 EndTurn、Potion、Choice、Full Auto、跨回合和队友目标关闭。

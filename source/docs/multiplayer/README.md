@@ -1,6 +1,6 @@
 # Multiplayer 适配阶段
 
-当前阶段：**MP-0 Core 与 Host 重建房间后的 Client 重新加入生命周期均已通过；MP-1 Advisor 受控 Smoke 已通过，重连后的远端私有药水语义保持 fail-closed；MP-2 显式一动作 Safe Execute Smoke 已通过，默认多人仍保持 Probe，MP-2B 继续阻塞**。
+当前阶段：**MP-0 Core 与 Host 重建房间后的 Client 重新加入生命周期均已通过；MP-1 Advisor 受控 Smoke 已通过，重连后的远端私有药水语义保持 fail-closed；MP-2A 显式一动作 Safe Execute Smoke 已通过；MP-2B 运行时与合同已实现，但两动作实机 Smoke 尚未完成，默认多人仍保持 Probe**。
 
 本阶段依据 `Multiplayer Apply` 中的精简功能方案和修正版执行计划实现，目标是先用隔离的双实例完成真实 Host/Client 证据，不改变多人会话语义。
 
@@ -9,7 +9,8 @@
 - **MP-0 Core：PASS**。连接兼容、本地私有状态只读采集、远端公开战斗状态、双 Client 对照和 Probe 只读契约均有证据。
 - **MP-0 Hardening：PASS（受控生命周期）**。已按游戏规则由 Host 退出并重新创建房间，Client 收到 `Quit` 后重新握手、加入、Ready，并再次进入有效战斗；进程停止本身不计入证据。
 - **MP-1 Advisor：SMOKE PASS（受控范围）**。静态合同与 Release 构建已通过；默认仍是 Probe，只有显式设置 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才会授予当前回合、本地玩家、只显示路线的搜索能力，绝不会自动执行动作。`BurningBlood`、side-turn relic、多人 block-scaling 和 EndTurn replay 边界均已收敛；fresh `-bbfix` client 的真实复验记录 `SEARCH_COMPLETE=5`、`SEARCH_FAILURE=0`、`FAIL_CLOSED=0`，并有原生完成通知与路线回放证据。Probe 仍保持只读，MP-2 Safe Execute 不在本次通过范围内。
-- **MP-2 Safe Execute：PASS（显式一动作范围）**。2026-09-20 的 HostVanilla + ClientCombatSolver `safe-execute` 单牌 Smoke 已验证通过；默认多人仍是 Probe，只有精确 `COMBATSOLVER_MULTIPLAYER_MODE=safe-execute` 才进入该能力。`safe-execute-lab` 仍只在 Multiplayer Lab 创建的 `ClientCombatSolver` 实例、Probe evidence 已启用且 ownership/profile marker 匹配时授权。两种入口一次 deployment 最多接受 1 张本地普通安全牌，随后重新观察并重算。自动 EndTurn、药水、选择、Replay/重复语义、队友目标、Full Auto、Instant 与连续多牌仍禁止。
+- **MP-2A Safe Execute：PASS（历史一动作范围）**。2026-09-20 的 HostVanilla + ClientCombatSolver `safe-execute` 单牌 Smoke 已验证通过；该证据保留为一动作基线。默认多人仍是 Probe，只有精确 `COMBATSOLVER_MULTIPLAYER_MODE=safe-execute` 才进入显式 Safe Execute，`safe-execute-lab` 仍只在 Multiplayer Lab 创建的 `ClientCombatSolver` 实例、Probe evidence 已启用且 ownership/profile marker 匹配时授权。
+- **MP-2B Safe Execute：实现/合同 PASS，实机 UNVERIFIED**。当前运行时使用显式 `Authorized → Executing → AwaitingWorldUpdate → Revalidating → next/Completed/Aborted` 会话，一次部署最多接受 2 张本地普通安全牌；每张原生动作完成后都会等待动作队列与 `WorldVersion` 稳定，复核本地手牌/资源/目标、敌人目标变化和远端公开状态。远端或未知变化会记录 `MP2B_REMOTE_DELTA_ABORT`、停止后续动作并重新搜索。`MultiplayerSafeExecuteChecks` 与 MP2B 验证器的合成合同已通过，但尚无两动作 Host/Client 或远端干扰实机证据，因此不能把 MP-2B 记为 Smoke PASS。
 - 正式一动作证据摘要见 [`evidence/mp2-safe-execute-formal-2026-09-20.json`](evidence/mp2-safe-execute-formal-2026-09-20.json)。
 
 ## 已实现
@@ -28,12 +29,19 @@
 - `SolverPerspective` 用 `Public/Private/Unknown` 知识语义与 authority 解耦；`CombatRootSnapshot` 在显式多人搜索能力开启时传入 local-player-only capture。`SimulatedCombatState` 与 `CombatPredictionState` 只物化根玩家的私有牌堆、遗物、药水、运行级牌组和 mod card audit，公共玩家名册仍可作为战斗上下文存在，访问未捕获队友私有 combat state、药水或金币会显式失败；远端遗物 hook 若没有针对性的公开语义 capture 也会 fail closed，不能静默丢失队友影响。基于 STS2 0.107.1 原生审计，`BurningBlood` 只覆盖 `AfterCombatVictory`，因此精确类型可从 CurrentTurnOnly root listener 表省略；未知远端遗物仍由 `RootUnsupportedRemotePublicRelicListenerCount` 拦截。
 - `MultiplayerSafeLocalActionClassifier` 只接受本地手牌的普通 `PlayCard`，目标仅限自身/敌人/无目标；药水、结束回合、选择、重复语义、多人专属卡、远端或未知目标形成连续前缀硬停止。
 - 搜索会记录启动时 `WorldVersion`，结果发布时若远端 fingerprint 已变化则丢弃旧结果；能力门禁打开后，Runtime 会取消旧搜索，等待原生动作队列稳定和 debounce，再只启动一次最新当前回合搜索。
-- Safe Execute 路径会在每个本地动作前复核 `WorldVersion`；远端世界变化会停止后续动作，不会自动 EndTurn 或跳过不安全动作继续执行。
+- Safe Execute 路径由显式 MP2B 会话管理每个动作；动作后先等待稳定世界，再区分预期本地变化与远端/未知变化。后者会停止后续动作并触发新的当前回合搜索，不会 reset/rebase `WorldVersion`，也不会自动 EndTurn 或跳过不安全动作继续执行。
 - 如果会话从单人/过渡态进入多人，控制器会一次性取消活动搜索、部署、全自动和回合开始接管，并清空可部署结果；之后的 Probe fingerprint 变化继续触发失效。
 
 ## 当前明确未启用
 
-多人 Safe Execute 仅通过精确的 `COMBATSOLVER_MULTIPLAYER_MODE=safe-execute` 显式开启，默认安装保持 Probe，不因玩家数或网络类型自动升级；简单本地牌自动执行、药水、选择驱动、自动结束回合、Full Auto、Instant、跨回合复用和 Route Repair 仍未开放。Advisor 仍受本地私有/远端公开 root contract、当前回合和 fail-closed 约束。
+多人 Safe Execute 仅通过精确的 `COMBATSOLVER_MULTIPLAYER_MODE=safe-execute` 显式开启，默认安装保持 Probe，不因玩家数或网络类型自动升级；MP2B 当前只开放源码中的两动作当前回合会话，等待两动作 Host/Client 与远端干扰 Smoke 后才能记为实机通过。药水、选择驱动、自动结束回合、Full Auto、Instant、跨回合复用和 Route Repair 仍未开放。Advisor 仍受本地私有/远端公开 root contract、当前回合和 fail-closed 约束。
+
+## MP-2B 当前实现与验证状态
+
+- `MultiplayerSafeExecutionSession` 固定一次用户授权的请求 ID、路线 generation、起始/已接受 `WorldVersion`、动作上限和状态迁移；旧路线或生命周期变化不会 reset/rebase 世界版本。
+- `MultiplayerSafeLocalActionClassifier` 只取最多两张本地普通 `PlayCard`，不接受药水、EndTurn、Choice、Replay/重复语义、多人专属牌、队友目标或未知目标；第二张牌执行前仍会针对 live state 重新分类。
+- 每张牌只通过原生 `PlayCardAction`；动作队列完成后强制进行一次 action-boundary Probe，并等待稳定 `WorldVersion`，再复核本地手牌/能量/星星、身份/目标、敌人非目标状态和远端公开 fingerprint。
+- 本地合同检查为 35 项 PASS，MP2B 日志验证器合成用例为 5 项 PASS；这些结果只证明源码/解析器合同，不替代真实 Host/Client 证据。运行命令见 `tools/multiplayer-lab/README.md`，实机步骤见 `RUNBOOK.md`。
 
 ## MP-0A / MP-0B 通过条件
 
@@ -139,4 +147,4 @@ pwsh -NoLogo -NoProfile -File "$toolRoot\start-client.ps1" `
 
 ## 下一阶段
 
-MP-0 生命周期证据已收口；固定工作量单人对照已完成受限 spot 验证，非空远端私有药水场景已实机复验并继续按合同 fail-closed，更广 Advisor 稳定性仍为 `PARTIAL`。Advisor 继续维持显式 opt-in，只搜索本地玩家当前回合、只显示路线、不自动执行；MP-2 正式 token 已完成显式一动作 Smoke，后续多动作能力另行评估。
+MP-0 生命周期证据已收口；固定工作量单人对照已完成受限 spot 验证，非空远端私有药水场景已实机复验并继续按合同 fail-closed，更广 Advisor 稳定性仍为 `PARTIAL`。下一步是由用户完成 MP2B 两动作 `safe-execute` Smoke，再完成一次两动作之间的远端干扰 Smoke；在两组日志通过验证前，MP2B 不升级为实机 PASS，默认仍保持 Probe。

@@ -1276,9 +1276,10 @@ internal static partial class SolverController
                     else if (capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute)
                     {
                         Entry.Logger.Info(
-                            $"[CombatSolver/MultiplayerSafeExecute] MP2A_WORLD_CHANGED " +
+                            $"[CombatSolver/MultiplayerSafeExecute] MP2B_WORLD_CHANGED " +
                             $"world_version={MultiplayerWorldTracker.WorldVersion} " +
-                            $"reason={MultiplayerWorldTracker.LastReason}");
+                            $"reason={MultiplayerWorldTracker.LastReason} " +
+                            $"session_state={_deployment?.SafeExecutionSession?.State.ToString() ?? "-"}");
                     }
                 }
                 if (enteredMultiplayerSession)
@@ -1290,8 +1291,13 @@ internal static partial class SolverController
                         string capabilityScope = labCapability ? "owned_client_instance" : "explicit_opt_in";
                         Entry.Logger.Info(
                             $"[CombatSolver/MultiplayerSafeExecute] {capabilityMarker} " +
-                            $"enabled=true scope={capabilityScope} max_actions=1 " +
+                            $"enabled=true scope={capabilityScope} " +
+                            $"max_actions={MultiplayerSafeExecutePolicy.MaxActionsPerDeployment} " +
                             "automatic_end_turn=false custom_network_api=false");
+                        Entry.Logger.Info(
+                            $"[CombatSolver/MultiplayerSafeExecute] MP2B_CAPABILITY " +
+                            $"enabled=true max_actions={MultiplayerSafeExecutePolicy.MaxActionsPerDeployment} " +
+                            "attribution=revalidation automatic_end_turn=false custom_network_api=false");
                     }
                     Entry.Logger.Info(
                         "[CombatSolver/MultiplayerProbe] CAPABILITY_BOUNDARY " +
@@ -1342,11 +1348,26 @@ internal static partial class SolverController
         CancelMultiplayerDebouncedSearch();
         CancelDeferredSearch();
         CancelSearch();
+        MultiplayerSafeExecutionState? safeExecutionState = _deployment?.SafeExecutionSession?.State;
         bool preserveExpectedSafeDeployment =
             SolverSessionCapabilities.Capture(state).Kind == SolverSessionKind.MultiplayerSafeExecute
-            && _deployment?.ExpectedWorldChangeInFlight == true;
+            && safeExecutionState is MultiplayerSafeExecutionState.Executing
+                or MultiplayerSafeExecutionState.AwaitingWorldUpdate
+                or MultiplayerSafeExecutionState.Revalidating;
         if (!preserveExpectedSafeDeployment)
         {
+            if (safeExecutionState == MultiplayerSafeExecutionState.Authorized
+                && _deployment?.SafeExecutionSession is { } safeSession)
+            {
+                safeSession.Abort("remote_or_unknown_change");
+                Entry.Logger.Info(
+                    $"[CombatSolver/MultiplayerSafeExecute] MP2B_REMOTE_DELTA_ABORT " +
+                    $"request_id={safeSession.RequestId} " +
+                    $"turn={_deployment.StartTurnNumber} " +
+                    $"completed_actions={safeSession.CompletedActions} " +
+                    "reason=remote_or_unknown_change " +
+                    $"last_accepted_world_version={safeSession.LastAcceptedWorldVersion}");
+            }
             CancelDeployment();
             _combat.MultiplayerSafeExecuteDeploymentRequested = false;
         }
@@ -1362,8 +1383,12 @@ internal static partial class SolverController
         _combat.PendingManualProjectionBaseline = null;
         InvalidateRenderedRouteAdoptionSeed();
         SolverOverlay.RefreshControls();
+        string invalidationPrefix = SolverSessionCapabilities.Capture(state).Kind
+            == SolverSessionKind.MultiplayerSafeExecute
+            ? "[CombatSolver/MultiplayerSafeExecute] MP2B_WORLD_INVALIDATED"
+            : "[CombatSolver/MultiplayerAdvisor] WORLD_INVALIDATED";
         Entry.Logger.Info(
-            $"[CombatSolver/MultiplayerAdvisor] WORLD_INVALIDATED " +
+            $"{invalidationPrefix} " +
             $"world_version={MultiplayerWorldTracker.WorldVersion} " +
             $"reason={MultiplayerWorldTracker.LastReason} " +
             $"turn={LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0}");

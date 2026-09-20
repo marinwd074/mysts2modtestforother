@@ -86,12 +86,16 @@ Lobby、wire 或战斗证据。
   才报告 `PASS`，采样窗口不同报告 `UNVERIFIED`，且不会自动修改 Phase 0 矩阵。
   比较器优先使用 schema v2 的 `runSeed`/`combatSegmentId`，同时兼容旧的
   schema v1 归档。
-- `validate-mp2a-results.ps1` 校验单牌 Safe Execute 日志：Safe Execute capability、
-  恰好一个原生 `PlayCardAction`、无药水/自动 EndTurn、动作后 WorldVersion
-  失效以及新的 debounce 搜索。它可输出机器 JSON 摘要；缺少真实运行证据返回
-  `UNVERIFIED`，不会把静态合同推断成实机 PASS。
+- `validate-mp2a-results.ps1` 保留并校验历史单牌 Safe Execute 日志：Safe Execute
+  capability、恰好一个原生 `PlayCardAction`、无药水/自动 EndTurn、动作后
+  WorldVersion 失效以及新的 debounce 搜索。它可输出机器 JSON 摘要；缺少真实运行
+  证据返回 `UNVERIFIED`，不会把静态合同推断成实机 PASS。
 - `test-mp2a-validator.ps1` 只测试上述验证器本身的 PASS/FAIL/UNVERIFIED
   判定，并由 L1 CI 调用；合成日志绝不作为多人实机证据。
+- `validate-mp2b-results.ps1` 校验当前两动作 Safe Execute 日志：MP2B capability、
+  同一请求的两个原生 `PlayCardAction`、两次动作后重验证、无 EndTurn/药水/Choice/
+  Replay、单调 WorldVersion 以及动作后的新搜索。`test-mp2b-validator.ps1` 只测试
+  该验证器的 5 个合成用例；二者都不能替代真实 Host/Client 证据。
 
 Lab Client 会自动设置 `COMBATSOLVER_MULTIPLAYER_PROBE_EVIDENCE=1`，因此
 Probe JSONL 只落在实例诊断目录；普通桌面运行不会因为 Probe 观察而持续写证据。
@@ -182,6 +186,36 @@ pwsh -NoLogo -NoProfile -File .\validate-mp2a-results.ps1 `
 MP-2A 真实 Smoke 证据。`safe-execute-lab` 与正式 `safe-execute` 是两个独立
 token；正式 token 的一动作 Host/Client Smoke 已通过，证据摘要见
 `docs/multiplayer/evidence/mp2-safe-execute-formal-2026-09-20.json`。
+
+## MP-2B 两动作 Smoke（当前待实机）
+
+MP2B 使用同一套 HostVanilla + ClientCombatSolver、Steam transport off 和 Mod
+warm-up 后的正式第二次 Client 启动；正式入口命令为：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
+  -InstanceRoot "$labRoot\runtime-mp-client-solver" `
+  -ClientId 1000 `
+  -ForceSteamOff `
+  -MultiplayerMode safe-execute
+~~~
+
+用户手动完成 Join、Ready、进入本地玩家回合，确认点击前没有自动出牌后只点击一次
+“执行本回合”。当前实现最多连续执行两张已分类为安全的本地普通牌；每张牌都应通过
+原生 `PlayCardAction`，费用/能量和手牌随实际动作变化，完成后不自动 EndTurn，界面
+应回到等待下一回合/可重新计算的安全边界。保留日志直到动作后的新 debounce search
+出现，再用默认 `Graceful` 停止实例。
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-mp2b-results.ps1 `
+  -LogPath '<post-restart-client-log>' `
+  -OutputPath '.\.local\multiplayer-lab\results\mp2b-summary.json'
+~~~
+
+正常 Smoke 通过要求验证器返回 `MULTIPLAYER_MP-2B_PASS`。另做一次远端干扰场景：
+第一张牌完成、第二张牌尚未执行时，由另一 Client 进行一次公开动作；预期当前 Client
+记录 `MP2B_REMOTE_DELTA_ABORT`、不再捕获第二个原生动作并重新搜索。该场景是安全边界
+证据，不应按正常两动作 PASS 计数。
 
 退出码：0 为 PASS，1 为矛盾/无效证据，2 为缺失或仍为 UNVERIFIED。真实
 Host/Client 运行证据必须带可审查的日志位置；单进程模拟和合成 JSON 不可作为

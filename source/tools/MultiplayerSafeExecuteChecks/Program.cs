@@ -48,14 +48,14 @@ Check(
     "A resolved local-player or enemy target is allowed.");
 Check(Resolved(incompleteTarget: true).Reason == "target_identity_incomplete", "Incomplete target identity fails closed.");
 Check(Resolved().IsSafe, "A targetless resolved local card is allowed.");
-Check(MultiplayerSafeExecutePolicy.MaxActionsPerDeployment == 1, "MP-2A is capped at one action per deployment.");
+Check(MultiplayerSafeExecutePolicy.MaxActionsPerDeployment == 2, "MP-2B is capped at two actions per deployment.");
 Check(
-    MultiplayerSafeExecutePolicy.DeploymentStopAfter(1, 2).Reason
-        == MultiplayerSafeExecutePolicy.SingleActionLimitReason,
-    "A second planned action stops at the MP-2A single-action boundary.");
+    MultiplayerSafeExecutePolicy.DeploymentStopAfter(2, 3).Reason
+        == MultiplayerSafeExecutePolicy.TwoActionLimitReason,
+    "A third planned action stops at the MP-2B two-action boundary.");
 Check(
-    MultiplayerSafeExecutePolicy.DeploymentStopAfter(1, 1).IsSafe,
-    "A single planned action does not synthesize an extra stop reason.");
+    MultiplayerSafeExecutePolicy.DeploymentStopAfter(1, 2).IsSafe,
+    "A second planned action remains admissible before the MP-2B cap is reached.");
 Check(
     MultiplayerSafeExecutePolicy.CanGrantLabCapability(
         new(MultiplayerSafeExecutePolicy.LabModeToken, true, true)),
@@ -77,5 +77,72 @@ Check(
 Check(
     !MultiplayerSafeExecutePolicy.CanGrantFormalCapability(MultiplayerSafeExecutePolicy.LabModeToken),
     "The Lab token is not silently promoted to the formal capability.");
+
+MultiplayerSafeExecutionSession session = new(
+    startTurnNumber: 1,
+    routeGeneration: 7,
+    startWorldVersion: 4,
+    maxActions: 2);
+Check(session.State == MultiplayerSafeExecutionState.Authorized, "A Safe Execute request starts authorized.");
+Check(
+    session.TryBeginAction(0, "PlayCard:STRIKE:0:target=-", 4, out _)
+        && session.State == MultiplayerSafeExecutionState.Executing,
+    "The first action consumes the authorization and enters Executing.");
+Check(session.MarkAwaitingWorldUpdate(), "A completed native action enters AwaitingWorldUpdate.");
+Check(session.BeginRevalidation(), "A stable observation enters Revalidating.");
+Check(
+    session.AcceptAction(5, hasNextAction: true)
+        && session.State == MultiplayerSafeExecutionState.Authorized
+        && session.CompletedActions == 1,
+    "A matched first action re-authorizes only the next bounded action.");
+Check(
+    !session.TryBeginAction(2, "PlayCard:DEFEND:0:target=-", 5, out string indexReason)
+        && indexReason == "action_index_mismatch",
+    "A stale or skipped action index is rejected.");
+Check(
+    session.TryBeginAction(1, "PlayCard:DEFEND:0:target=-", 5, out _)
+        && session.MarkAwaitingWorldUpdate()
+        && session.BeginRevalidation()
+        && session.AcceptAction(6, hasNextAction: false)
+        && session.State == MultiplayerSafeExecutionState.Completed,
+    "The final matched action closes the execution session.");
+
+MultiplayerSafeActionRevalidationFacts RevalidationFacts(bool hasNextAction = true)
+    => new(
+        NativePlayCardCaptured: true,
+        ActionQueueIdle: true,
+        LocalCardRemovedFromHand: true,
+        LocalPlayerIdentityStable: true,
+        EnergyStateConsistent: true,
+        TargetIdentityStable: true,
+        RemotePublicStateUnchanged: true,
+        EnemyStateMatchesExpectedTarget: true,
+        WorldVersionAdvanced: true,
+        WorldVersionStable: true,
+        HasNextAction: hasNextAction);
+
+Check(
+    MultiplayerSafeExecutePolicy.RevalidateAction(RevalidationFacts())
+        == MultiplayerSafeActionRevalidationDecision.SafeToContinue,
+    "A fully matched first action is safe to continue.");
+Check(
+    MultiplayerSafeExecutePolicy.RevalidateAction(RevalidationFacts(hasNextAction: false))
+        == MultiplayerSafeActionRevalidationDecision.ExpectedLocalChange,
+    "A fully matched final action is recorded as an expected local change.");
+Check(
+    MultiplayerSafeExecutePolicy.RevalidateAction(
+        RevalidationFacts() with { RemotePublicStateUnchanged = false })
+        == MultiplayerSafeActionRevalidationDecision.RemoteOrUnknownChange,
+    "A remote public mutation aborts before the next action.");
+Check(
+    MultiplayerSafeExecutePolicy.RevalidateAction(
+        RevalidationFacts() with { LocalCardRemovedFromHand = false })
+        == MultiplayerSafeActionRevalidationDecision.ActionMismatch,
+    "A card that did not leave the local hand fails closed.");
+Check(
+    MultiplayerSafeExecutePolicy.RevalidateAction(
+        RevalidationFacts() with { WorldVersionStable = false })
+        == MultiplayerSafeActionRevalidationDecision.WorldUnstable,
+    "An unstable WorldVersion blocks continuation.");
 
 Console.WriteLine($"PASS: {checks} multiplayer safe-execute policy checks");

@@ -33,8 +33,8 @@
 
 5. **正式证据只取重启后的运行。**
    - 记录第二次 Client 启动返回的 `logPath`。
-   - MP-2A 只在这次运行里点击一次“执行本回合”；正式 token Smoke 使用显式
-     `-MultiplayerMode safe-execute`，Lab 证据 Smoke 使用 `safe-execute-lab`。
+    - MP-2A 历史基线只在这次运行里点击一次“执行本回合”；当前 MP-2B Smoke 使用
+      显式 `-MultiplayerMode safe-execute`，Lab 证据 Smoke 仍使用 `safe-execute-lab`。
    - 等待动作完成、WorldVersion 更新和新 debounce search 后再停止。
 
 6. **停止默认 Graceful。**
@@ -84,10 +84,41 @@ pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
   -MultiplayerMode safe-execute
 ~~~
 
-用户仍只做一次 Host/Join/Ready、进入战斗、确认未自动出牌后点击“执行本回合”。
-验证器会检查 `FORMAL_CAPABILITY`、单个原生 `PlayCardAction`、动作后
-`WorldVersion` 失效和新的 debounce search；本轮 Smoke 通过不打开 MP-2B、Potion、
-Choice、自动 EndTurn、Full Auto 或 Instant。
+用户仍只做一次 Host/Join/Ready、进入战斗、确认未自动出牌后点击“执行本回合”。这段
+只用于复核 MP-2A 历史一动作基线；验证器会检查 `FORMAL_CAPABILITY`、单个原生
+`PlayCardAction`、动作后 `WorldVersion` 失效和新的 debounce search。它不代表当前
+MP-2B 两动作实机已通过。
+
+## MP-2B 两动作 Smoke（当前待实机）
+
+正式 Client 第二次启动继续使用上面的 `HostVanilla + ClientCombatSolver`、Steam
+transport off 和 Mod warm-up 后的隔离实例，但模式必须是：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
+  -InstanceRoot "$labRoot\runtime-mp-client-solver" `
+  -ClientId 1000 `
+  -ForceSteamOff `
+  -MultiplayerMode safe-execute
+~~~
+
+用户手动完成 Host/Join/Ready 并进入本地玩家回合；确认点击前没有自动出牌后，只点击
+一次“执行本回合”。MP2B 一次 deployment 最多执行两张通过安全分类的本地普通牌，
+每张都必须通过原生 `PlayCardAction`。观察费用/能量减少、手牌减少和动作完成后的
+稳定世界；不会自动 EndTurn，完成后 UI 应回到“等待下一回合”或可重新计算的安全边界。
+保留 Client 日志直到动作后的新 debounce search 出现，再用默认 `Graceful` 停止。
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-mp2b-results.ps1 `
+  -LogPath '<post-restart-client-log>' `
+  -OutputPath '.\.local\multiplayer-lab\results\mp2b-summary.json'
+~~~
+
+正常两动作 Smoke 只有在验证器返回 `MULTIPLAYER_MP-2B_PASS` 且人工确认 Host/Client
+身份与 UI 行为后才能记为 PASS。另做一次远端干扰 Smoke：第一张牌完成、第二张牌尚未
+执行时，由另一 Client 进行一次公开动作；预期当前 Client 记录
+`MP2B_REMOTE_DELTA_ABORT`，不再捕获第二个原生动作，并启动新的搜索。该场景只证明
+安全中止与重搜，不计入正常两动作 PASS。
 
 ## MP-2A 收尾
 
@@ -104,5 +135,6 @@ pwsh -NoLogo -NoProfile -File .\validate-mp2a-results.ps1 `
   -OutputPath '.\.local\multiplayer-lab\results\mp2a-summary.json'
 ~~~
 
-默认安装仍不因本手册自动进入 Safe Execute；MP-2B、Multiplayer Instant、Potion、
-Choice、自动 EndTurn 和 Full Auto 也保持关闭。
+默认安装仍不因本手册自动进入 Safe Execute；Multiplayer Instant、Potion、Choice、
+自动 EndTurn、Full Auto、跨回合和队友目标也保持关闭。MP2B 在两组实机证据完成前仍
+是 `UNVERIFIED/BLOCKED`。
