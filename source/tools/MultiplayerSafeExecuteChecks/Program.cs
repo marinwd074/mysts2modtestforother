@@ -99,6 +99,15 @@ Check(
     !session.TryBeginAction(2, "PlayCard:DEFEND:0:target=-", 5, out string indexReason)
         && indexReason == "action_index_mismatch",
     "A stale or skipped action index is rejected.");
+MultiplayerSafeExecutionSession conflictSession = new(
+    startTurnNumber: 1,
+    routeGeneration: 7,
+    startWorldVersion: 4,
+    maxActions: 2);
+Check(
+    !conflictSession.TryBeginAction(0, "PlayCard:STRIKE:0:target=-", 5, out string worldReason)
+        && worldReason == "world_version_not_accepted",
+    "A WorldVersion conflict cannot consume a new action authorization.");
 Check(
     session.TryBeginAction(1, "PlayCard:DEFEND:0:target=-", 5, out _)
         && session.MarkAwaitingWorldUpdate()
@@ -141,8 +150,24 @@ Check(
     "A card that did not leave the local hand fails closed.");
 Check(
     MultiplayerSafeExecutePolicy.RevalidateAction(
+        RevalidationFacts() with { NativePlayCardCaptured = false })
+        == MultiplayerSafeActionRevalidationDecision.ActionMismatch,
+    "A missing native PlayCardAction attribution fails closed.");
+Check(
+    MultiplayerSafeExecutePolicy.RevalidateAction(
+        RevalidationFacts() with { EnemyStateMatchesExpectedTarget = false })
+        == MultiplayerSafeActionRevalidationDecision.RemoteOrUnknownChange,
+    "An enemy mutation outside the expected target is treated as remote or unknown.");
+Check(
+    MultiplayerSafeExecutePolicy.RevalidateAction(
         RevalidationFacts() with { WorldVersionStable = false })
         == MultiplayerSafeActionRevalidationDecision.WorldUnstable,
     "An unstable WorldVersion blocks continuation.");
+conflictSession.Abort("remote_or_unknown_change");
+Check(
+    conflictSession.State == MultiplayerSafeExecutionState.Aborted
+        && !conflictSession.TryBeginAction(0, "PlayCard:STRIKE:0:target=-", 4, out string abortReason)
+        && abortReason == "session_state_Aborted",
+    "An aborted session clears authorization and cannot leak into a later action.");
 
 Console.WriteLine($"PASS: {checks} multiplayer safe-execute policy checks");

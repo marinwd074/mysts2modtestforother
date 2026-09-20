@@ -9,7 +9,7 @@
 - MP-1 Advisor Stability 追加受控轮（2026-09-20）：Host 重建房间后 Client 重新加入的无药水战斗记录 `SEARCH_START=4`、`SEARCH_COMPLETE=3`、`FAIL_CLOSED=0`、`SEARCH_FAILURE=0`，Probe `130/130` 全部只读且无动作入队/自定义网络包；随后非空远端药水复验记录 `FAIL_CLOSED=7`、`SEARCH_SETUP_FAILURE=7`，消耗药水后再完成 2 次搜索，整体稳定性仍为 `PARTIAL`。证据见 `multiplayer/evidence/mp1-advisor-potion-2026-09-20.json`。
 - Advisor root/phase 合同：`MultiplayerRootCaptureChecks` 15 项通过；精确 `BurningBlood` 可省略，未知远端遗物继续 fail closed，远端私有遗物清单仍不可访问，EndTurn/side-turn/block scaling 边界及单人 EndTurn 保持均有窄合同。
 - MP-2A 合同基线：`MultiplayerSafeExecuteChecks` 固定非 PlayCard、缺卡、本地所有权、自动 EndTurn、Replay、选择、多人专属卡、缺失/队友目标、正式精确 token 与 Lab-only capability token/evidence/owned-instance 三重门禁；历史正式 Host/Client 一动作 Smoke `PASS`。
-- MP-2B 合同：`MultiplayerSafeExecuteChecks` 当前 35 项通过，覆盖两动作上限、`Authorized → Executing → AwaitingWorldUpdate → Revalidating` 会话、WorldVersion 单调接受、预期本地变化、远端/未知变化、动作不匹配和不稳定世界的 fail-closed 判定；当前仅为实现/合同 PASS。
+- MP-2B 合同：`MultiplayerSafeExecuteChecks` 当前 39 项通过，覆盖两动作上限、`Authorized → Executing → AwaitingWorldUpdate → Revalidating` 会话、WorldVersion 冲突/单调接受、旧授权中止、预期本地变化、远端/未知变化、动作不匹配和不稳定世界的 fail-closed 判定；当前仅为实现/合同 PASS。
 - MP-2B 真实 Smoke：两动作 Host/Client 正常运行 `UNVERIFIED/BLOCKED`；两动作之间远端干扰 `UNVERIFIED/BLOCKED`。两组日志必须由用户完成并通过 MP2B 验证器后，才可升级实机状态。
 - MP-2A 证据验证器：`test-mp2a-validator.ps1` 在 CI 中只验证 parser 的 PASS/FAIL/UNVERIFIED 判定；真实运行使用 `validate-mp2a-results.ps1`，必须看到 Safe Execute capability、恰好一个原生 `PlayCardAction`、无药水/自动 EndTurn、动作后 WorldVersion 失效和新搜索，才能报告 Smoke PASS。
 - MP-2B 证据验证器：`test-mp2b-validator.ps1` 的 5 个合成用例通过；真实运行使用 `validate-mp2b-results.ps1`，必须看到同一 request ID 的两个原生 `PlayCardAction`、两次动作重验证、无 EndTurn/药水/Choice/Replay、每次 WorldVersion 前进及动作后新搜索，才能报告正常两动作 Smoke PASS。远端干扰场景必须单独确认 `MP2B_REMOTE_DELTA_ABORT` 且没有第二个原生动作，不得套用正常 Smoke PASS。

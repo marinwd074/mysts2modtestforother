@@ -322,6 +322,11 @@ internal static partial class SolverController
                     PotionModel? potion = player.GetPotionAtSlotIndex(action.PotionSlot);
                     if (potion is null)
                     {
+                        if (safeExecute)
+                        {
+                            AbortSafeExecution(host, deployment, turn, actionIndex, "potion_missing");
+                            return;
+                        }
                         Entry.Logger.Warn(
                             $"[CombatSolver/Test] DEPLOY_REPLAN turn={turn} reason=potion_missing " +
                             $"potion={action.PotionId} slot={action.PotionSlot}");
@@ -336,6 +341,11 @@ internal static partial class SolverController
                     }
                     if (!string.Equals(potion.Id.Entry, action.PotionId, StringComparison.Ordinal))
                     {
+                        if (safeExecute)
+                        {
+                            AbortSafeExecution(host, deployment, turn, actionIndex, "potion_mismatch");
+                            return;
+                        }
                         Entry.Logger.Warn(
                             $"[CombatSolver/Test] DEPLOY_REPLAN turn={turn} reason=potion_mismatch " +
                             $"slot={action.PotionSlot} actual={potion.Id.Entry} expected={action.PotionId}");
@@ -368,6 +378,11 @@ internal static partial class SolverController
                     {
                         bool targetValid = card.IsValidTarget(target);
                         bool cardPlayable = card.CanPlay(out UnplayableReason reason, out AbstractModel? preventer);
+                        if (safeExecute)
+                        {
+                            AbortSafeExecution(host, deployment, turn, actionIndex, "card_unplayable");
+                            return;
+                        }
                         Entry.Logger.Warn(
                             $"[CombatSolver/Test] DEPLOY_REPLAN turn={turn} reason=card_unplayable " +
                             $"card={action.CardId} occurrence={action.CardOccurrence} target_valid={targetValid} " +
@@ -690,6 +705,11 @@ internal static partial class SolverController
         }
         catch (InvalidOperationException ex) when (IsMissingDeploymentCard(ex))
         {
+            if (safeExecute)
+            {
+                AbortSafeExecution(host, deployment, turn, safeSession?.CompletedActions ?? 0, "card_missing");
+                return;
+            }
             _combat.ContinuationSource = null;
             CompleteDeployment(deployment);
             Entry.Logger.Warn(
@@ -703,6 +723,11 @@ internal static partial class SolverController
         }
         catch (InvalidOperationException ex) when (IsDeploymentTurnDrift(ex))
         {
+            if (safeExecute)
+            {
+                AbortSafeExecution(host, deployment, turn, safeSession?.CompletedActions ?? 0, "turn_drift");
+                return;
+            }
             _combat.ContinuationSource = null;
             CompleteDeployment(deployment);
             Entry.Logger.Warn(
@@ -724,6 +749,12 @@ internal static partial class SolverController
         }
         catch (Exception ex)
         {
+            if (safeExecute)
+            {
+                AbortSafeExecution(host, deployment, turn, safeSession?.CompletedActions ?? 0, "deployment_exception");
+                Entry.Logger.Error($"[CombatSolver/MultiplayerSafeExecute] MP2B_DEPLOY_EXCEPTION turn={turn} exception={ex}");
+                return;
+            }
             _combat.BugReportIssues.RecordFailure(CombatBugReportIssueKind.DeploymentFailure, ex);
             CombatBugReportExporter.RecordRuntimeException("deployment", ex);
             SolverOverlay.Show(host, FormatDeploymentFailure(ex));

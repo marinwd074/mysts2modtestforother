@@ -41,7 +41,7 @@
 - `MultiplayerSafeExecutionSession` 固定一次用户授权的请求 ID、路线 generation、起始/已接受 `WorldVersion`、动作上限和状态迁移；旧路线或生命周期变化不会 reset/rebase 世界版本。
 - `MultiplayerSafeLocalActionClassifier` 只取最多两张本地普通 `PlayCard`，不接受药水、EndTurn、Choice、Replay/重复语义、多人专属牌、队友目标或未知目标；第二张牌执行前仍会针对 live state 重新分类。
 - 每张牌只通过原生 `PlayCardAction`；动作队列完成后强制进行一次 action-boundary Probe，并等待稳定 `WorldVersion`，再复核本地手牌/能量/星星、身份/目标、敌人非目标状态和远端公开 fingerprint。
-- 本地合同检查为 35 项 PASS，MP2B 日志验证器合成用例为 5 项 PASS；这些结果只证明源码/解析器合同，不替代真实 Host/Client 证据。运行命令见 `tools/multiplayer-lab/README.md`，实机步骤见 `RUNBOOK.md`。
+- 本地合同检查为 39 项 PASS，MP2B 日志验证器合成用例为 5 项 PASS；这些结果只证明源码/解析器合同，不替代真实 Host/Client 证据。运行命令见 `tools/multiplayer-lab/README.md`，实机步骤见 `RUNBOOK.md`。
 
 ## MP-0A / MP-0B 通过条件
 
