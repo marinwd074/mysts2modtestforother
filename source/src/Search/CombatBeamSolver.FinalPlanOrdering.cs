@@ -15,6 +15,7 @@ internal sealed partial class CombatBeamSolver
         int minimumPotionUses,
         SearchDiagnosticsSink diagnostics,
         bool detailedDiagnostics,
+        MultiplayerCarryRankingContext carryRankingContext,
         BattleDamageSnapshot battleDamage,
         PotionStrategicCostLookup? potionStrategicCosts = null)
     {
@@ -26,6 +27,32 @@ internal sealed partial class CombatBeamSolver
         /// </summary>
         private int ScalePotionCost(int strategicHpCost)
             => PotionUsePolicy.SmartRequiredHpSaved(strategicHpCost, bossHpRelief);
+
+        private static MultiplayerCarryEvaluation EvaluateCarry(
+            MultiplayerCarryRankingContext context,
+            SimulationSnapshot snapshot,
+            bool allEnemiesDead)
+        {
+            if (!context.Enabled || context.RemotePlayers.Count == 0)
+            {
+                return MultiplayerCarryEvaluation.Disabled(
+                    context.Enabled ? "no_remote_teammate" : "disabled");
+            }
+
+            MultiplayerCarryEnemyOutcome[] enemiesAfter = new MultiplayerCarryEnemyOutcome[
+                snapshot.EnemyDurabilityByCombatId.Count];
+            for (int index = 0; index < enemiesAfter.Length; index++)
+            {
+                EnemyDurabilityEntry entry = snapshot.EnemyDurabilityByCombatId[index];
+                enemiesAfter[index] = new MultiplayerCarryEnemyOutcome(
+                    entry.CombatId,
+                    entry.Durability);
+            }
+
+            return MultiplayerCarryRankingEvaluator.Evaluate(
+                context,
+                MultiplayerCarryCandidateObservation.Create(allEnemiesDead, enemiesAfter));
+        }
 
         public FinalPlanSelection Select(
             IReadOnlyList<(SearchNode Node, SimulationSnapshot Snapshot)> evaluated,
@@ -99,6 +126,10 @@ internal sealed partial class CombatBeamSolver
                             ? PotionUsePolicy.AdditionalRequiredUseStrategicHpCost(
                                 optionalPotionStrategicCost)
                             : 0);
+                    MultiplayerCarryEvaluation carryEvaluation = EvaluateCarry(
+                        carryRankingContext,
+                        candidate.Snapshot,
+                        features.AllEnemiesDead);
                     return (candidate.Node, candidate.Snapshot, Features: features,
                         CompleteVictory: completeVictory,
                         CombatEndedTurn: completeVictory ? candidate.Snapshot.CombatEndedTurn : null,
@@ -112,7 +143,8 @@ internal sealed partial class CombatBeamSolver
                         OptionalPotionCount: optionalPotionCount,
                         OptionalPotionStrategicCost: optionalPotionStrategicCost,
                         OptionalAmbergrisCount: optionalAmbergrisCount,
-                        EffectivePotionPolicy: effectivePotionPolicy);
+                        EffectivePotionPolicy: effectivePotionPolicy,
+                        CarryEvaluation: carryEvaluation);
                 })
                 .ToList();
             if (emitDiagnostics && detailedDiagnostics)
@@ -278,6 +310,9 @@ internal sealed partial class CombatBeamSolver
                 .ThenBy(candidate => candidate.OptionalPotionCount)
                 .ThenBy(candidate => candidate.StrategicSold)
                 .ThenBy(candidate => candidate.Features.EnemyHp)
+                // Carry is a final multiplayer tie-break after local safety, resource,
+                // potion, and enemy-health ordering. It cannot outrank hard local quality.
+                .ThenByDescending(candidate => candidate.CarryEvaluation.CarryPreference)
                 .ThenByDescending(candidate => candidate.Score)
                 .ThenBy(candidate => candidate.Features.ActionCount)
                 .ToList();
@@ -289,6 +324,24 @@ internal sealed partial class CombatBeamSolver
                         : potionPolicy == SolverPotionPolicy.RequireAtLeastOne
                         ? "本场药水策略要求至少使用一瓶，但搜索没有找到可执行的用药路线。"
                         : "本场药水策略没有可执行路线。");
+            }
+            if (emitDiagnostics && carryRankingContext.Enabled)
+            {
+                foreach (var (candidate, index) in selected.Take(3).Select((item, index) => (item, index)))
+                {
+                    MultiplayerCarryEvaluation carry = candidate.CarryEvaluation;
+                    diagnostics.Info(
+                        $"[CombatSolver/MultiplayerCarry] MP_CARRY_RANKING " +
+                        $"rank={index + 1} selected={(index == 0).ToString().ToLowerInvariant()} " +
+                        $"enabled={carry.Enabled.ToString().ToLowerInvariant()} " +
+                        $"remoteRiskBefore={carry.RemoteRiskBefore} " +
+                        $"remoteRiskAfter={carry.RemoteRiskAfter} " +
+                        $"threatsRemoved={carry.ThreatsRemoved} " +
+                        $"unknownRiskCount={carry.UnknownRiskCount} " +
+                        $"carryPreference={carry.CarryPreference} " +
+                        $"carryPreferenceReason={carry.Reason} " +
+                        $"actions={string.Join(',', candidate.Node.Actions.Select(CombatBeamSolver.PolicyActionToken))}");
+                }
             }
             var selectedCandidate = selected[0];
             int potionBranchesRejected = policyCandidates.Count(candidate => candidate.PotionCount > 0)

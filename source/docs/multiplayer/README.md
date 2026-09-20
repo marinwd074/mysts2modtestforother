@@ -13,6 +13,7 @@
 - **MP-2B Safe Execute：实机 PASS（受控范围）**。当前运行时使用显式 `Authorized → Executing → AwaitingWorldUpdate → Revalidating → next/Completed/Aborted` 会话，一次部署最多接受 2 张本地普通安全牌；每张原生动作完成后都会等待动作队列与 `WorldVersion` 稳定，复核本地手牌/资源/目标、敌人目标变化和远端公开状态。远端或未知变化会记录 `MP2B_REMOTE_DELTA_ABORT`、停止后续动作并重新搜索。正常两动作与远端干扰验证器均已在真实 Host/Client journal 上返回 PASS，摘要见 [`evidence/mp2b-smoke-2026-09-20.json`](evidence/mp2b-smoke-2026-09-20.json)。
 - **MP-2C bounded N-action：实机 PASS（2026-09-20）**。当前 Safe Execute 使用单一有限上限 `MaxActionsPerDeployment=6`，按当前安全本地 `PlayCard` 连续前缀取值；每张牌仍经过原生队列完成、稳定 `WorldVersion`、动作后重验证和同一 session 的下一动作授权。正常 Smoke 自动打出 3 张本地普通牌且不 EndTurn；远端 Client 在主 Client 完成 2 张后制造公开变化，主 Client 停止第 3 张并重新搜索。两个验证器均 PASS，摘要见 [`evidence/mp2c-smoke-2026-09-20.json`](evidence/mp2c-smoke-2026-09-20.json)。
 - **Reactive Carry Foundation：实机 PASS（2026-09-20）**。显式 Safe Execute 在当前路线的安全本地牌序列完成后，经最新 world/lifecycle/route/queue/choice/identity 边界复核，通过原生 `EndPlayerTurnAction` 结束回合并清除旧 session/authorization；下一本地回合重新 Probe、capture、search。Smoke A、B、C 分别证明下一回合 fresh carry、EndTurn 后队友公开变化适应和连续 3 个本地回合无旧授权复用；摘要见 [`evidence/reactive-carry-smoke-2026-09-20.json`](evidence/reactive-carry-smoke-2026-09-20.json)。
+- **Multiplayer Carry Ranking v1：离线合同 PASS，实机待定**。显式 Advisor/Safe Execute 的新搜索根只捕获远端公开 HP/MaxHP/Block/回合阶段、公开 Powers、敌人公开状态和公开多人约束；纯 evaluator 的 8 项合同与 Release 构建已通过。Carry 只在既有本地安全/资源排序之后作兼容候选 tie-break；未知敌方目标保持 Unknown/neutral，默认 Probe、单人和远端私有状态不受影响。本轮未把 R1/R2 实机写成 PASS。
 - 正式一动作证据摘要见 [`evidence/mp2-safe-execute-formal-2026-09-20.json`](evidence/mp2-safe-execute-formal-2026-09-20.json)。
 
 ## 已实现
@@ -25,6 +26,7 @@
 - `source/tools/multiplayer-lab/validate-phase0-results.ps1` 只读校验带证据引用的 Host/Client 矩阵和 Probe JSONL；`MP-0A` 只校验连接兼容，`MP-0B` 才要求真实 Probe；它不会启动游戏，也不会解除 Advisor 门禁。
 - `MultiplayerWorldTracker`：维护只读观察的 `WorldVersion`、dirty 状态和 200ms 稳定等待窗口；使用紧凑值型 fingerprint 做快速变化检测，只有变化时才生成完整 Describe/JSON 证据。
 - Runtime 的搜索、部署、路线接管、全自动、回合开始接管和 Instant 入口统一经过能力表；没有通过实机证据前，网络多人保持关闭。
+- `MultiplayerCarryRankingContextCapture` 在 main-thread root capture 时复制公开多人状态；`MultiplayerCarryRankingEvaluator` 是无 Runtime/UI/live 对象依赖的纯确定性评估器。Carry context 带 `WorldVersion` 与公开 fingerprint，不跨 fresh search 复用；Probe 不搜索也不运行 ranking。
 
 已把后续 MP-1/MP-2 的受控路径接入源码；默认仍由 Probe 门禁关闭，只有明确 opt-in 才能进入对应能力：
 
@@ -37,7 +39,7 @@
 
 ## 当前明确未启用
 
-多人 Safe Execute 仅通过精确的 `COMBATSOLVER_MULTIPLAYER_MODE=safe-execute` 显式开启，默认安装保持 Probe，不因玩家数或网络类型自动升级；当前已开放的 Reactive Carry 仍只允许最新安全边界上的原生 Safe EndTurn，不构成 Full Auto。药水、选择驱动、Replay、Instant、旧跨回合路线复用、Route Repair 和队友控制仍未开放。Advisor 仍受本地私有/远端公开 root contract、当前回合和 fail-closed 约束。
+多人 Safe Execute 仅通过精确的 `COMBATSOLVER_MULTIPLAYER_MODE=safe-execute` 显式开启，默认安装保持 Probe，不因玩家数或网络类型自动升级；当前已开放的 Reactive Carry 仍只允许最新安全边界上的原生 Safe EndTurn，不构成 Full Auto。Carry Ranking 也只在显式 Advisor/Safe Execute 搜索中运行，不读取远端私有状态。药水、选择驱动、Replay、Instant、旧跨回合路线复用、Route Repair 和队友控制仍未开放。Advisor 仍受本地私有/远端公开 root contract、当前回合和 fail-closed 约束。
 
 ## MP-2B 历史基线与 MP-2C 当前实现
 

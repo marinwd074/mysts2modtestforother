@@ -48,6 +48,7 @@ try {
     Invoke-DotnetContract 'PredictionStateStoreChecks' 'tools/PredictionStateStoreChecks/PredictionStateStoreChecks.csproj'
     Invoke-DotnetContract 'DiagnosticLogTests' 'tools/DiagnosticLogTests/DiagnosticLogTests.csproj'
     Invoke-DotnetContract 'MultiplayerSafeExecuteChecks' 'tools/MultiplayerSafeExecuteChecks/MultiplayerSafeExecuteChecks.csproj'
+    Invoke-DotnetContract 'MultiplayerCarryRankingChecks' 'tools/MultiplayerCarryRankingChecks/MultiplayerCarryRankingChecks.csproj'
     Invoke-DotnetContract 'MultiplayerRootCaptureChecks' 'tools/MultiplayerRootCaptureChecks/MultiplayerRootCaptureChecks.csproj'
     Invoke-PowerShellContract 'MultiplayerSafeExecuteEvidenceChecks' 'tools/multiplayer-lab/test-mp2a-validator.ps1'
     Invoke-PowerShellContract 'MultiplayerSafeExecuteMp2BEvidenceChecks' 'tools/multiplayer-lab/test-mp2b-validator.ps1'

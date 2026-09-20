@@ -13,6 +13,8 @@
 - MP-2B 历史合同：`MultiplayerSafeExecuteChecks` 原 39 项通过，覆盖两动作上限、`Authorized → Executing → AwaitingWorldUpdate → Revalidating` 会话、WorldVersion 冲突/单调接受、旧授权中止、预期本地变化、远端/未知变化、动作不匹配和不稳定世界的 fail-closed 判定。
 - MP-2C bounded N-action 合同：基线为 40 项通过，覆盖六动作有限上限、5-action session 迁移、连续安全前缀、首个不安全动作硬边界、超过 ceiling、完成/中止 session 不可重用等检查；Release 构建与真实正常/干扰 Smoke 均已通过。
 - Reactive Carry 合同：`MultiplayerSafeExecuteChecks` 当前 53 项通过，新增 Safe EndTurn 单次授权、EndTurn 前边界复核、旧 session/route/generation/authorization 失效、Fresh Probe/Search、WorldVersion 单调和 reactive replan 场景；`test-reactive-carry-validator.ps1` 合成自测通过。
+- Multiplayer Carry Ranking v1 合同：新增 `MultiplayerCarryRankingChecks` 8 项通过，覆盖无远端 neutral、等风险保持 baseline、明确公开威胁移除、低远端有效生命风险、Unknown 目标 neutral、远端私有不可见和 WorldVersion/public fingerprint 变化重建上下文；纯 evaluator 不读取 Runtime/UI/live state。
+- Multiplayer Carry Ranking v1 当前实现：公开上下文只在显式 Advisor/Safe Execute 的 main-thread root capture 中建立，最终排序只在既有本地安全/资源/敌方生命键之后作 tie-break；单人和默认 Probe 不启用，R1/R2 尚未作为实机证据收口。
 - MP-2B 真实 Smoke：2026-09-20 Host/Client 正常两动作运行返回 `MULTIPLAYER_MP-2B_PASS`；两动作之间远端干扰运行返回 `MULTIPLAYER_MP-2B_REMOTE_ABORT_PASS`，没有第二个原生动作并完成新搜索。摘要见 `multiplayer/evidence/mp2b-smoke-2026-09-20.json`。
 - MP-2A 证据验证器：`test-mp2a-validator.ps1` 在 CI 中只验证 parser 的 PASS/FAIL/UNVERIFIED 判定；真实运行使用 `validate-mp2a-results.ps1`，必须看到 Safe Execute capability、恰好一个原生 `PlayCardAction`、无药水/自动 EndTurn、动作后 WorldVersion 失效和新搜索，才能报告 Smoke PASS。
 - MP-2B/2C 证据验证器：`validate-mp2b-results.ps1` 已通过 `-MinActions` / `-MaxActions` 泛化为 bounded N-action 校验器；默认参数仍兼容历史两动作运行。当前正常合成用例 6 个、远端干扰合成用例 6 个均通过，其中包含 5-action 正常与两张牌后中止；真实 MP-2C 运行要求同一 request ID 的连续原生 `PlayCardAction`、每动作重验证、WorldVersion 前进、无 forbidden action、`end_turn=false` 和 fresh search，干扰则要求不存在下一 action。

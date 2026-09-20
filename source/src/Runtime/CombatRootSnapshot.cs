@@ -59,6 +59,12 @@ internal sealed class CombatRootSnapshot
     public bool HasUnusedCardReplayAllocator { get; }
     public bool HasRenewablePotionShapedRock { get; }
     public PostCombatRelicHealProfile PostCombatRelicHeal { get; }
+    /// <summary>
+    /// Immutable public multiplayer input captured with this root. Single-player and
+    /// read-only Probe roots carry a disabled context; background search never reads live
+    /// remote players or creatures through this property.
+    /// </summary>
+    public MultiplayerCarryRankingContext CarryRankingContext { get; }
     internal HookLayoutCacheStatistics HookLayoutCacheStatistics
         => ((SimulatedCombatState)_rootSimulator.State.CombatState).HookLayoutCacheStatistics;
     internal HookListenerSegmentStatistics HookListenerSegmentStatistics
@@ -93,7 +99,8 @@ internal sealed class CombatRootSnapshot
         bool capturedBaseLibCardModifiers,
         bool hasUnusedCardReplayAllocator,
         bool hasRenewablePotionShapedRock,
-        PostCombatRelicHealProfile postCombatRelicHeal)
+        PostCombatRelicHealProfile postCombatRelicHeal,
+        MultiplayerCarryRankingContext carryRankingContext)
     {
         PlayerIdentity = playerIdentity;
         Perspective = perspective;
@@ -130,6 +137,7 @@ internal sealed class CombatRootSnapshot
         HasUnusedCardReplayAllocator = hasUnusedCardReplayAllocator;
         HasRenewablePotionShapedRock = hasRenewablePotionShapedRock;
         PostCombatRelicHeal = postCombatRelicHeal;
+        CarryRankingContext = carryRankingContext;
     }
 
     public static CombatRootSnapshot Capture(CombatState state)
@@ -144,6 +152,9 @@ internal sealed class CombatRootSnapshot
         PlayerCombatState playerState = player.PlayerCombatState
             ?? throw new InvalidOperationException("玩家没有战斗状态。");
         SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
+        MultiplayerCarryRankingContext carryRankingContext = capabilities.IsMultiplayer && capabilities.CanSearch
+            ? MultiplayerCarryRankingContextCapture.Capture(state, MultiplayerWorldTracker.WorldVersion)
+            : MultiplayerCarryRankingContext.Disabled;
         SolverPerspective perspective = SolverPerspective.Capture(
             player,
             state.Players.Count,
@@ -235,6 +246,17 @@ internal sealed class CombatRootSnapshot
         int powerCount = state.Creatures.Sum(creature => creature.Powers.Count);
         stopwatch.Stop();
 
+        if (carryRankingContext.Enabled)
+        {
+            Entry.Logger.Info(
+                $"[CombatSolver/MultiplayerCarry] MP_CARRY_CONTEXT_CAPTURE " +
+                $"world_version={carryRankingContext.WorldVersion} " +
+                $"remote_players={carryRankingContext.RemotePlayers.Count} " +
+                $"enemies={carryRankingContext.Enemies.Count} " +
+                "remote_private=false context_reused=false " +
+                $"public_fingerprint={carryRankingContext.PublicFingerprint}");
+        }
+
         return new CombatRootSnapshot(
             player,
             perspective,
@@ -264,7 +286,8 @@ internal sealed class CombatRootSnapshot
             simulatedCombat.RootHasBaseLibCardModifiers,
             hasUnusedCardReplayAllocator,
             hasRenewablePotionShapedRock,
-            postCombatRelicHeal);
+            postCombatRelicHeal,
+            carryRankingContext);
     }
 
     /// <summary>

@@ -8,6 +8,7 @@
 - MP-2A：显式 `safe-execute`/`safe-execute-lab` 的一动作 Host/Client Smoke 已 PASS，作为历史基线保留；该证据不等于两动作能力已通过。
 - MP-2B：两动作上限、显式 SafeExecutionSession、动作后稳定世界等待和本地/远端变化重验证已完成；历史 `MultiplayerSafeExecuteChecks` 39 项、正常/远端干扰验证器合成回归和 Release 构建已通过，真实正常两动作与远端干扰 Smoke 也已分别返回 PASS。摘要见 [`mp2b-smoke-2026-09-20.json`](multiplayer/evidence/mp2b-smoke-2026-09-20.json)。
 - MP-2C：已直接将 MP2B 泛化为当前回合 bounded N-action，policy ceiling 为 6；当前合同 40 项、正常/干扰验证器各 6 个合成用例和 Release 构建已通过。真实正常 Smoke 自动完成 3 张牌，真实远端干扰 Smoke 在完成 2 张后中止并重新搜索；摘要见 [`mp2c-smoke-2026-09-20.json`](multiplayer/evidence/mp2c-smoke-2026-09-20.json)。
+- Multiplayer Carry Ranking v1：已接入主线程捕获的公开远端/敌人上下文、纯确定性 evaluator 和最终路线排序 tie-break；8 项 Multiplayer Carry Ranking 离线合同与 Release 构建通过。仅显式 Advisor/Safe Execute 使用，默认 Probe/单人保持原排序；远端私有状态、队友行为预测和未知敌方目标均保持 fail-closed/neutral。本轮尚未把 R1/R2 写成实机 PASS。
 - Multiplayer Lab snapshot：已改为 schema 2 的持久 base-game snapshot + profile overlay 增量同步。marker 拆分 `baseGameId`、`ritsuArtifactId`、`combatSolverArtifactId`；游戏版本/底座变化、底座完整性失败或旧 schema 才全量重建，overlay 采用临时 managed tree + SHA-256 + rename/rollback。CombatSolver/RitsuLib 变化分别只更新各自 payload，HostVanilla 不因 CombatSolver 构建变化重建；`prepare-instances` 输出 `FULL_REBUILD` / `OVERLAY_UPDATED` / `REUSED` 和 `copiedFiles`。ownership、no-reparse-point、运行中禁止覆盖和正式证据隔离合同保持不变。
 - Multiplayer Instant、Potion、Choice、Replay、Full Auto、旧跨回合路线复用和队友目标继续关闭；Reactive Carry 仅在显式 Safe Execute 且最新安全路线边界成立时通过原生 EndTurn；默认多人仍保持 Probe。
 - 本轮没有为 MP2B 声明新的 GitHub Actions 结果；实机结论来自隔离 Multiplayer Lab 的 Host/Client journal 与对应验证器，不等同于 GitHub Actions 结果。
@@ -83,6 +84,7 @@
 ## 当前下一步
 
 [Reactive Carry Foundation](multiplayer/NEXT_REACTIVE_CARRY.md) 已完成；A/B/C 三轮真实
-Host/Client Smoke 和机器摘要已收口。默认仍保持 Probe，Potion、Choice、Replay、队友控制、
-Instant 和旧跨回合路线复用关闭。下一阶段如继续推进，应另立计划评估 uncertainty-aware
-ranking 或 teammate behavior model，不把未验证的预测或 Full Auto 混入当前 Safe Execute。
+Host/Client Smoke 和机器摘要已收口。外部计划 `CombatSolver_NEXT_CODEX_MULTIPLAYER_CARRY_RANKING_V1.md`
+当前已完成公开上下文/evaluator/离线合同与源码验证，待按计划决定是否需要最多两轮 R1/R2 实机。
+默认仍保持 Probe，Potion、Choice、Replay、队友控制、Instant 和旧跨回合路线复用关闭；不引入
+teammate behavior model 或 Full Auto。
