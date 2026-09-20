@@ -385,6 +385,32 @@ internal sealed partial class CombatBeamSolver
                 forecastOffset,
                 multiplayerExpectation));
         }
+        if (_detailedDiagnostics && root.AllowsLocalPlayerOnlySearch)
+        {
+            List<string> boundaryDiagnostics = [];
+            for (int pathIndex = 0; pathIndex < path.Count; pathIndex++)
+            {
+                SearchNode node = path[pathIndex];
+                PlanAction? action = node.Action;
+                if (action == null || action.Kind != PlanActionKind.EndTurn && !action.EndsPlayerTurn)
+                    continue;
+                int sameTurnActions = path
+                    .Skip(pathIndex + 1)
+                    .Count(later => later.Action?.Turn == node.Turn);
+                int laterTurnActions = path
+                    .Skip(pathIndex + 1)
+                    .Count(later => later.Action?.Turn > action.Turn);
+                boundaryDiagnostics.Add(
+                    $"index={pathIndex} action_turn={action.Turn} node_turn={node.Turn} " +
+                    $"same_node_turn={sameTurnActions} later_action_turn={laterTurnActions} " +
+                    $"boundary={node.Snapshot.BoundaryReason} player_dead={node.Snapshot.PlayerDead} " +
+                    $"enemies_dead={node.Snapshot.AllEnemiesDead}");
+            }
+            policy.Diagnostics.Info(
+                "[CombatSolver/Debug] MP_CONTINUATION_BUILD " +
+                $"path_actions={path.Count} entries={continuations.Count} " +
+                $"boundaries={string.Join('|', boundaryDiagnostics)}");
+        }
         return continuations;
     }
 

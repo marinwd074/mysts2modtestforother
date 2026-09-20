@@ -108,6 +108,7 @@ internal static class SolverDiagnostics
                 .Append(" actions=").Append(result.BestNode.Actions.Count)
                 .Append(" end_turn_count=").Append(result.BestNode.Actions.Count(action =>
                     action.Kind == PlanActionKind.EndTurn || action.EndsPlayerTurn))
+                .Append(" continuations=").Append(result.Continuations.Count)
                 .Append(" projected_hp_loss=").Append(result.ProjectedBattleHpLost)
                 .Append(" boundary=").Append(multiplayerBoundary)
                 .Append(" route_identity=").Append(result.RouteIdentity)
