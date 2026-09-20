@@ -740,7 +740,19 @@ internal static partial class SolverController
 
         _combat.LatestResult = result;
         _combat.LatestStamp = searchedStamp;
-        _combat.ContinuationSource = currentTurnAdopted ? null : result;
+        bool retainCurrentTurnRoute = currentTurnAdopted
+            && MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnContinuation(
+                result.MultiplayerScope,
+                result.Continuations.Count);
+        _combat.ContinuationSource = !currentTurnAdopted || retainCurrentTurnRoute
+            ? result
+            : null;
+        Entry.Logger.Info(
+            $"[CombatSolver/Test] SEARCH_RESULT_ROUTE_CAPTURE generation={generation} " +
+            $"deployment_scope={result.ResultScope} route_scope={result.MultiplayerScope} " +
+            $"continuations={result.Continuations.Count} " +
+            $"future_route_preserved={(_combat.ContinuationSource != null).ToString().ToLowerInvariant()} " +
+            $"route_identity={_combat.ContinuationSource?.RouteIdentity ?? "-"}");
         if (UnattendedTestRunner.IsActive)
             LastCompletedResultForTesting = result;
         BattleDamageTracker.RegisterPlan(searchedState, result);
@@ -777,7 +789,9 @@ internal static partial class SolverController
         {
             Entry.Logger.Info(
                 $"[CombatSolver/Test] SEARCH_CURRENT_TURN_ADOPTED generation={generation} " +
-                $"turn={result.StartTurnNumber} actions={result.BestNode.Actions.Count}");
+                $"turn={result.StartTurnNumber} actions={result.BestNode.Actions.Count} " +
+                $"continuations={result.Continuations.Count} " +
+                $"future_route_preserved={retainCurrentTurnRoute.ToString().ToLowerInvariant()}");
         }
         else if (routeAdopted)
         {

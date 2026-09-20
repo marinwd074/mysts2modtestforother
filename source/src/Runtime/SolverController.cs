@@ -1369,12 +1369,12 @@ internal static partial class SolverController
                 or MultiplayerSafeExecutionState.AwaitingWorldUpdate
                 or MultiplayerSafeExecutionState.Revalidating
                 or MultiplayerSafeExecutionState.EndTurnExecuting;
-        bool preservePendingContinuation = _deployment == null
-            && MultiplayerLocalCrossTurnContracts.CanPreserveFutureRoute(
-                capabilities.CanCrossTurnReuse,
-                _combat.AwaitingMultiplayerContinuation,
-                _combat.ContinuationSource?.Continuations.Count ?? 0,
-                _combat.ContinuationSource?.MultiplayerScope ?? MultiplayerSearchResultScope.CurrentTurnOnly);
+        bool preservePendingContinuation = MultiplayerLocalCrossTurnContracts.CanPreserveFutureRoute(
+            capabilities.CanCrossTurnReuse,
+            awaitingContinuation: preserveExpectedSafeDeployment
+                || _combat.AwaitingMultiplayerContinuation,
+            _combat.ContinuationSource?.Continuations.Count ?? 0,
+            _combat.ContinuationSource?.MultiplayerScope ?? MultiplayerSearchResultScope.CurrentTurnOnly);
         if (!preserveExpectedSafeDeployment)
         {
             if (safeExecutionState == MultiplayerSafeExecutionState.Authorized

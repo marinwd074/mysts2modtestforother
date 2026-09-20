@@ -373,6 +373,10 @@ internal sealed partial class CombatBeamSolver
             currentTurnCandidateNode = boundary;
             currentTurnPreviewNode = node;
         }
+
+        bool HasFutureTurnActions(SearchNode? node)
+            => node?.Actions.Any(action => action.Turn > _startTurnNumber) == true;
+
         void RefreshCurrentTurnPreview()
         {
             SearchNode? candidate = currentBestNode
@@ -791,7 +795,14 @@ internal sealed partial class CombatBeamSolver
                 IsActEndingBoss = _isActEndingBoss,
                 BossHpRelief = _bossHpRelief,
                 Elapsed = stopwatch.Elapsed,
-                Continuations = resultScope == SolverResultScope.CurrentTurnAdoption ? [] : continuations,
+                // Current-turn takeover is a deployment scope, not permission to discard a
+                // trusted local cross-turn projection. CurrentTurnOnly and single-player
+                // takeover still publish no future route; local-cross-turn takeover keeps only
+                // continuations actually materialized from a future-bearing preview node.
+                Continuations = resultScope == SolverResultScope.CurrentTurnAdoption
+                    && policy.RoutePolicy != SearchRoutePolicy.MultiplayerLocalCrossTurn
+                        ? []
+                        : continuations,
             };
             finalSnapshot.ReleaseSimulator();
             return result;
@@ -2018,9 +2029,15 @@ internal sealed partial class CombatBeamSolver
         }
 
         List<SearchNode> finalPool;
+        bool retainCrossTurnTakeoverRoute = currentTurnAdoptionReached
+            && policy.RoutePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
+            && HasFutureTurnActions(currentTurnPreviewNode);
         SearchNode? adoptedNode = policy.CurrentTurnOnly
             ? currentTurnCandidateNode ?? currentBestNode
-            : currentBestNode ?? currentTurnCandidateNode;
+            : currentBestNode
+                ?? (retainCrossTurnTakeoverRoute
+                    ? currentTurnPreviewNode
+                    : currentTurnCandidateNode);
         if (adoptionReached && adoptedNode != null)
         {
             SearchNode adopted = RefreshReleasedFallback(adoptedNode);
@@ -2033,6 +2050,9 @@ internal sealed partial class CombatBeamSolver
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] SEARCH_CHECKPOINT_ADOPTED " +
                 $"scope={(currentTurnAdoptionReached ? "current_turn" : "complete_victory")} " +
+                $"route_candidate={(retainCrossTurnTakeoverRoute ? "future_preview" : "current_turn_candidate")} " +
+                $"deployment_actions={adopted.Actions.Count(action => action.Turn == _startTurnNumber)} " +
+                $"future_actions={adopted.Actions.Count(action => action.Turn > _startTurnNumber)} " +
                 $"potions={adoptedSummary.ProjectedBattlePotionCount} " +
                 $"projected_battle_hp_lost={adoptedSummary.ProjectedBattleHpLost} " +
                 $"expanded={_run.Expanded}");

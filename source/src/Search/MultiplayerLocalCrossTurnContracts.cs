@@ -53,6 +53,13 @@ internal static class MultiplayerLocalCrossTurnContracts
             && continuationCount > 0
             && scope != MultiplayerSearchResultScope.CurrentTurnOnly;
 
+    internal static bool HasLocalCrossTurnContinuation(
+        MultiplayerSearchResultScope scope,
+        int continuationCount)
+        => continuationCount > 0
+            && scope is MultiplayerSearchResultScope.CompleteLocalBattleProjection
+                or MultiplayerSearchResultScope.PartialLocalCrossTurnProjection;
+
     internal static bool IsCurrentTurnAction(int actionTurn, int currentTurn)
         => actionTurn == currentTurn;
 
