@@ -4,7 +4,7 @@
 
 ## Multiplayer Lab（当前）
 
-- Multiplayer Lab snapshot sync：`test-headless-runtime.ps1 -MultiplayerSnapshot` 通过，覆盖持久 base 保留、HostVanilla 对 CombatSolver 构建变化不重建、CombatSolver/RitsuLib managed overlay 原子替换与残留删除、底座变化/底座篡改全量修复、`-ForceRebuild`、live fail-closed、schema 2 split marker、ownership 清理和 `prepare-instances` 分项输出；本机因无管理员符号链接权限未执行 reparse fixture，运行时拒绝逻辑仍由静态边界和既有 profile 安全合同覆盖。
+- Multiplayer Lab snapshot sync：`test-headless-runtime.ps1 -MultiplayerSnapshot` 通过并已接入 `run-contract-tests.ps1`，持续覆盖持久 base 保留、HostVanilla 对 CombatSolver 构建变化不重建、CombatSolver/RitsuLib managed overlay 原子替换与残留删除、底座变化/底座篡改全量修复、`-ForceRebuild`、live fail-closed、schema 2 split marker、ownership 清理和 `prepare-instances` 分项输出；无管理员符号链接权限的环境会跳过 reparse fixture，运行时拒绝逻辑仍由静态边界和既有 profile 安全合同覆盖。
 - MP-0 Core：`PASS`；MP-0 Hardening lifecycle：`PASS`（Host 退出并重建房间后 Client 重新加入、Ready、再次进入战斗）；当前受控 MP-0 矩阵为 `PASS`，Host 重建后的证据见 Phase 0 JSON。
 - MP-1 Advisor：`SMOKE_PASS`（受控范围；静态合同/Release 已通过，fresh `-bbfix` 真实复验 `SEARCH_COMPLETE=5`、`SEARCH_STALE=1`、`FAIL_CLOSED=0`、`SEARCH_FAILURE=0`，并有原生完成通知与路线回放），默认仍是 Probe，只有 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 显式 opt-in；MP-2 Safe Execute 显式一动作 Smoke `PASS`，默认仍是 Probe。
 - MP-1 Advisor Stability 追加受控轮（2026-09-20）：Host 重建房间后 Client 重新加入的无药水战斗记录 `SEARCH_START=4`、`SEARCH_COMPLETE=3`、`FAIL_CLOSED=0`、`SEARCH_FAILURE=0`，Probe `130/130` 全部只读且无动作入队/自定义网络包；随后非空远端药水复验记录 `FAIL_CLOSED=7`、`SEARCH_SETUP_FAILURE=7`，消耗药水后再完成 2 次搜索，整体稳定性仍为 `PARTIAL`。证据见 `multiplayer/evidence/mp1-advisor-potion-2026-09-20.json`。

@@ -14,11 +14,12 @@ $results = [System.Collections.Generic.List[object]]::new()
 function Invoke-PowerShellContract {
     param(
         [Parameter(Mandatory)][string]$Name,
-        [Parameter(Mandatory)][string]$Script
+        [Parameter(Mandatory)][string]$Script,
+        [string[]]$Arguments = @()
     )
 
     Write-Output "RUN: $Name"
-    & pwsh -NoLogo -NoProfile -File (Join-Path $repositoryRoot $Script)
+    & pwsh -NoLogo -NoProfile -File (Join-Path $repositoryRoot $Script) @Arguments
     $exitCode = $LASTEXITCODE
     $results.Add([pscustomobject]@{ Name = $Name; Status = if ($exitCode -eq 0) { 'PASS' } else { 'FAIL' } })
 }
@@ -51,6 +52,7 @@ try {
     Invoke-PowerShellContract 'MultiplayerSafeExecuteEvidenceChecks' 'tools/multiplayer-lab/test-mp2a-validator.ps1'
     Invoke-PowerShellContract 'MultiplayerSafeExecuteMp2BEvidenceChecks' 'tools/multiplayer-lab/test-mp2b-validator.ps1'
     Invoke-PowerShellContract 'MultiplayerSafeExecuteMp2BInterferenceChecks' 'tools/multiplayer-lab/test-mp2b-interference-validator.ps1'
+    Invoke-PowerShellContract 'MultiplayerSnapshotChecks' 'tools/test-headless-runtime.ps1' -Arguments @('-MultiplayerSnapshot')
 
     if ($SkipPython) {
         $results.Add([pscustomobject]@{ Name = 'BeamRankSortChecks'; Status = 'SKIP' })

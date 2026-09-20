@@ -116,7 +116,7 @@ pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
 transport off 和 Mod warm-up 后的隔离实例，但模式必须是：
 
 ~~~powershell
-# 用户执行
+# Codex/Agent 执行
 pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
   -InstanceRoot "$labRoot\runtime-mp-client-solver" `
   -ClientId 1000 `

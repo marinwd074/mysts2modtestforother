@@ -33,9 +33,10 @@
 
 ## 当前实验职责
 
-- 游戏内所有 GUI 操作交给用户完成；Codex/Agent 不再尝试代操作游戏。
-- Codex/Agent 负责把环境准备到可点击状态，并在用户每完成一步后读取日志/结果继续判断。
-- 后续 MP-2C Smoke 应按 RUNBOOK 分成短步骤交给用户执行；游戏内 GUI 操作仍由用户完成，Codex 只负责读取日志和验证结果。
+- 游戏内所有 GUI 操作交给用户完成；Codex/Agent 不代操作游戏 GUI。
+- 必须实机验证的任务由 Codex/Agent 驱动技术全流程：构建、prepare、启动/重启、warm-up、Graceful stop、日志定位、validator、证据分析和修复；不得把启动命令或进程管理反交给用户。
+- 到达 GUI 节点时只告诉用户当前要点击/观察的一步；用户反馈后 Codex/Agent 继续余下流程。
+- MP-2C 正常/干扰 Smoke 已收口，不为下一阶段重复同一证据。
 
 ## 本轮 MP-2A 实机证据（2026-09-20）
 
@@ -60,4 +61,4 @@
 
 ## 当前下一步
 
-MP-2C 实机已收口；Multiplayer Lab snapshot 增量同步已完成并通过定向 PowerShell 回归。继续保持默认 Probe，以及 Multiplayer Instant、自动 EndTurn、Potion、Choice、Full Auto、跨回合和队友目标关闭。当前已验证边界是“至少三张连续本地普通牌/当前回合/远端变化中止”；Safe EndTurn 仍留给下一阶段。
+当前目标见 [Reactive Carry Foundation](multiplayer/NEXT_REACTIVE_CARRY.md)：把 Safe EndTurn、Turn Boundary 和远端真实变化后的 reactive replan 合并成一个阶段，不再拆 3-action/4-action 等微阶段。Snapshot 专用自测已接入标准 contract suite；当前仍保持默认 Probe，Potion、Choice、Replay、队友控制、Instant 和跨回合旧路线复用关闭。完成标准包含 3 轮必要真实 Host/Client Smoke，技术全流程由 Codex/Agent 驱动，用户只做 GUI。
