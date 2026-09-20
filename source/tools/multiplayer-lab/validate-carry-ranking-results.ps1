@@ -133,7 +133,11 @@ foreach ($record in $rankings) {
     $removed = Get-IntToken $record.Text 'threatsRemoved'
     $unknown = Get-IntToken $record.Text 'unknownRiskCount'
     $reason = Get-Token $record.Text 'carryPreferenceReason'
-    if ($null -eq $preference -or $null -eq $removed -or $null -eq $unknown -or $null -eq $reason) {
+    $window = Get-Token $record.Text 'carryWindow'
+    $observationActionCount = Get-IntToken $record.Text 'carryObservationActionCount'
+    if ($null -eq $preference -or $null -eq $removed -or $null -eq $unknown -or
+        $null -eq $reason -or $null -eq $observationActionCount -or
+        $window -ne 'current_turn_pre_end') {
         $rankingContradictions.Add($record)
         continue
     }
