@@ -133,5 +133,18 @@ internal sealed class AppendOnlyEventLog<T> : IDisposable
         finally { file?.Dispose(); }
     }
     private void SetError(string value) => Interlocked.CompareExchange(ref _error, value, null);
-    public void Dispose() => _messages.Writer.TryComplete();
+
+    public void Dispose()
+    {
+        _messages.Writer.TryComplete();
+        try
+        {
+            Completion.Wait(TimeSpan.FromSeconds(2));
+        }
+        catch (AggregateException)
+        {
+            // The writer records expected I/O/serialization failures in Error.
+            // Disposal must still release the caller without surfacing shutdown-only faults.
+        }
+    }
 }
