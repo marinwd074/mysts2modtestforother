@@ -375,13 +375,7 @@ internal sealed partial class CombatBeamSolver
             }
             MultiplayerContinuationExpectation? multiplayerExpectation =
                 root.AllowsLocalPlayerOnlySearch
-                    ? new MultiplayerContinuationExpectation(
-                        ContinuationStamp.CapturePredictedCombatIdentity(node.Snapshot.Simulator),
-                        _player.NetId.ToString(),
-                        root.CarryRankingContext.RemotePublicFingerprint,
-                        root.CarryRankingContext.MultiplayerScalingHooks,
-                        root.CarryRankingContext.CardMultiplayerConstraint,
-                        root.CarryRankingContext.WorldVersion)
+                    ? CreateMultiplayerContinuationExpectation(expected)
                     : null;
             continuations.Add(new CachedContinuation(
                 expected,
@@ -390,6 +384,23 @@ internal sealed partial class CombatBeamSolver
                 multiplayerExpectation));
         }
         return continuations;
+    }
+
+    private MultiplayerContinuationExpectation CreateMultiplayerContinuationExpectation(
+        ContinuationStamp expected)
+    {
+        if (string.IsNullOrWhiteSpace(expected.CombatIdentity))
+        {
+            throw new InvalidOperationException(
+                "多人续用路线的预测 continuation 缺少 combat identity。");
+        }
+        return new MultiplayerContinuationExpectation(
+            expected.CombatIdentity,
+            _player.NetId.ToString(),
+            root.CarryRankingContext.RemotePublicFingerprint,
+            root.CarryRankingContext.MultiplayerScalingHooks,
+            root.CarryRankingContext.CardMultiplayerConstraint,
+            root.CarryRankingContext.WorldVersion);
     }
 
 }

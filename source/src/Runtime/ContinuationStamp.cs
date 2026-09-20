@@ -20,6 +20,31 @@ namespace CombatSolver;
 /// </summary>
 internal sealed record ContinuationStamp(string StateText)
 {
+    /// <summary>
+    /// Stable combat identity captured at the start of the exact state text. This is
+    /// intentionally available from the immutable stamp so route materialization does
+    /// not need to reacquire a released prediction simulator.
+    /// </summary>
+    public string CombatIdentity
+    {
+        get
+        {
+            const string prefix = "combat_identity=";
+            string[] fields = StateText.Split(';');
+            if (fields.Length == 0 || !fields[0].StartsWith(prefix, StringComparison.Ordinal))
+                return string.Empty;
+
+            StringBuilder identity = new(fields[0][prefix.Length..]);
+            for (int index = 1; index < fields.Length; index++)
+            {
+                if (fields[index].StartsWith("local_net_id=", StringComparison.Ordinal))
+                    break;
+                identity.Append(';').Append(fields[index]);
+            }
+            return identity.ToString();
+        }
+    }
+
     public string DescribeFirstDifference(ContinuationStamp actual)
         => DescribeDifferences(actual, maximumDifferences: 1).FirstOrDefault() ?? "none";
 
