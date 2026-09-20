@@ -48,14 +48,51 @@ Check(
     "A resolved local-player or enemy target is allowed.");
 Check(Resolved(incompleteTarget: true).Reason == "target_identity_incomplete", "Incomplete target identity fails closed.");
 Check(Resolved().IsSafe, "A targetless resolved local card is allowed.");
-Check(MultiplayerSafeExecutePolicy.MaxActionsPerDeployment == 2, "MP-2B is capped at two actions per deployment.");
 Check(
-    MultiplayerSafeExecutePolicy.DeploymentStopAfter(2, 3).Reason
-        == MultiplayerSafeExecutePolicy.TwoActionLimitReason,
-    "A third planned action stops at the MP-2B two-action boundary.");
+    MultiplayerSafeExecutePolicy.MaxActionsPerDeployment == 6,
+    "MP-2C uses one finite six-action Safe Execute ceiling.");
 Check(
-    MultiplayerSafeExecutePolicy.DeploymentStopAfter(1, 2).IsSafe,
-    "A second planned action remains admissible before the MP-2B cap is reached.");
+    MultiplayerSafeExecutePolicy.DeploymentStopAfter(6, 7).Reason
+        == MultiplayerSafeExecutePolicy.BoundedActionCeilingReason,
+    "A seventh planned action stops at the bounded MP-2C ceiling.");
+Check(
+    MultiplayerSafeExecutePolicy.DeploymentStopAfter(5, 6).IsSafe,
+    "A sixth planned action remains admissible before the MP-2C ceiling is reached.");
+IReadOnlyList<SafeLocalActionDecision> allSafe =
+    [SafeLocalActionDecision.Allow, SafeLocalActionDecision.Allow,
+     SafeLocalActionDecision.Allow, SafeLocalActionDecision.Allow];
+IReadOnlyList<SafeLocalActionDecision> fullPrefix =
+    MultiplayerSafeExecutePolicy.TakeBoundedSafePrefix(allSafe, decision => decision, out SafeLocalActionDecision fullStop);
+Check(fullPrefix.Count == 4 && fullStop.IsSafe, "An all-safe route returns its complete bounded prefix.");
+IReadOnlyList<SafeLocalActionDecision> safeThenUnsafe =
+    [SafeLocalActionDecision.Allow, SafeLocalActionDecision.Allow,
+     new(false, "choice_required"), SafeLocalActionDecision.Allow];
+IReadOnlyList<SafeLocalActionDecision> truncatedPrefix =
+    MultiplayerSafeExecutePolicy.TakeBoundedSafePrefix(
+        safeThenUnsafe,
+        decision => decision,
+        out SafeLocalActionDecision truncatedStop);
+Check(
+    truncatedPrefix.Count == 2 && truncatedStop.Reason == "choice_required",
+    "The first unsafe route action is a hard boundary; later safe actions are not skipped to.");
+IReadOnlyList<SafeLocalActionDecision> unsafeFirst =
+    [new(false, "ends_player_turn"), SafeLocalActionDecision.Allow];
+IReadOnlyList<SafeLocalActionDecision> emptyPrefix =
+    MultiplayerSafeExecutePolicy.TakeBoundedSafePrefix(
+        unsafeFirst,
+        decision => decision,
+        out SafeLocalActionDecision emptyStop);
+Check(emptyPrefix.Count == 0 && emptyStop.Reason == "ends_player_turn", "An unsafe first route action returns an empty prefix.");
+IReadOnlyList<SafeLocalActionDecision> overCeiling =
+    Enumerable.Repeat(SafeLocalActionDecision.Allow, 7).ToArray();
+IReadOnlyList<SafeLocalActionDecision> cappedPrefix =
+    MultiplayerSafeExecutePolicy.TakeBoundedSafePrefix(
+        overCeiling,
+        decision => decision,
+        out SafeLocalActionDecision ceilingStop);
+Check(
+    cappedPrefix.Count == 6 && ceilingStop.Reason == MultiplayerSafeExecutePolicy.BoundedActionCeilingReason,
+    "A route longer than the hard ceiling is truncated without becoming unbounded.");
 Check(
     MultiplayerSafeExecutePolicy.CanGrantLabCapability(
         new(MultiplayerSafeExecutePolicy.LabModeToken, true, true)),
@@ -82,39 +119,64 @@ MultiplayerSafeExecutionSession session = new(
     startTurnNumber: 1,
     routeGeneration: 7,
     startWorldVersion: 4,
-    maxActions: 2);
+    maxActions: MultiplayerSafeExecutePolicy.MaxActionsPerDeployment);
 Check(session.State == MultiplayerSafeExecutionState.Authorized, "A Safe Execute request starts authorized.");
+bool fiveActionRouteAccepted = true;
+for (int actionIndex = 0; actionIndex < 5; actionIndex++)
+{
+    fiveActionRouteAccepted = fiveActionRouteAccepted
+        && session.TryBeginAction(
+            actionIndex,
+            $"PlayCard:CARD_{actionIndex}:0:target=-",
+            4 + actionIndex,
+            out _)
+        && session.MarkAwaitingWorldUpdate()
+        && session.BeginRevalidation()
+        && session.AcceptAction(5 + actionIndex, hasNextAction: actionIndex < 4);
+}
 Check(
-    session.TryBeginAction(0, "PlayCard:STRIKE:0:target=-", 4, out _)
-        && session.State == MultiplayerSafeExecutionState.Executing,
-    "The first action consumes the authorization and enters Executing.");
-Check(session.MarkAwaitingWorldUpdate(), "A completed native action enters AwaitingWorldUpdate.");
-Check(session.BeginRevalidation(), "A stable observation enters Revalidating.");
+    fiveActionRouteAccepted
+        && session.CompletedActions == 5
+        && session.State == MultiplayerSafeExecutionState.Completed,
+    "A five-action route advances one session through every action boundary and completes.");
+MultiplayerSafeExecutionSession indexSession = new(
+    startTurnNumber: 1,
+    routeGeneration: 7,
+    startWorldVersion: 4,
+    maxActions: MultiplayerSafeExecutePolicy.MaxActionsPerDeployment);
 Check(
-    session.AcceptAction(5, hasNextAction: true)
-        && session.State == MultiplayerSafeExecutionState.Authorized
-        && session.CompletedActions == 1,
-    "A matched first action re-authorizes only the next bounded action.");
-Check(
-    !session.TryBeginAction(2, "PlayCard:DEFEND:0:target=-", 5, out string indexReason)
+    indexSession.TryBeginAction(0, "PlayCard:STRIKE:0:target=-", 4, out _)
+        && indexSession.MarkAwaitingWorldUpdate()
+        && indexSession.BeginRevalidation()
+        && indexSession.AcceptAction(5, hasNextAction: true)
+        && !indexSession.TryBeginAction(2, "PlayCard:DEFEND:0:target=-", 5, out string indexReason)
         && indexReason == "action_index_mismatch",
-    "A stale or skipped action index is rejected.");
-MultiplayerSafeExecutionSession conflictSession = new(
+    "A stale or skipped action index is rejected after a successful earlier action.");
+MultiplayerSafeExecutionSession ceilingSession = new(
     startTurnNumber: 1,
     routeGeneration: 7,
     startWorldVersion: 4,
     maxActions: 2);
+for (int actionIndex = 0; actionIndex < 2; actionIndex++)
+{
+    _ = ceilingSession.TryBeginAction(actionIndex, $"PlayCard:CARD_{actionIndex}:0:target=-", 4 + actionIndex, out _);
+    _ = ceilingSession.MarkAwaitingWorldUpdate();
+    _ = ceilingSession.BeginRevalidation();
+    _ = ceilingSession.AcceptAction(5 + actionIndex, hasNextAction: actionIndex == 0);
+}
+Check(
+    !ceilingSession.TryBeginAction(2, "PlayCard:EXTRA:0:target=-", 6, out string capReason)
+        && capReason == "session_state_Completed",
+    "A completed bounded session rejects an action beyond its configured ceiling.");
+MultiplayerSafeExecutionSession conflictSession = new(
+    startTurnNumber: 1,
+    routeGeneration: 7,
+    startWorldVersion: 4,
+    maxActions: MultiplayerSafeExecutePolicy.MaxActionsPerDeployment);
 Check(
     !conflictSession.TryBeginAction(0, "PlayCard:STRIKE:0:target=-", 5, out string worldReason)
         && worldReason == "world_version_not_accepted",
     "A WorldVersion conflict cannot consume a new action authorization.");
-Check(
-    session.TryBeginAction(1, "PlayCard:DEFEND:0:target=-", 5, out _)
-        && session.MarkAwaitingWorldUpdate()
-        && session.BeginRevalidation()
-        && session.AcceptAction(6, hasNextAction: false)
-        && session.State == MultiplayerSafeExecutionState.Completed,
-    "The final matched action closes the execution session.");
 
 MultiplayerSafeActionRevalidationFacts RevalidationFacts(bool hasNextAction = true)
     => new(

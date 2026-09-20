@@ -203,9 +203,12 @@ internal sealed class MultiplayerSafeExecutionSession
 /// </summary>
 internal static class MultiplayerSafeExecutePolicy
 {
-    internal const int MaxActionsPerDeployment = 2;
+    // MP-2C deliberately uses one finite ceiling for every Safe Execute deployment.
+    // The live safe prefix may be shorter; no route can make this bound unbounded.
+    internal const int MaxActionsPerDeployment = 6;
     internal const string SingleActionLimitReason = "mp2a_single_action_limit";
-    internal const string TwoActionLimitReason = "mp2b_two_action_limit";
+    internal const string BoundedActionCeilingReason = "mp2c_action_ceiling";
+    internal const string TwoActionLimitReason = BoundedActionCeilingReason;
     internal const string FormalModeToken = "safe-execute";
     internal const string LabModeToken = "safe-execute-lab";
 
@@ -252,8 +255,43 @@ internal static class MultiplayerSafeExecutePolicy
         int safeActionCount,
         int plannedActionCount)
         => safeActionCount >= MaxActionsPerDeployment && plannedActionCount > safeActionCount
-            ? new(false, TwoActionLimitReason)
+            ? new(false, BoundedActionCeilingReason)
             : SafeLocalActionDecision.Allow;
+
+    internal static IReadOnlyList<T> TakeBoundedSafePrefix<T>(
+        IReadOnlyList<T> actions,
+        Func<T, SafeLocalActionDecision> classify,
+        out SafeLocalActionDecision stop)
+    {
+        ArgumentNullException.ThrowIfNull(actions);
+        ArgumentNullException.ThrowIfNull(classify);
+        if (actions.Count == 0)
+        {
+            stop = SafeLocalActionDecision.Allow;
+            return [];
+        }
+
+        List<T> safe = [];
+        foreach (T action in actions)
+        {
+            if (safe.Count >= MaxActionsPerDeployment)
+            {
+                stop = DeploymentStopAfter(safe.Count, actions.Count);
+                return safe;
+            }
+
+            SafeLocalActionDecision decision = classify(action);
+            if (!decision.IsSafe)
+            {
+                stop = decision;
+                return safe;
+            }
+            safe.Add(action);
+        }
+
+        stop = DeploymentStopAfter(safe.Count, actions.Count);
+        return safe;
+    }
 
     internal static MultiplayerSafeActionRevalidationDecision RevalidateAction(
         MultiplayerSafeActionRevalidationFacts facts)

@@ -124,7 +124,7 @@ internal static partial class SolverController
         if (capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute)
         {
             IReadOnlyList<PlanAction> safeActions =
-                MultiplayerSafeLocalActionClassifier.TakeMp2BDeploymentSlice(
+                MultiplayerSafeLocalActionClassifier.TakeBoundedDeploymentSlice(
                     state,
                     plannedTurnActions,
                     out SafeLocalActionDecision stop);
@@ -183,7 +183,7 @@ internal static partial class SolverController
         MultiplayerSafeExecutionSession? safeSession = deployment.SafeExecutionSession;
         if (safeExecute)
         {
-            actions = [.. MultiplayerSafeLocalActionClassifier.TakeMp2BDeploymentSlice(
+            actions = [.. MultiplayerSafeLocalActionClassifier.TakeBoundedDeploymentSlice(
                 state,
                 plannedTurnActions,
                 out safeStop)];
@@ -948,7 +948,14 @@ internal static partial class SolverController
         _combat.LatestStamp = null;
         InvalidateRenderedRouteAdoptionSeed();
         CompleteDeployment(deployment);
-        SolverOverlay.ShowDeploymentComplete(host, turn, completedActions, endedTurn: false);
+        SolverOverlay.ShowDeploymentComplete(
+            host,
+            turn,
+            completedActions,
+            endedTurn: false,
+            completionMessage: string.Equals(reason, "remote_or_unknown_change", StringComparison.Ordinal)
+                ? "检测到多人状态变化，已停止后续执行并重新计算。"
+                : null);
         string marker = string.Equals(reason, "remote_or_unknown_change", StringComparison.Ordinal)
             ? "MP2B_REMOTE_DELTA_ABORT"
             : "MP2B_DEPLOY_ABORT";

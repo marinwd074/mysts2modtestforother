@@ -8,6 +8,12 @@ param(
 
     [string]$OutputPath = '',
 
+    [ValidateRange(1, 2147483647)]
+    [int]$MinCompletedActions = 1,
+
+    [ValidateRange(0, 2147483647)]
+    [int]$MaxActions = 0,
+
     [int]$RequestId = 0,
 
     [switch]$Json
@@ -18,11 +24,13 @@ $ErrorActionPreference = 'Stop'
 
 $records = [Collections.Generic.List[object]]::new()
 $globalIndex = 0
+$resolvedLogs = [Collections.Generic.List[string]]::new()
 foreach ($pathValue in $LogPath) {
     $path = (Resolve-Path -LiteralPath $pathValue -ErrorAction Stop).Path
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-        throw "MP-2B interference log path is not a file: $path"
+        throw "Bounded Safe Execute interference log path is not a file: $path"
     }
+    $resolvedLogs.Add($path)
     $lineNumber = 0
     foreach ($line in Get-Content -LiteralPath $path) {
         $lineNumber++
@@ -62,152 +70,224 @@ function Join-Evidence {
     return ($Items | ForEach-Object { Format-Evidence $_ } | Join-String -Separator ' | ')
 }
 
-$capability = @($records | Where-Object Text -Match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_CAPABILITY .*enabled=true .*max_actions=2')
-if ($capability.Count -eq 1) {
-    Add-Check 'mp2bCapability' PASS (Format-Evidence $capability[0])
-} elseif ($capability.Count -eq 0) {
-    Add-Check 'mp2bCapability' UNVERIFIED '' 'No MP2B capability marker was observed.'
-} else {
-    Add-Check 'mp2bCapability' FAIL (Join-Evidence $capability) 'A single client run must expose one MP2B capability marker.'
+function Test-ContiguousActionIndices {
+    param(
+        [object[]]$Items,
+        [int]$ExpectedCount
+    )
+    if ($Items.Count -ne $ExpectedCount) { return $false }
+    for ($index = 0; $index -lt $ExpectedCount; $index++) {
+        if ($Items[$index].Text -notmatch 'action_index=(\d+)\b') { return $false }
+        if ([int]$Matches[1] -ne $index) { return $false }
+    }
+    return $true
 }
 
-$startPattern = '\[CombatSolver/MultiplayerSafeExecute\] MP2B_DEPLOY_START .*action_count=2 .*max_actions=2'
-$start = if ($RequestId -gt 0) {
-    @($records | Where-Object {
-            $_.Text -match $startPattern -and
+$capability = @($records | Where-Object {
+        $_.Text -match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_CAPABILITY .*enabled=true .*max_actions=(\d+)'
+    })
+$capabilityMaxActions = 0
+$capabilityValid = $false
+if ($capability.Count -eq 1) {
+    if ($capability[0].Text -match 'max_actions=(\d+)') {
+        $capabilityMaxActions = [int]$Matches[1]
+    }
+    $capabilityValid = $capabilityMaxActions -gt 0 -and
+        ($MaxActions -eq 0 -or $capabilityMaxActions -eq $MaxActions)
+}
+if ($capability.Count -eq 1 -and $capabilityValid) {
+    Add-Check 'boundedCapability' PASS (Format-Evidence $capability[0])
+} elseif ($capability.Count -eq 0) {
+    Add-Check 'boundedCapability' UNVERIFIED '' 'No bounded Safe Execute capability marker was observed.'
+} else {
+    Add-Check 'boundedCapability' FAIL (Join-Evidence $capability) 'A single capability marker with the requested finite ceiling is required.'
+}
+
+$startPattern = '\[CombatSolver/MultiplayerSafeExecute\] MP2B_DEPLOY_START\b'
+$startCandidates = @($records | Where-Object { $_.Text -match $startPattern })
+if ($RequestId -gt 0) {
+    $start = @($startCandidates | Where-Object {
             $_.Text -match ('request_id=' + [regex]::Escape([string]$RequestId) + '\b')
         })
 } else {
-    @($records | Where-Object Text -Match $startPattern)
+    $start = @($startCandidates)
 }
+
+$observedRequestId = $null
+$startIndex = -1
+$deploymentActionCount = 0
+$deploymentMaxActions = 0
 if ($start.Count -eq 1) {
-    Add-Check 'twoActionDeploymentStart' PASS (Format-Evidence $start[0])
-} elseif ($start.Count -eq 0) {
-    Add-Check 'twoActionDeploymentStart' UNVERIFIED '' 'No bounded two-action MP2B deployment start was observed.'
-} else {
-    Add-Check 'twoActionDeploymentStart' FAIL (Join-Evidence $start) 'The interference run must contain exactly one bounded deployment.'
-}
-
-$requestId = $null
-if ($start.Count -eq 1 -and $start[0].Text -match 'request_id=(\d+)') {
-    $requestId = [int]$Matches[1]
-}
-
-$sessionRecords = $records
-if ($RequestId -gt 0) {
-    if ($start.Count -eq 1) {
-        $sessionStartIndex = [int]$start[0].Index
-        $nextStart = @($records | Where-Object {
-                $_.Index -gt $sessionStartIndex -and $_.Text -match $startPattern
-            } | Sort-Object Index | Select-Object -First 1)
-        $sessionEndIndex = if ($nextStart.Count -eq 1) {
-            [int]$nextStart[0].Index - 1
-        } else {
-            [int]::MaxValue
-        }
-        $sessionRecords = @($records | Where-Object {
-                $_.Index -ge $sessionStartIndex -and $_.Index -le $sessionEndIndex
-            })
-    } else {
-        $sessionRecords = @()
+    $startIndex = [int]$start[0].Index
+    if ($start[0].Text -match 'request_id=(\d+)') {
+        $observedRequestId = [int]$Matches[1]
+    }
+    if ($start[0].Text -match 'action_count=(\d+)') {
+        $deploymentActionCount = [int]$Matches[1]
+    }
+    if ($start[0].Text -match 'max_actions=(\d+)') {
+        $deploymentMaxActions = [int]$Matches[1]
     }
 }
 
-$native = @($sessionRecords | Where-Object Text -Match '\[CombatSolver/MultiplayerSafeExecute\] NATIVE_ACTION_CAPTURED')
-$nativeAction0 = @($native | Where-Object Text -Match 'action_index=0\b')
-$nativeAction1 = @($native | Where-Object Text -Match 'action_index=1\b')
-$invalidNative = @($native | Where-Object {
-        $_.Text -notmatch 'type=PlayCardAction\b' -or
-        $_.Text -notmatch 'custom_network_api_used=false\b'
-    })
-if ($native.Count -eq 1 -and $nativeAction0.Count -eq 1 -and $nativeAction1.Count -eq 0 -and $invalidNative.Count -eq 0) {
-    Add-Check 'singleNativeActionBeforeAbort' PASS (Format-Evidence $native[0])
-} elseif ($native.Count -eq 0) {
-    Add-Check 'singleNativeActionBeforeAbort' UNVERIFIED '' 'No native first action was observed.'
+$startValid = $start.Count -eq 1 -and
+    $deploymentActionCount -gt 0 -and
+    $deploymentActionCount -le $deploymentMaxActions -and
+    ($MaxActions -eq 0 -or $deploymentMaxActions -eq $MaxActions)
+if ($start.Count -eq 1 -and $startValid) {
+    Add-Check 'boundedDeploymentStart' PASS (Format-Evidence $start[0])
+} elseif ($start.Count -eq 0) {
+    Add-Check 'boundedDeploymentStart' UNVERIFIED '' 'No bounded Safe Execute deployment start was observed.'
+} elseif ($start.Count -gt 1) {
+    Add-Check 'boundedDeploymentStart' FAIL (Join-Evidence $start) 'The selected interference session must contain exactly one bounded deployment.'
 } else {
-    Add-Check 'singleNativeActionBeforeAbort' FAIL (Join-Evidence $native) 'Remote interference must stop before a second native PlayCardAction.'
+    Add-Check 'boundedDeploymentStart' FAIL (Format-Evidence $start[0]) 'The deployment action count and finite ceiling are inconsistent.'
 }
 
-$reconciled = @($sessionRecords | Where-Object Text -Match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_ACTION_RECONCILED')
-$firstReconciliation = @($reconciled | Where-Object {
-        $_.Text -match 'action_index=0\b' -and
-        $_.Text -match 'decision=(?:SafeToContinue|RemoteOrUnknownChange)\b'
-    })
-$unexpectedReconciliation = @($reconciled | Where-Object Text -NotMatch 'action_index=0\b')
-if ($reconciled.Count -eq 1 -and $firstReconciliation.Count -eq 1 -and $unexpectedReconciliation.Count -eq 0) {
-    Add-Check 'firstActionRevalidation' PASS (Format-Evidence $reconciled[0])
-} elseif ($reconciled.Count -eq 0) {
-    Add-Check 'firstActionRevalidation' UNVERIFIED '' 'No first-action revalidation was observed.'
-} else {
-    Add-Check 'firstActionRevalidation' FAIL (Join-Evidence $reconciled) 'The interference run must revalidate action 1 and must not revalidate a second action.'
+$sessionRecords = @()
+if ($start.Count -eq 1) {
+    $nextStart = @($records | Where-Object {
+            $_.Index -gt $startIndex -and $_.Text -match $startPattern
+        } | Sort-Object Index | Select-Object -First 1)
+    $sessionEndIndex = if ($nextStart.Count -eq 1) {
+        [int]$nextStart[0].Index - 1
+    } else {
+        [int]::MaxValue
+    }
+    $sessionRecords = @($records | Where-Object {
+            $_.Index -ge $startIndex -and $_.Index -le $sessionEndIndex
+        })
 }
 
-$abort = @($sessionRecords | Where-Object Text -Match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_REMOTE_DELTA_ABORT')
+$abort = @($sessionRecords | Where-Object {
+        $_.Text -match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_REMOTE_DELTA_ABORT\b'
+    })
 $abortRequestMatches = @($abort | Where-Object {
-        $null -ne $requestId -and $_.Text -match ("request_id=" + [regex]::Escape([string]$requestId) + '\b')
+        $null -ne $observedRequestId -and
+        $_.Text -match ('request_id=' + [regex]::Escape([string]$observedRequestId) + '\b')
     })
-$abortCompletedOne = @($abort | Where-Object Text -Match 'completed_actions=1\b')
-if ($abort.Count -eq 1 -and $abortRequestMatches.Count -eq 1 -and $abortCompletedOne.Count -eq 1) {
+$completedActions = -1
+if ($abort.Count -eq 1 -and $abort[0].Text -match 'completed_actions=(\d+)') {
+    $completedActions = [int]$Matches[1]
+}
+$abortValid = $abort.Count -eq 1 -and
+    $abortRequestMatches.Count -eq 1 -and
+    $completedActions -ge $MinCompletedActions -and
+    $completedActions -lt $deploymentActionCount
+if ($abort.Count -eq 1 -and $abortValid) {
     Add-Check 'remoteAbort' PASS (Format-Evidence $abort[0])
 } elseif ($abort.Count -eq 0) {
     Add-Check 'remoteAbort' UNVERIFIED '' 'No MP2B_REMOTE_DELTA_ABORT was observed.'
 } else {
-    Add-Check 'remoteAbort' FAIL (Join-Evidence $abort) 'The abort must belong to the deployment request and report one completed action.'
+    Add-Check 'remoteAbort' FAIL (Join-Evidence $abort) (
+            "The abort must belong to the deployment request, complete at least $MinCompletedActions action(s), and stop before the next planned action.")
+}
+
+$native = @($sessionRecords | Where-Object {
+        $_.Text -match '\[CombatSolver/MultiplayerSafeExecute\] NATIVE_ACTION_CAPTURED\b'
+    })
+$invalidNative = @($native | Where-Object {
+        $_.Text -notmatch 'type=PlayCardAction\b' -or
+        $_.Text -notmatch 'custom_network_api_used=false\b'
+    })
+$nativeIndicesValid = Test-ContiguousActionIndices $native $completedActions
+if ($abortValid -and
+    $native.Count -eq $completedActions -and
+    $invalidNative.Count -eq 0 -and
+    $nativeIndicesValid) {
+    Add-Check 'completedNativeActions' PASS (Join-Evidence $native)
+} elseif ($native.Count -eq 0) {
+    Add-Check 'completedNativeActions' UNVERIFIED '' 'No native completed action was observed before the remote abort.'
+} elseif ($abort.Count -eq 0) {
+    Add-Check 'completedNativeActions' UNVERIFIED '' 'A remote abort is required before completed-action count can be validated.'
+} else {
+    Add-Check 'completedNativeActions' FAIL (Join-Evidence $native) (
+            "The abort must have exactly $completedActions contiguous native PlayCardAction capture(s), with no custom network API.")
+}
+
+$reconciled = @($sessionRecords | Where-Object {
+        $_.Text -match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_ACTION_RECONCILED\b'
+    })
+$reconciliationValid = Test-ContiguousActionIndices $reconciled $completedActions
+if ($reconciliationValid) {
+    foreach ($record in $reconciled) {
+        if ($record.Text -notmatch 'decision=(?:SafeToContinue|RemoteOrUnknownChange)\b') {
+            $reconciliationValid = $false
+            break
+        }
+    }
+}
+if ($abortValid -and $reconciled.Count -eq $completedActions -and $reconciliationValid) {
+    Add-Check 'completedActionRevalidation' PASS (Join-Evidence $reconciled)
+} elseif ($reconciled.Count -eq 0) {
+    Add-Check 'completedActionRevalidation' UNVERIFIED '' 'No completed-action revalidation was observed before the remote abort.'
+} elseif ($abort.Count -eq 0) {
+    Add-Check 'completedActionRevalidation' UNVERIFIED '' 'A remote abort is required before completed-action count can be validated.'
+} else {
+    Add-Check 'completedActionRevalidation' FAIL (Join-Evidence $reconciled) 'Every completed action must have a contiguous revalidation before the remote abort.'
 }
 
 $abortIndex = if ($abort.Count -eq 1) { [int]$abort[0].Index } else { [int]::MaxValue }
-$deploymentStartIndex = if ($start.Count -eq 1) { [int]$start[0].Index } else { 0 }
 $deploymentRecords = @($sessionRecords | Where-Object {
-        $_.Index -ge $deploymentStartIndex -and $_.Index -le $abortIndex
+        $_.Index -ge $startIndex -and $_.Index -le $abortIndex
     })
-$forbidden = @($sessionRecords | Where-Object {
-        $_.Text -match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_DEPLOY_END' -or
+$forbidden = @($deploymentRecords | Where-Object {
+        $_.Text -match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_DEPLOY_END\b' -or
         $_.Text -match 'custom_network_api_used=true\b' -or
-        $_.Text -match 'NATIVE_ACTION_CAPTURED .*action_index=1\b'
-    }) + @($deploymentRecords | Where-Object {
+        $_.Text -match 'EndPlayerTurnAction' -or
         $_.Text -match 'DEPLOY_END_TURN' -or
         $_.Text -match '\[CombatSolver/Test\] DEPLOY_ACTION .*potion=' -or
         $_.Text -match 'DEPLOY_CHOICE_PLAN' -or
-        $_.Text -match 'Replay'
+        $_.Text -match 'Replay' -or
+        $_.Text -match 'type=UsePotionAction\b'
     })
-if ($forbidden.Count -eq 0) {
-    Add-Check 'noSecondOrForbiddenAction' PASS
+if ($completedActions -ge 0) {
+    $forbidden += @($sessionRecords | Where-Object {
+            $_.Text -match ('NATIVE_ACTION_CAPTURED\b.*action_index=' + $completedActions + '\b')
+        })
+}
+if ($abortValid -and $forbidden.Count -eq 0) {
+    Add-Check 'noNextOrForbiddenAction' PASS
+} elseif ($forbidden.Count -eq 0 -and $abort.Count -eq 0) {
+    Add-Check 'noNextOrForbiddenAction' UNVERIFIED '' 'Cannot prove the no-next-action boundary without a remote abort.'
 } else {
-    Add-Check 'noSecondOrForbiddenAction' FAIL (Join-Evidence $forbidden) 'The abort path must not complete, end the turn, use a potion/choice/replay, use a custom network API, or capture action 2.'
+    Add-Check 'noNextOrForbiddenAction' FAIL (Join-Evidence $forbidden) 'The remote abort path must not complete the deployment, end the turn, use a forbidden action, or capture the next action.'
 }
 
-$abortIndex = -1
-if ($abort.Count -eq 1) {
-    $abortIndex = [int]$abort[0].Index
+$abortIndex = if ($abort.Count -eq 1) { [int]$abort[0].Index } else { -1 }
+$research = $null
+if ($abortIndex -ge 0) {
+    foreach ($record in $records) {
+        if ($record.Index -le $abortIndex) { continue }
+        if ($record.Text -match '\[CombatSolver/MultiplayerAdvisor\] SEARCH_DEBOUNCED_START .*world_version=(\d+)') {
+            $research = $record
+            break
+        }
+    }
 }
-$research = @($records | Where-Object {
-        $abortIndex -ge 0 -and
-        $_.Index -gt $abortIndex -and
-        $_.Text -match '\[CombatSolver/MultiplayerAdvisor\] SEARCH_DEBOUNCED_START .*world_version=\d+'
-    })
-if ($research.Count -gt 0) {
-    Add-Check 'postAbortResearch' PASS (Format-Evidence $research[0])
+if ($null -ne $research) {
+    Add-Check 'postAbortResearch' PASS (Format-Evidence $research)
 } elseif ($abort.Count -eq 0) {
     Add-Check 'postAbortResearch' UNVERIFIED '' 'Cannot verify a fresh search before the remote abort is observed.'
 } else {
     Add-Check 'postAbortResearch' UNVERIFIED '' 'No fresh debounced search was observed after the remote abort.'
 }
 
-if ($null -ne $requestId) {
+if ($null -ne $observedRequestId) {
     $sessionLines = @($sessionRecords | Where-Object {
             ($_.Text -match 'request_id=(\d+)') -and
-            ($_.Text -match 'MP2B_(?:DEPLOY_START|NATIVE_ACTION_CAPTURED|ACTION_RECONCILED|REMOTE_DELTA_ABORT|DEPLOY_ABORT)')
+            ($_.Text -match 'MP2B_(?:DEPLOY_START|NATIVE_ACTION_CAPTURED|ACTION_RECONCILED|DEPLOY_END|REMOTE_DELTA_ABORT|DEPLOY_ABORT)')
         })
     $wrongRequest = @($sessionLines | Where-Object {
-            $_.Text -notmatch ("request_id=" + [regex]::Escape([string]$requestId) + '\b')
+            $_.Text -notmatch ('request_id=' + [regex]::Escape([string]$observedRequestId) + '\b')
         })
     if ($wrongRequest.Count -eq 0) {
         Add-Check 'sessionIdentity' PASS (Format-Evidence $start[0])
     } else {
-        Add-Check 'sessionIdentity' FAIL (Join-Evidence $wrongRequest) 'All interference markers must belong to the same execution session.'
+        Add-Check 'sessionIdentity' FAIL (Join-Evidence $wrongRequest) 'All interference markers must belong to the same explicit execution session.'
     }
 } else {
-    Add-Check 'sessionIdentity' UNVERIFIED '' 'The MP2B deployment request id was not observed.'
+    Add-Check 'sessionIdentity' UNVERIFIED '' 'The bounded deployment request id was not observed.'
 }
 
 $status = if (@($checks | Where-Object status -eq 'FAIL').Count -gt 0) {
@@ -218,18 +298,27 @@ $status = if (@($checks | Where-Object status -eq 'FAIL').Count -gt 0) {
     'PASS'
 }
 
+$phase = if ($completedActions -ge 2 -or $MinCompletedActions -ge 2) {
+    'MP-2C-remote-interference'
+} else {
+    'MP-2B-remote-interference'
+}
 $result = [ordered]@{
-    schemaVersion = 1
-    phase = 'MP-2B-remote-interference'
+    schemaVersion = 2
+    phase = $phase
     status = $status
     validatedUtc = [DateTimeOffset]::UtcNow.ToString('O')
-    requestId = if ($RequestId -gt 0) { $RequestId } else { $requestId }
-    logFiles = @($LogPath | ForEach-Object { (Resolve-Path -LiteralPath $_).Path })
+    requestId = if ($null -ne $observedRequestId) { $observedRequestId } else { $null }
+    minCompletedActions = $MinCompletedActions
+    maxActions = if ($MaxActions -gt 0) { $MaxActions } else { $null }
+    plannedActionCount = if ($start.Count -eq 1) { $deploymentActionCount } else { $null }
+    completedActions = if ($completedActions -ge 0) { $completedActions } else { $null }
+    logFiles = @($resolvedLogs)
     checks = @($checks)
     limitations = @(
         'This validates a user-controlled remote-interference scenario from owned Lab client logs.',
         'The remote action itself is not independently packet-captured; MP2B_REMOTE_DELTA_ABORT is the runtime attribution boundary.',
-        'A normal two-action smoke must be validated separately with validate-mp2b-results.ps1.'
+        'A normal bounded N-action smoke must be validated separately with validate-mp2b-results.ps1.'
     )
 }
 
@@ -245,7 +334,7 @@ if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
 if ($Json) {
     Write-Output $jsonText
 } else {
-    Write-Output "MULTIPLAYER_MP-2B_REMOTE_ABORT_$status logs=$($LogPath.Count)"
+    Write-Output "MULTIPLAYER_$phase`_$status logs=$($resolvedLogs.Count) request_id=$($observedRequestId ?? '-') completed_actions=$($completedActions)"
     foreach ($check in $checks) {
         $suffix = if ($null -eq $check.detail) { '' } else { " detail=$($check.detail)" }
         Write-Output ("{0} {1}{2}" -f $check.status, $check.name, $suffix)

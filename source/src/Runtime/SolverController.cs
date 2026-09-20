@@ -1349,6 +1349,8 @@ internal static partial class SolverController
         CancelDeferredSearch();
         CancelSearch();
         MultiplayerSafeExecutionState? safeExecutionState = _deployment?.SafeExecutionSession?.State;
+        SolverDeploymentSession? remoteAbortDeployment = null;
+        int remoteAbortCompletedActions = 0;
         bool preserveExpectedSafeDeployment =
             SolverSessionCapabilities.Capture(state).Kind == SolverSessionKind.MultiplayerSafeExecute
             && safeExecutionState is MultiplayerSafeExecutionState.Executing
@@ -1359,6 +1361,8 @@ internal static partial class SolverController
             if (safeExecutionState == MultiplayerSafeExecutionState.Authorized
                 && _deployment?.SafeExecutionSession is { } safeSession)
             {
+                remoteAbortDeployment = _deployment;
+                remoteAbortCompletedActions = safeSession.CompletedActions;
                 safeSession.Abort("remote_or_unknown_change");
                 Entry.Logger.Info(
                     $"[CombatSolver/MultiplayerSafeExecute] MP2B_REMOTE_DELTA_ABORT " +
@@ -1370,6 +1374,16 @@ internal static partial class SolverController
             }
             CancelDeployment();
             _combat.MultiplayerSafeExecuteDeploymentRequested = false;
+        }
+        if (remoteAbortDeployment is { } abortedDeployment
+            && NGame.Instance is { } host)
+        {
+            SolverOverlay.ShowDeploymentComplete(
+                host,
+                abortedDeployment.StartTurnNumber,
+                remoteAbortCompletedActions,
+                endedTurn: false,
+                completionMessage: "检测到多人状态变化，已停止后续执行并重新计算。");
         }
         Task turnSetupRelease = PlayerTurnSetupCoordinator.Reset("multiplayer_capability");
         PendingCombatDeferredOperations.RemoveAll(static task => task.IsCompleted);

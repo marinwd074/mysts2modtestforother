@@ -11,11 +11,16 @@ function Invoke-Case {
     param(
         [Parameter(Mandatory)][string]$Name,
         [Parameter(Mandatory)][string[]]$Lines,
-        [Parameter(Mandatory)][int]$ExpectedExitCode
+        [Parameter(Mandatory)][int]$ExpectedExitCode,
+        [int]$MinActions = 2,
+        [int]$MaxActions = 0
     )
     $path = Join-Path $root "$Name.log"
     [IO.File]::WriteAllLines($path, $Lines, [Text.UTF8Encoding]::new($false))
-    $output = & pwsh -NoLogo -NoProfile -File $validator -LogPath $path -Json 2>&1
+    $validatorArgs = @('-NoLogo', '-NoProfile', '-File', $validator, '-LogPath', $path, '-Json')
+    if ($MinActions -ne 2) { $validatorArgs += @('-MinActions', $MinActions) }
+    if ($MaxActions -gt 0) { $validatorArgs += @('-MaxActions', $MaxActions) }
+    $output = & pwsh @validatorArgs 2>&1
     $exitCode = $LASTEXITCODE
     if ($exitCode -ne $ExpectedExitCode) {
         throw "$Name expected exit $ExpectedExitCode but received $exitCode. Output: $($output -join ' ')"
@@ -55,7 +60,29 @@ try {
     )
     Invoke-Case -Name 'manual-end-turn-is-not-allowed-in-normal-smoke' -Lines $manualEndTurn -ExpectedExitCode 1
 
-    Write-Output 'MP2B_VALIDATOR_OK checks=5'
+    $multiAction = @(
+        '[CombatSolver/MultiplayerSafeExecute] FORMAL_CAPABILITY enabled=true scope=explicit_opt_in max_actions=6 automatic_end_turn=false custom_network_api=false',
+        '[CombatSolver/MultiplayerSafeExecute] MP2B_CAPABILITY enabled=true max_actions=6 attribution=revalidation automatic_end_turn=false custom_network_api=false',
+        '[CombatSolver/Evidence] ROUTE_REPLAY {"actionCount":6}',
+        '[CombatSolver/Evidence] ROUTE_ACTION {"index":5,"action":{"Kind":"EndTurn"}}',
+        '[CombatSolver/MultiplayerSafeExecute] MP2B_DEPLOY_START turn=1 request_id=19 route_generation=4 action_count=5 max_actions=6 search_world_version=4 stop_reason=safe_local_play_card'
+    )
+    for ($index = 0; $index -lt 5; $index++) {
+        $card = "CARD_$index"
+        $before = 4 + $index
+        $after = 5 + $index
+        $decision = if ($index -eq 4) { 'ExpectedLocalChange' } else { 'SafeToContinue' }
+        $reason = if ($index -eq 4) { 'expected_local_change' } else { 'safe_to_continue' }
+        $multiAction += "[CombatSolver/MultiplayerSafeExecute] NATIVE_ACTION_CAPTURED request_id=19 action_index=$index type=PlayCardAction turn=1 card=$card local_net_id=1000 custom_network_api_used=false"
+        $multiAction += "[CombatSolver/MultiplayerSafeExecute] MP2B_ACTION_RECONCILED request_id=19 action_index=$index card=$card decision=$decision reason=$reason before_world_version=$before after_world_version=$after observation_sequence=$($index + 8)"
+    }
+    $multiAction += @(
+        '[CombatSolver/MultiplayerSafeExecute] MP2B_DEPLOY_END request_id=19 turn=1 action_count=5 end_turn=false stop_reason=safe_local_play_card search_world_version=4 last_accepted_world_version=9 automatic_end_turn=false custom_network_api_used=false',
+        '[CombatSolver/MultiplayerAdvisor] SEARCH_DEBOUNCED_START world_version=9 request_id=20'
+    )
+    Invoke-Case -Name 'five-action-bounded-pass' -Lines $multiAction -ExpectedExitCode 0 -MinActions 3 -MaxActions 6
+
+    Write-Output 'MP2B_VALIDATOR_OK checks=6'
 }
 finally {
     Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue

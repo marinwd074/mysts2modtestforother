@@ -8,6 +8,14 @@ param(
 
     [string]$OutputPath = '',
 
+    [ValidateRange(1, 2147483647)]
+    [int]$MinActions = 2,
+
+    [ValidateRange(0, 2147483647)]
+    [int]$MaxActions = 0,
+
+    [int]$RequestId = 0,
+
     [switch]$Json
 )
 
@@ -20,7 +28,7 @@ $resolvedLogs = [Collections.Generic.List[string]]::new()
 foreach ($pathValue in $LogPath) {
     $path = (Resolve-Path -LiteralPath $pathValue -ErrorAction Stop).Path
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-        throw "MP-2B log path is not a file: $path"
+        throw "Bounded Safe Execute log path is not a file: $path"
     }
     $resolvedLogs.Add($path)
     $lineNumber = 0
@@ -62,108 +70,217 @@ function Join-Evidence {
     return ($Items | ForEach-Object { Format-Evidence $_ } | Join-String -Separator ' | ')
 }
 
-$capability = @($records | Where-Object Text -Match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_CAPABILITY .*enabled=true .*max_actions=2')
+function Test-ContiguousActionIndices {
+    param(
+        [object[]]$Items,
+        [int]$ExpectedCount
+    )
+    if ($Items.Count -ne $ExpectedCount) { return $false }
+    for ($index = 0; $index -lt $ExpectedCount; $index++) {
+        if ($Items[$index].Text -notmatch 'action_index=(\d+)\b') { return $false }
+        if ([int]$Matches[1] -ne $index) { return $false }
+    }
+    return $true
+}
+
+$capability = @($records | Where-Object {
+        $_.Text -match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_CAPABILITY .*enabled=true .*max_actions=(\d+)'
+    })
+$capabilityMaxActions = 0
+$capabilityValid = $false
 if ($capability.Count -eq 1) {
-    Add-Check 'mp2bCapability' PASS (Format-Evidence $capability[0])
+    if ($capability[0].Text -match 'max_actions=(\d+)') {
+        $capabilityMaxActions = [int]$Matches[1]
+    }
+    $capabilityValid = $capabilityMaxActions -gt 0 -and
+        ($MaxActions -eq 0 -or $capabilityMaxActions -eq $MaxActions)
+}
+if ($capability.Count -eq 1 -and $capabilityValid) {
+    Add-Check 'boundedCapability' PASS (Format-Evidence $capability[0])
 } elseif ($capability.Count -eq 0) {
-    Add-Check 'mp2bCapability' UNVERIFIED '' 'No MP2B capability marker was observed.'
+    Add-Check 'boundedCapability' UNVERIFIED '' 'No bounded Safe Execute capability marker was observed.'
 } else {
-    Add-Check 'mp2bCapability' FAIL (Join-Evidence $capability) 'A single client run must expose one MP2B capability marker.'
+    Add-Check 'boundedCapability' FAIL (Join-Evidence $capability) 'A single capability marker with the requested finite ceiling is required.'
 }
 
-$start = @($records | Where-Object Text -Match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_DEPLOY_START .*action_count=2 .*max_actions=2')
-if ($start.Count -eq 1) {
-    Add-Check 'twoActionDeploymentStart' PASS (Format-Evidence $start[0])
-} elseif ($start.Count -eq 0) {
-    Add-Check 'twoActionDeploymentStart' UNVERIFIED '' 'No bounded two-action MP2B deployment start was observed.'
+$startPattern = '\[CombatSolver/MultiplayerSafeExecute\] MP2B_DEPLOY_START\b'
+$startCandidates = @($records | Where-Object { $_.Text -match $startPattern })
+if ($RequestId -gt 0) {
+    $start = @($startCandidates | Where-Object {
+            $_.Text -match ('request_id=' + [regex]::Escape([string]$RequestId) + '\b')
+        })
 } else {
-    Add-Check 'twoActionDeploymentStart' FAIL (Join-Evidence $start) 'A normal MP2B smoke must contain exactly one two-action deployment.'
+    $start = @($startCandidates)
 }
 
-$requestId = $null
+$observedRequestId = $null
 $startIndex = -1
-if ($start.Count -eq 1 -and $start[0].Text -match 'request_id=(\d+)') {
-    $requestId = [int]$Matches[1]
+$deploymentActionCount = 0
+$deploymentMaxActions = 0
+if ($start.Count -eq 1) {
     $startIndex = [int]$start[0].Index
+    if ($start[0].Text -match 'request_id=(\d+)') {
+        $observedRequestId = [int]$Matches[1]
+    }
+    if ($start[0].Text -match 'action_count=(\d+)') {
+        $deploymentActionCount = [int]$Matches[1]
+    }
+    if ($start[0].Text -match 'max_actions=(\d+)') {
+        $deploymentMaxActions = [int]$Matches[1]
+    }
 }
 
-$native = @($records | Where-Object Text -Match '\[CombatSolver/MultiplayerSafeExecute\] NATIVE_ACTION_CAPTURED')
+$startValid = $start.Count -eq 1 -and
+    $deploymentActionCount -ge $MinActions -and
+    $deploymentActionCount -le $deploymentMaxActions -and
+    ($MaxActions -eq 0 -or $deploymentMaxActions -eq $MaxActions)
+if ($start.Count -eq 1 -and $startValid) {
+    Add-Check 'boundedDeploymentStart' PASS (Format-Evidence $start[0])
+} elseif ($start.Count -eq 0) {
+    Add-Check 'boundedDeploymentStart' UNVERIFIED '' 'No bounded Safe Execute deployment start was observed.'
+} elseif ($start.Count -gt 1) {
+    Add-Check 'boundedDeploymentStart' FAIL (Join-Evidence $start) 'The selected client session must contain exactly one bounded deployment.'
+} else {
+    Add-Check 'boundedDeploymentStart' FAIL (Format-Evidence $start[0]) (
+            "Deployment action_count=$deploymentActionCount, max_actions=$deploymentMaxActions does not satisfy " +
+            "MinActions=$MinActions and MaxActions=$MaxActions.")
+}
+
+$sessionRecords = @()
+if ($start.Count -eq 1) {
+    $nextStart = @($records | Where-Object {
+            $_.Index -gt $startIndex -and $_.Text -match $startPattern
+        } | Sort-Object Index | Select-Object -First 1)
+    $sessionEndIndex = if ($nextStart.Count -eq 1) {
+        [int]$nextStart[0].Index - 1
+    } else {
+        [int]::MaxValue
+    }
+    $sessionRecords = @($records | Where-Object {
+            $_.Index -ge $startIndex -and $_.Index -le $sessionEndIndex
+        })
+}
+
+$native = @($sessionRecords | Where-Object {
+        $_.Text -match '\[CombatSolver/MultiplayerSafeExecute\] NATIVE_ACTION_CAPTURED\b'
+    })
 $invalidNative = @($native | Where-Object {
-    $_.Text -notmatch 'type=PlayCardAction\b' -or
-    $_.Text -notmatch 'custom_network_api_used=false\b'
-})
-$nativeValid = $invalidNative.Count
-if ($native.Count -eq 2 -and $nativeValid -eq 0) {
+        $_.Text -notmatch 'type=PlayCardAction\b' -or
+        $_.Text -notmatch 'custom_network_api_used=false\b'
+    })
+$nativeIndicesValid = Test-ContiguousActionIndices $native $deploymentActionCount
+if ($start.Count -eq 1 -and
+    $native.Count -eq $deploymentActionCount -and
+    $invalidNative.Count -eq 0 -and
+    $nativeIndicesValid) {
     Add-Check 'nativePlayCardActions' PASS (Join-Evidence $native)
 } elseif ($native.Count -eq 0) {
-    Add-Check 'nativePlayCardActions' UNVERIFIED '' 'No native MP2B action capture was observed.'
+    Add-Check 'nativePlayCardActions' UNVERIFIED '' 'No native bounded PlayCardAction capture was observed.'
 } else {
-    Add-Check 'nativePlayCardActions' FAIL (Join-Evidence $native) 'MP2B must capture exactly two native PlayCardAction entries without a custom network API.'
+    Add-Check 'nativePlayCardActions' FAIL (Join-Evidence $native) (
+            "Expected exactly $deploymentActionCount contiguous native PlayCardAction entries without a custom network API.")
 }
 
-$reconciled = @($records | Where-Object Text -Match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_ACTION_RECONCILED')
-$firstReconciliation = @($reconciled | Where-Object Text -Match 'action_index=0 .*decision=SafeToContinue')
-$finalReconciliation = @($reconciled | Where-Object Text -Match 'action_index=1 .*decision=ExpectedLocalChange')
-if ($reconciled.Count -eq 2 -and $firstReconciliation.Count -eq 1 -and $finalReconciliation.Count -eq 1) {
+$reconciled = @($sessionRecords | Where-Object {
+        $_.Text -match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_ACTION_RECONCILED\b'
+    })
+$reconciliationValid = Test-ContiguousActionIndices $reconciled $deploymentActionCount
+if ($reconciliationValid) {
+    for ($index = 0; $index -lt $deploymentActionCount; $index++) {
+        $expectedDecision = if ($index -eq $deploymentActionCount - 1) {
+            'ExpectedLocalChange'
+        } else {
+            'SafeToContinue'
+        }
+        $matchingDecision = @($reconciled | Where-Object {
+                $_.Text -match ('action_index=' + $index + '\b') -and
+                $_.Text -match ('decision=' + $expectedDecision + '\b')
+            })
+        if ($matchingDecision.Count -ne 1) {
+            $reconciliationValid = $false
+            break
+        }
+    }
+}
+if ($start.Count -eq 1 -and $reconciled.Count -eq $deploymentActionCount -and $reconciliationValid) {
     Add-Check 'actionRevalidation' PASS (Join-Evidence $reconciled)
 } elseif ($reconciled.Count -eq 0) {
-    Add-Check 'actionRevalidation' UNVERIFIED '' 'No MP2B action revalidation was observed.'
+    Add-Check 'actionRevalidation' UNVERIFIED '' 'No per-action WorldVersion revalidation was observed.'
 } else {
-    Add-Check 'actionRevalidation' FAIL (Join-Evidence $reconciled) 'MP2B requires a SafeToContinue decision after action 1 and an ExpectedLocalChange decision after action 2.'
+    Add-Check 'actionRevalidation' FAIL (Join-Evidence $reconciled) (
+            'Expected one revalidation for every action, with SafeToContinue before the final action and ExpectedLocalChange on the final action.')
 }
 
-$end = @($records | Where-Object Text -Match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_DEPLOY_END .*action_count=2 .*end_turn=false')
+$end = @($sessionRecords | Where-Object {
+        $_.Text -match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_DEPLOY_END\b'
+    })
+$endValid = $false
 if ($end.Count -eq 1) {
-    if (($end[0].Text -match 'automatic_end_turn=false\b') -and ($end[0].Text -match 'custom_network_api_used=false\b')) {
-        Add-Check 'twoActionDeploymentEnd' PASS (Format-Evidence $end[0])
-    } else {
-        Add-Check 'twoActionDeploymentEnd' FAIL (Format-Evidence $end[0]) 'MP2B completion did not retain the no-EndTurn/native-network-path contract.'
+    $endActionCount = -1
+    if ($end[0].Text -match 'action_count=(\d+)') {
+        $endActionCount = [int]$Matches[1]
     }
+    $endValid = $endActionCount -eq $deploymentActionCount -and
+        $end[0].Text -match 'end_turn=false\b' -and
+        $end[0].Text -match 'automatic_end_turn=false\b' -and
+        $end[0].Text -match 'custom_network_api_used=false\b'
+}
+if ($start.Count -eq 1 -and $end.Count -eq 1 -and $endValid) {
+    Add-Check 'boundedDeploymentEnd' PASS (Format-Evidence $end[0])
 } elseif ($end.Count -eq 0) {
-    Add-Check 'twoActionDeploymentEnd' UNVERIFIED '' 'No completed two-action MP2B deployment was observed.'
+    Add-Check 'boundedDeploymentEnd' UNVERIFIED '' 'No completed bounded Safe Execute deployment was observed.'
+} elseif ($end.Count -gt 1) {
+    Add-Check 'boundedDeploymentEnd' FAIL (Join-Evidence $end) 'The selected client session must contain exactly one bounded deployment completion.'
 } else {
-    Add-Check 'twoActionDeploymentEnd' FAIL (Join-Evidence $end) 'A normal MP2B smoke must contain exactly one bounded deployment completion.'
+    Add-Check 'boundedDeploymentEnd' FAIL (Format-Evidence $end[0]) 'Completion must report the selected action count and retain end_turn=false with native execution.'
 }
 
-$deploymentStartIndex = if ($start.Count -eq 1) { [int]$start[0].Index } else { 0 }
-$deploymentEndIndex = if ($end.Count -eq 1) { [int]$end[0].Index } else { [int]::MaxValue }
-$deploymentRecords = @($records | Where-Object {
-        $_.Index -ge $deploymentStartIndex -and $_.Index -le $deploymentEndIndex
-    })
-$forbidden = @($records | Where-Object {
-        $_.Text -match 'EndPlayerTurnAction' -or
-        $_.Text -match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_DEPLOY_END .*end_turn=true' -or
-        $_.Text -match 'MP2B_REMOTE_DELTA_ABORT'
-    }) + @($deploymentRecords | Where-Object {
-        $_.Text -match '\[CombatSolver/Test\] DEPLOY_ACTION .*potion=' -or
-        $_.Text -match 'DEPLOY_CHOICE_PLAN' -or
-        $_.Text -match 'DEPLOY_END_TURN' -or
-        $_.Text -match 'Replay'
-    })
-if ($forbidden.Count -eq 0) {
+$forbidden = @()
+if ($start.Count -eq 1) {
+    $forbidden = @($sessionRecords | Where-Object {
+            $_.Text -match 'EndPlayerTurnAction' -or
+            $_.Text -match 'custom_network_api_used=true\b' -or
+            $_.Text -match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_DEPLOY_END\b.*end_turn=true' -or
+            $_.Text -match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_REMOTE_DELTA_ABORT\b' -or
+            $_.Text -match '\[CombatSolver/Test\] DEPLOY_ACTION .*potion=' -or
+            $_.Text -match 'DEPLOY_CHOICE_PLAN' -or
+            $_.Text -match 'DEPLOY_END_TURN' -or
+            $_.Text -match 'Replay' -or
+            $_.Text -match 'type=UsePotionAction\b'
+        })
+}
+if ($forbidden.Count -eq 0 -and $start.Count -eq 1) {
     Add-Check 'forbiddenActionsAbsent' PASS
+} elseif ($start.Count -eq 0) {
+    Add-Check 'forbiddenActionsAbsent' UNVERIFIED '' 'Cannot scope forbidden-action checks without a deployment start.'
 } else {
-    Add-Check 'forbiddenActionsAbsent' FAIL (Join-Evidence $forbidden) 'Potion, Choice, Replay, EndTurn or remote-abort evidence was observed in the normal two-action smoke.'
+    Add-Check 'forbiddenActionsAbsent' FAIL (Join-Evidence $forbidden) 'Potion, Choice, Replay, EndTurn, remote-abort or custom-network evidence was observed in the normal bounded smoke.'
 }
 
-$worldVersionIncreased = $true
-if ($reconciled.Count -eq 2) {
+$worldVersionIncreased = $reconciled.Count -eq $deploymentActionCount -and $deploymentActionCount -gt 0
+[long]$previousAfterVersion = -1
+if ($worldVersionIncreased) {
     foreach ($record in $reconciled) {
-        if (($record.Text -notmatch 'before_world_version=(\d+)') -or ($record.Text -notmatch 'after_world_version=(\d+)')) {
+        if (($record.Text -notmatch 'before_world_version=(\d+)') -or
+            ($record.Text -notmatch 'after_world_version=(\d+)')) {
             $worldVersionIncreased = $false
-            continue
+            break
         }
         [long]$beforeVersion = $record.Text -replace '^.*before_world_version=(\d+).*$','$1'
         [long]$afterVersion = $record.Text -replace '^.*after_world_version=(\d+).*$','$1'
-        if ($afterVersion -le $beforeVersion) { $worldVersionIncreased = $false }
+        if ($afterVersion -le $beforeVersion -or $afterVersion -le $previousAfterVersion) {
+            $worldVersionIncreased = $false
+            break
+        }
+        $previousAfterVersion = $afterVersion
     }
 }
-if ($reconciled.Count -eq 2 -and $worldVersionIncreased) {
+if ($worldVersionIncreased) {
     Add-Check 'worldVersionAttribution' PASS (Join-Evidence $reconciled)
 } elseif ($reconciled.Count -eq 0) {
     Add-Check 'worldVersionAttribution' UNVERIFIED '' 'No action-boundary WorldVersion evidence was observed.'
 } else {
-    Add-Check 'worldVersionAttribution' FAIL (Join-Evidence $reconciled) 'Each revalidated action must advance to a newer stable WorldVersion.'
+    Add-Check 'worldVersionAttribution' FAIL (Join-Evidence $reconciled) 'Every revalidated action must advance to a newer stable WorldVersion in log order.'
 }
 
 $research = $null
@@ -189,24 +306,27 @@ if ($endIndex -ge 0) {
 }
 if ($null -ne $research) {
     Add-Check 'postActionResearch' PASS (Format-Evidence $research)
+} elseif ($end.Count -eq 0) {
+    Add-Check 'postActionResearch' UNVERIFIED '' 'No completed deployment boundary was observed before fresh-search validation.'
 } else {
-    Add-Check 'postActionResearch' UNVERIFIED '' 'No fresh debounced search was observed after the bounded MP2B deployment.'
+    Add-Check 'postActionResearch' UNVERIFIED '' 'No fresh debounced search was observed after the bounded deployment.'
 }
 
-if ($null -ne $requestId) {
-    $sessionLines = @($records | Where-Object {
-            ($_.Text -match 'request_id=(\d+)') -and ($_.Text -match 'MP2B_(?:DEPLOY_START|ACTION_RECONCILED|DEPLOY_END|REMOTE_DELTA_ABORT|DEPLOY_ABORT)')
+if ($null -ne $observedRequestId) {
+    $sessionLines = @($sessionRecords | Where-Object {
+            ($_.Text -match 'request_id=(\d+)') -and
+            ($_.Text -match 'MP2B_(?:DEPLOY_START|NATIVE_ACTION_CAPTURED|ACTION_RECONCILED|DEPLOY_END|REMOTE_DELTA_ABORT|DEPLOY_ABORT)')
         })
     $wrongRequest = @($sessionLines | Where-Object {
-            $_.Text -notmatch ("request_id=" + [regex]::Escape([string]$requestId) + '\b')
+            $_.Text -notmatch ('request_id=' + [regex]::Escape([string]$observedRequestId) + '\b')
         })
     if ($wrongRequest.Count -eq 0) {
         Add-Check 'sessionIdentity' PASS (Format-Evidence $start[0])
     } else {
-        Add-Check 'sessionIdentity' FAIL (Join-Evidence $wrongRequest) 'All MP2B deployment markers must belong to the same explicit execution session.'
+        Add-Check 'sessionIdentity' FAIL (Join-Evidence $wrongRequest) 'All bounded deployment markers must belong to the same explicit execution session.'
     }
 } else {
-    Add-Check 'sessionIdentity' UNVERIFIED '' 'The MP2B deployment request id was not observed.'
+    Add-Check 'sessionIdentity' UNVERIFIED '' 'The bounded deployment request id was not observed.'
 }
 
 $status = if (@($checks | Where-Object status -eq 'FAIL').Count -gt 0) {
@@ -217,16 +337,21 @@ $status = if (@($checks | Where-Object status -eq 'FAIL').Count -gt 0) {
     'PASS'
 }
 
+$phase = if ($deploymentActionCount -ge 3 -or $MinActions -ge 3) { 'MP-2C' } else { 'MP-2B' }
 $result = [ordered]@{
-    schemaVersion = 1
-    phase = 'MP-2B'
+    schemaVersion = 2
+    phase = $phase
     status = $status
     validatedUtc = [DateTimeOffset]::UtcNow.ToString('O')
+    requestId = if ($null -ne $observedRequestId) { $observedRequestId } else { $null }
+    minActions = $MinActions
+    maxActions = if ($MaxActions -gt 0) { $MaxActions } else { $null }
+    actionCount = if ($start.Count -eq 1) { $deploymentActionCount } else { $null }
     logFiles = @($resolvedLogs)
     checks = @($checks)
     limitations = @(
         'This validates CombatSolver runtime evidence from an owned Lab client process.',
-        'The normal smoke proves the bounded two-action local path; remote-interference abort requires a separate scenario.',
+        'The normal smoke proves a bounded safe local PlayCard prefix; remote-interference abort requires a separate scenario.',
         'custom_network_api_used=false proves this CombatSolver path used only the native action path; it is not an independent packet capture.'
     )
 }
@@ -243,7 +368,7 @@ if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
 if ($Json) {
     Write-Output $jsonText
 } else {
-    Write-Output "MULTIPLAYER_MP-2B_$status logs=$($resolvedLogs.Count)"
+    Write-Output "MULTIPLAYER_$phase`_$status logs=$($resolvedLogs.Count) request_id=$($observedRequestId ?? '-') action_count=$($deploymentActionCount)"
     foreach ($check in $checks) {
         $suffix = if ($null -eq $check.detail) { '' } else { " detail=$($check.detail)" }
         Write-Output ("{0} {1}{2}" -f $check.status, $check.name, $suffix)

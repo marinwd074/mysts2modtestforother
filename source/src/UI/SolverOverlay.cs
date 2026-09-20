@@ -1050,7 +1050,12 @@ internal static partial class SolverOverlay
         Entry.Logger.Info("[CombatSolver/Test] UI_DEPLOYMENT_END_TURN state=active");
     }
 
-    public static void ShowDeploymentComplete(Node host, int turn, int actionCount, bool endedTurn)
+    public static void ShowDeploymentComplete(
+        Node host,
+        int turn,
+        int actionCount,
+        bool endedTurn,
+        string? completionMessage = null)
     {
         _presentation = SolverOverlayPresentation.ExecutedHistory;
         _waitingForNextTurnPlan = false;
@@ -1069,9 +1074,13 @@ internal static partial class SolverOverlay
         if (_summaryText != null)
         {
             _summaryText.Visible = true;
-            _summaryText.Text = endedTurn
-                ? SolverText.Format($"已按推荐路线打出 [b]{actionCount}[/b] 张牌，并提交结束回合动作。")
-                : SolverText.Format($"已打出 [b]{actionCount}[/b] 张牌；战斗或当前回合已在执行期间结束。");
+            _summaryText.Text = completionMessage != null
+                ? SolverText.Get(completionMessage)
+                : endedTurn
+                    ? SolverText.Format($"已按推荐路线打出 [b]{actionCount}[/b] 张牌，并提交结束回合动作。")
+                    : SolverController.CurrentSessionCapabilities.Kind == SolverSessionKind.MultiplayerSafeExecute
+                        ? SolverText.Format($"已执行 [b]{actionCount}[/b] 张牌，保持当前回合；正在重新计算最新路线。")
+                        : SolverText.Format($"已打出 [b]{actionCount}[/b] 张牌；战斗或当前回合已在执行期间结束。");
         }
         if (_progressText != null)
             _progressText.Visible = false;

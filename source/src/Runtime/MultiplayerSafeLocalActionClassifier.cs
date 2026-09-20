@@ -88,46 +88,22 @@ internal static class MultiplayerSafeLocalActionClassifier
     }
 
     /// <summary>
-    /// MP-2B takes a bounded prefix only. Each returned action is classified again against
+    /// Multiplayer Safe Execute takes a bounded prefix only. Each returned action is classified again against
     /// the live state immediately before execution; the post-action session revalidation
     /// is the authority for admitting the next action.
     /// </summary>
-    public static IReadOnlyList<PlanAction> TakeMp2BDeploymentSlice(
+    public static IReadOnlyList<PlanAction> TakeBoundedDeploymentSlice(
         CombatState state,
         IReadOnlyList<PlanAction> actions,
         out SafeLocalActionDecision stop)
-    {
-        if (actions.Count == 0)
-        {
-            stop = SafeLocalActionDecision.Allow;
-            return [];
-        }
-
-        List<PlanAction> safe = [];
-        foreach (PlanAction action in actions)
-        {
-            if (safe.Count >= MultiplayerSafeExecutePolicy.MaxActionsPerDeployment)
-            {
-                stop = MultiplayerSafeExecutePolicy.DeploymentStopAfter(safe.Count, actions.Count);
-                return safe;
-            }
-
-            SafeLocalActionDecision decision = Classify(state, action);
-            if (!decision.IsSafe)
-            {
-                stop = decision;
-                return safe;
-            }
-            safe.Add(action);
-        }
-
-        stop = MultiplayerSafeExecutePolicy.DeploymentStopAfter(safe.Count, actions.Count);
-        return safe;
-    }
+        => MultiplayerSafeExecutePolicy.TakeBoundedSafePrefix(
+            actions,
+            action => Classify(state, action),
+            out stop);
 
     /// <summary>
     /// Retained for the MP-2A validator's historical contract. New runtime deployments
-    /// use <see cref="TakeMp2BDeploymentSlice"/> and the explicit execution session.
+    /// use <see cref="TakeBoundedDeploymentSlice"/> and the explicit execution session.
     /// </summary>
     public static IReadOnlyList<PlanAction> TakeMp2ADeploymentSlice(
         CombatState state,
