@@ -5,10 +5,10 @@
 
 ## 职责分工
 
-- **用户负责全部游戏进程与游戏内操作**：执行 Host/Client 启动命令、Mod warm-up 后重启、必要时停止游戏，以及 Host/Join、角色选择、Ready、进入战斗、点击“执行本回合”和观察 UI/牌/能量/格挡等。
-- **Codex/Agent 不得启动、重启或关闭游戏进程，也不得代操作游戏 GUI。** 不执行 `start-host.ps1`、`start-client.ps1`、`stop-owned-instances.ps1` 或其他会创建/关闭 STS2 进程的命令。
-- Codex/Agent 只负责：构建代码、准备/刷新隔离实例、生成准确的用户执行命令、定位日志、运行离线 validator、分析证据和修复代码。
-- 需要游戏操作时，Codex/Agent 一次只给用户一个短步骤，并明确标记 **“用户执行”**；用户反馈结果或完成操作后再继续。
+- **Codex/Agent 负责游戏进程与技术流程**：构建代码、准备/刷新隔离实例、执行 `start-host.ps1` / `start-client.ps1`、完成 Mod warm-up 后的必要重启、按需要执行 Graceful stop、定位日志、运行 validator、分析证据和修复代码。
+- **用户只负责游戏窗口内的人工操作与观察**：Host/Join、角色选择、Ready、进入战斗、点击“执行本回合”、操作第二个 Client 制造干扰，以及确认卡牌/能量/格挡/UI 等实际现象。
+- Codex/Agent **不得代替用户点击或操作游戏 GUI**；当流程推进到需要人工交互时，应停止自动操作并明确告诉用户当前要点击什么、预期看到什么。
+- 用户完成该 GUI 步骤并反馈后，Codex/Agent 再继续进程管理、日志读取、验证或下一轮启动。
 
 ## 固定前置条件
 
@@ -44,10 +44,9 @@
 
 ## 推荐启动顺序
 
-> 以下所有启动/重启/停止游戏命令均由**用户在本机执行**。Codex/Agent 只生成命令，不执行。
+> 以下 Host/Client 启动、Mod warm-up 重启和 Graceful stop 均由 **Codex/Agent 执行**；只有进入游戏窗口后的点击交给用户。
 
 ~~~powershell
-# 用户执行
 $labRoot = 'D:\yingye\CombatSolver\.local\multiplayer-lab'
 
 pwsh -NoLogo -NoProfile -File .\start-host.ps1 `
@@ -64,7 +63,7 @@ pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
 让 Client 完成 Mod 加载并重启。不要把这次当正式测试。
 
 ~~~powershell
-# 用户执行：Client 第二次正式运行
+# Client 第二次：正式运行
 pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
   -InstanceRoot "$labRoot\runtime-mp-client-solver" `
   -ClientId 1000 `
@@ -78,10 +77,9 @@ pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
 
 正式 token 只接受明确的 `COMBATSOLVER_MULTIPLAYER_MODE=safe-execute` opt-in，
 默认多人仍保持 Probe。为保持实例隔离，第一轮正式 token Smoke 仍使用本目录
-准备的 `HostVanilla + ClientCombatSolver`，但 Client 第二次启动改为。**以下命令由用户执行：**
+准备的 `HostVanilla + ClientCombatSolver`，但 Client 第二次启动改为：
 
 ~~~powershell
-# 用户执行
 pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
   -InstanceRoot "$labRoot\runtime-mp-client-solver" `
   -ClientId 1000 `
@@ -97,7 +95,7 @@ MP-2B 两动作实机已通过。
 ## MP-2B 两动作 Smoke（当前待实机）
 
 正式 Client 第二次启动继续使用上面的 `HostVanilla + ClientCombatSolver`、Steam
-transport off 和 Mod warm-up 后的隔离实例，但模式必须是。**以下命令由用户执行：**
+transport off 和 Mod warm-up 后的隔离实例，但模式必须是：
 
 ~~~powershell
 # 用户执行
@@ -137,10 +135,9 @@ pwsh -NoLogo -NoProfile -File .\validate-mp2b-interference-results.ps1 `
 
 ## MP-2A 收尾
 
-停止游戏仍由用户负责。Codex/Agent 不执行停止脚本。
+游戏进程停止仍由 Codex/Agent 负责，默认使用 Graceful；只有游戏窗口中的点击交给用户。
 
 ~~~powershell
-# 用户执行
 pwsh -NoLogo -NoProfile -File .\stop-owned-instances.ps1 `
   -InstanceRoot "$labRoot\runtime-mp-client-solver"
 ~~~
