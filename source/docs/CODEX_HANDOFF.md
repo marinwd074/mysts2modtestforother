@@ -30,6 +30,9 @@
 - `DiagnosticLogTests` 新增 Dispose 尾事件落盘断言，并加入 L1 contract suite；合同入口由 8 个变为 9 个。
 - Safe Execute 只有在 turn-setup 等待被实际接受，或当前状态通过 `CanSolve` 后才武装显式部署请求；拒绝路径不会留下旧授权。
 - 部署 UI 根据会话能力显示“结束本回合”或“保持当前回合”。
+- CI 首轮 run `35485311478` 暴露既有 `AppendOnlyEventLog.Dispose()` 文件句柄生命周期缺陷；随后提交 `18accc1` 将 Dispose 改为有界等待后台 writer 完成。
+- 修复后 GitHub Actions run `35485393314`：`static-consistency=PASS`、`contract-tests=PASS`，L1 为 `PASS: 9 / FAIL: 0 / SKIP: 0`；`DiagnosticLogTests` 明确通过尾事件落盘与 flush-each 文件释放，`MP2A_VALIDATOR_OK checks=4`。
+- Multiplayer Lab README 中已清理由旧目录遗留的 `multiplayer/blockers/` 失效入口，当前限制真源为 `LIMITATIONS.md` 与本 handoff。
 
 ## 仍需实机验证
 

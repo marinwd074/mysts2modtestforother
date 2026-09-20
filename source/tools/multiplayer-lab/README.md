@@ -173,5 +173,5 @@ MP-2A 真实 Smoke 证据。该 Lab token 不得改名或推广为正式 `safe-e
 Host/Client 运行证据必须带可审查的日志位置；单进程模拟和合成 JSON 不可作为
 通过证据。
 
-当前阻碍和未验证事实记录在
-`source/docs/multiplayer/blockers/`。
+当前能力边界与未验证事实以
+`source/docs/multiplayer/LIMITATIONS.md` 和 `source/docs/CODEX_HANDOFF.md` 为准。
