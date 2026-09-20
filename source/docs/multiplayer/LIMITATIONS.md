@@ -80,7 +80,7 @@
 - 重连后的远端私有药水库存仍不可访问，Advisor 必须保持 fail-closed；如需支持正向搜索语义，应另立受控 public-state 设计与合同，不在本次 MP-0 生命周期收口中静默放开。退出阶段的 `CombatBugReportExporter` `NullReferenceException` 另需独立 triage。
 - MP-2 Safe Execute 的正式能力只接受显式 `COMBATSOLVER_MULTIPLAYER_MODE=safe-execute` opt-in；一动作与两动作 Host/Client Smoke 是历史基线，当前 MP-2C 运行时最多执行 6 张连续安全本地普通 PlayCard，并在每张牌后做动作归因与重验证。默认多人仍是 Probe；`safe-execute-lab` 继续要求 Multiplayer Lab、匹配的 `ClientCombatSolver` ownership/profile marker 和 Probe evidence。Safe EndTurn 已在显式 `safe-execute` 下通过；药水、选择、Replay、队友目标、Full Auto 和 Instant 仍关闭。Local Cross-Turn 预测已在源码中启用，但尚未由 X1/X2 实机证据升级为正式多人能力结论。
 - Multiplayer Carry Ranking v1 只使用远端公开 HP/MaxHP/Block/回合阶段、公开 Powers、敌人公开状态和公开多人约束；不读取或预测远端手牌、牌堆、能量、药水、私有遗物或下一张牌。无明确目标语义的敌方风险保持 Unknown/neutral，且只在本地质量兼容候选之间观察/比较。
-- Multiplayer Local Cross-Turn 当前限制：搜索结果可包含本地未来回合，但只允许部署当前真实本地回合；Safe EndTurn 后旧 authorization 必须失效，只有对本地/敌人/远端公开 fingerprint、多人约束和单调 WorldVersion 完成严格对账后才复用 continuation。任何不匹配都必须 Fresh Probe + Fresh Root + Fresh Search；队友私有行为不作为确定输入。X1 已有 T3→T4 精确复用与新授权实机证据；T3 空推荐的最终排序修复已完成，仍需新构建实机确认；独立的 X2 队友主动公开变化场景仍待验证。
+- Multiplayer Local Cross-Turn 当前限制：搜索结果可包含本地未来回合，但只允许部署当前真实本地回合；Safe EndTurn 后旧 authorization 必须失效，只有对本地/敌人/远端公开 fingerprint、多人约束和单调 WorldVersion 完成严格对账后才复用 continuation。任何不匹配都必须 Fresh Probe + Fresh Root + Fresh Search；队友私有行为不作为确定输入。X1 已有 T3→T4 精确复用与新授权实机证据；T3 空推荐的成员内排序与 Beam portfolio 选择修复已完成，仍需新构建实机确认；独立的 X2 队友主动公开变化场景仍待验证。
 
 ## 当前安全边界
 

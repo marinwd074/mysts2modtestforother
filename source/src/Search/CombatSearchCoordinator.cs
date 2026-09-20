@@ -1728,9 +1728,13 @@ internal static partial class CombatSearchCoordinator
         int primaryQuality = CompareCompletedResultPrimaryQuality(root, policy, candidate, current);
         if (primaryQuality != 0)
             return primaryQuality < 0;
-        return candidate.PotionCount < current.PotionCount
-            || candidate.PotionCount == current.PotionCount
-                && candidate.BestNode.Score > current.BestNode.Score;
+        if (candidate.PotionCount != current.PotionCount)
+            return candidate.PotionCount < current.PotionCount;
+        if (PreferPlayableCurrentTurnRoute(policy, candidate, current))
+            return true;
+        if (PreferPlayableCurrentTurnRoute(policy, current, candidate))
+            return false;
+        return candidate.BestNode.Score > current.BestNode.Score;
     }
 
     private static bool IsBetterPotionPolicyResult(
@@ -1738,28 +1742,50 @@ internal static partial class CombatSearchCoordinator
         SearchPolicySnapshot policy,
         SolverResult candidate,
         SolverResult current)
-        => IsBetterPotionPolicyResult(
+    {
+        SolverInterimResult candidateInterim = BuildInterimResult(root, policy, candidate);
+        SolverInterimResult currentInterim = BuildInterimResult(root, policy, current);
+        int quality = ComparePotionPolicyQuality(
             policy.TheftPolicy,
-            BuildInterimResult(root, policy, candidate),
-            BuildInterimResult(root, policy, current));
+            candidateInterim,
+            currentInterim);
+        if (quality != 0)
+            return quality < 0;
+        if (PreferPlayableCurrentTurnRoute(policy, candidate, current))
+            return true;
+        if (PreferPlayableCurrentTurnRoute(policy, current, candidate))
+            return false;
+        return candidate.BestNode.Score > current.BestNode.Score;
+    }
 
     internal static bool IsBetterPotionPolicyResult(
         SolverTheftPolicy? theftPolicy,
         SolverInterimResult candidate,
         SolverInterimResult current)
     {
+        int quality = ComparePotionPolicyQuality(theftPolicy, candidate, current);
+        if (quality != 0)
+            return quality < 0;
+        return candidate.Score > current.Score;
+    }
+
+    private static int ComparePotionPolicyQuality(
+        SolverTheftPolicy? theftPolicy,
+        SolverInterimResult candidate,
+        SolverInterimResult current)
+    {
         int victoryComparison = current.Won.CompareTo(candidate.Won);
         if (victoryComparison != 0)
-            return victoryComparison < 0;
+            return victoryComparison;
         int survivalComparison = current.Survives.CompareTo(candidate.Survives);
         if (survivalComparison != 0)
-            return survivalComparison < 0;
+            return survivalComparison;
         if (candidate.DeathSaveUseCount != current.DeathSaveUseCount)
-            return candidate.DeathSaveUseCount < current.DeathSaveUseCount;
+            return candidate.DeathSaveUseCount.CompareTo(current.DeathSaveUseCount);
         int recovery = TheftEncounterStrategy.CompareRecovery(theftPolicy,
             candidate.Won, candidate.OutstandingStolenResource, current.Won, current.OutstandingStolenResource);
         if (recovery != 0)
-            return recovery < 0;
+            return recovery;
         int primaryQuality = SolverInterimResultOrdering.ComparePrimaryQuality(
             candidate.Won,
             candidate.StrategicHpDeficit,
@@ -1774,19 +1800,31 @@ internal static partial class CombatSearchCoordinator
             candidate.DeathSaveUseCount,
             current.DeathSaveUseCount);
         if (primaryQuality != 0)
-            return primaryQuality < 0;
+            return primaryQuality;
         if (theftPolicy == SolverTheftPolicy.PreserveResources
             && candidate.OutstandingStolenResource != current.OutstandingStolenResource)
         {
-            return candidate.OutstandingStolenResource < current.OutstandingStolenResource;
+            return candidate.OutstandingStolenResource.CompareTo(current.OutstandingStolenResource);
         }
         if (candidate.ProjectedBattlePotionCount != current.ProjectedBattlePotionCount)
         {
-            return candidate.ProjectedBattlePotionCount
-                < current.ProjectedBattlePotionCount;
+            return candidate.ProjectedBattlePotionCount.CompareTo(current.ProjectedBattlePotionCount);
         }
-        return candidate.Score > current.Score;
+        return 0;
     }
+
+    private static bool PreferPlayableCurrentTurnRoute(
+        SearchPolicySnapshot policy,
+        SolverResult candidate,
+        SolverResult current)
+        => policy.RoutePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
+            && HasCurrentTurnCardAction(candidate)
+            && !HasCurrentTurnCardAction(current);
+
+    private static bool HasCurrentTurnCardAction(SolverResult result)
+        => result.BestNode.Actions.Any(action =>
+            action.Turn == result.StartTurnNumber
+            && action.Kind == PlanActionKind.PlayCard);
 
     private static int CompareCompletedResultPrimaryQuality(
         CombatRootSnapshot root,
