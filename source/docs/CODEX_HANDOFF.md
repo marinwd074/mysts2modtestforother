@@ -203,4 +203,15 @@ Chandelier/Captain's Wheel/Sparkling Rouge 为第 3 回合。另发现计数目�
 RelicCounterCatalog 静态初始化时 fail-closed 校验 period、slot、重复 Id 与计数器总量；当前行为不变。
 上述 period/turn 值与 packing 不变量均已补静态护栏，route-affecting mismatch 总数仍为 44。
 
+最终收尾扫描第四小批在 Search/Prediction 阈值中发现并修复 1 个新的 route-affecting mismatch：
+ActEndingBossPolicy 原先把所有非最终 Act Boss 都按 A2+ 的“缺失 HP 恢复 80%”估值，导致 A0/A1
+错误地认为战斗内治疗仍有 1/5 会跨 Act 保留。0.107.1 Ancient 原生逻辑是 A0/A1 补满缺失 HP，
+只有 Weary Traveler（A2+）才乘 0.8。根快照现在读取 RunState.AscensionLevel：A0/A1 使用
+ActClearFullHeal（战斗内恢复 HP 的跨 Act 持久价值为 0），A2+ 保持原 ActClearHeal 的 1/5 价值；
+ActTransitionBossHpStrategy 对两种过 Act恢复都继续生效。累计 route-affecting mismatch 更新为 45。
+
+同批还把 GrowthPolicy 内置/第三方成长预算重复写死的 1000 HP 上限收成单一 MaximumBudgetHp 常量；
+这是 solver 配置安全边界，不是游戏版本数值。Act 3 的零基索引 2 与 0.107.1 三个 Boss
+TEST_SUBJECT_BOSS / AEONGLASS_BOSS / QUEEN_BOSS 也已补静态版本护栏。
+
 已完成的 Power、continuation、死亡生命周期和 78/78 卡牌 OnPlay 数值不重复展开；多人牌仍暂不作为当前 blocker。

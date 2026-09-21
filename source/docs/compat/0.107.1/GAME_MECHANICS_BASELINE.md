@@ -74,6 +74,30 @@ A route-affecting change is allowed only when all applicable checks below pass:
 
 If any item is unresolved, document a gap instead of changing the solver.
 
+## Act-transition Ancient healing
+
+The pinned 0.107.1 rule is Ascension-sensitive. After a non-final-act boss, the
+transition Ancient starts from the player's missing HP. Below
+`AscensionLevel.WearyTraveler` it heals the full missing amount; at Weary
+Traveler (Ascension 2) or above, that amount is multiplied by `0.8m` before
+healing. Therefore HP restored during the boss has no persistent post-transition
+value below A2, while at A2+ one fifth of that HP still carries strategically.
+
+The root snapshot must derive this from `RunState.AscensionLevel`; treating every
+act transition as the A2+ 80% case overvalues ending HP on A0/A1.
+
+Public cross-check:
+https://slayspiredb.com/zh-hans/sts2/ascension
+
+## Act 3 boss identity
+
+The 0.107.1 Act 3 boss set is Test Subject, Queen, and Aeonglass. The run act
+index is zero-based, so Act 3 is index `2`. Aeonglass replaced Doormaker in
+0.107.1; later/current boss text must not cause that identity gate to drift.
+
+Public cross-check:
+https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2%3ABosses
+
 ## Multiplayer combat baseline
 
 The public multiplayer rules describe battles as one shared encounter in which

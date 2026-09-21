@@ -363,6 +363,39 @@ foreach ($turnSpecificRelicRule in @(
     }
 }
 
+$actEndingBossPolicyPath = Join-Path $repositoryRoot 'src/Search/ActEndingBossPolicy.cs'
+$actEndingBossPolicyText = [IO.File]::ReadAllText($actEndingBossPolicyPath)
+foreach ($actBossRule in @(
+    'BossHpRelief.ActClearFullHeal',
+    'runState.AscensionLevel >= (int)AscensionLevel.WearyTraveler',
+    'BossHpRelief.ActClearHeal => persistentHpValue * 5',
+    'BossHpRelief.ActClearFullHeal or BossHpRelief.RunEnding => 0')) {
+    if (-not $actEndingBossPolicyText.Contains($actBossRule)) {
+        $violations.Add("${actEndingBossPolicyPath}: 0.107.1 act-transition HP relief drifted '$actBossRule'")
+    }
+}
+
+$searchPolicySnapshotPath = Join-Path $repositoryRoot 'src/Search/SearchPolicySnapshot.cs'
+$searchPolicySnapshotText = [IO.File]::ReadAllText($searchPolicySnapshotPath)
+foreach ($act3BossRule in @(
+    'actIndex == 2',
+    '"TEST_SUBJECT_BOSS"',
+    '"AEONGLASS_BOSS"',
+    '"QUEEN_BOSS"')) {
+    if (-not $searchPolicySnapshotText.Contains($act3BossRule)) {
+        $violations.Add("${searchPolicySnapshotPath}: 0.107.1 Act 3 boss identity drifted '$act3BossRule'")
+    }
+}
+
+$growthPolicyPath = Join-Path $repositoryRoot 'src/Search/GrowthPolicy.cs'
+$growthPolicyText = [IO.File]::ReadAllText($growthPolicyPath)
+if (-not $growthPolicyText.Contains('internal const int MaximumBudgetHp = 1000;')) {
+    $violations.Add("${growthPolicyPath}: growth budget safety cap lost its single source of truth")
+}
+if ($growthPolicyText.Contains('Get(source) is < 0 or > 1000')) {
+    $violations.Add("${growthPolicyPath}: built-in growth budget duplicated the hard-coded 1000 cap")
+}
+
 if (-not $cardPowerSupportText.Contains('combat.Apply<HauntPower>(owner, card.DynamicVars.HpLoss.IntValue, owner)')) {
     $violations.Add("${cardPowerSupportPath}: Haunt 0.107.1 HP-loss amount must come from the pinned card model")
 }

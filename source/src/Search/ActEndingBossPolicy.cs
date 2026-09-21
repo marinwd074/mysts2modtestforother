@@ -1,4 +1,5 @@
 using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.Entities.Ascension;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 
@@ -12,7 +13,10 @@ internal enum BossHpRelief
     /// <summary>Normal fight: HP carries straight into the next one and is weighted in full.</summary>
     None,
 
-    /// <summary>Clearing acts one and two restores 80% of the damage taken.</summary>
+    /// <summary>Below Weary Traveler, the transition Ancient fully restores missing HP.</summary>
+    ActClearFullHeal,
+
+    /// <summary>At Weary Traveler or above, the transition Ancient restores 80% of missing HP.</summary>
     ActClearHeal,
 
     /// <summary>Nothing follows this fight, so only surviving it matters.</summary>
@@ -89,7 +93,8 @@ internal static class ActEndingBossPolicy
         BossHpStrategy finalBossStrategy)
         => encounterHpRelief switch
         {
-            BossHpRelief.ActClearHeal when actTransitionStrategy == BossHpStrategy.MinimizeHpLoss
+            BossHpRelief.ActClearFullHeal or BossHpRelief.ActClearHeal
+                when actTransitionStrategy == BossHpStrategy.MinimizeHpLoss
                 => BossHpRelief.None,
             BossHpRelief.RunEnding when finalBossStrategy == BossHpStrategy.MinimizeHpLoss
                 => BossHpRelief.None,
@@ -104,8 +109,8 @@ internal static class ActEndingBossPolicy
             return 0;
         return bossHpRelief switch
         {
+            BossHpRelief.ActClearFullHeal or BossHpRelief.RunEnding => int.MaxValue / 4,
             BossHpRelief.ActClearHeal => persistentHpValue * 5,
-            BossHpRelief.RunEnding => int.MaxValue / 4,
             _ => persistentHpValue,
         };
     }
@@ -122,7 +127,12 @@ internal static class ActEndingBossPolicy
     public static int PersistentValueOfRecoveredHp(int recoveredHp, BossHpRelief bossHpRelief)
         => recoveredHp <= 0
             ? 0
-            : recoveredHp / RawHpRequiredForPersistentValue(1, bossHpRelief);
+            : bossHpRelief switch
+            {
+                BossHpRelief.ActClearFullHeal or BossHpRelief.RunEnding => 0,
+                BossHpRelief.ActClearHeal => recoveredHp / 5,
+                _ => recoveredHp,
+            };
 
     /// <summary>
     /// Battle HP loss net of what the route healed back, which is the quantity route quality is ranked on.
@@ -203,7 +213,11 @@ internal static class ActEndingBossPolicy
         RunState runState = combatState.RunState as RunState
             ?? throw new InvalidOperationException("Boss 战没有可识别的 RunState。");
         if (runState.CurrentActIndex < runState.Acts.Count - 1)
-            return BossHpRelief.ActClearHeal;
+        {
+            return runState.AscensionLevel >= (int)AscensionLevel.WearyTraveler
+                ? BossHpRelief.ActClearHeal
+                : BossHpRelief.ActClearFullHeal;
+        }
 
         // Final act. A single boss is the run's last fight; when the act has two, only the second one is,
         // and HP carries from the first into it exactly like a normal fight.
