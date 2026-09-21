@@ -29,8 +29,8 @@ internal static class PredictionModPatchAudit
     /// Throws when any card reachable from the captured root has a third-party patch on its mirrored OnPlay.
     /// </summary>
     /// <remarks>
-    /// This is a best-effort boundary: card types that only appear later through in-combat generation are not
-    /// visible at capture time and are not audited here.
+    /// Reachable card types are audited immediately. Registered generated-card types and the set of patched
+    /// OnPlay methods are also frozen at root capture so worker threads never inspect the mutable Harmony table.
     /// </remarks>
     public static void ValidateCardOnPlay(IEnumerable<CardModel> cards)
         => CaptureCardOnPlay(cards);
@@ -41,30 +41,87 @@ internal static class PredictionModPatchAudit
         bool adapted = AdaptedCardOnPlayMirrors.Seal();
         Dictionary<Type, AdaptedCardOnPlayMirrors.Registration?>? selections = adapted ? [] : null;
         HashSet<Type> checkedTypes = [];
+
         foreach (CardModel card in cards)
         {
-            // Harmony patches can be installed or removed between root captures.
             Type type = card.GetType();
-            if (!checkedTypes.Add(type)) continue;
-            MethodInfo target = AdaptedCardOnPlayMirrors.ResolveOnPlay(type)
-                ?? throw new PredictionUnsupportedException($"Missing OnPlay for {type.FullName}.");
-            Patches? patches = Harmony.GetPatchInfo(target);
-            ForeignPatch? firstForeign = null;
-            if (patches is not null)
-                foreach (var group in AdaptedCardOnPlayMirrors.Groups(patches))
-                    foreach (Patch patch in group.Patches)
-                    {
-                        // Resolve every source even when the full combination is registered.
-                        ForeignPatch? foreign = TryDescribeForeignPatch(patch, target);
-                        firstForeign ??= foreign;
-                    }
-            var selected = adapted ? AdaptedCardOnPlayMirrors.Select(type, target, patches) : null;
+            if (!checkedTypes.Add(type))
+                continue;
+
+            AdaptedCardOnPlayMirrors.Registration? selected =
+                AuditCardOnPlay(type, adapted, out ForeignPatch? firstForeign);
             if (selected is null && firstForeign is { } unsupported)
-                throw new IncompatibleGameplayModException(unsupported.ModId, unsupported.ModName,
-                    unsupported.Description, "combat");
+            {
+                throw new IncompatibleGameplayModException(
+                    unsupported.ModId,
+                    unsupported.ModName,
+                    unsupported.Description,
+                    "combat");
+            }
             selections?.Add(type, selected);
         }
-        return selections is null ? null : new(selections, AdaptedCardOnPlayMirrors.CaptureLiveStamp()!);
+
+        if (selections is null)
+            return null;
+
+        Dictionary<Type, string> deferredFailures = [];
+        foreach (Type type in AdaptedCardOnPlayMirrors.RegisteredTypes())
+        {
+            if (!checkedTypes.Add(type))
+                continue;
+
+            try
+            {
+                AdaptedCardOnPlayMirrors.Registration? selected =
+                    AuditCardOnPlay(type, adapted: true, out ForeignPatch? firstForeign);
+                if (selected is null && firstForeign is { } unsupported)
+                {
+                    deferredFailures.Add(
+                        type,
+                        $"{unsupported.ModName} ({unsupported.ModId}) patches the OnPlay of " +
+                        $"{type.FullName} without a matching adapter: {unsupported.Description}.");
+                }
+                else
+                {
+                    selections.Add(type, selected);
+                }
+            }
+            catch (PredictionUnsupportedException error)
+            {
+                // The registered type is not reachable yet. Preserve the exact root-time rejection
+                // and report it only if a later generated card actually uses this type.
+                deferredFailures.Add(type, error.Message);
+            }
+        }
+
+        HashSet<MethodInfo> patchedOnPlayTargets = [];
+        string stamp = AdaptedCardOnPlayMirrors.CaptureLiveStamp(patchedOnPlayTargets)!;
+        return new(selections, stamp, patchedOnPlayTargets, deferredFailures);
+    }
+
+    internal static AdaptedCardOnPlayMirrors.Registration? AuditCardOnPlay(
+        Type type,
+        bool adapted,
+        out ForeignPatch? firstForeign)
+    {
+        MethodInfo target = AdaptedCardOnPlayMirrors.ResolveOnPlay(type)
+            ?? throw new PredictionUnsupportedException($"Missing OnPlay for {type.FullName}.");
+        Patches? patches = Harmony.GetPatchInfo(target);
+        firstForeign = null;
+        if (patches is not null)
+        {
+            foreach (var group in AdaptedCardOnPlayMirrors.Groups(patches))
+            {
+                foreach (Patch patch in group.Patches)
+                {
+                    // Resolve every source even when the full composition has an adapter.
+                    ForeignPatch? foreign = TryDescribeForeignPatch(patch, target);
+                    firstForeign ??= foreign;
+                }
+            }
+        }
+
+        return adapted ? AdaptedCardOnPlayMirrors.Select(type, target, patches) : null;
     }
 
     internal static void ValidateLoadedMods(IEnumerable<Mod> mods)
@@ -73,7 +130,15 @@ internal static class PredictionModPatchAudit
         {
             string? incompatibleId = IncompatibleModIds.FirstOrDefault(id =>
                 string.Equals(mod.manifest?.id, id, StringComparison.OrdinalIgnoreCase)
-                || mod.path.Contains(id, StringComparison.OrdinalIgnoreCase));
+#if STS2_01071
+                || mod.path.Contains(id, StringComparison.OrdinalIgnoreCase)
+#else
+                || mod.assemblies.Any(assembly => string.Equals(
+                    assembly.GetName().Name,
+                    id,
+                    StringComparison.OrdinalIgnoreCase))
+#endif
+            );
             if (incompatibleId is null)
                 continue;
             throw new IncompatibleGameplayModException(
