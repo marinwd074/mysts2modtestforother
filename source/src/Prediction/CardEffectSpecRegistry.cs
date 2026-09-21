@@ -73,6 +73,9 @@ internal static class CardEffectSpecRegistry
             Owner<EnergyNextTurnPower>(card => card.DynamicVars.Energy.IntValue),
         ],
         [typeof(Salvo)] = [Owner<RetainHandPower>(_ => 1)],
+#if STS2_01071
+        [typeof(Scare)] = [AllEnemies<WeakPower>(_ => 1)],
+#endif
         [typeof(Scourge)] = [Target<DoomPower>(card => card.DynamicVars.Doom.IntValue)],
         [typeof(SetupStrike)] = [Owner<SetupStrikePower>(card => card.DynamicVars.Strength.IntValue)],
         [typeof(SicEm)] = [Target<SicEmPower>("SicEmPower")],

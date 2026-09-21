@@ -119,6 +119,9 @@ internal static partial class CardOnPlayMirrors
         registry.Register<Reboot>(CardDrawCardMirrors.RebootOnPlay);
         registry.Register<Restlessness>(CardDrawCardMirrors.RestlessnessOnPlay);
         registry.Register<Scrape>(CardDrawCardMirrors.ScrapeOnPlay);
+#if STS2_01071
+        registry.Register<Scare>(static (_, _) => { });
+#endif
         registry.Register<Scrawl>(CardDrawCardMirrors.ScrawlOnPlay);
         registry.Register<SpoilsOfBattle>(CardDrawCardMirrors.SpoilsOfBattleOnPlay);
 

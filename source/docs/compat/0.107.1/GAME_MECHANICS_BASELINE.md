@@ -557,9 +557,10 @@ These later patch notes are especially useful as negative evidence for the
   into auto-playing all Ethereal cards in the Exhaust Pile; the same patch also
   reworked Expertise, Well-Laid Plans, and Pillar of Creation.
 - v0.110 reworked Haze to add Weak, reworked Outbreak into an immediate-Poison
-  Skill, increased Sacrifice from double to triple Osty Max HP, and changed
-  Regalite from triggering on every created card to only the first created card
-  each turn.
+  Skill, renamed/reworked Scare into the unrelated Energy-next-turn Sidestep,
+  increased Sacrifice from double to triple Osty Max HP, and changed Regalite
+  from triggering on every created card to only the first created card each
+  turn.
 - v0.111 later changed Guiding Star draw from this turn to next turn,
   reworked Expect a Fight and Hyperbeam again, and removed Forgotten Ritual's
   requirement that its owner had already Exhausted a card that turn.

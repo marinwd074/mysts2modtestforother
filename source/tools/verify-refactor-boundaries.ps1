@@ -1712,6 +1712,15 @@ else {
 }
 
 
+$cardOnPlayMirrorPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/CardOnPlayMirrors.cs'
+$cardOnPlayMirrorText = [IO.File]::ReadAllText($cardOnPlayMirrorPath)
+if (-not $cardOnPlayMirrorText.Contains('registry.Register<Scare>(static (_, _) => { });')) {
+    $violations.Add("${cardOnPlayMirrorPath}: 0.107.1 Scare must remain explicitly mirrorable")
+}
+if (-not $cardEffectSpecText.Contains('[typeof(Scare)] = [AllEnemies<WeakPower>(_ => 1)]')) {
+    $violations.Add("${cardEffectSpecPath}: 0.107.1 Scare must apply 1 Weak to every hittable enemy")
+}
+
 $generatedCardHookPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Card/AfterCardGeneratedForCombatMirrors.cs'
 $generatedCardHookText = [IO.File]::ReadAllText($generatedCardHookPath)
 $regaliteStart = $generatedCardHookText.IndexOf('private static void HandleRegalite')
