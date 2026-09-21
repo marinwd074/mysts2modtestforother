@@ -187,6 +187,85 @@ foreach ($genericCard in @('FlickFlack', 'Devastate', 'Haunt', 'Reave')) {
     }
 }
 
+$batch042Path = Join-Path $repositoryRoot 'src/Prediction/CardOnPlaySupport.Batch042.cs'
+$batch042Text = [IO.File]::ReadAllText($batch042Path)
+$calculatedVarSpecPath = Join-Path $repositoryRoot 'src/Prediction/CalculatedVarSpecRegistry.cs'
+$calculatedVarSpecText = [IO.File]::ReadAllText($calculatedVarSpecPath)
+$bespokeCardMirrorsPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/BespokeCardMirrors.cs'
+$bespokeCardMirrorsText = [IO.File]::ReadAllText($bespokeCardMirrorsPath)
+
+foreach ($finalPatchTrapRule in @(
+    'SoulStorm => playerState.ExhaustPile.Cards.Count(candidate => candidate.Preview is Soul)',
+    'CanonicalModels.Card<GiantRock>()',
+    'card.DynamicVars.Damage.BaseValue')) {
+    $sourceText = if ($finalPatchTrapRule.StartsWith('SoulStorm')) { $calculatedVarSpecText } else { $batch042Text }
+    if (-not $sourceText.Contains($finalPatchTrapRule)) {
+        $violations.Add("Final post-0.107.1 patch trap must remain model-driven '$finalPatchTrapRule'")
+    }
+}
+
+foreach ($finalPatchTrapRule in @(
+    'playedCard.MutablePreview.EnergyCost.SetThisCombat(0)',
+    'AddFixed<Debris>(simulator, card, PileType.Hand, 1)',
+    'combat.ForceStunnedMove(target',
+    '[typeof(Relax)] =',
+    '[typeof(Mangle)] = [Target<ManglePower>("StrengthLoss")]',
+    '[typeof(CrushUnder)] = [AllEnemies<CrushUnderPower>("StrengthLoss")]',
+    '[typeof(Salvo)] = [Owner<RetainHandPower>(_ => 1)]')) {
+    if (-not $cardEffectSpecText.Contains($finalPatchTrapRule)) {
+        $violations.Add("${cardEffectSpecPath}: final version-delta rule missing '$finalPatchTrapRule'")
+    }
+}
+
+foreach ($finalPatchTrapRule in @(
+    'combat.Apply<DemonFormPower>(owner, card.DynamicVars["StrengthPower"].IntValue, owner)',
+    'simulator.GainBlock(owner, card.DynamicVars.Block, playedCard, cardPlay)',
+    'card.DynamicVars["VulnerablePower"].IntValue',
+    'combat.Apply<AccelerantPower>(owner, card.DynamicVars["Accelerant"].IntValue, owner)',
+    'simulator.GainEnergy(card.Owner, card.DynamicVars.Energy.IntValue)')) {
+    if (-not $corePowerSupportText.Contains($finalPatchTrapRule)) {
+        $violations.Add("${corePowerSupportPath}: final version-delta rule must remain model-driven '$finalPatchTrapRule'")
+    }
+}
+
+foreach ($finalPatchTrapRule in @(
+    'card.DynamicVars.HpLoss.IntValue',
+    'simulator.GainEnergy(card.Owner, card.DynamicVars.Energy.IntValue)')) {
+    if (-not $cardOnPlaySupportText.Contains($finalPatchTrapRule)) {
+        $violations.Add("${cardOnPlaySupportPath}: Bloodletting must remain model-driven '$finalPatchTrapRule'")
+    }
+}
+
+if (-not $cardPowerSupportText.Contains('combat.Apply<CrueltyPower>(owner, card.DynamicVars["CrueltyPower"].IntValue, owner)')) {
+    $violations.Add("${cardPowerSupportPath}: Cruelty Power amount must remain model-driven")
+}
+if (-not $cardPowerLateText.Contains('combat.Apply<VigorPower>(owner, card.DynamicVars["VigorPower"].IntValue, owner)')) {
+    $violations.Add("${cardPowerLatePath}: Terraforming Vigor must remain model-driven")
+}
+foreach ($finalPatchTrapRule in @(
+    'if (context.OwnerState.ExhaustPile.Cards.Count >= card.DynamicVars.Cards.IntValue)',
+    'context.AttackAllOpponents();')) {
+    if (-not $bespokeCardMirrorsText.Contains($finalPatchTrapRule)) {
+        $violations.Add("${bespokeCardMirrorsPath}: Pact's End 0.107.1 path missing '$finalPatchTrapRule'")
+    }
+}
+foreach ($genericCard in @('SoulStorm', 'MomentumStrike', 'DemonForm', 'Taunt', 'Bloodletting', 'Cruelty',
+                           'Dominate', 'Accelerant', 'CollisionCourse', 'Sunder', 'Relax', 'Whistle',
+                           'EchoingSlash', 'Terraforming', 'CrushUnder', 'Salvo')) {
+    if ($cardOnPlayMirrorsText.Contains("registry.Register<$genericCard>")) {
+        $violations.Add("${cardOnPlayMirrorsPath}: $genericCard must not gain a hard-coded later-patch numeric OnPlay mirror")
+    }
+}
+if (-not $cardOnPlayMirrorsText.Contains('registry.Register<Mangle>(GeneralCardMirrors.GeneralAttackOnPlay)')) {
+    $violations.Add("${cardOnPlayMirrorsPath}: Mangle damage must stay on the model-driven general attack mirror")
+}
+if (-not $cardOnPlayMirrorsText.Contains('registry.Register<PactsEnd>(BespokeCardMirrors.PactsEndOnPlay)')) {
+    $violations.Add("${cardOnPlayMirrorsPath}: Pact's End must keep its conditional 0.107.1 bespoke path")
+}
+if (-not $cardOnPlayMirrorsText.Contains('registry.Register<Splash>(CardGenerationCardMirrors.SplashOnPlay)')) {
+    $violations.Add("${cardOnPlayMirrorsPath}: Splash generation behavior must remain independent of its later rarity swap")
+}
+
 $poolLifetime = [System.IO.File]::ReadAllText((Join-Path $repositoryRoot 'src/Runtime/NodePoolSignalLifetimePatch.cs'))
 foreach ($required in @('using ((Godot.Collections.Array)signals)', 'using var ownedArray', 'using (connection)', 'using (callable.Method)', 'using (signal.Name)')) {
     if (-not $poolLifetime.Contains($required)) { $violations.Add("Node pool wrapper ownership missing: $required") }

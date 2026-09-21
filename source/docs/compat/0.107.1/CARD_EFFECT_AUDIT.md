@@ -327,6 +327,35 @@ its amount through the Soul-play trigger, while Reave's explicit generated-Soul
 suffix reads only its Cards var and does not replace the model-driven attack
 damage.
 
+The final twenty known post-0.107.1 single-player patch-note candidates are
+also checked with no additional route mismatch. For v0.108 deltas, Soul Storm
+keeps its 2(3) additional damage per exhausted Soul by using the Soul count only
+as the CalculatedVar multiplier, and Momentum Strike keeps its 10(13) model
+damage while its separate set-to-zero-cost effect remains unchanged. For
+v0.109, Demon Form keeps 2(3) Strength; Primal Force transforms into the pinned
+`CanonicalModels.Card<GiantRock>()`, preserving Giant Rock's 16(20) damage;
+Taunt keeps 7(8) Block and Uncommon rarity; Bloodletting remains Common,
+Cruelty Rare, Dominate Uncommon, and Accelerant Rare; Collision Course keeps
+11(15) model damage; and Sunder keeps 24(32) model damage while its fatal Energy
+gain still reads the card's Energy var.
+
+The remaining v0.110/v0.111 deltas are likewise isolated to pinned model data:
+Relax keeps 15(17) Block, Whistle costs 3, Mangle deals 15(20), Pact's End
+deals 17(23) when its Exhaust-pile condition passes, Echoing Slash remains
+Rare, Terraforming grants 6(8) Vigor, and Crush Under deals 7(8). Salvo and
+Splash retain their pre-v0.111 rarities (Salvo Rare, Splash Uncommon); their
+combat implementations do not depend on rarity. Mangle and Echoing Slash read
+`DynamicVars.Damage`, Pact's End uses the normal card attack value after its
+condition, Terraforming reads `VigorPower`, and Splash's generated-card choice
+logic is unchanged by the rarity swap.
+
+This completes the known post-0.107.1 single-player patch-note candidate list:
+78/78 candidate entries have now been reviewed. Further card audit should no
+longer mechanically follow patch notes; it should target solver-authored
+hard-coded mirrors, version conditionals, mutable live-state reads, and custom
+continuation/order logic that can be wrong even when no later patch mentioned
+the card.
+
 The multiplayer-card result is tracked separately in
 [`MULTIPLAYER_CARD_COVERAGE.md`](MULTIPLAYER_CARD_COVERAGE.md). "Checked
 match" there means source semantics were compared and no mismatch was found;

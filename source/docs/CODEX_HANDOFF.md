@@ -108,10 +108,12 @@
 
 当前只处理 **0.107.1 单人卡牌版本差异**。已确认并修正 44 个 route-affecting mismatch。
 
-最新一批继续检查 10 个 v0.108 单人牌数值陷阱：Colossus、Crimson Mantle、Howl from Beyond、
-Setup Strike、Anticipate、Flick-Flack、Devastate、Resonance、Haunt、Reave。未发现新的
-route-affecting mismatch，总数仍为 44；这些变化均由 0.107.1 CardModel/DynamicVar 提供。
-Haunt 的 Power 应用与 Soul-play HP-loss 触发、Reave 的生成 Soul 后缀也都保持模型数值来源。
-已补静态守卫；patch-note 候选从 30 张降到约 20 张。
+已完成剩余 20 个已知 post-0.107.1 单人牌 patch-note 候选：Soul Storm、Momentum Strike、
+Demon Form、Primal Force、Taunt、Bloodletting、Cruelty、Dominate、Accelerant、Collision Course、
+Sunder、Relax、Whistle、Mangle、Pact's End、Echoing Slash、Terraforming、Crush Under、Salvo、Splash。
+未发现新的 route-affecting mismatch，总数仍为 44。Soul Storm 的 Soul 计数、Primal Force→Giant Rock
+变形、Pact's End 条件攻击、Echoing Slash 伤害循环等特殊路径均确认继续读取 0.107.1 模型数据。
 
-后续继续按“后续 patch → 0.107.1 真值 → 只查对应实现”的方式，每批处理约 10 张单人牌。
+已知后续补丁单人牌候选现在 **78/78 已审计完成**。下一阶段不再机械追 patch notes；改为审计 solver
+自身手写的高风险路径：硬编码常数、`#if STS2_01071` 分叉、直接 live-state/history 读取、特殊
+OnPlay/Hook 执行顺序与 continuation。多人牌仍暂不作为当前 blocker。
