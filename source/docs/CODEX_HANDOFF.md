@@ -165,5 +165,13 @@ GitHub Actions 在 `9118442e` 上约 5 秒内同时结束两个 job、steps/logs
 `805ad8df` 仅有本 handoff 文档差异，verifier 与 run-contract-tests 逐字一致，因此当前记录为
 runner/checkout 层异常，不据此改战斗源码。
 
-下一批转向 Power amount-change / 临时属性 / Artifact 抵消链，继续找 solver-authored 特殊语义；
-多人牌仍暂不作为当前 blocker。
+Power amount-change / 临时属性 / Artifact 抵消链已完成一轮复核。Artifact 成功抵消 Debuff 时在
+`RecordPowerAmountChange` 之前返回，因此不会把被抵消的 Debuff 错送给 Outbreak/Shroud/
+Sleight of Flesh/Vicious；Artifact 自身正常消耗 1 层。Vicious 触发抽牌产生 nested choice 的路径已有
+阶段挂起测试，调用点处于 execution dispatch，不能保留半处理的 drained amount-change 批次。
+临时 Strength 的正负叠加、Artifact、极值 cap、回合末恢复、Power 顺序和 Fork 隔离已有完整原生差分；
+0.107.1 的临时 Focus / Regen 特殊回合末顺序仍由现有 `STS2_01071` 分支保持。未发现新的
+route-affecting mismatch，总数仍为 44。
+
+下一批转向死亡生命周期与 applier/实例清理，重点检查 BeforeDeath/AfterDeath/PreventDeath 以及
+Guarded、Magic Bomb、Shrink 等依赖施加者身份的 Power；多人牌仍暂不作为当前 blocker。
