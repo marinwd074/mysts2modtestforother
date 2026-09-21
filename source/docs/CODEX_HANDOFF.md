@@ -106,10 +106,10 @@
 
 ## 当前下一步
 
-当前只处理 **0.107.1 单人卡牌版本差异**。已确认并修正 42 个 route-affecting mismatch。
+当前只处理 **0.107.1 单人卡牌版本差异**。已确认并修正 43 个 route-affecting mismatch。
 
-最新修正：Voltaic 的 OnPlay 不再读取可变的 live `CombatManager.Instance.History`，
-改为复用 `GetLightningChannelsForCalculatedVar`，严格使用冻结 root 历史 + 当前分支新增
-Lightning channel 历史。
+最新修正：Replay 的战斗结束行为已按版本隔离。0.107.1 会继续执行已经生成的重复出牌；
+v0.108+ 才允许在首击结束战斗后跳过剩余 Replay。执行器通过 `Sts2CardPlayCompatibility`
+读取该版本差异，避免把新版修复写死进 0.107.1 主路径。
 
 后续按短批次继续：每次只审计/修正一个高风险单人牌路径；多人牌暂不处理。

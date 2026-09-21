@@ -28,12 +28,13 @@ replace the native-vs-predicted runtime differential.
 
 ## Corrected version drift
 
-Forty-two route-affecting mismatches have been confirmed in the 0.107.1 source audit:
+Forty-three route-affecting mismatches have been confirmed in the 0.107.1 source audit:
 
 | Card | 0.107.1 native behavior | Incorrect solver behavior | Correction |
 |---|---|---|---|
 | Tracking | first play applies TrackingPower 2, later plays +1; against Weak targets the power amount is the damage multiplier | applied 50 and interpreted it as percentage bonus | use 2 then +1 and multiply by the branch power amount |
 | Big Bang | after its draw finishes, gains Stars, then Energy, then Forges; `AfterStarsGained` completes before the Energy/Forge suffix | gained Energy before Stars, so a star-gain hook that suspended could observe post-star Energy too early | preserve the native Stars -> Energy -> Forge order and keep Energy/Forge untouched when the star hook suspends |
+| Replay enchantment | v0.107.1 continues the already-generated repeated card plays even when the first attack ends combat; v0.108 introduced skipping the remaining plays in that case | the simulator unconditionally broke the repeated-play loop whenever combat became over/ending, importing the v0.108 fix | route the end-of-combat stop through `Sts2CardPlayCompatibility`; 0.107.1 keeps replaying while newer builds may stop |
 | Sacrifice | calculates block as 2x the living Osty's max HP, then kills Osty and gains that block | both the OnPlay mirror and calculated-var registry had x3 drift | restore x2 in both execution and calculated-variable paths |
 | Haze | applies Poison to all hittable enemies; upgrade increases Poison | also applied Weak | remove the Weak application |
 | Outbreak | applies OutbreakPower 11/15; every third positive Poison application by the owner deals that amount as Unpowered damage to all hittable enemies | immediately applied Poison to all enemies and triggered Poison damage when the card was played | restore the persistent power, its hidden 0/1/2 poison counter, and its third-application damage trigger |

@@ -28,6 +28,22 @@ $forbiddenSearchReferences = @(
 )
 
 $violations = [System.Collections.Generic.List[string]]::new()
+$cardPlayCompatibilityPath = Join-Path $repositoryRoot 'src/Compatibility/Sts2CardPlayCompatibility.cs'
+$cardPlayContinuationPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.CardExecutionContinuation.cs'
+$cardPlayCompatibilityText = [IO.File]::ReadAllText($cardPlayCompatibilityPath)
+$cardPlayContinuationText = [IO.File]::ReadAllText($cardPlayContinuationPath)
+if (-not $cardPlayCompatibilityText.Contains('#if STS2_01071') -or
+    -not $cardPlayCompatibilityText.Contains('return false;') -or
+    -not $cardPlayCompatibilityText.Contains('return isOverOrEnding;')) {
+    $violations.Add("${cardPlayCompatibilityPath}: Replay end-of-combat behavior must stay version-gated")
+}
+if (-not $cardPlayContinuationText.Contains('Sts2CardPlayCompatibility.ShouldStopRepeatedPlayWhenCombatEnding(IsOverOrEnding)')) {
+    $violations.Add("${cardPlayContinuationPath}: repeated card plays must use the versioned Replay end-of-combat gate")
+}
+if ($cardPlayContinuationText.Contains('if (IsOverOrEnding) break;')) {
+    $violations.Add("${cardPlayContinuationPath}: unconditional v0.108+ Replay stop behavior leaked into the 0.107.1 path")
+}
+
 $poolLifetime = [System.IO.File]::ReadAllText((Join-Path $repositoryRoot 'src/Runtime/NodePoolSignalLifetimePatch.cs'))
 foreach ($required in @('using ((Godot.Collections.Array)signals)', 'using var ownedArray', 'using (connection)', 'using (callable.Method)', 'using (signal.Name)')) {
     if (-not $poolLifetime.Contains($required)) { $violations.Add("Node pool wrapper ownership missing: $required") }
