@@ -3642,7 +3642,8 @@ internal sealed partial class CombatBeamSolver
             CombatProgress: transpositionProgress);
         TranspositionLabel dominated = new(
             0, 0, 0, 0, 2, 9, SearchRouteTraits.None, HasNonPotionAction: false,
-            BoundaryReason: SearchBoundaryReason.None, CombatProgress: transpositionProgress);
+            BoundaryReason: SearchBoundaryReason.None, PlayerDead: false, AllEnemiesDead: false,
+            CombatProgress: transpositionProgress);
 
         if (!ShouldDeferCycleTranspositionUntilActionAdmission(candidate)
             || HasCycleAdmissionTranspositionLease(candidate)
