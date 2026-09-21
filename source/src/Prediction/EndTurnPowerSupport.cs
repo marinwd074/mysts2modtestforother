@@ -44,6 +44,9 @@ internal static partial class EndTurnPowerSupport
                 case CorrosiveWavePower when ownerParticipates:
                     combat.SetAmount<CorrosiveWavePower>(owner, 0);
                     break;
+                case CoveredPower or InterceptPower when side == CombatSide.Enemy:
+                    combat.SetPowerAmount(power, 0);
+                    break;
                 case DemisePower when ownerParticipates && simulator.State.GetCreature(owner).IsAlive:
                     using (simulator.PushDamageSource(
                         CombatDamageSource.For(CombatDamageSourceKind.Power, nameof(DemisePower))))

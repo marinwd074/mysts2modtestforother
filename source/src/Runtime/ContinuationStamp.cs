@@ -539,6 +539,16 @@ internal sealed record ContinuationStamp(string StateText)
                 text.Append("PoisonApplications=").Append(simulator == null
                     ? PowerPredictionStateSupport.NativeOutbreakPoisonApplications(outbreak)
                     : PowerPredictionStateSupport.OutbreakPoisonApplications(simulator, outbreak)).Append(',');
+            if (power is InterceptPower intercept)
+            {
+                IReadOnlyList<Creature> coveredCreatures = simulator == null
+                    ? PowerPredictionStateSupport.NativeInterceptCoveredCreatures(intercept)
+                    : PowerPredictionStateSupport.InterceptCoveredCreatures(simulator, intercept);
+                text.Append("Covered=");
+                foreach (Creature covered in coveredCreatures.OrderBy(creature => creature.CombatId ?? uint.MaxValue))
+                    text.Append(covered.CombatId ?? uint.MaxValue).Append('.');
+                text.Append(',');
+            }
             text.Append("],");
         }
     }

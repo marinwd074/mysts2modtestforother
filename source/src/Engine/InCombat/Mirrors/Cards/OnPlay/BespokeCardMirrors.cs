@@ -50,6 +50,22 @@ internal static class BespokeCardMirrors
             card.Owner,
             context.Calculate(card.DynamicVars["CalculatedEnergy"]));
 
+    public static void InterceptOnPlay(Intercept card, CardOnPlayMirrorContext context)
+    {
+        context.GainBlock(card.Owner.Creature);
+        if (context.Simulator.HasPendingChoice)
+            return;
+        if (context.CombatState is not SimulatedCombatState combat)
+            throw new InvalidOperationException("Intercept requires writable branch combat state.");
+
+        combat.Apply<CoveredPower>(context.Target, 1, card.Owner.Creature);
+        PowerPredictionStateSupport.ApplyInterceptCoverage(
+            context.Simulator,
+            combat,
+            card.Owner.Creature,
+            context.Target);
+    }
+
     public static void TwinStrikeOnPlay(TwinStrike _, CardOnPlayMirrorContext context)
         => context.AttackSingle(hitCount: 2);
 

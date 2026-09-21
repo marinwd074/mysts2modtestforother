@@ -2025,6 +2025,80 @@ foreach ($requiredHammerTimeForgeRule in @(
     }
 }
 
+
+$cardOnPlayRegistryText = [IO.File]::ReadAllText($cardOnPlayRegistryPath)
+if (-not $cardOnPlayRegistryText.Contains('registry.Register<Intercept>(BespokeCardMirrors.InterceptOnPlay);')) {
+    $violations.Add("${cardOnPlayRegistryPath}: 0.107.1 Intercept requires its dedicated native-order OnPlay mirror")
+}
+$cardOnPlayCatalogPath = Join-Path $repositoryRoot 'src/Prediction/CardOnPlayCompensationCatalog.cs'
+$cardOnPlayCatalogText = [IO.File]::ReadAllText($cardOnPlayCatalogPath)
+if (-not $cardOnPlayCatalogText.Contains('typeof(Bolas), typeof(Intercept), typeof(RightHandHand)')) {
+    $violations.Add("${cardOnPlayCatalogPath}: Intercept must remain in the compensated OnPlay catalog")
+}
+$interceptMirrorStart = $bespokeOnPlayText.IndexOf('public static void InterceptOnPlay')
+$interceptMirrorEnd = $bespokeOnPlayText.IndexOf('public static void TwinStrikeOnPlay', $interceptMirrorStart)
+if ($interceptMirrorStart -lt 0 -or $interceptMirrorEnd -le $interceptMirrorStart) {
+    $violations.Add("${bespokeOnPlayPath}: Intercept mirror boundary is missing")
+}
+else {
+    $interceptMirrorBlock = $bespokeOnPlayText.Substring($interceptMirrorStart, $interceptMirrorEnd - $interceptMirrorStart)
+    foreach ($requiredInterceptOnPlay in @(
+        'context.GainBlock(card.Owner.Creature);',
+        'combat.Apply<CoveredPower>(context.Target, 1, card.Owner.Creature);',
+        'PowerPredictionStateSupport.ApplyInterceptCoverage(')) {
+        if (-not $interceptMirrorBlock.Contains($requiredInterceptOnPlay)) {
+            $violations.Add("${bespokeOnPlayPath}: missing 0.107.1 Intercept OnPlay rule '$requiredInterceptOnPlay'")
+        }
+    }
+}
+$powerPredictionStateText = [IO.File]::ReadAllText($powerPredictionStatePath)
+foreach ($requiredInterceptState in @(
+    'typeof(PowerModel).GetField("_internalData"',
+    'GetNestedType("Data", BindingFlags.NonPublic)',
+    '.GetField("coveredCreatures"',
+    'NativeInterceptCoveredCreatures',
+    'InterceptCoveredCreatures',
+    'ApplyInterceptCoverage',
+    'case (InterceptPower value, InterceptPower original)',
+    'new InterceptPredictionState(NativeInterceptCoveredCreatures(original))',
+    'internal sealed class InterceptPredictionState')) {
+    if (-not $powerPredictionStateText.Contains($requiredInterceptState)) {
+        $violations.Add("${powerPredictionStatePath}: missing Intercept hidden-state rule '$requiredInterceptState'")
+    }
+}
+foreach ($requiredInterceptDamage in @(
+    'registry.Register<CoveredPower>(HandleCoveredPower);',
+    'registry.Register<InterceptPower>(HandleInterceptPower);',
+    'context.Target == power.Owner && context.Props.IsPoweredAttack()',
+    'PowerPredictionStateSupport.InterceptCoveredCreatures(context.Simulator, power).Count + 1')) {
+    if (-not $damageMirrorText.Contains($requiredInterceptDamage)) {
+        $violations.Add("${damageMirrorPath}: missing Intercept damage rule '$requiredInterceptDamage'")
+    }
+}
+if (-not $simulatedCombatText.Contains('PowerPredictionStateSupport.InterceptCoveredCreatures(simulator, intercept)')) {
+    $violations.Add("${simulatedCombatPath}: Intercept covered-target state must participate in the search fingerprint")
+}
+$continuationStampText = [IO.File]::ReadAllText($continuationStampPath)
+if (-not $continuationStampText.Contains('NativeInterceptCoveredCreatures(intercept)')) {
+    $violations.Add("${continuationStampPath}: live Intercept covered-target state is missing from exact continuation")
+}
+if (-not $continuationStampText.Contains('InterceptCoveredCreatures(simulator, intercept)')) {
+    $violations.Add("${continuationStampPath}: predicted Intercept covered-target state is missing from exact continuation")
+}
+$afterDeathPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Death/AfterDeathMirrors.cs'
+$afterDeathText = [IO.File]::ReadAllText($afterDeathPath)
+if (-not $afterDeathText.Contains('registry.Register<CoveredPower>(HandleCoveredPower);')) {
+    $violations.Add("${afterDeathPath}: CoveredPower applier-death cleanup mirror is missing")
+}
+if (-not $afterDeathText.Contains('ReferenceEquals(context.Creature, power.Applier)')) {
+    $violations.Add("${afterDeathPath}: CoveredPower must expire when its applier dies")
+}
+$endTurnPowerPath = Join-Path $repositoryRoot 'src/Prediction/EndTurnPowerSupport.cs'
+$endTurnPowerText = [IO.File]::ReadAllText($endTurnPowerPath)
+if (-not $endTurnPowerText.Contains('case CoveredPower or InterceptPower when side == CombatSide.Enemy:')) {
+    $violations.Add("${endTurnPowerPath}: Covered/Intercept must expire after the enemy side turn")
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."

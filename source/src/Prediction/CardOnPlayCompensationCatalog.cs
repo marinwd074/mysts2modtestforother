@@ -27,7 +27,7 @@ internal static class CardOnPlayCompensationCatalog
         typeof(Acrobatics), typeof(BurningPact), typeof(CosmicIndifference), typeof(DaggerThrow),
         typeof(Glimmer), typeof(Graveblast), typeof(Hologram), typeof(NeowsFury), typeof(PhotonCut),
         typeof(ThinkingAhead),
-        typeof(Bolas), typeof(RightHandHand),
+        typeof(Bolas), typeof(Intercept), typeof(RightHandHand),
         typeof(BlightStrike), typeof(Fisticuffs),
         typeof(AllForOne), typeof(BeatIntoShape), typeof(DeathsDoor), typeof(DecisionsDecisions),
         typeof(EvilEye), typeof(Feed), typeof(FiendFire), typeof(Flatten), typeof(Glitterstream),

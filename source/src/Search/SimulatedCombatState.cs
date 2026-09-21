@@ -725,6 +725,14 @@ internal sealed partial class SimulatedCombatState
                 throw new InvalidOperationException("守护 Power 的施加者不是战斗中的玩家。");
             ((StringVar)guarded.DynamicVars["Applier"]).StringValue = _playerNames[applyingPlayer];
         }
+        if (simulated is CoveredPower covered && applier != null)
+        {
+            Player? applyingPlayer = applier.Player
+                ?? Players.FirstOrDefault(player => player.Creature.CombatId == applier.CombatId);
+            if (applyingPlayer == null)
+                throw new InvalidOperationException("掩护 Power 的施加者不是战斗中的玩家。");
+            ((StringVar)covered.DynamicVars["Applier"]).StringValue = _playerNames[applyingPlayer];
+        }
         afterAmountChanged?.Invoke(amount, simulated);
         if (previousAmount == 0 && simulated._amount != 0 && simulated is PhantomBladesPower phantom)
             PhantomBladesPowerMirrors.AfterApplied(phantom, _predictionState
@@ -2371,6 +2379,14 @@ internal sealed partial class SimulatedCombatState
             item.Add((int)PowerPredictionStateSupport.SurroundedFacing(simulator, surrounded));
         if (power is OutbreakPower outbreak)
             item.Add(PowerPredictionStateSupport.OutbreakPoisonApplications(simulator, outbreak));
+        if (power is InterceptPower intercept)
+        {
+            IReadOnlyList<Creature> coveredCreatures =
+                PowerPredictionStateSupport.InterceptCoveredCreatures(simulator, intercept);
+            item.Add(coveredCreatures.Count);
+            foreach (Creature covered in coveredCreatures.OrderBy(creature => creature.CombatId ?? uint.MaxValue))
+                item.Add(covered.CombatId ?? uint.MaxValue);
+        }
         ulong dynamicFirst = 0;
         ulong dynamicSecond = 0;
         int dynamicCount = 0;

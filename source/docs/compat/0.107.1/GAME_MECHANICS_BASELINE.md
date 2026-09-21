@@ -187,9 +187,17 @@ must fork it exactly and include it in state equivalence while the Power can
 still affect damage. It should enter a continuation/public-state stamp only if
 that continuation boundary can occur before the Power's enemy-turn expiry.
 
-**Status: gameplay and DLL semantics confirmed; solver-state implementation and
-a focused reciprocal-Intercept native differential are still required before
-marking the card solver-confirmed.**
+The solver source now mirrors this chain explicitly: Intercept has a dedicated
+native-order OnPlay mirror; Covered and Intercept have their own damage
+multipliers; the private native list is captured from the pinned DLL's
+`_internalData` into a forkable prediction state; covered creature identities
+participate in branch fingerprints and exact continuation stamps; and native
+death/side-turn expiry is mirrored. The list intentionally does not shrink when
+a covered creature dies, matching the pinned implementation.
+
+**Status: gameplay/DLL semantics and source implementation confirmed; a focused
+reciprocal-Intercept and covered-player-death native differential is still
+required before runtime-confirmed.**
 
 ### Beacon of Hope
 
@@ -517,7 +525,7 @@ Do not change these from public text alone:
 
 | Mechanic/card | Current status | Required evidence before code change |
 |---|---|---|
-| Intercept | gameplay + Covered/Intercept DLL chain confirmed | solver fork/fingerprint design for private covered-creature list + reciprocal-intercept native differential |
+| Intercept | gameplay/DLL semantics confirmed; hidden covered-creature state, damage multipliers, cleanup, fingerprint and continuation support restored in solver source | reciprocal-intercept + covered-player-death native multiplayer differential |
 | Beacon of Hope | gameplay/DLL semantics confirmed; solver Block mirror already matched and card application gap has been corrected | focused native multiplayer differential for fractional/post-modifier sharing and recursion guard |
 | Hammer Time | gameplay/DLL semantics confirmed; Forge propagation and recursion suppression restored in solver source | focused multiplayer native differential covering one and multiple Hammer Time owners plus exhausted Sovereign Blades |
 | current Tracking text | known to be later presentation | pinned DLL only for 0.107.1 values |
