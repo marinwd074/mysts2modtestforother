@@ -5,24 +5,18 @@ using CombatSolver.Engine.InCombat.Simulation;
 
 namespace CombatSolver.Engine.InCombat.Mirrors.Cards.OnPlay;
 
-internal static class RandomTargetAttackCardMirrors
+internal static partial class RandomTargetAttackCardMirrors
 {
     public static void FlakCannonOnPlay(FlakCannon card, CardOnPlayMirrorContext context)
     {
-        var statuses = context.OwnerState.AllCards
+        context.Simulator.AcknowledgeExecutionDispatch();
+        List<PredictedCard> statuses = context.OwnerState.AllCards
             .Where(predictedCard =>
-                predictedCard.Preview.Type is CardType.Status &&
+                predictedCard.Preview.Type == CardType.Status &&
                 !context.OwnerState.ExhaustPile.Cards.Contains(predictedCard))
             .ToList();
-
-        foreach (var status in statuses)
-        {
-            context.Simulator.Exhaust(status);
-            if (context.Simulator.HasPendingChoice)
-                return;
-        }
-
-        context.AttackRandomOpponents(statuses.Count);
+        int hitCount = (int)context.Calculate(card.DynamicVars["CalculatedHits"]);
+        _ = ContinueFlakCannon(context, statuses, hitCount, nextIndex: 0);
     }
 
     public static void RicochetOnPlay(Ricochet card, CardOnPlayMirrorContext context)

@@ -28,7 +28,7 @@ replace the native-vs-predicted runtime differential.
 
 ## Corrected version drift
 
-Thirty-seven route-affecting mismatches have been confirmed in the 0.107.1 source audit:
+Thirty-eight route-affecting mismatches have been confirmed in the 0.107.1 source audit:
 
 | Card | 0.107.1 native behavior | Incorrect solver behavior | Correction |
 |---|---|---|---|
@@ -185,6 +185,19 @@ each iteration; the remaining cards preserve their post-command stage. This
 prevents a nested card choice from silently ending the outer card early without
 changing the existing 0.107.1 RNG-selection policy or True Grit's explicitly
 unresolved upgraded player choice.
+
+### Flak Cannon exhaust-loop continuation correction
+
+The pinned 0.107.1 Flak Cannon snapshots every Status card outside the Exhaust
+pile and calculates its hit count before exhausting anything. It then awaits
+each Exhaust in order and only after the whole snapshot is processed performs
+the random-target attack with that original hit count.
+
+Prediction previously returned on the first Exhaust-triggered choice, losing
+the remaining Status cards and the final attack. The mirror now stores the
+Status snapshot, precomputed hit count, and next Exhaust index in a fork-safe
+execution frame. Effects triggered by an early Exhaust therefore cannot change
+this play's hit count, matching the native async state machine.
 
 ### Opaque Attack / Damage / Kill continuation boundary
 

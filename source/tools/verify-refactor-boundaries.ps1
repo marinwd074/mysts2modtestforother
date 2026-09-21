@@ -3034,6 +3034,31 @@ foreach ($selectionMethod in @(
     }
 }
 
+$randomTargetMirrorPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/RandomTargetAttackCardMirrors.cs'
+$randomTargetMirrorText = [IO.File]::ReadAllText($randomTargetMirrorPath)
+$randomTargetContinuationPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/RandomTargetAttackCardMirrors.ExecutionContinuation.cs'
+$randomTargetContinuationText = [IO.File]::ReadAllText($randomTargetContinuationPath)
+foreach ($requiredFlakEntryRule in @(
+    'context.Simulator.AcknowledgeExecutionDispatch();',
+    'int hitCount = (int)context.Calculate(card.DynamicVars["CalculatedHits"]);',
+    'ContinueFlakCannon(context, statuses, hitCount, nextIndex: 0)')) {
+    if (-not $randomTargetMirrorText.Contains($requiredFlakEntryRule)) {
+        $violations.Add("${randomTargetMirrorPath}: missing 0.107.1 Flak Cannon entry rule '$requiredFlakEntryRule'")
+    }
+}
+foreach ($requiredFlakContinuationRule in @(
+    'private sealed record FlakCannonExecutionFrame(',
+    'ForkExecutionCardList(Statuses, context)',
+    'Statuses = context.RequireRemap(Statuses)',
+    'context.Simulator.Exhaust(statuses[index])',
+    'new FlakCannonExecutionFrame(',
+    'index + 1',
+    'context.AttackRandomOpponents(hitCount)')) {
+    if (-not $randomTargetContinuationText.Contains($requiredFlakContinuationRule)) {
+        $violations.Add("${randomTargetContinuationPath}: missing 0.107.1 Flak Cannon continuation rule '$requiredFlakContinuationRule'")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."
