@@ -1964,7 +1964,7 @@ else {
     foreach ($requiredTankRule in @(
         'combat.Apply<TankPower>(ownerCreature, 1, ownerCreature)',
         'combat.GetTeammatesOf(ownerCreature)',
-        'creature.IsAlive',
+        'simulator.State.GetCreature(creature).IsAlive',
         'creature.IsPlayer',
         '!ReferenceEquals(creature, ownerCreature)',
         'combat.Apply<GuardedPower>(teammate, 1, ownerCreature)')) {
