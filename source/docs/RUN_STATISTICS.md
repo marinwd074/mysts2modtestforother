@@ -24,19 +24,12 @@ RunManager 的新局/Launch 与 SaveManager.SaveRunHistory 补丁只采样主线
 
 开启多人、无头或无人测试不启动跑局统计采集。设置说明有中英文。原生 UI 操作、长时间帧率和真实结算尚需可见游戏验收；自动合同不替代这些项目。
 
-## 服务端
+## 服务端边界
 
-`tools/OnlinePresence/run-statistics.mjs` 维护独立 SQLite 表：`runs` 与 `run_history_snapshots`。复用 HTTPS 和管理登录，兼容旧心跳；昵称保持原在线系统的内存生命周期，离线战绩使用匿名档案标识。
-
-- `POST /v1/runs`：`{sessionId,run}`。同一安装＋跑局 ID 幂等；pending 可更新，已结算冲突返回 409。
-- `POST /v1/run-history`：`{sessionId,historical}`。按安装＋档案保留首次历史快照。
-- `GET /api/run-statistics`：管理登录必需。分页 30；source=solver/historical，participation=full/partial/none/all，activity=solve/execute/auto，character、version、ascension、since/until（毫秒）；streak_min/max、best_min/max、rate_min/max（百分比）、wins_min、losses_min、abandoned_min、runs_min；sort=streak/best/rate/wins/losses。
-
-问题包 report.json 的可选 `runStatistics` 是提交时快照。日志站数值筛选不匹配旧包 null；不回填、不随后来战绩变化。日志站不以问题包份数统计全站胜率。
+在线统计服务端、管理后台、部署配置和数据库实现不属于本公开仓库。客户端只保留协议与本地统计实现；实际服务地址、证书指纹和运维配置由仓库外环境提供。
 
 ## 验证入口
 
 - `dotnet run --project tools/RunStatisticsTests -c Release`：连胜、放弃、缺口、持久化、去重、补传收据、历史隔离、原生结算恢复。
-- `npm test`（tools/OnlinePresence）：统计、筛选、权重、幂等、管理鉴权、旧心跳及持久登录。
 - `UI-LOCALIZATION`：中英设置和 headless 统计节点隔离。
 - 日志站 `test_reports_v2`、`test_agent_api.AgentApiTests`：提交快照、缺失字段、筛选、排序、百分比验证与归档。
