@@ -1987,6 +1987,24 @@ foreach ($requiredGuardedCleanup in @(
     }
 }
 
+
+$beaconSpec = '[typeof(BeaconOfHope)] = [Owner<BeaconOfHopePower>(_ => 1)]'
+if (-not $cardEffectSpecText.Contains($beaconSpec)) {
+    $violations.Add("${cardEffectSpecPath}: 0.107.1 Beacon of Hope must apply one BeaconOfHopePower to its owner")
+}
+$afterBlockGainedPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Block/AfterBlockGainedMirrors.cs'
+$afterBlockGainedText = [IO.File]::ReadAllText($afterBlockGainedPath)
+foreach ($requiredBeaconRule in @(
+    'registry.Register<BeaconOfHopePower>(HandleBeaconOfHopePower);',
+    'context.Amount * 0.5m',
+    'context.State.GetCreature(creature).IsAlive',
+    'state.HasAlreadyBeenGivenBlock = true',
+    'ValueProp.Unpowered')) {
+    if (-not $afterBlockGainedText.Contains($requiredBeaconRule)) {
+        $violations.Add("${afterBlockGainedPath}: missing 0.107.1 Beacon of Hope rule '$requiredBeaconRule'")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."

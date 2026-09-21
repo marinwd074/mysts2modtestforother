@@ -34,6 +34,7 @@ internal static class CardEffectSpecRegistry
 {
     private static readonly Dictionary<Type, CardPowerEffect[]> PowerEffects = new()
     {
+        [typeof(BeaconOfHope)] = [Owner<BeaconOfHopePower>(_ => 1)],
         [typeof(Blur)] = [Owner<BlurPower>("Blur")],
         [typeof(ChargeBattery)] = [Owner<EnergyNextTurnPower>(card => card.DynamicVars.Energy.IntValue)],
         [typeof(Colossus)] = [Owner<ColossusPower>("Colossus")],

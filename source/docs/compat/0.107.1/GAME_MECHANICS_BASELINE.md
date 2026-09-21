@@ -504,7 +504,7 @@ Do not change these from public text alone:
 | Mechanic/card | Current status | Required evidence before code change |
 |---|---|---|
 | Intercept | gameplay + Covered/Intercept DLL chain confirmed | solver fork/fingerprint design for private covered-creature list + reciprocal-intercept native differential |
-| Beacon of Hope | gameplay + post-modifier Block sharing/rounding/recursion semantics confirmed | targeted audit of current solver Block hooks and branch-local recipient handling |
+| Beacon of Hope | gameplay/DLL semantics confirmed; solver Block mirror already matched and card application gap has been corrected | focused native multiplayer differential for fractional/post-modifier sharing and recursion guard |
 | Hammer Time | Forge propagation and recursion suppression confirmed | targeted audit of current Forge modeling, generated Sovereign Blade state, AfterForge ordering, and multiplayer branch-local recipients |
 | current Tracking text | known to be later presentation | pinned DLL only for 0.107.1 values |
 | current Tank text | changed in v0.108 | pinned DLL + v0.108 delta |
