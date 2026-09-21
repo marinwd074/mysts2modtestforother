@@ -244,6 +244,10 @@ internal sealed partial class CombatBeamSolver
             Transpositions = [];
             foreach (SearchNode node in frontier)
             {
+                // Cross-turn probes are bounded scheduling lanes, not ordinary state representatives.
+                // Keeping them out also prevents a rebuilt cache from letting a probe prune a normal route.
+                if (node.CrossTurnProbe != null)
+                    continue;
                 TranspositionLabel label = new(
                     node.PotionCount,
                     node.PotionStrategicCost,

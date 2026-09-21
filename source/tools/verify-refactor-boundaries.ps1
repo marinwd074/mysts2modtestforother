@@ -28,6 +28,24 @@ $forbiddenSearchReferences = @(
 )
 
 $violations = [System.Collections.Generic.List[string]]::new()
+$crossTurnTranspositionPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Expansion.cs'
+$crossTurnTranspositionText = [IO.File]::ReadAllText($crossTurnTranspositionPath)
+foreach ($crossTurnTranspositionRule in @(
+    'private static bool HasCrossTurnTranspositionLease(SearchNode candidate)',
+    '=> candidate.CrossTurnProbe != null;',
+    '|| HasCrossTurnTranspositionLease(candidate)',
+    '|| HasCrossTurnTranspositionLease(node)')) {
+    if (-not $crossTurnTranspositionText.Contains($crossTurnTranspositionRule)) {
+        $violations.Add("${crossTurnTranspositionPath}: cross-turn scheduling lease lost transposition protection '$crossTurnTranspositionRule'")
+    }
+}
+
+$crossTurnTranspositionModelPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Models.cs'
+$crossTurnTranspositionModelText = [IO.File]::ReadAllText($crossTurnTranspositionModelPath)
+if (-not $crossTurnTranspositionModelText.Contains('if (node.CrossTurnProbe != null)')) {
+    $violations.Add("${crossTurnTranspositionModelPath}: cache rebuild must exclude active cross-turn probes")
+}
+
 $transpositionPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Transpositions.cs'
 $transpositionText = [IO.File]::ReadAllText($transpositionPath)
 foreach ($transpositionRule in @(

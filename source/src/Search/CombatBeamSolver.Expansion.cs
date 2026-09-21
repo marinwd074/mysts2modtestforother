@@ -3486,6 +3486,9 @@ internal sealed partial class CombatBeamSolver
         => HasValidCycleProbeLease(candidate)
             || HasValidCycleExitProbe(candidate, requireIssuedTicket: true);
 
+    private static bool HasCrossTurnTranspositionLease(SearchNode candidate)
+        => candidate.CrossTurnProbe != null;
+
     private static CycleExitProbeFamilyKey BuildCycleExitAdmissionFamilyKey(
         SearchNode candidate)
     {
@@ -3804,9 +3807,10 @@ internal sealed partial class CombatBeamSolver
         // same simulator state cannot inherit their exact pattern/envelope history, so it must
         // not erase the probe before the obligation reaches the frontier.
         if (HasCycleAdmissionTranspositionLease(candidate)
+            || HasCrossTurnTranspositionLease(candidate)
             || CanRetainOrderedMutationLease(_run, candidate))
         {
-            ObserveSearchPath(candidate, SearchPathObservationStage.AdmissionTransposition, "bypass_cycle_or_ordered_lease");
+            ObserveSearchPath(candidate, SearchPathObservationStage.AdmissionTransposition, "bypass_scheduling_lease");
             return true;
         }
         TranspositionLabel next = new(
@@ -3854,9 +3858,10 @@ internal sealed partial class CombatBeamSolver
                 "临时循环出口 observation 越过了 action admission frontier。");
         }
         if (HasCycleExpansionTranspositionLease(node)
+            || HasCrossTurnTranspositionLease(node)
             || CanRetainOrderedMutationLease(_run, node))
         {
-            ObserveSearchPath(node, SearchPathObservationStage.ExpansionTransposition, "bypass_cycle_or_ordered_lease");
+            ObserveSearchPath(node, SearchPathObservationStage.ExpansionTransposition, "bypass_scheduling_lease");
             return true;
         }
         TranspositionLabel next = new(

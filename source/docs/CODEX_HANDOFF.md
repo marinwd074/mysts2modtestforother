@@ -261,7 +261,14 @@ TurnOutcome 只用于最终路线报告，不参与未来合法动作。新发�
 当前 StateKey 相同但进展历史不同的节点可能互相支配，导致剩余无进展预算不同的路线被误剪。现在只有
 CombatProgressState 值相等时才允许转置支配；ResetRebuildableCaches 与 admission/expanded 两张转置表均
 传入同一进展状态。BeamRankSortChecks 的生产代码抽取合同扩展到 8 组，新增双向“不同 progress 不得合并”。
-此项是 solver 剪枝正确性修复，不新增 0.107.1 版本 mismatch；计数仍为 46。Cross-turn probe/baseline 的
-更细调度身份留给下一小批单独审计，避免本批过度放宽转置。
+此项是 solver 剪枝正确性修复，不新增 0.107.1 版本 mismatch；计数仍为 46。
+
+最终收尾扫描第八小批单独复核 cross-turn probe/baseline。确认 CrossTurnProbe 是有界调度租约：
+它会改变 ShouldPruneCrossTurnNoProgress 的继续资格和 cross-turn retention 排序，但旧普通 transposition
+既不识别该租约，也不会绕过它，因此同 StateKey 的普通路线可能提前剪掉正在观察延迟收益的 probe。
+现已让 active CrossTurnProbe 与 cycle/ordered-mutation 调度租约一样绕过 admission/expanded transposition；
+ResetRebuildableCaches 也跳过 active probe，避免内存重建后 probe label 反向支配普通路线。租约被 retention
+明确清除后节点恢复普通转置剪枝。stand-pat baseline 仍只作为 turn-start 的语义比较证据，不进入普通
+StateKey/transposition。该项是 solver 剪枝正确性修复，不新增 0.107.1 版本 mismatch；计数仍为 46。
 
 已完成的 Power、continuation、死亡生命周期和 78/78 卡牌 OnPlay 数值不重复展开；多人牌仍暂不作为当前 blocker。
