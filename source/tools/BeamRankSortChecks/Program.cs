@@ -169,4 +169,16 @@ if (!CombatBeamSolver.TryAcceptTranspositionForCheck(
         firstAllEnemiesDead: false, nextAllEnemiesDead: true))
     throw new InvalidOperationException("Victory and non-victory routes were incorrectly merged.");
 
-Console.WriteLine(JsonSerializer.Serialize(new { status = "Passed", cases, entries, retained_tie_cases = 3, transposition_path_cases = 14, runtime = Environment.Version.ToString(), scope = "Extracted production ranking plus retained-order and path-sensitive transposition contracts" }));
+if (!CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.None, false,
+        SearchRouteTraits.None, false,
+        firstRiskMethod: "AfterDeath",
+        nextRiskMethod: "OtherRisk")
+    || !CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.None, false,
+        SearchRouteTraits.None, false,
+        firstRiskMethod: "OtherRisk",
+        nextRiskMethod: "AfterDeath"))
+    throw new InvalidOperationException("Different prediction-risk histories were incorrectly merged.");
+
+Console.WriteLine(JsonSerializer.Serialize(new { status = "Passed", cases, entries, retained_tie_cases = 3, transposition_path_cases = 16, runtime = Environment.Version.ToString(), scope = "Extracted production ranking plus retained-order and path-sensitive transposition contracts" }));

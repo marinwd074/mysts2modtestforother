@@ -39,6 +39,7 @@ for name in fields + ['OffensiveProgressValue']:
 classes = '''namespace CombatSolver;
 ''' + route_traits + '''
 ''' + boundary_reason + '''
+internal sealed record PredictionGap(string SourceId, string Method, string Reason, bool Compensated);
 internal sealed record CombatProgressState(int Stable);
 internal sealed class SearchNode {
 public double Score;
@@ -90,15 +91,23 @@ internal sealed partial class CombatBeamSolver
         bool firstPlayerDead = false,
         bool nextPlayerDead = false,
         bool firstAllEnemiesDead = false,
-        bool nextAllEnemiesDead = false)
+        bool nextAllEnemiesDead = false,
+        string? firstRiskMethod = null,
+        string? nextRiskMethod = null)
     {
+        IReadOnlyList<PredictionGap> firstGaps = firstRiskMethod is null
+            ? []
+            : [new PredictionGap("TEST", firstRiskMethod, "risk", false)];
+        IReadOnlyList<PredictionGap> nextGaps = nextRiskMethod is null
+            ? []
+            : [new PredictionGap("TEST", nextRiskMethod, "risk", false)];
         TranspositionLabel first = new(
             0, 0, 0, 0, 1, 10, firstTraits, firstHasNonPotionAction,
-            firstBoundary, firstPlayerDead, firstAllEnemiesDead,
+            firstBoundary, firstPlayerDead, firstAllEnemiesDead, firstGaps,
             new CombatProgressState(firstProgress));
         TranspositionLabel next = new(
             0, 0, 0, 0, 1, 10, nextTraits, nextHasNonPotionAction,
-            nextBoundary, nextPlayerDead, nextAllEnemiesDead,
+            nextBoundary, nextPlayerDead, nextAllEnemiesDead, nextGaps,
             new CombatProgressState(nextProgress));
         return new TranspositionFrontier(first).TryAccept(next);
     }

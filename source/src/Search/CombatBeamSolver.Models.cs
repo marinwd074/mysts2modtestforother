@@ -260,6 +260,7 @@ internal sealed partial class CombatBeamSolver
                     node.BoundaryReason,
                     node.Snapshot.PlayerDead,
                     node.Snapshot.AllEnemiesDead,
+                    node.Snapshot.PredictionGaps,
                     node.CombatProgress);
                 if (Transpositions.TryGetValue(node.StateKey, out TranspositionFrontier? existing))
                     _ = existing.TryAccept(label);

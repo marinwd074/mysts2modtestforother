@@ -278,8 +278,8 @@ BuildStateKey 不包含 boundary，而最终路线排序、turn-outcome 可比�
 旧 transposition 因此可能让 UnsupportedEffect/PendingChoice 终止节点与相同 StateKey 的正常可继续节点互相支配。
 现在 TranspositionLabel 纳入 SearchBoundaryReason，并要求 boundary 相等才允许支配；普通 admission、
 expanded table 和 ResetRebuildableCaches 均传入节点 boundary。BeamRankSortChecks 增加双向不同 boundary
-不得合并合同，总数扩展到 10 组。HasPredictionRisk 当前只确认用于风险摘要，未发现改变合法动作或最终
-排序，因此本批不扩大转置键。该项是 solver 剪枝正确性修复，不新增 0.107.1 版本 mismatch；计数仍为 46。
+不得合并合同，总数扩展到 10 组。HasPredictionRisk 当时仅确认未直接进入最终排序，因此该批未扩大转置键；第十一小批继续追踪风险历史后，
+确认这一结论不足，见下。该项是 solver 剪枝正确性修复，不新增 0.107.1 版本 mismatch；计数仍为 46。
 
 CI 门禁专项排查：最后一次完整成功 run 为 805ad8d（35610137901），约 4 分钟后的 58f56c9
 开始两个 job 同时出现 steps=null，之后持续如此；失败 job 连日志 blob 都不存在，而成功 job 有正常
@@ -305,5 +305,16 @@ live/defeat 路线理论上可被错误合并。现已要求 PlayerDead 与 AllE
 admission、expanded table 与 ResetRebuildableCaches。BeamRankSortChecks 新增 live-vs-defeat 与
 victory-vs-nonvictory 双向合同，path-sensitive transposition cases 从 10 扩到 14。该项是 solver 剪枝
 正确性修复，不新增 0.107.1 版本 mismatch；计数仍为 46。
+
+最终收尾扫描第十一小批继续追踪 HasPredictionRisk / PredictionGaps。最终排序本身不读取 HasRisk，
+但风险历史会随 simulator fork 继承；StateEvaluation 在未来胜利时调用 HasUncompensatedDeathGap，若路径历史
+含未补偿 Death gap，会把原本 victory 改为 UnsupportedEffect。因此相同当前 StateKey 的两条路线即使都
+HasRisk=true，只要 gap 语义不同，未来合法终局就可能不同。现已让 TranspositionLabel 保存快照的完整
+PredictionGaps，并仅在两侧 gap 序列相等时允许支配；这比单独比较 HasRisk bool 更严格且直接覆盖 Death /
+non-Death、compensated / uncompensated 差异。admission、expanded table 与 ResetRebuildableCaches 均同步。
+BeamRankSortChecks 增加双向不同 risk-history 不得合并合同，path-sensitive cases 从 14 扩到 16。
+至此已审出的 StateKey 外、会改变未来搜索语义的 path-only 状态均有显式保护；transposition 收尾停止继续
+扩张，后续优先回到实机问题包/本地门禁驱动。该项是 solver 剪枝正确性修复，不新增 0.107.1 版本 mismatch；
+计数仍为 46。
 
 已完成的 Power、continuation、死亡生命周期和 78/78 卡牌 OnPlay 数值不重复展开；多人牌仍暂不作为当前 blocker。

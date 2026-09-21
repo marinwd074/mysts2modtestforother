@@ -14,6 +14,7 @@ internal sealed partial class CombatBeamSolver
         SearchBoundaryReason BoundaryReason,
         bool PlayerDead,
         bool AllEnemiesDead,
+        IReadOnlyList<PredictionGap> PredictionGaps,
         CombatProgressState CombatProgress);
 
     private sealed class TranspositionFrontier(TranspositionLabel first)
@@ -62,6 +63,7 @@ internal sealed partial class CombatBeamSolver
                 && left.BoundaryReason == right.BoundaryReason
                 && left.PlayerDead == right.PlayerDead
                 && left.AllEnemiesDead == right.AllEnemiesDead
+                && left.PredictionGaps.SequenceEqual(right.PredictionGaps)
                 && left.CombatProgress == right.CombatProgress;
     }
 
