@@ -271,52 +271,156 @@ internal static class PersistentPowerSupport
         if (simulator.HasPendingChoice)
             return;
 
-        SimPlayerCombatState state = simulator.State.GetPlayerCombatState(player);
-        bool hasUnexhaustedBlade = state.AllCards.Any(card =>
-            card.Preview is SovereignBlade
-            && !card.Preview.IsDupe
-            && !state.ExhaustPile.Cards.Contains(card));
-        if (!hasUnexhaustedBlade)
+        _ = ContinueForge(
+            simulator,
+            player,
+            amount,
+            source,
+            ForgeExecutionStage.Begin,
+            hammerPlayers: null,
+            nextPlayer: 0,
+            hammerTime: null);
+    }
+
+    private static bool ContinueForge(
+        CombatPredictionSimulator simulator,
+        Player player,
+        int amount,
+        AbstractModel? source,
+        ForgeExecutionStage stage,
+        IReadOnlyList<Player>? hammerPlayers,
+        int nextPlayer,
+        HammerTimePower? hammerTime)
+    {
+        if (stage == ForgeExecutionStage.Begin)
         {
-            PredictedCard created = PredictedCard.Create(CanonicalModels.Card<SovereignBlade>(), player);
-            ((SovereignBlade)created.MutablePreview).CreatedThroughForge = true;
-            simulator.AddGeneratedCardToCombat(
-                created,
-                PileType.Hand,
-                player,
-                CardPilePosition.Bottom,
-                CardGenerationResultKind.Fixed);
-            if (simulator.HasPendingChoice)
-                return;
+            SimPlayerCombatState state = simulator.State.GetPlayerCombatState(player);
+            bool hasUnexhaustedBlade = state.AllCards.Any(card =>
+                card.Preview is SovereignBlade
+                && !card.Preview.IsDupe
+                && !state.ExhaustPile.Cards.Contains(card));
+            if (!hasUnexhaustedBlade)
+            {
+                PredictedCard created = PredictedCard.Create(CanonicalModels.Card<SovereignBlade>(), player);
+                ((SovereignBlade)created.MutablePreview).CreatedThroughForge = true;
+                simulator.AddGeneratedCardToCombat(
+                    created,
+                    PileType.Hand,
+                    player,
+                    CardPilePosition.Bottom,
+                    CardGenerationResultKind.Fixed);
+                if (simulator.HasPendingChoice)
+                {
+                    simulator.AppendExecutionContinuation(
+                        new ForgeExecutionFrame(
+                            player,
+                            amount,
+                            source,
+                            ForgeExecutionStage.AfterGenerated,
+                            HammerPlayers: null,
+                            NextPlayer: 0,
+                            HammerTime: null));
+                    return false;
+                }
+            }
+
+            stage = ForgeExecutionStage.AfterGenerated;
         }
-        foreach (PredictedCard card in state.AllCards)
+
+        if (stage == ForgeExecutionStage.AfterGenerated)
         {
-            if (card.Preview is not SovereignBlade preview || preview.IsDupe)
-                continue;
-            ((SovereignBlade)card.MutablePreview).AddDamage(amount);
+            SimPlayerCombatState state = simulator.State.GetPlayerCombatState(player);
+            foreach (PredictedCard card in state.AllCards)
+            {
+                if (card.Preview is not SovereignBlade preview || preview.IsDupe)
+                    continue;
+                ((SovereignBlade)card.MutablePreview).AddDamage(amount);
+            }
+
+            // ForgeCmd then awaits Hook.AfterForge. HammerTimePower is the only
+            // prediction-relevant 0.107.1 AfterForge listener modeled here.
+            if (source is HammerTimePower)
+                return true;
+
+            SimulatedCombatState combat = (SimulatedCombatState)simulator.State.CombatState;
+            hammerTime = combat.GetPower<HammerTimePower>(player.Creature);
+            if (hammerTime is null || combat.GetAmount<HammerTimePower>(player.Creature) <= 0)
+                return true;
+
+            // Native HammerTime keeps a lazy iterator over CombatState.Players across
+            // awaited child Forges. Keep roster order but re-check IsAlive per index.
+            hammerPlayers = simulator.State.Players.ToArray();
+            nextPlayer = 0;
+            stage = ForgeExecutionStage.HammerTimePlayers;
         }
 
-        if (source is HammerTimePower)
-            return;
+        if (stage != ForgeExecutionStage.HammerTimePlayers || hammerTime is null)
+            return true;
 
-        SimulatedCombatState combat = (SimulatedCombatState)simulator.State.CombatState;
-        HammerTimePower? hammerTime = combat.GetPower<HammerTimePower>(player.Creature);
-        if (hammerTime is null || combat.GetAmount<HammerTimePower>(player.Creature) <= 0)
-            return;
-
-        foreach (Creature teammate in combat.GetTeammatesOf(player.Creature))
+        hammerPlayers ??= simulator.State.Players;
+        for (int index = nextPlayer; index < hammerPlayers.Count; index++)
         {
-            if (ReferenceEquals(teammate, player.Creature)
-                || !teammate.IsPlayer
-                || !simulator.State.GetCreature(teammate).IsAlive
-                || teammate.Player is not { } teammatePlayer)
+            Player teammate = hammerPlayers[index];
+            if (ReferenceEquals(teammate, player)
+                || !simulator.State.GetCreature(teammate.Creature).IsAlive)
             {
                 continue;
             }
 
-            Forge(simulator, teammatePlayer, amount, hammerTime);
-            if (simulator.HasPendingChoice)
-                return;
+            Forge(simulator, teammate, amount, hammerTime);
+            if (!simulator.HasPendingChoice)
+                continue;
+
+            simulator.AppendExecutionContinuation(
+                new ForgeExecutionFrame(
+                    player,
+                    amount,
+                    source,
+                    ForgeExecutionStage.HammerTimePlayers,
+                    hammerPlayers,
+                    index + 1,
+                    hammerTime));
+            return false;
         }
+
+        return true;
     }
+
+    private enum ForgeExecutionStage
+    {
+        Begin,
+        AfterGenerated,
+        HammerTimePlayers,
+    }
+
+    private sealed record ForgeExecutionFrame(
+        Player Player,
+        int Amount,
+        AbstractModel? Source,
+        ForgeExecutionStage Stage,
+        IReadOnlyList<Player>? HammerPlayers,
+        int NextPlayer,
+        HammerTimePower? HammerTime) : ICombatPredictionExecutionFrame
+    {
+        public ICombatPredictionExecutionFrame Fork(PredictionForkContext context)
+            => this with
+            {
+                Source = Source is null ? null : context.RemapOrSelf(Source),
+                HammerTime = HammerTime is null
+                    ? null
+                    : (HammerTimePower)context.RemapOrSelf(HammerTime)
+            };
+
+        public bool Resume(CombatPredictionSimulator simulator)
+            => ContinueForge(
+                simulator,
+                Player,
+                Amount,
+                Source,
+                Stage,
+                HammerPlayers,
+                NextPlayer,
+                HammerTime);
+    }
+
 }

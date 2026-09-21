@@ -2872,6 +2872,37 @@ else {
     }
 }
 
+$persistentPowerSupportPath = Join-Path $repositoryRoot 'src/Prediction/PersistentPowerSupport.cs'
+$persistentPowerSupportText = [IO.File]::ReadAllText($persistentPowerSupportPath)
+foreach ($requiredForgeContinuationRule in @(
+    'private static bool ContinueForge(',
+    'ForgeExecutionStage.AfterGenerated',
+    'ForgeExecutionStage.HammerTimePlayers',
+    'private sealed record ForgeExecutionFrame(',
+    'new ForgeExecutionFrame(',
+    'simulator.State.Players.ToArray()',
+    '!simulator.State.GetCreature(teammate.Creature).IsAlive',
+    'Forge(simulator, teammate, amount, hammerTime)',
+    'Source = Source is null ? null : context.RemapOrSelf(Source)',
+    '(HammerTimePower)context.RemapOrSelf(HammerTime)')) {
+    if (-not $persistentPowerSupportText.Contains($requiredForgeContinuationRule)) {
+        $violations.Add("${persistentPowerSupportPath}: missing resumable 0.107.1 Forge rule '$requiredForgeContinuationRule'")
+    }
+}
+$forgeStart = $persistentPowerSupportText.IndexOf('public static void Forge(')
+if ($forgeStart -lt 0) {
+    $violations.Add("${persistentPowerSupportPath}: Forge entry point is missing")
+}
+else {
+    $forgeBlock = $persistentPowerSupportText.Substring($forgeStart)
+    $generatedIndex = $forgeBlock.IndexOf('simulator.AddGeneratedCardToCombat(')
+    $bladeGrowthIndex = $forgeBlock.IndexOf('((SovereignBlade)card.MutablePreview).AddDamage(amount)')
+    $hammerLoopIndex = $forgeBlock.IndexOf('ForgeExecutionStage.HammerTimePlayers')
+    if ($generatedIndex -lt 0 -or $bladeGrowthIndex -le $generatedIndex -or $hammerLoopIndex -le $bladeGrowthIndex) {
+        $violations.Add("${persistentPowerSupportPath}: 0.107.1 Forge order must remain generated Blade -> Blade growth -> Hammer Time propagation")
+    }
+}
+
 $attackSimulatorPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.Attack.cs'
 $attackSimulatorText = [IO.File]::ReadAllText($attackSimulatorPath)
 foreach ($boundary in @(
