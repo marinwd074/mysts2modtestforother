@@ -28,7 +28,7 @@ replace the native-vs-predicted runtime differential.
 
 ## Corrected version drift
 
-Thirty-six route-affecting mismatches have been confirmed in the 0.107.1 source audit:
+Thirty-seven route-affecting mismatches have been confirmed in the 0.107.1 source audit:
 
 | Card | 0.107.1 native behavior | Incorrect solver behavior | Correction |
 |---|---|---|---|
@@ -167,6 +167,24 @@ Escape Plan and Scrape therefore evaluate the cards that finish drawing after
 the nested choice instead of a partial pre-suspension snapshot, while Offering,
 Neurosurge, Reboot, and the attack-then-draw cards no longer skip their native
 suffixes.
+
+### Card-selection sequence continuation correction
+
+The dedicated selection/autoplay mirrors had the same suspended-suffix gap as
+the draw and Orb cards. In the 0.107.1 assembly, Beat Down and Catastrophe keep
+their async loop program counters across each awaited AutoPlay, while Cinder,
+Drain Power, Thrash, True Grit, and Uproar resume their selection/exhaust/
+upgrade/autoplay suffix only after the preceding Attack or Block command
+finishes.
+
+These seven mirrors now acknowledge the card execution dispatch and use a
+fork-safe selection execution frame. Beat Down preserves its already-shuffled
+discard-pile selection plus the next index; Catastrophe preserves only the next
+iteration because native code re-reads and re-shuffles the current Draw pile on
+each iteration; the remaining cards preserve their post-command stage. This
+prevents a nested card choice from silently ending the outer card early without
+changing the existing 0.107.1 RNG-selection policy or True Grit's explicitly
+unresolved upgraded player choice.
 
 ### Opaque Attack / Damage / Kill continuation boundary
 

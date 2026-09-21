@@ -10,7 +10,7 @@ using CombatSolver.Engine.InCombat.Simulation;
 
 namespace CombatSolver.Engine.InCombat.Mirrors.Cards.OnPlay;
 
-internal static class CardSelectionCardMirrors
+internal static partial class CardSelectionCardMirrors
 {
     public static void AnointedOnPlay(Anointed card, CardOnPlayMirrorContext context)
     {
@@ -35,6 +35,7 @@ internal static class CardSelectionCardMirrors
 
     public static void BeatDownOnPlay(BeatDown card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         var selectedCards = context.OwnerState.DiscardPile.Cards
             .Where(predictedCard =>
                 predictedCard.Preview.Type == CardType.Attack &&
@@ -44,102 +45,28 @@ internal static class CardSelectionCardMirrors
             .Take(card.DynamicVars.Cards.IntValue)
             .ToList();
         if (selectedCards.Count == 0)
-        {
             return;
-        }
 
         context.Simulator.History.CardsSelected(selectedCards);
-
-        foreach (var selectedCard in selectedCards)
-        {
-            if (context.Simulator.IsOverOrEnding)
-            {
-                break;
-            }
-
-            Creature? target = null;
-            if (selectedCard.Preview.TargetType == TargetType.AnyEnemy)
-            {
-                // BeatDown.OnPlay resolves this target before CardCmd.AutoPlay checks whether the
-                // selected card can play, so preserve that CombatTargets RNG consumption order.
-                target = context.Rng.CombatTargets.NextItem(context.State.HittableEnemies);
-            }
-
-            context.Simulator.AutoPlay(selectedCard, target, nestedChoiceSourceId: card.Id.Entry);
-            if (context.Simulator.HasPendingChoice)
-            {
-                break;
-            }
-        }
+        _ = ContinueBeatDown(context, selectedCards, nextIndex: 0);
     }
 
-    public static void CatastropheOnPlay(Catastrophe card, CardOnPlayMirrorContext context)
+    public static void CatastropheOnPlay(Catastrophe _, CardOnPlayMirrorContext context)
     {
-        for (var i = 0; i < card.DynamicVars.Cards.IntValue; i++)
-        {
-            var drawPileCards = context.OwnerState.DrawPile.Cards;
-            List<PredictedCard> eligibleCards = drawPileCards
-                .Where(predictedCard =>
-                    !predictedCard.HasKeyword(context.State, CardKeyword.Unplayable))
-                .ToList();
-            CombatBeamSolver.StableShuffleProjection(eligibleCards, context.Rng.Shuffle);
-            var selectedCard = eligibleCards.FirstOrDefault();
-
-            if (selectedCard is null)
-            {
-                List<PredictedCard> fallbackCards = drawPileCards.ToList();
-                CombatBeamSolver.StableShuffleProjection(fallbackCards, context.Rng.Shuffle);
-                selectedCard = fallbackCards.FirstOrDefault();
-            }
-
-            if (selectedCard is null)
-            {
-                break;
-            }
-
-            context.Simulator.History.CardsSelected([selectedCard]);
-            context.Simulator.AutoPlay(selectedCard, nestedChoiceSourceId: card.Id.Entry);
-            if (context.Simulator.HasPendingChoice)
-            {
-                break;
-            }
-        }
+        context.Simulator.AcknowledgeExecutionDispatch();
+        _ = ContinueCatastrophe(context, nextIteration: 0);
     }
 
-    public static void CinderOnPlay(Cinder card, CardOnPlayMirrorContext context)
+    public static void CinderOnPlay(Cinder _, CardOnPlayMirrorContext context)
     {
-        context.AttackSingle();
-        if (context.Simulator.HasPendingChoice)
-            return;
-
-        if (SelectRandomHandCard(context, static _ => true) is { } selectedCard)
-        {
-            context.Simulator.History.CardsSelected([selectedCard]);
-            context.Simulator.Exhaust(selectedCard);
-        }
+        context.Simulator.AcknowledgeExecutionDispatch();
+        _ = ContinueCardSelectionSequence(context, CardSelectionSequence.Cinder);
     }
 
-    public static void DrainPowerOnPlay(DrainPower card, CardOnPlayMirrorContext context)
+    public static void DrainPowerOnPlay(DrainPower _, CardOnPlayMirrorContext context)
     {
-        context.AttackSingle();
-        if (context.Simulator.HasPendingChoice)
-            return;
-
-        var cardsToUpgrade = context.OwnerState.DiscardPile.Cards
-            .Where(predictedCard => predictedCard.Preview.IsUpgradable)
-            .TakeRandom(card.DynamicVars.Cards.IntValue, context.Rng.CombatCardSelection)
-            .ToList();
-        if (cardsToUpgrade.Count == 0)
-        {
-            return;
-        }
-
-        foreach (var cardToUpgrade in cardsToUpgrade)
-        {
-            context.Simulator.Upgrade(cardToUpgrade);
-        }
-
-        context.Simulator.History.CardsSelected(cardsToUpgrade);
+        context.Simulator.AcknowledgeExecutionDispatch();
+        _ = ContinueCardSelectionSequence(context, CardSelectionSequence.DrainPower);
     }
 
     public static void HiddenGemOnPlay(HiddenGem card, CardOnPlayMirrorContext context)
@@ -177,107 +104,24 @@ internal static class CardSelectionCardMirrors
         context.AttackSingle();
     }
 
-    public static void ThrashOnPlay(Thrash card, CardOnPlayMirrorContext context)
+    public static void ThrashOnPlay(Thrash _, CardOnPlayMirrorContext context)
     {
-        context.AttackSingle(hitCount: 2);
-        if (context.Simulator.HasPendingChoice)
-            return;
-
-        var cardToExhaust = SelectRandomHandCard(context, cardModel => cardModel.Type == CardType.Attack);
-        if (cardToExhaust is null)
-        {
-            return;
-        }
-
-        context.Simulator.History.CardsSelected([cardToExhaust]);
-
-        var damage = 0m;
-        var dynamicVars = cardToExhaust.Preview.DynamicVars;
-        if (dynamicVars.ContainsKey("CalculatedDamage"))
-        {
-            damage = dynamicVars.CalculatedDamage.InvokeCalculate(context.Simulator, cardToExhaust, null);
-        }
-        else if (dynamicVars.ContainsKey("Damage"))
-        {
-            damage = dynamicVars.Damage.BaseValue;
-        }
-        else if (dynamicVars.ContainsKey("OstyDamage"))
-        {
-            damage = dynamicVars.OstyDamage.BaseValue;
-        }
-        else
-        {
-            EngineDiagnostics.Warn(
-                $"Exhausted attack card {cardToExhaust.Preview.Id.Entry} did not have an appropriate DamageVar");
-        }
-
-        damage = HookMirrors.ModifyDamage(
-            context.Simulator,
-            target: null,
-            dealer: cardToExhaust.Preview.Owner.Creature,
-            damage,
-            ValueProp.Move,
-            cardSource: cardToExhaust,
-            cardPlay: null);
-
-        card.DynamicVars.Damage.BaseValue += damage;
-        card.ExtraDamage += damage;
-
-        context.Simulator.Exhaust(cardToExhaust);
+        context.Simulator.AcknowledgeExecutionDispatch();
+        _ = ContinueCardSelectionSequence(context, CardSelectionSequence.Thrash);
     }
 
-    public static void TrueGritOnPlay(TrueGrit card, CardOnPlayMirrorContext context)
+    public static void TrueGritOnPlay(TrueGrit _, CardOnPlayMirrorContext context)
     {
-        context.GainBlock(card.Owner.Creature);
-        if (context.Simulator.HasPendingChoice)
-            return;
-
-        if (card.IsUpgraded)
-        {
-            if (!context.OwnerState.Hand.IsEmpty)
-            {
-                // Vanilla asks the player which hand card to exhaust. The choice and resulting
-                // pile state cannot be determined during prediction.
-                context.History.RecordRisk(PredictionRiskReason.UnresolvedPlayerChoice);
-            }
-            return;
-        }
-
-        if (SelectRandomHandCard(context, static _ => true) is { } selectedCard)
-        {
-            context.Simulator.History.CardsSelected([selectedCard]);
-            context.Simulator.Exhaust(selectedCard);
-        }
+        context.Simulator.AcknowledgeExecutionDispatch();
+        _ = ContinueCardSelectionSequence(context, CardSelectionSequence.TrueGrit);
     }
 
-    public static void UproarOnPlay(Uproar card, CardOnPlayMirrorContext context)
+    public static void UproarOnPlay(Uproar _, CardOnPlayMirrorContext context)
     {
-        context.AttackSingle(hitCount: 2);
-        if (context.Simulator.HasPendingChoice)
-            return;
-
-        var attackCards = context.OwnerState.DrawPile.Cards
-            .Where(predictedCard => predictedCard.Preview.Type == CardType.Attack)
-            .ToList();
-
-        var selectedCard = attackCards
-            .Where(predictedCard => !predictedCard.HasKeyword(context.State, CardKeyword.Unplayable))
-            .ToList()
-            .StableShuffle(context.Rng.Shuffle)
-            .FirstOrDefault();
-
-        selectedCard ??= attackCards
-            .StableShuffle(context.Rng.Shuffle)
-            .FirstOrDefault();
-
-        if (selectedCard is null)
-        {
-            return;
-        }
-
-        context.Simulator.History.CardsSelected([selectedCard]);
-        context.Simulator.AutoPlay(selectedCard, nestedChoiceSourceId: card.Id.Entry);
+        context.Simulator.AcknowledgeExecutionDispatch();
+        _ = ContinueCardSelectionSequence(context, CardSelectionSequence.Uproar);
     }
+
 
     private static PredictedCard? SelectRandomHandCard(
         CardOnPlayMirrorContext context,

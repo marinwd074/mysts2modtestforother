@@ -2989,6 +2989,51 @@ foreach ($boundary in @(
     }
 }
 
+$cardSelectionMirrorPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/CardSelectionCardMirrors.cs'
+$cardSelectionMirrorText = [IO.File]::ReadAllText($cardSelectionMirrorPath)
+$cardSelectionContinuationPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/CardSelectionCardMirrors.ExecutionContinuation.cs'
+$cardSelectionContinuationText = [IO.File]::ReadAllText($cardSelectionContinuationPath)
+foreach ($requiredSelectionContinuationRule in @(
+    'private sealed record CardSelectionExecutionFrame(',
+    'CardSelectionSequence.BeatDown',
+    'CardSelectionSequence.Catastrophe',
+    'CardSelectionSequence.Cinder',
+    'CardSelectionSequence.DrainPower',
+    'CardSelectionSequence.Thrash',
+    'CardSelectionSequence.TrueGrit',
+    'CardSelectionSequence.Uproar',
+    'ContinueBeatDown(',
+    'ContinueCatastrophe(',
+    'ContinueCardSelectionSequence(',
+    'ForkExecutionCardList(Cards, context)',
+    'Cards = Cards is null ? null : context.RequireRemap(Cards)')) {
+    if (-not $cardSelectionContinuationText.Contains($requiredSelectionContinuationRule)) {
+        $violations.Add("${cardSelectionContinuationPath}: missing 0.107.1 selection continuation rule '$requiredSelectionContinuationRule'")
+    }
+}
+foreach ($selectionMethod in @(
+    'BeatDown',
+    'Catastrophe',
+    'Cinder',
+    'DrainPower',
+    'Thrash',
+    'TrueGrit',
+    'Uproar')) {
+    $methodStart = $cardSelectionMirrorText.IndexOf("public static void $($selectionMethod)OnPlay")
+    $nextPublic = $cardSelectionMirrorText.IndexOf([Environment]::NewLine + '    public static void ', $methodStart + 1)
+    $nextPrivate = $cardSelectionMirrorText.IndexOf([Environment]::NewLine + '    private static ', $methodStart + 1)
+    $candidates = @($nextPublic, $nextPrivate) | Where-Object { $_ -gt $methodStart }
+    $methodEnd = if ($candidates.Count -gt 0) { ($candidates | Measure-Object -Minimum).Minimum } else { $cardSelectionMirrorText.Length }
+    if ($methodStart -lt 0 -or $methodEnd -le $methodStart) {
+        $violations.Add("${cardSelectionMirrorPath}: selection continuation method boundary missing for $selectionMethod")
+        continue
+    }
+    $methodBlock = $cardSelectionMirrorText.Substring($methodStart, $methodEnd - $methodStart)
+    if (-not $methodBlock.Contains('context.Simulator.AcknowledgeExecutionDispatch();')) {
+        $violations.Add("${cardSelectionMirrorPath}: $selectionMethod must acknowledge its resumable OnPlay sequence")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."
