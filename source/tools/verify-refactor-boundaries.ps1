@@ -1854,6 +1854,22 @@ if (-not $cardEffectSpecText.Contains('[typeof(ExpectAFight)] = [Owner<NoEnergyG
     $violations.Add("${cardEffectSpecPath}: 0.107.1 Expect a Fight must apply one NoEnergyGainPower after gaining energy")
 }
 
+
+$hyperbeamStart = $cardEffectSpecText.IndexOf('#if STS2_01071', $cardEffectSpecText.IndexOf('[typeof(Hegemony)]'))
+$hyperbeamEnd = $cardEffectSpecText.IndexOf('#else', $hyperbeamStart)
+if ($hyperbeamStart -lt 0 -or $hyperbeamEnd -le $hyperbeamStart) {
+    $violations.Add("${cardEffectSpecPath}: Hyperbeam 0.107.1 compatibility boundary is missing")
+}
+else {
+    $hyperbeam01071Block = $cardEffectSpecText.Substring($hyperbeamStart, $hyperbeamEnd - $hyperbeamStart)
+    if (-not $hyperbeam01071Block.Contains('[typeof(Hyperbeam)] = [Owner<FocusPower>(card => -card.DynamicVars["FocusPower"].IntValue)]')) {
+        $violations.Add("${cardEffectSpecPath}: 0.107.1 Hyperbeam must apply negative FocusPower after its attack")
+    }
+    if ($hyperbeam01071Block.Contains('[typeof(Hyperbeam)] = []')) {
+        $violations.Add("${cardEffectSpecPath}: empty 0.107.1 Hyperbeam effect returned")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."
