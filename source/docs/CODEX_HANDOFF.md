@@ -228,7 +228,93 @@ cards-per-turn、reachable-cards、Buffer 兜底、Focus/Furnace scaling 等裸�
 不应伪装成 0.107.1 游戏常量；SearchWaveMemoryPolicy 与 SmartLayerMemoryForecast 的 64 MiB 虽同值，
 但分别表示 parent reserve 与 whole-layer forecast 最小余量，当前没有证据要求合并。BFWS 达到
 MaxNoveltyEntries 后仍按“先判断当前 tuple novelty、再限制历史写入”处理，已与仓库 ReferenceNovelty
-和容量 0/1/7 的生成流合同核对，属于设计语义而非 bug。未发现新的 route-affecting mismatch，总数仍为 45。
+和容量 0/1/7 的生成流合同核对，属于设计语义而非 bug。未发现新的 route-affecting mismatch；在后续 Louse 修复后当前总数为 46。
 现有 BfwsResearchChecks 此前未进入 run-contract-tests；已加入 L1 合同套件，并补静态门禁防止再次掉出。
+
+最终收尾扫描第六小批检查 Cycle / Retention / Transposition。Cycle family 的 improvement epoch
+使用 byte 但硬上限仅 4，CycleRegion epoch 使用 int 且预算先 clamp 后 checked；0.107.1 手牌上限也由
+CardPileCmd 的 Draw/Add 两条路径共同限制为 10，因此 HandFingerprintBuffer[10] 不构成越界风险。
+TranspositionFrontier 的 nondominated label 接受/替换逻辑未发现新的状态误合并。
+
+发现并修复 1 个 solver 确定性缺口：Cycle、CycleExit、CrossTurn 的 retention rank 分段允许尾部/头部
+重叠，而 SortRetained 原先在最小 retention rank 与 Score 同时相等时直接返回 0。List.Sort 不保证稳定，
+并行候选输入顺序可能因此改变后续扩展顺序。现在仅在原本完全平局时追加已有的
+CompareCycleCandidateDeterministicFingerprints（StateKey → Action → Parent）作为最终 tie-break；
+所有既有 rank/Score 优先级不变。BeamRankSortChecks 已扩展为直接抽取生产 CompareRetainedOrder，
+覆盖 rank、score 与重叠 rank 的 deterministic tie-break。
+
+同一批继续发现并修复 transposition 的路径语义遗漏。StateKey 只描述模拟器状态，但
+SearchRouteTraits 会决定后续 retention lane，HasNonPotionAction 还会直接禁止 RequiresOpeningUse 药水；
+旧 TranspositionLabel 没有这两项，因此相同 StateKey 的两条路径可能在未来可用动作/保留资格不同的情况下
+仍被当成互相支配。现在 label 纳入两项路径事实：只有左侧 traits 覆盖右侧全部 traits，且左侧的
+HasNonPotionAction 不比右侧更受限时才允许支配。false（尚无非药水动作）可支配 true，反向不可。
+此外 ResetRebuildableCaches 原先对重复 StateKey 直接覆盖字典，只保留最后一个 label；现在重建时通过
+TranspositionFrontier.TryAccept 恢复完整 nondominated frontier。BeamRankSortChecks 同时抽取生产
+Transpositions.cs，覆盖 6 组 path-sensitive dominance 合同。以上两项属于 solver 确定性/剪枝正确性修复，
+不新增 0.107.1 版本 mismatch；当前 route-affecting mismatch 计数保持 46。
+
+最终收尾扫描第七小批继续审计 StateKey 外的 path-only 状态。CrossTurnProbe 传播链确认仍由
+AttachCycleSchedulingEvidence → AttachCrossTurnSchedulingEvidence 保持，未发现传播断链；CumulativeEnemyHpLost /
+TurnOutcome 只用于最终路线报告，不参与未来合法动作。新发现并修复 CombatProgressState 的转置遗漏：
+它保存约 28 项历史最好/最低进展基线与 TurnsWithoutProgress，后续 Advance/ShouldPruneCrossTurnNoProgress
+会据此判断“下一回合是否有进展”和何时停止无进展路线。旧 TranspositionLabel 未携带该历史，因此两个
+当前 StateKey 相同但进展历史不同的节点可能互相支配，导致剩余无进展预算不同的路线被误剪。现在只有
+CombatProgressState 值相等时才允许转置支配；ResetRebuildableCaches 与 admission/expanded 两张转置表均
+传入同一进展状态。BeamRankSortChecks 的生产代码抽取合同扩展到 8 组，新增双向“不同 progress 不得合并”。
+此项是 solver 剪枝正确性修复，不新增 0.107.1 版本 mismatch；计数仍为 46。
+
+最终收尾扫描第八小批单独复核 cross-turn probe/baseline。确认 CrossTurnProbe 是有界调度租约：
+它会改变 ShouldPruneCrossTurnNoProgress 的继续资格和 cross-turn retention 排序，但旧普通 transposition
+既不识别该租约，也不会绕过它，因此同 StateKey 的普通路线可能提前剪掉正在观察延迟收益的 probe。
+现已让 active CrossTurnProbe 与 cycle/ordered-mutation 调度租约一样绕过 admission/expanded transposition；
+ResetRebuildableCaches 也跳过 active probe，避免内存重建后 probe label 反向支配普通路线。租约被 retention
+明确清除后节点恢复普通转置剪枝。stand-pat baseline 仍只作为 turn-start 的语义比较证据，不进入普通
+StateKey/transposition。该项是 solver 剪枝正确性修复，不新增 0.107.1 版本 mismatch；计数仍为 46。
+
+最终收尾扫描第九小批审计 TurnSetupChoices / TurnSetupPlayState 与边界元数据。两项 TurnSetup 数据仅用于
+最终 continuation 从自身 parent 链重放，以及运行时用 TurnSetupPlayState 校验 live state；transposition
+不会替换 surviving node 的 parent 链，因此不需要进入 label。随后发现 BoundaryReason 是真正遗漏项：
+BuildStateKey 不包含 boundary，而最终路线排序、turn-outcome 可比性和 continuation 构建都会读取它。
+旧 transposition 因此可能让 UnsupportedEffect/PendingChoice 终止节点与相同 StateKey 的正常可继续节点互相支配。
+现在 TranspositionLabel 纳入 SearchBoundaryReason，并要求 boundary 相等才允许支配；普通 admission、
+expanded table 和 ResetRebuildableCaches 均传入节点 boundary。BeamRankSortChecks 增加双向不同 boundary
+不得合并合同，总数扩展到 10 组。HasPredictionRisk 当时仅确认未直接进入最终排序，因此该批未扩大转置键；第十一小批继续追踪风险历史后，
+确认这一结论不足，见下。该项是 solver 剪枝正确性修复，不新增 0.107.1 版本 mismatch；计数仍为 46。
+
+CI 门禁专项排查：最后一次完整成功 run 为 805ad8d（35610137901），约 4 分钟后的 58f56c9
+开始两个 job 同时出现 steps=null，之后持续如此；失败 job 连日志 blob 都不存在，而成功 job 有正常
+windows-2025 hosted runner 日志，说明失败发生在 checkout/脚本执行之前。workflow 本身未依赖 self-hosted
+runner。static-consistency 只使用 PowerShell 7/source/XML/git 检查，现改到 ubuntu-latest；contract-tests
+暂留 windows-latest，因为 MultiplayerSnapshotChecks 明确使用 WINDIR/System32/cmd.exe 和 Windows 路径语义。
+这样不削弱任何门禁，同时可区分“Windows runner 分配异常”和“账户级 Actions 配额/账单拒绝”。
+诊断提交 b5e5105 后，ubuntu-latest 的 static-consistency 与 windows-latest 的 contract-tests 仍同时
+steps=null，且都无日志 blob，已排除 Windows runner 专属问题，定位为 GitHub Hosted Actions 在 runner
+分配前的账户/仓库级拒绝。仓库 YAML 无法直接解除该外部限制。为避免恢复后继续无谓消耗私有仓库分钟，
+workflow 现仅在 compatibility workflow 自身或 source 非 docs 文件变化时自动触发；source/docs/** 文档提交
+不再跑完整门禁。另加入同 workflow/ref 的 cancel-in-progress，连续快速提交只保留最新一轮。手动
+workflow_dispatch 保留，代码/tools/target/project 变化仍完整执行门禁。云端 runner 被账户级拒绝期间，
+新增 tools/run-ci-gates.ps1 作为本地统一入口：顺序执行 target-version、refactor-boundaries、完整 L1
+contract suite 与 git diff --check；支持 -NoRestore / -SkipPython 透传。它不替代 GitHub required check，
+只保证本地/Codex 可运行与云 workflow 相同的源码门禁。
+
+最终收尾扫描第十小批审计 IsTerminal / TerminalStamp。TerminalStamp 本身不需要整体进入
+transposition：其 outcome 已投影为 SimulationSnapshot.PlayerDead / AllEnemiesDead，终局回合又由 StateKey
+中的 turn 区分。但这两个终局标志此前未进入 TranspositionLabel。尤其 defeat 路径允许 native pending loss
+已经锁定后由后续效果恢复当前 HP，因此 PlayerDead=true 不能可靠地从 HP/StateKey 反推；相同 StateKey 的
+live/defeat 路线理论上可被错误合并。现已要求 PlayerDead 与 AllEnemiesDead 均相等才允许转置支配，并同步
+admission、expanded table 与 ResetRebuildableCaches。BeamRankSortChecks 新增 live-vs-defeat 与
+victory-vs-nonvictory 双向合同，path-sensitive transposition cases 从 10 扩到 14。该项是 solver 剪枝
+正确性修复，不新增 0.107.1 版本 mismatch；计数仍为 46。
+
+最终收尾扫描第十一小批继续追踪 HasPredictionRisk / PredictionGaps。最终排序本身不读取 HasRisk，
+但风险历史会随 simulator fork 继承；StateEvaluation 在未来胜利时调用 HasUncompensatedDeathGap，若路径历史
+含未补偿 Death gap，会把原本 victory 改为 UnsupportedEffect。因此相同当前 StateKey 的两条路线即使都
+HasRisk=true，只要 gap 语义不同，未来合法终局就可能不同。现已让 TranspositionLabel 保存快照的完整
+PredictionGaps，并仅在两侧 gap 序列相等时允许支配；这比单独比较 HasRisk bool 更严格且直接覆盖 Death /
+non-Death、compensated / uncompensated 差异。admission、expanded table 与 ResetRebuildableCaches 均同步。
+BeamRankSortChecks 增加双向不同 risk-history 不得合并合同，path-sensitive cases 从 14 扩到 16。
+至此已审出的 StateKey 外、会改变未来搜索语义的 path-only 状态均有显式保护；transposition 收尾停止继续
+扩张，后续优先回到实机问题包/本地门禁驱动。该项是 solver 剪枝正确性修复，不新增 0.107.1 版本 mismatch；
+计数仍为 46。
 
 已完成的 Power、continuation、死亡生命周期和 78/78 卡牌 OnPlay 数值不重复展开；多人牌仍暂不作为当前 blocker。

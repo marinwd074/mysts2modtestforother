@@ -28,6 +28,74 @@ $forbiddenSearchReferences = @(
 )
 
 $violations = [System.Collections.Generic.List[string]]::new()
+$crossTurnTranspositionPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Expansion.cs'
+$crossTurnTranspositionText = [IO.File]::ReadAllText($crossTurnTranspositionPath)
+foreach ($crossTurnTranspositionRule in @(
+    'private static bool HasCrossTurnTranspositionLease(SearchNode candidate)',
+    '=> candidate.CrossTurnProbe != null;',
+    '|| HasCrossTurnTranspositionLease(candidate)',
+    '|| HasCrossTurnTranspositionLease(node)')) {
+    if (-not $crossTurnTranspositionText.Contains($crossTurnTranspositionRule)) {
+        $violations.Add("${crossTurnTranspositionPath}: cross-turn scheduling lease lost transposition protection '$crossTurnTranspositionRule'")
+    }
+}
+
+$crossTurnTranspositionModelPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Models.cs'
+$crossTurnTranspositionModelText = [IO.File]::ReadAllText($crossTurnTranspositionModelPath)
+if (-not $crossTurnTranspositionModelText.Contains('if (node.CrossTurnProbe != null)')) {
+    $violations.Add("${crossTurnTranspositionModelPath}: cache rebuild must exclude active cross-turn probes")
+}
+
+$transpositionPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Transpositions.cs'
+$transpositionText = [IO.File]::ReadAllText($transpositionPath)
+foreach ($transpositionRule in @(
+    'SearchRouteTraits Traits',
+    'bool HasNonPotionAction',
+    'SearchBoundaryReason BoundaryReason',
+    'bool PlayerDead',
+    'bool AllEnemiesDead',
+    'IReadOnlyList<PredictionGap> PredictionGaps',
+    'CombatProgressState CombatProgress',
+    '(left.Traits & right.Traits) == right.Traits',
+    '(!left.HasNonPotionAction || right.HasNonPotionAction)',
+    'left.BoundaryReason == right.BoundaryReason',
+    'left.PlayerDead == right.PlayerDead',
+    'left.AllEnemiesDead == right.AllEnemiesDead',
+    'left.PredictionGaps.SequenceEqual(right.PredictionGaps)',
+    'left.CombatProgress == right.CombatProgress')) {
+    if (-not $transpositionText.Contains($transpositionRule)) {
+        $violations.Add("${transpositionPath}: path-sensitive transposition dominance drifted '$transpositionRule'")
+    }
+}
+
+$transpositionModelPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Models.cs'
+$transpositionModelText = [IO.File]::ReadAllText($transpositionModelPath)
+foreach ($transpositionRebuildRule in @(
+    'node.Traits,',
+    'node.HasNonPotionAction,',
+    'node.BoundaryReason,',
+    'node.Snapshot.PlayerDead,',
+    'node.Snapshot.AllEnemiesDead,',
+    'node.Snapshot.PredictionGaps,',
+    'node.CombatProgress);',
+    'Transpositions.TryGetValue(node.StateKey, out TranspositionFrontier? existing)',
+    '_ = existing.TryAccept(label);')) {
+    if (-not $transpositionModelText.Contains($transpositionRebuildRule)) {
+        $violations.Add("${transpositionModelPath}: transposition frontier rebuild drifted '$transpositionRebuildRule'")
+    }
+}
+
+$retentionOrderPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Retention.cs'
+$retentionOrderText = [IO.File]::ReadAllText($retentionOrderPath)
+foreach ($retentionOrderRule in @(
+    '=> selected.Sort(CompareRetainedOrder);',
+    'private static int CompareRetainedOrder(SearchNode left, SearchNode right)',
+    'CompareCycleCandidateDeterministicFingerprints(left, right)')) {
+    if (-not $retentionOrderText.Contains($retentionOrderRule)) {
+        $violations.Add("${retentionOrderPath}: retained frontier deterministic tie-break drifted '$retentionOrderRule'")
+    }
+}
+
 $monsterValueReaderPath = Join-Path $repositoryRoot 'src/Prediction/MonsterValueReader.cs'
 $monsterValueReaderText = [IO.File]::ReadAllText($monsterValueReaderPath)
 foreach ($monsterReaderRule in @(

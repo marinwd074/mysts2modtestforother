@@ -2,12 +2,26 @@ name: 0.107.1 compatibility consistency
 
 on:
   push:
+    paths:
+      - '.github/workflows/compatibility.yml'
+      - 'source/**'
+      - '!source/docs/**'
   pull_request:
+    paths:
+      - '.github/workflows/compatibility.yml'
+      - 'source/**'
+      - '!source/docs/**'
   workflow_dispatch:
+
+concurrency:
+  group: compatibility-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   static-consistency:
-    runs-on: windows-latest
+    # This job only parses source/XML and runs PowerShell 7; keep it off the
+    # Windows pool so a Windows-hosted allocation problem cannot hide static drift.
+    runs-on: ubuntu-latest
     steps:
       - name: Check out source
         uses: actions/checkout@v4

@@ -3486,6 +3486,9 @@ internal sealed partial class CombatBeamSolver
         => HasValidCycleProbeLease(candidate)
             || HasValidCycleExitProbe(candidate, requireIssuedTicket: true);
 
+    private static bool HasCrossTurnTranspositionLease(SearchNode candidate)
+        => candidate.CrossTurnProbe != null;
+
     private static CycleExitProbeFamilyKey BuildCycleExitAdmissionFamilyKey(
         SearchNode candidate)
     {
@@ -3632,8 +3635,15 @@ internal sealed partial class CombatBeamSolver
             Snapshot: null!,
             CombatProgress: null!,
             Cycle: coarseCycle);
-        TranspositionLabel dominating = new(0, 0, 0, 0, 1, 10);
-        TranspositionLabel dominated = new(0, 0, 0, 0, 2, 9);
+        CombatProgressState transpositionProgress = null!;
+        TranspositionLabel dominating = new(
+            0, 0, 0, 0, 1, 10, SearchRouteTraits.None, HasNonPotionAction: false,
+            BoundaryReason: SearchBoundaryReason.None, PlayerDead: false, AllEnemiesDead: false,
+            PredictionGaps: [], CombatProgress: transpositionProgress);
+        TranspositionLabel dominated = new(
+            0, 0, 0, 0, 2, 9, SearchRouteTraits.None, HasNonPotionAction: false,
+            BoundaryReason: SearchBoundaryReason.None, PlayerDead: false, AllEnemiesDead: false,
+            PredictionGaps: [], CombatProgress: transpositionProgress);
 
         if (!ShouldDeferCycleTranspositionUntilActionAdmission(candidate)
             || HasCycleAdmissionTranspositionLease(candidate)
@@ -3799,9 +3809,10 @@ internal sealed partial class CombatBeamSolver
         // same simulator state cannot inherit their exact pattern/envelope history, so it must
         // not erase the probe before the obligation reaches the frontier.
         if (HasCycleAdmissionTranspositionLease(candidate)
+            || HasCrossTurnTranspositionLease(candidate)
             || CanRetainOrderedMutationLease(_run, candidate))
         {
-            ObserveSearchPath(candidate, SearchPathObservationStage.AdmissionTransposition, "bypass_cycle_or_ordered_lease");
+            ObserveSearchPath(candidate, SearchPathObservationStage.AdmissionTransposition, "bypass_scheduling_lease");
             return true;
         }
         TranspositionLabel next = new(
@@ -3810,7 +3821,14 @@ internal sealed partial class CombatBeamSolver
             candidate.FutureSoldHp,
             candidate.Snapshot.CumulativePlayerHpLost,
             candidate.ActionCount,
-            candidate.Score);
+            candidate.Score,
+            candidate.Traits,
+            candidate.HasNonPotionAction,
+            candidate.BoundaryReason,
+            candidate.Snapshot.PlayerDead,
+            candidate.Snapshot.AllEnemiesDead,
+            candidate.Snapshot.PredictionGaps,
+            candidate.CombatProgress);
         if (!_run.Transpositions.TryGetValue(candidate.StateKey, out TranspositionFrontier? frontier))
         {
             _run.Transpositions.Add(candidate.StateKey, new TranspositionFrontier(next));
@@ -3846,9 +3864,10 @@ internal sealed partial class CombatBeamSolver
                 "临时循环出口 observation 越过了 action admission frontier。");
         }
         if (HasCycleExpansionTranspositionLease(node)
+            || HasCrossTurnTranspositionLease(node)
             || CanRetainOrderedMutationLease(_run, node))
         {
-            ObserveSearchPath(node, SearchPathObservationStage.ExpansionTransposition, "bypass_cycle_or_ordered_lease");
+            ObserveSearchPath(node, SearchPathObservationStage.ExpansionTransposition, "bypass_scheduling_lease");
             return true;
         }
         TranspositionLabel next = new(
@@ -3857,7 +3876,14 @@ internal sealed partial class CombatBeamSolver
             node.FutureSoldHp,
             node.Snapshot.CumulativePlayerHpLost,
             node.ActionCount,
-            node.Score);
+            node.Score,
+            node.Traits,
+            node.HasNonPotionAction,
+            node.BoundaryReason,
+            node.Snapshot.PlayerDead,
+            node.Snapshot.AllEnemiesDead,
+            node.Snapshot.PredictionGaps,
+            node.CombatProgress);
         if (!_run.ExpandedTranspositions.TryGetValue(node.StateKey, out TranspositionFrontier? frontier))
         {
             _run.ExpandedTranspositions.Add(node.StateKey, new TranspositionFrontier(next));

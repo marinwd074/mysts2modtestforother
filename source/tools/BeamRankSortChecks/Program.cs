@@ -56,4 +56,129 @@ foreach (bool negative in new[] { false, true })
         entries += n;
     }
 }
-Console.WriteLine(JsonSerializer.Serialize(new { status = "Passed", cases, entries, runtime = Environment.Version.ToString(), scope = "Extracted production score/sort/comparison; minimal immutable snapshot inputs; exact reference order vs original List.Sort" }));
+
+SearchNode Retained(
+    int stable,
+    double score,
+    int retention = int.MaxValue,
+    int longTerm = int.MaxValue,
+    int cycle = int.MaxValue,
+    int cycleExit = int.MaxValue,
+    int crossTurn = int.MaxValue)
+    => new()
+    {
+        Stable = stable,
+        Score = score,
+        RetentionRank = retention,
+        LongTermResourceRetentionRank = longTerm,
+        CycleRetentionRank = cycle,
+        CycleExitRetentionRank = cycleExit,
+        CrossTurnRetentionRank = crossTurn,
+        Snapshot = new()
+    };
+
+SearchNode earlierRank = Retained(2, 0, cycle: 4);
+SearchNode laterRank = Retained(1, double.MaxValue, cycleExit: 5);
+if (Scorer.CompareRetainedOrder(earlierRank, laterRank) >= 0)
+    throw new InvalidOperationException("Retention rank no longer precedes score.");
+
+SearchNode higherScore = Retained(2, 10, cycle: 5);
+SearchNode lowerScore = Retained(1, 9, cycleExit: 5);
+if (Scorer.CompareRetainedOrder(higherScore, lowerScore) >= 0)
+    throw new InvalidOperationException("Score no longer breaks equal retention ranks.");
+
+List<SearchNode> stableTie =
+[
+    Retained(3, 10, cycleExit: 5),
+    Retained(1, 10, cycle: 5),
+    Retained(2, 10, crossTurn: 5),
+];
+stableTie.Sort(Scorer.CompareRetainedOrder);
+if (!stableTie.Select(node => node.Stable).SequenceEqual([1, 2, 3]))
+    throw new InvalidOperationException("Equal retention rank/score lacks deterministic final ordering.");
+
+if (CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.None, false,
+        SearchRouteTraits.None, false))
+    throw new InvalidOperationException("Equivalent transposition label was not dominated.");
+
+if (!CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.Scaling, false,
+        SearchRouteTraits.Resource, false))
+    throw new InvalidOperationException("Incomparable route traits were incorrectly merged.");
+
+if (CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.Scaling | SearchRouteTraits.Resource, false,
+        SearchRouteTraits.Scaling, false))
+    throw new InvalidOperationException("Trait superset no longer dominates a subset.");
+
+if (!CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.Scaling, false,
+        SearchRouteTraits.Scaling | SearchRouteTraits.Resource, false))
+    throw new InvalidOperationException("Trait superset candidate was incorrectly pruned.");
+
+if (CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.None, false,
+        SearchRouteTraits.None, true))
+    throw new InvalidOperationException("Route with more future potion options did not dominate.");
+
+if (!CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.None, true,
+        SearchRouteTraits.None, false))
+    throw new InvalidOperationException("Route with fewer future potion options incorrectly dominated.");
+
+if (!CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.None, false,
+        SearchRouteTraits.None, false,
+        firstProgress: 1, nextProgress: 2)
+    || !CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.None, false,
+        SearchRouteTraits.None, false,
+        firstProgress: 2, nextProgress: 1))
+    throw new InvalidOperationException("Different combat-progress histories were incorrectly merged.");
+
+if (!CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.None, false,
+        SearchRouteTraits.None, false,
+        firstBoundary: SearchBoundaryReason.None,
+        nextBoundary: SearchBoundaryReason.UnsupportedEffect)
+    || !CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.None, false,
+        SearchRouteTraits.None, false,
+        firstBoundary: SearchBoundaryReason.PendingChoice,
+        nextBoundary: SearchBoundaryReason.None))
+    throw new InvalidOperationException("Different search boundaries were incorrectly merged.");
+
+if (!CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.None, false,
+        SearchRouteTraits.None, false,
+        firstPlayerDead: true, nextPlayerDead: false)
+    || !CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.None, false,
+        SearchRouteTraits.None, false,
+        firstPlayerDead: false, nextPlayerDead: true))
+    throw new InvalidOperationException("Live and defeated routes were incorrectly merged.");
+
+if (!CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.None, false,
+        SearchRouteTraits.None, false,
+        firstAllEnemiesDead: true, nextAllEnemiesDead: false)
+    || !CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.None, false,
+        SearchRouteTraits.None, false,
+        firstAllEnemiesDead: false, nextAllEnemiesDead: true))
+    throw new InvalidOperationException("Victory and non-victory routes were incorrectly merged.");
+
+if (!CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.None, false,
+        SearchRouteTraits.None, false,
+        firstRiskMethod: "AfterDeath",
+        nextRiskMethod: "OtherRisk")
+    || !CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.None, false,
+        SearchRouteTraits.None, false,
+        firstRiskMethod: "OtherRisk",
+        nextRiskMethod: "AfterDeath"))
+    throw new InvalidOperationException("Different prediction-risk histories were incorrectly merged.");
+
+Console.WriteLine(JsonSerializer.Serialize(new { status = "Passed", cases, entries, retained_tie_cases = 3, transposition_path_cases = 16, runtime = Environment.Version.ToString(), scope = "Extracted production ranking plus retained-order and path-sensitive transposition contracts" }));

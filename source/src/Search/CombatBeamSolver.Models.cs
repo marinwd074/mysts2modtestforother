@@ -244,14 +244,28 @@ internal sealed partial class CombatBeamSolver
             Transpositions = [];
             foreach (SearchNode node in frontier)
             {
-                Transpositions[node.StateKey] = new TranspositionFrontier(
-                    new TranspositionLabel(
-                        node.PotionCount,
-                        node.PotionStrategicCost,
-                        node.FutureSoldHp,
-                        node.Snapshot.CumulativePlayerHpLost,
-                        node.ActionCount,
-                        node.Score));
+                // Cross-turn probes are bounded scheduling lanes, not ordinary state representatives.
+                // Keeping them out also prevents a rebuilt cache from letting a probe prune a normal route.
+                if (node.CrossTurnProbe != null)
+                    continue;
+                TranspositionLabel label = new(
+                    node.PotionCount,
+                    node.PotionStrategicCost,
+                    node.FutureSoldHp,
+                    node.Snapshot.CumulativePlayerHpLost,
+                    node.ActionCount,
+                    node.Score,
+                    node.Traits,
+                    node.HasNonPotionAction,
+                    node.BoundaryReason,
+                    node.Snapshot.PlayerDead,
+                    node.Snapshot.AllEnemiesDead,
+                    node.Snapshot.PredictionGaps,
+                    node.CombatProgress);
+                if (Transpositions.TryGetValue(node.StateKey, out TranspositionFrontier? existing))
+                    _ = existing.TryAccept(label);
+                else
+                    Transpositions.Add(node.StateKey, new TranspositionFrontier(label));
             }
             ExpandedTranspositions = [];
             StandPatCache = [];

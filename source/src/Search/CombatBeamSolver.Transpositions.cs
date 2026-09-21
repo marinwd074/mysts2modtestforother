@@ -8,7 +8,14 @@ internal sealed partial class CombatBeamSolver
         int FutureSoldHp,
         int CumulativePlayerHpLost,
         int ActionCount,
-        double Score);
+        double Score,
+        SearchRouteTraits Traits,
+        bool HasNonPotionAction,
+        SearchBoundaryReason BoundaryReason,
+        bool PlayerDead,
+        bool AllEnemiesDead,
+        IReadOnlyList<PredictionGap> PredictionGaps,
+        CombatProgressState CombatProgress);
 
     private sealed class TranspositionFrontier(TranspositionLabel first)
     {
@@ -50,7 +57,14 @@ internal sealed partial class CombatBeamSolver
                 && left.FutureSoldHp <= right.FutureSoldHp
                 && left.CumulativePlayerHpLost <= right.CumulativePlayerHpLost
                 && left.ActionCount <= right.ActionCount
-                && left.Score >= right.Score;
+                && left.Score >= right.Score
+                && (left.Traits & right.Traits) == right.Traits
+                && (!left.HasNonPotionAction || right.HasNonPotionAction)
+                && left.BoundaryReason == right.BoundaryReason
+                && left.PlayerDead == right.PlayerDead
+                && left.AllEnemiesDead == right.AllEnemiesDead
+                && left.PredictionGaps.SequenceEqual(right.PredictionGaps)
+                && left.CombatProgress == right.CombatProgress;
     }
 
 }
