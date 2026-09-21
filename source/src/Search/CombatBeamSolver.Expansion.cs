@@ -3632,10 +3632,13 @@ internal sealed partial class CombatBeamSolver
             Snapshot: null!,
             CombatProgress: null!,
             Cycle: coarseCycle);
+        CombatProgressState transpositionProgress = CombatProgressState.Capture(snapshot);
         TranspositionLabel dominating = new(
-            0, 0, 0, 0, 1, 10, SearchRouteTraits.None, HasNonPotionAction: false);
+            0, 0, 0, 0, 1, 10, SearchRouteTraits.None, HasNonPotionAction: false,
+            transpositionProgress);
         TranspositionLabel dominated = new(
-            0, 0, 0, 0, 2, 9, SearchRouteTraits.None, HasNonPotionAction: false);
+            0, 0, 0, 0, 2, 9, SearchRouteTraits.None, HasNonPotionAction: false,
+            transpositionProgress);
 
         if (!ShouldDeferCycleTranspositionUntilActionAdmission(candidate)
             || HasCycleAdmissionTranspositionLease(candidate)
@@ -3814,7 +3817,8 @@ internal sealed partial class CombatBeamSolver
             candidate.ActionCount,
             candidate.Score,
             candidate.Traits,
-            candidate.HasNonPotionAction);
+            candidate.HasNonPotionAction,
+            candidate.CombatProgress);
         if (!_run.Transpositions.TryGetValue(candidate.StateKey, out TranspositionFrontier? frontier))
         {
             _run.Transpositions.Add(candidate.StateKey, new TranspositionFrontier(next));
@@ -3863,7 +3867,8 @@ internal sealed partial class CombatBeamSolver
             node.ActionCount,
             node.Score,
             node.Traits,
-            node.HasNonPotionAction);
+            node.HasNonPotionAction,
+            node.CombatProgress);
         if (!_run.ExpandedTranspositions.TryGetValue(node.StateKey, out TranspositionFrontier? frontier))
         {
             _run.ExpandedTranspositions.Add(node.StateKey, new TranspositionFrontier(next));

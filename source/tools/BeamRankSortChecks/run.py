@@ -37,6 +37,7 @@ for name in fields + ['OffensiveProgressValue']:
         raise RuntimeError(f'Update probe for changed snapshot field: {name}')
 classes = '''namespace CombatSolver;
 ''' + route_traits + '''
+internal sealed record CombatProgressState(int Stable);
 internal sealed class SearchNode {
 public double Score;
 public int ActionCount;
@@ -79,12 +80,16 @@ internal sealed partial class CombatBeamSolver
         SearchRouteTraits firstTraits,
         bool firstHasNonPotionAction,
         SearchRouteTraits nextTraits,
-        bool nextHasNonPotionAction)
+        bool nextHasNonPotionAction,
+        int firstProgress = 0,
+        int nextProgress = 0)
     {
         TranspositionLabel first = new(
-            0, 0, 0, 0, 1, 10, firstTraits, firstHasNonPotionAction);
+            0, 0, 0, 0, 1, 10, firstTraits, firstHasNonPotionAction,
+            new CombatProgressState(firstProgress));
         TranspositionLabel next = new(
-            0, 0, 0, 0, 1, 10, nextTraits, nextHasNonPotionAction);
+            0, 0, 0, 0, 1, 10, nextTraits, nextHasNonPotionAction,
+            new CombatProgressState(nextProgress));
         return new TranspositionFrontier(first).TryAccept(next);
     }
 }

@@ -253,4 +253,15 @@ TranspositionFrontier.TryAccept 恢复完整 nondominated frontier。BeamRankSor
 Transpositions.cs，覆盖 6 组 path-sensitive dominance 合同。以上两项属于 solver 确定性/剪枝正确性修复，
 不新增 0.107.1 版本 mismatch；当前 route-affecting mismatch 计数保持 46。
 
+最终收尾扫描第七小批继续审计 StateKey 外的 path-only 状态。CrossTurnProbe 传播链确认仍由
+AttachCycleSchedulingEvidence → AttachCrossTurnSchedulingEvidence 保持，未发现传播断链；CumulativeEnemyHpLost /
+TurnOutcome 只用于最终路线报告，不参与未来合法动作。新发现并修复 CombatProgressState 的转置遗漏：
+它保存约 28 项历史最好/最低进展基线与 TurnsWithoutProgress，后续 Advance/ShouldPruneCrossTurnNoProgress
+会据此判断“下一回合是否有进展”和何时停止无进展路线。旧 TranspositionLabel 未携带该历史，因此两个
+当前 StateKey 相同但进展历史不同的节点可能互相支配，导致剩余无进展预算不同的路线被误剪。现在只有
+CombatProgressState 值相等时才允许转置支配；ResetRebuildableCaches 与 admission/expanded 两张转置表均
+传入同一进展状态。BeamRankSortChecks 的生产代码抽取合同扩展到 8 组，新增双向“不同 progress 不得合并”。
+此项是 solver 剪枝正确性修复，不新增 0.107.1 版本 mismatch；计数仍为 46。Cross-turn probe/baseline 的
+更细调度身份留给下一小批单独审计，避免本批过度放宽转置。
+
 已完成的 Power、continuation、死亡生命周期和 78/78 卡牌 OnPlay 数值不重复展开；多人牌仍暂不作为当前 blocker。
