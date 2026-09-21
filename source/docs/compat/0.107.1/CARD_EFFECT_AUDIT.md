@@ -22,7 +22,7 @@ replace the native-vs-predicted runtime differential.
 
 ## Corrected version drift
 
-Seven route-affecting mismatches were confirmed in the first pass:
+Six route-affecting mismatches were confirmed in the first pass:
 
 | Card | 0.107.1 native behavior | Incorrect solver behavior | Correction |
 |---|---|---|---|
@@ -45,7 +45,7 @@ cannot erase or silently mismatch the next trigger.
 The initial pass also checked several special cases that already match the
 0.107.1 assembly and were left unchanged: No Escape, Synchronize, Hang,
 The Scythe, Spite, Heavenly Drill, Glacier, Meteor Strike, Refract,
-Predator, and Bouncing Flask.
+Fight Through, Predator, and Bouncing Flask.
 
 Choice-driven cards must be compared across the whole solver pipeline rather
 than one OnPlay switch. For example, Brand's exhaust choice and post-choice

@@ -404,7 +404,7 @@ internal static class CardEffectSpecRegistry
                 break;
             }
             case FightThrough:
-                AddFixed<Wound>(simulator, card, PileType.Discard, 1);
+                AddFixed<Wound>(simulator, card, PileType.Discard, 2);
                 applied = true;
                 break;
             case GraveWarden:

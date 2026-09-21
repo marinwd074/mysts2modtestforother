@@ -1766,11 +1766,11 @@ if ($fightThroughStart -lt 0 -or $fightThroughEnd -le $fightThroughStart) {
 }
 else {
     $fightThroughBlock = $cardEffectSpecText.Substring($fightThroughStart, $fightThroughEnd - $fightThroughStart)
-    if (-not $fightThroughBlock.Contains('AddFixed<Wound>(simulator, card, PileType.Discard, 1)')) {
-        $violations.Add("${cardEffectSpecPath}: 0.107.1 Fight Through must generate exactly one Wound")
+    if (-not $fightThroughBlock.Contains('AddFixed<Wound>(simulator, card, PileType.Discard, 2)')) {
+        $violations.Add("${cardEffectSpecPath}: 0.107.1 Fight Through must generate exactly two Wounds")
     }
-    if ($fightThroughBlock.Contains('PileType.Discard, 2')) {
-        $violations.Add("${cardEffectSpecPath}: later-version Fight Through two-Wound behavior returned")
+    if ($fightThroughBlock.Contains('PileType.Discard, 1')) {
+        $violations.Add("${cardEffectSpecPath}: incorrect one-Wound Fight Through behavior returned")
     }
 }
 
