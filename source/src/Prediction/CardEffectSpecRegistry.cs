@@ -359,7 +359,7 @@ internal static class CardEffectSpecRegistry
             {
                 combat.Apply<TankPower>(ownerCreature, 1, ownerCreature);
                 foreach (Creature teammate in combat.GetTeammatesOf(ownerCreature)
-                             .Where(creature => creature.IsAlive
+                             .Where(creature => simulator.State.GetCreature(creature).IsAlive
                                  && creature.IsPlayer
                                  && !ReferenceEquals(creature, ownerCreature)))
                 {
