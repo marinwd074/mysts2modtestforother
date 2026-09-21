@@ -281,4 +281,11 @@ expanded table 和 ResetRebuildableCaches 均传入节点 boundary。BeamRankSor
 不得合并合同，总数扩展到 10 组。HasPredictionRisk 当前只确认用于风险摘要，未发现改变合法动作或最终
 排序，因此本批不扩大转置键。该项是 solver 剪枝正确性修复，不新增 0.107.1 版本 mismatch；计数仍为 46。
 
+CI 门禁专项排查：最后一次完整成功 run 为 805ad8d（35610137901），约 4 分钟后的 58f56c9
+开始两个 job 同时出现 steps=null，之后持续如此；失败 job 连日志 blob 都不存在，而成功 job 有正常
+windows-2025 hosted runner 日志，说明失败发生在 checkout/脚本执行之前。workflow 本身未依赖 self-hosted
+runner。static-consistency 只使用 PowerShell 7/source/XML/git 检查，现改到 ubuntu-latest；contract-tests
+暂留 windows-latest，因为 MultiplayerSnapshotChecks 明确使用 WINDIR/System32/cmd.exe 和 Windows 路径语义。
+这样不削弱任何门禁，同时可区分“Windows runner 分配异常”和“账户级 Actions 配额/账单拒绝”。
+
 已完成的 Power、continuation、死亡生命周期和 78/78 卡牌 OnPlay 数值不重复展开；多人牌仍暂不作为当前 blocker。
