@@ -12,6 +12,7 @@ not silently reinterpreted as 0.107.1 results.
 | Hook/patch coverage | [HOOK_COVERAGE.md](HOOK_COVERAGE.md) |
 | Native-vs-predicted differential | [NATIVE_DIFFERENTIAL.md](NATIVE_DIFFERENTIAL.md) |
 | Game-mechanics baseline | [GAME_MECHANICS_BASELINE.md](GAME_MECHANICS_BASELINE.md) |
+| 0.107.1 multiplayer-card coverage | [MULTIPLAYER_CARD_COVERAGE.md](MULTIPLAYER_CARD_COVERAGE.md) |
 | Card-effect source audit | [CARD_EFFECT_AUDIT.md](CARD_EFFECT_AUDIT.md) |
 | First-turn and incremental search | [SEARCH_SMOKE.md](SEARCH_SMOKE.md) |
 | Native turn setup | [TURN_SETUP_SMOKE.md](TURN_SETUP_SMOKE.md) |

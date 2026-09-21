@@ -63,7 +63,12 @@ cannot erase or silently mismatch the next trigger.
 The initial pass also checked several special cases that already match the
 0.107.1 assembly and were left unchanged: No Escape, Synchronize, Hang,
 The Scythe, Spite, Heavenly Drill, Glacier, Meteor Strike, Refract,
-Fight Through, Predator, and Bouncing Flask.
+Fight Through, Predator, Bouncing Flask, Gang Up, Lift, Rally, and Tag Team.
+
+The multiplayer-card result is tracked separately in
+[`MULTIPLAYER_CARD_COVERAGE.md`](MULTIPLAYER_CARD_COVERAGE.md). "Checked
+match" there means source semantics were compared and no mismatch was found;
+it does not claim a Host/Client native differential.
 
 Choice-driven cards must be compared across the whole solver pipeline rather
 than one OnPlay switch. For example, Brand's exhaust choice and post-choice
