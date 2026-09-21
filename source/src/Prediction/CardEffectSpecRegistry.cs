@@ -44,6 +44,7 @@ internal static class CardEffectSpecRegistry
         [typeof(DyingStar)] = [AllEnemies<DyingStarPower>("StrengthLoss")],
         [typeof(Equilibrium)] = [Owner<RetainHandPower>("Equilibrium")],
         [typeof(ExpectAFight)] = [Owner<NoEnergyGainPower>(_ => 1)],
+        [typeof(Flanking)] = [Target<FlankingPower>(_ => 2)],
         [typeof(FlameBarrier)] = [Owner<FlameBarrierPower>("DamageBack")],
         [typeof(FocusedStrike)] = [Owner<FocusedStrikePower>("FocusPower")],
         [typeof(Glow)] = [Owner<DrawCardsNextTurnPower>(card => card.DynamicVars.Cards.IntValue)],

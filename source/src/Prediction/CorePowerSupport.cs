@@ -775,6 +775,15 @@ internal static class CorePowerSupport
         IEnumerable<Creature> participants)
     {
         HashSet<Creature> participantSet = participants.ToHashSet();
+        foreach (FlankingPower flanking in combat.EffectivePowers()
+                     .OfType<FlankingPower>()
+                     .Where(power => power.Amount != 0 && participantSet.Contains(power.Owner))
+                     .ToArray())
+        {
+            simulator.StateStore.GetPowerAmount(flanking).Consume();
+            combat.SetPowerAmount(flanking, 0);
+        }
+
         foreach (Creature creature in combat.Creatures)
         {
             if (creature.Side != side && combat.GetAmount<FlameBarrierPower>(creature) > 0)

@@ -88,6 +88,7 @@ internal static class ModifyDamageMirrors
     {
         var registry = new Registry(ModifyDamageMultiplicative);
 
+        registry.Register<FlankingPower>(HandleFlankingPower);
         registry.Register<FlutterPower>(HandleFlutterPower);
         registry.Register<GigantificationPower>(GigantificationPowerMirrors.ModifyDamageMultiplicative);
         registry.Register<ColossusPower>(HandleColossusPower);
@@ -102,6 +103,18 @@ internal static class ModifyDamageMirrors
         registry.Register<UndyingSigil>(HandleUndyingSigil);
 
         return registry;
+    }
+
+    private static decimal HandleFlankingPower(FlankingPower power, ModifyDamageMirrorContext context)
+    {
+        if (context.Target != power.Owner
+            || !context.Props.IsPoweredAttack()
+            || context.Dealer == power.Applier)
+        {
+            return 1;
+        }
+
+        return power.Amount;
     }
 
     private static decimal HandleFlutterPower(FlutterPower power, ModifyDamageMirrorContext context)

@@ -709,6 +709,14 @@ internal sealed partial class SimulatedCombatState
                 throw new InvalidOperationException("击倒 Power 的施加者不是战斗中的玩家。");
             ((StringVar)knockdown.DynamicVars["Applier"]).StringValue = _playerNames[applyingPlayer];
         }
+        if (simulated is FlankingPower flanking && applier != null)
+        {
+            Player? applyingPlayer = applier.Player
+                ?? Players.FirstOrDefault(player => player.Creature.CombatId == applier.CombatId);
+            if (applyingPlayer == null)
+                throw new InvalidOperationException("侧翼夹击 Power 的施加者不是战斗中的玩家。");
+            ((StringVar)flanking.DynamicVars["Applier"]).StringValue = _playerNames[applyingPlayer];
+        }
         afterAmountChanged?.Invoke(amount, simulated);
         if (previousAmount == 0 && simulated._amount != 0 && simulated is PhantomBladesPower phantom)
             PhantomBladesPowerMirrors.AfterApplied(phantom, _predictionState

@@ -1891,6 +1891,48 @@ else {
     }
 }
 
+
+$flankingSpec = '[typeof(Flanking)] = [Target<FlankingPower>(_ => 2)]'
+if (-not $cardEffectSpecText.Contains($flankingSpec)) {
+    $violations.Add("${cardEffectSpecPath}: 0.107.1 Flanking must apply an instanced FlankingPower amount 2 to its target")
+}
+if (-not $damageMirrorText.Contains('registry.Register<FlankingPower>(HandleFlankingPower);')) {
+    $violations.Add("${damageMirrorPath}: FlankingPower damage multiplier mirror is missing")
+}
+$flankingDamageStart = $damageMirrorText.IndexOf('private static decimal HandleFlankingPower')
+$flankingDamageEnd = $damageMirrorText.IndexOf('private static decimal HandleFlutterPower', $flankingDamageStart)
+if ($flankingDamageStart -lt 0 -or $flankingDamageEnd -le $flankingDamageStart) {
+    $violations.Add("${damageMirrorPath}: FlankingPower multiplier handler boundary is missing")
+}
+else {
+    $flankingDamageBlock = $damageMirrorText.Substring($flankingDamageStart, $flankingDamageEnd - $flankingDamageStart)
+    foreach ($requiredFlankingDamage in @(
+        'context.Target != power.Owner',
+        '!context.Props.IsPoweredAttack()',
+        'context.Dealer == power.Applier',
+        'return power.Amount;')) {
+        if (-not $flankingDamageBlock.Contains($requiredFlankingDamage)) {
+            $violations.Add("${damageMirrorPath}: missing 0.107.1 Flanking damage rule '$requiredFlankingDamage'")
+        }
+    }
+}
+$simulatedCombatText = [IO.File]::ReadAllText($simulatedCombatPath)
+if (-not $simulatedCombatText.Contains('simulated is FlankingPower flanking && applier != null')
+    -or -not $simulatedCombatText.Contains('flanking.DynamicVars["Applier"]')) {
+    $violations.Add("${simulatedCombatPath}: Flanking application must preserve the native applier display state")
+}
+$corePowerSupportPath = Join-Path $repositoryRoot 'src/Prediction/CorePowerSupport.cs'
+$corePowerSupportText = [IO.File]::ReadAllText($corePowerSupportPath)
+foreach ($requiredFlankingExpiry in @(
+    '.OfType<FlankingPower>()',
+    'participantSet.Contains(power.Owner)',
+    'StateStore.GetPowerAmount(flanking).Consume()',
+    'combat.SetPowerAmount(flanking, 0)')) {
+    if (-not $corePowerSupportText.Contains($requiredFlankingExpiry)) {
+        $violations.Add("${corePowerSupportPath}: missing 0.107.1 Flanking end-of-side removal '$requiredFlankingExpiry'")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."
