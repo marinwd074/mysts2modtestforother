@@ -28,11 +28,12 @@ replace the native-vs-predicted runtime differential.
 
 ## Corrected version drift
 
-Forty route-affecting mismatches have been confirmed in the 0.107.1 source audit:
+Forty-one route-affecting mismatches have been confirmed in the 0.107.1 source audit:
 
 | Card | 0.107.1 native behavior | Incorrect solver behavior | Correction |
 |---|---|---|---|
 | Tracking | first play applies TrackingPower 2, later plays +1; against Weak targets the power amount is the damage multiplier | applied 50 and interpreted it as percentage bonus | use 2 then +1 and multiply by the branch power amount |
+| Big Bang | after its draw finishes, gains Stars, then Energy, then Forges; `AfterStarsGained` completes before the Energy/Forge suffix | gained Energy before Stars, so a star-gain hook that suspended could observe post-star Energy too early | preserve the native Stars -> Energy -> Forge order and keep Energy/Forge untouched when the star hook suspends |
 | Sacrifice | calculates block as 2x the living Osty's max HP, then kills Osty and gains that block | both the OnPlay mirror and calculated-var registry had x3 drift | restore x2 in both execution and calculated-variable paths |
 | Haze | applies Poison to all hittable enemies; upgrade increases Poison | also applied Weak | remove the Weak application |
 | Outbreak | applies OutbreakPower 11/15; every third positive Poison application by the owner deals that amount as Unpowered damage to all hittable enemies | immediately applied Poison to all enemies and triggered Poison damage when the card was played | restore the persistent power, its hidden 0/1/2 poison counter, and its third-application damage trigger |
@@ -256,7 +257,8 @@ fork-safe execution frames keep their localized continuation path.
 The initial pass also checked several special cases that already match the
 0.107.1 assembly and were left unchanged: No Escape, Synchronize, Hang,
 The Scythe, Spite, Heavenly Drill, Glacier, Meteor Strike, Refract,
-Fight Through, Predator, Bouncing Flask, Gang Up, Lift, Rally, and Tag Team, and Pillar of Creation.
+Fight Through, Predator, Bouncing Flask, Gang Up, Lift, Rally, Tag Team,
+Pillar of Creation, Summon Forth, Seeking Edge, and Juggling.
 
 The multiplayer-card result is tracked separately in
 [`MULTIPLAYER_CARD_COVERAGE.md`](MULTIPLAYER_CARD_COVERAGE.md). "Checked
