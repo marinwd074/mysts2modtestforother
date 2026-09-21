@@ -31,7 +31,7 @@ internal static partial class CardOnPlaySupport
                 ApplyDirge(simulator, combat, card);
                 break;
             case Eidolon:
-                ApplyEidolon(simulator, combat, card);
+                ApplyEidolon(simulator, combat, playedCard);
                 break;
             case KnifeTrap when target != null:
                 ApplyKnifeTrap(simulator, combat, card, target, processedEnemyDeaths);
@@ -107,22 +107,67 @@ internal static partial class CardOnPlaySupport
     private static void ApplyEidolon(
         CombatPredictionSimulator simulator,
         SimulatedCombatState combat,
-        CardModel card)
+        PredictedCard playedCard)
     {
-        PredictedCard[] cards = simulator.State.GetPlayerCombatState(card.Owner)
+        // This compensation runs inside the card-effect dispatch. Exhaust hooks can open
+        // a choice, so keep the adapted suffix eligible for execution continuation.
+        simulator.AcknowledgeExecutionDispatch();
+
+        PredictedCard[] cards = simulator.State.GetPlayerCombatState(playedCard.Preview.Owner)
             .Hand.Cards
             .ToArray();
-        int exhaustedCount = 0;
-        foreach (PredictedCard candidate in cards)
+        _ = ContinueEidolon(simulator, combat, playedCard, cards, 0, 0);
+    }
+
+    private static bool ContinueEidolon(
+        CombatPredictionSimulator simulator,
+        SimulatedCombatState combat,
+        PredictedCard playedCard,
+        IReadOnlyList<PredictedCard> cards,
+        int nextIndex,
+        int exhaustedCount)
+    {
+        for (int index = nextIndex; index < cards.Count; index++)
         {
-            simulator.Exhaust(candidate);
-            if (simulator.HasPendingChoice)
-                return;
+            simulator.Exhaust(cards[index]);
             exhaustedCount++;
+            if (simulator.HasPendingChoice)
+            {
+                simulator.AppendExecutionContinuation(
+                    new EidolonExecutionFrame(playedCard, cards, index + 1, exhaustedCount));
+                return false;
+            }
         }
 
         if (exhaustedCount >= 9)
-            combat.Apply<IntangiblePower>(card.Owner.Creature, 1, card.Owner.Creature);
+        {
+            Creature owner = playedCard.Preview.Owner.Creature;
+            combat.Apply<IntangiblePower>(owner, 1, owner);
+        }
+        return !simulator.HasPendingChoice;
+    }
+
+    private sealed record EidolonExecutionFrame(
+        PredictedCard PlayedCard,
+        IReadOnlyList<PredictedCard> Cards,
+        int NextIndex,
+        int ExhaustedCount) : ICombatPredictionExecutionFrame
+    {
+        public ICombatPredictionExecutionFrame Fork(PredictionForkContext context)
+            => this with
+            {
+                PlayedCard = context.RequireRemap(PlayedCard),
+                Cards = Cards.Select(card => context.RequireRemap(card)).ToArray(),
+            };
+
+        public bool Resume(CombatPredictionSimulator simulator)
+            => ContinueEidolon(
+                simulator,
+                (SimulatedCombatState)simulator.State.CombatState,
+                PlayedCard,
+                Cards,
+                NextIndex,
+                ExhaustedCount);
     }
 
     private static void ApplyKnifeTrap(

@@ -1747,13 +1747,30 @@ else {
     $eidolonBlock = $batch043Text.Substring($eidolonStart, $eidolonEnd - $eidolonStart)
     foreach ($requiredEidolonRule in @(
         '.Hand.Cards',
-        'simulator.Exhaust(candidate)',
+        'simulator.AcknowledgeExecutionDispatch()',
+        'ContinueEidolon(',
+        'simulator.Exhaust(cards[index])',
         'exhaustedCount++',
+        'simulator.AppendExecutionContinuation(',
+        'new EidolonExecutionFrame(',
         'exhaustedCount >= 9',
-        'combat.Apply<IntangiblePower>')) {
+        'combat.Apply<IntangiblePower>',
+        'PlayedCard = context.RequireRemap(PlayedCard)',
+        'Cards = Cards.Select(card => context.RequireRemap(card)).ToArray()')) {
         if (-not $eidolonBlock.Contains($requiredEidolonRule)) {
             $violations.Add("${batch043Path}: missing 0.107.1 Eidolon rule '$requiredEidolonRule'")
         }
+    }
+    $eidolonExhaustIndex = $eidolonBlock.IndexOf('simulator.Exhaust(cards[index])')
+    $eidolonCountIndex = $eidolonBlock.IndexOf('exhaustedCount++', $eidolonExhaustIndex)
+    $eidolonPendingIndex = $eidolonBlock.IndexOf('if (simulator.HasPendingChoice)', $eidolonCountIndex)
+    if ($eidolonExhaustIndex -lt 0 -or
+        $eidolonCountIndex -le $eidolonExhaustIndex -or
+        $eidolonPendingIndex -le $eidolonCountIndex) {
+        $violations.Add("${batch043Path}: Eidolon must carry the completed Exhaust into its continuation count before suspending")
+    }
+    if (-not $batch043Text.Contains('ApplyEidolon(simulator, combat, playedCard);')) {
+        $violations.Add("${batch043Path}: Eidolon continuation must retain the prediction-owned played card")
     }
     if ($eidolonBlock.Contains('.ExhaustPile.Cards') -or
         $eidolonBlock.Contains('CardExecutionSupport.AutoPlay') -or
