@@ -199,8 +199,6 @@ internal static class OrbCardMirrors
         {
             context.Simulator.OrbChannel<GlassOrb>(card.Owner);
         }
-
-        // Vanilla applies SpinnerPower after optional channeling, which is not simulated here.
     }
 
     public static void TempestOnPlay(Tempest card, CardOnPlayMirrorContext context)

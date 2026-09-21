@@ -77,6 +77,7 @@ internal static class CardEffectSpecRegistry
         [typeof(SetupStrike)] = [Owner<SetupStrikePower>(card => card.DynamicVars.Strength.IntValue)],
         [typeof(SicEm)] = [Target<SicEmPower>("SicEmPower")],
         [typeof(Sneaky)] = [Owner<SneakyPower>("SneakyPower")],
+        [typeof(Spinner)] = [Owner<SpinnerPower>("SpinnerPower")],
         [typeof(Strangle)] = [Target<StranglePower>("StranglePower")],
         [typeof(Synthesis)] = [Owner<FreePowerPower>(_ => 1)],
         [typeof(TagTeam)] = [Target<TagTeamPower>(_ => 1)],
