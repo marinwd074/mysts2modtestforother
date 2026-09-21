@@ -1793,6 +1793,49 @@ if (-not $scareCardEffectSpecText.Contains('[typeof(Scare)] = [AllEnemies<WeakPo
     $violations.Add("${scareCardEffectSpecPath}: 0.107.1 Scare must apply 1 Weak to every hittable enemy")
 }
 
+$shiningStrikeSpecPath = Join-Path $repositoryRoot 'src/Prediction/CardEffectSpecRegistry.cs'
+$shiningStrikeSpecText = [IO.File]::ReadAllText($shiningStrikeSpecPath)
+$shiningStrikeStart = $shiningStrikeSpecText.IndexOf('case ShiningStrike:')
+$shiningStrikeEnd = $shiningStrikeSpecText.IndexOf('case SolarStrike:', $shiningStrikeStart)
+if ($shiningStrikeStart -lt 0 -or $shiningStrikeEnd -le $shiningStrikeStart) {
+    $violations.Add("${shiningStrikeSpecPath}: Shining Strike 0.107.1 effect boundary is missing")
+}
+else {
+    $shiningStrikeBlock = $shiningStrikeSpecText.Substring(
+        $shiningStrikeStart,
+        $shiningStrikeEnd - $shiningStrikeStart)
+    foreach ($requiredShiningStrikeRule in @(
+        'simulator.GainStars(card.Owner, card.DynamicVars.Stars.IntValue)',
+        'new ShiningStrikeExecutionFrame(playedCard)',
+        'ReturnShiningStrikeToDrawPile(simulator, playedCard)')) {
+        if (-not $shiningStrikeBlock.Contains($requiredShiningStrikeRule)) {
+            $violations.Add("${shiningStrikeSpecPath}: missing 0.107.1 Shining Strike rule '$requiredShiningStrikeRule'")
+        }
+    }
+}
+$shiningStrikeHelperStart = $shiningStrikeSpecText.IndexOf('private static void ReturnShiningStrikeToDrawPile')
+$shiningStrikeHelperEnd = $shiningStrikeSpecText.IndexOf('private static void SpreadDebuffs', $shiningStrikeHelperStart)
+if ($shiningStrikeHelperStart -lt 0 -or $shiningStrikeHelperEnd -le $shiningStrikeHelperStart) {
+    $violations.Add("${shiningStrikeSpecPath}: Shining Strike Draw-top helper boundary is missing")
+}
+else {
+    $shiningStrikeHelper = $shiningStrikeSpecText.Substring(
+        $shiningStrikeHelperStart,
+        $shiningStrikeHelperEnd - $shiningStrikeHelperStart)
+    foreach ($requiredShiningStrikeHelperRule in @(
+        'HasKeyword(simulator.State, CardKeyword.Exhaust)',
+        '!playedCard.Preview.ExhaustOnNextPlay',
+        'AddToPile(playedCard, PileType.Draw, CardPilePosition.Top)',
+        'context.RequireRemap(Card)')) {
+        if (-not $shiningStrikeHelper.Contains($requiredShiningStrikeHelperRule)) {
+            $violations.Add("${shiningStrikeSpecPath}: missing Shining Strike helper rule '$requiredShiningStrikeHelperRule'")
+        }
+    }
+    if ($shiningStrikeHelper.Contains('IsDupe')) {
+        $violations.Add("${shiningStrikeSpecPath}: v0.108 Shining Strike dupe exclusion returned")
+    }
+}
+
 $generatedCardHookPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Card/AfterCardGeneratedForCombatMirrors.cs'
 $generatedCardHookText = [IO.File]::ReadAllText($generatedCardHookPath)
 $regaliteStart = $generatedCardHookText.IndexOf('private static void HandleRegalite')

@@ -251,7 +251,16 @@ internal static class CardEffectSpecRegistry
                 simulator.GainStars(card.Owner, card.DynamicVars.Stars.IntValue);
                 applied = true;
                 break;
-            case ShiningStrike or SolarStrike:
+            case ShiningStrike:
+                if (!simulator.GainStars(card.Owner, card.DynamicVars.Stars.IntValue))
+                {
+                    simulator.AppendExecutionContinuation(new ShiningStrikeExecutionFrame(playedCard));
+                    return true;
+                }
+                ReturnShiningStrikeToDrawPile(simulator, playedCard);
+                applied = true;
+                break;
+            case SolarStrike:
                 simulator.GainStars(card.Owner, card.DynamicVars.Stars.IntValue);
                 applied = true;
                 break;
@@ -488,6 +497,30 @@ internal static class CardEffectSpecRegistry
                 break;
         }
         return applied;
+    }
+
+    private static void ReturnShiningStrikeToDrawPile(
+        CombatPredictionSimulator simulator,
+        PredictedCard playedCard)
+    {
+        if (!playedCard.HasKeyword(simulator.State, CardKeyword.Exhaust)
+            && !playedCard.Preview.ExhaustOnNextPlay)
+        {
+            simulator.AddToPile(playedCard, PileType.Draw, CardPilePosition.Top);
+        }
+    }
+
+    private sealed record ShiningStrikeExecutionFrame(PredictedCard Card)
+        : ICombatPredictionExecutionFrame
+    {
+        public ICombatPredictionExecutionFrame Fork(PredictionForkContext context)
+            => this with { Card = context.RequireRemap(Card) };
+
+        public bool Resume(CombatPredictionSimulator simulator)
+        {
+            ReturnShiningStrikeToDrawPile(simulator, Card);
+            return !simulator.HasPendingChoice;
+        }
     }
 
     private static void SpreadDebuffs(SimulatedCombatState combat, Creature source)
