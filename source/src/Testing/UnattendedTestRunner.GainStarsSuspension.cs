@@ -42,6 +42,7 @@ internal sealed partial class UnattendedTestRunner
         PredictedCard blade = PredictedCard.Create(ModelDb.Card<SovereignBlade>(), player);
         fixture.Simulator.AddToPile(blade, PileType.Hand);
         decimal damageBefore = blade.Preview.DynamicVars.Damage.BaseValue;
+        int energyBefore = fixture.Simulator.State.GetPlayerCombatState(player).Energy;
         PredictedCard card = PredictedCard.Create(ModelDb.Card<BigBang>(), player);
 
         bool supported = CardEffectSpecRegistry.Apply(
@@ -57,6 +58,8 @@ internal sealed partial class UnattendedTestRunner
             fixture.Hellraiser.Id.Entry,
             PlanChoiceEffect.MoveToHand,
             "resource effect stars");
+        if (fixture.Simulator.State.GetPlayerCombatState(player).Energy != energyBefore)
+            throw new InvalidOperationException("Big Bang 在 GainStars 挂起前提前执行了后续能量获得。");
         if (blade.Preview.DynamicVars.Damage.BaseValue != damageBefore)
             throw new InvalidOperationException("资源效果在 GainStars 挂起后仍执行了后续锻造。");
     }
