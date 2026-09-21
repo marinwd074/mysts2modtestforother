@@ -97,4 +97,34 @@ stableTie.Sort(Scorer.CompareRetainedOrder);
 if (!stableTie.Select(node => node.Stable).SequenceEqual([1, 2, 3]))
     throw new InvalidOperationException("Equal retention rank/score lacks deterministic final ordering.");
 
-Console.WriteLine(JsonSerializer.Serialize(new { status = "Passed", cases, entries, retained_tie_cases = 3, runtime = Environment.Version.ToString(), scope = "Extracted production score/sort/comparison plus deterministic retained-order tie break; minimal immutable snapshot inputs" }));
+if (CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.None, false,
+        SearchRouteTraits.None, false))
+    throw new InvalidOperationException("Equivalent transposition label was not dominated.");
+
+if (!CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.Scaling, false,
+        SearchRouteTraits.Resource, false))
+    throw new InvalidOperationException("Incomparable route traits were incorrectly merged.");
+
+if (CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.Scaling | SearchRouteTraits.Resource, false,
+        SearchRouteTraits.Scaling, false))
+    throw new InvalidOperationException("Trait superset no longer dominates a subset.");
+
+if (!CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.Scaling, false,
+        SearchRouteTraits.Scaling | SearchRouteTraits.Resource, false))
+    throw new InvalidOperationException("Trait superset candidate was incorrectly pruned.");
+
+if (CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.None, false,
+        SearchRouteTraits.None, true))
+    throw new InvalidOperationException("Route with more future potion options did not dominate.");
+
+if (!CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.None, true,
+        SearchRouteTraits.None, false))
+    throw new InvalidOperationException("Route with fewer future potion options incorrectly dominated.");
+
+Console.WriteLine(JsonSerializer.Serialize(new { status = "Passed", cases, entries, retained_tie_cases = 3, transposition_path_cases = 6, runtime = Environment.Version.ToString(), scope = "Extracted production ranking plus retained-order and path-sensitive transposition contracts" }));

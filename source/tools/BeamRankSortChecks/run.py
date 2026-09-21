@@ -11,6 +11,7 @@ retention_source = (repo / 'src/Search/CombatBeamSolver.BeamRetentionPolicy.cs')
 ranking_source = (repo / 'src/Search/CombatBeamSolver.BeamRanking.cs').read_text(encoding='utf-8')
 snapshot_source = (repo / 'src/Search/CombatPlan.cs').read_text(encoding='utf-8')
 retained_source = (repo / 'src/Search/CombatBeamSolver.Retention.cs').read_text(encoding='utf-8')
+transposition_source = (repo / 'src/Search/CombatBeamSolver.Transpositions.cs').read_text(encoding='utf-8')
 
 def block(source, signature):
     start = source.index(signature)
@@ -29,11 +30,13 @@ retained = retained[:retained.index(';') + 1]
 compare = block(ranking_source, 'internal static int CompareBeamRankOrder(').replace('internal static', 'public static', 1)
 sort = block(retention_source, 'private void SortByBeamRank(List<SearchNode> ranked)').replace('private void', 'public void', 1)
 retained_compare = block(retained_source, 'private static int CompareRetainedOrder(').replace('private static', 'public static', 1)
+route_traits = block(snapshot_source, 'internal enum SearchRouteTraits')
 fields = sorted(set(re.findall(r'(?:node\.Snapshot|snapshot)\.(\w+)', score + retained)))
 for name in fields + ['OffensiveProgressValue']:
     if not re.search(r'public int ' + name + r'\s*\{', snapshot_source):
         raise RuntimeError(f'Update probe for changed snapshot field: {name}')
 classes = '''namespace CombatSolver;
+''' + route_traits + '''
 internal sealed class SearchNode {
 public double Score;
 public int ActionCount;
@@ -44,6 +47,12 @@ public int CycleRetentionRank = int.MaxValue;
 public int CycleExitRetentionRank = int.MaxValue;
 public int CrossTurnRetentionRank = int.MaxValue;
 public int Stable;
+public int PotionCount;
+public int PotionStrategicCost;
+public int FutureSoldHp;
+public int CumulativePlayerHpLost;
+public SearchRouteTraits Traits;
+public bool HasNonPotionAction;
 }
 internal sealed class SimulationSnapshot {
 '''
@@ -62,6 +71,24 @@ private static int CompareCycleCandidateDeterministicFingerprints(SearchNode lef
 '''
 classes += '\n'.join([score, retained, compare, sort, retained_compare]) + '\n}'
 (output / 'Extracted.cs').write_text(classes, encoding='utf-8')
+(output / 'Transpositions.cs').write_text(transposition_source, encoding='utf-8')
+(output / 'TranspositionProbe.cs').write_text('''namespace CombatSolver;
+internal sealed partial class CombatBeamSolver
+{
+    internal static bool TryAcceptTranspositionForCheck(
+        SearchRouteTraits firstTraits,
+        bool firstHasNonPotionAction,
+        SearchRouteTraits nextTraits,
+        bool nextHasNonPotionAction)
+    {
+        TranspositionLabel first = new(
+            0, 0, 0, 0, 1, 10, firstTraits, firstHasNonPotionAction);
+        TranspositionLabel next = new(
+            0, 0, 0, 0, 1, 10, nextTraits, nextHasNonPotionAction);
+        return new TranspositionFrontier(first).TryAccept(next);
+    }
+}
+''', encoding='utf-8')
 (output / 'Program.cs').write_bytes((repo / 'tools/BeamRankSortChecks/Program.cs').read_bytes())
 (output / 'Checks.csproj').write_text('''<Project Sdk="Microsoft.NET.Sdk">
 <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net9.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>

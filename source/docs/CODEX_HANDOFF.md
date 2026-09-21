@@ -241,7 +241,16 @@ TranspositionFrontier 的 nondominated label 接受/替换逻辑未发现新的�
 并行候选输入顺序可能因此改变后续扩展顺序。现在仅在原本完全平局时追加已有的
 CompareCycleCandidateDeterministicFingerprints（StateKey → Action → Parent）作为最终 tie-break；
 所有既有 rank/Score 优先级不变。BeamRankSortChecks 已扩展为直接抽取生产 CompareRetainedOrder，
-覆盖 rank、score 与重叠 rank 的 deterministic tie-break。此项是 solver 确定性修复，不新增
-0.107.1 route-affecting mismatch；当前总数保持 46。
+覆盖 rank、score 与重叠 rank 的 deterministic tie-break。
+
+同一批继续发现并修复 transposition 的路径语义遗漏。StateKey 只描述模拟器状态，但
+SearchRouteTraits 会决定后续 retention lane，HasNonPotionAction 还会直接禁止 RequiresOpeningUse 药水；
+旧 TranspositionLabel 没有这两项，因此相同 StateKey 的两条路径可能在未来可用动作/保留资格不同的情况下
+仍被当成互相支配。现在 label 纳入两项路径事实：只有左侧 traits 覆盖右侧全部 traits，且左侧的
+HasNonPotionAction 不比右侧更受限时才允许支配。false（尚无非药水动作）可支配 true，反向不可。
+此外 ResetRebuildableCaches 原先对重复 StateKey 直接覆盖字典，只保留最后一个 label；现在重建时通过
+TranspositionFrontier.TryAccept 恢复完整 nondominated frontier。BeamRankSortChecks 同时抽取生产
+Transpositions.cs，覆盖 6 组 path-sensitive dominance 合同。以上两项属于 solver 确定性/剪枝正确性修复，
+不新增 0.107.1 版本 mismatch；当前 route-affecting mismatch 计数保持 46。
 
 已完成的 Power、continuation、死亡生命周期和 78/78 卡牌 OnPlay 数值不重复展开；多人牌仍暂不作为当前 blocker。

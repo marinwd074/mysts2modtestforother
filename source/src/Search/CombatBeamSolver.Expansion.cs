@@ -3632,8 +3632,10 @@ internal sealed partial class CombatBeamSolver
             Snapshot: null!,
             CombatProgress: null!,
             Cycle: coarseCycle);
-        TranspositionLabel dominating = new(0, 0, 0, 0, 1, 10);
-        TranspositionLabel dominated = new(0, 0, 0, 0, 2, 9);
+        TranspositionLabel dominating = new(
+            0, 0, 0, 0, 1, 10, SearchRouteTraits.None, HasNonPotionAction: false);
+        TranspositionLabel dominated = new(
+            0, 0, 0, 0, 2, 9, SearchRouteTraits.None, HasNonPotionAction: false);
 
         if (!ShouldDeferCycleTranspositionUntilActionAdmission(candidate)
             || HasCycleAdmissionTranspositionLease(candidate)
@@ -3810,7 +3812,9 @@ internal sealed partial class CombatBeamSolver
             candidate.FutureSoldHp,
             candidate.Snapshot.CumulativePlayerHpLost,
             candidate.ActionCount,
-            candidate.Score);
+            candidate.Score,
+            candidate.Traits,
+            candidate.HasNonPotionAction);
         if (!_run.Transpositions.TryGetValue(candidate.StateKey, out TranspositionFrontier? frontier))
         {
             _run.Transpositions.Add(candidate.StateKey, new TranspositionFrontier(next));
@@ -3857,7 +3861,9 @@ internal sealed partial class CombatBeamSolver
             node.FutureSoldHp,
             node.Snapshot.CumulativePlayerHpLost,
             node.ActionCount,
-            node.Score);
+            node.Score,
+            node.Traits,
+            node.HasNonPotionAction);
         if (!_run.ExpandedTranspositions.TryGetValue(node.StateKey, out TranspositionFrontier? frontier))
         {
             _run.ExpandedTranspositions.Add(node.StateKey, new TranspositionFrontier(next));

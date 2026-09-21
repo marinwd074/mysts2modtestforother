@@ -28,6 +28,30 @@ $forbiddenSearchReferences = @(
 )
 
 $violations = [System.Collections.Generic.List[string]]::new()
+$transpositionPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Transpositions.cs'
+$transpositionText = [IO.File]::ReadAllText($transpositionPath)
+foreach ($transpositionRule in @(
+    'SearchRouteTraits Traits',
+    'bool HasNonPotionAction',
+    '(left.Traits & right.Traits) == right.Traits',
+    '(!left.HasNonPotionAction || right.HasNonPotionAction)')) {
+    if (-not $transpositionText.Contains($transpositionRule)) {
+        $violations.Add("${transpositionPath}: path-sensitive transposition dominance drifted '$transpositionRule'")
+    }
+}
+
+$transpositionModelPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Models.cs'
+$transpositionModelText = [IO.File]::ReadAllText($transpositionModelPath)
+foreach ($transpositionRebuildRule in @(
+    'node.Traits,',
+    'node.HasNonPotionAction);',
+    'Transpositions.TryGetValue(node.StateKey, out TranspositionFrontier? existing)',
+    '_ = existing.TryAccept(label);')) {
+    if (-not $transpositionModelText.Contains($transpositionRebuildRule)) {
+        $violations.Add("${transpositionModelPath}: transposition frontier rebuild drifted '$transpositionRebuildRule'")
+    }
+}
+
 $retentionOrderPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Retention.cs'
 $retentionOrderText = [IO.File]::ReadAllText($retentionOrderPath)
 foreach ($retentionOrderRule in @(
