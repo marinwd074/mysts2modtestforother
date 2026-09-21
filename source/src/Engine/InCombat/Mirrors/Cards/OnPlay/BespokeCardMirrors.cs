@@ -50,6 +50,27 @@ internal static class BespokeCardMirrors
             card.Owner,
             context.Calculate(card.DynamicVars["CalculatedEnergy"]));
 
+    public static void DemonicShieldOnPlay(DemonicShield card, CardOnPlayMirrorContext context)
+    {
+        Creature owner = card.Owner.Creature;
+        context.Simulator.Damage(
+            [owner],
+            card.DynamicVars.HpLoss.BaseValue,
+            MegaCrit.Sts2.Core.ValueProps.ValueProp.Unblockable
+            | MegaCrit.Sts2.Core.ValueProps.ValueProp.Unpowered
+            | MegaCrit.Sts2.Core.ValueProps.ValueProp.Move,
+            owner,
+            context.Card,
+            null);
+        if (context.Simulator.HasPendingChoice)
+            return;
+
+        context.GainBlock(
+            context.Target,
+            context.Calculate(card.DynamicVars.CalculatedBlock),
+            card.DynamicVars.CalculatedBlock.Props);
+    }
+
     public static void InterceptOnPlay(Intercept card, CardOnPlayMirrorContext context)
     {
         context.GainBlock(card.Owner.Creature);

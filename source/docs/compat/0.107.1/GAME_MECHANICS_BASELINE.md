@@ -229,6 +229,46 @@ recipient's own Block modifiers have run.
 **Status: gameplay and 0.107.1 implementation semantics confirmed; current
 solver hook coverage still needs a targeted audit before code changes.**
 
+### Demonic Shield
+
+Public rule: lose 1 HP, then give another player Block equal to the user's
+Block. The base card Exhausts; upgrade removes Exhaust.
+
+Reference:
+https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2%3ADemonic_Shield
+
+The pinned 0.107.1 DLL confirms the order is semantic, not presentation:
+`CreatureCmd.Damage` resolves first with Unblockable + Unpowered + Move and
+the card as source; only after that completes does `CalculatedBlock` read the
+owner's current Block and grant that amount to the selected ally. HP-loss
+listeners such as Rupture therefore resolve before the shared Block amount is
+calculated.
+
+The solver now uses a dedicated OnPlay mirror for this sequence rather than a
+generic Block recipe. Its existing branch-local Demonic Shield
+`CalculatedBlock` multiplier remains the source of the final Block amount.
+
+**Status: gameplay/DLL semantics and source implementation confirmed; focused
+multiplayer native differential still required.**
+
+### Sneaky
+
+Public rule: whenever another player plays an Attack, gain 1 Block (2 upgraded).
+
+References:
+
+- https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2%3ABuffs
+- https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2%3ABlock
+
+The pinned DLL applies `SneakyPower` to the card owner. Its
+`AfterCardPlayed` checks only that the played card belongs to a different
+creature and is an Attack, then grants `power.Amount` Unpowered Block. The
+solver's existing AfterCardPlayed mirror already matched this rule; the missing
+piece was the card's Power application, which is now explicit.
+
+**Status: gameplay/DLL semantics and source implementation confirmed; focused
+multiplayer native differential still required.**
+
 ### Hammer Time
 
 Public rule: whenever the owner Forges, all allies Forge as well.
@@ -528,6 +568,8 @@ Do not change these from public text alone:
 | Intercept | gameplay/DLL semantics confirmed; hidden covered-creature state, damage multipliers, cleanup, fingerprint and continuation support restored in solver source | reciprocal-intercept + covered-player-death native multiplayer differential |
 | Beacon of Hope | gameplay/DLL semantics confirmed; solver Block mirror already matched and card application gap has been corrected | focused native multiplayer differential for fractional/post-modifier sharing and recursion guard |
 | Hammer Time | gameplay/DLL semantics confirmed; Forge propagation and recursion suppression restored in solver source | focused multiplayer native differential covering one and multiple Hammer Time owners plus exhausted Sovereign Blades |
+| Demonic Shield | native self-damage-before-shared-Block order restored in solver source | focused multiplayer differential including Rupture/Tungsten/Block-modifier interactions |
+| Sneaky | native Power application restored; existing cross-player Attack trigger mirror matches DLL | focused multiplayer differential with remote Attack, Replay, and Shadowmeld Block modification |
 | current Tracking text | known to be later presentation | pinned DLL only for 0.107.1 values |
 | current Tank text | changed in v0.108 | pinned DLL + v0.108 delta |
 | current Haze/Outbreak/Sacrifice text | changed after 0.107.1 | pinned DLL + later patch delta |

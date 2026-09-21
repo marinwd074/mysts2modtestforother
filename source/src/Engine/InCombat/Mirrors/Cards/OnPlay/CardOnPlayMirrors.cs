@@ -78,6 +78,7 @@ internal static partial class CardOnPlayMirrors
         registry.Register<AstralPulse>(BespokeCardMirrors.AstralPulseOnPlay);
         registry.Register<BoneShards>(BespokeCardMirrors.BoneShardsOnPlay);
         registry.Register<DaggerSpray>(BespokeCardMirrors.DaggerSprayOnPlay);
+        registry.Register<DemonicShield>(BespokeCardMirrors.DemonicShieldOnPlay);
         registry.Register<PactsEnd>(BespokeCardMirrors.PactsEndOnPlay);
         registry.Register<ExpectAFight>(BespokeCardMirrors.ExpectAFightOnPlay);
         registry.Register<Intercept>(BespokeCardMirrors.InterceptOnPlay);

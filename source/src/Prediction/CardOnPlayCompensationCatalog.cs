@@ -30,7 +30,7 @@ internal static class CardOnPlayCompensationCatalog
         typeof(Bolas), typeof(Intercept), typeof(RightHandHand),
         typeof(BlightStrike), typeof(Fisticuffs),
         typeof(AllForOne), typeof(BeatIntoShape), typeof(DeathsDoor), typeof(DecisionsDecisions),
-        typeof(EvilEye), typeof(Feed), typeof(FiendFire), typeof(Flatten), typeof(Glitterstream),
+        typeof(DemonicShield), typeof(EvilEye), typeof(Feed), typeof(FiendFire), typeof(Flatten), typeof(Glitterstream),
         typeof(GoForTheEyes), typeof(HandOfGreed), typeof(HandTrick), typeof(HeirloomHammer),
         typeof(KnockoutBlow), typeof(Misery), typeof(MoltenFist), typeof(MomentumStrike),
         typeof(Sacrifice), typeof(SculptingStrike), typeof(SecondWind), typeof(SicEm), typeof(Snap),

@@ -2099,6 +2099,52 @@ if (-not $endTurnPowerText.Contains('case CoveredPower or InterceptPower when si
     $violations.Add("${endTurnPowerPath}: Covered/Intercept must expire after the enemy side turn")
 }
 
+
+$demonicShieldRegistryRule = 'registry.Register<DemonicShield>(BespokeCardMirrors.DemonicShieldOnPlay);'
+if (-not $cardOnPlayRegistryText.Contains($demonicShieldRegistryRule)) {
+    $violations.Add("${cardOnPlayRegistryPath}: 0.107.1 Demonic Shield requires its dedicated native-order OnPlay mirror")
+}
+if (-not $cardOnPlayCatalogText.Contains('typeof(DemonicShield)')) {
+    $violations.Add("${cardOnPlayCatalogPath}: Demonic Shield must remain in the compensated OnPlay catalog")
+}
+$demonicShieldStart = $bespokeOnPlayText.IndexOf('public static void DemonicShieldOnPlay')
+$demonicShieldEnd = $bespokeOnPlayText.IndexOf('public static void InterceptOnPlay', $demonicShieldStart)
+if ($demonicShieldStart -lt 0 -or $demonicShieldEnd -le $demonicShieldStart) {
+    $violations.Add("${bespokeOnPlayPath}: Demonic Shield mirror boundary is missing")
+}
+else {
+    $demonicShieldBlock = $bespokeOnPlayText.Substring($demonicShieldStart, $demonicShieldEnd - $demonicShieldStart)
+    foreach ($requiredDemonicShieldRule in @(
+        'context.Simulator.Damage(',
+        'card.DynamicVars.HpLoss.BaseValue',
+        'ValueProp.Unblockable',
+        'ValueProp.Unpowered',
+        'context.Card,',
+        'context.Calculate(card.DynamicVars.CalculatedBlock)',
+        'context.GainBlock(',
+        'context.Target')) {
+        if (-not $demonicShieldBlock.Contains($requiredDemonicShieldRule)) {
+            $violations.Add("${bespokeOnPlayPath}: missing 0.107.1 Demonic Shield rule '$requiredDemonicShieldRule'")
+        }
+    }
+}
+
+$sneakySpec = '[typeof(Sneaky)] = [Owner<SneakyPower>("SneakyPower")]'
+if (-not $cardEffectSpecText.Contains($sneakySpec)) {
+    $violations.Add("${cardEffectSpecPath}: 0.107.1 Sneaky must apply SneakyPower from its Power dynamic var")
+}
+$afterCardPlayedPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Card/AfterCardPlayedMirrors.cs'
+$afterCardPlayedText = [IO.File]::ReadAllText($afterCardPlayedPath)
+foreach ($requiredSneakyRule in @(
+    'registry.Register<SneakyPower>(HandleSneakyPower);',
+    'context.PreviewCard.Owner.Creature != power.Owner',
+    'context.PreviewCard.Type == CardType.Attack',
+    'context.Simulator.GainBlock(power.Owner, power.Amount, ValueProp.Unpowered)')) {
+    if (-not $afterCardPlayedText.Contains($requiredSneakyRule)) {
+        $violations.Add("${afterCardPlayedPath}: missing 0.107.1 Sneaky rule '$requiredSneakyRule'")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."
