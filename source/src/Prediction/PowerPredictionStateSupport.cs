@@ -13,7 +13,7 @@ internal static class PowerPredictionStateSupport
         => simulator.StateStore.Peek(power, () => new SurroundedPredictionState(power)).Facing;
 
     public static int NativeOutbreakPoisonApplications(OutbreakPower power)
-        => power.GetInternalData<OutbreakPower.Data>().timesPoisoned;
+        => power.DisplayAmount;
 
     public static int OutbreakPoisonApplications(
         CombatPredictionSimulator simulator,
