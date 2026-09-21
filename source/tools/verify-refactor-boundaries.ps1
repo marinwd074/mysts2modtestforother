@@ -271,6 +271,51 @@ foreach ($fixedCounterRule in @(
     }
 }
 
+$specialCountChecks = @(
+    @{
+        Path = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Card/ShouldPlayMirrors.cs'
+        Rules = @(
+            'return combat.GetCardPlayStartsThisTurn(normality.Owner.Creature) < 3;'
+        )
+    },
+    @{
+        Path = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Card/AfterCardDrawnMirrors.cs'
+        Rules = @(
+            'context.MutablePreviewCard.EnergyCost.SetThisCombat(context.Rng.CombatEnergyCosts.NextInt(4));',
+            'CountStatusCardsDrawnThisTurn(context.Simulator, player) <= 1'
+        )
+    },
+    @{
+        Path = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Card/BeforeCardPlayedMirrors.cs'
+        Rules = @(
+            'state.AttacksPlayed = (state.AttacksPlayed + 1) % 10;'
+        )
+    },
+    @{
+        Path = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Damage/ModifyDamageMirrors.cs'
+        Rules = @(
+            'SurroundedPower.Direction.Right when context.Dealer.HasPower<BackAttackLeftPower>() => 1.5m,',
+            'SurroundedPower.Direction.Left when context.Dealer.HasPower<BackAttackRightPower>() => 1.5m,',
+            'return state.AttackToDouble == context.CardSource.Original ? 2 : 1;',
+            'state.AttacksPlayed == 9'
+        )
+    },
+    @{
+        Path = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Card/AfterCardPlayedMirrors.cs'
+        Rules = @(
+            'if (state.AttacksPlayedThisTurn != 3)'
+        )
+    }
+)
+foreach ($specialCountCheck in $specialCountChecks) {
+    $specialCountText = [IO.File]::ReadAllText($specialCountCheck.Path)
+    foreach ($specialCountRule in $specialCountCheck.Rules) {
+        if (-not $specialCountText.Contains($specialCountRule)) {
+            $violations.Add("$($specialCountCheck.Path): audited 0.107.1 hard-coded count/multiplier drifted '$specialCountRule'")
+        }
+    }
+}
+
 if (-not $cardPowerSupportText.Contains('combat.Apply<HauntPower>(owner, card.DynamicVars.HpLoss.IntValue, owner)')) {
     $violations.Add("${cardPowerSupportPath}: Haunt 0.107.1 HP-loss amount must come from the pinned card model")
 }

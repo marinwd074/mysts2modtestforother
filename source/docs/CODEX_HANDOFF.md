@@ -189,5 +189,9 @@ Illusion 的原生移除 veto、玩家 Power 清理顺序、Orb/Pet teardown 与
 run/combat 引用只用于根捕获时主动断开 live 引用。未发现单人路径存在“读取私有状态但分支未隔离”
 的新 route-affecting mismatch，总数仍为 44。
 
-下一小批只扫剩余 solver-authored 硬编码常量与特殊计数，不重复已完成的 Power/continuation/死亡审计；
-多人牌仍暂不作为当前 blocker。
+最终收尾扫描第二小批已复核 solver-authored 硬编码常量与特殊计数：Normality 的每回合 3 张上限、
+Confused/Slither 的 0..3 能量随机范围（`NextInt(4)`）、Iteration 的“本回合第一次 Status”计数、
+Pen Nib 的 10 次循环/第 10 次双倍、Surrounded 的 1.5 倍背击，以及 Juggling 的第 3 次 Attack。
+Iteration 的当前抽牌会在 `AfterCardDrawn` 前先写入分支计数，因此 `<= 1` 没有 off-by-one。
+这些值均与 0.107.1 语义一致，已补静态护栏；未发现新的 route-affecting mismatch，总数仍为 44。
+已完成的 Power、continuation、死亡生命周期和 78/78 卡牌 OnPlay 数值不重复展开；多人牌仍暂不作为当前 blocker。
