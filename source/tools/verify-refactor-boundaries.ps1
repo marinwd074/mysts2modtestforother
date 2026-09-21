@@ -2872,6 +2872,43 @@ else {
     }
 }
 
+$attackSimulatorPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.Attack.cs'
+$attackSimulatorText = [IO.File]::ReadAllText($attackSimulatorPath)
+foreach ($boundary in @(
+    @{ Start = 'public AttackCommand BeginAttackContext(AttackCommand command)'; End = 'public void AddAttackContextHit' },
+    @{ Start = 'public void EndAttackContext(AttackCommand attackContext, bool completed = true)'; End = 'public void ExecuteAttack(AttackCommand attackCommand)' },
+    @{ Start = 'public void ExecuteAttack(AttackCommand attackCommand)'; End = '// Mirrors AttackCommand.GetPossibleTargets' })) {
+    $start = $attackSimulatorText.IndexOf($boundary.Start)
+    $end = $attackSimulatorText.IndexOf($boundary.End, $start + 1)
+    if ($start -lt 0 -or $end -le $start) {
+        $violations.Add("${attackSimulatorPath}: opaque attack boundary '$($boundary.Start)' is missing")
+        continue
+    }
+    $block = $attackSimulatorText.Substring($start, $end - $start)
+    if (-not $block.Contains('using (BeginExecutionDispatch())')) {
+        $violations.Add("${attackSimulatorPath}: '$($boundary.Start)' must reject unsafe partial execution continuations")
+    }
+}
+
+$damageSimulatorPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.Damage.cs'
+$damageSimulatorText = [IO.File]::ReadAllText($damageSimulatorPath)
+foreach ($boundary in @(
+    @{ Start = "public IReadOnlyList<DamageResult> Damage(`n        IReadOnlyList<Creature> targets,`n        decimal amount,`n        ValueProp props,`n        Creature? dealer,`n        PredictedCard? cardSource,`n        CardPlay? cardPlay)"; End = 'private IReadOnlyList<DamageResult> DamageSingleTarget(' },
+    @{ Start = 'private IReadOnlyList<DamageResult> DamageSingleTarget('; End = '// Mirrors the per-target body of CreatureCmd.Damage.' },
+    @{ Start = 'public bool Kill(Creature creature, bool force = false)'; End = '// Mirrors CreatureCmd.Kill.' },
+    @{ Start = 'public bool Kill(IReadOnlyList<Creature> creatures, bool force = false)'; End = '// Mirrors CreatureCmd.KillWithoutCheckingWinCondition' })) {
+    $start = $damageSimulatorText.IndexOf($boundary.Start)
+    $end = $damageSimulatorText.IndexOf($boundary.End, $start + 1)
+    if ($start -lt 0 -or $end -le $start) {
+        $violations.Add("${damageSimulatorPath}: opaque damage/kill boundary '$($boundary.Start)' is missing")
+        continue
+    }
+    $block = $damageSimulatorText.Substring($start, $end - $start)
+    if (-not $block.Contains('using (BeginExecutionDispatch())')) {
+        $violations.Add("${damageSimulatorPath}: '$($boundary.Start)' must reject unsafe partial execution continuations")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."

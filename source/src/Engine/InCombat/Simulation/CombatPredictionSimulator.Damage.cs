@@ -60,35 +60,38 @@ internal sealed partial class CombatPredictionSimulator
         PredictedCard? cardSource,
         CardPlay? cardPlay)
     {
-        if (dealer != null && State.GetCreature(dealer).IsDead || targets.Count == 0)
+        using (BeginExecutionDispatch())
         {
-            // Vanilla returns empty DamageResult shells when the dealer is dead. The simulator
-            // only uses damage results to update prediction state, so no-op results are omitted.
-            return [];
-        }
-
-        CombatDamageSource source = ResolveDamageSource(cardSource);
-        var results = new List<DamageResult>();
-
-        foreach (var originalTarget in targets)
-        {
-            if (!TryDamageTarget(
-                    originalTarget,
-                    amount,
-                    props,
-                    dealer,
-                    cardSource,
-                    cardPlay,
-                    source,
-                    out IReadOnlyList<DamageResult> targetResults))
+            if (dealer != null && State.GetCreature(dealer).IsDead || targets.Count == 0)
             {
-                return results;
+                // Vanilla returns empty DamageResult shells when the dealer is dead. The simulator
+                // only uses damage results to update prediction state, so no-op results are omitted.
+                return [];
             }
-            results.AddRange(targetResults);
+    
+            CombatDamageSource source = ResolveDamageSource(cardSource);
+            var results = new List<DamageResult>();
+    
+            foreach (var originalTarget in targets)
+            {
+                if (!TryDamageTarget(
+                        originalTarget,
+                        amount,
+                        props,
+                        dealer,
+                        cardSource,
+                        cardPlay,
+                        source,
+                        out IReadOnlyList<DamageResult> targetResults))
+                {
+                    return results;
+                }
+                results.AddRange(targetResults);
+            }
+    
+            _ = ProcessDamageResults(results, dealer, cardSource, source);
+            return results;
         }
-
-        _ = ProcessDamageResults(results, dealer, cardSource, source);
-        return results;
     }
 
     private IReadOnlyList<DamageResult> DamageSingleTarget(
@@ -99,23 +102,26 @@ internal sealed partial class CombatPredictionSimulator
         PredictedCard? cardSource,
         CardPlay? cardPlay)
     {
-        if (dealer != null && State.GetCreature(dealer).IsDead)
-            return [];
-        CombatDamageSource source = ResolveDamageSource(cardSource);
-        if (!TryDamageTarget(
-                target,
-                amount,
-                props,
-                dealer,
-                cardSource,
-                cardPlay,
-                source,
-                out IReadOnlyList<DamageResult> results))
+        using (BeginExecutionDispatch())
         {
+            if (dealer != null && State.GetCreature(dealer).IsDead)
+                return [];
+            CombatDamageSource source = ResolveDamageSource(cardSource);
+            if (!TryDamageTarget(
+                    target,
+                    amount,
+                    props,
+                    dealer,
+                    cardSource,
+                    cardPlay,
+                    source,
+                    out IReadOnlyList<DamageResult> results))
+            {
+                return results;
+            }
+            _ = ProcessDamageResults(results, dealer, cardSource, source);
             return results;
         }
-        _ = ProcessDamageResults(results, dealer, cardSource, source);
-        return results;
     }
 
     // Mirrors the per-target body of CreatureCmd.Damage.
@@ -337,29 +343,35 @@ internal sealed partial class CombatPredictionSimulator
     // Convenience overload for Kill with a single target.
     public bool Kill(Creature creature, bool force = false)
     {
-        if (!KillWithoutCheckingWinCondition(creature, force))
-            return false;
-        if (State.Players.All(player => State.GetCreature(player.Creature).IsDead))
-            LoseCombat();
-        return !HasPendingChoice;
+        using (BeginExecutionDispatch())
+        {
+            if (!KillWithoutCheckingWinCondition(creature, force))
+                return false;
+            if (State.Players.All(player => State.GetCreature(player.Creature).IsDead))
+                LoseCombat();
+            return !HasPendingChoice;
+        }
     }
 
     // Mirrors CreatureCmd.Kill.
     public bool Kill(IReadOnlyList<Creature> creatures, bool force = false)
     {
-        foreach (var creature in creatures)
+        using (BeginExecutionDispatch())
         {
-            if (!KillWithoutCheckingWinCondition(creature, force))
-                return false;
+            foreach (var creature in creatures)
+            {
+                if (!KillWithoutCheckingWinCondition(creature, force))
+                    return false;
+            }
+    
+            if (State.Players.All(player => State.GetCreature(player.Creature).IsDead))
+            {
+                LoseCombat();
+            }
+    
+            // Vanilla ends a player's turn when the player is killed, which is not simulated here.
+            return !HasPendingChoice;
         }
-
-        if (State.Players.All(player => State.GetCreature(player.Creature).IsDead))
-        {
-            LoseCombat();
-        }
-
-        // Vanilla ends a player's turn when the player is killed, which is not simulated here.
-        return !HasPendingChoice;
     }
 
     // Mirrors CreatureCmd.KillWithoutCheckingWinCondition, without recursion checks.

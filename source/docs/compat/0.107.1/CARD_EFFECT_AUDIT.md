@@ -157,6 +157,26 @@ the nested choice instead of a partial pre-suspension snapshot, while Offering,
 Neurosurge, Reboot, and the attack-then-draw cards no longer skip their native
 suffixes.
 
+### Opaque Attack / Damage / Kill continuation boundary
+
+AttackCommand, CreatureCmd.Damage, and CreatureCmd.Kill contain multiple native
+hook phases but do not yet have local execution frames that can resume from an
+arbitrary interior phase. Card-level continuations therefore must not treat a
+choice captured inside one of those commands as a completed command prefix.
+
+The simulator now enters those command mirrors through an **unacknowledged**
+execution-dispatch scope. If a nested hook opens a choice, the existing
+execution-continuation machinery rejects that partial prefix and falls back to
+replaying the whole action from its stable snapshot. Begin/End attack-context
+helpers use the same boundary so bespoke attacks and monster attacks cannot
+leak an unfinished BeforeAttack/AfterAttack command into a card tail. This
+matches the existing `AbortAttack` contract: command-scoped bookkeeping is
+cleared on suspension and replay restarts from the whole-action snapshot.
+
+This is deliberately a correctness fallback, not a search-budget reduction.
+Draw, generated-card, Orb, discard, and other commands that already own
+fork-safe execution frames keep their localized continuation path.
+
 ## Checked matches
 
 The initial pass also checked several special cases that already match the
