@@ -4,6 +4,12 @@ This audit pins card simulation semantics to the repository's own STS2
 `v0.107.1` game-body snapshot instead of interpreting later upstream
 CombatSolver behavior as old-version truth.
 
+Algorithm changes in this audit are also gated by
+[`GAME_MECHANICS_BASELINE.md`](GAME_MECHANICS_BASELINE.md). Public-facing game
+rules and version history are checked before a decompiled implementation detail
+is interpreted as intended gameplay semantics. Current-version wiki text alone
+is never sufficient to rewrite 0.107.1 behavior.
+
 ## Truth source
 
 The Git LFS game-body objects were pulled and inspected directly:
