@@ -44,6 +44,40 @@ if ($cardPlayContinuationText.Contains('if (IsOverOrEnding) break;')) {
     $violations.Add("${cardPlayContinuationPath}: unconditional v0.108+ Replay stop behavior leaked into the 0.107.1 path")
 }
 
+$enchantmentOnPlayPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Enchantments/OnPlay/EnchantmentOnPlayMirrors.cs'
+$enchantmentOnPlayText = [IO.File]::ReadAllText($enchantmentOnPlayPath)
+if (-not $cardPlayCompatibilityText.Contains('ShouldDisableSwiftBeforeDraw')) {
+    $violations.Add("${cardPlayCompatibilityPath}: Swift draw/disable order must stay version-gated")
+}
+foreach ($swiftContinuationRule in @(
+    'Sts2CardPlayCompatibility.ShouldDisableSwiftBeforeDraw()',
+    'context.Simulator.Draw(context.PreviewCard.Owner, enchantment.Amount);',
+    'AppendExecutionContinuation(new SwiftDisableExecutionFrame(context.Card))',
+    'private sealed record SwiftDisableExecutionFrame')) {
+    if (-not $enchantmentOnPlayText.Contains($swiftContinuationRule)) {
+        $violations.Add("${enchantmentOnPlayPath}: 0.107.1 Swift continuation rule is missing '$swiftContinuationRule'")
+    }
+}
+
+$generationPoolPath = Join-Path $repositoryRoot 'src/Search/RootCombatCardGenerationPoolSnapshot.cs'
+$generationPoolText = [IO.File]::ReadAllText($generationPoolPath)
+foreach ($laterGenerationExclusion in @('Nightmare', 'Transfigure')) {
+    if ($generationPoolText.Contains($laterGenerationExclusion)) {
+        $violations.Add("${generationPoolPath}: $laterGenerationExclusion must remain model-driven; v0.108 generation exclusion must not be hard-coded")
+    }
+}
+$transformationPoolPath = Join-Path $repositoryRoot 'src/Search/RootCombatTransformationPoolSnapshot.cs'
+$transformationPoolText = [IO.File]::ReadAllText($transformationPoolPath)
+if ($transformationPoolText.Contains('AscendersBane')) {
+    $violations.Add("${transformationPoolPath}: v0.108 Ascender's Bane transform exclusion must not be hard-coded into the 0.107.1 pool")
+}
+$afterBlockBrokenPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Block/AfterBlockBrokenMirrors.cs'
+$afterBlockBrokenText = [IO.File]::ReadAllText($afterBlockBrokenPath)
+if (-not $afterBlockBrokenText.Contains('#if !STS2_01071') -or
+    -not $afterBlockBrokenText.Contains('registry.Register<HandDrill>(HandleHandDrill);')) {
+    $violations.Add("${afterBlockBrokenPath}: Hand Drill AfterBlockBroken behavior must remain excluded from 0.107.1")
+}
+
 $poolLifetime = [System.IO.File]::ReadAllText((Join-Path $repositoryRoot 'src/Runtime/NodePoolSignalLifetimePatch.cs'))
 foreach ($required in @('using ((Godot.Collections.Array)signals)', 'using var ownedArray', 'using (connection)', 'using (callable.Method)', 'using (signal.Name)')) {
     if (-not $poolLifetime.Contains($required)) { $violations.Add("Node pool wrapper ownership missing: $required") }

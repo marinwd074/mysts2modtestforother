@@ -28,13 +28,14 @@ replace the native-vs-predicted runtime differential.
 
 ## Corrected version drift
 
-Forty-three route-affecting mismatches have been confirmed in the 0.107.1 source audit:
+Forty-four route-affecting mismatches have been confirmed in the 0.107.1 source audit:
 
 | Card | 0.107.1 native behavior | Incorrect solver behavior | Correction |
 |---|---|---|---|
 | Tracking | first play applies TrackingPower 2, later plays +1; against Weak targets the power amount is the damage multiplier | applied 50 and interpreted it as percentage bonus | use 2 then +1 and multiply by the branch power amount |
 | Big Bang | after its draw finishes, gains Stars, then Energy, then Forges; `AfterStarsGained` completes before the Energy/Forge suffix | gained Energy before Stars, so a star-gain hook that suspended could observe post-star Energy too early | preserve the native Stars -> Energy -> Forge order and keep Energy/Forge untouched when the star hook suspends |
 | Replay enchantment | v0.107.1 continues the already-generated repeated card plays even when the first attack ends combat; v0.108 introduced skipping the remaining plays in that case | the simulator unconditionally broke the repeated-play loop whenever combat became over/ending, importing the v0.108 fix | route the end-of-combat stop through `Sts2CardPlayCompatibility`; 0.107.1 keeps replaying while newer builds may stop |
+| Swift enchantment / Hellraiser / Shining Strike | in v0.107.1 Swift awaits its draw before disabling itself, so a Swift Shining Strike drawn under Hellraiser can be autoplayed, return to the Draw pile, and be drawn again; v0.108 fixed this recursion | disabled Swift before starting its draw, importing the later fix and suppressing the 0.107.1 recursive interaction | version-gate the Swift order; on 0.107.1 keep Swift active through the draw and resume the disable suffix with a fork-safe execution frame if the draw suspends |
 | Sacrifice | calculates block as 2x the living Osty's max HP, then kills Osty and gains that block | both the OnPlay mirror and calculated-var registry had x3 drift | restore x2 in both execution and calculated-variable paths |
 | Haze | applies Poison to all hittable enemies; upgrade increases Poison | also applied Weak | remove the Weak application |
 | Outbreak | applies OutbreakPower 11/15; every third positive Poison application by the owner deals that amount as Unpowered damage to all hittable enemies | immediately applied Poison to all enemies and triggered Poison damage when the card was played | restore the persistent power, its hidden 0/1/2 poison counter, and its third-application damage trigger |
@@ -295,6 +296,14 @@ The initial pass also checked several special cases that already match the
 The Scythe, Spite, Heavenly Drill, Glacier, Meteor Strike, Refract,
 Fight Through, Predator, Bouncing Flask, Gang Up, Lift, Rally, Tag Team,
 Pillar of Creation, Summon Forth, Seeking Edge, and Juggling.
+
+A later-patch trap pass also confirmed four model/version boundaries without
+changing solver behavior: Nightmare and Transfigure remain eligible for
+in-combat generation because the root pool delegates to the pinned native
+combat filter; Entropy's Curse transform remains able to select Ascender's Bane
+because transformation filtering stays in the pinned native CardFactory; and
+Hand Drill's AfterBlockBroken mirror remains excluded under STS2_01071, so the
+v0.109 Expose interaction is not backported.
 
 The multiplayer-card result is tracked separately in
 [`MULTIPLAYER_CARD_COVERAGE.md`](MULTIPLAYER_CARD_COVERAGE.md). "Checked

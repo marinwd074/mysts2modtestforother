@@ -106,10 +106,12 @@
 
 ## 当前下一步
 
-当前只处理 **0.107.1 单人卡牌版本差异**。已确认并修正 43 个 route-affecting mismatch。
+当前只处理 **0.107.1 单人卡牌版本差异**。已确认并修正 44 个 route-affecting mismatch。
 
-最新修正：Replay 的战斗结束行为已按版本隔离。0.107.1 会继续执行已经生成的重复出牌；
-v0.108+ 才允许在首击结束战斗后跳过剩余 Replay。执行器通过 `Sts2CardPlayCompatibility`
-读取该版本差异，避免把新版修复写死进 0.107.1 主路径。
+最新一批检查了 5 个后续版本陷阱：Nightmare 生成、Transfigure 生成、Entropy→Ascender's Bane、
+Hellraiser×Swift×Shining Strike、Expose×Hand Drill。前 3 项和 Expose/Hand Drill 当前已正确保持
+0.107.1 边界；Swift 发现真实漂移并已修正：0.107.1 现在保持“先完成 Draw、后 Disabled”的原始
+await 顺序，若 Draw 内部挂起则通过 fork-safe `SwiftDisableExecutionFrame` 恢复后缀；新版仍可通过
+`Sts2CardPlayCompatibility` 使用先禁用再抽牌的修复行为。
 
 后续按短批次继续：每次只审计/修正一个高风险单人牌路径；多人牌暂不处理。

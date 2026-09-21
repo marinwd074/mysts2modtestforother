@@ -115,7 +115,38 @@ internal static class EnchantmentOnPlayMirrors
             return;
         }
 
-        enchantment._status = EnchantmentStatus.Disabled;
+        if (global::CombatSolver.Sts2CardPlayCompatibility.ShouldDisableSwiftBeforeDraw())
+        {
+            enchantment._status = EnchantmentStatus.Disabled;
+            context.Simulator.Draw(context.PreviewCard.Owner, enchantment.Amount);
+            return;
+        }
+
+        // v0.107.1 awaits the draw before disabling Swift. This intentionally leaves
+        // Swift active while draw hooks (including Hellraiser autoplay) resolve.
         context.Simulator.Draw(context.PreviewCard.Owner, enchantment.Amount);
+        if (context.Simulator.HasPendingChoice)
+        {
+            context.Simulator.AcknowledgeExecutionDispatch();
+            context.Simulator.AppendExecutionContinuation(new SwiftDisableExecutionFrame(context.Card));
+            return;
+        }
+
+        enchantment._status = EnchantmentStatus.Disabled;
+    }
+
+    private sealed record SwiftDisableExecutionFrame(PredictedCard Card) : ICombatPredictionExecutionFrame
+    {
+        public ICombatPredictionExecutionFrame Fork(PredictionForkContext context)
+            => this with { Card = context.RequireRemap(Card) };
+
+        public bool Resume(CombatPredictionSimulator simulator)
+        {
+            if (Card.MutablePreview.Enchantment is not Swift swift)
+                throw new InvalidOperationException("Swift continuation lost its played-card enchantment.");
+
+            swift._status = EnchantmentStatus.Disabled;
+            return !simulator.HasPendingChoice;
+        }
     }
 }
