@@ -2471,6 +2471,23 @@ else {
     }
 }
 
+$madScienceStart = $cardGenerationMirrorText.IndexOf('public static void MadScienceOnPlay')
+$madScienceEnd = $cardGenerationMirrorText.IndexOf('public static void ManifestAuthorityOnPlay', $madScienceStart)
+if ($madScienceStart -lt 0 -or $madScienceEnd -le $madScienceStart) {
+    $violations.Add("${cardGenerationMirrorPath}: Mad Science mirror boundary is missing")
+}
+else {
+    $madScienceBlock = $cardGenerationMirrorText.Substring(
+        $madScienceStart,
+        $madScienceEnd - $madScienceStart)
+    if (-not $madScienceBlock.Contains('context.Simulator.AddToPile(cards, PileType.Hand)')) {
+        $violations.Add("${cardGenerationMirrorPath}: 0.107.1 Mad Science Chaos rider must use ordinary pile insertion")
+    }
+    if ($madScienceBlock.Contains('AddGeneratedCardsToCombat(cards, PileType.Hand, card.Owner)')) {
+        $violations.Add("${cardGenerationMirrorPath}: v0.108 generated-card Mad Science behavior returned")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."

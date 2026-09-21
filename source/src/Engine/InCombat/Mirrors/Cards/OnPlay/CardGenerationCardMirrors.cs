@@ -218,7 +218,9 @@ internal static class CardGenerationCardMirrors
                         context.CardMultiplayerConstraint)
                     .Select(generatedCard => generatedCard.SetToFreeThisTurn())
                     .ToList();
-                context.Simulator.AddGeneratedCardsToCombat(cards, PileType.Hand, card.Owner);
+                // 0.107.1 uses ordinary CardPileCmd.Add for the Chaos rider.
+                // Do not emit CardGenerated history or AfterCardGeneratedForCombat hooks here.
+                context.Simulator.AddToPile(cards, PileType.Hand);
                 break;
             }
         }
