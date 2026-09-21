@@ -2005,6 +2005,26 @@ foreach ($requiredBeaconRule in @(
     }
 }
 
+
+$hammerTimeSpec = '[typeof(HammerTime)] = [Owner<HammerTimePower>(_ => 1)]'
+if (-not $cardEffectSpecText.Contains($hammerTimeSpec)) {
+    $violations.Add("${cardEffectSpecPath}: 0.107.1 Hammer Time must apply one HammerTimePower")
+}
+$persistentPowerSupportPath = Join-Path $repositoryRoot 'src/Prediction/PersistentPowerSupport.cs'
+$persistentPowerSupportText = [IO.File]::ReadAllText($persistentPowerSupportPath)
+foreach ($requiredHammerTimeForgeRule in @(
+    'AbstractModel? source = null',
+    'if (source is HammerTimePower)',
+    'HammerTimePower? hammerTime = combat.GetPower<HammerTimePower>(player.Creature)',
+    'combat.GetAmount<HammerTimePower>(player.Creature) <= 0',
+    'combat.GetTeammatesOf(player.Creature)',
+    'simulator.State.GetCreature(teammate).IsAlive',
+    'Forge(simulator, teammatePlayer, amount, hammerTime)')) {
+    if (-not $persistentPowerSupportText.Contains($requiredHammerTimeForgeRule)) {
+        $violations.Add("${persistentPowerSupportPath}: missing 0.107.1 Hammer Time Forge rule '$requiredHammerTimeForgeRule'")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."

@@ -241,8 +241,22 @@ The pinned DLL implements this in `HammerTimePower.AfterForge`:
 Thus multiple players holding Hammer Time do not create an unbounded Forge
 cascade from one Forge event.
 
-**Status: gameplay and recursion semantics confirmed; solver support must still
-be audited against the full Forge state mutation described below.**
+The 0.107.1 `CardModel.AfterForged()` call only raises the card's `Forged`
+event. The only native subscriber found in the pinned assembly is
+`CombatStateTracker`, so omitting that presentation/state-tracker callback
+does not omit another combat effect. The only gameplay-relevant
+`AbstractModel.AfterForge` override in the pinned assembly is
+`HammerTimePower`; the other override is an achievement check.
+
+The solver audit confirmed that its existing Forge path already creates a
+Sovereign Blade when none remains outside Exhaust and increases every non-Dupe
+Sovereign Blade including exhausted copies. The missing combat semantics were
+therefore limited to Hammer Time's global AfterForge propagation and the card's
+own Power application; those have now been restored without changing Forge
+damage or generation rules.
+
+**Status: gameplay/DLL semantics and source implementation confirmed; a focused
+multiplayer native differential is still required before runtime-confirmed.**
 
 ## Damage baseline
 
@@ -505,7 +519,7 @@ Do not change these from public text alone:
 |---|---|---|
 | Intercept | gameplay + Covered/Intercept DLL chain confirmed | solver fork/fingerprint design for private covered-creature list + reciprocal-intercept native differential |
 | Beacon of Hope | gameplay/DLL semantics confirmed; solver Block mirror already matched and card application gap has been corrected | focused native multiplayer differential for fractional/post-modifier sharing and recursion guard |
-| Hammer Time | Forge propagation and recursion suppression confirmed | targeted audit of current Forge modeling, generated Sovereign Blade state, AfterForge ordering, and multiplayer branch-local recipients |
+| Hammer Time | gameplay/DLL semantics confirmed; Forge propagation and recursion suppression restored in solver source | focused multiplayer native differential covering one and multiple Hammer Time owners plus exhausted Sovereign Blades |
 | current Tracking text | known to be later presentation | pinned DLL only for 0.107.1 values |
 | current Tank text | changed in v0.108 | pinned DLL + v0.108 delta |
 | current Haze/Outbreak/Sacrifice text | changed after 0.107.1 | pinned DLL + later patch delta |

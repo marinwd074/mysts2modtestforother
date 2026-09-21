@@ -265,7 +265,8 @@ internal static class PersistentPowerSupport
     public static void Forge(
         CombatPredictionSimulator simulator,
         Player player,
-        int amount)
+        int amount,
+        AbstractModel? source = null)
     {
         if (simulator.HasPendingChoice)
             return;
@@ -293,6 +294,29 @@ internal static class PersistentPowerSupport
             if (card.Preview is not SovereignBlade preview || preview.IsDupe)
                 continue;
             ((SovereignBlade)card.MutablePreview).AddDamage(amount);
+        }
+
+        if (source is HammerTimePower)
+            return;
+
+        SimulatedCombatState combat = (SimulatedCombatState)simulator.State.CombatState;
+        HammerTimePower? hammerTime = combat.GetPower<HammerTimePower>(player.Creature);
+        if (hammerTime is null || combat.GetAmount<HammerTimePower>(player.Creature) <= 0)
+            return;
+
+        foreach (Creature teammate in combat.GetTeammatesOf(player.Creature))
+        {
+            if (ReferenceEquals(teammate, player.Creature)
+                || !teammate.IsPlayer
+                || !simulator.State.GetCreature(teammate).IsAlive
+                || teammate.Player is not { } teammatePlayer)
+            {
+                continue;
+            }
+
+            Forge(simulator, teammatePlayer, amount, hammerTime);
+            if (simulator.HasPendingChoice)
+                return;
         }
     }
 }

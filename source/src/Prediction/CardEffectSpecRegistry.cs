@@ -51,6 +51,7 @@ internal static class CardEffectSpecRegistry
         [typeof(FocusedStrike)] = [Owner<FocusedStrikePower>("FocusPower")],
         [typeof(Glow)] = [Owner<DrawCardsNextTurnPower>(card => card.DynamicVars.Cards.IntValue)],
         [typeof(Hegemony)] = [Owner<EnergyNextTurnPower>(card => card.DynamicVars.Energy.IntValue)],
+        [typeof(HammerTime)] = [Owner<HammerTimePower>(_ => 1)],
 #if STS2_01071
         [typeof(Hyperbeam)] = [Owner<FocusPower>(card => -card.DynamicVars["FocusPower"].IntValue)],
 #else
