@@ -2540,6 +2540,8 @@ else {
     }
 }
 
+$cardGenerationContinuationPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/CardGenerationCardMirrors.ExecutionContinuation.cs'
+$cardGenerationContinuationText = [IO.File]::ReadAllText($cardGenerationContinuationPath)
 $madScienceStart = $cardGenerationMirrorText.IndexOf('public static void MadScienceOnPlay')
 $madScienceEnd = $cardGenerationMirrorText.IndexOf('public static void ManifestAuthorityOnPlay', $madScienceStart)
 if ($madScienceStart -lt 0 -or $madScienceEnd -le $madScienceStart) {
@@ -2549,11 +2551,11 @@ else {
     $madScienceBlock = $cardGenerationMirrorText.Substring(
         $madScienceStart,
         $madScienceEnd - $madScienceStart)
-    if (-not $madScienceBlock.Contains('context.Simulator.AddToPile(cards, PileType.Hand)')) {
-        $violations.Add("${cardGenerationMirrorPath}: 0.107.1 Mad Science Chaos rider must use ordinary pile insertion")
+    if (-not $cardGenerationContinuationText.Contains('context.Simulator.AddToPile(cards, PileType.Hand)')) {
+        $violations.Add("${cardGenerationContinuationPath}: 0.107.1 Mad Science Chaos rider must use ordinary pile insertion")
     }
-    if ($madScienceBlock.Contains('AddGeneratedCardsToCombat(cards, PileType.Hand, card.Owner)')) {
-        $violations.Add("${cardGenerationMirrorPath}: v0.108 generated-card Mad Science behavior returned")
+    if ($cardGenerationContinuationText.Contains('AddGeneratedCardsToCombat(cards, PileType.Hand, card.Owner)')) {
+        $violations.Add("${cardGenerationContinuationPath}: v0.108 generated-card Mad Science behavior returned")
     }
     foreach ($requiredMadScienceAttackRule in @(
         'ContinueMadScienceAttacks(card, context, nextHit: 0, hitCount)',
@@ -2561,7 +2563,7 @@ else {
         'DamageCmd.Attack(card.DynamicVars.Damage.BaseValue)',
         'new MadScienceAttackExecutionFrame(',
         'hitIndex + 1',
-        'ApplyMadScienceRider(card, context)')) {
+        'return ContinueMadScienceRider(context, stage: 0);')) {
         if (-not $madScienceBlock.Contains($requiredMadScienceAttackRule)) {
             $violations.Add("${cardGenerationMirrorPath}: missing 0.107.1 Mad Science Violence rule '$requiredMadScienceAttackRule'")
         }
