@@ -2121,6 +2121,8 @@ else {
 
 $orbCardMirrorPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/OrbCardMirrors.cs'
 $orbCardMirrorText = [IO.File]::ReadAllText($orbCardMirrorPath)
+$orbCardContinuationPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/OrbCardMirrors.ExecutionContinuation.cs'
+$orbCardContinuationText = [IO.File]::ReadAllText($orbCardContinuationPath)
 $nullStart = $orbCardMirrorText.IndexOf('public static void NullOnPlay')
 $nullEnd = $orbCardMirrorText.IndexOf('public static void QuadcastOnPlay', $nullStart)
 if ($nullStart -lt 0 -or $nullEnd -le $nullStart) {
@@ -2129,13 +2131,20 @@ if ($nullStart -lt 0 -or $nullEnd -le $nullStart) {
 else {
     $nullBlock = $orbCardMirrorText.Substring($nullStart, $nullEnd - $nullStart)
     $attackIndex = $nullBlock.IndexOf('context.AttackSingle()')
-    $weakIndex = $nullBlock.IndexOf('combat.Apply<WeakPower>')
-    $orbIndex = $nullBlock.IndexOf('OrbChannel<DarkOrb>')
-    if ($attackIndex -lt 0 -or $weakIndex -le $attackIndex -or $orbIndex -le $weakIndex) {
-        $violations.Add("${orbCardMirrorPath}: 0.107.1 Null must resolve attack -> Weak -> Dark Orb in native order")
+    $tailIndex = $nullBlock.IndexOf('ContinueOrQueueTail(context, OrbCardTailKind.NullWeakThenDark)')
+    if ($attackIndex -lt 0 -or $tailIndex -le $attackIndex) {
+        $violations.Add("${orbCardMirrorPath}: 0.107.1 Null must enter its Weak -> Dark Orb continuation after the attack")
     }
-    if (-not $nullBlock.Contains('card.DynamicVars.Weak.IntValue')) {
-        $violations.Add("${orbCardMirrorPath}: 0.107.1 Null must use its Weak dynamic var")
+    foreach ($requiredNullTailRule in @(
+        'case OrbCardTailKind.NullWeakThenDark:',
+        'combat.Apply<WeakPower>(',
+        'card.DynamicVars.Weak.IntValue',
+        'ContinueOrQueueTail(context, OrbCardTailKind.NullDark)',
+        'case OrbCardTailKind.NullDark:',
+        'simulator.OrbChannel<DarkOrb>(playedCard.Preview.Owner)')) {
+        if (-not $orbCardContinuationText.Contains($requiredNullTailRule)) {
+            $violations.Add("${orbCardContinuationPath}: missing 0.107.1 Null continuation rule '$requiredNullTailRule'")
+        }
     }
 }
 $flankingSpec = '[typeof(Flanking)] = [Target<FlankingPower>(_ => 2)]'
