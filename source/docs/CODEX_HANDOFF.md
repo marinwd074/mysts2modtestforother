@@ -107,11 +107,14 @@
 ## 当前下一步
 
 当前主线已从多人能力扩展切换到 **0.107.1 card-effect / continuation source audit**。截至
-`f63e591b`，Mad Science、生成牌链、Orb、Draw、Selection、Flak Cannon、Forge、
-Bulk Up、Misery、Well-Laid Plans 等高风险路径已完成一轮版本回退与 continuation
-加固，`0.107.1 compatibility consistency` 在该基线 PASS。Pillar of Creation 已作为
+`15d45124`，已确认并修正 **41 项** route-affecting 版本/执行语义偏差；Mad Science、
+生成牌链、Orb、Draw、Selection、Flak Cannon、Forge、Bulk Up、Misery、Well-Laid Plans
+等高风险路径已完成一轮版本回退与 continuation 加固。最新补充的 Big Bang 已恢复
+0.107.1 原生 **Stars → Energy → Forge** 顺序，并增加挂起回归断言与静态顺序护栏；
+最新 `0.107.1 compatibility consistency` 全部 PASS。Pillar of Creation 也已作为
 v0.109 版本陷阱补上静态回归护栏：0.107.1 保持“每次由 owner 生成牌都按 Power amount
-获得 Block”，不得引入 first-trigger-per-turn 状态。
+获得 Block”，不得引入 first-trigger-per-turn 状态。Pillar of Creation、Summon Forth、
+Seeking Edge、Juggling 已重新对照 0.107.1 本体并确认为 checked matches。
 
 下一轮继续按 `compat/0.107.1/CARD_EFFECT_AUDIT.md` 的 audit boundary 工作：
 优先检查 **hard-coded constants、版本条件、custom execution order** 的卡牌/Power；
