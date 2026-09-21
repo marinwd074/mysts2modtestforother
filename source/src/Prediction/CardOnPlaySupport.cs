@@ -124,8 +124,6 @@ internal static partial class CardOnPlaySupport
             case Haze:
                 foreach (Creature enemy in combat.HittableEnemies)
                     combat.Apply<PoisonPower>(enemy, card.DynamicVars.Poison.IntValue, owner);
-                foreach (Creature enemy in combat.HittableEnemies)
-                    combat.Apply<WeakPower>(enemy, card.DynamicVars.Weak.IntValue, owner);
                 break;
             case HiddenCache:
                 if (!simulator.GainStars(card.Owner, card.DynamicVars.Stars.IntValue))

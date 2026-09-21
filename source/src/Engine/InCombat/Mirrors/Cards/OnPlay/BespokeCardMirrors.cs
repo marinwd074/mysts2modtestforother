@@ -172,7 +172,7 @@ internal static class BespokeCardMirrors
     {
         if (context.State.GetOsty(card.Owner) is not { } osty || !context.State.GetCreature(osty).IsAlive)
             return;
-        int block = context.State.GetCreature(osty).MaxHp * 3;
+        int block = context.State.GetCreature(osty).MaxHp * 2;
         context.Simulator.Kill(osty, force: true);
         if (context.Simulator.HasPendingChoice)
             return;

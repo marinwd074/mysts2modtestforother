@@ -1630,6 +1630,69 @@ if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/UI/SolverOv
     $violations.Add('Frontier overlay preview must render turn-start choices')
 }
 
+
+# Card semantics below are pinned to the repository's v0.107.1 game-body assembly.
+# These guards intentionally reject later-version behavior when upstream changes are backported.
+$trackingCardPath = Join-Path $repositoryRoot 'src/Prediction/CardOnPlaySupport.Batch042.cs'
+$trackingCardText = [IO.File]::ReadAllText($trackingCardPath)
+if (-not $trackingCardText.Contains('combat.GetAmount<TrackingPower>(owner) > 0 ? 1 : 2')) {
+    $violations.Add("${trackingCardPath}: 0.107.1 Tracking must apply 2 initially and +1 thereafter")
+}
+if ($trackingCardText.Contains('combat.Apply<TrackingPower>(owner, 50, owner)')) {
+    $violations.Add("${trackingCardPath}: later-version percentage Tracking application returned")
+}
+
+$damageMirrorPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Damage/ModifyDamageMirrors.cs'
+$damageMirrorText = [IO.File]::ReadAllText($damageMirrorPath)
+$trackingHandlerStart = $damageMirrorText.IndexOf('private static decimal HandleTrackingPower')
+$trackingHandlerEnd = $damageMirrorText.IndexOf('private static decimal HandleWeakPower', $trackingHandlerStart)
+if ($trackingHandlerStart -lt 0 -or $trackingHandlerEnd -le $trackingHandlerStart) {
+    $violations.Add("${damageMirrorPath}: Tracking multiplier handler boundary is missing")
+}
+else {
+    $trackingHandler = $damageMirrorText.Substring($trackingHandlerStart, $trackingHandlerEnd - $trackingHandlerStart)
+    if (-not $trackingHandler.Contains('combat.GetAmount<TrackingPower>(power.Owner)')) {
+        $violations.Add("${damageMirrorPath}: 0.107.1 Tracking multiplier must use the branch TrackingPower amount")
+    }
+    if ($trackingHandler.Contains('/ 100m')) {
+        $violations.Add("${damageMirrorPath}: later-version percentage Tracking multiplier returned")
+    }
+}
+
+$bespokeCardPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/BespokeCardMirrors.cs'
+$bespokeCardText = [IO.File]::ReadAllText($bespokeCardPath)
+$sacrificeStart = $bespokeCardText.IndexOf('public static void SacrificeOnPlay')
+$sacrificeEnd = $bespokeCardText.IndexOf('public static void SecondWindOnPlay', $sacrificeStart)
+if ($sacrificeStart -lt 0 -or $sacrificeEnd -le $sacrificeStart) {
+    $violations.Add("${bespokeCardPath}: Sacrifice mirror boundary is missing")
+}
+else {
+    $sacrificeBlock = $bespokeCardText.Substring($sacrificeStart, $sacrificeEnd - $sacrificeStart)
+    if (-not $sacrificeBlock.Contains('MaxHp * 2')) {
+        $violations.Add("${bespokeCardPath}: 0.107.1 Sacrifice must gain twice Osty's max HP as block")
+    }
+    if ($sacrificeBlock.Contains('MaxHp * 3')) {
+        $violations.Add("${bespokeCardPath}: later-version Sacrifice x3 block returned")
+    }
+}
+
+$cardOnPlayPath = Join-Path $repositoryRoot 'src/Prediction/CardOnPlaySupport.cs'
+$cardOnPlayText = [IO.File]::ReadAllText($cardOnPlayPath)
+$hazeStart = $cardOnPlayText.IndexOf('case Haze:')
+$hazeEnd = $cardOnPlayText.IndexOf('case HiddenCache:', $hazeStart)
+if ($hazeStart -lt 0 -or $hazeEnd -le $hazeStart) {
+    $violations.Add("${cardOnPlayPath}: Haze compensation boundary is missing")
+}
+else {
+    $hazeBlock = $cardOnPlayText.Substring($hazeStart, $hazeEnd - $hazeStart)
+    if (-not $hazeBlock.Contains('PoisonPower')) {
+        $violations.Add("${cardOnPlayPath}: 0.107.1 Haze must apply Poison")
+    }
+    if ($hazeBlock.Contains('WeakPower')) {
+        $violations.Add("${cardOnPlayPath}: later-version Haze Weak application returned")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."

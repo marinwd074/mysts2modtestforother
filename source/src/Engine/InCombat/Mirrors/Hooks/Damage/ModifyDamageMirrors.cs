@@ -198,8 +198,9 @@ internal static class ModifyDamageMirrors
             return 1;
         }
 
-        return Combat(context).GetAmount<WeakPower>(context.Target) > 0
-            ? 1 + (decimal)power.Amount / 100m
+        SimulatedCombatState combat = Combat(context);
+        return combat.GetAmount<WeakPower>(context.Target) > 0
+            ? combat.GetAmount<TrackingPower>(power.Owner)
             : 1;
     }
 
