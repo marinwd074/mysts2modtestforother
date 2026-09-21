@@ -86,7 +86,7 @@ internal static class BespokeCardMirrors
     {
         context.Simulator.AcknowledgeExecutionDispatch();
         PredictedCard[] hand = context.OwnerState.Hand.Cards.ToArray();
-        _ = ContinueFiendFire(
+        ContinueFiendFire(
             context.Simulator,
             context.Card,
             context.CardPlay,
@@ -128,7 +128,7 @@ internal static class BespokeCardMirrors
             return;
         }
 
-        _ = ContinueLeadingStrikeShivs(
+        ContinueLeadingStrikeShivs(
             context.Simulator,
             context.Card,
             context.CardPlay,
@@ -260,7 +260,7 @@ internal static class BespokeCardMirrors
         PredictedCard[] cards = context.OwnerState.Hand.Cards
             .Where(candidate => candidate.Preview.Type != CardType.Attack)
             .ToArray();
-        _ = ContinueSecondWind(
+        ContinueSecondWind(
             context.Simulator,
             context.Card,
             context.CardPlay,

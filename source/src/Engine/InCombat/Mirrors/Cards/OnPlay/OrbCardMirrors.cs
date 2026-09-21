@@ -18,7 +18,7 @@ internal static partial class OrbCardMirrors
     public static void ChaosOnPlay(Chaos _, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        _ = ContinueChaos(context, nextIndex: 0);
+        ContinueChaos(context, nextIndex: 0);
     }
 
     public static void ChillOnPlay(Chill card, CardOnPlayMirrorContext context)

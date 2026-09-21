@@ -3,6 +3,7 @@ using CombatSolver.Engine.InCombat.Extensions;
 using CombatSolver.Engine.InCombat.Simulation;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Models.Cards;
+using MegaCrit.Sts2.Core.Models.Events;
 using MegaCrit.Sts2.Core.Models.Powers;
 
 namespace CombatSolver.Engine.InCombat.Mirrors.Cards.OnPlay;

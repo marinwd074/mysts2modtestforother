@@ -13,31 +13,31 @@ internal static partial class CardDrawCardMirrors
     public static void AdrenalineOnPlay(Adrenaline _, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        _ = ContinueCardDrawSequence(context, CardDrawSequence.Adrenaline);
+        ContinueCardDrawSequence(context, CardDrawSequence.Adrenaline);
     }
 
     public static void OfferingOnPlay(Offering _, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        _ = ContinueCardDrawSequence(context, CardDrawSequence.Offering);
+        ContinueCardDrawSequence(context, CardDrawSequence.Offering);
     }
 
     public static void NeurosurgeOnPlay(Neurosurge _, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        _ = ContinueCardDrawSequence(context, CardDrawSequence.Neurosurge);
+        ContinueCardDrawSequence(context, CardDrawSequence.Neurosurge);
     }
 
     public static void SpoilsOfBattleOnPlay(SpoilsOfBattle _, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        _ = ContinueCardDrawSequence(context, CardDrawSequence.SpoilsOfBattle);
+        ContinueCardDrawSequence(context, CardDrawSequence.SpoilsOfBattle);
     }
 
     public static void CompileDriverOnPlay(CompileDriver _, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        _ = ContinueCardDrawSequence(context, CardDrawSequence.CompileDriver);
+        ContinueCardDrawSequence(context, CardDrawSequence.CompileDriver);
     }
 
     public static void CalculatedGambleOnPlay(CalculatedGamble card, CardOnPlayMirrorContext context)
@@ -63,7 +63,7 @@ internal static partial class CardDrawCardMirrors
     public static void EscapePlanOnPlay(EscapePlan _, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        _ = ContinueCardDrawSequence(context, CardDrawSequence.EscapePlan);
+        ContinueCardDrawSequence(context, CardDrawSequence.EscapePlan);
     }
 
     public static void ExpertiseOnPlay(Expertise card, CardOnPlayMirrorContext context)
@@ -77,20 +77,20 @@ internal static partial class CardDrawCardMirrors
     public static void FetchOnPlay(Fetch _, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        _ = ContinueCardDrawSequence(context, CardDrawSequence.Fetch);
+        ContinueCardDrawSequence(context, CardDrawSequence.Fetch);
     }
 
     public static void FtlOnPlay(Ftl _, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        _ = ContinueCardDrawSequence(context, CardDrawSequence.Ftl);
+        ContinueCardDrawSequence(context, CardDrawSequence.Ftl);
     }
 
     public static void HuddleUpOnPlay(HuddleUp card, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
         var allies = context.State.GetTeammatesOf(card.Owner.Creature).ToArray();
-        _ = ContinueCardDrawSequence(
+        ContinueCardDrawSequence(
             context,
             CardDrawSequence.HuddleUp,
             teammates: allies);
@@ -107,25 +107,25 @@ internal static partial class CardDrawCardMirrors
     public static void PillageOnPlay(Pillage _, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        _ = ContinueCardDrawSequence(context, CardDrawSequence.Pillage);
+        ContinueCardDrawSequence(context, CardDrawSequence.Pillage);
     }
 
     public static void RebootOnPlay(Reboot _, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        _ = ContinueCardDrawSequence(context, CardDrawSequence.Reboot);
+        ContinueCardDrawSequence(context, CardDrawSequence.Reboot);
     }
 
     public static void RestlessnessOnPlay(Restlessness _, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        _ = ContinueCardDrawSequence(context, CardDrawSequence.Restlessness);
+        ContinueCardDrawSequence(context, CardDrawSequence.Restlessness);
     }
 
     public static void ScrapeOnPlay(Scrape _, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        _ = ContinueCardDrawSequence(context, CardDrawSequence.Scrape);
+        ContinueCardDrawSequence(context, CardDrawSequence.Scrape);
     }
 
     public static void ScrawlOnPlay(Scrawl card, CardOnPlayMirrorContext context)

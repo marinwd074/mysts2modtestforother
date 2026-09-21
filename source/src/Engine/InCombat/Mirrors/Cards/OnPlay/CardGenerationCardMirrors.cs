@@ -104,7 +104,7 @@ internal static partial class CardGenerationCardMirrors
     public static void JackpotOnPlay(Jackpot _, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        _ = ContinueGenerationCardSequence(context, GenerationCardSequence.Jackpot);
+        ContinueGenerationCardSequence(context, GenerationCardSequence.Jackpot);
     }
 
     public static void LargesseOnPlay(Largesse card, CardOnPlayMirrorContext context)
@@ -135,12 +135,12 @@ internal static partial class CardGenerationCardMirrors
                 int hitCount = card.TinkerTimeRider == TinkerTime.RiderEffect.Violence
                     ? card.DynamicVars["ViolenceHits"].IntValue
                     : 1;
-                _ = ContinueMadScienceAttacks(card, context, nextHit: 0, hitCount);
+                ContinueMadScienceAttacks(card, context, nextHit: 0, hitCount);
                 return;
             }
             case CardType.Skill:
             case CardType.Power:
-                _ = ContinueMadScienceMain(context, stage: 0);
+                ContinueMadScienceMain(context, stage: 0);
                 return;
             default:
                 throw new ArgumentOutOfRangeException(nameof(card.TinkerTimeType), card.TinkerTimeType, null);
@@ -206,7 +206,7 @@ internal static partial class CardGenerationCardMirrors
     public static void ManifestAuthorityOnPlay(ManifestAuthority _, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        _ = ContinueGenerationCardSequence(
+        ContinueGenerationCardSequence(
             context,
             GenerationCardSequence.ManifestAuthority);
     }
@@ -270,7 +270,7 @@ internal static partial class CardGenerationCardMirrors
     {
         context.Simulator.AcknowledgeExecutionDispatch();
         List<PredictedCard> cardsToExhaust = context.OwnerState.Hand.Cards.ToList();
-        _ = ContinueStoke(
+        ContinueStoke(
             context.Simulator,
             context.Card,
             context.CardPlay,

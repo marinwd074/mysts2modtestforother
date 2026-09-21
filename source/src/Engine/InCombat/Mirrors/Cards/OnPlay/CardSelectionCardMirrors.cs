@@ -48,25 +48,25 @@ internal static partial class CardSelectionCardMirrors
             return;
 
         context.Simulator.History.CardsSelected(selectedCards);
-        _ = ContinueBeatDown(context, selectedCards, nextIndex: 0);
+        ContinueBeatDown(context, selectedCards, nextIndex: 0);
     }
 
     public static void CatastropheOnPlay(Catastrophe _, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        _ = ContinueCatastrophe(context, nextIteration: 0);
+        ContinueCatastrophe(context, nextIteration: 0);
     }
 
     public static void CinderOnPlay(Cinder _, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        _ = ContinueCardSelectionSequence(context, CardSelectionSequence.Cinder);
+        ContinueCardSelectionSequence(context, CardSelectionSequence.Cinder);
     }
 
     public static void DrainPowerOnPlay(DrainPower _, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        _ = ContinueCardSelectionSequence(context, CardSelectionSequence.DrainPower);
+        ContinueCardSelectionSequence(context, CardSelectionSequence.DrainPower);
     }
 
     public static void HiddenGemOnPlay(HiddenGem card, CardOnPlayMirrorContext context)
@@ -107,19 +107,19 @@ internal static partial class CardSelectionCardMirrors
     public static void ThrashOnPlay(Thrash _, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        _ = ContinueCardSelectionSequence(context, CardSelectionSequence.Thrash);
+        ContinueCardSelectionSequence(context, CardSelectionSequence.Thrash);
     }
 
     public static void TrueGritOnPlay(TrueGrit _, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        _ = ContinueCardSelectionSequence(context, CardSelectionSequence.TrueGrit);
+        ContinueCardSelectionSequence(context, CardSelectionSequence.TrueGrit);
     }
 
     public static void UproarOnPlay(Uproar _, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        _ = ContinueCardSelectionSequence(context, CardSelectionSequence.Uproar);
+        ContinueCardSelectionSequence(context, CardSelectionSequence.Uproar);
     }
 
 

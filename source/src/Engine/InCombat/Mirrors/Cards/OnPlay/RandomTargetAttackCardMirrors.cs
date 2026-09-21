@@ -1,6 +1,7 @@
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Models.Cards;
+using CombatSolver.Engine.Common;
 using CombatSolver.Engine.InCombat.Simulation;
 
 namespace CombatSolver.Engine.InCombat.Mirrors.Cards.OnPlay;
@@ -16,7 +17,7 @@ internal static partial class RandomTargetAttackCardMirrors
                 !context.OwnerState.ExhaustPile.Cards.Contains(predictedCard))
             .ToList();
         int hitCount = (int)context.Calculate(card.DynamicVars["CalculatedHits"]);
-        _ = ContinueFlakCannon(context, statuses, hitCount, nextIndex: 0);
+        ContinueFlakCannon(context, statuses, hitCount, nextIndex: 0);
     }
 
     public static void RicochetOnPlay(Ricochet card, CardOnPlayMirrorContext context)
