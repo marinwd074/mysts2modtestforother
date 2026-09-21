@@ -3632,13 +3632,13 @@ internal sealed partial class CombatBeamSolver
             Snapshot: null!,
             CombatProgress: null!,
             Cycle: coarseCycle);
-        CombatProgressState transpositionProgress = CombatProgressState.Capture(snapshot);
+        CombatProgressState transpositionProgress = null!;
         TranspositionLabel dominating = new(
             0, 0, 0, 0, 1, 10, SearchRouteTraits.None, HasNonPotionAction: false,
-            transpositionProgress);
+            CombatProgress: transpositionProgress);
         TranspositionLabel dominated = new(
             0, 0, 0, 0, 2, 9, SearchRouteTraits.None, HasNonPotionAction: false,
-            transpositionProgress);
+            CombatProgress: transpositionProgress);
 
         if (!ShouldDeferCycleTranspositionUntilActionAdmission(candidate)
             || HasCycleAdmissionTranspositionLease(candidate)
