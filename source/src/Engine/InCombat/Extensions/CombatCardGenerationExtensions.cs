@@ -203,7 +203,7 @@ internal static class CombatCardGenerationExtensions
             && snapshot.TryGetRootEligibleCharacterCards(
                 player, pool, multiplayerConstraint, selection, out IReadOnlyList<CardModel>? cached))
         {
-            return new(cached, alreadyEligible: true, multiplayerConstraint);
+            return new(cached, alreadyEligible: true);
         }
         IEnumerable<CardModel> unlocked = pool.GetUnlockedCards(player.UnlockState, multiplayerConstraint);
         IEnumerable<CardModel> options = selection switch
@@ -214,13 +214,12 @@ internal static class CombatCardGenerationExtensions
             CharacterCombatGenerationPool.Common => unlocked.Where(static card => card.Rarity == CardRarity.Common),
             _ => throw new ArgumentOutOfRangeException(nameof(selection)),
         };
-        return new(options, alreadyEligible: false, multiplayerConstraint);
+        return new(options, alreadyEligible: false);
     }
 
     internal readonly struct CharacterGenerationCandidates(
         IEnumerable<CardModel> options,
-        bool alreadyEligible,
-        CardMultiplayerConstraint multiplayerConstraint)
+        bool alreadyEligible)
     {
         public IEnumerable<PredictedCard> GetDistinctForCombat(Player player, int count, Rng rng)
             => (alreadyEligible ? options : options.FilterForDistinctCombat(player))

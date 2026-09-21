@@ -428,10 +428,12 @@ internal static class BespokeCardMirrors
         }
 
         var card = (FiendFire)playedCard.MutablePreview;
+        Creature target = play.Target
+            ?? throw new InvalidOperationException($"{card.Id} requires a target.");
         DamageCmd.Attack(card.DynamicVars.Damage.BaseValue)
             .WithHitCount(cards.Count)
             .FromCard(card, play)
-            .Targeting(play.Target)
+            .Targeting(target)
             .Simulate(simulator);
         return !simulator.HasPendingChoice;
     }
