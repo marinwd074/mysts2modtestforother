@@ -1917,8 +1917,8 @@ else {
     }
 }
 $simulatedCombatText = [IO.File]::ReadAllText($simulatedCombatPath)
-if (-not $simulatedCombatText.Contains('simulated is FlankingPower flanking && applier != null')
-    -or -not $simulatedCombatText.Contains('flanking.DynamicVars["Applier"]')) {
+if ((-not $simulatedCombatText.Contains('simulated is FlankingPower flanking && applier != null')) -or
+    (-not $simulatedCombatText.Contains('flanking.DynamicVars["Applier"]'))) {
     $violations.Add("${simulatedCombatPath}: Flanking application must preserve the native applier display state")
 }
 $corePowerSupportPath = Join-Path $repositoryRoot 'src/Prediction/CorePowerSupport.cs'
@@ -1973,8 +1973,8 @@ else {
         }
     }
 }
-if (-not $simulatedCombatText.Contains('simulated is GuardedPower guarded && applier != null')
-    -or -not $simulatedCombatText.Contains('guarded.DynamicVars["Applier"]')) {
+if ((-not $simulatedCombatText.Contains('simulated is GuardedPower guarded && applier != null')) -or
+    (-not $simulatedCombatText.Contains('guarded.DynamicVars["Applier"]'))) {
     $violations.Add("${simulatedCombatPath}: Guarded application must preserve the native applier display state")
 }
 foreach ($requiredGuardedCleanup in @(
