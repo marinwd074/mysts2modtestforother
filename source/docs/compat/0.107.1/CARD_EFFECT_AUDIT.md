@@ -317,6 +317,16 @@ keeps 6(8) through `ThunderPower`'s card dynamic var; and Biased Cognition
 keeps Focus 4(5) through `FocusPower`'s card dynamic var. Later 0.110/0.111
 balance values therefore do not leak into the pinned build.
 
+The next v0.108 balance batch also found no route mismatch. Colossus keeps
+5(8) Block, Crimson Mantle 8(10) Block, Howl from Beyond 16(21) damage,
+Setup Strike 2(3) temporary Strength, Anticipate 2(3) Dexterity, Flick-Flack
+6(8) damage, Devastate 30(40) damage, Resonance a 3-Star cost, Haunt 6(8)
+HP loss per Soul, and Reave 9(11) damage. Their changed values remain sourced
+from the pinned 0.107.1 CardModel/DynamicVars. Haunt's applied Power also keeps
+its amount through the Soul-play trigger, while Reave's explicit generated-Soul
+suffix reads only its Cards var and does not replace the model-driven attack
+damage.
+
 The multiplayer-card result is tracked separately in
 [`MULTIPLAYER_CARD_COVERAGE.md`](MULTIPLAYER_CARD_COVERAGE.md). "Checked
 match" there means source semantics were compared and no mismatch was found;

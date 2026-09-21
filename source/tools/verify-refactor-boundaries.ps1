@@ -137,6 +137,56 @@ foreach ($genericCard in @('Rend', 'TimesUp')) {
     }
 }
 
+$generalCardMirrorsPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/GeneralCardMirrors.cs'
+$generalCardMirrorsText = [IO.File]::ReadAllText($generalCardMirrorsPath)
+foreach ($modelDrivenRule in @(
+    'registry.Register<HowlFromBeyond>(GeneralCardMirrors.GeneralAttackOnPlay)',
+    'TryGetDynamicVar(card, ["CalculatedDamage", "Damage", "OstyDamage"], out var damage)')) {
+    $sourceText = if ($modelDrivenRule.StartsWith('registry.')) { $cardOnPlayMirrorsText } else { $generalCardMirrorsText }
+    if (-not $sourceText.Contains($modelDrivenRule)) {
+        $violations.Add("0.107.1 attack value must remain model-driven '$modelDrivenRule'")
+    }
+}
+
+foreach ($modelDrivenRule in @(
+    '[typeof(Colossus)] = [Owner<ColossusPower>("Colossus")]',
+    '[typeof(SetupStrike)] = [Owner<SetupStrikePower>(card => card.DynamicVars.Strength.IntValue)]',
+    'int count = card.DynamicVars.Cards.IntValue')) {
+    if (-not $cardEffectSpecText.Contains($modelDrivenRule)) {
+        $violations.Add("${cardEffectSpecPath}: v0.108 card delta must remain model-driven '$modelDrivenRule'")
+    }
+}
+
+foreach ($modelDrivenRule in @(
+    'combat.IncrementCrimsonMantle(owner, card.DynamicVars["CrimsonMantlePower"].IntValue)',
+    'combat.ApplyAnticipate(owner, card.DynamicVars.Dexterity.IntValue, owner)',
+    'combat.Apply<StrengthPower>(owner, card.DynamicVars["StrengthPower"].IntValue, owner)')) {
+    if (-not $corePowerSupportText.Contains($modelDrivenRule)) {
+        $violations.Add("${corePowerSupportPath}: v0.108 card delta must remain model-driven '$modelDrivenRule'")
+    }
+}
+
+$cardPowerSupportPath = Join-Path $repositoryRoot 'src/Prediction/CardPowerOnPlaySupport.cs'
+$cardPowerSupportText = [IO.File]::ReadAllText($cardPowerSupportPath)
+if (-not $cardPowerSupportText.Contains('combat.Apply<HauntPower>(owner, card.DynamicVars.HpLoss.IntValue, owner)')) {
+    $violations.Add("${cardPowerSupportPath}: Haunt 0.107.1 HP-loss amount must come from the pinned card model")
+}
+$afterCardPlayedPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Card/AfterCardPlayedMirrors.cs'
+$afterCardPlayedText = [IO.File]::ReadAllText($afterCardPlayedPath)
+foreach ($hauntRule in @(
+    'registry.Register<HauntPower>(HandleHauntPower)',
+    'context.Simulator.Damage(target, power.Amount, DamageProps.nonCardHpLoss, dealer: null)')) {
+    if (-not $afterCardPlayedText.Contains($hauntRule)) {
+        $violations.Add("${afterCardPlayedPath}: Haunt trigger must preserve the Power amount '$hauntRule'")
+    }
+}
+
+foreach ($genericCard in @('FlickFlack', 'Devastate', 'Haunt', 'Reave')) {
+    if ($cardOnPlayMirrorsText.Contains("registry.Register<$genericCard>")) {
+        $violations.Add("${cardOnPlayMirrorsPath}: $genericCard must not duplicate v0.108 numeric values in a bespoke OnPlay mirror")
+    }
+}
+
 $poolLifetime = [System.IO.File]::ReadAllText((Join-Path $repositoryRoot 'src/Runtime/NodePoolSignalLifetimePatch.cs'))
 foreach ($required in @('using ((Godot.Collections.Array)signals)', 'using var ownedArray', 'using (connection)', 'using (callable.Method)', 'using (signal.Name)')) {
     if (-not $poolLifetime.Contains($required)) { $violations.Add("Node pool wrapper ownership missing: $required") }

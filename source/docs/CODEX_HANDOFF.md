@@ -108,10 +108,10 @@
 
 当前只处理 **0.107.1 单人卡牌版本差异**。已确认并修正 44 个 route-affecting mismatch。
 
-最新一批连续检查 10 个后续版本陷阱：Abundance、Brightest Flame、Rend、Rampage、Alignment、
-Refine Blade、Shroud、Time's Up、Thunder、Biased Cognition。未发现新的 route-affecting mismatch，
-总数仍为 44。Abundance 正确排除在 STS2_01071；其余牌的后续数值/关键词变化均由目标版本
-CardModel/DynamicVar/keyword 元数据承载，手写路径没有回移 0.110/0.111 的新值。已补静态守卫，
-防止这些版本边界未来被硬编码破坏。
+最新一批继续检查 10 个 v0.108 单人牌数值陷阱：Colossus、Crimson Mantle、Howl from Beyond、
+Setup Strike、Anticipate、Flick-Flack、Devastate、Resonance、Haunt、Reave。未发现新的
+route-affecting mismatch，总数仍为 44；这些变化均由 0.107.1 CardModel/DynamicVar 提供。
+Haunt 的 Power 应用与 Soul-play HP-loss 触发、Reave 的生成 Soul 后缀也都保持模型数值来源。
+已补静态守卫；patch-note 候选从 30 张降到约 20 张。
 
-后续继续按“后续 patch → 0.107.1 真值 → 只查对应实现”的批量方式，每批可处理约 10 个单人牌版本陷阱。
+后续继续按“后续 patch → 0.107.1 真值 → 只查对应实现”的方式，每批处理约 10 张单人牌。
