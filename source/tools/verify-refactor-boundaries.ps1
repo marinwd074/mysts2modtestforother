@@ -1870,6 +1870,27 @@ else {
     }
 }
 
+
+$cardDrawMirrorPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/CardDrawCardMirrors.cs'
+$cardDrawMirrorText = [IO.File]::ReadAllText($cardDrawMirrorPath)
+$expertiseStart = $cardDrawMirrorText.IndexOf('public static void ExpertiseOnPlay')
+$expertiseEnd = $cardDrawMirrorText.IndexOf('public static void FetchOnPlay', $expertiseStart)
+if ($expertiseStart -lt 0 -or $expertiseEnd -le $expertiseStart) {
+    $violations.Add("${cardDrawMirrorPath}: Expertise mirror boundary is missing")
+}
+else {
+    $expertiseBlock = $cardDrawMirrorText.Substring($expertiseStart, $expertiseEnd - $expertiseStart)
+    if (-not $expertiseBlock.Contains('card.DynamicVars.Cards.BaseValue - context.OwnerState.Hand.Cards.Count')) {
+        $violations.Add("${cardDrawMirrorPath}: 0.107.1 Expertise must draw only enough cards to reach its Cards hand-size target")
+    }
+    if ($expertiseBlock.Contains('GiveSingleTurnRetain')) {
+        $violations.Add("${cardDrawMirrorPath}: later-version Expertise retain behavior returned")
+    }
+    if ($expertiseBlock.Contains('Draw(card.Owner, card.DynamicVars.Cards.IntValue)')) {
+        $violations.Add("${cardDrawMirrorPath}: fixed-count Expertise draw returned")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."

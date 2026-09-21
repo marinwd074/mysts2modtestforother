@@ -95,13 +95,10 @@ internal static class CardDrawCardMirrors
 
     public static void ExpertiseOnPlay(Expertise card, CardOnPlayMirrorContext context)
     {
-        var drawnCards = context.Simulator.Draw(card.Owner, card.DynamicVars.Cards.IntValue);
-        if (context.Simulator.HasPendingChoice)
-            return;
-        foreach (var drawnCard in drawnCards)
-        {
-            drawnCard.MutablePreview.GiveSingleTurnRetain();
-        }
+        decimal drawCount = Math.Max(
+            0m,
+            card.DynamicVars.Cards.BaseValue - context.OwnerState.Hand.Cards.Count);
+        context.Simulator.Draw(card.Owner, drawCount);
     }
 
     public static void FetchOnPlay(Fetch card, CardOnPlayMirrorContext context)
