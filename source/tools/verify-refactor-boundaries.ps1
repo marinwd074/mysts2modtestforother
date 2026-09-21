@@ -2404,11 +2404,17 @@ else {
         'ValueProp.Unblockable',
         'ValueProp.Unpowered',
         'context.Card,',
+        'ContinueOrQueueTail(context, BespokeTailKind.DemonicShieldGainBlock);')) {
+        if (-not $demonicShieldBlock.Contains($requiredDemonicShieldRule)) {
+            $violations.Add("${bespokeOnPlayPath}: missing 0.107.1 Demonic Shield rule '$requiredDemonicShieldRule'")
+        }
+    }
+    foreach ($requiredDemonicShieldTailRule in @(
         'context.Calculate(card.DynamicVars.CalculatedBlock)',
         'context.GainBlock(',
         'context.Target')) {
-        if (-not $demonicShieldBlock.Contains($requiredDemonicShieldRule)) {
-            $violations.Add("${bespokeOnPlayPath}: missing 0.107.1 Demonic Shield rule '$requiredDemonicShieldRule'")
+        if (-not $bespokeOnPlayText.Contains($requiredDemonicShieldTailRule)) {
+            $violations.Add("${bespokeOnPlayPath}: missing 0.107.1 Demonic Shield continuation rule '$requiredDemonicShieldTailRule'")
         }
     }
 }
