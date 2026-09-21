@@ -1712,6 +1712,31 @@ else {
 }
 
 
+$resultLocationMirrorPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Card/ModifyCardPlayResultLocationMirrors.cs'
+$resultLocationMirrorText = [IO.File]::ReadAllText($resultLocationMirrorPath)
+$feralStart = $resultLocationMirrorText.IndexOf('private static CardLocation HandleFeralPower')
+$feralEnd = $resultLocationMirrorText.IndexOf('private static CardLocation HandleNostalgiaPower', $feralStart)
+if ($feralStart -lt 0 -or $feralEnd -le $feralStart) {
+    $violations.Add("${resultLocationMirrorPath}: Feral result-pile mirror boundary is missing")
+}
+else {
+    $feralBlock = $resultLocationMirrorText.Substring($feralStart, $feralEnd - $feralStart)
+    foreach ($requiredFeralRule in @(
+        'card.Owner.Creature != power.Owner',
+        'card.Type != CardType.Attack',
+        'context.Resources.EnergyValue > 0',
+        'state.ZeroCostAttacksPlayed >= power.Amount',
+        'location.pileType = PileType.Hand',
+        'location.player = card.Owner')) {
+        if (-not $feralBlock.Contains($requiredFeralRule)) {
+            $violations.Add("${resultLocationMirrorPath}: missing 0.107.1 Feral rule '$requiredFeralRule'")
+        }
+    }
+    if ($feralBlock.Contains('card.IsDupe')) {
+        $violations.Add("${resultLocationMirrorPath}: v0.108 Feral dupe exclusion returned")
+    }
+}
+
 $cardOnPlayMirrorPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/CardOnPlayMirrors.cs'
 $cardOnPlayMirrorText = [IO.File]::ReadAllText($cardOnPlayMirrorPath)
 if (-not $cardOnPlayMirrorText.Contains('registry.Register<Scare>(static (_, _) => { });')) {
