@@ -302,8 +302,16 @@ changing solver behavior: Nightmare and Transfigure remain eligible for
 in-combat generation because the root pool delegates to the pinned native
 combat filter; Entropy's Curse transform remains able to select Ascender's Bane
 because transformation filtering stays in the pinned native CardFactory; and
-Hand Drill's AfterBlockBroken mirror remains excluded under STS2_01071, so the
-v0.109 Expose interaction is not backported.
+Hand Drill keeps the 0.107.1 damage-based block-break listener while the broader
+AfterBlockBroken mirror remains excluded under STS2_01071. This distinction is
+intentional: ordinary damage that breaks enemy Block can still trigger Hand
+Drill, while the v0.109 Expose fix is not backported.
+
+A focused STS2_01071 conditional pass also confirmed the v0.108 multiplayer
+additions remain outside the target build: Midnight, Concoct, Constellation,
+Underworld, Soulbound, Cacophony, Hibernate, Imitation Learning, and The Ball.
+Their registrations/handlers stay behind `#if !STS2_01071`; no target-version
+fallback or partial hook registration was found.
 
 A ten-card later-patch pass also found no new route mismatch. Abundance stays
 excluded from the 0.107.1 build because the card was introduced after the

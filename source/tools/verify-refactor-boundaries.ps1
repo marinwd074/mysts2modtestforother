@@ -89,6 +89,32 @@ if ($abundanceStart -ge 0) {
     }
 }
 
+$post01071GuardRules = @(
+    @{ Path = (Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Card/AfterCardDrawnMirrors.cs'); Marker = 'registry.Register<CacophonyPower>(HandleCacophonyPower);' },
+    @{ Path = (Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Card/AfterCardExhaustedMirrors.cs'); Marker = 'registry.Register<Midnight>(HandleMidnight);' },
+    @{ Path = (Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Card/AfterCardGeneratedForCombatMirrors.cs'); Marker = 'registry.Register<SoulboundPower>(HandleSoulboundPower);' },
+    @{ Path = (Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Card/AfterCardPlayedMirrors.cs'); Marker = 'registry.Register<ImitationLearningPower>(HandleImitationLearningPower);' },
+    @{ Path = (Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Card/BeforeCardPlayedMirrors.cs'); Marker = 'registry.Register<ImitationLearningPower>(HandleImitationLearningPower);' },
+    @{ Path = (Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Damage/AfterDamageGivenMirrors.cs'); Marker = 'registry.Register<ConcoctPower>(HandleConcoctPower);' },
+    @{ Path = (Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Damage/AfterDamageGivenMirrors.cs'); Marker = 'registry.Register<UnderworldPower>(HandleUnderworldPower);' },
+    @{ Path = (Join-Path $repositoryRoot 'src/Prediction/TurnStartPowerSupport.cs'); Marker = 'case HibernatePower:' },
+    @{ Path = (Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/CardOnPlayMirrors.cs'); Marker = 'registry.Register<Constellation>(CardDrawCardMirrors.ConstellationOnPlay);' },
+    @{ Path = (Join-Path $repositoryRoot 'src/Prediction/CardOnPlayCompensationCatalog.cs'); Marker = 'typeof(TheBall),' }
+)
+foreach ($rule in $post01071GuardRules) {
+    $text = [IO.File]::ReadAllText($rule.Path)
+    $markerIndex = $text.IndexOf($rule.Marker)
+    if ($markerIndex -lt 0) {
+        $violations.Add("$($rule.Path): expected post-0.107.1 compatibility marker missing '$($rule.Marker)'")
+        continue
+    }
+    $prefixStart = [Math]::Max(0, $markerIndex - 180)
+    $prefix = $text.Substring($prefixStart, $markerIndex - $prefixStart)
+    if (-not $prefix.Contains('#if !STS2_01071')) {
+        $violations.Add("$($rule.Path): post-0.107.1 behavior escaped STS2_01071 guard '$($rule.Marker)'")
+    }
+}
+
 $cardEffectSpecPath = Join-Path $repositoryRoot 'src/Prediction/CardEffectSpecRegistry.cs'
 $cardEffectSpecText = [IO.File]::ReadAllText($cardEffectSpecPath)
 foreach ($modelDrivenRule in @(

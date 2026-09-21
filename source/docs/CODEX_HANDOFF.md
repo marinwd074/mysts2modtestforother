@@ -125,4 +125,11 @@ decrement/consume。未发现新的 route-affecting mismatch，总数仍为 44�
 `IntentForecaster.Build` 的 live CombatState/RNG 读取发生在 `CombatRootSnapshot.Capture` 主线程根捕获阶段，
 随后后台搜索只消费已捕获 Forecast，因此不构成分支状态泄漏。
 
-下一批优先转向 `#if STS2_01071` 分叉和特殊 OnPlay/Hook 执行顺序/continuation；多人牌暂不作为当前 blocker。
+`STS2_01071` 分叉已完成第一轮集中审计：Hyperbeam/Scare 的 0.107.1 专用路径保持不变；
+v0.108 才新增的 Midnight、Concoct、Constellation、Underworld、Soulbound、Cacophony、Hibernate、
+Imitation Learning、The Ball 仍全部位于 `#if !STS2_01071` 边界外，已补静态护栏。Hand Drill 也已澄清：
+0.107.1 保留 damage-based WasBlockBroken 触发，但更广的 AfterBlockBroken/Expose 路径继续排除。
+本轮仍未发现新的 route-affecting mismatch，总数保持 44。
+
+下一批转向特殊 OnPlay/Hook **执行顺序与 continuation**，优先检查会在 pending choice / generated-card /
+Forge / draw / exhaust 中途挂起后恢复的手写链；多人牌仍暂不作为当前 blocker。
