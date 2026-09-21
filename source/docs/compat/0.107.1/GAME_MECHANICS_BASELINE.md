@@ -94,6 +94,26 @@ Solver consequences:
 - redirects, shared buffs/debuffs, and teammate-targeted effects must be modeled
   as multiplayer mechanics first and implementation details second.
 
+### Targeting and autoplay
+
+The pinned 0.107.1 `CardCmd.AutoPlay` path treats target selection differently
+from a normal player choice:
+
+- `AnyEnemy` with no supplied target chooses from `HittableEnemies` using
+  `RunState.Rng.CombatTargets`;
+- `AnyAlly` with no supplied target chooses a living player ally other than
+  the card owner, using the same `CombatTargets` RNG stream;
+- if no valid target exists, the autoplayed card is moved to its result pile
+  without executing its normal play effect.
+
+This random targeting belongs to AutoPlay, not to ordinary manual targeting.
+The solver must not invent random targets for a normal player-directed card.
+
+Because this path consumes `CombatTargets`, multiplayer future prediction must
+treat that RNG as shared/version-sensitive evidence. A route must not assume a
+future random target remains stable across remote actions unless RNG ownership
+and consumption are proven for that boundary.
+
 ### Coordinate
 
 0.107.1-visible rule: give another player 5 Strength this turn, 8 when
@@ -138,15 +158,38 @@ Reference:
 https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2%3AIntercept
 
 The same page records a special interaction where two players intercepting one
-another can result in zero damage for both during that turn. This proves that
-Intercept is an attack-redirection mechanic, not merely "target takes zero
-damage" or a generic damage multiplier.
+another can result in zero damage for both during that turn.
 
-**Status: not safe for algorithm changes yet.** Before implementing or changing
-Intercept, trace the pinned DLL's Covered/Intercept pair, private covered-target
-state, death cleanup, turn-end cleanup, target selection/redirection order, and
-the reciprocal-Intercept edge case. That state must be fork-safe before the
-card is marked fully supported.
+The pinned 0.107.1 DLL explains the player-facing "redirect" without rewriting
+the attack target:
+
+1. `Intercept.OnPlay` first gives Block to the card owner, then applies one
+   instanced `CoveredPower` to the chosen ally with the owner as applier.
+2. `CoveredPower.ModifyDamageMultiplicative` returns `0` for Powered Attack
+   damage targeting the covered ally.
+3. `CoveredPower.AfterApplied` creates or reuses an `InterceptPower` on the
+   applier and appends the covered creature to a private `coveredCreatures`
+   list.
+4. `InterceptPower.ModifyDamageMultiplicative` multiplies Powered Attack
+   damage targeting its owner by `coveredCreatures.Count + 1`.
+5. both Powers remove themselves after the enemy side turn; Covered also
+   removes itself if its applier dies.
+
+In the normal multiplayer enemy-attack pattern, this produces the same
+player-visible result as redirection: covered allies take zero while the
+interceptor's corresponding hit is multiplied to account for the covered
+players. Reciprocal Intercept also becomes mechanically explainable: each
+player's Covered multiplier can reduce their own incoming Powered Attack to
+zero even though each also has an Intercept multiplier.
+
+The private covered-creature list is future-relevant state. Any solver support
+must fork it exactly and include it in state equivalence while the Power can
+still affect damage. It should enter a continuation/public-state stamp only if
+that continuation boundary can occur before the Power's enemy-turn expiry.
+
+**Status: gameplay and DLL semantics confirmed; solver-state implementation and
+a focused reciprocal-Intercept native differential are still required before
+marking the card solver-confirmed.**
 
 ### Beacon of Hope
 
@@ -156,12 +199,75 @@ half that much Block; upgrade makes the card Innate.
 Reference:
 https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2%3ABeacon_of_Hope
 
-**Status: mechanics understood, implementation audit pending.** The solver must
-determine whether "gain Block" observes pre- or post-modifier Block, how integer
-rounding works, whether repeated/zero Block events trigger, and how multiplayer
-recipient filtering is implemented in 0.107.1 before adding compensation.
+The pinned DLL resolves the ambiguous details:
+
+- the Power listens to `AfterBlockGained`, so it receives the owner's
+  post-`ModifyBlock` decimal amount, not the card's raw Block value;
+- it triggers only when the Block event amount is at least 1, the gainer is the
+  Power owner, and the combat's current side matches the owner's side;
+- it computes `amount * 0.5` without pre-rounding and does nothing if that
+  shared amount is below 1;
+- recipients are living player teammates other than the owner;
+- each recipient receives that decimal value through a fresh
+  `CreatureCmd.GainBlock(..., ValueProp.Unpowered, null)`, so the recipient's
+  own Block modifiers still run;
+- an internal boolean guard is set while sharing, preventing the shared Block
+  events from recursively retriggering the same Beacon.
+
+Block storage is integer-backed, so the eventual write truncates as described
+in the Block pipeline below. Do not pre-floor the 50% value before the
+recipient's own Block modifiers have run.
+
+**Status: gameplay and 0.107.1 implementation semantics confirmed; current
+solver hook coverage still needs a targeted audit before code changes.**
+
+### Hammer Time
+
+Public rule: whenever the owner Forges, all allies Forge as well.
+
+References:
+
+- https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2%3ASovereign_Blade
+- https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2%3AFurnace
+
+The pinned DLL implements this in `HammerTimePower.AfterForge`:
+
+- it triggers only when the original forger is the Power owner;
+- it does not trigger when the Forge source is already a `HammerTimePower`;
+- it iterates every other living player and calls `Forge` for the same amount;
+- those secondary Forges use the Hammer Time Power as their source, which
+  suppresses recursive Hammer Time chains on every player.
+
+Thus multiple players holding Hammer Time do not create an unbounded Forge
+cascade from one Forge event.
+
+**Status: gameplay and recursion semantics confirmed; solver support must still
+be audited against the full Forge state mutation described below.**
 
 ## Damage baseline
+
+### 0.107.1 damage pipeline
+
+The pinned DLL keeps damage as `decimal` through the modifier pipeline. For
+normal damage calculation, the important order is:
+
+1. card-enchantment damage modification, when applicable;
+2. every additive damage hook in hook-listener order;
+3. every multiplicative damage hook in hook-listener order;
+4. damage-cap hooks;
+5. clamp the modified amount to at least zero;
+6. consume Block unless the damage is Unblockable;
+7. apply HP-loss modification hooks and then write HP loss;
+8. run post-damage hooks and death processing.
+
+Do not floor after each multiplier. Fractional values can reach Block/HP
+settlement. Creature Block and HP are integer-backed and their internal writes
+convert the decimal amount to `int`; therefore premature solver rounding can
+produce a different result from native execution.
+
+This also means multiplication is not an abstract unordered set of effects:
+hook listener order is part of the executable semantics even when common
+multipliers happen to commute.
 
 ### Powered Attack scope
 
@@ -205,8 +311,23 @@ attacks can affect multiple players, but each player resolves their own Block.
 Reference:
 https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2%3ABlock
 
+The pinned 0.107.1 `CreatureCmd.GainBlock` order is:
+
+1. `BeforeBlockGained`;
+2. `ModifyBlock`;
+3. clamp the modified decimal amount to at least zero;
+4. `AfterModifyingBlockAmount` for the models that modified it;
+5. write Block with `GainBlockInternal`;
+6. record Block history;
+7. `AfterBlockGained` with the modified decimal amount.
+
+`GainBlockInternal` stores Block as an integer and converts only at the final
+write. Therefore a hook such as Beacon of Hope can observe a fractional
+post-modifier amount even though the creature's stored Block is integral.
+
 Any card that redistributes, mirrors, redirects, or derives values from Block
-must use the predicted creature's branch-local Block value.
+must use the predicted creature's branch-local Block value and preserve this
+hook order.
 
 ## Poison baseline
 
@@ -257,17 +378,71 @@ The current Orb page carries beta-content warnings, so its high-level concepts
 are useful but version-sensitive values/order must still be checked against the
 0.107.1 assembly.
 
-## Replay baseline
+## Forge baseline
+
+Public Forge semantics are documented on Sovereign Blade: Forge creates a
+Sovereign Blade when needed and increases Sovereign Blade damage. Spoils of
+Battle also documents that Forge happens before its card draw.
+
+References:
+
+- https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2%3ASovereign_Blade
+- https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2%3ASpoils_of_Battle
+
+The pinned 0.107.1 `ForgeCmd.Forge` order is more precise:
+
+1. collect non-Dupe Sovereign Blades, excluding cards currently in Exhaust;
+2. if none remain outside Exhaust, create a new Sovereign Blade in Hand and
+   mark it `CreatedThroughForge`;
+3. increase the damage of every non-Dupe Sovereign Blade, this time including
+   exhausted copies;
+4. run each blade's `AfterForged` behavior;
+5. only then run the global `Hook.AfterForge(amount, forger, source)`.
+
+This ordering is observable: generated-card hooks can happen before AfterForge,
+and Hammer Time is an AfterForge effect. A solver must not represent Forge as
+only a scalar "Sovereign Blade damage +X" resource.
+
+## Replay and AutoPlay baseline
 
 Replay means a card is played additional times.
 
 Reference:
 https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2%3AReplay
 
-Replay must not be treated as "repeat only the damage number." Every replay can
-interact with card-play hooks, first/last-in-series logic, generated cards,
-choices, Power counters, and card history. Exact replay/autoplay distinctions
-remain DLL- and runtime-test territory.
+In the pinned DLL, Replay is implemented inside one `OnPlayWrapper` series.
+The wrapper sets `PlayCount = replayCount + 1` (subject to card-play-count
+hooks) and executes each iteration with a `CardPlay` carrying:
+
+- `PlayIndex`;
+- `PlayCount`;
+- `IsFirstInSeries` / `IsLastInSeries`;
+- the same play resources and autoplay flag for that series.
+
+Each iteration runs normal Before/After-card-play hooks and the card's complete
+OnPlay behavior. Therefore Replay must not be represented as "repeat the damage
+number" or as independent new player input.
+
+AutoPlay is a different mechanism. `CardCmd.AutoPlay`:
+
+- runs `ShouldPlay` with an `AutoPlayType`;
+- can select a missing enemy/ally target through `CombatTargets` RNG;
+- invokes `BeforeCardAutoPlayed`;
+- records zero resources actually spent while preserving the card's effective
+  energy/star value fields;
+- calls the same `OnPlayWrapper` with `IsAutoPlay = true`.
+
+An autoplayed card can still have Replay, in which case every replay iteration
+belongs to that autoplay series. Hooks that distinguish `IsAutoPlay`,
+`PlayIndex`, first/last-in-series, or resources must therefore remain distinct
+in prediction.
+
+Mayhem is a useful public example of true AutoPlay: its update history contains
+multiple fixes specifically about cards being auto-played at turn start rather
+than manually played.
+
+Reference:
+https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2%3AMayhem
 
 ## Power stack/lifetime vocabulary
 
@@ -328,9 +503,9 @@ Do not change these from public text alone:
 
 | Mechanic/card | Current status | Required evidence before code change |
 |---|---|---|
-| Intercept | public redirect semantics known; private target list matters | full Covered/Intercept DLL trace + fork/fingerprint design + reciprocal-intercept runtime case |
-| Beacon of Hope | public half-Block sharing known | 0.107.1 Block-event amount/rounding/recipient trace |
-| Hammer Time | high-level "all allies Forge" interaction known | 0.107.1 Forge trigger ordering, creator/applier ownership, multiplayer recipient/RNG trace |
+| Intercept | gameplay + Covered/Intercept DLL chain confirmed | solver fork/fingerprint design for private covered-creature list + reciprocal-intercept native differential |
+| Beacon of Hope | gameplay + post-modifier Block sharing/rounding/recursion semantics confirmed | targeted audit of current solver Block hooks and branch-local recipient handling |
+| Hammer Time | Forge propagation and recursion suppression confirmed | targeted audit of current Forge modeling, generated Sovereign Blade state, AfterForge ordering, and multiplayer branch-local recipients |
 | current Tracking text | known to be later presentation | pinned DLL only for 0.107.1 values |
 | current Tank text | changed in v0.108 | pinned DLL + v0.108 delta |
 | current Haze/Outbreak/Sacrifice text | changed after 0.107.1 | pinned DLL + later patch delta |
