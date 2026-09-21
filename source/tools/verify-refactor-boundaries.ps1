@@ -1753,6 +1753,27 @@ if ((-not $continuationStampText.Contains('PoisonApplications=')) -or
     $violations.Add("${continuationStampPath}: Outbreak hidden counter must participate in exact continuation stamps")
 }
 
+
+$cardEffectSpecPath = Join-Path $repositoryRoot 'src/Prediction/CardEffectSpecRegistry.cs'
+$cardEffectSpecText = [IO.File]::ReadAllText($cardEffectSpecPath)
+if ($cardEffectSpecText.Contains('[typeof(GuidingStar)] = [Owner<DrawCardsNextTurnPower>')) {
+    $violations.Add("${cardEffectSpecPath}: 0.107.1 Guiding Star draws immediately; deferred draw power returned")
+}
+$fightThroughStart = $cardEffectSpecText.IndexOf('case FightThrough:')
+$fightThroughEnd = $cardEffectSpecText.IndexOf('case GraveWarden:', $fightThroughStart)
+if ($fightThroughStart -lt 0 -or $fightThroughEnd -le $fightThroughStart) {
+    $violations.Add("${cardEffectSpecPath}: Fight Through generation boundary is missing")
+}
+else {
+    $fightThroughBlock = $cardEffectSpecText.Substring($fightThroughStart, $fightThroughEnd - $fightThroughStart)
+    if (-not $fightThroughBlock.Contains('AddFixed<Wound>(simulator, card, PileType.Discard, 1)')) {
+        $violations.Add("${cardEffectSpecPath}: 0.107.1 Fight Through must generate exactly one Wound")
+    }
+    if ($fightThroughBlock.Contains('PileType.Discard, 2')) {
+        $violations.Add("${cardEffectSpecPath}: later-version Fight Through two-Wound behavior returned")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."

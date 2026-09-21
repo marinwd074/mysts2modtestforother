@@ -22,7 +22,7 @@ replace the native-vs-predicted runtime differential.
 
 ## Corrected version drift
 
-Four route-affecting mismatches were confirmed in the first pass:
+Six route-affecting mismatches were confirmed in the first pass:
 
 | Card | 0.107.1 native behavior | Incorrect solver behavior | Correction |
 |---|---|---|---|
@@ -30,6 +30,8 @@ Four route-affecting mismatches were confirmed in the first pass:
 | Sacrifice | kills the living Osty and gains block equal to 2x Osty's max HP | used 3x max HP | restore 2x |
 | Haze | applies Poison to all hittable enemies; upgrade increases Poison | also applied Weak | remove the Weak application |
 | Outbreak | applies OutbreakPower 11/15; every third positive Poison application by the owner deals that amount as Unpowered damage to all hittable enemies | immediately applied Poison to all enemies and triggered Poison damage when the card was played | restore the persistent power, its hidden 0/1/2 poison counter, and its third-application damage trigger |
+| Guiding Star | attacks, then immediately draws Cards this turn | also added DrawCardsNextTurnPower | remove the deferred draw compensation and rely on the native-order inferred draw |
+| Fight Through | gains block and adds one Wound to discard | added two Wounds | generate exactly one Wound |
 
 These differences materially affect route ranking, so source-shape guards in
 `tools/verify-refactor-boundaries.ps1` reject the later-version semantics.
@@ -42,7 +44,7 @@ cannot erase or silently mismatch the next trigger.
 The initial pass also checked several special cases that already match the
 0.107.1 assembly and were left unchanged: No Escape, Synchronize, Hang,
 The Scythe, Spite, Heavenly Drill, Glacier, Meteor Strike, Refract,
-Fight Through, Predator, and Bouncing Flask.
+Predator, and Bouncing Flask.
 
 Choice-driven cards must be compared across the whole solver pipeline rather
 than one OnPlay switch. For example, Brand's exhaust choice and post-choice

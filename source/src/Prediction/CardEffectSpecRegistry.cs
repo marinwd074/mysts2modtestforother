@@ -46,7 +46,6 @@ internal static class CardEffectSpecRegistry
         [typeof(FlameBarrier)] = [Owner<FlameBarrierPower>("DamageBack")],
         [typeof(FocusedStrike)] = [Owner<FocusedStrikePower>("FocusPower")],
         [typeof(Glow)] = [Owner<DrawCardsNextTurnPower>(card => card.DynamicVars.Cards.IntValue)],
-        [typeof(GuidingStar)] = [Owner<DrawCardsNextTurnPower>(card => card.DynamicVars.Cards.IntValue)],
         [typeof(Hegemony)] = [Owner<EnergyNextTurnPower>(card => card.DynamicVars.Energy.IntValue)],
 #if STS2_01071
         [typeof(Hyperbeam)] = [],
@@ -405,7 +404,7 @@ internal static class CardEffectSpecRegistry
                 break;
             }
             case FightThrough:
-                AddFixed<Wound>(simulator, card, PileType.Discard, 2);
+                AddFixed<Wound>(simulator, card, PileType.Discard, 1);
                 applied = true;
                 break;
             case GraveWarden:
