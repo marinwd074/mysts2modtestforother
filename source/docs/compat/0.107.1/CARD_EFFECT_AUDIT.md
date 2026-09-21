@@ -152,7 +152,9 @@ The 0.107.1 sequences for Adrenaline, Offering, Neurosurge, Spoils of Battle,
 Compile Driver, Escape Plan, Fetch, FTL, Huddle Up, Pillage, Reboot,
 Restlessness, and Scrape now use one fork-safe card-draw execution frame.
 The frame preserves the native program counter, any in-flight Draw result list,
-the next multiplayer ally for Huddle Up, and Pillage's draw/evaluate loop.
+the teammate Creature roster/index for Huddle Up, and Pillage's draw/evaluate
+loop. Huddle Up re-checks alive/player state only when each native lazy-enumerator
+position is reached, rather than freezing the alive set before the first Draw.
 Escape Plan and Scrape therefore evaluate the cards that finish drawing after
 the nested choice instead of a partial pre-suspension snapshot, while Offering,
 Neurosurge, Reboot, and the attack-then-draw cards no longer skip their native

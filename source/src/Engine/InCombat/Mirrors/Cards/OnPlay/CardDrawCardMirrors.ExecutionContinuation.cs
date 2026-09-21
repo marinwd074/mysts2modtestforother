@@ -2,6 +2,7 @@ using CombatSolver.Engine.Common;
 using CombatSolver.Engine.InCombat.Simulation;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Cards;
+using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.Models.Powers;
@@ -16,8 +17,8 @@ internal static partial class CardDrawCardMirrors
         CardDrawSequence sequence,
         int stage = 0,
         IReadOnlyList<PredictedCard>? drawnCards = null,
-        IReadOnlyList<Player>? players = null,
-        int nextPlayer = 0)
+        IReadOnlyList<Creature>? teammates = null,
+        int nextTeammate = 0)
     {
         switch (sequence)
         {
@@ -159,16 +160,24 @@ internal static partial class CardDrawCardMirrors
             case CardDrawSequence.HuddleUp:
             {
                 var card = (HuddleUp)context.Card.MutablePreview;
-                players ??= [];
-                for (int index = nextPlayer; index < players.Count; index++)
+                teammates ??= [];
+                for (int index = nextTeammate; index < teammates.Count; index++)
                 {
-                    context.Simulator.Draw(players[index], card.DynamicVars.Cards.BaseValue);
+                    Creature teammate = teammates[index];
+                    if (!teammate.IsPlayer
+                        || !context.State.GetCreature(teammate).IsAlive
+                        || teammate.Player is not { } player)
+                    {
+                        continue;
+                    }
+
+                    context.Simulator.Draw(player, card.DynamicVars.Cards.BaseValue);
                     if (QueueCardDrawContinuation(
                             context,
                             sequence,
                             stage,
-                            players: players,
-                            nextPlayer: index + 1))
+                            teammates: teammates,
+                            nextTeammate: index + 1))
                         return false;
                 }
                 return true;
@@ -270,8 +279,8 @@ internal static partial class CardDrawCardMirrors
         CardDrawSequence sequence,
         int nextStage,
         IReadOnlyList<PredictedCard>? drawnCards = null,
-        IReadOnlyList<Player>? players = null,
-        int nextPlayer = 0)
+        IReadOnlyList<Creature>? teammates = null,
+        int nextTeammate = 0)
     {
         if (!context.Simulator.HasPendingChoice)
             return false;
@@ -283,8 +292,8 @@ internal static partial class CardDrawCardMirrors
                 sequence,
                 nextStage,
                 drawnCards,
-                players,
-                nextPlayer));
+                teammates,
+                nextTeammate));
         return true;
     }
 
@@ -311,8 +320,8 @@ internal static partial class CardDrawCardMirrors
         CardDrawSequence Sequence,
         int Stage,
         IReadOnlyList<PredictedCard>? DrawnCards,
-        IReadOnlyList<Player>? Players,
-        int NextPlayer) : ICombatPredictionExecutionFrame
+        IReadOnlyList<Creature>? Teammates,
+        int NextTeammate) : ICombatPredictionExecutionFrame
     {
         public void PrepareFork(PredictionForkContext context)
         {
@@ -340,7 +349,7 @@ internal static partial class CardDrawCardMirrors
                 Sequence,
                 Stage,
                 DrawnCards,
-                Players,
-                NextPlayer);
+                Teammates,
+                NextTeammate);
     }
 }

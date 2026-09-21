@@ -2813,8 +2813,9 @@ foreach ($requiredCardDrawContinuationRule in @(
     'CardDrawSequence.Pillage',
     'CardDrawSequence.Scrape',
     'CardDrawSequence.EscapePlan',
-    'players: allies',
-    'nextPlayer: index + 1')) {
+    'teammates: allies',
+    'nextTeammate: index + 1',
+    '!context.State.GetCreature(teammate).IsAlive')) {
     if (-not ($cardDrawSequenceText.Contains($requiredCardDrawContinuationRule) -or
               $cardDrawContinuationText.Contains($requiredCardDrawContinuationRule))) {
         $violations.Add("${cardDrawContinuationPath}: missing card-draw continuation rule '$requiredCardDrawContinuationRule'")

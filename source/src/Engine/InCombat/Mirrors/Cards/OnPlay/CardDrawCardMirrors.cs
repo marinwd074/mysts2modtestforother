@@ -89,14 +89,11 @@ internal static partial class CardDrawCardMirrors
     public static void HuddleUpOnPlay(HuddleUp card, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        var allies = context.State.GetTeammatesOf(card.Owner.Creature)
-            .Where(creature => creature.IsPlayer && context.State.GetCreature(creature).IsAlive)
-            .Select(creature => creature.Player!)
-            .ToArray();
+        var allies = context.State.GetTeammatesOf(card.Owner.Creature).ToArray();
         _ = ContinueCardDrawSequence(
             context,
             CardDrawSequence.HuddleUp,
-            players: allies);
+            teammates: allies);
     }
 
     public static void ImpatienceOnPlay(Impatience card, CardOnPlayMirrorContext context)
