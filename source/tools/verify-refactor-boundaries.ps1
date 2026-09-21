@@ -1587,11 +1587,15 @@ foreach ($forbidden in @('Task<', 'Func<', 'Action<')) {
 if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/CombatHistoryCounterKey.cs') -SimpleMatch 'simulator.History.GetCounters(owner)' -Quiet)) {
     $violations.Add('History key must consume incremental totals')
 }
-if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.cs') -SimpleMatch 'root.PlayerCount == 1 && CombatHistoryCounterKey.AppliesTo(root.PlayerCardIds)' -Quiet)) {
+$historySolverPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.cs'
+if (-not (Select-String -LiteralPath $historySolverPath -SimpleMatch 'root.PlayerCount == 1' -Quiet)
+    -or -not (Select-String -LiteralPath $historySolverPath -SimpleMatch 'CombatHistoryCounterKey.AppliesTo(root.PlayerCardIds)' -Quiet)) {
     $violations.Add('History-sensitive transposition key must stay single-player only')
 }
 foreach ($historyFile in @('CombatPredictionHistory.cs', 'CombatPredictionHistory.CardContinuation.cs', 'CombatPredictionHistory.ExecutionContinuation.cs')) {
-    if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot "src/Engine/InCombat/Simulation/$historyFile") -SimpleMatch '_counterOwner, _counters' -Quiet)) {
+    $historyPath = Join-Path $repositoryRoot "src/Engine/InCombat/Simulation/$historyFile"
+    if (-not (Select-String -LiteralPath $historyPath -SimpleMatch '_counterOwner' -Quiet)
+        -or -not (Select-String -LiteralPath $historyPath -SimpleMatch '_counters' -Quiet)) {
         $violations.Add("History fork must inherit counters: $historyFile")
     }
 }
