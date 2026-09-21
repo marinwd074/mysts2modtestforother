@@ -49,6 +49,7 @@ Push-Location -LiteralPath $repositoryRoot
 try {
     Invoke-DotnetContract 'StateFingerprintChecks' 'tools/StateFingerprintChecks/StateFingerprintChecks.csproj'
     Invoke-DotnetContract 'HistoryCounterKeyChecks' 'tools/HistoryCounterKeyChecks/HistoryCounterKeyChecks.csproj'
+    Invoke-DotnetContract 'BfwsResearchChecks' 'tools/BfwsResearchChecks/BfwsResearchChecks.csproj'
     Invoke-DotnetContract 'PotionStrategyChecks' 'tools/PotionStrategyChecks/PotionStrategyChecks.csproj'
     Invoke-DotnetContract 'TurnStartChoicePreviewChecks' 'tools/TurnStartChoicePreviewChecks/TurnStartChoicePreviewChecks.csproj'
     Invoke-DotnetContract 'CardHookReceiverChecks' 'tools/CardHookReceiverChecks/CardHookReceiverChecks.csproj'

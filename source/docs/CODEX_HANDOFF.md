@@ -214,4 +214,12 @@ ActTransitionBossHpStrategy 对两种过 Act恢复都继续生效。累计 route
 这是 solver 配置安全边界，不是游戏版本数值。Act 3 的零基索引 2 与 0.107.1 三个 Boss
 TEST_SUBJECT_BOSS / AEONGLASS_BOSS / QUEEN_BOSS 也已补静态版本护栏。
 
+最终收尾扫描第五小批继续检查 StrategicEffect / Novelty / memory policy。StrategicEffectModel 中
+cards-per-turn、reachable-cards、Buffer 兜底、Focus/Furnace scaling 等裸数字均属于 solver 的启发式估值，
+不应伪装成 0.107.1 游戏常量；SearchWaveMemoryPolicy 与 SmartLayerMemoryForecast 的 64 MiB 虽同值，
+但分别表示 parent reserve 与 whole-layer forecast 最小余量，当前没有证据要求合并。BFWS 达到
+MaxNoveltyEntries 后仍按“先判断当前 tuple novelty、再限制历史写入”处理，已与仓库 ReferenceNovelty
+和容量 0/1/7 的生成流合同核对，属于设计语义而非 bug。未发现新的 route-affecting mismatch，总数仍为 45。
+现有 BfwsResearchChecks 此前未进入 run-contract-tests；已加入 L1 合同套件，并补静态门禁防止再次掉出。
+
 已完成的 Power、continuation、死亡生命周期和 78/78 卡牌 OnPlay 数值不重复展开；多人牌仍暂不作为当前 blocker。

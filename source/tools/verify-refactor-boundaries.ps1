@@ -28,6 +28,12 @@ $forbiddenSearchReferences = @(
 )
 
 $violations = [System.Collections.Generic.List[string]]::new()
+$contractRunnerPath = Join-Path $repositoryRoot 'tools/run-contract-tests.ps1'
+$contractRunnerText = [IO.File]::ReadAllText($contractRunnerPath)
+if (-not $contractRunnerText.Contains("Invoke-DotnetContract 'BfwsResearchChecks' 'tools/BfwsResearchChecks/BfwsResearchChecks.csproj'")) {
+    $violations.Add("${contractRunnerPath}: BFWS novelty/cap contracts must remain in the L1 contract suite")
+}
+
 $cardPlayCompatibilityPath = Join-Path $repositoryRoot 'src/Compatibility/Sts2CardPlayCompatibility.cs'
 $cardPlayContinuationPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.CardExecutionContinuation.cs'
 $cardPlayCompatibilityText = [IO.File]::ReadAllText($cardPlayCompatibilityPath)
