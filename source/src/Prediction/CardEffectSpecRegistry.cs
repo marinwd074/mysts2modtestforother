@@ -37,6 +37,7 @@ internal static class CardEffectSpecRegistry
         [typeof(Blur)] = [Owner<BlurPower>("Blur")],
         [typeof(ChargeBattery)] = [Owner<EnergyNextTurnPower>(card => card.DynamicVars.Energy.IntValue)],
         [typeof(Colossus)] = [Owner<ColossusPower>("Colossus")],
+        [typeof(Coordinate)] = [Target<CoordinatePower>(card => card.DynamicVars.Strength.IntValue)],
         [typeof(CrushUnder)] = [AllEnemies<CrushUnderPower>("StrengthLoss")],
         [typeof(Debilitate)] = [Target<DebilitatePower>("DebilitatePower")],
         [typeof(Defy)] = [Target<WeakPower>(card => card.DynamicVars.Weak.IntValue)],
@@ -521,7 +522,9 @@ internal static class CardEffectSpecRegistry
         int amount,
         Creature applier)
     {
-        if (powerType == typeof(CrushUnderPower))
+        if (powerType == typeof(CoordinatePower))
+            combat.ApplyTemporaryStrengthGain<CoordinatePower>(target, amount, applier);
+        else if (powerType == typeof(CrushUnderPower))
             combat.ApplyTemporaryStrengthLoss<CrushUnderPower>(target, amount, applier);
         else if (powerType == typeof(DyingStarPower))
             combat.ApplyTemporaryStrengthLoss<DyingStarPower>(target, amount, applier);

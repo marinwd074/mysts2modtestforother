@@ -1933,6 +1933,23 @@ foreach ($requiredFlankingExpiry in @(
     }
 }
 
+
+$coordinateSpec = '[typeof(Coordinate)] = [Target<CoordinatePower>(card => card.DynamicVars.Strength.IntValue)]'
+if (-not $cardEffectSpecText.Contains($coordinateSpec)) {
+    $violations.Add("${cardEffectSpecPath}: 0.107.1 Coordinate must apply its Strength amount as CoordinatePower to the target")
+}
+$coordinateApplyStart = $cardEffectSpecText.IndexOf('private static void ApplyPower(')
+$coordinateApplyEnd = $cardEffectSpecText.IndexOf('private static CardPowerEffect Owner<', $coordinateApplyStart)
+if ($coordinateApplyStart -lt 0 -or $coordinateApplyEnd -le $coordinateApplyStart) {
+    $violations.Add("${cardEffectSpecPath}: shared card Power application boundary is missing")
+}
+else {
+    $coordinateApplyBlock = $cardEffectSpecText.Substring($coordinateApplyStart, $coordinateApplyEnd - $coordinateApplyStart)
+    if (-not $coordinateApplyBlock.Contains('combat.ApplyTemporaryStrengthGain<CoordinatePower>(target, amount, applier)')) {
+        $violations.Add("${cardEffectSpecPath}: CoordinatePower must use temporary Strength gain semantics")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."
