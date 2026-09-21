@@ -22,7 +22,7 @@ replace the native-vs-predicted runtime differential.
 
 ## Corrected version drift
 
-Six route-affecting mismatches were confirmed in the first pass:
+Seven route-affecting mismatches were confirmed in the first pass:
 
 | Card | 0.107.1 native behavior | Incorrect solver behavior | Correction |
 |---|---|---|---|
@@ -32,6 +32,7 @@ Six route-affecting mismatches were confirmed in the first pass:
 | Outbreak | applies OutbreakPower 11/15; every third positive Poison application by the owner deals that amount as Unpowered damage to all hittable enemies | immediately applied Poison to all enemies and triggered Poison damage when the card was played | restore the persistent power, its hidden 0/1/2 poison counter, and its third-application damage trigger |
 | Guiding Star | attacks, then immediately draws Cards this turn | also added DrawCardsNextTurnPower | remove the deferred draw compensation and rely on the native-order inferred draw |
 | Fight Through | gains block and adds one Wound to discard | added two Wounds | generate exactly one Wound |
+| Well-Laid Plans | applies WellLaidPlansPower using RetainAmount (1, upgraded to 2) | always applied one stack | read RetainAmount from the 0.107.1 card model |
 
 These differences materially affect route ranking, so source-shape guards in
 `tools/verify-refactor-boundaries.ps1` reject the later-version semantics.

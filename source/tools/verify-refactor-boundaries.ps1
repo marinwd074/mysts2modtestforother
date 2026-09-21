@@ -1774,6 +1774,25 @@ else {
     }
 }
 
+
+$cardPowerSupportPath = Join-Path $repositoryRoot 'src/Prediction/CardPowerOnPlaySupport.SToZ.cs'
+$cardPowerSupportText = [IO.File]::ReadAllText($cardPowerSupportPath)
+$wellLaidPlansStart = $cardPowerSupportText.IndexOf('case WellLaidPlans:')
+if ($wellLaidPlansStart -lt 0) {
+    $violations.Add("${cardPowerSupportPath}: Well-Laid Plans boundary is missing")
+}
+else {
+    $wellLaidPlansBlock = $cardPowerSupportText.Substring(
+        $wellLaidPlansStart,
+        [Math]::Min(320, $cardPowerSupportText.Length - $wellLaidPlansStart))
+    if (-not $wellLaidPlansBlock.Contains('card.DynamicVars["RetainAmount"].IntValue')) {
+        $violations.Add("${cardPowerSupportPath}: 0.107.1 Well-Laid Plans must use RetainAmount")
+    }
+    if ($wellLaidPlansBlock.Contains('WellLaidPlansPower>(owner, 1, owner)')) {
+        $violations.Add("${cardPowerSupportPath}: fixed one-stack Well-Laid Plans behavior returned")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."
