@@ -3119,6 +3119,44 @@ foreach ($requiredHistoryStamp in @(
     }
 }
 
+$cardGenerationContinuationPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/CardGenerationCardMirrors.ExecutionContinuation.cs'
+$cardGenerationContinuationText = [IO.File]::ReadAllText($cardGenerationContinuationPath)
+foreach ($requiredGenerationPrefixRule in @(
+    'GenerationCardSequence.Jackpot',
+    'GenerationCardSequence.ManifestAuthority',
+    'private sealed record GenerationCardExecutionFrame(',
+    'ContinueGenerationCardSequence(',
+    'private sealed record MadScienceMainExecutionFrame(',
+    'private sealed record MadScienceRiderExecutionFrame(',
+    'ContinueMadScienceMain(',
+    'ContinueMadScienceRider(',
+    'nextStage: 2',
+    'typeof(DexterityPower)',
+    'typeof(WeakPower)',
+    'typeof(VulnerablePower)')) {
+    if (-not $cardGenerationContinuationText.Contains($requiredGenerationPrefixRule)) {
+        $violations.Add("${cardGenerationContinuationPath}: missing generated-card/Mad Science continuation rule '$requiredGenerationPrefixRule'")
+    }
+}
+foreach ($generatedPrefixMethod in @('Jackpot', 'MadScience', 'ManifestAuthority')) {
+    $methodStart = $cardGenerationMirrorText.IndexOf("public static void $($generatedPrefixMethod)OnPlay")
+    $nextPublic = $cardGenerationMirrorText.IndexOf([Environment]::NewLine + '    public static void ', $methodStart + 1)
+    $nextPrivate = $cardGenerationMirrorText.IndexOf([Environment]::NewLine + '    private static ', $methodStart + 1)
+    $candidates = @($nextPublic, $nextPrivate) | Where-Object { $_ -gt $methodStart }
+    $methodEnd = if ($candidates.Count -gt 0) { ($candidates | Measure-Object -Minimum).Minimum } else { $cardGenerationMirrorText.Length }
+    if ($methodStart -lt 0 -or $methodEnd -le $methodStart) {
+        $violations.Add("${cardGenerationMirrorPath}: generated-prefix method boundary missing for $generatedPrefixMethod")
+        continue
+    }
+    $methodBlock = $cardGenerationMirrorText.Substring($methodStart, $methodEnd - $methodStart)
+    if (-not $methodBlock.Contains('context.Simulator.AcknowledgeExecutionDispatch();')) {
+        $violations.Add("${cardGenerationMirrorPath}: $generatedPrefixMethod must acknowledge its resumable OnPlay sequence")
+    }
+}
+if ($cardGenerationMirrorText.Contains('ApplyMadScienceRider(')) {
+    $violations.Add("${cardGenerationMirrorPath}: non-resumable Mad Science rider helper returned")
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."

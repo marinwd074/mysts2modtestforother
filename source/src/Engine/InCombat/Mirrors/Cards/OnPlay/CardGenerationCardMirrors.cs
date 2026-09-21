@@ -9,7 +9,7 @@ using MegaCrit.Sts2.Core.Models.Powers;
 
 namespace CombatSolver.Engine.InCombat.Mirrors.Cards.OnPlay;
 
-internal static class CardGenerationCardMirrors
+internal static partial class CardGenerationCardMirrors
 {
 #if !STS2_01071
     public static void AbundanceOnPlay(Abundance card, CardOnPlayMirrorContext context)
@@ -101,24 +101,10 @@ internal static class CardGenerationCardMirrors
         context.Simulator.AddGeneratedCardsToCombat(cards, PileType.Hand, card.Owner);
     }
 
-    public static void JackpotOnPlay(Jackpot card, CardOnPlayMirrorContext context)
+    public static void JackpotOnPlay(Jackpot _, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        context.AttackSingle();
-        if (context.Simulator.HasPendingChoice)
-            return;
-
-        var cards = card.Owner.GetUnlockedCharacterCards(context.CardMultiplayerConstraint)
-            .Where(candidate => candidate.EnergyCost is { Canonical: 0, CostsX: false })
-            .GetForCombat(
-                card.Owner,
-                card.DynamicVars.Cards.IntValue,
-                context.Rng.CombatCardGeneration,
-                context.CardMultiplayerConstraint)
-            .UpgradeIf(card.IsUpgraded)
-            .ToList();
-
-        context.Simulator.AddGeneratedCardsToCombat(cards, PileType.Hand, card.Owner);
+        _ = ContinueGenerationCardSequence(context, GenerationCardSequence.Jackpot);
     }
 
     public static void LargesseOnPlay(Largesse card, CardOnPlayMirrorContext context)
@@ -139,15 +125,13 @@ internal static class CardGenerationCardMirrors
 
     public static void MadScienceOnPlay(MadScience card, CardOnPlayMirrorContext context)
     {
-        if (context.CombatState is not ICombatPredictionEffectSink effects)
-            throw new InvalidOperationException("疯狂科学效果缺少可写的预测状态。");
+        context.Simulator.AcknowledgeExecutionDispatch();
         switch (card.TinkerTimeType)
         {
             case CardType.Attack:
             {
                 // 0.107.1 executes Violence as separate AttackCommands. This matters for
                 // one-attack effects such as Vigor, which are consumed after the first command.
-                context.Simulator.AcknowledgeExecutionDispatch();
                 int hitCount = card.TinkerTimeRider == TinkerTime.RiderEffect.Violence
                     ? card.DynamicVars["ViolenceHits"].IntValue
                     : 1;
@@ -155,41 +139,12 @@ internal static class CardGenerationCardMirrors
                 return;
             }
             case CardType.Skill:
-                context.GainBlock(card.Owner.Creature);
-                break;
             case CardType.Power:
-                switch (card.TinkerTimeRider)
-                {
-                    case TinkerTime.RiderEffect.Expertise:
-                        effects.ApplyPower(
-                            typeof(StrengthPower),
-                            card.Owner.Creature,
-                            card.DynamicVars["ExpertiseStrength"].IntValue,
-                            card.Owner.Creature);
-                        effects.ApplyPower(
-                            typeof(DexterityPower),
-                            card.Owner.Creature,
-                            card.DynamicVars["ExpertiseDexterity"].IntValue,
-                            card.Owner.Creature);
-                        break;
-                    case TinkerTime.RiderEffect.Curious:
-                        effects.ApplyPower(
-                            typeof(CuriousPower),
-                            card.Owner.Creature,
-                            card.DynamicVars["CuriousReduction"].IntValue,
-                            card.Owner.Creature);
-                        break;
-                    case TinkerTime.RiderEffect.Improvement:
-                        effects.ApplyPower(typeof(ImprovementPower), card.Owner.Creature, 1, card.Owner.Creature);
-                        break;
-                }
-                break;
+                _ = ContinueMadScienceMain(context, stage: 0);
+                return;
             default:
                 throw new ArgumentOutOfRangeException(nameof(card.TinkerTimeType), card.TinkerTimeType, null);
         }
-        if (context.Simulator.HasPendingChoice)
-            return;
-        ApplyMadScienceRider(card, context);
     }
 
     private static bool ContinueMadScienceAttacks(
@@ -216,57 +171,7 @@ internal static class CardGenerationCardMirrors
             }
         }
 
-        ApplyMadScienceRider(card, context);
-        return !context.Simulator.HasPendingChoice;
-    }
-
-    private static void ApplyMadScienceRider(MadScience card, CardOnPlayMirrorContext context)
-    {
-        if (context.CombatState is not ICombatPredictionEffectSink effects)
-            throw new InvalidOperationException("疯狂科学效果缺少可写的预测状态。");
-        switch (card.TinkerTimeRider)
-        {
-            case TinkerTime.RiderEffect.Sapping:
-                effects.ApplyPower(
-                    typeof(WeakPower),
-                    context.Target,
-                    card.DynamicVars["SappingWeak"].IntValue,
-                    card.Owner.Creature);
-                effects.ApplyPower(
-                    typeof(VulnerablePower),
-                    context.Target,
-                    card.DynamicVars["SappingVulnerable"].IntValue,
-                    card.Owner.Creature);
-                break;
-            case TinkerTime.RiderEffect.Choking:
-                effects.ApplyPower(
-                    typeof(StranglePower),
-                    context.Target,
-                    card.DynamicVars["ChokingDamage"].IntValue,
-                    card.Owner.Creature);
-                break;
-            case TinkerTime.RiderEffect.Energized:
-                context.Simulator.GainEnergy(card.Owner, card.DynamicVars["EnergizedEnergy"].IntValue);
-                break;
-            case TinkerTime.RiderEffect.Wisdom:
-                context.Simulator.Draw(card.Owner, card.DynamicVars["WisdomCards"].IntValue);
-                break;
-            case TinkerTime.RiderEffect.Chaos:
-            {
-                var cards = card.Owner.GetUnlockedCharacterCards(context.CardMultiplayerConstraint)
-                    .GetDistinctForCombat(
-                        card.Owner,
-                        1,
-                        context.Rng.CombatCardGeneration,
-                        context.CardMultiplayerConstraint)
-                    .Select(generatedCard => generatedCard.SetToFreeThisTurn())
-                    .ToList();
-                // 0.107.1 uses ordinary CardPileCmd.Add for the Chaos rider.
-                // Do not emit CardGenerated history or AfterCardGeneratedForCombat hooks here.
-                context.Simulator.AddToPile(cards, PileType.Hand);
-                break;
-            }
-        }
+        return ContinueMadScienceRider(context, stage: 0);
     }
 
     private sealed record MadScienceAttackExecutionFrame(
@@ -298,23 +203,12 @@ internal static class CardGenerationCardMirrors
                 HitCount);
     }
 
-    public static void ManifestAuthorityOnPlay(ManifestAuthority card, CardOnPlayMirrorContext context)
+    public static void ManifestAuthorityOnPlay(ManifestAuthority _, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        context.GainBlock(card.Owner.Creature);
-        if (context.Simulator.HasPendingChoice)
-            return;
-
-        var cards = context.Simulator
-            .GetDistinctUnlockedColorlessForCombat(
-                card.Owner,
-                1,
-                context.Rng.CombatCardGeneration,
-                context.CardMultiplayerConstraint)
-            .UpgradeIf(card.IsUpgraded)
-            .ToList();
-
-        context.Simulator.AddGeneratedCardsToCombat(cards, PileType.Hand, card.Owner);
+        _ = ContinueGenerationCardSequence(
+            context,
+            GenerationCardSequence.ManifestAuthority);
     }
 
     public static void MetamorphosisOnPlay(Metamorphosis card, CardOnPlayMirrorContext context)

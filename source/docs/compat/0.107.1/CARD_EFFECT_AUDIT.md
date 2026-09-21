@@ -28,7 +28,7 @@ replace the native-vs-predicted runtime differential.
 
 ## Corrected version drift
 
-Thirty-nine route-affecting mismatches have been confirmed in the 0.107.1 source audit:
+Forty route-affecting mismatches have been confirmed in the 0.107.1 source audit:
 
 | Card | 0.107.1 native behavior | Incorrect solver behavior | Correction |
 |---|---|---|---|
@@ -200,6 +200,22 @@ the remaining Status cards and the final attack. The mirror now stores the
 Status snapshot, precomputed hit count, and next Exhaust index in a fork-safe
 execution frame. Effects triggered by an early Exhaust therefore cannot change
 this play's hit count, matching the native async state machine.
+
+### Generated-card prefix and Mad Science continuation correction
+
+Several generated-card mirrors already used resumable generated-card batches,
+but their card-level prefixes could still disappear across a nested choice.
+In 0.107.1, Jackpot awaits its Attack before selecting and creating zero-cost
+cards, and Manifest Authority awaits Block before creating its colorless card.
+Those two mirrors now resume at the generation suffix instead of returning from
+OnPlay early.
+
+Mad Science has a second nested state machine in the native assembly. Skill
+resolves Block before its rider; Power/Expertise resolves Strength then
+Dexterity before returning to the rider; and the Sapping rider resolves Weak
+then Vulnerable. Prediction now preserves those exact stages in fork-safe
+execution frames. The existing Violence rider still uses separate AttackCommands,
+and the Chaos rider still uses ordinary pile insertion as required by 0.107.1.
 
 ### Opaque Attack / Damage / Kill continuation boundary
 
