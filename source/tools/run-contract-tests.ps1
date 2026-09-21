@@ -57,6 +57,7 @@ try {
     Invoke-DotnetContract 'MultiplayerLocalCrossTurnChecks' 'tools/MultiplayerLocalCrossTurnChecks/MultiplayerLocalCrossTurnChecks.csproj'
     Invoke-DotnetContract 'MultiplayerRootCaptureChecks' 'tools/MultiplayerRootCaptureChecks/MultiplayerRootCaptureChecks.csproj'
     Invoke-DotnetContract 'Sts2LocalInspectorChecks' 'tools/Sts2LocalInspector/Sts2LocalInspector.csproj' -Arguments @('--self-test')
+    Invoke-DotnetContract 'AncillaryWorkChecks' 'tools/AncillaryWorkChecks/AncillaryWorkChecks.csproj'
     Invoke-PowerShellContract 'MultiplayerSafeExecuteEvidenceChecks' 'tools/multiplayer-lab/test-mp2a-validator.ps1'
     Invoke-PowerShellContract 'MultiplayerSafeExecuteMp2BEvidenceChecks' 'tools/multiplayer-lab/test-mp2b-validator.ps1'
     Invoke-PowerShellContract 'MultiplayerSafeExecuteMp2BInterferenceChecks' 'tools/multiplayer-lab/test-mp2b-interference-validator.ps1'
