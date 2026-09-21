@@ -66,6 +66,9 @@ internal static partial class EndTurnPowerSupport
                 case HighVoltagePower when ownerParticipates:
                     combat.Apply<StrengthPower>(owner, power.Amount, owner);
                     break;
+                case KnockdownPower when ownerParticipates:
+                    combat.SetPowerAmount(power, 0);
+                    break;
                 case TaintedPower when side == CombatSide.Enemy:
                     combat.SetAmount<TaintedPower>(owner, 0);
                     break;

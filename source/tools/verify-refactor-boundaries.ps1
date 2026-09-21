@@ -2173,6 +2173,22 @@ else {
     }
 }
 
+
+$endTurnPowerText = [IO.File]::ReadAllText($endTurnPowerPath)
+$knockdownExpiry = 'case KnockdownPower when ownerParticipates:'
+if (-not $endTurnPowerText.Contains($knockdownExpiry)) {
+    $violations.Add("${endTurnPowerPath}: 0.107.1 Knockdown instances must expire when their owner participates in side-turn end")
+}
+if (-not $endTurnPowerText.Contains('combat.SetPowerAmount(power, 0);')) {
+    $violations.Add("${endTurnPowerPath}: Knockdown expiry must remove the specific instanced power")
+}
+if (-not $cardEffectSpecText.Contains('[typeof(Knockdown)] = [Target<KnockdownPower>("KnockdownPower")]')) {
+    $violations.Add("${cardEffectSpecPath}: Knockdown must remain an instanced target Power application")
+}
+if (-not $simulatedCombatText.Contains('if (simulated is KnockdownPower knockdown && applier != null)')) {
+    $violations.Add("${simulatedCombatPath}: Knockdown applier display state must remain branch-local")
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."

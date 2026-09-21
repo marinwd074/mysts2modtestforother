@@ -269,6 +269,31 @@ piece was the card's Power application, which is now explicit.
 **Status: gameplay/DLL semantics and source implementation confirmed; focused
 multiplayer native differential still required.**
 
+### Knockdown
+
+Public rule: deal 10 damage and make Attacks from other players deal 2x damage
+to that enemy this turn; upgraded values are 14 damage and 3x. Separate
+Knockdown applications remain separate instances and therefore multiply.
+
+Reference:
+https://slaythespire.wiki.gg/wiki/Slay_the_Spire_2%3AKnockdown
+
+The pinned 0.107.1 DLL confirms that `KnockdownPower` is an instanced Counter
+debuff. Its multiplier applies only to Powered Attack damage targeting the
+Power owner, excludes damage from the Power applier, and returns the instance
+amount as the multiplier. `AfterSideTurnEnd` removes the specific instance
+when the debuffed creature is among that side's participants.
+
+The solver already had deterministic Power application, branch-local applier
+display state, and a safe pure-method fallback for the multiplier. The missing
+semantic was the instance lifetime; predicted end-turn processing now removes
+each instance at the native owner-participation boundary instead of leaving the
+multiplier active across later turns.
+
+**Status: gameplay/DLL semantics and source implementation confirmed; focused
+multiplayer differential with repeated Knockdown instances and Osty attacks is
+still required.**
+
 ### Hammer Time
 
 Public rule: whenever the owner Forges, all allies Forge as well.
@@ -571,6 +596,7 @@ Do not change these from public text alone:
 | Demonic Shield | native self-damage-before-shared-Block order restored in solver source | focused multiplayer differential including Rupture/Tungsten/Block-modifier interactions |
 | Sneaky | native Power application restored; existing cross-player Attack trigger mirror matches DLL | focused multiplayer differential with remote Attack, Replay, and Shadowmeld Block modification |
 | Mimic | native calculation/recipient split restored: selected ally supplies Block value, owner receives Block | focused multiplayer differential with target Block modifiers and zero/high Block values |
+| Knockdown | native instanced multiplier semantics matched; missing side-turn expiry restored | focused multiplayer differential with two separate instances, applier exclusion, and Osty dealer identity |
 | Energy Surge / Believe in You | native behavior changes teammate Energy, but the local-only root intentionally does not capture remote PlayerCombatState | introduce a detached remote-public resource sidecar only after proving Energy/Stars are safe public inputs; do not relax remote private-pile capture |
 | Huddle Up / Ignition / Largesse / Glimpse Beyond | native behavior mutates teammate draw/hand/orb state | explicit remote-private-state policy; local cross-turn solver must fail closed rather than materialize teammate piles/orbs |
 | Legion of Bone | native behavior summons/heals Osty for every living player, but current GetOsty fallback can reread player.Osty from the live graph | freeze remote/public pet identity in the root before adding cross-player summon support |

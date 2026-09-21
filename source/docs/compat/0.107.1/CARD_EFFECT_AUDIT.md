@@ -28,7 +28,7 @@ replace the native-vs-predicted runtime differential.
 
 ## Corrected version drift
 
-Eighteen route-affecting mismatches have been confirmed in the 0.107.1 source audit:
+Nineteen route-affecting mismatches have been confirmed in the 0.107.1 source audit:
 
 | Card | 0.107.1 native behavior | Incorrect solver behavior | Correction |
 |---|---|---|---|
@@ -50,6 +50,7 @@ Eighteen route-affecting mismatches have been confirmed in the 0.107.1 source au
 | Demonic Shield | first loses 1 HP as Unblockable/Unpowered/Move card damage, then gives the chosen ally Block equal to the owner's current Block; upgrade only removes Exhaust | the calculated-Block formula existed, but there was no exact compensated OnPlay path for the preceding self-damage and its HP-loss hooks | use a dedicated native-order mirror: resolve card-sourced self-damage first, then calculate and grant the ally Block from the post-damage branch state |
 | Sneaky | applies SneakyPower 1 (2 upgraded); after any other player's Attack finishes, the owner gains that much Unpowered Block | the AfterCardPlayed SneakyPower mirror already existed, but the card never applied SneakyPower in prediction | register Sneaky's deterministic owner Power application so the existing cross-player Attack trigger becomes reachable |
 | Mimic | reads the selected ally's current Block, then gives that calculated amount of Block to the Mimic owner; upgrade only removes Exhaust | generic AnyAlly block inference used the selected ally as the Block recipient even though the selected ally is only the calculation source | use a dedicated OnPlay mirror that keeps the selected ally as the CalculatedBlock target but grants the resulting Block to the card owner |
+| Knockdown | applies an instanced KnockdownPower(2/3); other allied Powered Attacks are multiplied by that instance while the applier's own damage is excluded; each instance is removed when the debuffed creature participates in side-turn end | Power application, applier identity, and pure damage multiplier were already represented, but no predicted side-turn expiry removed the instance | remove each predicted KnockdownPower instance at the native owner-participation boundary without aggregating instances |
 
 These differences materially affect route ranking, so source-shape guards in
 `tools/verify-refactor-boundaries.ps1` reject the later-version semantics.
