@@ -2806,6 +2806,57 @@ foreach ($requiredCardDrawContinuationRule in @(
     }
 }
 
+$generatedContinuationPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.CardGenerationContinuation.cs'
+$generatedContinuationText = [IO.File]::ReadAllText($generatedContinuationPath)
+foreach ($requiredGeneratedContinuationRule in @(
+    'private sealed record GeneratedCardBatchExecutionFrame(',
+    'public IEnumerable<CombatPredictionHistoryEntry> DeferredEntries => [PendingEntry];',
+    'ForkExecutionCardList(Cards, context)',
+    'PendingEntry = context.RequireRemap(PendingEntry)',
+    'History.CardGenerationResolved(pendingEntry, pendingCard!)',
+    'new GeneratedCardBatchExecutionFrame(')) {
+    if (-not $generatedContinuationText.Contains($requiredGeneratedContinuationRule)) {
+        $violations.Add("${generatedContinuationPath}: missing generated-card continuation rule '$requiredGeneratedContinuationRule'")
+    }
+}
+$cardPilePath = Join-Path $repositoryRoot 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.CardPile.cs'
+$cardPileText = [IO.File]::ReadAllText($cardPilePath)
+if (-not $cardPileText.Contains('ContinueGeneratedCardBatch(')) {
+    $violations.Add("${cardPilePath}: generated-card batches must enter the resumable batch helper")
+}
+
+$afterGeneratedPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Card/AfterCardGeneratedForCombatMirrors.cs'
+$afterGeneratedText = [IO.File]::ReadAllText($afterGeneratedPath)
+foreach ($requiredTrashRule in @(
+    'ContinueTrashToTreasure(context.Simulator, power, player, nextIndex: 0)',
+    'private sealed record TrashToTreasureExecutionFrame(',
+    'Power = (TrashToTreasurePower)context.RemapOrSelf(Power)',
+    'index < power.Amount')) {
+    if (-not $afterGeneratedText.Contains($requiredTrashRule)) {
+        $violations.Add("${afterGeneratedPath}: missing resumable 0.107.1 Trash to Treasure rule '$requiredTrashRule'")
+    }
+}
+
+$stokeStart = $cardGenerationMirrorText.IndexOf('public static void StokeOnPlay')
+$stokeEnd = $cardGenerationMirrorText.IndexOf('public static void WhiteNoiseOnPlay', $stokeStart)
+if ($stokeStart -lt 0 -or $stokeEnd -le $stokeStart) {
+    $violations.Add("${cardGenerationMirrorPath}: Stoke mirror boundary is missing")
+}
+else {
+    $stokeBlock = $cardGenerationMirrorText.Substring($stokeStart, $stokeEnd - $stokeStart)
+    foreach ($requiredStokeRule in @(
+        'context.Simulator.AcknowledgeExecutionDispatch();',
+        'List<PredictedCard> cardsToExhaust = context.OwnerState.Hand.Cards.ToList();',
+        'new StokeExecutionFrame(playedCard, play, cardsToExhaust, index + 1)',
+        'cardsToExhaust.Count',
+        'simulator.AddGeneratedCardsToCombat(cards, PileType.Hand, card.Owner)',
+        'CardsToExhaust = context.RequireRemap(CardsToExhaust)')) {
+        if (-not $stokeBlock.Contains($requiredStokeRule)) {
+            $violations.Add("${cardGenerationMirrorPath}: missing resumable 0.107.1 Stoke rule '$requiredStokeRule'")
+        }
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."

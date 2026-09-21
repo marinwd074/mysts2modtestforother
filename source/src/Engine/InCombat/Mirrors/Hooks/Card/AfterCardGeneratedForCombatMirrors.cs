@@ -8,6 +8,7 @@ using MegaCrit.Sts2.Core.Models.Relics;
 using MegaCrit.Sts2.Core.ValueProps;
 using CombatSolver.Engine.Common;
 using CombatSolver.Engine.Common.Mirrors;
+using CombatSolver.Engine.InCombat.Simulation;
 
 namespace CombatSolver.Engine.InCombat.Mirrors.Hooks.Card;
 
@@ -133,13 +134,41 @@ internal static class AfterCardGeneratedForCombatMirrors
             return;
         }
 
-        for (var i = 0; i < power.Amount; i++)
+        context.Simulator.AcknowledgeExecutionDispatch();
+        _ = ContinueTrashToTreasure(context.Simulator, power, player, nextIndex: 0);
+    }
+
+    private static bool ContinueTrashToTreasure(
+        CombatPredictionSimulator simulator,
+        TrashToTreasurePower power,
+        Player player,
+        int nextIndex)
+    {
+        for (int index = nextIndex; index < power.Amount; index++)
         {
-            var orb = OrbModel.GetRandomOrb(context.Rng.CombatOrbGeneration).ToMutable();
-            context.Simulator.OrbChannel(player, orb);
-            if (context.Simulator.HasPendingChoice)
-                return;
+            OrbModel orb = OrbModel.GetRandomOrb(simulator.Rng.CombatOrbGeneration).ToMutable();
+            simulator.OrbChannel(player, orb);
+            if (simulator.HasPendingChoice)
+            {
+                simulator.AppendExecutionContinuation(
+                    new TrashToTreasureExecutionFrame(power, player, index + 1));
+                return false;
+            }
         }
+
+        return true;
+    }
+
+    private sealed record TrashToTreasureExecutionFrame(
+        TrashToTreasurePower Power,
+        Player Player,
+        int NextIndex) : ICombatPredictionExecutionFrame
+    {
+        public ICombatPredictionExecutionFrame Fork(PredictionForkContext context)
+            => this with { Power = (TrashToTreasurePower)context.RemapOrSelf(Power) };
+
+        public bool Resume(CombatPredictionSimulator simulator)
+            => ContinueTrashToTreasure(simulator, Power, Player, NextIndex);
     }
 
     private static void HandleRocketPunch(RocketPunch card, AfterCardGeneratedForCombatMirrorContext context)

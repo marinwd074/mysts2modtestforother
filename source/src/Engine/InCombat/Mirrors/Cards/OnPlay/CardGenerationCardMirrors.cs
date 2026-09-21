@@ -364,16 +364,43 @@ internal static class CardGenerationCardMirrors
         RecordOptions(context, cards);
     }
 
-    public static void StokeOnPlay(Stoke card, CardOnPlayMirrorContext context)
+    public static void StokeOnPlay(Stoke _, CardOnPlayMirrorContext context)
     {
-        var cardsToExhaust = context.OwnerState.Hand.Cards.ToList();
-        foreach (var cardToExhaust in cardsToExhaust)
+        context.Simulator.AcknowledgeExecutionDispatch();
+        List<PredictedCard> cardsToExhaust = context.OwnerState.Hand.Cards.ToList();
+        _ = ContinueStoke(
+            context.Simulator,
+            context.Card,
+            context.CardPlay,
+            cardsToExhaust,
+            nextIndex: 0);
+    }
+
+    private static bool ContinueStoke(
+        CombatPredictionSimulator simulator,
+        PredictedCard playedCard,
+        CardPlay play,
+        List<PredictedCard> cardsToExhaust,
+        int nextIndex)
+    {
+        for (int index = nextIndex; index < cardsToExhaust.Count; index++)
         {
-            context.Simulator.Exhaust(cardToExhaust);
-            if (context.Simulator.HasPendingChoice)
-                return;
+            simulator.Exhaust(cardsToExhaust[index]);
+            if (simulator.HasPendingChoice)
+            {
+                simulator.AppendExecutionContinuation(
+                    new StokeExecutionFrame(playedCard, play, cardsToExhaust, index + 1));
+                return false;
+            }
         }
 
+        var context = new CardOnPlayMirrorContext
+        {
+            Simulator = simulator,
+            Card = playedCard,
+            CardPlay = play
+        };
+        var card = (Stoke)playedCard.MutablePreview;
         var cards = card.Owner.GetUnlockedCharacterCards(context.CardMultiplayerConstraint)
             .GetForCombat(
                 card.Owner,
@@ -383,7 +410,32 @@ internal static class CardGenerationCardMirrors
             .UpgradeIf(card.IsUpgraded)
             .ToList();
 
-        context.Simulator.AddGeneratedCardsToCombat(cards, PileType.Hand, card.Owner);
+        simulator.AddGeneratedCardsToCombat(cards, PileType.Hand, card.Owner);
+        return !simulator.HasPendingChoice;
+    }
+
+    private sealed record StokeExecutionFrame(
+        PredictedCard Card,
+        CardPlay Play,
+        List<PredictedCard> CardsToExhaust,
+        int NextIndex) : ICombatPredictionExecutionFrame
+    {
+        public void PrepareFork(PredictionForkContext context)
+        {
+            CombatPredictionSimulator.PrepareExecutionCardPlay(Card, Play, context);
+            CombatPredictionSimulator.ForkExecutionCardList(CardsToExhaust, context);
+        }
+
+        public ICombatPredictionExecutionFrame Fork(PredictionForkContext context)
+            => this with
+            {
+                Card = context.RequireRemap(Card),
+                Play = context.RequireRemap(Play),
+                CardsToExhaust = context.RequireRemap(CardsToExhaust)
+            };
+
+        public bool Resume(CombatPredictionSimulator simulator)
+            => ContinueStoke(simulator, Card, Play, CardsToExhaust, NextIndex);
     }
 
     public static void WhiteNoiseOnPlay(WhiteNoise card, CardOnPlayMirrorContext context)

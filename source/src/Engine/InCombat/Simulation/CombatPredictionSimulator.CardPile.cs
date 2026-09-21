@@ -222,34 +222,29 @@ internal sealed partial class CombatPredictionSimulator
         CardGenerationResultKind resultKind = CardGenerationResultKind.Random)
     {
         if (!IsInProgress || cards.Count == 0)
-        {
             return [];
-        }
 
         if (!newPileType.IsCombatPile())
-        {
             throw new InvalidOperationException("Generated combat cards can only be added to combat piles.");
-        }
 
-        for (int index = 0; index < cards.Count; index++)
+        List<PredictedCard> batch = cards as List<PredictedCard> ?? cards.ToList();
+        for (int index = 0; index < batch.Count; index++)
         {
-            if (cards[index].GetPile(State) is not null)
+            if (batch[index].GetPile(State) is not null)
                 throw new InvalidOperationException("Generated combat cards cannot already be in a pile.");
         }
 
-        List<SimCardPileAddResult> results = new(cards.Count);
-
-        foreach (var card in cards)
-        {
-            var entry = History.CardGenerated(card, creator, resultKind);
-            results.Add(AddToPile(card, newPileType, position));
-
-            HookMirrors.AfterCardGeneratedForCombat(this, card, creator);
-            if (HasPendingChoice)
-                return results;
-            History.CardGenerationResolved(entry, card);
-        }
-
+        List<SimCardPileAddResult> results = new(batch.Count);
+        _ = ContinueGeneratedCardBatch(
+            batch,
+            newPileType,
+            creator,
+            position,
+            resultKind,
+            nextIndex: 0,
+            pendingEntry: null,
+            pendingCard: null,
+            results);
         return results;
     }
 
