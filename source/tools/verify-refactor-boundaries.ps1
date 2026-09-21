@@ -2652,6 +2652,37 @@ foreach ($bespokeContinuationMethod in @(
     }
 }
 
+$orbContinuationPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.Orb.ExecutionContinuation.cs'
+$orbContinuationText = [IO.File]::ReadAllText($orbContinuationPath)
+$orbSimulatorPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.Orb.cs'
+$orbSimulatorText = [IO.File]::ReadAllText($orbSimulatorPath)
+foreach ($requiredOrbContinuationRule in @(
+    'private sealed record OrbChannelBatchExecutionFrame<TOrb>(',
+    'private sealed record OrbChannelExecutionFrame(',
+    'private sealed record OrbEvokeAfterModelExecutionFrame(',
+    'private sealed record OrbEvokeNextExecutionFrame(',
+    'private sealed record OrbPassiveTriggerExecutionFrame(',
+    'private sealed record OrbPassiveAfterModelExecutionFrame(',
+    'PrepareExecutionOrb(Orb, context)',
+    'context.Register(orb, fork)',
+    'ResolveDeathsFirst: true',
+    'ResolveDeathsFirst: false')) {
+    if (-not $orbContinuationText.Contains($requiredOrbContinuationRule)) {
+        $violations.Add("${orbContinuationPath}: missing Orb execution continuation rule '$requiredOrbContinuationRule'")
+    }
+}
+foreach ($requiredOrbSimulatorRule in @(
+    'new OrbChannelExecutionFrame(player, orb)',
+    'new OrbEvokeAfterModelExecutionFrame(evokedOrb, targets.ToArray())',
+    'new OrbPassiveAfterModelExecutionFrame(processedEnemyDeaths.ToArray())',
+    'ContinueOrbEvokeNext(',
+    'ContinueOrbPassiveTriggers(')) {
+    if (-not $orbSimulatorText.Contains($requiredOrbSimulatorRule)) {
+        $violations.Add("${orbSimulatorPath}: missing resumable Orb simulator rule '$requiredOrbSimulatorRule'")
+    }
+}
+
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."
