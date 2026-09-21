@@ -23,7 +23,7 @@ internal static class PredictionModPatchAudit
 {
     private static readonly string[] IncompatibleModIds = ["WheelchairSpire", "PengoTarot", "BetterCharacterRelics"];
 
-    private readonly record struct ForeignPatch(string ModId, string ModName, string Description);
+    internal readonly record struct ForeignPatch(string ModId, string ModName, string Description);
 
     /// <summary>
     /// Throws when any card reachable from the captured root has a third-party patch on its mirrored OnPlay.
