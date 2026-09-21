@@ -194,4 +194,13 @@ Confused/Slither 的 0..3 能量随机范围（`NextInt(4)`）、Iteration 的�
 Pen Nib 的 10 次循环/第 10 次双倍、Surrounded 的 1.5 倍背击，以及 Juggling 的第 3 次 Attack。
 Iteration 的当前抽牌会在 `AfterCardDrawn` 前先写入分支计数，因此 `<= 1` 没有 off-by-one。
 这些值均与 0.107.1 语义一致，已补静态护栏；未发现新的 route-affecting mismatch，总数仍为 44。
+
+最终收尾扫描第三小批转到 Search 层 relic counter。RelicCounterCatalog 的 Happy Flower 3、Fake Happy Flower 5、
+Pendulum 3、Pollinous Core 4、Pen Nib/Nunchaku/Tuning Fork 10、Joss Paper 5、Iron Club 4、
+Galactic Dust 10，以及 Meat on the Bone 的二态目标均与 0.107.1 语义一致；Candelabra/Horn Cleat 为第 2 回合，
+Chandelier/Captain's Wheel/Sparkling Rouge 为第 3 回合。另发现计数目标使用 4-bit 槽位但此前没有容量断言：
+未来若加入周期 >= 17 的计数器或过多计数器可能静默截断/串入优先级槽。现已将 4-bit 参数命名化，并在
+RelicCounterCatalog 静态初始化时 fail-closed 校验 period、slot、重复 Id 与计数器总量；当前行为不变。
+上述 period/turn 值与 packing 不变量均已补静态护栏，route-affecting mismatch 总数仍为 44。
+
 已完成的 Power、continuation、死亡生命周期和 78/78 卡牌 OnPlay 数值不重复展开；多人牌仍暂不作为当前 blocker。

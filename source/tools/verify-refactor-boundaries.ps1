@@ -316,6 +316,53 @@ foreach ($specialCountCheck in $specialCountChecks) {
     }
 }
 
+$relicCounterCatalogPath = Join-Path $repositoryRoot 'src/Prediction/RelicCounterCatalog.cs'
+$relicCounterCatalogText = [IO.File]::ReadAllText($relicCounterCatalogPath)
+foreach ($relicCounterRule in @(
+    'new(RelicCounterId.HappyFlower, () => ModelDb.Relic<HappyFlower>(), 3)',
+    'new(RelicCounterId.FakeHappyFlower, () => ModelDb.Relic<FakeHappyFlower>(), 5)',
+    'new(RelicCounterId.Pendulum, () => ModelDb.Relic<Pendulum>(), 3)',
+    'new(RelicCounterId.PollinousCore, () => ModelDb.Relic<PollinousCore>(), 4)',
+    'new(RelicCounterId.PenNib, () => ModelDb.Relic<PenNib>(), 10)',
+    'new(RelicCounterId.Nunchaku, () => ModelDb.Relic<Nunchaku>(), 10)',
+    'new(RelicCounterId.TuningFork, () => ModelDb.Relic<TuningFork>(), 10)',
+    'new(RelicCounterId.JossPaper, () => ModelDb.Relic<JossPaper>(), 5)',
+    'new(RelicCounterId.IronClub, () => ModelDb.Relic<IronClub>(), 4)',
+    'new(RelicCounterId.GalacticDust, () => ModelDb.Relic<GalacticDust>(), 10)',
+    'new(RelicCounterId.MeatOnTheBone, () => ModelDb.Relic<MeatOnTheBone>(), 2)',
+    'All.Count > RelicCounterEvaluation.MaxPackedCounterCount',
+    'entry.Period > RelicCounterEvaluation.MaxPackedPeriod')) {
+    if (-not $relicCounterCatalogText.Contains($relicCounterRule)) {
+        $violations.Add("${relicCounterCatalogPath}: audited relic counter period/packing guard drifted '$relicCounterRule'")
+    }
+}
+
+$relicCounterPolicyPath = Join-Path $repositoryRoot 'src/Search/RelicCounterPolicy.cs'
+$relicCounterPolicyText = [IO.File]::ReadAllText($relicCounterPolicyPath)
+foreach ($packingRule in @(
+    'internal const int PackedValueBits = 4;',
+    'internal const int PackedValueMask = (1 << PackedValueBits) - 1;',
+    'internal const int PackedSlotCapacity = sizeof(ulong) * 8 / PackedValueBits;',
+    'internal const int MaxPackedCounterCount = PackedValueMask;',
+    'internal const int MaxPackedPeriod = 1 << PackedValueBits;')) {
+    if (-not $relicCounterPolicyText.Contains($packingRule)) {
+        $violations.Add("${relicCounterPolicyPath}: relic counter packed representation drifted '$packingRule'")
+    }
+}
+
+foreach ($turnSpecificRelicRule in @(
+    @{ Path = 'src/Search/SimulatedCombatState.RelicTurnStart.cs'; Rule = 'case Candelabra when turn == 2:' },
+    @{ Path = 'src/Search/SimulatedCombatState.RelicTurnStart.cs'; Rule = 'case Chandelier when turn == 3:' },
+    @{ Path = 'src/Search/SimulatedCombatState.ReactiveRelics.cs'; Rule = 'case CaptainsWheel when turn == 3:' },
+    @{ Path = 'src/Search/SimulatedCombatState.ReactiveRelics.cs'; Rule = 'case HornCleat when turn == 2:' },
+    @{ Path = 'src/Search/SimulatedCombatState.ReactiveRelics.cs'; Rule = 'case SparklingRouge when turn == 3:' })) {
+    $turnSpecificRelicPath = Join-Path $repositoryRoot $turnSpecificRelicRule.Path
+    $turnSpecificRelicText = [IO.File]::ReadAllText($turnSpecificRelicPath)
+    if (-not $turnSpecificRelicText.Contains($turnSpecificRelicRule.Rule)) {
+        $violations.Add("${turnSpecificRelicPath}: audited 0.107.1 turn-specific relic trigger drifted '$($turnSpecificRelicRule.Rule)'")
+    }
+}
+
 if (-not $cardPowerSupportText.Contains('combat.Apply<HauntPower>(owner, card.DynamicVars.HpLoss.IntValue, owner)')) {
     $violations.Add("${cardPowerSupportPath}: Haunt 0.107.1 HP-loss amount must come from the pinned card model")
 }
