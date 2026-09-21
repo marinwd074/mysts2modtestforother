@@ -1607,6 +1607,19 @@ if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/Comb
     $violations.Add('State key no longer includes history counters')
 }
 
+if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.cs') -SimpleMatch 'PotionStrategy = policy.PotionStrategy.ForForcedBaseline()' -Quiet)) {
+    $violations.Add('Mixed Smart potion search must establish a forced-only baseline')
+}
+if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.cs') -SimpleMatch 'result.PotionStrategicCostByTurn.Values.Sum() - forced.ForcedStrategicHpCost' -Quiet)) {
+    $violations.Add('Smart potion opportunity cost must exclude forced potion cost')
+}
+if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.cs') -SimpleMatch '!= SolverPotionDirective.Force' -Quiet)) {
+    $violations.Add('Smart potion layer capacity must exclude forced directives')
+}
+if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/PotionStrategySnapshot.cs') -SimpleMatch 'if (_onlyForcedUses)' -Quiet)) {
+    $violations.Add('Forced potion baseline lost its optional-use gate')
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."
