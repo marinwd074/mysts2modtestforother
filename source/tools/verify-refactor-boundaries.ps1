@@ -197,6 +197,22 @@ if (-not $cardPowerLateText.Contains('combat.Apply<UnmovablePower>(owner, 1, own
     $violations.Add("${cardPowerLatePath}: audited 0.107.1 Unmovable Power unit must remain one stack per card")
 }
 
+foreach ($fixedCounterRule in @(
+    '[typeof(ExpectAFight)] = [Owner<NoEnergyGainPower>(_ => 1)]',
+    '[typeof(Pounce)] = [Owner<FreeSkillPower>(_ => 1)]',
+    '[typeof(Predator)] = [Owner<DrawCardsNextTurnPower>(_ => 2)]',
+    '[typeof(Rebound)] = [Owner<ReboundPower>(_ => 1)]',
+    '[typeof(Reflect)] = [Owner<ReflectPower>(_ => 1)]',
+    '[typeof(Synthesis)] = [Owner<FreePowerPower>(_ => 1)]',
+    '[typeof(TagTeam)] = [Target<TagTeamPower>(_ => 1)]',
+    '[typeof(TheGambit)] = [Owner<TheGambitPower>(_ => 1)]',
+    '[typeof(Unrelenting)] = [Owner<FreeAttackPower>(_ => 1)]',
+    '[typeof(Veilpiercer)] = [Owner<VeilpiercerPower>(_ => 1)]')) {
+    if (-not $cardEffectSpecText.Contains($fixedCounterRule)) {
+        $violations.Add("${cardEffectSpecPath}: audited 0.107.1 fixed counter/duration drifted '$fixedCounterRule'")
+    }
+}
+
 if (-not $cardPowerSupportText.Contains('combat.Apply<HauntPower>(owner, card.DynamicVars.HpLoss.IntValue, owner)')) {
     $violations.Add("${cardPowerSupportPath}: Haunt 0.107.1 HP-loss amount must come from the pinned card model")
 }

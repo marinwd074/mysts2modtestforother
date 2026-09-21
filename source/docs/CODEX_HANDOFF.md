@@ -114,10 +114,15 @@ Sunder、Relax、Whistle、Mangle、Pact's End、Echoing Slash、Terraforming、
 未发现新的 route-affecting mismatch，总数仍为 44。Soul Storm 的 Soul 计数、Primal Force→Giant Rock
 变形、Pact's End 条件攻击、Echoing Slash 伤害循环等特殊路径均确认继续读取 0.107.1 模型数据。
 
-已知后续补丁单人牌候选现在 **78/78 已审计完成**。第一批 solver 自身硬编码常数审计也已完成：
-Conqueror、Convergence、Shadow Step、Aggression、Dark Embrace、Calamity、Fan of Knives、
-Hello World、Infinite Blades、Unmovable 的固定 `Power(1)` 均确认是 0.107.1 的单次堆叠/模式单位，
-不是泄漏的后续版本数值；未发现新的 route-affecting mismatch，总数仍为 44，并已补静态回归护栏。
+已知后续补丁单人牌候选现在 **78/78 已审计完成**。solver 自身硬编码常数已完成两批、共 20 条高风险路径：
+第一批为 Conqueror、Convergence、Shadow Step、Aggression、Dark Embrace、Calamity、Fan of Knives、
+Hello World、Infinite Blades、Unmovable；第二批为 Expect a Fight、Pounce、Predator、Rebound、Reflect、
+Synthesis、Tag Team、The Gambit、Unrelenting、Veilpiercer。两批固定量均确认是 0.107.1 的堆叠/
+持续/消费计数或模式标记，不是泄漏的后续版本牌面数值；消费端也按对应 Power amount
+decrement/consume。未发现新的 route-affecting mismatch，总数仍为 44，且两批均已补静态回归护栏。
 
-下一批继续审计剩余固定常数，并优先核对 `#if STS2_01071` 分叉和特殊 OnPlay/Hook 执行顺序/
-continuation；直接 live-state/history 读取仍保持高风险检查项。多人牌暂不作为当前 blocker。
+直接 live-state 扫描也已完成一轮：Prediction 目录未发现新的后台 live HP/Block/Energy/牌堆读取。
+`IntentForecaster.Build` 的 live CombatState/RNG 读取发生在 `CombatRootSnapshot.Capture` 主线程根捕获阶段，
+随后后台搜索只消费已捕获 Forecast，因此不构成分支状态泄漏。
+
+下一批优先转向 `#if STS2_01071` 分叉和特殊 OnPlay/Hook 执行顺序/continuation；多人牌暂不作为当前 blocker。

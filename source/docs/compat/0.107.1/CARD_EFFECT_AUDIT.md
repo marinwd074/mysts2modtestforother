@@ -360,6 +360,16 @@ model-driven. Fan of Knives' `FanOfKnivesPower(1)` likewise represents the
 persistent "Shivs hit all enemies" mode; its 4(5) Shiv creation is a separate
 card effect and is not encoded by that literal.
 
+A second hard-coded-literal pass reviewed Expect a Fight, Pounce, Predator,
+Rebound, Reflect, Synthesis, Tag Team, The Gambit, Unrelenting, and Veilpiercer.
+Again, no route mismatch was found. These literals are semantic counters rather
+than balance mirrors: Predator queues exactly two next-turn draws; Pounce,
+Synthesis, Unrelenting, Rebound, Tag Team, and Veilpiercer install one
+consumable use; Reflect installs one duration stack; The Gambit is a non-stacking
+state marker; and Expect a Fight installs one no-energy-gain marker after its
+calculated Energy gain. The corresponding hook/turn code consumes or decrements
+those Power amounts instead of treating them as card damage/block values.
+
 This completes the known post-0.107.1 single-player patch-note candidate list:
 78/78 candidate entries have now been reviewed. Further card audit should no
 longer mechanically follow patch notes; it should target solver-authored
