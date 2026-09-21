@@ -1620,6 +1620,16 @@ if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/Poti
     $violations.Add('Forced potion baseline lost its optional-use gate')
 }
 
+if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Phases.cs') -SimpleMatch 'TurnStartChoicePreviewPolicy.ChoicesForTurn(' -Quiet)) {
+    $violations.Add('Live search previews must carry frozen turn-start choices')
+}
+if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/UI/SolverOverlaySnapshot.cs') -SimpleMatch 'FormatTurnStartChoices(preview.TurnStartChoices)' -Quiet)) {
+    $violations.Add('Current-turn overlay preview must render turn-start choices')
+}
+if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/UI/SolverOverlaySnapshot.cs') -SimpleMatch 'FormatTurnStartChoices(frontier.TurnStartChoices)' -Quiet)) {
+    $violations.Add('Frontier overlay preview must render turn-start choices')
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."

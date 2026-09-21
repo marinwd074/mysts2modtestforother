@@ -174,6 +174,8 @@ internal sealed record SolverFrontierTurn(
     int EnergyLeft,
     bool CombatEnded)
 {
+    public IReadOnlyList<PlanCardChoice> TurnStartChoices { get; init; } = [];
+
     public static IReadOnlyList<SolverFrontierTurn> FromResult(SolverResult result)
         => result.BestNode.Actions
             .GroupBy(action => action.Turn)
@@ -185,7 +187,14 @@ internal sealed record SolverFrontierTurn(
                 result.HpRecoveredByTurn.GetValueOrDefault(group.Key),
                 result.EnemyHpLostByTurn.GetValueOrDefault(group.Key),
                 result.EnergyLeftByTurn.GetValueOrDefault(group.Key),
-                result.CombatEndedTurn == group.Key))
+                result.CombatEndedTurn == group.Key)
+            {
+                TurnStartChoices = TurnStartChoicePreviewPolicy.ChoicesForTurn(
+                    group.Key,
+                    result.StartTurnNumber,
+                    result.WasReused ? [] : result.TurnSetupChoices,
+                    result.BestNode.Actions),
+            })
             .ToArray();
 }
 
@@ -200,6 +209,8 @@ internal sealed record SolverCurrentTurnPreview(
     bool CombatEnded,
     IReadOnlyList<SolverFrontierTurn>? FrontierTurns = null)
 {
+    public IReadOnlyList<PlanCardChoice> TurnStartChoices { get; init; } = [];
+
     public static SolverCurrentTurnPreview FromResult(
         SolverResult result,
         int candidateVersion = 0)
@@ -214,7 +225,10 @@ internal sealed record SolverCurrentTurnPreview(
             result.EnemyHpLostByTurn.GetValueOrDefault(result.StartTurnNumber),
             result.EnergyLeftByTurn.GetValueOrDefault(result.StartTurnNumber),
             result.CombatEndedTurn == result.StartTurnNumber,
-            SolverFrontierTurn.FromResult(result));
+            SolverFrontierTurn.FromResult(result))
+        {
+            TurnStartChoices = result.WasReused ? [] : result.TurnSetupChoices,
+        };
 }
 
 internal sealed record SolverSpeculativeRoutePreview(
