@@ -1737,13 +1737,60 @@ else {
     }
 }
 
+
+$historyCoursePath = Join-Path $repositoryRoot 'src/Search/SimulatedCombatState.AutoPlay.cs'
+$historyCourseText = [IO.File]::ReadAllText($historyCoursePath)
+$historyRecordStart = $historyCourseText.IndexOf('private void RecordHistoryCourseAttack')
+$historyRecordEnd = $historyCourseText.IndexOf('public void CommitHistoryCourseTurn', $historyRecordStart)
+if ($historyRecordStart -lt 0 -or $historyRecordEnd -le $historyRecordStart) {
+    $violations.Add("${historyCoursePath}: History Course simulated-turn tracking boundary is missing")
+}
+else {
+    $historyRecordBlock = $historyCourseText.Substring(
+        $historyRecordStart,
+        $historyRecordEnd - $historyRecordStart)
+    if (-not $historyRecordBlock.Contains(
+        'card.Preview.Type is not (CardType.Attack or CardType.Skill)')) {
+        $violations.Add("${historyCoursePath}: 0.107.1 History Course must track both Attacks and Skills")
+    }
+    if ($historyRecordBlock.Contains('card.Preview.Type != CardType.Attack')) {
+        $violations.Add("${historyCoursePath}: v0.109 Attack-only History Course tracking returned")
+    }
+    if (-not $historyRecordBlock.Contains('card.Preview.IsDupe')) {
+        $violations.Add("${historyCoursePath}: History Course must still exclude gameplay dupes")
+    }
+}
+
+$historyRootStart = $historyCourseText.IndexOf('private PredictedCard? GetPreviousTurnAttack')
+$historyRootEnd = $historyCourseText.IndexOf('private Dictionary<Player, PredictedCard>? ForkHistoryCourseCards', $historyRootStart)
+if ($historyRootStart -lt 0 -or $historyRootEnd -le $historyRootStart) {
+    $violations.Add("${historyCoursePath}: History Course live-root lookup boundary is missing")
+}
+else {
+    $historyRootBlock = $historyCourseText.Substring(
+        $historyRootStart,
+        $historyRootEnd - $historyRootStart)
+    if (-not $historyRootBlock.Contains(
+        '(entry.CardPlay.Card.Type is CardType.Attack or CardType.Skill)')) {
+        $violations.Add("${historyCoursePath}: 0.107.1 live History Course lookup must accept Attacks and Skills")
+    }
+    if ($historyRootBlock.Contains('entry.CardPlay.Card.Type == CardType.Attack')) {
+        $violations.Add("${historyCoursePath}: v0.109 Attack-only live History Course lookup returned")
+    }
+    if (-not $historyRootBlock.Contains('!entry.CardPlay.Card.IsDupe')) {
+        $violations.Add("${historyCoursePath}: live History Course lookup must exclude dupes")
+    }
+}
+
 $cardOnPlayMirrorPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/CardOnPlayMirrors.cs'
 $cardOnPlayMirrorText = [IO.File]::ReadAllText($cardOnPlayMirrorPath)
 if (-not $cardOnPlayMirrorText.Contains('registry.Register<Scare>(static (_, _) => { });')) {
     $violations.Add("${cardOnPlayMirrorPath}: 0.107.1 Scare must remain explicitly mirrorable")
 }
-if (-not $cardEffectSpecText.Contains('[typeof(Scare)] = [AllEnemies<WeakPower>(_ => 1)]')) {
-    $violations.Add("${cardEffectSpecPath}: 0.107.1 Scare must apply 1 Weak to every hittable enemy")
+$scareCardEffectSpecPath = Join-Path $repositoryRoot 'src/Prediction/CardEffectSpecRegistry.cs'
+$scareCardEffectSpecText = [IO.File]::ReadAllText($scareCardEffectSpecPath)
+if (-not $scareCardEffectSpecText.Contains('[typeof(Scare)] = [AllEnemies<WeakPower>(_ => 1)]')) {
+    $violations.Add("${scareCardEffectSpecPath}: 0.107.1 Scare must apply 1 Weak to every hittable enemy")
 }
 
 $generatedCardHookPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Card/AfterCardGeneratedForCombatMirrors.cs'

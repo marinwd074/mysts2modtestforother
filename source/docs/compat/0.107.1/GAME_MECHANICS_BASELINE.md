@@ -556,7 +556,8 @@ These later patch notes are especially useful as negative evidence for the
   so globally temporary 0-cost effects also prevent its discard, and fixed
   Feral so a History Course copy of Helix Drill is no longer returned to Hand.
 - v0.109 reworked Eidolon from "Exhaust your Hand; 9 Exhausts grant 1 Intangible"
-  into auto-playing all Ethereal cards in the Exhaust Pile; the same patch also
+  into auto-playing all Ethereal cards in the Exhaust Pile, nerfed History
+  Course so it repeats Attacks only instead of Attacks or Skills, and also
   reworked Expertise, Well-Laid Plans, and Pillar of Creation.
 - v0.110 reworked Haze to add Weak, reworked Outbreak into an immediate-Poison
   Skill, renamed/reworked Scare into the unrelated Energy-next-turn Sidestep,

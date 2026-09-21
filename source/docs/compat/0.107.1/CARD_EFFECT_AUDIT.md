@@ -74,6 +74,14 @@ first generated card each turn. The mirror now grants Block on every matching
 generation, and the nonexistent Regalite per-turn prediction/fingerprint state
 has been removed.
 
+History Course is another adjacent relic boundary because it determines which
+card is auto-played at the next turn start. In 0.107.1 it records the owner's
+last non-dupe **Attack or Skill** from the previous player turn. The solver had
+already imported the v0.109 nerf and tracked Attacks only, which silently
+dropped Skill routes from cross-turn prediction. Both simulated turn history
+and live-root history lookup now accept Attack or Skill while still excluding
+dupes.
+
 ## Checked matches
 
 The initial pass also checked several special cases that already match the
