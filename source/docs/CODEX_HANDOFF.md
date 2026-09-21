@@ -292,6 +292,9 @@ steps=null，且都无日志 blob，已排除 Windows runner 专属问题，定�
 分配前的账户/仓库级拒绝。仓库 YAML 无法直接解除该外部限制。为避免恢复后继续无谓消耗私有仓库分钟，
 workflow 现仅在 compatibility workflow 自身或 source 非 docs 文件变化时自动触发；source/docs/** 文档提交
 不再跑完整门禁。另加入同 workflow/ref 的 cancel-in-progress，连续快速提交只保留最新一轮。手动
-workflow_dispatch 保留，代码/tools/target/project 变化仍完整执行门禁。
+workflow_dispatch 保留，代码/tools/target/project 变化仍完整执行门禁。云端 runner 被账户级拒绝期间，
+新增 tools/run-ci-gates.ps1 作为本地统一入口：顺序执行 target-version、refactor-boundaries、完整 L1
+contract suite 与 git diff --check；支持 -NoRestore / -SkipPython 透传。它不替代 GitHub required check，
+只保证本地/Codex 可运行与云 workflow 相同的源码门禁。
 
 已完成的 Power、continuation、死亡生命周期和 78/78 卡牌 OnPlay 数值不重复展开；多人牌仍暂不作为当前 blocker。
