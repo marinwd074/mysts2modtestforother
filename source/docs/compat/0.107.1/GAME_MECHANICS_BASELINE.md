@@ -555,8 +555,9 @@ These later patch notes are especially useful as negative evidence for the
 - v0.108 reworked Tank, changed end-of-turn Orb/Doom ordering, changed Scrape
   so globally temporary 0-cost effects also prevent its discard, fixed Feral
   so a History Course copy of Helix Drill is no longer returned to Hand, fixed
-  History Course copies of Shining Strike returning themselves to Draw, and
-  fixed Supermassive so Mad Science-created cards contribute to its scaling.
+  History Course copies of Shining Strike returning themselves to Draw, fixed
+  Supermassive so Mad Science-created cards contribute to its scaling, and fixed
+  the Enfeebling Touch + Misery + Artifact interaction that exists in 0.107.1.
 - v0.109 reworked Eidolon from "Exhaust your Hand; 9 Exhausts grant 1 Intangible"
   into auto-playing all Ethereal cards in the Exhaust Pile, nerfed History
   Course so it repeats Attacks only instead of Attacks or Skills, and also

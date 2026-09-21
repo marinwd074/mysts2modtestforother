@@ -2346,6 +2346,38 @@ if (-not $endTurnPowerText.Contains('case CoveredPower or InterceptPower when si
 }
 
 
+$miseryRegistryRule = 'registry.Register<Misery>(BespokeCardMirrors.MiseryOnPlay);'
+if (-not $cardOnPlayRegistryText.Contains($miseryRegistryRule)) {
+    $violations.Add("${cardOnPlayRegistryPath}: 0.107.1 Misery requires its dedicated native-order OnPlay mirror")
+}
+if ($cardEffectSpecText.Contains('case Misery when target != null:') -or
+    $cardEffectSpecText.Contains('private static void SpreadDebuffs(')) {
+    $violations.Add("${cardEffectSpecPath}: Misery must not use the old post-attack aggregated Debuff approximation")
+}
+$miseryStart = $bespokeOnPlayText.IndexOf('public static void MiseryOnPlay')
+$miseryEnd = $bespokeOnPlayText.IndexOf('public static void MaulOnPlay', $miseryStart)
+if ($miseryStart -lt 0 -or $miseryEnd -le $miseryStart) {
+    $violations.Add("${bespokeOnPlayPath}: Misery mirror boundary is missing")
+}
+else {
+    $miseryBlock = $bespokeOnPlayText.Substring($miseryStart, $miseryEnd - $miseryStart)
+    foreach ($requiredMiseryRule in @(
+        'MiseryDebuffSnapshot[] debuffs = combat.EffectivePowers()',
+        'ReferenceEquals(power.Owner, context.Target)',
+        'power.TypeForCurrentAmount == MegaCrit.Sts2.Core.Entities.Powers.PowerType.Debuff',
+        'DamageCmd.Attack(card.DynamicVars.Damage.BaseValue)',
+        'new MiserySpreadExecutionFrame(context.Target, debuffs)',
+        'foreach (MiseryDebuffSnapshot debuff in debuffs)',
+        'combat.ApplyPower(debuff.PowerType, enemy, debuff.Amount, debuff.Applier)')) {
+        if (-not $miseryBlock.Contains($requiredMiseryRule)) {
+            $violations.Add("${bespokeOnPlayPath}: missing 0.107.1 Misery rule '$requiredMiseryRule'")
+        }
+    }
+    if ($miseryBlock.Contains('GroupBy(')) {
+        $violations.Add("${bespokeOnPlayPath}: Misery Debuffs must retain native Power order and must not be grouped by type")
+    }
+}
+
 $demonicShieldRegistryRule = 'registry.Register<DemonicShield>(BespokeCardMirrors.DemonicShieldOnPlay);'
 if (-not $cardOnPlayRegistryText.Contains($demonicShieldRegistryRule)) {
     $violations.Add("${cardOnPlayRegistryPath}: 0.107.1 Demonic Shield requires its dedicated native-order OnPlay mirror")

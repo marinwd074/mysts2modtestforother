@@ -94,7 +94,7 @@ internal static class CardEffectSpecRegistry
         typeof(Glow), typeof(Hemokinesis), typeof(ShiningStrike), typeof(SolarStrike),
         typeof(AllForOne), typeof(BoneShards), typeof(Bulwark), typeof(Claw), typeof(Compact),
         typeof(DeathsDoor), typeof(EvilEye), typeof(GeneticAlgorithm), typeof(Glitterstream), typeof(GoForTheEyes),
-        typeof(Misery), typeof(Modded), typeof(MoltenFist), typeof(MomentumStrike), typeof(PullAggro),
+        typeof(Modded), typeof(MoltenFist), typeof(MomentumStrike), typeof(PullAggro),
         typeof(Rampage), typeof(Tank), typeof(Whistle), typeof(WroughtInWar),
     ];
 
@@ -345,10 +345,6 @@ internal static class CardEffectSpecRegistry
                 combat.Apply<WeakPower>(target, card.DynamicVars.Weak.IntValue, ownerCreature);
                 applied = true;
                 break;
-            case Misery when target != null:
-                SpreadDebuffs(combat, target);
-                applied = true;
-                break;
             case Modded:
                 simulator.AddOrbSlots(card.Owner, card.DynamicVars.Repeat.IntValue);
                 playedCard.MutablePreview.EnergyCost.AddThisCombat(1);
@@ -520,32 +516,6 @@ internal static class CardEffectSpecRegistry
         {
             ReturnShiningStrikeToDrawPile(simulator, Card);
             return !simulator.HasPendingChoice;
-        }
-    }
-
-    private static void SpreadDebuffs(SimulatedCombatState combat, Creature source)
-    {
-        Dictionary<Type, (int Amount, Creature? Applier)> debuffs = combat.EffectivePowers()
-            .Where(power => power.Owner == source
-                && power.TypeForCurrentAmount == PowerType.Debuff)
-            .GroupBy(power => power.GetType())
-            .ToDictionary(
-                group => group.Key,
-                group => (group.Sum(power => power.Amount), group.First().Applier));
-        foreach (PowerModel power in combat.EffectivePowers().Where(power => power.Owner == source))
-        {
-            if (power is not ITemporaryPower temporary
-                || !debuffs.TryGetValue(temporary.InternallyAppliedPower.GetType(), out var internalEffect))
-            {
-                continue;
-            }
-            debuffs[temporary.InternallyAppliedPower.GetType()] =
-                (internalEffect.Amount + power.Amount, internalEffect.Applier);
-        }
-        foreach (Creature enemy in combat.HittableEnemies.Where(enemy => enemy != source))
-        {
-            foreach ((Type type, (int amount, Creature? applier)) in debuffs)
-                combat.ApplyPower(type, enemy, amount, applier);
         }
     }
 

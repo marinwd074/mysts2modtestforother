@@ -157,6 +157,64 @@ internal static class BespokeCardMirrors
             card.DynamicVars.CalculatedBlock.Props);
     }
 
+    public static void MiseryOnPlay(Misery card, CardOnPlayMirrorContext context)
+    {
+        if (context.CombatState is not SimulatedCombatState combat)
+            throw new InvalidOperationException("Misery requires writable branch combat state.");
+
+        // 0.107.1 snapshots the target's Debuffs before the attack, then spreads those
+        // snapshots after the attack. Preserve listener/power order: temporary Power
+        // markers (for example EnfeeblingTouchPower) must remain separate from the
+        // negative StrengthPower they originally created.
+        MiseryDebuffSnapshot[] debuffs = combat.EffectivePowers()
+            .Where(power => ReferenceEquals(power.Owner, context.Target)
+                && power.TypeForCurrentAmount == MegaCrit.Sts2.Core.Entities.Powers.PowerType.Debuff)
+            .Select(power => new MiseryDebuffSnapshot(power.GetType(), power.Amount, power.Applier))
+            .ToArray();
+
+        DamageCmd.Attack(card.DynamicVars.Damage.BaseValue)
+            .FromCard(card, context.CardPlay)
+            .Targeting(context.Target)
+            .Simulate(context.Simulator);
+        if (context.Simulator.HasPendingChoice)
+        {
+            context.Simulator.AppendExecutionContinuation(
+                new MiserySpreadExecutionFrame(context.Target, debuffs));
+            return;
+        }
+
+        ApplyMiseryDebuffs(combat, context.Target, debuffs);
+    }
+
+    private static void ApplyMiseryDebuffs(
+        SimulatedCombatState combat,
+        Creature source,
+        IReadOnlyList<MiseryDebuffSnapshot> debuffs)
+    {
+        foreach (Creature enemy in combat.HittableEnemies.Where(enemy => !ReferenceEquals(enemy, source)).ToArray())
+        {
+            foreach (MiseryDebuffSnapshot debuff in debuffs)
+                combat.ApplyPower(debuff.PowerType, enemy, debuff.Amount, debuff.Applier);
+        }
+    }
+
+    private readonly record struct MiseryDebuffSnapshot(Type PowerType, int Amount, Creature? Applier);
+
+    private sealed record MiserySpreadExecutionFrame(
+        Creature Source,
+        IReadOnlyList<MiseryDebuffSnapshot> Debuffs) : ICombatPredictionExecutionFrame
+    {
+        public ICombatPredictionExecutionFrame Fork(PredictionForkContext context) => this;
+
+        public bool Resume(CombatPredictionSimulator simulator)
+        {
+            if (simulator.State.CombatState is not SimulatedCombatState combat)
+                throw new InvalidOperationException("Misery continuation requires writable branch combat state.");
+            ApplyMiseryDebuffs(combat, Source, Debuffs);
+            return !simulator.HasPendingChoice;
+        }
+    }
+
     public static void MaulOnPlay(Maul card, CardOnPlayMirrorContext context)
     {
         DamageCmd.Attack(card.DynamicVars.Damage.BaseValue)
