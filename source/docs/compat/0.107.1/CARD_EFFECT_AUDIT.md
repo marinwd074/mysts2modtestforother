@@ -74,6 +74,20 @@ Outbreak's hidden poison counter is also included in the search fingerprint and
 live/predicted continuation stamps so branch deduplication and cross-turn reuse
 cannot erase or silently mismatch the next trigger.
 
+
+### Pillar of Creation version guard
+
+Pillar of Creation is a checked-match version trap rather than a new mismatch.
+In the pinned 0.107.1 model, the card applies `PillarOfCreationPower` using its
+Block dynamic var (3 base, 4 upgraded). Its `AfterCardGeneratedForCombat` hook
+then grants that Power amount as Unpowered Block whenever the Power owner's
+card generation creates a card. There is no once-per-turn prediction state.
+
+The later v0.109 redesign changed this to a larger Block gain only on the first
+created card each turn, so the compatibility verifier now scopes the Pillar
+hook itself and rejects once-per-turn state if that newer behavior is copied
+back into the 0.107.1 target.
+
 ### Adjacent generated-card hook correction
 
 Regalite is not a card, but its hook changes the value of every card-generation
@@ -242,7 +256,7 @@ fork-safe execution frames keep their localized continuation path.
 The initial pass also checked several special cases that already match the
 0.107.1 assembly and were left unchanged: No Escape, Synchronize, Hang,
 The Scythe, Spite, Heavenly Drill, Glacier, Meteor Strike, Refract,
-Fight Through, Predator, Bouncing Flask, Gang Up, Lift, Rally, and Tag Team.
+Fight Through, Predator, Bouncing Flask, Gang Up, Lift, Rally, and Tag Team, and Pillar of Creation.
 
 The multiplayer-card result is tracked separately in
 [`MULTIPLAYER_CARD_COVERAGE.md`](MULTIPLAYER_CARD_COVERAGE.md). "Checked

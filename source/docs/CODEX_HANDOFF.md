@@ -106,5 +106,14 @@
 
 ## 当前下一步
 
-[Reactive Carry Foundation](multiplayer/NEXT_REACTIVE_CARRY.md) 已完成；A/B/C 三轮真实
-Host/Client Smoke 和机器摘要已收口。当前 Local Cross-Turn/T3/X2/Shuffle Boundary、Carry R1 与 Carry current-turn threat window 均已收口。Carry R2 decisive runtime fixture 改为可选补充证据，不再阻塞开发；不要继续人工刷等价 HP 场景。下一阶段应从仍关闭的能力中按收益/风险选择新的独立工作项，优先保持默认 Probe 与现有多人安全边界，不引入 teammate behavior model 或第二套 Solver。
+当前主线已从多人能力扩展切换到 **0.107.1 card-effect / continuation source audit**。截至
+`f63e591b`，Mad Science、生成牌链、Orb、Draw、Selection、Flak Cannon、Forge、
+Bulk Up、Misery、Well-Laid Plans 等高风险路径已完成一轮版本回退与 continuation
+加固，`0.107.1 compatibility consistency` 在该基线 PASS。Pillar of Creation 已作为
+v0.109 版本陷阱补上静态回归护栏：0.107.1 保持“每次由 owner 生成牌都按 Power amount
+获得 Block”，不得引入 first-trigger-per-turn 状态。
+
+下一轮继续按 `compat/0.107.1/CARD_EFFECT_AUDIT.md` 的 audit boundary 工作：
+优先检查 **hard-coded constants、版本条件、custom execution order** 的卡牌/Power；
+DynamicVar 驱动的普通 attack/block/draw recipe 降低优先级。多人已收口能力保持不动，
+Carry R2 decisive runtime fixture 仍为可选证据，不人工刷场景。
