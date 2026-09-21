@@ -1,6 +1,18 @@
 # Third-Party Notices
 
-Last updated: 2026-09-16
+Last updated: 2026-09-22
+
+## CombatSolver upstream
+
+This repository is a modified fork of [Torch1230/CombatSolver](https://github.com/Torch1230/CombatSolver).
+Upstream CombatSolver is distributed under the MIT License. Its required copyright notice is
+retained in this repository's LICENSE:
+
+Copyright (c) 2026 Torch1230 and contributors
+
+The fork may modify or replace upstream implementation details, but that does not remove the
+license obligation for upstream code that remains in the repository.
+
 
 ## Random Foreseer
 
