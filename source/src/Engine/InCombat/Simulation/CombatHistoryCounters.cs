@@ -17,7 +17,7 @@ internal readonly record struct CombatHistoryCounters(
             CombatPredictionCardPlayFinishedEntry play => this with
             {
                 FinishedPlays = FinishedPlays + 1,
-                EtherealPlays = EtherealPlays + (play.WasEthereal && play.CardPlay.Card.Owner == owner ? 1 : 0),
+                EtherealPlays = EtherealPlays + (play.WasEthereal && play.Card.Owner == owner ? 1 : 0),
             },
             CombatPredictionOrbChanneledEntry channel when channel.Orb is LightningOrb && channel.Orb.Owner == owner
                 => this with { LightningChannels = LightningChannels + 1 },
@@ -39,7 +39,7 @@ internal readonly record struct CombatHistoryCounters(
             {
                 case CombatPredictionCardPlayFinishedEntry play:
                     finished++;
-                    if (play.WasEthereal && play.CardPlay.Card.Owner == owner) ethereal++;
+                    if (play.WasEthereal && play.Card.Owner == owner) ethereal++;
                     break;
                 case CombatPredictionOrbChanneledEntry channel:
                     if (channel.Orb is LightningOrb && channel.Orb.Owner == owner) lightning++;

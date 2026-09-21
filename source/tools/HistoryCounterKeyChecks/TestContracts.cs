@@ -34,6 +34,7 @@ namespace CombatSolver.Engine.InCombat.Simulation
     internal abstract class CombatPredictionHistoryEntry;
     internal sealed class CombatPredictionCardPlayFinishedEntry : CombatPredictionHistoryEntry
     {
+        public required CardSnapshot Card { get; init; }
         public required CardPlay CardPlay { get; init; }
         public bool WasEthereal { get; init; }
     }

@@ -21,8 +21,8 @@ Player other = new();
 CombatHistoryCounters counters = default;
 List<CombatPredictionHistoryEntry> events =
 [
-    new CombatPredictionCardPlayFinishedEntry { CardPlay = new CardPlay { Player = other }, WasEthereal = true },
-    new CombatPredictionCardPlayFinishedEntry { CardPlay = new CardPlay { Player = owner }, WasEthereal = true },
+    new CombatPredictionCardPlayFinishedEntry { Card = new CardSnapshot { Owner = other }, CardPlay = new CardPlay { Player = other }, WasEthereal = true },
+    new CombatPredictionCardPlayFinishedEntry { Card = new CardSnapshot { Owner = owner }, CardPlay = new CardPlay { Player = owner }, WasEthereal = true },
     new CombatPredictionOrbChanneledEntry { Orb = new LightningOrb { Owner = owner } },
     new CombatPredictionDamageReceivedEntry { Receiver = owner.Creature, Result = new DamageResult { UnblockedDamage = 3 } },
     new CombatPredictionCardDrawnEntry { Card = new CardSnapshot { Owner = owner } },
