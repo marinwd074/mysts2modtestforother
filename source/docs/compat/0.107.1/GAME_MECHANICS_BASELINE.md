@@ -555,8 +555,9 @@ These later patch notes are especially useful as negative evidence for the
 - v0.108 reworked Tank, changed end-of-turn Orb/Doom ordering, and changed Scrape so globally temporary 0-cost effects also prevent its discard.
 - v0.110 reworked Haze to add Weak, reworked Outbreak into an immediate-Poison
   Skill, and increased Sacrifice from double to triple Osty Max HP.
-- v0.111 later changed Guiding Star draw from this turn to next turn and
-  reworked Expect a Fight and Hyperbeam again.
+- v0.111 later changed Guiding Star draw from this turn to next turn,
+  reworked Expect a Fight and Hyperbeam again, and removed Forgotten Ritual's
+  requirement that its owner had already Exhausted a card that turn.
 
 Official Steam announcement stream:
 https://steamcommunity.com/app/2868840/announcements/

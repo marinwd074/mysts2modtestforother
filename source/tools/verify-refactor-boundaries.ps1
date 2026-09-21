@@ -1678,6 +1678,24 @@ else {
 
 $cardOnPlayPath = Join-Path $repositoryRoot 'src/Prediction/CardOnPlaySupport.cs'
 $cardOnPlayText = [IO.File]::ReadAllText($cardOnPlayPath)
+$forgottenRitualStart = $cardOnPlayText.IndexOf('case ForgottenRitual')
+$forgottenRitualEnd = $cardOnPlayText.IndexOf('case Fuel:', $forgottenRitualStart)
+if ($forgottenRitualStart -lt 0 -or $forgottenRitualEnd -le $forgottenRitualStart) {
+    $violations.Add("${cardOnPlayPath}: Forgotten Ritual compensation boundary is missing")
+}
+else {
+    $forgottenRitualBlock = $cardOnPlayText.Substring(
+        $forgottenRitualStart,
+        $forgottenRitualEnd - $forgottenRitualStart)
+    if (-not $forgottenRitualBlock.Contains(
+        'case ForgottenRitual when combat.WasCardExhaustedThisTurn(owner):')) {
+        $violations.Add("${cardOnPlayPath}: 0.107.1 Forgotten Ritual must require owner card Exhaust history before gaining Energy")
+    }
+    if ($forgottenRitualBlock.Contains('case ForgottenRitual or Luminesce:')) {
+        $violations.Add("${cardOnPlayPath}: later-version unconditional Forgotten Ritual Energy behavior returned")
+    }
+}
+
 $hazeStart = $cardOnPlayText.IndexOf('case Haze:')
 $hazeEnd = $cardOnPlayText.IndexOf('case HiddenCache:', $hazeStart)
 if ($hazeStart -lt 0 -or $hazeEnd -le $hazeStart) {
