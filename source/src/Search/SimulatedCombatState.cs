@@ -2353,6 +2353,8 @@ internal sealed partial class SimulatedCombatState
             item.Add(ritual._wasJustAppliedByEnemy);
         if (power is SurroundedPower surrounded)
             item.Add((int)PowerPredictionStateSupport.SurroundedFacing(simulator, surrounded));
+        if (power is OutbreakPower outbreak)
+            item.Add(PowerPredictionStateSupport.OutbreakPoisonApplications(simulator, outbreak));
         ulong dynamicFirst = 0;
         ulong dynamicSecond = 0;
         int dynamicCount = 0;

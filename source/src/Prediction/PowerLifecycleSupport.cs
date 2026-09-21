@@ -145,6 +145,22 @@ internal static class PowerLifecycleSupport
                         continue;
                     switch (listener)
                     {
+                        case OutbreakPower outbreak when change.Delta > 0
+                            && change.Power is PoisonPower
+                            && ReferenceEquals(change.Applier, outbreak.Owner):
+                            if (PowerPredictionStateSupport.RecordOutbreakPoisonApplication(simulator, outbreak))
+                            {
+                                using (simulator.PushDamageSource(
+                                    CombatDamageSource.For(CombatDamageSourceKind.Power, nameof(OutbreakPower))))
+                                {
+                                    simulator.Damage(
+                                        combat.HittableEnemies,
+                                        combat.GetAmount<OutbreakPower>(outbreak.Owner),
+                                        ValueProp.Unpowered,
+                                        outbreak.Owner);
+                                }
+                            }
+                            break;
                         case ShroudPower when ReferenceEquals(change.Applier, listener.Owner)
                                                    && change.Power is DoomPower:
                             simulator.GainBlock(listener.Owner, listener.Amount, ValueProp.Unpowered);

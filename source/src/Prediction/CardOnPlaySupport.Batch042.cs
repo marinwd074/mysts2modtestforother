@@ -81,11 +81,10 @@ internal static partial class CardOnPlaySupport
                     processedEnemyDeaths);
                 break;
             case Outbreak:
-                ApplyOutbreak(
-                    simulator,
-                    combat,
-                    card,
-                    processedEnemyDeaths);
+                combat.Apply<OutbreakPower>(
+                    owner,
+                    card.DynamicVars["OutbreakPower"].IntValue,
+                    owner);
                 break;
             case PrimalForce:
             {
@@ -312,29 +311,6 @@ internal static partial class CardOnPlaySupport
         finally
         {
             simulator.EndAttackContext(attackContext, completed);
-        }
-    }
-
-    private static void ApplyOutbreak(
-        CombatPredictionSimulator simulator,
-        SimulatedCombatState combat,
-        CardModel card,
-        ISet<uint> processedEnemyDeaths)
-    {
-        List<Creature> targets = AliveHittableEnemies(simulator, combat);
-        foreach (Creature enemy in targets)
-            combat.Apply<PoisonPower>(enemy, card.DynamicVars.Poison.IntValue, card.Owner.Creature);
-        foreach (Creature enemy in targets)
-        {
-            if (!CorePowerSupport.TriggerPoison(simulator, combat, [enemy]))
-                return;
-            CorePowerSupport.ApplyEnemyDeathPowers(
-                simulator,
-                combat,
-                combat.Enemies,
-                processedEnemyDeaths);
-            if (simulator.HasPendingChoice)
-                return;
         }
     }
 

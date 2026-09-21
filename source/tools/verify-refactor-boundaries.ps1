@@ -1693,6 +1693,66 @@ else {
     }
 }
 
+
+$outbreakCardPath = Join-Path $repositoryRoot 'src/Prediction/CardOnPlaySupport.Batch042.cs'
+$outbreakCardText = [IO.File]::ReadAllText($outbreakCardPath)
+$outbreakStart = $outbreakCardText.IndexOf('case Outbreak:')
+$outbreakEnd = $outbreakCardText.IndexOf('case PrimalForce:', $outbreakStart)
+if ($outbreakStart -lt 0 -or $outbreakEnd -le $outbreakStart) {
+    $violations.Add("${outbreakCardPath}: Outbreak card boundary is missing")
+}
+else {
+    $outbreakBlock = $outbreakCardText.Substring($outbreakStart, $outbreakEnd - $outbreakStart)
+    if (-not $outbreakBlock.Contains('combat.Apply<OutbreakPower>(')
+        -or -not $outbreakBlock.Contains('card.DynamicVars["OutbreakPower"].IntValue')) {
+        $violations.Add("${outbreakCardPath}: 0.107.1 Outbreak must apply OutbreakPower from its dynamic var")
+    }
+    if ($outbreakBlock.Contains('ApplyOutbreak(')) {
+        $violations.Add("${outbreakCardPath}: later-version immediate Outbreak poison settlement returned")
+    }
+}
+if ($outbreakCardText.Contains('private static void ApplyOutbreak(')) {
+    $violations.Add("${outbreakCardPath}: retired later-version Outbreak helper returned")
+}
+
+$powerLifecyclePath = Join-Path $repositoryRoot 'src/Prediction/PowerLifecycleSupport.cs'
+$powerLifecycleText = [IO.File]::ReadAllText($powerLifecyclePath)
+foreach ($requiredOutbreakLifecycle in @(
+    'case OutbreakPower outbreak when change.Delta > 0',
+    'change.Power is PoisonPower',
+    'PowerPredictionStateSupport.RecordOutbreakPoisonApplication(simulator, outbreak)',
+    'combat.GetAmount<OutbreakPower>(outbreak.Owner)',
+    'ValueProp.Unpowered')) {
+    if (-not $powerLifecycleText.Contains($requiredOutbreakLifecycle)) {
+        $violations.Add("${powerLifecyclePath}: missing 0.107.1 Outbreak lifecycle '$requiredOutbreakLifecycle'")
+    }
+}
+
+$powerPredictionStatePath = Join-Path $repositoryRoot 'src/Prediction/PowerPredictionStateSupport.cs'
+$powerPredictionStateText = [IO.File]::ReadAllText($powerPredictionStatePath)
+foreach ($requiredOutbreakState in @(
+    'NativeOutbreakPoisonApplications',
+    'OutbreakPoisonApplications',
+    'RecordOutbreakPoisonApplication',
+    'OutbreakPower.poisonThreshold',
+    'case (OutbreakPower value, OutbreakPower original)')) {
+    if (-not $powerPredictionStateText.Contains($requiredOutbreakState)) {
+        $violations.Add("${powerPredictionStatePath}: missing Outbreak hidden-state rule '$requiredOutbreakState'")
+    }
+}
+
+$simulatedCombatPath = Join-Path $repositoryRoot 'src/Search/SimulatedCombatState.cs'
+if (-not (Select-String -LiteralPath $simulatedCombatPath -SimpleMatch 'PowerPredictionStateSupport.OutbreakPoisonApplications(simulator, outbreak)' -Quiet)) {
+    $violations.Add("${simulatedCombatPath}: Outbreak hidden counter must participate in the search fingerprint")
+}
+$continuationStampPath = Join-Path $repositoryRoot 'src/Runtime/ContinuationStamp.cs'
+$continuationStampText = [IO.File]::ReadAllText($continuationStampPath)
+if (-not $continuationStampText.Contains('PoisonApplications=')
+    -or -not $continuationStampText.Contains('NativeOutbreakPoisonApplications(outbreak)')
+    -or -not $continuationStampText.Contains('OutbreakPoisonApplications(simulator, outbreak)')) {
+    $violations.Add("${continuationStampPath}: Outbreak hidden counter must participate in exact continuation stamps")
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."

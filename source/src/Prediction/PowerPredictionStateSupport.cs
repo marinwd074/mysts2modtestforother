@@ -12,6 +12,30 @@ internal static class PowerPredictionStateSupport
     public static SurroundedPower.Direction SurroundedFacing(CombatPredictionSimulator simulator, SurroundedPower power)
         => simulator.StateStore.Peek(power, () => new SurroundedPredictionState(power)).Facing;
 
+    public static int NativeOutbreakPoisonApplications(OutbreakPower power)
+        => power.GetInternalData<OutbreakPower.Data>().timesPoisoned;
+
+    public static int OutbreakPoisonApplications(
+        CombatPredictionSimulator simulator,
+        OutbreakPower power)
+        => simulator.StateStore
+            .Peek(power, () => new CounterPredictionState(NativeOutbreakPoisonApplications(power)))
+            .Value;
+
+    public static bool RecordOutbreakPoisonApplication(
+        CombatPredictionSimulator simulator,
+        OutbreakPower power)
+    {
+        CounterPredictionState state = simulator.StateStore.Get(
+            power,
+            () => new CounterPredictionState(NativeOutbreakPoisonApplications(power)));
+        state.Value++;
+        if (state.Value < OutbreakPower.poisonThreshold)
+            return false;
+        state.Value %= OutbreakPower.poisonThreshold;
+        return true;
+    }
+
     public static void CaptureRootState(
         CombatPredictionSimulator simulator,
         PowerModel target,
@@ -46,6 +70,11 @@ internal static class PowerPredictionStateSupport
                 break;
             case (JugglingPower value, JugglingPower original):
                 _ = simulator.StateStore.GetReadOnly(value, () => new JugglingPredictionState(original));
+                break;
+            case (OutbreakPower value, OutbreakPower original):
+                _ = simulator.StateStore.GetReadOnly(
+                    value,
+                    () => new CounterPredictionState(NativeOutbreakPoisonApplications(original)));
                 break;
             case (ChainsOfBindingPower value, ChainsOfBindingPower original):
                 _ = simulator.StateStore.GetReadOnly(value, () => ChainsOfBindingPredictionState.CaptureRoot(original));

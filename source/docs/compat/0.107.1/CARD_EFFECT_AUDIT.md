@@ -22,16 +22,20 @@ replace the native-vs-predicted runtime differential.
 
 ## Corrected version drift
 
-Three route-affecting mismatches were confirmed in the first pass:
+Four route-affecting mismatches were confirmed in the first pass:
 
 | Card | 0.107.1 native behavior | Incorrect solver behavior | Correction |
 |---|---|---|---|
 | Tracking | first play applies TrackingPower 2, later plays +1; against Weak targets the power amount is the damage multiplier | applied 50 and interpreted it as percentage bonus | use 2 then +1 and multiply by the branch power amount |
 | Sacrifice | kills the living Osty and gains block equal to 2x Osty's max HP | used 3x max HP | restore 2x |
 | Haze | applies Poison to all hittable enemies; upgrade increases Poison | also applied Weak | remove the Weak application |
+| Outbreak | applies OutbreakPower 11/15; every third positive Poison application by the owner deals that amount as Unpowered damage to all hittable enemies | immediately applied Poison to all enemies and triggered Poison damage when the card was played | restore the persistent power, its hidden 0/1/2 poison counter, and its third-application damage trigger |
 
 These differences materially affect route ranking, so source-shape guards in
 `tools/verify-refactor-boundaries.ps1` reject the later-version semantics.
+Outbreak's hidden poison counter is also included in the search fingerprint and
+live/predicted continuation stamps so branch deduplication and cross-turn reuse
+cannot erase or silently mismatch the next trigger.
 
 ## Checked matches
 
