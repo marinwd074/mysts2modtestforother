@@ -1814,7 +1814,7 @@ else {
     }
 }
 $shiningStrikeHelperStart = $shiningStrikeSpecText.IndexOf('private static void ReturnShiningStrikeToDrawPile')
-$shiningStrikeHelperEnd = $shiningStrikeSpecText.IndexOf('private static void SpreadDebuffs', $shiningStrikeHelperStart)
+$shiningStrikeHelperEnd = $shiningStrikeSpecText.IndexOf('private static void AddFixed<TCard>', $shiningStrikeHelperStart)
 if ($shiningStrikeHelperStart -lt 0 -or $shiningStrikeHelperEnd -le $shiningStrikeHelperStart) {
     $violations.Add("${shiningStrikeSpecPath}: Shining Strike Draw-top helper boundary is missing")
 }
