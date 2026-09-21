@@ -28,7 +28,7 @@ replace the native-vs-predicted runtime differential.
 
 ## Corrected version drift
 
-Thirty-two route-affecting mismatches have been confirmed in the 0.107.1 source audit:
+Thirty-three route-affecting mismatches have been confirmed in the 0.107.1 source audit:
 
 | Card | 0.107.1 native behavior | Incorrect solver behavior | Correction |
 |---|---|---|---|
@@ -122,6 +122,24 @@ suffix independently. Shared tail frames cover attack/Block -> Channel and
 Channel -> draw/Power chains, while Chaos, Darkness, Shatter, and Tesla Coil
 store explicit loop indices and fork-remapped Orb snapshots. This mirrors the
 0.107.1 await order without replaying already completed Orb effects.
+
+### Card-draw sequence continuation correction
+
+A second multi-step continuation gap existed in the dedicated draw-card mirrors.
+The simulator's Draw command already resumes its own shuffle/draw/AfterCardDrawn
+work and keeps the same mutable drawn-card list, but the surrounding CardModel
+OnPlay handler previously returned on a pending choice and forgot what the card
+was supposed to do next.
+
+The 0.107.1 sequences for Adrenaline, Offering, Neurosurge, Spoils of Battle,
+Compile Driver, Escape Plan, Fetch, FTL, Huddle Up, Pillage, Reboot,
+Restlessness, and Scrape now use one fork-safe card-draw execution frame.
+The frame preserves the native program counter, any in-flight Draw result list,
+the next multiplayer ally for Huddle Up, and Pillage's draw/evaluate loop.
+Escape Plan and Scrape therefore evaluate the cards that finish drawing after
+the nested choice instead of a partial pre-suspension snapshot, while Offering,
+Neurosurge, Reboot, and the attack-then-draw cards no longer skip their native
+suffixes.
 
 ## Checked matches
 

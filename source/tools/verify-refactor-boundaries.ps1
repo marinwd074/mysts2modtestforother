@@ -2756,6 +2756,56 @@ foreach ($orbCardMethod in @(
     }
 }
 
+$cardDrawSequencePath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/CardDrawCardMirrors.cs'
+$cardDrawSequenceText = [IO.File]::ReadAllText($cardDrawSequencePath)
+$cardDrawContinuationPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/CardDrawCardMirrors.ExecutionContinuation.cs'
+$cardDrawContinuationText = [IO.File]::ReadAllText($cardDrawContinuationPath)
+foreach ($cardDrawContinuationMethod in @(
+    'Adrenaline',
+    'Offering',
+    'Neurosurge',
+    'SpoilsOfBattle',
+    'CompileDriver',
+    'EscapePlan',
+    'Fetch',
+    'Ftl',
+    'HuddleUp',
+    'Pillage',
+    'Reboot',
+    'Restlessness',
+    'Scrape')) {
+    $methodStart = $cardDrawSequenceText.IndexOf("public static void $($cardDrawContinuationMethod)OnPlay")
+    $nextPublic = $cardDrawSequenceText.IndexOf([Environment]::NewLine + '    public static void ', $methodStart + 1)
+    $nextDirective = $cardDrawSequenceText.IndexOf([Environment]::NewLine + '#', $methodStart + 1)
+    $candidates = @($nextPublic, $nextDirective) | Where-Object { $_ -gt $methodStart }
+    $methodEnd = if ($candidates.Count -gt 0) { ($candidates | Measure-Object -Minimum).Minimum } else { $cardDrawSequenceText.Length }
+    if ($methodStart -lt 0 -or $methodEnd -le $methodStart) {
+        $violations.Add("${cardDrawSequencePath}: continuation method boundary missing for $cardDrawContinuationMethod")
+        continue
+    }
+    $methodBlock = $cardDrawSequenceText.Substring($methodStart, $methodEnd - $methodStart)
+    if (-not $methodBlock.Contains('context.Simulator.AcknowledgeExecutionDispatch();')) {
+        $violations.Add("${cardDrawSequencePath}: $cardDrawContinuationMethod must acknowledge resumable OnPlay dispatch")
+    }
+    if (-not $methodBlock.Contains('ContinueCardDrawSequence(')) {
+        $violations.Add("${cardDrawSequencePath}: $cardDrawContinuationMethod must enter the card-draw continuation state machine")
+    }
+}
+foreach ($requiredCardDrawContinuationRule in @(
+    'private sealed record CardDrawExecutionFrame(',
+    'CombatPredictionSimulator.ForkExecutionCardList(list, context)',
+    'DrawnCards = DrawnCards is null ? null : context.RequireRemap(DrawnCards)',
+    'CardDrawSequence.Pillage',
+    'CardDrawSequence.Scrape',
+    'CardDrawSequence.EscapePlan',
+    'players: allies',
+    'nextPlayer: index + 1')) {
+    if (-not ($cardDrawSequenceText.Contains($requiredCardDrawContinuationRule) -or
+              $cardDrawContinuationText.Contains($requiredCardDrawContinuationRule))) {
+        $violations.Add("${cardDrawContinuationPath}: missing card-draw continuation rule '$requiredCardDrawContinuationRule'")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."

@@ -8,58 +8,36 @@ using CombatSolver.Engine.InCombat.Simulation;
 
 namespace CombatSolver.Engine.InCombat.Mirrors.Cards.OnPlay;
 
-internal static class CardDrawCardMirrors
+internal static partial class CardDrawCardMirrors
 {
-    public static void AdrenalineOnPlay(Adrenaline card, CardOnPlayMirrorContext context)
+    public static void AdrenalineOnPlay(Adrenaline _, CardOnPlayMirrorContext context)
     {
-        context.Simulator.GainEnergy(card.Owner, card.DynamicVars.Energy.IntValue);
-        if (context.Simulator.HasPendingChoice)
-            return;
-        context.Simulator.Draw(card.Owner, card.DynamicVars.Cards.BaseValue);
+        context.Simulator.AcknowledgeExecutionDispatch();
+        _ = ContinueCardDrawSequence(context, CardDrawSequence.Adrenaline);
     }
 
-    public static void OfferingOnPlay(Offering card, CardOnPlayMirrorContext context)
+    public static void OfferingOnPlay(Offering _, CardOnPlayMirrorContext context)
     {
-        context.Simulator.Damage([card.Owner.Creature], card.DynamicVars.HpLoss.BaseValue,
-            ValueProp.Unblockable | ValueProp.Unpowered | ValueProp.Move,
-            card.Owner.Creature, context.Card, context.CardPlay);
-        if (context.Simulator.HasPendingChoice)
-            return;
-        context.Simulator.GainEnergy(card.Owner, card.DynamicVars.Energy.IntValue);
-        if (context.Simulator.HasPendingChoice)
-            return;
-        context.Simulator.Draw(card.Owner, card.DynamicVars.Cards.BaseValue);
+        context.Simulator.AcknowledgeExecutionDispatch();
+        _ = ContinueCardDrawSequence(context, CardDrawSequence.Offering);
     }
 
-    public static void NeurosurgeOnPlay(Neurosurge card, CardOnPlayMirrorContext context)
+    public static void NeurosurgeOnPlay(Neurosurge _, CardOnPlayMirrorContext context)
     {
-        context.Simulator.GainEnergy(card.Owner, card.DynamicVars.Energy.IntValue);
-        if (context.Simulator.HasPendingChoice)
-            return;
-        context.Simulator.Draw(card.Owner, card.DynamicVars.Cards.BaseValue);
-        if (context.Simulator.HasPendingChoice)
-            return;
-        SimulatedCombatState combat = context.State.CombatState as SimulatedCombatState
-            ?? throw new InvalidOperationException("Neurosurge requires simulated combat state.");
-        combat.Apply<NeurosurgePower>(card.Owner.Creature, card.DynamicVars["NeurosurgePower"].IntValue,
-            card.Owner.Creature);
+        context.Simulator.AcknowledgeExecutionDispatch();
+        _ = ContinueCardDrawSequence(context, CardDrawSequence.Neurosurge);
     }
 
-    public static void SpoilsOfBattleOnPlay(SpoilsOfBattle card, CardOnPlayMirrorContext context)
+    public static void SpoilsOfBattleOnPlay(SpoilsOfBattle _, CardOnPlayMirrorContext context)
     {
-        PersistentPowerSupport.Forge(context.Simulator, card.Owner, card.DynamicVars.Forge.IntValue);
-        if (context.Simulator.HasPendingChoice)
-            return;
-        context.Simulator.Draw(card.Owner, card.DynamicVars.Cards.BaseValue);
+        context.Simulator.AcknowledgeExecutionDispatch();
+        _ = ContinueCardDrawSequence(context, CardDrawSequence.SpoilsOfBattle);
     }
 
-    public static void CompileDriverOnPlay(CompileDriver card, CardOnPlayMirrorContext context)
+    public static void CompileDriverOnPlay(CompileDriver _, CardOnPlayMirrorContext context)
     {
-        context.AttackSingle();
-        if (context.Simulator.HasPendingChoice)
-            return;
-        var drawCount = context.OwnerState.OrbQueue.Orbs.Select(orb => orb.Id).Distinct().Count();
-        context.Simulator.Draw(card.Owner, drawCount);
+        context.Simulator.AcknowledgeExecutionDispatch();
+        _ = ContinueCardDrawSequence(context, CardDrawSequence.CompileDriver);
     }
 
     public static void CalculatedGambleOnPlay(CalculatedGamble card, CardOnPlayMirrorContext context)
@@ -82,15 +60,10 @@ internal static class CardDrawCardMirrors
     }
 #endif
 
-    public static void EscapePlanOnPlay(EscapePlan card, CardOnPlayMirrorContext context)
+    public static void EscapePlanOnPlay(EscapePlan _, CardOnPlayMirrorContext context)
     {
-        var drawnCards = context.Simulator.Draw(card.Owner, 1);
-        if (context.Simulator.HasPendingChoice)
-            return;
-        if (drawnCards is [{ Preview.Type: CardType.Skill }])
-        {
-            context.GainBlock(card.Owner.Creature);
-        }
+        context.Simulator.AcknowledgeExecutionDispatch();
+        _ = ContinueCardDrawSequence(context, CardDrawSequence.EscapePlan);
     }
 
     public static void ExpertiseOnPlay(Expertise card, CardOnPlayMirrorContext context)
@@ -101,52 +74,29 @@ internal static class CardDrawCardMirrors
         context.Simulator.Draw(card.Owner, drawCount);
     }
 
-    public static void FetchOnPlay(Fetch card, CardOnPlayMirrorContext context)
+    public static void FetchOnPlay(Fetch _, CardOnPlayMirrorContext context)
     {
-        if (context.State.GetOsty(card.Owner) is not { } osty || context.State.GetCreature(osty).IsDead)
-        {
-            return;
-        }
-
-        DamageCmd.Attack(card.DynamicVars.OstyDamage.BaseValue)
-            .FromOsty(osty, card, context.CardPlay)
-            .Targeting(context.Target)
-            .Simulate(context.Simulator);
-        if (context.Simulator.HasPendingChoice)
-            return;
-
-        SimulatedCombatState combat = context.Simulator.State.CombatState as SimulatedCombatState
-            ?? throw new InvalidOperationException("Fetch requires simulated combat state.");
-        if (!combat.WasFetchPlayedThisTurn(context.Card))
-        {
-            context.Simulator.Draw(card.Owner, card.DynamicVars.Cards.BaseValue);
-        }
+        context.Simulator.AcknowledgeExecutionDispatch();
+        _ = ContinueCardDrawSequence(context, CardDrawSequence.Fetch);
     }
 
-    public static void FtlOnPlay(Ftl card, CardOnPlayMirrorContext context)
+    public static void FtlOnPlay(Ftl _, CardOnPlayMirrorContext context)
     {
-        context.AttackSingle();
-        if (context.Simulator.HasPendingChoice)
-            return;
-
-        SimulatedCombatState combat = context.Simulator.State.CombatState as SimulatedCombatState
-            ?? throw new InvalidOperationException("FTL requires simulated combat state.");
-        if (combat.GetCardsPlayedThisTurn(card.Owner.Creature) < card.DynamicVars[Ftl._playMaxKey].IntValue)
-        {
-            context.Simulator.Draw(card.Owner, card.DynamicVars.Cards.BaseValue);
-        }
+        context.Simulator.AcknowledgeExecutionDispatch();
+        _ = ContinueCardDrawSequence(context, CardDrawSequence.Ftl);
     }
 
     public static void HuddleUpOnPlay(HuddleUp card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         var allies = context.State.GetTeammatesOf(card.Owner.Creature)
-            .Where(creature => creature.IsPlayer && context.State.GetCreature(creature).IsAlive);
-        foreach (var ally in allies)
-        {
-            context.Simulator.Draw(ally.Player!, card.DynamicVars.Cards.BaseValue);
-            if (context.Simulator.HasPendingChoice)
-                return;
-        }
+            .Where(creature => creature.IsPlayer && context.State.GetCreature(creature).IsAlive)
+            .Select(creature => creature.Player!)
+            .ToArray();
+        _ = ContinueCardDrawSequence(
+            context,
+            CardDrawSequence.HuddleUp,
+            players: allies);
     }
 
     public static void ImpatienceOnPlay(Impatience card, CardOnPlayMirrorContext context)
@@ -157,64 +107,28 @@ internal static class CardDrawCardMirrors
         }
     }
 
-    public static void PillageOnPlay(Pillage card, CardOnPlayMirrorContext context)
+    public static void PillageOnPlay(Pillage _, CardOnPlayMirrorContext context)
     {
-        context.AttackSingle();
-        if (context.Simulator.HasPendingChoice)
-            return;
-
-        while (true)
-        {
-            var drawnCards = context.Simulator.Draw(card.Owner, 1);
-            if (context.Simulator.HasPendingChoice)
-                return;
-            if (drawnCards is not [{ Preview.Type: CardType.Attack }] ||
-                context.OwnerState.Hand.Cards.Count >= context.Simulator.GetMaxHandSize(card.Owner))
-            {
-                break;
-            }
-        }
+        context.Simulator.AcknowledgeExecutionDispatch();
+        _ = ContinueCardDrawSequence(context, CardDrawSequence.Pillage);
     }
 
-    public static void RebootOnPlay(Reboot card, CardOnPlayMirrorContext context)
+    public static void RebootOnPlay(Reboot _, CardOnPlayMirrorContext context)
     {
-        context.Simulator.MoveHandToDrawPile(card.Owner);
-        if (context.Simulator.HasPendingChoice)
-            return;
-        context.Simulator.Shuffle(card.Owner);
-        if (context.Simulator.HasPendingChoice)
-            return;
-        context.Simulator.Draw(card.Owner, card.DynamicVars.Cards.BaseValue);
+        context.Simulator.AcknowledgeExecutionDispatch();
+        _ = ContinueCardDrawSequence(context, CardDrawSequence.Reboot);
     }
 
-    public static void RestlessnessOnPlay(Restlessness card, CardOnPlayMirrorContext context)
+    public static void RestlessnessOnPlay(Restlessness _, CardOnPlayMirrorContext context)
     {
-        if (context.OwnerState.Hand.IsEmpty)
-        {
-            context.Simulator.Draw(card.Owner, card.DynamicVars.Cards.IntValue);
-            if (context.Simulator.HasPendingChoice)
-                return;
-            context.Simulator.GainEnergy(card.Owner, card.DynamicVars.Energy.IntValue);
-        }
+        context.Simulator.AcknowledgeExecutionDispatch();
+        _ = ContinueCardDrawSequence(context, CardDrawSequence.Restlessness);
     }
 
-    public static void ScrapeOnPlay(Scrape card, CardOnPlayMirrorContext context)
+    public static void ScrapeOnPlay(Scrape _, CardOnPlayMirrorContext context)
     {
-        context.AttackSingle();
-        if (context.Simulator.HasPendingChoice)
-            return;
-
-        IReadOnlyList<PredictedCard> drawnCards = context.Simulator.Draw(
-            card.Owner,
-            card.DynamicVars.Cards.IntValue);
-        if (context.Simulator.HasPendingChoice)
-            return;
-        var cardsToDiscard = drawnCards
-            .Where(drawnCard =>
-                drawnCard.Preview.EnergyCost.GetWithModifiers(CostModifiers.Local) != 0 ||
-                drawnCard.Preview.EnergyCost.CostsX)
-            .ToList();
-        context.Simulator.Discard(cardsToDiscard);
+        context.Simulator.AcknowledgeExecutionDispatch();
+        _ = ContinueCardDrawSequence(context, CardDrawSequence.Scrape);
     }
 
     public static void ScrawlOnPlay(Scrawl card, CardOnPlayMirrorContext context)
