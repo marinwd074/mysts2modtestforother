@@ -1910,6 +1910,26 @@ else {
     }
 }
 
+$orbCardMirrorPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/OrbCardMirrors.cs'
+$orbCardMirrorText = [IO.File]::ReadAllText($orbCardMirrorPath)
+$nullStart = $orbCardMirrorText.IndexOf('public static void NullOnPlay')
+$nullEnd = $orbCardMirrorText.IndexOf('public static void QuadcastOnPlay', $nullStart)
+if ($nullStart -lt 0 -or $nullEnd -le $nullStart) {
+    $violations.Add("${orbCardMirrorPath}: Null mirror boundary is missing")
+}
+else {
+    $nullBlock = $orbCardMirrorText.Substring($nullStart, $nullEnd - $nullStart)
+    $attackIndex = $nullBlock.IndexOf('context.AttackSingle()')
+    $weakIndex = $nullBlock.IndexOf('combat.Apply<WeakPower>')
+    $orbIndex = $nullBlock.IndexOf('OrbChannel<DarkOrb>')
+    if ($attackIndex -lt 0 -or $weakIndex -le $attackIndex -or $orbIndex -le $weakIndex) {
+        $violations.Add("${orbCardMirrorPath}: 0.107.1 Null must resolve attack -> Weak -> Dark Orb in native order")
+    }
+    if (-not $nullBlock.Contains('card.DynamicVars.Weak.IntValue')) {
+        $violations.Add("${orbCardMirrorPath}: 0.107.1 Null must use its Weak dynamic var")
+    }
+}
+
 $spinnerSpec = '[typeof(Spinner)] = [Owner<SpinnerPower>("SpinnerPower")]'
 if (-not $cardEffectSpecText.Contains($spinnerSpec)) {
     $violations.Add("${cardEffectSpecPath}: 0.107.1 Spinner must apply SpinnerPower after its optional upgrade channel")

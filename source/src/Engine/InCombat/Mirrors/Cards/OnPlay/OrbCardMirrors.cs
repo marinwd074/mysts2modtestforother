@@ -142,7 +142,16 @@ internal static class OrbCardMirrors
         context.AttackSingle();
         if (context.Simulator.HasPendingChoice)
             return;
-        // Vanilla applies Weak before channeling; Weak does not affect this prediction's orb damage.
+
+        SimulatedCombatState combat = context.CombatState as SimulatedCombatState
+            ?? throw new InvalidOperationException("Null requires simulated combat state.");
+        combat.Apply<WeakPower>(
+            context.Target,
+            card.DynamicVars.Weak.IntValue,
+            card.Owner.Creature);
+        if (context.Simulator.HasPendingChoice)
+            return;
+
         context.Simulator.OrbChannel<DarkOrb>(card.Owner);
     }
 
