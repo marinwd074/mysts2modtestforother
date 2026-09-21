@@ -2108,14 +2108,29 @@ if ($scrapeStart -lt 0 -or $scrapeEnd -le $scrapeStart) {
 }
 else {
     $scrapeBlock = $cardDrawMirrorText.Substring($scrapeStart, $scrapeEnd - $scrapeStart)
-    if (-not $scrapeBlock.Contains('EnergyCost.GetWithModifiers(CostModifiers.Local) != 0')) {
-        $violations.Add("${cardDrawMirrorPath}: 0.107.1 Scrape must test the drawn card's local Energy cost only")
+    if (-not $scrapeBlock.Contains('ContinueCardDrawSequence(context, CardDrawSequence.Scrape)')) {
+        $violations.Add("${cardDrawMirrorPath}: 0.107.1 Scrape must enter its resumable attack -> draw -> discard sequence")
     }
-    if (-not $scrapeBlock.Contains('EnergyCost.CostsX')) {
-        $violations.Add("${cardDrawMirrorPath}: 0.107.1 Scrape must still discard X-cost cards")
+}
+$cardDrawContinuationPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/CardDrawCardMirrors.ExecutionContinuation.cs'
+$cardDrawContinuationText = [IO.File]::ReadAllText($cardDrawContinuationPath)
+$scrapeContinuationStart = $cardDrawContinuationText.IndexOf('case CardDrawSequence.Scrape:')
+$scrapeContinuationEnd = $cardDrawContinuationText.IndexOf('default:', $scrapeContinuationStart)
+if ($scrapeContinuationStart -lt 0 -or $scrapeContinuationEnd -le $scrapeContinuationStart) {
+    $violations.Add("${cardDrawContinuationPath}: Scrape continuation boundary is missing")
+}
+else {
+    $scrapeContinuationBlock = $cardDrawContinuationText.Substring(
+        $scrapeContinuationStart,
+        $scrapeContinuationEnd - $scrapeContinuationStart)
+    if (-not $scrapeContinuationBlock.Contains('EnergyCost.GetWithModifiers(CostModifiers.Local) != 0')) {
+        $violations.Add("${cardDrawContinuationPath}: 0.107.1 Scrape must test the drawn card's local Energy cost only")
     }
-    if ($scrapeBlock.Contains('GetEnergyCostValueWithModifiers(context.Simulator)')) {
-        $violations.Add("${cardDrawMirrorPath}: later-version/global-cost Scrape behavior returned")
+    if (-not $scrapeContinuationBlock.Contains('EnergyCost.CostsX')) {
+        $violations.Add("${cardDrawContinuationPath}: 0.107.1 Scrape must still discard X-cost cards")
+    }
+    if ($scrapeContinuationBlock.Contains('GetEnergyCostValueWithModifiers(context.Simulator)')) {
+        $violations.Add("${cardDrawContinuationPath}: later-version/global-cost Scrape behavior returned")
     }
 }
 
