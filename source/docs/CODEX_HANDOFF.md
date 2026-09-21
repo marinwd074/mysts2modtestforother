@@ -183,6 +183,11 @@ Illusion 的原生移除 veto、玩家 Power 清理顺序、Orb/Pet teardown 与
 `PredictedDeathPhase` 随 Fork 复制并进入状态指纹，复活/永久死亡状态不会跨分支串线。
 未发现新的 route-affecting mismatch，总数仍为 44。
 
-下一批做单人 0.107.1 最终收尾扫描：排除已审计的 patch-note、continuation、固定单位、Power 生命周期、
-amount-change 与死亡链，只找剩余 solver-authored 硬编码、反射私有状态和未进入指纹/Fork 的特殊语义；
+最终收尾扫描第一小批已复核反射/私有状态。Nemesis/Tender/Pale Blue Dot/Intercept 的隐藏状态均已有
+专门根捕获、Fork 或状态指纹覆盖；`_nextCreatureId` 随 Fork 复制且只用于新生 Creature 的唯一身份，
+不参与伤害/RNG/规则判定；`_rootFloatingCards` 是只读根成员集合；MultiplayerScalingModel 的私有
+run/combat 引用只用于根捕获时主动断开 live 引用。未发现单人路径存在“读取私有状态但分支未隔离”
+的新 route-affecting mismatch，总数仍为 44。
+
+下一小批只扫剩余 solver-authored 硬编码常量与特殊计数，不重复已完成的 Power/continuation/死亡审计；
 多人牌仍暂不作为当前 blocker。
