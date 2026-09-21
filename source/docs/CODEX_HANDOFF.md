@@ -173,5 +173,16 @@ Sleight of Flesh/Vicious；Artifact 自身正常消耗 1 层。Vicious 触发抽
 0.107.1 的临时 Focus / Regen 特殊回合末顺序仍由现有 `STS2_01071` 分支保持。未发现新的
 route-affecting mismatch，总数仍为 44。
 
-下一批转向死亡生命周期与 applier/实例清理，重点检查 BeforeDeath/AfterDeath/PreventDeath 以及
-Guarded、Magic Bomb、Shrink 等依赖施加者身份的 Power；多人牌仍暂不作为当前 blocker。
+死亡生命周期与 applier/实例清理已完成一轮复核。真正死亡后，Shrink/Constrict/Hex、
+Guarded 和 Magic Bomb 都按原始 `Applier == dead` 精确清理；Guarded 保留实例身份并同时消费对应
+PowerAmountPredictionState。Fairy in a Bottle / Lizard Tail 先经过 ShouldDie 与 AfterPreventingDeath，
+成功复活后不会进入 deferred enemy-death cleanup，因此不会把“曾到 0 HP”误当真实死亡。Magic Bomb
+与 Shrink 的施加者死亡语义已有实机差分；Tank/Intercept 的 Guarded/Covered applier 清理已在
+0.107.1 卡牌审计中锁定。普通死者 Power 清理遵守 `ShouldPowerBeRemovedAfterOwnerDeath`，
+Illusion 的原生移除 veto、玩家 Power 清理顺序、Orb/Pet teardown 与重复清理幂等性都有独立合同覆盖。
+`PredictedDeathPhase` 随 Fork 复制并进入状态指纹，复活/永久死亡状态不会跨分支串线。
+未发现新的 route-affecting mismatch，总数仍为 44。
+
+下一批做单人 0.107.1 最终收尾扫描：排除已审计的 patch-note、continuation、固定单位、Power 生命周期、
+amount-change 与死亡链，只找剩余 solver-authored 硬编码、反射私有状态和未进入指纹/Fork 的特殊语义；
+多人牌仍暂不作为当前 blocker。
