@@ -2290,10 +2290,16 @@ else {
     $interceptMirrorBlock = $bespokeOnPlayText.Substring($interceptMirrorStart, $interceptMirrorEnd - $interceptMirrorStart)
     foreach ($requiredInterceptOnPlay in @(
         'context.GainBlock(card.Owner.Creature);',
-        'combat.Apply<CoveredPower>(context.Target, 1, card.Owner.Creature);',
-        'PowerPredictionStateSupport.ApplyInterceptCoverage(')) {
+        'ContinueOrQueueTail(context, BespokeTailKind.InterceptCoverage);')) {
         if (-not $interceptMirrorBlock.Contains($requiredInterceptOnPlay)) {
             $violations.Add("${bespokeOnPlayPath}: missing 0.107.1 Intercept OnPlay rule '$requiredInterceptOnPlay'")
+        }
+    }
+    foreach ($requiredInterceptTailRule in @(
+        'combat.Apply<CoveredPower>(context.Target, 1, card.Owner.Creature);',
+        'PowerPredictionStateSupport.ApplyInterceptCoverage(')) {
+        if (-not $bespokeOnPlayText.Contains($requiredInterceptTailRule)) {
+            $violations.Add("${bespokeOnPlayPath}: missing 0.107.1 Intercept continuation rule '$requiredInterceptTailRule'")
         }
     }
 }
