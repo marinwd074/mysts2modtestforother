@@ -135,9 +135,19 @@ Release 编译错误已修复：`PowerPredictionStateSupport.cs` 缺失 `using C
 导致 `IPredictionStateForkable` / `PredictionForkContext` 无法解析；修复提交为 `63a1222b`，对应 CI 已通过。
 静态 verifier 现已增加该命名空间回归检查。
 
-continuation 第一批复核了 Capture Spirit、Echoing Slash、End of Days、Omnislice、Shadow Step，以及
-Bespoke/Generated-card 中主动 `AcknowledgeExecutionDispatch` 的多阶段链。现有 opaque Damage/Attack
-整动作回退、Discard continuation、`ContinueOrQueueTail`、Mad Science/Stoke/Jackpot/Manifest Authority
-执行帧边界一致，未发现新的 route-affecting mismatch，总数仍为 44。
+continuation 审计已完成第二轮收口：Draw / Selection / Orb 的批量操作都由底层 execution frame
+保存恢复索引；Hook/EndTurn 中未显式描述剩余工作的路径会由 `ExecutionDispatchScope` fail-closed
+拒绝局部 continuation，并回退整动作重放，因此不会漏执行后半段。Stampede 等未专门保存循环索引的
+Hook 属于性能回退而非语义错误。两轮均未发现新的 route-affecting mismatch，总数仍为 44。
 
-下一批继续审计尚未覆盖的 Hook/OnPlay continuation；多人牌仍暂不作为当前 blocker。
+剩余 13 个显式固定 `Power(1)` 路径也已完成审计：Forbidden Grimoire、Hellraiser、Master Planner、
+Mayhem、Nostalgia、Reaper Form、Seeking Edge、Stratagem、Subroutine、The Sealed Throne、
+Tools of the Trade、Trash to Treasure、Tyranny。它们分别是存在标记或每份 Power 的触发/选择/资源单位，
+消费端按 `power.Amount` 或存在性读取，均未发现后续版本数值泄漏；已补静态护栏。
+Forbidden Grimoire 的 `RecordLongTermResource(50)` 是 solver 战略估值，不是原生卡牌效果数值，未锁定为
+0.107.1 卡牌常量。
+
+近期编译回归也已收口：`bb29ce1c` 修复两条 Release warning 源码，`ae918241` 将历史计数改为读取
+稳定的预测卡牌快照 `play.Card.Owner`，并补齐纯合同测试桩；对应 GitHub CI 已通过。
+下一批转向其余 solver-authored 特殊语义/状态生命周期，不再重复已收口的 continuation 和固定单位；
+多人牌仍暂不作为当前 blocker。

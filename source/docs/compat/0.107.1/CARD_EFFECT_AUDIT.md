@@ -297,6 +297,15 @@ The Scythe, Spite, Heavenly Drill, Glacier, Meteor Strike, Refract,
 Fight Through, Predator, Bouncing Flask, Gang Up, Lift, Rally, Tag Team,
 Pillar of Creation, Summon Forth, Seeking Edge, and Juggling.
 
+A fixed-unit follow-up also checked the remaining solver-authored `Power(1)`
+applications: Forbidden Grimoire, Hellraiser, Master Planner, Mayhem, Nostalgia,
+Reaper Form, Seeking Edge, Stratagem, Subroutine, The Sealed Throne,
+Tools of the Trade, Trash to Treasure, and Tyranny. Their consumers treat one
+applied stack as an existence flag or one trigger/selection/resource unit; no
+later-version balance value was found. Forbidden Grimoire's separate
+`RecordLongTermResource(50)` is a solver strategic valuation rather than a
+native card-effect amount and is intentionally not guarded as 0.107.1 card data.
+
 A later-patch trap pass also confirmed four model/version boundaries without
 changing solver behavior: Nightmare and Transfigure remain eligible for
 in-combat generation because the root pool delegates to the pinned native

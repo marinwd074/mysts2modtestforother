@@ -231,6 +231,30 @@ if (-not $cardPowerLateText.Contains('combat.Apply<UnmovablePower>(owner, 1, own
     $violations.Add("${cardPowerLatePath}: audited 0.107.1 Unmovable Power unit must remain one stack per card")
 }
 
+foreach ($fixedPowerUnitRule in @(
+    'combat.Apply<ForbiddenGrimoirePower>(owner, 1, owner);',
+    'combat.Apply<HellraiserPower>(owner, 1, owner);',
+    'combat.Apply<MasterPlannerPower>(owner, 1, owner);',
+    'combat.Apply<MayhemPower>(owner, 1, owner);',
+    'combat.Apply<NostalgiaPower>(owner, 1, owner);',
+    'combat.Apply<ReaperFormPower>(owner, 1, owner);')) {
+    if (-not $cardPowerSupportText.Contains($fixedPowerUnitRule)) {
+        $violations.Add("${cardPowerSupportPath}: audited 0.107.1 fixed Power unit drifted '$fixedPowerUnitRule'")
+    }
+}
+foreach ($fixedPowerUnitRule in @(
+    'combat.Apply<SeekingEdgePower>(owner, 1, owner);',
+    'combat.Apply<StratagemPower>(owner, 1, owner);',
+    'combat.Apply<SubroutinePower>(owner, 1, owner);',
+    'combat.Apply<TheSealedThronePower>(owner, 1, owner);',
+    'combat.Apply<ToolsOfTheTradePower>(owner, 1, owner);',
+    'combat.Apply<TrashToTreasurePower>(owner, 1, owner);',
+    'combat.Apply<TyrannyPower>(owner, 1, owner);')) {
+    if (-not $cardPowerLateText.Contains($fixedPowerUnitRule)) {
+        $violations.Add("${cardPowerLatePath}: audited 0.107.1 fixed Power unit drifted '$fixedPowerUnitRule'")
+    }
+}
+
 foreach ($fixedCounterRule in @(
     '[typeof(ExpectAFight)] = [Owner<NoEnergyGainPower>(_ => 1)]',
     '[typeof(Pounce)] = [Owner<FreeSkillPower>(_ => 1)]',
