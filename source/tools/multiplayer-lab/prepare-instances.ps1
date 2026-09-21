@@ -33,7 +33,13 @@ function Assert-LauncherNotCancelled { }
 $repositoryRoot = Get-HeadlessCanonicalPath (Join-Path $PSScriptRoot '..\..\..')
 $sourceRoot = Get-HeadlessCanonicalPath (Join-Path $PSScriptRoot '..\..')
 if ([string]::IsNullOrWhiteSpace($Instance)) {
-    $Instance = 'mp-' + $Profile.ToLowerInvariant()
+    $Instance = switch ($Profile) {
+        'HostVanilla' { 'mp-host' }
+        'ClientCombatSolver' { 'mp-client-solver' }
+        'ClientRitsuOnly' { 'mp-client-ritsu' }
+        'ClientVanilla' { 'mp-client-vanilla' }
+        default { throw "Unsupported multiplayer profile: $Profile" }
+    }
 }
 if ([string]::IsNullOrWhiteSpace($RuntimeRoot)) {
     $RuntimeRoot = Join-Path $repositoryRoot ".local\multiplayer-lab\runtime-$Instance"
@@ -90,6 +96,10 @@ try {
         runtimeRoot = $context.Root
         gameRoot = $context.GameRoot
         sourceGameRoot = $context.SourceGameRoot
+        roamingRoot = Join-Path $context.Root 'Roaming'
+        localRoot = Join-Path $context.Root 'Local'
+        userDataPolicy = 'persistent-per-instance'
+        forceRebuildResetsUserData = $false
         gameExecutable = Join-Path $context.GameRoot 'SlayTheSpire2.exe'
         artifactId = $snapshotPlan.id
         snapshotSchemaVersion = 2
@@ -122,6 +132,10 @@ try {
         instance = $context.Instance
         runtimeRoot = $context.Root
         gameRoot = $context.GameRoot
+        roamingRoot = Join-Path $context.Root 'Roaming'
+        localRoot = Join-Path $context.Root 'Local'
+        userDataPolicy = 'persistent-per-instance'
+        forceRebuildResetsUserData = $false
         artifactId = $snapshotPlan.id
         snapshotSchemaVersion = 2
         baseGameId = $snapshotPlan.baseGameId
