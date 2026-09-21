@@ -2931,6 +2931,27 @@ else {
     }
 }
 
+$bulkUpStart = $corePowerSupportText.IndexOf('case BulkUp:')
+$bulkUpEnd = $corePowerSupportText.IndexOf('case Resonance:', $bulkUpStart)
+if ($bulkUpStart -lt 0 -or $bulkUpEnd -le $bulkUpStart) {
+    $violations.Add("${corePowerSupportPath}: Bulk Up card-power boundary is missing")
+}
+else {
+    $bulkUpBlock = $corePowerSupportText.Substring($bulkUpStart, $bulkUpEnd - $bulkUpStart)
+    $bulkDexterity = $bulkUpBlock.IndexOf('combat.Apply<DexterityPower>')
+    $bulkResolve = $bulkUpBlock.IndexOf('PowerLifecycleSupport.ResolvePowerAmountChanges(simulator, combat)')
+    $bulkPending = $bulkUpBlock.IndexOf('if (simulator.HasPendingChoice)', $bulkResolve)
+    $bulkRemoveSlots = $bulkUpBlock.IndexOf('.OrbQueue.RemoveCapacity(')
+    $bulkStrength = $bulkUpBlock.IndexOf('combat.Apply<StrengthPower>')
+    if ($bulkDexterity -lt 0 -or
+        $bulkResolve -le $bulkDexterity -or
+        $bulkPending -le $bulkResolve -or
+        $bulkRemoveSlots -le $bulkPending -or
+        $bulkStrength -le $bulkRemoveSlots) {
+        $violations.Add("${corePowerSupportPath}: 0.107.1 Bulk Up order must be Dexterity -> resolve listeners -> remove Orb slots -> Strength")
+    }
+}
+
 $attackSimulatorPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.Attack.cs'
 $attackSimulatorText = [IO.File]::ReadAllText($attackSimulatorPath)
 foreach ($boundary in @(

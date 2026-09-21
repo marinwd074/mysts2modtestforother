@@ -300,10 +300,13 @@ internal static class CorePowerSupport
                 combat.Apply<ThornsPower>(owner, card.DynamicVars["ThornsPower"].IntValue, owner);
                 break;
             case BulkUp:
+                combat.Apply<DexterityPower>(owner, card.DynamicVars.Dexterity.IntValue, owner);
+                PowerLifecycleSupport.ResolvePowerAmountChanges(simulator, combat);
+                if (simulator.HasPendingChoice)
+                    return false;
                 simulator.State.GetPlayerCombatState(card.Owner).OrbQueue.RemoveCapacity(
                     card.DynamicVars["OrbSlots"].IntValue);
                 combat.Apply<StrengthPower>(owner, card.DynamicVars.Strength.IntValue, owner);
-                combat.Apply<DexterityPower>(owner, card.DynamicVars.Dexterity.IntValue, owner);
                 break;
             case Resonance:
                 combat.Apply<StrengthPower>(owner, card.DynamicVars["StrengthPower"].IntValue, owner);

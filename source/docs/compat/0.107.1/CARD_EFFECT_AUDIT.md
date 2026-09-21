@@ -28,7 +28,7 @@ replace the native-vs-predicted runtime differential.
 
 ## Corrected version drift
 
-Thirty-five route-affecting mismatches have been confirmed in the 0.107.1 source audit:
+Thirty-six route-affecting mismatches have been confirmed in the 0.107.1 source audit:
 
 | Card | 0.107.1 native behavior | Incorrect solver behavior | Correction |
 |---|---|---|---|
@@ -64,6 +64,7 @@ Thirty-five route-affecting mismatches have been confirmed in the 0.107.1 source
 | Sneaky | applies SneakyPower 1 (2 upgraded); after any other player's Attack finishes, the owner gains that much Unpowered Block | the AfterCardPlayed SneakyPower mirror already existed, but the card never applied SneakyPower in prediction | register Sneaky's deterministic owner Power application so the existing cross-player Attack trigger becomes reachable |
 | Mimic | reads the selected ally's current Block, then gives that calculated amount of Block to the Mimic owner; upgrade only removes Exhaust | generic AnyAlly block inference used the selected ally as the Block recipient even though the selected ally is only the calculation source | use a dedicated OnPlay mirror that keeps the selected ally as the CalculatedBlock target but grants the resulting Block to the card owner |
 | Knockdown | applies an instanced KnockdownPower(2/3); other allied Powered Attacks are multiplied by that instance while the applier's own damage is excluded; each instance is removed when the debuffed creature participates in side-turn end | Power application, applier identity, and pure damage multiplier were already represented, but no predicted side-turn expiry removed the instance | remove each predicted KnockdownPower instance at the native owner-participation boundary without aggregating instances |
+| Bulk Up | applies Dexterity, waits for that Power application and its amount-change listeners to finish, removes Orb slots, then applies Strength | removed Orb slots first, queued Strength before Dexterity, and deferred both Power amount-change lifecycles until the card tail | apply Dexterity first and resolve its pending Power amount changes, then remove Orb capacity, then apply Strength for the normal card-tail lifecycle flush |
 
 These differences materially affect route ranking, so source-shape guards in
 `tools/verify-refactor-boundaries.ps1` reject the later-version semantics.
