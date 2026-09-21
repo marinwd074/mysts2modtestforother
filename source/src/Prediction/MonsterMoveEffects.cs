@@ -720,7 +720,7 @@ internal static partial class MonsterMoveEffects
                 GainBlock(simulator, move.Owner, combat.GetMonsterStaticInt(move.Owner, "CurlBlock"));
                 combat.Apply<StrengthPower>(
                     move.Owner,
-                    combat.GetMonsterStaticInt(move.Owner, "GrowStrength"),
+                    combat.GetMonsterStaticInt(move.Owner, "_growStrength"),
                     move.Owner);
                 return true;
             case ("Tunneler", "BURROW_MOVE"):

@@ -16,7 +16,7 @@ internal sealed partial class SimulatedCombatState
 
     private void RecordHistoryCourseAttack(PredictedCard card)
     {
-        if (card.Preview.Type != CardType.Attack || card.Preview.IsDupe)
+        if (card.Preview.Type is not (CardType.Attack or CardType.Skill) || card.Preview.IsDupe)
             return;
         (_lastAttackThisTurn ??= [])[card.Preview.Owner] = card;
     }
@@ -152,7 +152,7 @@ internal sealed partial class SimulatedCombatState
         CardPlayFinishedEntry? live = _rootHistory.CardPlaysFinished.LastOrDefault(entry =>
             entry.CardPlay.Card.Owner == player
             && entry.HappenedLastPlayerTurn(player)
-            && entry.CardPlay.Card.Type == CardType.Attack
+            && (entry.CardPlay.Card.Type is CardType.Attack or CardType.Skill)
             && !entry.CardPlay.Card.IsDupe);
         if (live == null)
             return null;

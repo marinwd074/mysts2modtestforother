@@ -88,7 +88,10 @@ internal static class ModifyDamageMirrors
     {
         var registry = new Registry(ModifyDamageMultiplicative);
 
+        registry.Register<CoveredPower>(HandleCoveredPower);
+        registry.Register<FlankingPower>(HandleFlankingPower);
         registry.Register<FlutterPower>(HandleFlutterPower);
+        registry.Register<InterceptPower>(HandleInterceptPower);
         registry.Register<GigantificationPower>(GigantificationPowerMirrors.ModifyDamageMultiplicative);
         registry.Register<ColossusPower>(HandleColossusPower);
         registry.Register<LethalityPower>(HandleLethalityPower);
@@ -102,6 +105,25 @@ internal static class ModifyDamageMirrors
         registry.Register<UndyingSigil>(HandleUndyingSigil);
 
         return registry;
+    }
+
+    private static decimal HandleCoveredPower(CoveredPower power, ModifyDamageMirrorContext context)
+    {
+        return context.Target == power.Owner && context.Props.IsPoweredAttack()
+            ? 0
+            : 1;
+    }
+
+    private static decimal HandleFlankingPower(FlankingPower power, ModifyDamageMirrorContext context)
+    {
+        if (context.Target != power.Owner
+            || !context.Props.IsPoweredAttack()
+            || context.Dealer == power.Applier)
+        {
+            return 1;
+        }
+
+        return power.Amount;
     }
 
     private static decimal HandleFlutterPower(FlutterPower power, ModifyDamageMirrorContext context)
@@ -140,6 +162,13 @@ internal static class ModifyDamageMirrors
         }
 
         return power.DynamicVars["DamageDecrease"].BaseValue;
+    }
+
+    private static decimal HandleInterceptPower(InterceptPower power, ModifyDamageMirrorContext context)
+    {
+        if (context.Target != power.Owner || !context.Props.IsPoweredAttack())
+            return 1;
+        return PowerPredictionStateSupport.InterceptCoveredCreatures(context.Simulator, power).Count + 1;
     }
 
     private static decimal HandleLethalityPower(LethalityPower power, ModifyDamageMirrorContext context)
@@ -198,8 +227,9 @@ internal static class ModifyDamageMirrors
             return 1;
         }
 
-        return Combat(context).GetAmount<WeakPower>(context.Target) > 0
-            ? 1 + (decimal)power.Amount / 100m
+        SimulatedCombatState combat = Combat(context);
+        return combat.GetAmount<WeakPower>(context.Target) > 0
+            ? combat.GetAmount<TrackingPower>(power.Owner)
             : 1;
     }
 

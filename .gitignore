@@ -1,10 +1,16 @@
 # This directory is a Steam installation. Track only the CombatSolver artifacts.
 *
 !.gitignore
+!.gitattributes
 !AGENTS.md
 # Build output stays local; releases are produced from source and a verified build.
 !source/
 !source/**
+# One-time private Steam game snapshot; files are stored through Git LFS.
+!game-body/
+!game-body/**
+# Runtime logs copied alongside the installation are not part of the snapshot.
+/game-body/**/*.log
 # Multiplayer lab runs and generated coverage stay outside version control.
 /.local/multiplayer-lab/
 /artifacts/

@@ -31,31 +31,31 @@ internal sealed partial class CombatPredictionSimulator
         if (HasPendingChoice)
             return;
 
+        processedEnemyDeaths ??= new HashSet<uint>();
         var triggerCount = HookMirrors.ModifyOrbPassiveTriggerCount(this, orb, 1, out _);
         if (HasPendingChoice)
-            return;
-        // Vanilla calls Hook.AfterModifyingOrbPassiveTriggerCount here, but all listeners are cosmetic.
-        processedEnemyDeaths ??= new HashSet<uint>();
-
-        for (var i = 0; i < triggerCount; i++)
         {
-            OrbPassive(orb, target, processedEnemyDeaths);
-            if (HasPendingChoice)
-                return;
+            AppendExecutionContinuation(
+                new OrbPassiveTriggerExecutionFrame(
+                    orb,
+                    target,
+                    triggerCount,
+                    NextIndex: 0,
+                    processedEnemyDeaths));
+            return;
         }
+        // Vanilla calls Hook.AfterModifyingOrbPassiveTriggerCount here, but all listeners are cosmetic.
+        _ = ContinueOrbPassiveTriggers(
+            orb,
+            target,
+            triggerCount,
+            nextIndex: 0,
+            processedEnemyDeaths);
     }
 
     // Mirrors OrbCmd.Channel<T> without mutating the real orb queue.
     public void OrbChannel<T>(Player player, int count = 1) where T : OrbModel
-    {
-        for (var i = 0; i < count; i++)
-        {
-            if (!OrbChannel(player, CanonicalModels.Orb<T>().ToMutable()))
-            {
-                break;
-            }
-        }
-    }
+        => _ = ContinueOrbChannelBatch<T>(player, count, nextIndex: 0);
 
     // Mirrors OrbCmd.Channel without VFX/SFX, waits, real queue mutation, or async hook execution.
     public bool OrbChannel(Player player, OrbModel orb)
@@ -84,23 +84,30 @@ internal sealed partial class CombatPredictionSimulator
         {
             OrbEvokeNext(player);
             if (HasPendingChoice)
-                return false;
-
-            // Vanilla OrbCmd.Channel immediately calls OrbQueue.TryEnqueue after EvokeNext. If
-            // evoke side effects synchronously channel another orb and refill the freed slot,
-            // vanilla throws "OrbQueue is full" here. Prediction fails closed instead of
-            // reproducing that bug or inventing additional evokes to make room.
-            if (orbQueue.Orbs.Count >= orbQueue.Capacity)
             {
-                History.RecordRisk(PredictionRiskReason.MethodMirrorIncomplete);
+                AppendExecutionContinuation(new OrbChannelExecutionFrame(player, orb));
                 return false;
             }
+
+        }
+
+        return ContinueOrbChannelAfterEvoke(player, orb);
+    }
+
+    private bool ContinueOrbChannelAfterEvoke(Player player, OrbModel orb)
+    {
+        var orbQueue = State.GetPlayerCombatState(player).OrbQueue;
+
+        // Vanilla resumes after EvokeNext and immediately attempts the enqueue. If Evoke
+        // side effects refill the slot, do not restart OrbChannel and evoke a second orb.
+        if (orbQueue.Capacity > 0 && orbQueue.Orbs.Count >= orbQueue.Capacity)
+        {
+            History.RecordRisk(PredictionRiskReason.MethodMirrorIncomplete);
+            return false;
         }
 
         if (!orbQueue.TryEnqueue(orb))
-        {
             return false;
-        }
 
         History.OrbChanneled(orb);
         HookMirrors.AfterOrbChanneled(this, player, orb);
@@ -114,23 +121,17 @@ internal sealed partial class CombatPredictionSimulator
             return;
 
         var orbQueue = State.GetPlayerCombatState(player).OrbQueue;
-        if (orbQueue.Orbs.Count > 0)
-        {
-            var orb = orbQueue.Orbs[0];
-            ISet<uint> processedEnemyDeaths = new HashSet<uint>();
-            for (int i = 0; i < repeat; i++)
-            {
-                OrbEvoke(player, orb, dequeue: dequeue && i == repeat - 1);
-                if (HasPendingChoice)
-                    return;
-                if (State.CombatState is ICombatPredictionEnemyDeathSink deathSink)
-                {
-                    deathSink.ResolvePendingEnemyDeaths(this, processedEnemyDeaths);
-                    if (HasPendingChoice)
-                        return;
-                }
-            }
-        }
+        if (orbQueue.Orbs.Count == 0)
+            return;
+
+        _ = ContinueOrbEvokeNext(
+            player,
+            orbQueue.Orbs[0],
+            repeat,
+            dequeue,
+            nextIndex: 0,
+            resolveDeathsFirst: false,
+            new HashSet<uint>());
     }
 
     // Mirrors OrbCmd.Evoke without VFX/SFX, choice-context model stack updates, or real queue mutation.
@@ -154,7 +155,11 @@ internal sealed partial class CombatPredictionSimulator
 
         var targets = OrbMirrors.InvokeEvoke(this, evokedOrb);
         if (HasPendingChoice)
+        {
+            AppendExecutionContinuation(
+                new OrbEvokeAfterModelExecutionFrame(evokedOrb, targets.ToArray()));
             return;
+        }
 
         // Vanilla calls evokedOrb.RemoveInternal after AfterOrbEvoked when dequeue succeeds.
         // We only remove from the shadow queue because mutating the real orb would affect
@@ -173,14 +178,18 @@ internal sealed partial class CombatPredictionSimulator
             return;
         }
 
+        processedEnemyDeaths ??= new HashSet<uint>();
         OrbMirrors.InvokePassive(this, orb, target);
         if (HasPendingChoice)
-            return;
-        if (State.CombatState is ICombatPredictionEnemyDeathSink deathSink)
         {
-            deathSink.ResolvePendingEnemyDeaths(
-                this,
-                processedEnemyDeaths ?? new HashSet<uint>());
+            if (State.CombatState is ICombatPredictionEnemyDeathSink)
+            {
+                AppendExecutionContinuation(
+                    new OrbPassiveAfterModelExecutionFrame(processedEnemyDeaths));
+            }
+            return;
         }
+
+        _ = ContinueOrbPassiveAfterModel(new HashSet<uint>(processedEnemyDeaths));
     }
 }

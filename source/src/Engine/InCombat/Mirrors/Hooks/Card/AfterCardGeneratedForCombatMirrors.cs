@@ -8,6 +8,7 @@ using MegaCrit.Sts2.Core.Models.Relics;
 using MegaCrit.Sts2.Core.ValueProps;
 using CombatSolver.Engine.Common;
 using CombatSolver.Engine.Common.Mirrors;
+using CombatSolver.Engine.InCombat.Simulation;
 
 namespace CombatSolver.Engine.InCombat.Mirrors.Hooks.Card;
 
@@ -70,19 +71,8 @@ internal static class AfterCardGeneratedForCombatMirrors
 
     private static void HandleRegalite(Regalite relic, AfterCardGeneratedForCombatMirrorContext context)
     {
-        if (context.Creator != relic.Owner)
-        {
-            return;
-        }
-
-        var state = context.StateStore.Get(relic, () => new RegalitePredictionState(relic));
-        if (state.UsedThisTurn)
-        {
-            return;
-        }
-
-        state.UsedThisTurn = true;
-        context.Simulator.GainBlock(relic.Owner.Creature, relic.DynamicVars.Block);
+        if (context.Creator == relic.Owner)
+            context.Simulator.GainBlock(relic.Owner.Creature, relic.DynamicVars.Block);
     }
 
 #if !STS2_01071
@@ -144,13 +134,41 @@ internal static class AfterCardGeneratedForCombatMirrors
             return;
         }
 
-        for (var i = 0; i < power.Amount; i++)
+        context.Simulator.AcknowledgeExecutionDispatch();
+        _ = ContinueTrashToTreasure(context.Simulator, power, player, nextIndex: 0);
+    }
+
+    private static bool ContinueTrashToTreasure(
+        CombatPredictionSimulator simulator,
+        TrashToTreasurePower power,
+        Player player,
+        int nextIndex)
+    {
+        for (int index = nextIndex; index < power.Amount; index++)
         {
-            var orb = OrbModel.GetRandomOrb(context.Rng.CombatOrbGeneration).ToMutable();
-            context.Simulator.OrbChannel(player, orb);
-            if (context.Simulator.HasPendingChoice)
-                return;
+            OrbModel orb = OrbModel.GetRandomOrb(simulator.Rng.CombatOrbGeneration).ToMutable();
+            simulator.OrbChannel(player, orb);
+            if (simulator.HasPendingChoice)
+            {
+                simulator.AppendExecutionContinuation(
+                    new TrashToTreasureExecutionFrame(power, player, index + 1));
+                return false;
+            }
         }
+
+        return true;
+    }
+
+    private sealed record TrashToTreasureExecutionFrame(
+        TrashToTreasurePower Power,
+        Player Player,
+        int NextIndex) : ICombatPredictionExecutionFrame
+    {
+        public ICombatPredictionExecutionFrame Fork(PredictionForkContext context)
+            => this with { Power = (TrashToTreasurePower)context.RemapOrSelf(Power) };
+
+        public bool Resume(CombatPredictionSimulator simulator)
+            => ContinueTrashToTreasure(simulator, Power, Player, NextIndex);
     }
 
     private static void HandleRocketPunch(RocketPunch card, AfterCardGeneratedForCombatMirrorContext context)
@@ -181,12 +199,3 @@ internal sealed class SoulboundPredictionState(SoulboundPower power) : IPredicti
 }
 #endif
 
-internal sealed class RegalitePredictionState(Regalite relic) : IPredictionStateForkable
-{
-    // Regalite's 0.107.1 state is not exposed through the later private field.
-    // The live root is captured before the generated-card hook sequence, so the
-    // state starts unused and is advanced only by the mirrored hook itself.
-    public bool UsedThisTurn { get; set; }
-
-    public object Fork(PredictionForkContext context) => MemberwiseClone();
-}

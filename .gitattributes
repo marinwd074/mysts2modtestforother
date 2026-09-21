@@ -1,0 +1,2 @@
+# The one-time game snapshot contains large binary files; keep them out of normal Git objects.
+game-body/** filter=lfs diff=lfs merge=lfs -text

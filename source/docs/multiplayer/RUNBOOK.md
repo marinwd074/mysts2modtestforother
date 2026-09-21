@@ -27,10 +27,14 @@
    - 单 Client 通常用 `1000`。
    - 同一 Host 上第二个本地 Client 使用其他非零值，例如 `1001`。
 
-4. **保持实例隔离。**
-   - Host 使用 `HostVanilla`。
-   - Solver Client 使用 `ClientCombatSolver`。
+4. **保持实例隔离，但长期复用同一角色的实例根目录。**
+   - Host 使用 `HostVanilla`，默认实例固定为 `mp-host`。
+   - Solver Client 使用 `ClientCombatSolver`，默认实例固定为 `mp-client-solver`。
+   - Ritsu-only / Vanilla Client 分别固定为 `mp-client-ritsu` / `mp-client-vanilla`。
    - 不混用 Host/Client 的 `APPDATA`、`LOCALAPPDATA`、logs 或 instance root。
+   - **不要为了每个 Smoke / 功能名创建新的 RuntimeRoot。** 日志已有独立 runId，证据隔离不依赖新实例。
+   - `Roaming` / `Local` 是每个实例的持久用户设置层；窗口模式、音量、键位、`settings.save` 等应跨 game snapshot 重建保留。
+   - `-ForceRebuild` 只允许重建 `game` snapshot，不应删除 `Roaming` / `Local`。只有明确需要“全新用户配置”测试时才另建实例或手工清理用户数据。
 
 5. **正式证据只取重启后的运行。**
    - 记录第二次 Client 启动返回的 `logPath`。
@@ -43,6 +47,12 @@
    - `-Mode Force` 只用于清理卡死实例；强杀可能截断 CombatSolver journal，不能把该运行当完整证据。
 
 ## 实例 snapshot 增量同步
+
+实例用户数据和 game snapshot 生命周期分离：`runtime-*\Roaming` 与 `runtime-*\Local`
+属于持久层，`runtime-*\game` 属于可重建层。窗口/显示设置位于游戏的 Roaming
+用户目录；因此普通 prepare、overlay 更新、base-game rebuild 和 `-ForceRebuild` 都必须
+保留同一实例的用户设置。若测试脚本换了新的 RuntimeRoot，则会得到新的 APPDATA，
+表现为窗口模式等设置恢复默认，这不应作为常规测试流程。
 
 `prepare-instances.ps1` 的 game root 使用 schema 2：底座文件保留为持久
 base-game snapshot，RitsuLib 与 CombatSolver 作为 profile overlay 增量同步。

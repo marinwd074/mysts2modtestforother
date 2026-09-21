@@ -246,7 +246,16 @@ internal sealed partial class CombatBeamSolver
                     materialized.Outcome.HpRecovered,
                     materialized.Outcome.EnemyHpLost,
                     materialized.Outcome.EnergyLeft,
-                    materialized.CombatEnded));
+                    materialized.CombatEnded)
+                {
+                    TurnStartChoices = TurnStartChoicePreviewPolicy.ChoicesForTurn(
+                        actions.Key,
+                        _startTurnNumber,
+                        candidate.GetTurnSetupChoices(),
+                        candidate.Actions)
+                        .Select(WithDisplayNames)
+                        .ToArray(),
+                });
             }
             turns.Sort((a, b) => a.Turn.CompareTo(b.Turn));
             return turns.Count == 0 ? null : turns;
@@ -266,7 +275,8 @@ internal sealed partial class CombatBeamSolver
                 SolverFrontierTurn b = next[i];
                 if (a.Turn != b.Turn || a.HpLost != b.HpLost || a.EnemyHpLost != b.EnemyHpLost
                     || a.EnergyLeft != b.EnergyLeft || a.CombatEnded != b.CombatEnded
-                    || !a.Actions.SequenceEqual(b.Actions))
+                    || !a.Actions.SequenceEqual(b.Actions)
+                    || !a.TurnStartChoices.SequenceEqual(b.TurnStartChoices))
                 {
                     return false;
                 }
@@ -414,7 +424,12 @@ internal sealed partial class CombatBeamSolver
                 outcome.EnemyHpLost,
                 outcome.EnergyLeft,
                 combatEnded,
-                frontierTurns);
+                frontierTurns)
+            {
+                TurnStartChoices = candidate.GetTurnSetupChoices()
+                    .Select(WithDisplayNames)
+                    .ToArray(),
+            };
         }
 
 
@@ -853,7 +868,16 @@ internal sealed partial class CombatBeamSolver
                         annotations.HpRecoveredByTurn.GetValueOrDefault(group.Key),
                         enemyHpLost,
                         energyLeft,
-                        annotations.CombatEndedTurn == group.Key);
+                        annotations.CombatEndedTurn == group.Key)
+                    {
+                        TurnStartChoices = TurnStartChoicePreviewPolicy.ChoicesForTurn(
+                            group.Key,
+                            _startTurnNumber,
+                            selected.Node.GetTurnSetupChoices(),
+                            selected.Node.Actions)
+                            .Select(WithDisplayNames)
+                            .ToArray(),
+                    };
                 })
                 .ToArray();
             return new SolverSpeculativeRoutePreview(

@@ -1,5 +1,6 @@
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Orbs;
 using MegaCrit.Sts2.Core.Models.Powers;
@@ -12,6 +13,27 @@ namespace CombatSolver;
 
 internal static partial class EndTurnPowerSupport
 {
+    public static bool TriggerBeforeFlushLate(
+        CombatPredictionSimulator simulator,
+        SimulatedCombatState combat,
+        Player player)
+    {
+        if (!PersistentRelicSupport.ShouldFlush(combat, player))
+            return true;
+
+        WellLaidPlansPower? power = combat.GetPower<WellLaidPlansPower>(player.Creature);
+        if (power is not { Amount: > 0 })
+            return true;
+
+        return TurnStartChoiceSupport.ResolveSingleTurnRetain(
+            simulator,
+            combat,
+            player,
+            combat.ActiveExecutionChoices,
+            power.Id.Entry,
+            power.Amount);
+    }
+
     public static bool TriggerRegular(
         CombatPredictionSimulator simulator,
         SimulatedCombatState combat,
@@ -44,6 +66,9 @@ internal static partial class EndTurnPowerSupport
                 case CorrosiveWavePower when ownerParticipates:
                     combat.SetAmount<CorrosiveWavePower>(owner, 0);
                     break;
+                case CoveredPower or InterceptPower when side == CombatSide.Enemy:
+                    combat.SetPowerAmount(power, 0);
+                    break;
                 case DemisePower when ownerParticipates && simulator.State.GetCreature(owner).IsAlive:
                     using (simulator.PushDamageSource(
                         CombatDamageSource.For(CombatDamageSourceKind.Power, nameof(DemisePower))))
@@ -62,6 +87,9 @@ internal static partial class EndTurnPowerSupport
                     break;
                 case HighVoltagePower when ownerParticipates:
                     combat.Apply<StrengthPower>(owner, power.Amount, owner);
+                    break;
+                case KnockdownPower when ownerParticipates:
+                    combat.SetPowerAmount(power, 0);
                     break;
                 case TaintedPower when side == CombatSide.Enemy:
                     combat.SetAmount<TaintedPower>(owner, 0);

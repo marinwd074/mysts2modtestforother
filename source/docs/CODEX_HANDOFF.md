@@ -8,10 +8,19 @@
 - MP-2A：显式 `safe-execute`/`safe-execute-lab` 的一动作 Host/Client Smoke 已 PASS，作为历史基线保留；该证据不等于两动作能力已通过。
 - MP-2B：两动作上限、显式 SafeExecutionSession、动作后稳定世界等待和本地/远端变化重验证已完成；历史 `MultiplayerSafeExecuteChecks` 39 项、正常/远端干扰验证器合成回归和 Release 构建已通过，真实正常两动作与远端干扰 Smoke 也已分别返回 PASS。摘要见 [`mp2b-smoke-2026-09-20.json`](multiplayer/evidence/mp2b-smoke-2026-09-20.json)。
 - MP-2C：已直接将 MP2B 泛化为当前回合 bounded N-action，policy ceiling 为 6；当前合同 40 项、正常/干扰验证器各 6 个合成用例和 Release 构建已通过。真实正常 Smoke 自动完成 3 张牌，真实远端干扰 Smoke 在完成 2 张后中止并重新搜索；摘要见 [`mp2c-smoke-2026-09-20.json`](multiplayer/evidence/mp2c-smoke-2026-09-20.json)。
-- Multiplayer Carry Ranking v1：已接入主线程捕获的公开远端/敌人上下文、纯确定性 evaluator 和最终路线排序 tie-break；11 项 Multiplayer Carry Ranking 离线合同与 Release 构建通过。仅显式 Advisor/Safe Execute 使用，默认 Probe/单人保持原排序；远端私有状态、队友行为预测和未知敌方目标均保持 fail-closed/neutral。运行时目标分类已补齐：仅原版怪物的公开 AttackIntent 按 0.107.1 原生 `AttackCommand.FromMonster → TargetingAllOpponents` 合同标为 `AllPlayers`，非攻击/第三方怪物保持 `Unknown`；root 日志已增加机器可读 `all_player_threats/unknown_threats`，并新增 R1/R2 validator 与 CI 合成自测。R1 已在 `SLIMES_WEAK` 真实 Advisor journal 中 PASS（1 名远端、3 敌人、2 个 `AllPlayers` threat、1 个 Unknown，remote private=false）；R2 当前为 `UNVERIFIED`，且上一轮正向 Carry 观测已被语义审计判定不能用于 R2：路线在 T1 只把 `TwigSlimeS` 打到 7 HP，直到 T2 `Bash` 才击杀，但旧 evaluator 用整条路线终局状态把它提前记为当前威胁已移除。现已修为 `carryWindow=current_turn_pre_end`：Carry 只观察 startTurn 的 EndTurn 前快照，未来 T2/T3 kill 不再给当前公开威胁记分。下一 R2 fixture 必须在当前本地回合内完成击杀，并让威胁怪剩余 HP 精确等于当前攻击实际伤害，使 pre-carry `EnemyHp` 硬键打平。
+- Multiplayer Carry Ranking v1：已接入主线程捕获的公开远端/敌人上下文、纯确定性 evaluator 和最终路线排序 tie-break；11 项 Multiplayer Carry Ranking 离线合同与 Release 构建通过。仅显式 Advisor/Safe Execute 使用，默认 Probe/单人保持原排序；远端私有状态、队友行为预测和未知敌方目标均保持 fail-closed/neutral。运行时目标分类已补齐：仅原版怪物的公开 AttackIntent 按 0.107.1 原生 `AttackCommand.FromMonster → TargetingAllOpponents` 合同标为 `AllPlayers`，非攻击/第三方怪物保持 `Unknown`；root 日志已增加机器可读 `all_player_threats/unknown_threats`，并新增 R1/R2 validator 与 CI 合成自测。R1 已在 `SLIMES_WEAK` 真实 Advisor journal 中 PASS（1 名远端、3 敌人、2 个 `AllPlayers` threat、1 个 Unknown，remote private=false）；R2 当前保持 `UNVERIFIED`，但不再作为阶段阻塞项。`f54506c3` 已完成真实回归：Release 0 errors（2 warnings）、11/11 Carry contracts、validator self-test 全 PASS；`carryWindow=current_turn_pre_end` 与 `carryObservationActionCount=3` 对齐第一处 EndTurn，且 `futureOnlyKillCredited=false`。两次真实 `SLIMES_WEAK` fixture 中威胁 `TWIG_SLIME_S` 搜索时仍为 15 HP，而当前 T1 只有两张 `Strike=6`、`Bash=8` 在 T2 才抽到，因此没有形成当前回合可击杀的等价 tie，R2 正确返回 UNVERIFIED。决定性 flip 继续由第 10 项纯合同保证；真实 R1 + 当前窗口回归已证明 runtime 接线与安全语义。后续仅在自然出现合适 fixture 时补 R2 decisive runtime evidence，不再人工刷场景。
 - Multiplayer Lab snapshot：已改为 schema 2 的持久 base-game snapshot + profile overlay 增量同步。marker 拆分 `baseGameId`、`ritsuArtifactId`、`combatSolverArtifactId`；游戏版本/底座变化、底座完整性失败或旧 schema 才全量重建，overlay 采用临时 managed tree + SHA-256 + rename/rollback。CombatSolver/RitsuLib 变化分别只更新各自 payload，HostVanilla 不因 CombatSolver 构建变化重建；`prepare-instances` 输出 `FULL_REBUILD` / `OVERLAY_UPDATED` / `REUSED` 和 `copiedFiles`。ownership、no-reparse-point、运行中禁止覆盖和正式证据隔离合同保持不变。
 - Multiplayer Instant、Potion、Choice、Replay、Full Auto 和队友目标继续关闭；Reactive Carry 仅在显式 Safe Execute 且最新安全路线边界成立时通过原生 EndTurn。新实现已为显式 Advisor/Safe Execute 打开“只预测本地玩家”的跨回合路线，默认 Probe 仍保持只读当前回合边界；Safe Execute 仍只部署当前真实本地回合。
 - 本轮没有为 MP2B 声明新的 GitHub Actions 结果；实机结论来自隔离 Multiplayer Lab 的 Host/Client journal 与对应验证器，不等同于 GitHub Actions 结果。
+
+## 2026-09-21 Carry 当前回合窗口交接（新对话先读）
+
+- 当前仓库为 `main`，`HEAD` 与 `origin/main` 均为 `e07794f39ab0a2b5729ef1401fc9df46f6be611b`；本轮 Carry 验证基线 `f54506c34f5fbd470a2cb3c8cf4d07c21e869130` 已在当前历史中。
+- 第一阶段已收口：Release `0 errors / 2` 条既有 `CS9113` warnings、Carry contracts `11/11 PASS`、validator self-test `PASS`。
+- 当前回合窗口回归 `PASS`：`carryWindow=current_turn_pre_end`、`carryObservationActionCount=3`、第一处 EndTurn 为 action index `3`、`futureOnlyKillCredited=false`。这证明 EndTurn 前只观察当前回合动作，后续回合击杀不会被错误计入当前窗口。
+- R1 继续保持真实运行 `PASS`。本轮 R2 仍为 `UNVERIFIED`，不是失败或阶段阻塞：主 journal 为 1 名远端、3 个敌人、1 个 `AllPlayers` threat、2 个 `Unknown` threat，`remote_private=false`；当前 T1 只有两张 `Strike=6` 和 `Defend`，T2 才抽到 `Bash=8`，所以没有形成当前回合可击杀的等价 tie。备用 fixture 也没有出现精确的 8 点当前回合攻击，未进行盲点操作。
+- 关键证据：最终摘要 [`carry-ranking-current-window-final.json`](../../.local/multiplayer-lab/results/carry-ranking-current-window-final.json)；主 validator [`carry-ranking-current-window-r2.json`](../../.local/multiplayer-lab/results/carry-ranking-current-window-r2.json)；备用 validator [`carry-ranking-current-window-r2-alternate.json`](../../.local/multiplayer-lab/results/carry-ranking-current-window-r2-alternate.json)。主/备用 journal 均保留在各自 `runtime-mp-client-carry-window-r2/diagnostics/CombatSolver-BugReports/logs/CombatSolver/` 目录。
+- 两个 Host/Client 已 Graceful stop；本轮未观察到 remote-private 泄漏、`SEARCH_SETUP_FAILURE`、自定义网络 API 或自动部署。Carry 验证本身未改源码；本次交接仅更新本文件。新对话不要重新启动游戏或人工刷 R2，先读本节与 `docs/multiplayer/RUNBOOK.md`，再选择下一个独立能力；只有自然出现精确 fixture 时才补 R2 decisive runtime evidence。
 
 ## 项目规则已放宽
 
@@ -97,5 +106,129 @@
 
 ## 当前下一步
 
-[Reactive Carry Foundation](multiplayer/NEXT_REACTIVE_CARRY.md) 已完成；A/B/C 三轮真实
-Host/Client Smoke 和机器摘要已收口。当前 Local Cross-Turn/T3/X2/Shuffle Boundary 已收口。下一唯一主动多人验收项是 Carry Ranking R2：复用已 PASS 的 R1/Release/10 项合同，只构造一次严格等价目标场景；若本地无 Strength/Vulnerable 且 `Strike=6`，优先把一个 `AllPlayers` 攻击怪准备到恰好 6 HP，同时保留一个 HP>6 的 Unknown/非攻击目标，再让 Advisor fresh-search。只有 `carryDecisive=true` 且 `carryBaselineDifferent=true` 才收口 R2；最多再换一个普通多敌人 fixture，不无限刷 Seed。默认仍保持 Probe，Potion、Choice、Replay、队友控制、Instant 和 Full Auto 继续关闭；不引入 teammate behavior model 或第二套 Solver。
+当前只处理 **0.107.1 单人卡牌版本差异**。已确认并修正 44 个 route-affecting mismatch。
+
+已完成剩余 20 个已知 post-0.107.1 单人牌 patch-note 候选：Soul Storm、Momentum Strike、
+Demon Form、Primal Force、Taunt、Bloodletting、Cruelty、Dominate、Accelerant、Collision Course、
+Sunder、Relax、Whistle、Mangle、Pact's End、Echoing Slash、Terraforming、Crush Under、Salvo、Splash。
+未发现新的 route-affecting mismatch，总数仍为 44。Soul Storm 的 Soul 计数、Primal Force→Giant Rock
+变形、Pact's End 条件攻击、Echoing Slash 伤害循环等特殊路径均确认继续读取 0.107.1 模型数据。
+
+已知后续补丁单人牌候选现在 **78/78 已审计完成**。solver 自身硬编码常数已完成两批、共 20 条高风险路径：
+第一批为 Conqueror、Convergence、Shadow Step、Aggression、Dark Embrace、Calamity、Fan of Knives、
+Hello World、Infinite Blades、Unmovable；第二批为 Expect a Fight、Pounce、Predator、Rebound、Reflect、
+Synthesis、Tag Team、The Gambit、Unrelenting、Veilpiercer。两批固定量均确认是 0.107.1 的堆叠/
+持续/消费计数或模式标记，不是泄漏的后续版本牌面数值；消费端也按对应 Power amount
+decrement/consume。未发现新的 route-affecting mismatch，总数仍为 44，且两批均已补静态回归护栏。
+
+直接 live-state 扫描也已完成一轮：Prediction 目录未发现新的后台 live HP/Block/Energy/牌堆读取。
+`IntentForecaster.Build` 的 live CombatState/RNG 读取发生在 `CombatRootSnapshot.Capture` 主线程根捕获阶段，
+随后后台搜索只消费已捕获 Forecast，因此不构成分支状态泄漏。
+
+`STS2_01071` 分叉已完成第一轮集中审计：Hyperbeam/Scare 的 0.107.1 专用路径保持不变；
+v0.108 才新增的 Midnight、Concoct、Constellation、Underworld、Soulbound、Cacophony、Hibernate、
+Imitation Learning、The Ball 仍全部位于 `#if !STS2_01071` 边界外，已补静态护栏。Hand Drill 也已澄清：
+0.107.1 保留 damage-based WasBlockBroken 触发，但更广的 AfterBlockBroken/Expose 路径继续排除。
+本轮仍未发现新的 route-affecting mismatch，总数保持 44。
+
+Release 编译错误已修复：`PowerPredictionStateSupport.cs` 缺失 `using CombatSolver.Engine.Common;`，
+导致 `IPredictionStateForkable` / `PredictionForkContext` 无法解析；修复提交为 `63a1222b`，对应 CI 已通过。
+静态 verifier 现已增加该命名空间回归检查。
+
+continuation 审计已完成第二轮收口：Draw / Selection / Orb 的批量操作都由底层 execution frame
+保存恢复索引；Hook/EndTurn 中未显式描述剩余工作的路径会由 `ExecutionDispatchScope` fail-closed
+拒绝局部 continuation，并回退整动作重放，因此不会漏执行后半段。Stampede 等未专门保存循环索引的
+Hook 属于性能回退而非语义错误。两轮均未发现新的 route-affecting mismatch，总数仍为 44。
+
+剩余 13 个显式固定 `Power(1)` 路径也已完成审计：Forbidden Grimoire、Hellraiser、Master Planner、
+Mayhem、Nostalgia、Reaper Form、Seeking Edge、Stratagem、Subroutine、The Sealed Throne、
+Tools of the Trade、Trash to Treasure、Tyranny。它们分别是存在标记或每份 Power 的触发/选择/资源单位，
+消费端按 `power.Amount` 或存在性读取，均未发现后续版本数值泄漏；已补静态护栏。
+Forbidden Grimoire 的 `RecordLongTermResource(50)` 是 solver 战略估值，不是原生卡牌效果数值，未锁定为
+0.107.1 卡牌常量。
+
+近期编译回归也已收口：`bb29ce1c` 修复两条 Release warning 源码，`ae918241` 将历史计数改为读取
+稳定的预测卡牌快照 `play.Card.Owner`，并补齐纯合同测试桩；对应 GitHub CI 已通过。
+Power 生命周期第一批也已复核：Debilitate、Magic Bomb、Monologue、Oblivion、Sic Em、Strangle、
+Colossus、Escape Artist、Hatch、Shrink 的回合边界均与既有适配证据一致。Escape Artist 保持
+`3→2→1→1`；Shrink 的永久负层依赖循环入口 `Amount <= 0` 跳过，因此不会被递减。未发现新的
+route-affecting mismatch，总数仍为 44。该批只保留审计结论，不再增加冗余静态护栏。
+
+Power 生命周期第二批已继续复核：NoDraw、Dark Embrace、Doom、Asleep、Slumber、Battleworn Dummy、
+High Voltage、Territorial、Pale Blue Dot、Smoggy、Consuming Shadow、Nemesis、Juggling、Tender。
+这些路径均已进入原生-vs-模拟回合边界测试入口。Dark Embrace 抽牌中途出现选择时仍走既有
+fail-closed 整阶段重放，不会从半完成状态继续；Nemesis/Tender 隐藏字典随 Fork 复制，Juggling 走
+PredictionStateStore Fork，Pale Blue Dot 内部激活位既随 Fork 复制又进入状态指纹。未发现新的
+route-affecting mismatch，总数仍为 44。
+
+GitHub Actions 在 `9118442e` 上约 5 秒内同时结束两个 job、steps/logs 为空；且该提交相对已全绿的
+`805ad8df` 仅有本 handoff 文档差异，verifier 与 run-contract-tests 逐字一致，因此当前记录为
+runner/checkout 层异常，不据此改战斗源码。
+
+Power amount-change / 临时属性 / Artifact 抵消链已完成一轮复核。Artifact 成功抵消 Debuff 时在
+`RecordPowerAmountChange` 之前返回，因此不会把被抵消的 Debuff 错送给 Outbreak/Shroud/
+Sleight of Flesh/Vicious；Artifact 自身正常消耗 1 层。Vicious 触发抽牌产生 nested choice 的路径已有
+阶段挂起测试，调用点处于 execution dispatch，不能保留半处理的 drained amount-change 批次。
+临时 Strength 的正负叠加、Artifact、极值 cap、回合末恢复、Power 顺序和 Fork 隔离已有完整原生差分；
+0.107.1 的临时 Focus / Regen 特殊回合末顺序仍由现有 `STS2_01071` 分支保持。未发现新的
+route-affecting mismatch，总数仍为 44。
+
+死亡生命周期与 applier/实例清理已完成一轮复核。真正死亡后，Shrink/Constrict/Hex、
+Guarded 和 Magic Bomb 都按原始 `Applier == dead` 精确清理；Guarded 保留实例身份并同时消费对应
+PowerAmountPredictionState。Fairy in a Bottle / Lizard Tail 先经过 ShouldDie 与 AfterPreventingDeath，
+成功复活后不会进入 deferred enemy-death cleanup，因此不会把“曾到 0 HP”误当真实死亡。Magic Bomb
+与 Shrink 的施加者死亡语义已有实机差分；Tank/Intercept 的 Guarded/Covered applier 清理已在
+0.107.1 卡牌审计中锁定。普通死者 Power 清理遵守 `ShouldPowerBeRemovedAfterOwnerDeath`，
+Illusion 的原生移除 veto、玩家 Power 清理顺序、Orb/Pet teardown 与重复清理幂等性都有独立合同覆盖。
+`PredictedDeathPhase` 随 Fork 复制并进入状态指纹，复活/永久死亡状态不会跨分支串线。
+未发现新的 route-affecting mismatch，总数仍为 44。
+
+最终收尾扫描第一小批已复核反射/私有状态。Nemesis/Tender/Pale Blue Dot/Intercept 的隐藏状态均已有
+专门根捕获、Fork 或状态指纹覆盖；`_nextCreatureId` 随 Fork 复制且只用于新生 Creature 的唯一身份，
+不参与伤害/RNG/规则判定；`_rootFloatingCards` 是只读根成员集合；MultiplayerScalingModel 的私有
+run/combat 引用只用于根捕获时主动断开 live 引用。未发现单人路径存在“读取私有状态但分支未隔离”
+的新 route-affecting mismatch，总数仍为 44。
+
+最终收尾扫描第二小批已复核 solver-authored 硬编码常量与特殊计数：Normality 的每回合 3 张上限、
+Confused/Slither 的 0..3 能量随机范围（`NextInt(4)`）、Iteration 的“本回合第一次 Status”计数、
+Pen Nib 的 10 次循环/第 10 次双倍、Surrounded 的 1.5 倍背击，以及 Juggling 的第 3 次 Attack。
+Iteration 的当前抽牌会在 `AfterCardDrawn` 前先写入分支计数，因此 `<= 1` 没有 off-by-one。
+这些值均与 0.107.1 语义一致，已补静态护栏；未发现新的 route-affecting mismatch，总数仍为 44。
+
+最终收尾扫描第三小批转到 Search 层 relic counter。RelicCounterCatalog 的 Happy Flower 3、Fake Happy Flower 5、
+Pendulum 3、Pollinous Core 4、Pen Nib/Nunchaku/Tuning Fork 10、Joss Paper 5、Iron Club 4、
+Galactic Dust 10，以及 Meat on the Bone 的二态目标均与 0.107.1 语义一致；Candelabra/Horn Cleat 为第 2 回合，
+Chandelier/Captain's Wheel/Sparkling Rouge 为第 3 回合。另发现计数目标使用 4-bit 槽位但此前没有容量断言：
+未来若加入周期 >= 17 的计数器或过多计数器可能静默截断/串入优先级槽。现已将 4-bit 参数命名化，并在
+RelicCounterCatalog 静态初始化时 fail-closed 校验 period、slot、重复 Id 与计数器总量；当前行为不变。
+上述 period/turn 值与 packing 不变量均已补静态护栏，route-affecting mismatch 总数仍为 44。
+
+最终收尾扫描第四小批在 Search/Prediction 阈值中发现并修复 1 个新的 route-affecting mismatch：
+ActEndingBossPolicy 原先把所有非最终 Act Boss 都按 A2+ 的“缺失 HP 恢复 80%”估值，导致 A0/A1
+错误地认为战斗内治疗仍有 1/5 会跨 Act 保留。0.107.1 Ancient 原生逻辑是 A0/A1 补满缺失 HP，
+只有 Weary Traveler（A2+）才乘 0.8。根快照现在读取 RunState.AscensionLevel：A0/A1 使用
+ActClearFullHeal（战斗内恢复 HP 的跨 Act 持久价值为 0），A2+ 保持原 ActClearHeal 的 1/5 价值；
+ActTransitionBossHpStrategy 对两种过 Act恢复都继续生效。累计 route-affecting mismatch 更新为 45。
+
+同批还把 GrowthPolicy 内置/第三方成长预算重复写死的 1000 HP 上限收成单一 MaximumBudgetHp 常量；
+这是 solver 配置安全边界，不是游戏版本数值。Act 3 的零基索引 2 与 0.107.1 三个 Boss
+TEST_SUBJECT_BOSS / AEONGLASS_BOSS / QUEEN_BOSS 也已补静态版本护栏。
+
+新问题包 `CombatSolver-0.40.2-LOUSE_PROGENITOR_NORMAL-e54eceb84baa44f3809748a38e6b2725.zip`
+定位到新的 SearchSetupFailure：根快照捕获 LouseProgenitor 时尝试读取不存在的实例成员
+`GrowStrength`，实际 0.107.1 模型使用 private static const `_growStrength = 5`；同时
+`MonsterValueReader` 原先只搜索实例成员，因此仅改名仍会失败。现已让 int/bool/object 编译访问器
+同时支持 instance/static property/field，并将 LouseProgenitor 静态值捕获和 CURL_AND_GROW 消费统一改为
+`_growStrength`。现有 DevotedSculptor `_ritualGain` 仍按实例 readonly 字段路径读取，不受影响。
+该错误会让 LOUSE_PROGENITOR_NORMAL 在 AutoTurnStart 根捕获阶段完全无法搜索，计入新的
+route-affecting mismatch；累计总数由 45 更新为 46。已补静态回归门禁。
+
+最终收尾扫描第五小批继续检查 StrategicEffect / Novelty / memory policy。StrategicEffectModel 中
+cards-per-turn、reachable-cards、Buffer 兜底、Focus/Furnace scaling 等裸数字均属于 solver 的启发式估值，
+不应伪装成 0.107.1 游戏常量；SearchWaveMemoryPolicy 与 SmartLayerMemoryForecast 的 64 MiB 虽同值，
+但分别表示 parent reserve 与 whole-layer forecast 最小余量，当前没有证据要求合并。BFWS 达到
+MaxNoveltyEntries 后仍按“先判断当前 tuple novelty、再限制历史写入”处理，已与仓库 ReferenceNovelty
+和容量 0/1/7 的生成流合同核对，属于设计语义而非 bug。未发现新的 route-affecting mismatch，总数仍为 45。
+现有 BfwsResearchChecks 此前未进入 run-contract-tests；已加入 L1 合同套件，并补静态门禁防止再次掉出。
+
+已完成的 Power、continuation、死亡生命周期和 78/78 卡牌 OnPlay 数值不重复展开；多人牌仍暂不作为当前 blocker。

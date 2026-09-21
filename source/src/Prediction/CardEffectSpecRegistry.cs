@@ -34,22 +34,26 @@ internal static class CardEffectSpecRegistry
 {
     private static readonly Dictionary<Type, CardPowerEffect[]> PowerEffects = new()
     {
+        [typeof(BeaconOfHope)] = [Owner<BeaconOfHopePower>(_ => 1)],
         [typeof(Blur)] = [Owner<BlurPower>("Blur")],
         [typeof(ChargeBattery)] = [Owner<EnergyNextTurnPower>(card => card.DynamicVars.Energy.IntValue)],
         [typeof(Colossus)] = [Owner<ColossusPower>("Colossus")],
+        [typeof(Coordinate)] = [Target<CoordinatePower>(card => card.DynamicVars.Strength.IntValue)],
         [typeof(CrushUnder)] = [AllEnemies<CrushUnderPower>("StrengthLoss")],
         [typeof(Debilitate)] = [Target<DebilitatePower>("DebilitatePower")],
         [typeof(Defy)] = [Target<WeakPower>(card => card.DynamicVars.Weak.IntValue)],
         [typeof(Delay)] = [Owner<EnergyNextTurnPower>(card => card.DynamicVars.Energy.IntValue)],
         [typeof(DyingStar)] = [AllEnemies<DyingStarPower>("StrengthLoss")],
         [typeof(Equilibrium)] = [Owner<RetainHandPower>("Equilibrium")],
+        [typeof(ExpectAFight)] = [Owner<NoEnergyGainPower>(_ => 1)],
+        [typeof(Flanking)] = [Target<FlankingPower>(_ => 2)],
         [typeof(FlameBarrier)] = [Owner<FlameBarrierPower>("DamageBack")],
         [typeof(FocusedStrike)] = [Owner<FocusedStrikePower>("FocusPower")],
         [typeof(Glow)] = [Owner<DrawCardsNextTurnPower>(card => card.DynamicVars.Cards.IntValue)],
-        [typeof(GuidingStar)] = [Owner<DrawCardsNextTurnPower>(card => card.DynamicVars.Cards.IntValue)],
         [typeof(Hegemony)] = [Owner<EnergyNextTurnPower>(card => card.DynamicVars.Energy.IntValue)],
+        [typeof(HammerTime)] = [Owner<HammerTimePower>(_ => 1)],
 #if STS2_01071
-        [typeof(Hyperbeam)] = [],
+        [typeof(Hyperbeam)] = [Owner<FocusPower>(card => -card.DynamicVars["FocusPower"].IntValue)],
 #else
         [typeof(Hyperbeam)] = [Owner<HyperbeamFocusDownPower>("FocusPower")],
 #endif
@@ -69,9 +73,13 @@ internal static class CardEffectSpecRegistry
             Owner<EnergyNextTurnPower>(card => card.DynamicVars.Energy.IntValue),
         ],
         [typeof(Salvo)] = [Owner<RetainHandPower>(_ => 1)],
+#if STS2_01071
+        [typeof(Scare)] = [AllEnemies<WeakPower>(_ => 1)],
+#endif
         [typeof(Scourge)] = [Target<DoomPower>(card => card.DynamicVars.Doom.IntValue)],
         [typeof(SetupStrike)] = [Owner<SetupStrikePower>(card => card.DynamicVars.Strength.IntValue)],
         [typeof(SicEm)] = [Target<SicEmPower>("SicEmPower")],
+        [typeof(Sneaky)] = [Owner<SneakyPower>("SneakyPower")],
         [typeof(Strangle)] = [Target<StranglePower>("StranglePower")],
         [typeof(Synthesis)] = [Owner<FreePowerPower>(_ => 1)],
         [typeof(TagTeam)] = [Target<TagTeamPower>(_ => 1)],
@@ -86,8 +94,8 @@ internal static class CardEffectSpecRegistry
         typeof(Glow), typeof(Hemokinesis), typeof(ShiningStrike), typeof(SolarStrike),
         typeof(AllForOne), typeof(BoneShards), typeof(Bulwark), typeof(Claw), typeof(Compact),
         typeof(DeathsDoor), typeof(EvilEye), typeof(GeneticAlgorithm), typeof(Glitterstream), typeof(GoForTheEyes),
-        typeof(Misery), typeof(Modded), typeof(MoltenFist), typeof(MomentumStrike), typeof(PullAggro),
-        typeof(Rampage), typeof(Whistle), typeof(WroughtInWar),
+        typeof(Modded), typeof(MoltenFist), typeof(MomentumStrike), typeof(PullAggro),
+        typeof(Rampage), typeof(Tank), typeof(Whistle), typeof(WroughtInWar),
     ];
 
     private static readonly HashSet<Type> GenerationEffects =
@@ -201,9 +209,9 @@ internal static class CardEffectSpecRegistry
                 break;
             }
             case BigBang:
-                simulator.GainEnergy(card.Owner, card.DynamicVars.Energy.IntValue);
                 if (!simulator.GainStars(card.Owner, card.DynamicVars.Stars.IntValue))
                     return true;
+                simulator.GainEnergy(card.Owner, card.DynamicVars.Energy.IntValue);
                 PersistentPowerSupport.Forge(simulator, card.Owner, card.DynamicVars.Forge.IntValue);
                 applied = true;
                 break;
@@ -243,7 +251,16 @@ internal static class CardEffectSpecRegistry
                 simulator.GainStars(card.Owner, card.DynamicVars.Stars.IntValue);
                 applied = true;
                 break;
-            case ShiningStrike or SolarStrike:
+            case ShiningStrike:
+                if (!simulator.GainStars(card.Owner, card.DynamicVars.Stars.IntValue))
+                {
+                    simulator.AppendExecutionContinuation(new ShiningStrikeExecutionFrame(playedCard));
+                    return true;
+                }
+                ReturnShiningStrikeToDrawPile(simulator, playedCard);
+                applied = true;
+                break;
+            case SolarStrike:
                 simulator.GainStars(card.Owner, card.DynamicVars.Stars.IntValue);
                 applied = true;
                 break;
@@ -328,10 +345,6 @@ internal static class CardEffectSpecRegistry
                 combat.Apply<WeakPower>(target, card.DynamicVars.Weak.IntValue, ownerCreature);
                 applied = true;
                 break;
-            case Misery when target != null:
-                SpreadDebuffs(combat, target);
-                applied = true;
-                break;
             case Modded:
                 simulator.AddOrbSlots(card.Owner, card.DynamicVars.Repeat.IntValue);
                 playedCard.MutablePreview.EnergyCost.AddThisCombat(1);
@@ -353,6 +366,19 @@ internal static class CardEffectSpecRegistry
                 combat.SummonOsty(simulator, card.Owner, card.DynamicVars.Summon.IntValue);
                 applied = true;
                 break;
+            case Tank:
+            {
+                combat.Apply<TankPower>(ownerCreature, 1, ownerCreature);
+                foreach (Creature teammate in combat.GetTeammatesOf(ownerCreature)
+                             .Where(creature => simulator.State.GetCreature(creature).IsAlive
+                                 && creature.IsPlayer
+                                 && !ReferenceEquals(creature, ownerCreature)))
+                {
+                    combat.Apply<GuardedPower>(teammate, 1, ownerCreature);
+                }
+                applied = true;
+                break;
+            }
             case Rampage rampage:
             {
                 decimal increase = rampage.DynamicVars["Increase"].BaseValue;
@@ -469,29 +495,27 @@ internal static class CardEffectSpecRegistry
         return applied;
     }
 
-    private static void SpreadDebuffs(SimulatedCombatState combat, Creature source)
+    private static void ReturnShiningStrikeToDrawPile(
+        CombatPredictionSimulator simulator,
+        PredictedCard playedCard)
     {
-        Dictionary<Type, (int Amount, Creature? Applier)> debuffs = combat.EffectivePowers()
-            .Where(power => power.Owner == source
-                && power.TypeForCurrentAmount == PowerType.Debuff)
-            .GroupBy(power => power.GetType())
-            .ToDictionary(
-                group => group.Key,
-                group => (group.Sum(power => power.Amount), group.First().Applier));
-        foreach (PowerModel power in combat.EffectivePowers().Where(power => power.Owner == source))
+        if (!playedCard.HasKeyword(simulator.State, CardKeyword.Exhaust)
+            && !playedCard.Preview.ExhaustOnNextPlay)
         {
-            if (power is not ITemporaryPower temporary
-                || !debuffs.TryGetValue(temporary.InternallyAppliedPower.GetType(), out var internalEffect))
-            {
-                continue;
-            }
-            debuffs[temporary.InternallyAppliedPower.GetType()] =
-                (internalEffect.Amount + power.Amount, internalEffect.Applier);
+            simulator.AddToPile(playedCard, PileType.Draw, CardPilePosition.Top);
         }
-        foreach (Creature enemy in combat.HittableEnemies.Where(enemy => enemy != source))
+    }
+
+    private sealed record ShiningStrikeExecutionFrame(PredictedCard Card)
+        : ICombatPredictionExecutionFrame
+    {
+        public ICombatPredictionExecutionFrame Fork(PredictionForkContext context)
+            => this with { Card = context.RequireRemap(Card) };
+
+        public bool Resume(CombatPredictionSimulator simulator)
         {
-            foreach ((Type type, (int amount, Creature? applier)) in debuffs)
-                combat.ApplyPower(type, enemy, amount, applier);
+            ReturnShiningStrikeToDrawPile(simulator, Card);
+            return !simulator.HasPendingChoice;
         }
     }
 
@@ -520,7 +544,9 @@ internal static class CardEffectSpecRegistry
         int amount,
         Creature applier)
     {
-        if (powerType == typeof(CrushUnderPower))
+        if (powerType == typeof(CoordinatePower))
+            combat.ApplyTemporaryStrengthGain<CoordinatePower>(target, amount, applier);
+        else if (powerType == typeof(CrushUnderPower))
             combat.ApplyTemporaryStrengthLoss<CrushUnderPower>(target, amount, applier);
         else if (powerType == typeof(DyingStarPower))
             combat.ApplyTemporaryStrengthLoss<DyingStarPower>(target, amount, applier);

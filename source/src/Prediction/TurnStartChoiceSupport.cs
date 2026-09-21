@@ -260,6 +260,43 @@ internal static partial class TurnStartChoiceSupport
         return ResolveCapturedChoice(simulator, combat, player, cursor, request);
     }
 
+    public static bool ResolveSingleTurnRetain(
+        CombatPredictionSimulator simulator,
+        SimulatedCombatState combat,
+        Player player,
+        TurnStartChoiceCursor? cursor,
+        string sourceId,
+        int requestedCount)
+    {
+        if (requestedCount <= 0)
+            return true;
+
+        SimPlayerCombatState state = simulator.State.GetPlayerCombatState(player);
+        IReadOnlyList<PredictedCard> options = state.Hand.Cards
+            .Where(card => !card.Preview.ShouldRetainThisTurn)
+            .ToArray();
+        int maxCount = Math.Min(requestedCount, options.Count);
+        if (maxCount <= 0)
+            return true;
+
+        CardChoiceSpec spec = new(
+            PlanChoiceEffect.ApplyRetain,
+            PileType.Hand,
+            0,
+            maxCount,
+            options,
+            state.Hand.Cards,
+            ReplacementValue: 0d);
+        TurnStartChoiceRequest request = new(
+            sourceId,
+            PlanChoiceEffect.ApplyRetain,
+            PileType.Hand,
+            maxCount,
+            spec,
+            Timing: combat.ActiveActionChoiceTiming);
+        return ResolveCapturedChoice(simulator, combat, player, cursor, request);
+    }
+
     public static bool Resolve(
         CombatPredictionSimulator simulator,
         SimulatedCombatState combat,
@@ -317,7 +354,9 @@ internal static partial class TurnStartChoiceSupport
             }
             return false;
         }
-        IReadOnlyList<PredictedCard> selected = request.Effect is PlanChoiceEffect.GenerateToHand or PlanChoiceEffect.DiscardAndDraw
+        IReadOnlyList<PredictedCard> selected = request.Effect is PlanChoiceEffect.GenerateToHand
+                or PlanChoiceEffect.DiscardAndDraw
+                or PlanChoiceEffect.ApplyRetain
             ? ResolveTokens(choice!, spec.Options, spec.MinCount, spec.MaxCount)
             : CardChoiceSupport.ResolveStandaloneChoice(simulator, choice!, spec.Options, request.Count, request.SourcePile);
         switch (request.Effect)
@@ -350,6 +389,10 @@ internal static partial class TurnStartChoiceSupport
                 break;
             case PlanChoiceEffect.MoveToHand:
                 simulator.AddToPile(selected, PileType.Hand);
+                break;
+            case PlanChoiceEffect.ApplyRetain:
+                foreach (PredictedCard card in selected)
+                    card.MutablePreview.GiveSingleTurnRetain();
                 break;
             default:
                 throw new InvalidOperationException($"不支持的回合开始选牌效果：{request.Effect}。");

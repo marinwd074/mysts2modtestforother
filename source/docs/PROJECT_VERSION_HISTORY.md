@@ -8,6 +8,14 @@
 
 <!-- project-versions -->
 
+## 1.52 — 预测：0.107.1 卡牌和生命周期校准
+
+2026-09-21 · 小更新 · `project-v1.52`
+
+- 新增：以 Git LFS 保存 pinned 游戏快照，提供版本语义审计与合同入口。
+- 修复：校准 Outbreak、Well-Laid Plans、Expertise、Hyperbeam、Big Bang 等卡牌、生成/抽牌/选牌/星星顺序与 continuation。
+- 修复：修正 Power 死亡及金额变化生命周期、遗物计数、怪物静态值与 Release 编译问题。
+
 ## 1.51 — 多人：Reactive Carry 与本地跨回合规划
 
 2026-09-21 · 大更新 · `project-v1.51`

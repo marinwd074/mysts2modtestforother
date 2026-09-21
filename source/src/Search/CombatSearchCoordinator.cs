@@ -213,6 +213,11 @@ internal static partial class CombatSearchCoordinator
             };
         }
         Stopwatch requestClock = Stopwatch.StartNew();
+        bool forcedSmartGradient = policy.PotionPolicy == SolverPotionPolicy.Smart
+            && policy.PotionStrategy.HasForcedDirectives;
+        SearchPolicySnapshot forcedBaselinePolicy = forcedSmartGradient
+            ? policy with { PotionStrategy = policy.PotionStrategy.ForForcedBaseline() }
+            : policy;
         SolverPotionPolicy? initialPotionPolicyOverride = policy.PotionPolicy == SolverPotionPolicy.Smart
             && !policy.PotionStrategy.HasForcedDirectives
                 ? SolverPotionPolicy.Disabled
@@ -264,8 +269,9 @@ internal static partial class CombatSearchCoordinator
         {
             long passAllocatedAtStart = GC.GetTotalAllocatedBytes(precise: false);
             long passTransitionsAtStart = policy.RequestWorkTotals?.Snapshot().TransitionCount ?? 0;
-            SearchPolicySnapshot beamPolicy = policy.NoveltySearch == null
-                ? policy : policy with { NoveltySearch = null };
+            SearchPolicySnapshot passPolicy = forcedBaselinePolicy;
+            SearchPolicySnapshot beamPolicy = passPolicy.NoveltySearch == null
+                ? passPolicy : passPolicy with { NoveltySearch = null };
             SolverResult SolveMember(SolverSearchProfile memberProfile, bool refinement)
             {
                 Action<SolverProgress>? memberProgressCallback = refinement && progressCallback != null
@@ -297,15 +303,36 @@ internal static partial class CombatSearchCoordinator
                 => RunBeamWidthPortfolioPass(root, beamPolicy, baselineProfile,
                     ReferenceEquals(baselineProfile, passProfile) ? passClock : Stopwatch.StartNew(),
                     SolveMember, publishBaseline);
-            SolverResult passResult = policy.UseNoveltyPortfolio
-                ? RunNoveltyPortfolioPass(root, displayNames, battleDamage, policy, passProfile,
-                    passClock, initialPotionPolicyOverride, cancellationToken, progressCallback,
-                    interimResultCallback, RunBaseline)
-                : RunBaseline(passProfile);
+            SolverResult RunPrimary()
+                => policy.UseNoveltyPortfolio
+                    ? RunNoveltyPortfolioPass(root, displayNames, battleDamage, passPolicy, passProfile,
+                        passClock, initialPotionPolicyOverride, cancellationToken, progressCallback,
+                        interimResultCallback, RunBaseline)
+                    : RunBaseline(passProfile);
+
+            bool hasForcedBaseline = forcedSmartGradient;
+            SolverResult passResult;
+            try
+            {
+                passResult = RunPrimary();
+            }
+            catch (PotionPolicyUnsatisfiedException) when (forcedSmartGradient)
+            {
+                // If mandatory potions alone cannot produce a usable route, restore ordinary
+                // mixed Smart search so an optional potion may still rescue the fight.
+                hasForcedBaseline = false;
+                passPolicy = policy;
+                beamPolicy = policy.NoveltySearch == null
+                    ? policy : policy with { NoveltySearch = null };
+                passResult = RunPrimary();
+            }
             NoveltyPortfolioTelemetry? noveltyPass = passResult.NoveltyPortfolio;
             ObserveSmartLayerMemory(
                 policy, memoryForecast, passAllocatedAtStart, passTransitionsAtStart,
-                passResult, passProfile, completedPotionCount: 0);
+                passResult, passProfile,
+                completedPotionCount: hasForcedBaseline
+                    ? policy.PotionStrategy.ForcedDirectiveCount
+                    : 0);
             if (policy.MeasurePhasePerformance)
                 policy.Diagnostics.Info(SolverDiagnostics.DescribeSearchPhasePerformance(passResult));
             passResult.SingleSessionSearch = true;
@@ -322,9 +349,9 @@ internal static partial class CombatSearchCoordinator
                 passSettled = true;
                 return passResult;
             }
-            if (!policy.PotionStrategy.HasForcedDirectives)
+            if (!policy.PotionStrategy.HasForcedDirectives || hasForcedBaseline)
             {
-                if (HasReachedAcceptableBattleHpLoss(policy, passResult))
+                if (!hasForcedBaseline && HasReachedAcceptableBattleHpLoss(policy, passResult))
                 {
                     passSettled = true;
                     return passResult;
@@ -333,7 +360,9 @@ internal static partial class CombatSearchCoordinator
                     root,
                     displayNames,
                     battleDamage,
-                    beamPolicy,
+                    policy.NoveltySearch == null
+                        ? policy
+                        : policy with { NoveltySearch = null },
                     cancellationToken,
                     progressCallback,
                     passProfile,
@@ -632,18 +661,22 @@ internal static partial class CombatSearchCoordinator
         SolverResult selected = primary;
         try
         {
-            selected = AuditRequiredPotionUse(
-                root,
-                displayNames,
-                battleDamage,
-                policy,
-                deadline.Token,
-                progressCallback,
-                profile,
-                selected);
+            if (!policy.PotionStrategy.HasForcedDirectives)
+            {
+                selected = AuditRequiredPotionUse(
+                    root,
+                    displayNames,
+                    battleDamage,
+                    policy,
+                    deadline.Token,
+                    progressCallback,
+                    profile,
+                    selected);
+            }
             if (ResolveTakeoverResult(selected, policy.Interaction) is { } requiredTakeoverResult)
                 return requiredTakeoverResult;
-            if (HasReachedAcceptableBattleHpLoss(policy, selected))
+            if (!policy.PotionStrategy.HasForcedDirectives
+                && HasReachedAcceptableBattleHpLoss(policy, selected))
                 return selected;
             selected = AuditSmartPotionUse(
                 root,
@@ -1389,19 +1422,20 @@ internal static partial class CombatSearchCoordinator
         SmartLayerMemoryForecast memoryForecast,
         Action<SolverResult>? interimResultCallback)
     {
-        if (potionFree.ExplicitPotionCount != 0)
-            throw new InvalidOperationException("Smart 梯度搜索必须从无主动用药结果开始。");
+        int forcedPotionCount = policy.PotionStrategy.ForcedDirectiveCount;
+        if (potionFree.ExplicitPotionCount != forcedPotionCount)
+            throw new InvalidOperationException("Smart 梯度搜索必须从仅满足强制用药的结果开始。");
 
         bool potionFreeWon = potionFree.Snapshot.AllEnemiesDead
             && !potionFree.Snapshot.PlayerDead
             && potionFree.Snapshot.ProjectedPlayerHp > 0;
         int potionFreeDeficit = StrategicHpDeficit(root, policy, potionFree);
-        int maximumPotionUses = MaximumSmartPotionUses(
+        int maximumOptionalPotionUses = MaximumSmartPotionUses(
             root,
             policy,
             potionFreeWon,
             potionFreeDeficit);
-        if (maximumPotionUses == 0)
+        if (maximumOptionalPotionUses == 0)
         {
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] SMART_POTION_GRADIENT result " +
@@ -1421,8 +1455,11 @@ internal static partial class CombatSearchCoordinator
         SolverResult selected = potionFree;
         bool deadlineExpired = false;
         bool acceptablePotionLayerFound = false;
-        for (int potionCount = 1; potionCount <= maximumPotionUses; potionCount++)
+        for (int optionalPotionCount = 1;
+             optionalPotionCount <= maximumOptionalPotionUses;
+             optionalPotionCount++)
         {
+            int potionCount = forcedPotionCount + optionalPotionCount;
             if (searchCancellationToken.IsCancellationRequested)
             {
                 callerCancellationToken.ThrowIfCancellationRequested();
@@ -1549,7 +1586,7 @@ internal static partial class CombatSearchCoordinator
         policy.Diagnostics.Info(
             $"[CombatSolver/Test] SMART_POTION_GRADIENT result " +
             $"stop={(deadlineExpired ? "deadline" : acceptablePotionLayerFound ? "threshold_met" : "complete")} " +
-            $"maximum={maximumPotionUses} " +
+            $"maximum={forcedPotionCount + maximumOptionalPotionUses} " +
             $"selected_potions={selected.PotionCount}");
         return selected;
     }
@@ -1966,11 +2003,15 @@ internal static partial class CombatSearchCoordinator
         SearchPolicySnapshot policy,
         SolverResult result)
     {
+        ForcedPotionUseEvaluation forced = policy.PotionStrategy.EvaluateForcedUses(
+            result.BestNode.Actions,
+            root.HasRenewablePotionShapedRock);
         int ambergrisCount = result.BestNode.Actions.Count(action =>
             action.Kind == PlanActionKind.UsePotion
-            && string.Equals(action.PotionId, "AMBERGRIS", StringComparison.Ordinal));
+            && string.Equals(action.PotionId, "AMBERGRIS", StringComparison.Ordinal))
+            - forced.ForcedAmbergrisCount;
         int strategicHpCost = PotionUsePolicy.EffectiveStrategicHpCost(
-            result.PotionStrategicCostByTurn.Values.Sum(),
+            Math.Max(0, result.PotionStrategicCostByTurn.Values.Sum() - forced.ForcedStrategicHpCost),
             ambergrisCount,
             root.InitialPlayerMaxHp);
         return PotionUsePolicy.SmartRequiredHpSaved(
@@ -2032,7 +2073,9 @@ internal static partial class CombatSearchCoordinator
                 potion.Slot,
                 potion.PotionId,
                 SolverPotionPolicy.Smart,
-                forceAllDisabled: false))
+                forceAllDisabled: false)
+                && policy.PotionStrategy.Resolve(potion.Slot, potion.PotionId)
+                    != SolverPotionDirective.Force)
             .ToArray();
         if (!potionFreeWon || policy.TheftPolicy == SolverTheftPolicy.PreserveResources)
             return allowedPotions.Length;

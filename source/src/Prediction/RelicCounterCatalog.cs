@@ -22,6 +22,17 @@ internal static class RelicCounterCatalog
         new(RelicCounterId.MeatOnTheBone, () => ModelDb.Relic<MeatOnTheBone>(), 2),
     });
 
+    static RelicCounterCatalog()
+    {
+        if (All.Count > RelicCounterEvaluation.MaxPackedCounterCount
+            || All.Select(entry => entry.Id).Distinct().Count() != All.Count
+            || All.Any(entry => (int)entry.Id < 0 || (int)entry.Id >= RelicCounterEvaluation.PackedSlotCapacity)
+            || All.Any(entry => entry.Period <= 0 || entry.Period > RelicCounterEvaluation.MaxPackedPeriod))
+        {
+            throw new InvalidOperationException("Relic counter catalog exceeds its packed representation.");
+        }
+    }
+
     public static RelicCounterId? Identify(RelicModel relic) => relic switch
     {
         HappyFlower => RelicCounterId.HappyFlower, FakeHappyFlower => RelicCounterId.FakeHappyFlower,

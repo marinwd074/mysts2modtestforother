@@ -83,17 +83,33 @@ internal sealed class SolvedRouteCache(string path)
             ProjectSettings.GlobalizePath("user://combat-solver-routes"), key + ".json"));
     }
 
+    // Cache persistence is optional. File/protocol failures behave as misses so search can continue.
     public SolverResult? Read(IntentForecast currentForecast)
+        => string.IsNullOrEmpty(Path)
+            ? null
+            : AncillaryWork.Try("READ_FAILED", () => ReadCore(currentForecast), Log);
+
+    private SolverResult? ReadCore(IntentForecast currentForecast)
     {
-        if (string.IsNullOrEmpty(Path))
-            return null;
         if (!File.Exists(Path))
             return null;
-        using FileStream stream = File.OpenRead(Path);
-        SolverResult result = JsonSerializer.Deserialize<SolverResult>(stream, Options(currentForecast))
-            ?? throw new InvalidDataException($"Empty solved route: {Path}");
-        result.WasRestoredFromCache = true;
-        return result;
+        try
+        {
+            using FileStream stream = File.OpenRead(Path);
+            SolverResult result = JsonSerializer.Deserialize<SolverResult>(stream, Options(currentForecast))
+                ?? throw new InvalidDataException($"Empty solved route: {Path}");
+            result.WasRestoredFromCache = true;
+            return result;
+        }
+        catch (Exception error) when (error is JsonException or InvalidDataException or NotSupportedException)
+        {
+            // Keep damaged content for diagnosis. Transient IO/permission failures are not quarantined.
+            AncillaryWork.Run(
+                "QUARANTINE_FAILED",
+                () => File.Move(Path, Path + QuarantineSuffix, overwrite: true),
+                Log);
+            throw;
+        }
     }
 
     internal static byte[] SerializeRoute(SolverResult result)
@@ -103,10 +119,16 @@ internal sealed class SolvedRouteCache(string path)
         => JsonSerializer.Deserialize<SolverResult>(bytes, Options(currentForecast))
            ?? throw new InvalidDataException("录像包中的预计算路线为空。");
 
+    // A cache write/cleanup failure must not withhold an already solved route.
     public void StoreFirst(SolverResult result)
     {
         if (string.IsNullOrEmpty(Path))
             return;
+        AncillaryWork.Run("STORE_FAILED", () => StoreFirstCore(result), Log);
+    }
+
+    private void StoreFirstCore(SolverResult result)
+    {
         if (result.WasRestoredFromCache
             || result.ResultScope == SolverResultScope.CurrentTurnAdoption
             || File.Exists(Path))
@@ -115,12 +137,31 @@ internal sealed class SolvedRouteCache(string path)
         Directory.CreateDirectory(directory);
         byte[] bytes = SerializeRoute(result);
         string temporary = Path + ".tmp";
-        File.WriteAllBytes(temporary, bytes);
-        File.Move(temporary, Path);
-        foreach (FileInfo obsolete in new DirectoryInfo(directory).GetFiles("*.json")
-                     .OrderByDescending(file => file.LastWriteTimeUtc).Skip(MaximumEntries))
-            obsolete.Delete();
+        try
+        {
+            File.WriteAllBytes(temporary, bytes);
+            File.Move(temporary, Path);
+        }
+        finally
+        {
+            AncillaryWork.Run("TEMP_CLEANUP_FAILED", () => File.Delete(temporary), Log);
+        }
+
+        DirectoryInfo info = new(directory);
+        foreach (FileInfo obsolete in info.GetFiles("*.json")
+                     .OrderByDescending(file => file.LastWriteTimeUtc).Skip(MaximumEntries)
+                     .Concat(info.GetFiles("*" + QuarantineSuffix)
+                         .OrderByDescending(file => file.LastWriteTimeUtc).Skip(MaximumQuarantinedEntries)))
+        {
+            AncillaryWork.Run("CLEANUP_FAILED", obsolete.Delete, Log);
+        }
     }
+
+    private const string QuarantineSuffix = ".bad";
+    private const int MaximumQuarantinedEntries = 8;
+
+    private static void Log(string message)
+        => Entry.Logger.Warn($"[CombatSolver/RouteCache] {message}");
 
     private static JsonSerializerOptions Options(IntentForecast forecast)
     {

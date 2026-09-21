@@ -300,10 +300,13 @@ internal static class CorePowerSupport
                 combat.Apply<ThornsPower>(owner, card.DynamicVars["ThornsPower"].IntValue, owner);
                 break;
             case BulkUp:
+                combat.Apply<DexterityPower>(owner, card.DynamicVars.Dexterity.IntValue, owner);
+                PowerLifecycleSupport.ResolvePowerAmountChanges(simulator, combat);
+                if (simulator.HasPendingChoice)
+                    return false;
                 simulator.State.GetPlayerCombatState(card.Owner).OrbQueue.RemoveCapacity(
                     card.DynamicVars["OrbSlots"].IntValue);
                 combat.Apply<StrengthPower>(owner, card.DynamicVars.Strength.IntValue, owner);
-                combat.Apply<DexterityPower>(owner, card.DynamicVars.Dexterity.IntValue, owner);
                 break;
             case Resonance:
                 combat.Apply<StrengthPower>(owner, card.DynamicVars["StrengthPower"].IntValue, owner);
@@ -673,6 +676,15 @@ internal static class CorePowerSupport
                     ShrinkPower? shrink = combat.GetPower<ShrinkPower>(player);
                     if (shrink?.Applier == dead)
                         combat.SetAmount<ShrinkPower>(player, 0);
+                    foreach (GuardedPower guarded in combat.EffectivePowers()
+                                 .OfType<GuardedPower>()
+                                 .Where(power => ReferenceEquals(power.Owner, player)
+                                     && ReferenceEquals(power.Applier, dead))
+                                 .ToArray())
+                    {
+                        simulator.StateStore.GetPowerAmount(guarded).Consume();
+                        combat.SetPowerAmount(guarded, 0);
+                    }
                 }
                 // SetPowerAmount 会让 EffectivePowers 失效，所以命中项仍必须先物化；
                 // 但绝大多数结算根本没有 MagicBomb，改成只在命中时才建表，顺序与原来一致。
@@ -705,7 +717,6 @@ internal static class CorePowerSupport
         Player player)
     {
         SimPlayerCombatState playerState = simulator.State.GetPlayerCombatState(player);
-        EnchantmentLifecycleSupport.BeforeFlush(simulator, player);
         List<PredictedCard>? toFlush = null;
         if (PersistentRelicSupport.ShouldFlush(combat, player))
         {
@@ -775,6 +786,15 @@ internal static class CorePowerSupport
         IEnumerable<Creature> participants)
     {
         HashSet<Creature> participantSet = participants.ToHashSet();
+        foreach (FlankingPower flanking in combat.EffectivePowers()
+                     .OfType<FlankingPower>()
+                     .Where(power => power.Amount != 0 && participantSet.Contains(power.Owner))
+                     .ToArray())
+        {
+            simulator.StateStore.GetPowerAmount(flanking).Consume();
+            combat.SetPowerAmount(flanking, 0);
+        }
+
         foreach (Creature creature in combat.Creatures)
         {
             if (creature.Side != side && combat.GetAmount<FlameBarrierPower>(creature) > 0)

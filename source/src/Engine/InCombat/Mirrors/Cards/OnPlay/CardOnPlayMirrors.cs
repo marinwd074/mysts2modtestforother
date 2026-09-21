@@ -78,13 +78,18 @@ internal static partial class CardOnPlayMirrors
         registry.Register<AstralPulse>(BespokeCardMirrors.AstralPulseOnPlay);
         registry.Register<BoneShards>(BespokeCardMirrors.BoneShardsOnPlay);
         registry.Register<DaggerSpray>(BespokeCardMirrors.DaggerSprayOnPlay);
+        registry.Register<DemonicShield>(BespokeCardMirrors.DemonicShieldOnPlay);
         registry.Register<PactsEnd>(BespokeCardMirrors.PactsEndOnPlay);
+        registry.Register<ExpectAFight>(BespokeCardMirrors.ExpectAFightOnPlay);
+        registry.Register<Intercept>(BespokeCardMirrors.InterceptOnPlay);
         registry.Register<TwinStrike>(BespokeCardMirrors.TwinStrikeOnPlay);
         registry.Register<HeavenlyDrill>(BespokeCardMirrors.HeavenlyDrillOnPlay);
         registry.Register<Dismantle>(BespokeCardMirrors.DismantleOnPlay);
         registry.Register<Entrench>(BespokeCardMirrors.EntrenchOnPlay);
         registry.Register<FiendFire>(BespokeCardMirrors.FiendFireOnPlay);
         registry.Register<LeadingStrike>(BespokeCardMirrors.LeadingStrikeOnPlay);
+        registry.Register<Mimic>(BespokeCardMirrors.MimicOnPlay);
+        registry.Register<Misery>(BespokeCardMirrors.MiseryOnPlay);
         registry.Register<Maul>(BespokeCardMirrors.MaulOnPlay);
         registry.Register<Sacrifice>(BespokeCardMirrors.SacrificeOnPlay);
         registry.Register<Spite>(BespokeCardMirrors.SpiteOnPlay);
@@ -115,6 +120,9 @@ internal static partial class CardOnPlayMirrors
         registry.Register<Reboot>(CardDrawCardMirrors.RebootOnPlay);
         registry.Register<Restlessness>(CardDrawCardMirrors.RestlessnessOnPlay);
         registry.Register<Scrape>(CardDrawCardMirrors.ScrapeOnPlay);
+#if STS2_01071
+        registry.Register<Scare>(static (_, _) => { });
+#endif
         registry.Register<Scrawl>(CardDrawCardMirrors.ScrawlOnPlay);
         registry.Register<SpoilsOfBattle>(CardDrawCardMirrors.SpoilsOfBattleOnPlay);
 

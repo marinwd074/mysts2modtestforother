@@ -51,9 +51,20 @@ internal static class AfterDeathMirrors
         registry.Register<Melancholy>(HandleMelancholy);
         registry.Register<StockPower>(HandleStock);
         registry.Register<CrabRagePower>(HandleCrabRage);
+        registry.Register<CoveredPower>(HandleCoveredPower);
         registry.Register<DampenPower>(HandleDampen);
 
         return registry;
+    }
+
+    private static void HandleCoveredPower(CoveredPower power, AfterDeathMirrorContext context)
+    {
+        if (!context.WasRemovalPrevented && ReferenceEquals(context.Creature, power.Applier))
+        {
+            if (context.CombatState is not ICombatPredictionEffectSink effects)
+                throw new InvalidOperationException("Covered death cleanup requires writable branch state.");
+            effects.SetPowerAmount(power, 0);
+        }
     }
 
     private static void HandleDampen(DampenPower power, AfterDeathMirrorContext context)

@@ -48,7 +48,8 @@ internal sealed class RootCombatCardGenerationPoolSnapshot
     }
 
     public static RootCombatCardGenerationPoolSnapshot Capture(
-        IReadOnlyList<Player> players,
+        IReadOnlyList<Player> colorlessPlayers,
+        IReadOnlyList<Player> characterPlayers,
         CardMultiplayerConstraint multiplayerConstraint)
     {
         CardPoolModel colorlessPool = ModelDb.CardPool<ColorlessCardPool>();
@@ -68,10 +69,8 @@ internal sealed class RootCombatCardGenerationPoolSnapshot
         }
 
         Dictionary<Player, CardModel[]> eligibleByPlayer =
-            new(players.Count, ReferenceEqualityComparer.Instance);
-        Dictionary<Player, NativeCharacterGenerationPoolEntry> characterPoolsByPlayer =
-            new(players.Count, ReferenceEqualityComparer.Instance);
-        foreach (Player player in players)
+            new(colorlessPlayers.Count, ReferenceEqualityComparer.Instance);
+        foreach (Player player in colorlessPlayers)
         {
             eligibleByPlayer.Add(
                 player,
@@ -79,6 +78,12 @@ internal sealed class RootCombatCardGenerationPoolSnapshot
                         player,
                         player.GetUnlockedCards(colorlessPool, multiplayerConstraint))
                     .ToArray());
+        }
+
+        Dictionary<Player, NativeCharacterGenerationPoolEntry> characterPoolsByPlayer =
+            new(characterPlayers.Count, ReferenceEqualityComparer.Instance);
+        foreach (Player player in characterPlayers)
+        {
             if (TryCaptureNativeCharacterGenerationPool(
                     player,
                     multiplayerConstraint,

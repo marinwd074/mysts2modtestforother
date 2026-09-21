@@ -1581,6 +1581,9 @@ internal static partial class SolverOverlay
         _potionStrategyPanel = new SolverPotionStrategyPanel();
         _growthStrategyPanel = new SolverGrowthStrategyPanel();
         _relicStrategyPanel = new SolverRelicStrategyPanel();
+        _potionStrategyPanel.CloseRequested += TogglePotionStrategy;
+        _growthStrategyPanel.CloseRequested += ToggleGrowthStrategy;
+        _relicStrategyPanel.CloseRequested += ToggleRelicStrategy;
         _relicStrategyPanel.PolicyChanged += OnRelicPolicyChanged;
         _growthStrategyPanel.PolicyChanged += OnGrowthPolicyChanged;
         _growthStrategyPanel.BrightestFlameLimitChanged += OnBrightestFlameLimitChanged;

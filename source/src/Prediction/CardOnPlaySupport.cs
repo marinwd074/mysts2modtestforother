@@ -110,7 +110,10 @@ internal static partial class CardOnPlaySupport
                 combat.Apply<FeralPower>(owner, card.DynamicVars["FeralPower"].IntValue, owner);
                 combat.InitializeFeralAfterApplied(simulator, owner);
                 break;
-            case ForgottenRitual or Luminesce:
+            case ForgottenRitual when combat.WasCardExhaustedThisTurn(owner):
+                simulator.GainEnergy(card.Owner, card.DynamicVars.Energy.IntValue);
+                break;
+            case Luminesce:
                 simulator.GainEnergy(card.Owner, card.DynamicVars.Energy.IntValue);
                 break;
             case Fuel:
@@ -124,8 +127,6 @@ internal static partial class CardOnPlaySupport
             case Haze:
                 foreach (Creature enemy in combat.HittableEnemies)
                     combat.Apply<PoisonPower>(enemy, card.DynamicVars.Poison.IntValue, owner);
-                foreach (Creature enemy in combat.HittableEnemies)
-                    combat.Apply<WeakPower>(enemy, card.DynamicVars.Weak.IntValue, owner);
                 break;
             case HiddenCache:
                 if (!simulator.GainStars(card.Owner, card.DynamicVars.Stars.IntValue))

@@ -130,6 +130,7 @@ internal sealed record ContinuationStamp(string StateText)
         AppendLivePile(text, pcs.DiscardPile, 'C');
         AppendLivePile(text, pcs.ExhaustPile, 'X');
         SimulatedCombatState.AppendLiveTurnCardHistory(text, state, player);
+        SimulatedCombatState.AppendLiveCalculatedCardHistory(text, player);
         AppendOrbs(text, pcs.OrbQueue.Capacity, pcs.OrbQueue.Orbs);
         AppendPotions(text, player, player.GetPotionAtSlotIndex);
         SimulatedCombatState.AppendLiveStatefulRelics(text, player);
@@ -197,6 +198,7 @@ internal sealed record ContinuationStamp(string StateText)
         AppendPredictedPile(text, pcs.DiscardPile, 'C');
         AppendPredictedPile(text, pcs.ExhaustPile, 'X');
         combat.AppendPredictedTurnCardHistory(text, player);
+        combat.AppendPredictedCalculatedCardHistory(text, simulator, player);
         AppendPredictedOrbs(text, simulator, pcs.OrbQueue.Capacity, pcs.OrbQueue.Orbs);
         AppendPotions(text, player, slot => combat.GetPotionAtSlot(player, slot));
         combat.AppendPredictedStatefulRelics(text, player);
@@ -535,6 +537,20 @@ internal sealed record ContinuationStamp(string StateText)
             if (power is OrbitPower orbit)
                 text.Append("EnergyRemainder=").Append(simulator == null ? (4 - orbit.DisplayAmount) % 4
                     : ((SimulatedCombatState)simulator.State.CombatState).GetOrbitEnergyRemainder(orbit)).Append(',');
+            if (power is OutbreakPower outbreak)
+                text.Append("PoisonApplications=").Append(simulator == null
+                    ? PowerPredictionStateSupport.NativeOutbreakPoisonApplications(outbreak)
+                    : PowerPredictionStateSupport.OutbreakPoisonApplications(simulator, outbreak)).Append(',');
+            if (power is InterceptPower intercept)
+            {
+                IReadOnlyList<Creature> coveredCreatures = simulator == null
+                    ? PowerPredictionStateSupport.NativeInterceptCoveredCreatures(intercept)
+                    : PowerPredictionStateSupport.InterceptCoveredCreatures(simulator, intercept);
+                text.Append("Covered=");
+                foreach (Creature covered in coveredCreatures.OrderBy(creature => creature.CombatId ?? uint.MaxValue))
+                    text.Append(covered.CombatId ?? uint.MaxValue).Append('.');
+                text.Append(',');
+            }
             text.Append("],");
         }
     }

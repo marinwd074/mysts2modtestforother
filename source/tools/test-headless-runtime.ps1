@@ -88,6 +88,12 @@ if ($MultiplayerSnapshot) {
         Assert-HostFixture ($hostSync.snapshotAction -eq 'FULL_REBUILD' -and $hostSync.baseGameAction -eq 'REBUILT') 'initial snapshot action was not FULL_REBUILD'
         Assert-HostFixture ($hostSync.copiedBaseFiles -eq 3) 'initial base snapshot file count was incorrect'
 
+        $persistentSettings = Join-Path $context.Root 'Roaming\SlayTheSpire2\steam\fixture\settings.save'
+        $persistentLocalConfig = Join-Path $context.Root 'Local\SlayTheSpire2\fixture.cfg'
+        New-Item -ItemType Directory -Path (Split-Path -Parent $persistentSettings), (Split-Path -Parent $persistentLocalConfig) -Force | Out-Null
+        Set-Content -LiteralPath $persistentSettings -Value '{"display_mode":"windowed"}' -Encoding UTF8
+        Set-Content -LiteralPath $persistentLocalConfig -Value 'windowed=true' -Encoding UTF8
+
         Set-Content -LiteralPath (Join-Path $buildRoot 'CombatSolver.dll') -Value 'solver-v2' -Encoding UTF8
         $hostPlanAfterSolverChange = Get-HeadlessMultiplayerSnapshotPlan @solverPlanArgs
         $hostSyncAfterSolverChange = Set-HeadlessGameSnapshot $context $hostPlanAfterSolverChange
@@ -101,6 +107,8 @@ if ($MultiplayerSnapshot) {
         $hostSyncAfterBaseTamper = Set-HeadlessGameSnapshot $context $hostPlanAfterBaseTamper
         Assert-HostFixture ($hostSyncAfterBaseTamper.syncMode -eq 'full-rebuild') 'tampered base snapshot was not rebuilt'
         Assert-HostFixture ((Get-Content -LiteralPath (Join-Path $context.GameRoot 'data.bin') -Raw).Trim() -eq 'base-data-v1') 'base snapshot tamper was not repaired'
+        Assert-HostFixture ((Get-Content -LiteralPath $persistentSettings -Raw).Trim() -eq '{"display_mode":"windowed"}') 'full snapshot rebuild removed Roaming settings'
+        Assert-HostFixture ((Get-Content -LiteralPath $persistentLocalConfig -Raw).Trim() -eq 'windowed=true') 'full snapshot rebuild removed Local settings'
 
         $clientPlan = Get-HeadlessMultiplayerSnapshotPlan -Context $context -Profile 'ClientCombatSolver' `
             -CombatSolverDll $solverPlanArgs[2] -CombatSolverManifest $solverPlanArgs[3] -MemoryCleaner $solverPlanArgs[4] `
@@ -171,6 +179,8 @@ if ($MultiplayerSnapshot) {
         $forcedSync = Set-HeadlessGameSnapshot $context $planAfterBaseChange -ForceFullRebuild
         Assert-HostFixture ($forcedSync.syncMode -eq 'full-rebuild' -and $forcedSync.snapshotAction -eq 'FULL_REBUILD') '-ForceRebuild did not force a full rebuild'
         Assert-HostFixture ($forcedSync.copiedFiles -eq 9) '-ForceRebuild copied an unexpected file count'
+        Assert-HostFixture ((Get-Content -LiteralPath $persistentSettings -Raw).Trim() -eq '{"display_mode":"windowed"}') '-ForceRebuild removed Roaming settings'
+        Assert-HostFixture ((Get-Content -LiteralPath $persistentLocalConfig -Raw).Trim() -eq 'windowed=true') '-ForceRebuild removed Local settings'
 
         Set-Content -LiteralPath (Join-Path $buildRoot 'CombatSolver.dll') -Value 'solver-v4' -Encoding UTF8
         $liveProcess = $null
@@ -294,7 +304,7 @@ if ($MultiplayerSnapshot) {
         Assert-HostFixture ($clientPrepareOverlay.snapshotAction -eq 'OVERLAY_UPDATED' -and
             $clientPrepareOverlay.baseGameAction -eq 'REUSED' -and $clientPrepareOverlay.ritsuAction -eq 'REUSED' -and
             $clientPrepareOverlay.combatSolverAction -eq 'UPDATED' -and $clientPrepareOverlay.copiedFiles -eq 3) 'prepare output did not report Solver-only overlay update'
-        Write-Output "MULTIPLAYER_SNAPSHOT_SYNC_SELFTEST_PASS base-persistence/solver-overlay/ritsu-overlay/host-isolation/base-rebuild/force-rebuild/live-rejection/ownership-rejection/prepare-output/$reparseEvidence"
+        Write-Output "MULTIPLAYER_SNAPSHOT_SYNC_SELFTEST_PASS base-persistence/userdata-persistence/solver-overlay/ritsu-overlay/host-isolation/base-rebuild/force-rebuild/live-rejection/ownership-rejection/prepare-output/$reparseEvidence"
         return
     }
     finally {

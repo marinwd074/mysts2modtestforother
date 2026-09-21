@@ -30,7 +30,7 @@ internal sealed partial class CombatPredictionSimulator
         {
             if (stage == CardExecutionStage.Start)
             {
-                if (IsOverOrEnding) break;
+                if (global::CombatSolver.Sts2CardPlayCompatibility.ShouldStopRepeatedPlayWhenCombatEnding(IsOverOrEnding)) break;
                 preview.CurrentPlayIndex = index;
                 ownerBlockBefore = ownerCreature.Block;
                 playHistoryStart = History.Entries.Count;

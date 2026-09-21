@@ -32,7 +32,6 @@ internal static class RelicPredictionStateSupport
             or PenNib
             or Permafrost
             or RainbowRing
-            or Regalite
             or Shuriken
             or ThrowingAxe
             or TuningFork
@@ -102,9 +101,6 @@ internal static class RelicPredictionStateSupport
                 break;
             case (RainbowRing target, RainbowRing source):
                 _ = simulator.StateStore.GetReadOnly((AbstractModel)target, () => new RainbowRingPredictionState(source));
-                break;
-            case (Regalite target, Regalite source):
-                _ = simulator.StateStore.GetReadOnly((AbstractModel)target, () => new RegalitePredictionState(source));
                 break;
             case (Shuriken target, Shuriken source):
                 CaptureCounter(target, source._attacksPlayedThisTurn);
@@ -177,11 +173,6 @@ internal static class RelicPredictionStateSupport
                     state.ActivationCountThisTurn = 0;
                     break;
                 }
-            case Regalite value:
-                simulator.StateStore
-                    .Get(value, static model => new RegalitePredictionState(model))
-                    .UsedThisTurn = false;
-                break;
             case Shuriken value:
                 Counter(simulator, value, value._attacksPlayedThisTurn).Value = 0;
                 break;
@@ -326,11 +317,6 @@ internal static class RelicPredictionStateSupport
                     fingerprint.Add(state.ActivationCountThisTurn);
                     break;
                 }
-            case Regalite value:
-                fingerprint.Add(simulator.StateStore
-                    .Peek(value, static relic => new RegalitePredictionState(relic))
-                    .UsedThisTurn);
-                break;
             case Shuriken value:
                 fingerprint.Add(CounterValueReadOnly(simulator, value, value._attacksPlayedThisTurn));
                 break;
@@ -461,7 +447,6 @@ internal static class RelicPredictionStateSupport
             PenNib value => value.AttacksPlayed.ToString(),
             Permafrost value => Bool(value._activatedThisCombat),
             RainbowRing value => RainbowRingText(new RainbowRingPredictionState(value)),
-            Regalite value => Bool(new RegalitePredictionState(value).UsedThisTurn),
             Shuriken value => value._attacksPlayedThisTurn.ToString(),
             ThrowingAxe value => Bool(value._usedThisCombat),
             TuningFork value => value.SkillsPlayed.ToString(),
@@ -504,8 +489,6 @@ internal static class RelicPredictionStateSupport
                 .Peek((AbstractModel)value, () => new FlagPredictionState(value._activatedThisCombat)).Value),
             RainbowRing value => RainbowRingText(simulator.StateStore
                 .Peek((AbstractModel)value, () => new RainbowRingPredictionState(value))),
-            Regalite value => Bool(simulator.StateStore
-                .Peek((AbstractModel)value, () => new RegalitePredictionState(value)).UsedThisTurn),
             Shuriken value => CounterValueReadOnly(simulator, value, value._attacksPlayedThisTurn).ToString(),
             ThrowingAxe value => Bool(simulator.StateStore
                 .Peek((AbstractModel)value, () => new ThrowingAxePredictionState(value)).UsedThisCombat),

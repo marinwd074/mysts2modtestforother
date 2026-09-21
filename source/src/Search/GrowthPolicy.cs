@@ -10,6 +10,11 @@ internal enum GrowthSource
     HandOfGreed, TheHunt, Feed, Royalties, Alchemize, GeneticAlgorithm, TheScythe, Goopy, ForbiddenGrimoire,
 }
 
+internal static class GrowthPolicyLimits
+{
+    internal const int MaximumBudgetHp = 1000;
+}
+
 /// <summary>
 /// 成长向量里第三方来源那一半，按 <see cref="GrowthSourceMirrors"/> 登记的 id 存。
 /// </summary>
@@ -27,9 +32,6 @@ internal enum GrowthSource
 /// </remarks>
 internal readonly struct GrowthExtras : IEquatable<GrowthExtras>
 {
-    /// <summary>额度上限，与原版九个字段同一口径。</summary>
-    private const int MaximumValue = 1000;
-
     private readonly KeyValuePair<string, int>[]? _entries;
 
     private GrowthExtras(KeyValuePair<string, int>[]? entries) => _entries = entries;
@@ -131,8 +133,8 @@ internal readonly struct GrowthExtras : IEquatable<GrowthExtras>
         {
             if (string.IsNullOrEmpty(entry.Key))
                 throw new InvalidDataException("Third-party growth source ID must not be empty.");
-            if (entry.Value is < 0 or > MaximumValue)
-                throw new InvalidDataException($"Growth budget {entry.Key} must be in 0..{MaximumValue} HP.");
+            if (entry.Value is < 0 or > GrowthPolicyLimits.MaximumBudgetHp)
+                throw new InvalidDataException($"Growth budget {entry.Key} must be in 0..{GrowthPolicyLimits.MaximumBudgetHp} HP.");
         }
     }
 
@@ -341,8 +343,9 @@ internal readonly record struct GrowthValues(
     {
         foreach (GrowthSource source in Enum.GetValues<GrowthSource>())
         {
-            if (Get(source) is < 0 or > 1000)
-                throw new InvalidDataException($"Growth budget {source} must be in 0..1000 HP.");
+            if (Get(source) is < 0 or > GrowthPolicyLimits.MaximumBudgetHp)
+                throw new InvalidDataException(
+                    $"Growth budget {source} must be in 0..{GrowthPolicyLimits.MaximumBudgetHp} HP.");
         }
         _extras.ValidateBudgets();
     }

@@ -86,7 +86,6 @@ internal static class ModifyCardPlayResultLocationMirrors
         if (card.Owner.Creature != power.Owner ||
             card.Type != CardType.Attack ||
             context.Resources.EnergyValue > 0 ||
-            card.IsDupe ||
             state.ZeroCostAttacksPlayed >= power.Amount)
         {
             return context.Location;

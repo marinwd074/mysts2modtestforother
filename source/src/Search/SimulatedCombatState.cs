@@ -262,6 +262,7 @@ internal sealed partial class SimulatedCombatState
             ? _players
             : [localPlayerOnly];
         _rootCardGenerationPools = RootCombatCardGenerationPoolSnapshot.Capture(
+            _players,
             _rootCapturedPlayers,
             _cardMultiplayerConstraint);
         _rootTransformationPools = RootCombatTransformationPoolSnapshot.Capture(
@@ -708,6 +709,30 @@ internal sealed partial class SimulatedCombatState
             if (applyingPlayer == null)
                 throw new InvalidOperationException("击倒 Power 的施加者不是战斗中的玩家。");
             ((StringVar)knockdown.DynamicVars["Applier"]).StringValue = _playerNames[applyingPlayer];
+        }
+        if (simulated is FlankingPower flanking && applier != null)
+        {
+            Player? applyingPlayer = applier.Player
+                ?? Players.FirstOrDefault(player => player.Creature.CombatId == applier.CombatId);
+            if (applyingPlayer == null)
+                throw new InvalidOperationException("侧翼夹击 Power 的施加者不是战斗中的玩家。");
+            ((StringVar)flanking.DynamicVars["Applier"]).StringValue = _playerNames[applyingPlayer];
+        }
+        if (simulated is GuardedPower guarded && applier != null)
+        {
+            Player? applyingPlayer = applier.Player
+                ?? Players.FirstOrDefault(player => player.Creature.CombatId == applier.CombatId);
+            if (applyingPlayer == null)
+                throw new InvalidOperationException("守护 Power 的施加者不是战斗中的玩家。");
+            ((StringVar)guarded.DynamicVars["Applier"]).StringValue = _playerNames[applyingPlayer];
+        }
+        if (simulated is CoveredPower covered && applier != null)
+        {
+            Player? applyingPlayer = applier.Player
+                ?? Players.FirstOrDefault(player => player.Creature.CombatId == applier.CombatId);
+            if (applyingPlayer == null)
+                throw new InvalidOperationException("掩护 Power 的施加者不是战斗中的玩家。");
+            ((StringVar)covered.DynamicVars["Applier"]).StringValue = _playerNames[applyingPlayer];
         }
         afterAmountChanged?.Invoke(amount, simulated);
         if (previousAmount == 0 && simulated._amount != 0 && simulated is PhantomBladesPower phantom)
@@ -2296,6 +2321,7 @@ internal sealed partial class SimulatedCombatState
         AddPlayerIntMap(ref fingerprint, 'z', _starsGainedThisTurn);
         AddPlayerIntMap(ref fingerprint, 'n', _nonHandDrawsThisTurn);
         AddPlayerIntMap(ref fingerprint, 's', _statusCardsDrawnThisTurn);
+        AppendCalculatedCardHistoryFingerprint(ref fingerprint, simulator);
         AddCreatureIntMap(ref fingerprint, 'Q', _cardPlaySeriesStartedThisTurn);
         AddCreatureIntMap(ref fingerprint, 'q', _zeroCostAttackStartsThisTurn);
         AddCreatureIntMap(ref fingerprint, 'a', _attackPlayStartsThisTurn);
@@ -2353,6 +2379,16 @@ internal sealed partial class SimulatedCombatState
             item.Add(ritual._wasJustAppliedByEnemy);
         if (power is SurroundedPower surrounded)
             item.Add((int)PowerPredictionStateSupport.SurroundedFacing(simulator, surrounded));
+        if (power is OutbreakPower outbreak)
+            item.Add(PowerPredictionStateSupport.OutbreakPoisonApplications(simulator, outbreak));
+        if (power is InterceptPower intercept)
+        {
+            IReadOnlyList<Creature> coveredCreatures =
+                PowerPredictionStateSupport.InterceptCoveredCreatures(simulator, intercept);
+            item.Add(coveredCreatures.Count);
+            foreach (Creature covered in coveredCreatures.OrderBy(creature => creature.CombatId ?? uint.MaxValue))
+                item.Add(covered.CombatId ?? uint.MaxValue);
+        }
         ulong dynamicFirst = 0;
         ulong dynamicSecond = 0;
         int dynamicCount = 0;

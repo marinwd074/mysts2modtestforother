@@ -21,10 +21,13 @@ internal sealed partial class CombatPredictionSimulator
 
     public AttackCommand BeginAttackContext(AttackCommand command)
     {
-        _ = command.Attacker
-            ?? throw new InvalidOperationException("Attack context must have an attacker.");
-        HookMirrors.BeforeAttack(this, command);
-        return command;
+        using (BeginExecutionDispatch())
+        {
+            _ = command.Attacker
+                ?? throw new InvalidOperationException("Attack context must have an attacker.");
+            HookMirrors.BeforeAttack(this, command);
+            return command;
+        }
     }
 
     public void AddAttackContextHit(
@@ -55,20 +58,23 @@ internal sealed partial class CombatPredictionSimulator
 
     public void EndAttackContext(AttackCommand attackContext, bool completed = true)
     {
-        if (!completed)
+        using (BeginExecutionDispatch())
         {
-            HookMirrors.AbortAttack(this, attackContext);
-            return;
+            if (!completed)
+            {
+                HookMirrors.AbortAttack(this, attackContext);
+                return;
+            }
+    
+            Creature attacker = attackContext.Attacker
+                ?? throw new InvalidOperationException("Attack context must have an attacker.");
+            History.CreatureAttacked(
+                attacker,
+                FlattenAttackResults(attackContext));
+            if (State.CombatState is ICombatPredictionCardEventSink eventSink)
+                eventSink.RecordCreatureAttacked(attacker);
+            HookMirrors.AfterAttack(this, attackContext);
         }
-
-        Creature attacker = attackContext.Attacker
-            ?? throw new InvalidOperationException("Attack context must have an attacker.");
-        History.CreatureAttacked(
-            attacker,
-            FlattenAttackResults(attackContext));
-        if (State.CombatState is ICombatPredictionCardEventSink eventSink)
-            eventSink.RecordCreatureAttacked(attacker);
-        HookMirrors.AfterAttack(this, attackContext);
     }
 
     /// <summary>
@@ -82,85 +88,88 @@ internal sealed partial class CombatPredictionSimulator
     /// <exception cref="InvalidOperationException">Thrown when a required attacker, card source, or target mode is absent.</exception>
     public void ExecuteAttack(AttackCommand attackCommand)
     {
-        if (attackCommand.Attacker is not { } attacker)
+        using (BeginExecutionDispatch())
         {
-            throw new InvalidOperationException("AttackCommand must have an attacker.");
-        }
-
-        // Prediction always mirrors a live-combat command, so the detached-combat exception in
-        // AttackCommand.Execute does not apply here.
-        if (IsOverOrEnding)
-        {
-            return;
-        }
-
-        if (attackCommand.ModelSource is not CardModel card)
-        {
-            throw new InvalidOperationException("AttackCommand simulation requires a card source.");
-        }
-
-        if (!attackCommand.IsSingleTargeted && !attackCommand.IsMultiTargeted)
-        {
-            throw new InvalidOperationException("AttackCommand must be either single-targeted or multi-targeted.");
-        }
-
-        var attackerState = State.GetCreature(attacker);
-        if (attackerState.IsDead)
-        {
-            return;
-        }
-
-        BeginAttackContext(attackCommand);
-        bool completed = false;
-        try
-        {
-            if (HasPendingChoice)
-                return;
-
-            var hitCount = HookMirrors.ModifyAttackHitCount(this, attackCommand, attackCommand._hitCount);
-            if (HasPendingChoice)
-                return;
-
-            var cardSource = State.FindCard(card) ?? new PredictedCard(card);
-
-            for (var i = 0; i < hitCount; i++)
+            if (attackCommand.Attacker is not { } attacker)
             {
-                if (attackerState.IsDead)
-                {
-                    break;
-                }
-
-                var validTargets = GetPossibleAttackTargets(attackCommand)
-                    .Where(creature => State.GetCreature(creature).IsAlive)
-                    .ToList();
-                if (validTargets.Count == 0)
-                {
-                    break;
-                }
-
-                var singleTarget = SelectSingleAttackTarget(attackCommand, validTargets);
-                if (attackCommand.IsRandomlyTargeted && singleTarget == null)
-                {
-                    break;
-                }
-
-                var results = Damage(
-                    singleTarget != null ? [singleTarget] : validTargets,
-                    GetAttackDamageAmount(attackCommand, cardSource, singleTarget),
-                    attackCommand.DamageProps,
-                    attacker,
-                    cardSource,
-                    cardPlay: null);
+                throw new InvalidOperationException("AttackCommand must have an attacker.");
+            }
+    
+            // Prediction always mirrors a live-combat command, so the detached-combat exception in
+            // AttackCommand.Execute does not apply here.
+            if (IsOverOrEnding)
+            {
+                return;
+            }
+    
+            if (attackCommand.ModelSource is not CardModel card)
+            {
+                throw new InvalidOperationException("AttackCommand simulation requires a card source.");
+            }
+    
+            if (!attackCommand.IsSingleTargeted && !attackCommand.IsMultiTargeted)
+            {
+                throw new InvalidOperationException("AttackCommand must be either single-targeted or multi-targeted.");
+            }
+    
+            var attackerState = State.GetCreature(attacker);
+            if (attackerState.IsDead)
+            {
+                return;
+            }
+    
+            BeginAttackContext(attackCommand);
+            bool completed = false;
+            try
+            {
                 if (HasPendingChoice)
                     return;
-                attackCommand.AddResultsInternal(results);
+    
+                var hitCount = HookMirrors.ModifyAttackHitCount(this, attackCommand, attackCommand._hitCount);
+                if (HasPendingChoice)
+                    return;
+    
+                var cardSource = State.FindCard(card) ?? new PredictedCard(card);
+    
+                for (var i = 0; i < hitCount; i++)
+                {
+                    if (attackerState.IsDead)
+                    {
+                        break;
+                    }
+    
+                    var validTargets = GetPossibleAttackTargets(attackCommand)
+                        .Where(creature => State.GetCreature(creature).IsAlive)
+                        .ToList();
+                    if (validTargets.Count == 0)
+                    {
+                        break;
+                    }
+    
+                    var singleTarget = SelectSingleAttackTarget(attackCommand, validTargets);
+                    if (attackCommand.IsRandomlyTargeted && singleTarget == null)
+                    {
+                        break;
+                    }
+    
+                    var results = Damage(
+                        singleTarget != null ? [singleTarget] : validTargets,
+                        GetAttackDamageAmount(attackCommand, cardSource, singleTarget),
+                        attackCommand.DamageProps,
+                        attacker,
+                        cardSource,
+                        cardPlay: null);
+                    if (HasPendingChoice)
+                        return;
+                    attackCommand.AddResultsInternal(results);
+                }
+    
+                completed = true;
             }
-
-            completed = true;
-        }
-        finally
-        {
-            EndAttackContext(attackCommand, completed);
+            finally
+            {
+                EndAttackContext(attackCommand, completed);
+            }
         }
     }
 
