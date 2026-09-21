@@ -114,6 +114,10 @@ Sunder、Relax、Whistle、Mangle、Pact's End、Echoing Slash、Terraforming、
 未发现新的 route-affecting mismatch，总数仍为 44。Soul Storm 的 Soul 计数、Primal Force→Giant Rock
 变形、Pact's End 条件攻击、Echoing Slash 伤害循环等特殊路径均确认继续读取 0.107.1 模型数据。
 
-已知后续补丁单人牌候选现在 **78/78 已审计完成**。下一阶段不再机械追 patch notes；改为审计 solver
-自身手写的高风险路径：硬编码常数、`#if STS2_01071` 分叉、直接 live-state/history 读取、特殊
-OnPlay/Hook 执行顺序与 continuation。多人牌仍暂不作为当前 blocker。
+已知后续补丁单人牌候选现在 **78/78 已审计完成**。第一批 solver 自身硬编码常数审计也已完成：
+Conqueror、Convergence、Shadow Step、Aggression、Dark Embrace、Calamity、Fan of Knives、
+Hello World、Infinite Blades、Unmovable 的固定 `Power(1)` 均确认是 0.107.1 的单次堆叠/模式单位，
+不是泄漏的后续版本数值；未发现新的 route-affecting mismatch，总数仍为 44，并已补静态回归护栏。
+
+下一批继续审计剩余固定常数，并优先核对 `#if STS2_01071` 分叉和特殊 OnPlay/Hook 执行顺序/
+continuation；直接 live-state/history 读取仍保持高风险检查项。多人牌暂不作为当前 blocker。

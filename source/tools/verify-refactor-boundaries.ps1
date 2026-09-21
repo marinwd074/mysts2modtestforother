@@ -168,6 +168,35 @@ foreach ($modelDrivenRule in @(
 
 $cardPowerSupportPath = Join-Path $repositoryRoot 'src/Prediction/CardPowerOnPlaySupport.cs'
 $cardPowerSupportText = [IO.File]::ReadAllText($cardPowerSupportPath)
+
+foreach ($fixedPowerUnitRule in @(
+    'combat.Apply<ConquerorPower>(target, 1, owner);',
+    'combat.Apply<RetainHandPower>(owner, 1, owner);',
+    'combat.Apply<ShadowStepPower>(owner, 1, owner);')) {
+    if (-not $cardOnPlaySupportText.Contains($fixedPowerUnitRule)) {
+        $violations.Add("${cardOnPlaySupportPath}: audited 0.107.1 fixed Power unit drifted '$fixedPowerUnitRule'")
+    }
+}
+foreach ($fixedPowerUnitRule in @(
+    'combat.Apply<AggressionPower>(owner, 1, owner);',
+    'combat.Apply<DarkEmbracePower>(owner, 1, owner);')) {
+    if (-not $corePowerSupportText.Contains($fixedPowerUnitRule)) {
+        $violations.Add("${corePowerSupportPath}: audited 0.107.1 fixed Power unit drifted '$fixedPowerUnitRule'")
+    }
+}
+foreach ($fixedPowerUnitRule in @(
+    'combat.Apply<CalamityPower>(owner, 1, owner);',
+    'combat.Apply<FanOfKnivesPower>(owner, 1, owner);',
+    'combat.Apply<HelloWorldPower>(owner, 1, owner);',
+    'combat.Apply<InfiniteBladesPower>(owner, 1, owner);')) {
+    if (-not $cardPowerSupportText.Contains($fixedPowerUnitRule)) {
+        $violations.Add("${cardPowerSupportPath}: audited 0.107.1 fixed Power unit drifted '$fixedPowerUnitRule'")
+    }
+}
+if (-not $cardPowerLateText.Contains('combat.Apply<UnmovablePower>(owner, 1, owner);')) {
+    $violations.Add("${cardPowerLatePath}: audited 0.107.1 Unmovable Power unit must remain one stack per card")
+}
+
 if (-not $cardPowerSupportText.Contains('combat.Apply<HauntPower>(owner, card.DynamicVars.HpLoss.IntValue, owner)')) {
     $violations.Add("${cardPowerSupportPath}: Haunt 0.107.1 HP-loss amount must come from the pinned card model")
 }

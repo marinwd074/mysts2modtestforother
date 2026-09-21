@@ -349,6 +349,17 @@ combat implementations do not depend on rarity. Mangle and Echoing Slash read
 condition, Terraforming reads `VigorPower`, and Splash's generated-card choice
 logic is unchanged by the rarity swap.
 
+The first solver-authored hard-coded-literal pass reviewed ten fixed-unit Power
+applications: Conqueror, Convergence, Shadow Step, Aggression, Dark Embrace,
+Calamity, Fan of Knives, Hello World, Infinite Blades, and Unmovable. No new
+route mismatch was found. Their literal `1` values are Power stack/mode units,
+not later-version card balance values: each play installs one instance/stack of
+the corresponding persistent or temporary rule, while quantified card effects
+such as Conqueror's Forge amount and Convergence's next-turn resources remain
+model-driven. Fan of Knives' `FanOfKnivesPower(1)` likewise represents the
+persistent "Shivs hit all enemies" mode; its 4(5) Shiv creation is a separate
+card effect and is not encoded by that literal.
+
 This completes the known post-0.107.1 single-player patch-note candidate list:
 78/78 candidate entries have now been reviewed. Further card audit should no
 longer mechanically follow patch notes; it should target solver-authored
