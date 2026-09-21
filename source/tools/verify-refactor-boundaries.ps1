@@ -1950,6 +1950,43 @@ else {
     }
 }
 
+
+if (-not $cardEffectSpecText.Contains('typeof(Rampage), typeof(Tank), typeof(Whistle)')) {
+    $violations.Add("${cardEffectSpecPath}: Tank must remain in the explicit 0.107.1 card-effect catalog")
+}
+$tankStart = $cardEffectSpecText.IndexOf('case Tank:')
+$tankEnd = $cardEffectSpecText.IndexOf('case Rampage rampage:', $tankStart)
+if ($tankStart -lt 0 -or $tankEnd -le $tankStart) {
+    $violations.Add("${cardEffectSpecPath}: Tank card-effect boundary is missing")
+}
+else {
+    $tankBlock = $cardEffectSpecText.Substring($tankStart, $tankEnd - $tankStart)
+    foreach ($requiredTankRule in @(
+        'combat.Apply<TankPower>(ownerCreature, 1, ownerCreature)',
+        'combat.GetTeammatesOf(ownerCreature)',
+        'creature.IsAlive',
+        'creature.IsPlayer',
+        '!ReferenceEquals(creature, ownerCreature)',
+        'combat.Apply<GuardedPower>(teammate, 1, ownerCreature)')) {
+        if (-not $tankBlock.Contains($requiredTankRule)) {
+            $violations.Add("${cardEffectSpecPath}: missing 0.107.1 Tank rule '$requiredTankRule'")
+        }
+    }
+}
+if (-not $simulatedCombatText.Contains('simulated is GuardedPower guarded && applier != null')
+    -or -not $simulatedCombatText.Contains('guarded.DynamicVars["Applier"]')) {
+    $violations.Add("${simulatedCombatPath}: Guarded application must preserve the native applier display state")
+}
+foreach ($requiredGuardedCleanup in @(
+    '.OfType<GuardedPower>()',
+    'ReferenceEquals(power.Applier, dead)',
+    'StateStore.GetPowerAmount(guarded).Consume()',
+    'combat.SetPowerAmount(guarded, 0)')) {
+    if (-not $corePowerSupportText.Contains($requiredGuardedCleanup)) {
+        $violations.Add("${corePowerSupportPath}: missing Guarded cleanup after Tank owner death '$requiredGuardedCleanup'")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."

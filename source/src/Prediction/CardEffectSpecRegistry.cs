@@ -89,7 +89,7 @@ internal static class CardEffectSpecRegistry
         typeof(AllForOne), typeof(BoneShards), typeof(Bulwark), typeof(Claw), typeof(Compact),
         typeof(DeathsDoor), typeof(EvilEye), typeof(GeneticAlgorithm), typeof(Glitterstream), typeof(GoForTheEyes),
         typeof(Misery), typeof(Modded), typeof(MoltenFist), typeof(MomentumStrike), typeof(PullAggro),
-        typeof(Rampage), typeof(Whistle), typeof(WroughtInWar),
+        typeof(Rampage), typeof(Tank), typeof(Whistle), typeof(WroughtInWar),
     ];
 
     private static readonly HashSet<Type> GenerationEffects =
@@ -355,6 +355,19 @@ internal static class CardEffectSpecRegistry
                 combat.SummonOsty(simulator, card.Owner, card.DynamicVars.Summon.IntValue);
                 applied = true;
                 break;
+            case Tank:
+            {
+                combat.Apply<TankPower>(ownerCreature, 1, ownerCreature);
+                foreach (Creature teammate in combat.GetTeammatesOf(ownerCreature)
+                             .Where(creature => creature.IsAlive
+                                 && creature.IsPlayer
+                                 && !ReferenceEquals(creature, ownerCreature)))
+                {
+                    combat.Apply<GuardedPower>(teammate, 1, ownerCreature);
+                }
+                applied = true;
+                break;
+            }
             case Rampage rampage:
             {
                 decimal increase = rampage.DynamicVars["Increase"].BaseValue;
