@@ -2285,11 +2285,12 @@ $persistentPowerSupportText = [IO.File]::ReadAllText($persistentPowerSupportPath
 foreach ($requiredHammerTimeForgeRule in @(
     'AbstractModel? source = null',
     'if (source is HammerTimePower)',
-    'HammerTimePower? hammerTime = combat.GetPower<HammerTimePower>(player.Creature)',
+    'hammerTime = combat.GetPower<HammerTimePower>(player.Creature)',
     'combat.GetAmount<HammerTimePower>(player.Creature) <= 0',
-    'combat.GetTeammatesOf(player.Creature)',
-    'simulator.State.GetCreature(teammate).IsAlive',
-    'Forge(simulator, teammatePlayer, amount, hammerTime)')) {
+    'simulator.State.Players.ToArray()',
+    '!simulator.State.GetCreature(teammate.Creature).IsAlive',
+    'Forge(simulator, teammate, amount, hammerTime)',
+    'ForgeExecutionStage.HammerTimePlayers')) {
     if (-not $persistentPowerSupportText.Contains($requiredHammerTimeForgeRule)) {
         $violations.Add("${persistentPowerSupportPath}: missing 0.107.1 Hammer Time Forge rule '$requiredHammerTimeForgeRule'")
     }
