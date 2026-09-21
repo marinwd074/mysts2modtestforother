@@ -2,6 +2,7 @@ using System.Reflection;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Powers;
+using CombatSolver.Engine.Common;
 using CombatSolver.Engine.InCombat.Mirrors.Hooks.Attack;
 using CombatSolver.Engine.InCombat.Mirrors.Hooks.Card;
 using CombatSolver.Engine.InCombat.Mirrors.Hooks.Damage;
