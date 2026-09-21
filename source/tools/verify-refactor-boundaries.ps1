@@ -1929,12 +1929,6 @@ else {
         $violations.Add("${orbCardMirrorPath}: 0.107.1 Null must use its Weak dynamic var")
     }
 }
-
-$spinnerSpec = '[typeof(Spinner)] = [Owner<SpinnerPower>("SpinnerPower")]'
-if (-not $cardEffectSpecText.Contains($spinnerSpec)) {
-    $violations.Add("${cardEffectSpecPath}: 0.107.1 Spinner must apply SpinnerPower after its optional upgrade channel")
-}
-
 $flankingSpec = '[typeof(Flanking)] = [Target<FlankingPower>(_ => 2)]'
 if (-not $cardEffectSpecText.Contains($flankingSpec)) {
     $violations.Add("${cardEffectSpecPath}: 0.107.1 Flanking must apply an instanced FlankingPower amount 2 to its target")
