@@ -13,6 +13,15 @@
 - Multiplayer Instant、Potion、Choice、Replay、Full Auto 和队友目标继续关闭；Reactive Carry 仅在显式 Safe Execute 且最新安全路线边界成立时通过原生 EndTurn。新实现已为显式 Advisor/Safe Execute 打开“只预测本地玩家”的跨回合路线，默认 Probe 仍保持只读当前回合边界；Safe Execute 仍只部署当前真实本地回合。
 - 本轮没有为 MP2B 声明新的 GitHub Actions 结果；实机结论来自隔离 Multiplayer Lab 的 Host/Client journal 与对应验证器，不等同于 GitHub Actions 结果。
 
+## 2026-09-21 Carry 当前回合窗口交接（新对话先读）
+
+- 当前仓库为 `main`，`HEAD` 与 `origin/main` 均为 `e07794f39ab0a2b5729ef1401fc9df46f6be611b`；本轮 Carry 验证基线 `f54506c34f5fbd470a2cb3c8cf4d07c21e869130` 已在当前历史中。
+- 第一阶段已收口：Release `0 errors / 2` 条既有 `CS9113` warnings、Carry contracts `11/11 PASS`、validator self-test `PASS`。
+- 当前回合窗口回归 `PASS`：`carryWindow=current_turn_pre_end`、`carryObservationActionCount=3`、第一处 EndTurn 为 action index `3`、`futureOnlyKillCredited=false`。这证明 EndTurn 前只观察当前回合动作，后续回合击杀不会被错误计入当前窗口。
+- R1 继续保持真实运行 `PASS`。本轮 R2 仍为 `UNVERIFIED`，不是失败或阶段阻塞：主 journal 为 1 名远端、3 个敌人、1 个 `AllPlayers` threat、2 个 `Unknown` threat，`remote_private=false`；当前 T1 只有两张 `Strike=6` 和 `Defend`，T2 才抽到 `Bash=8`，所以没有形成当前回合可击杀的等价 tie。备用 fixture 也没有出现精确的 8 点当前回合攻击，未进行盲点操作。
+- 关键证据：最终摘要 [`carry-ranking-current-window-final.json`](../../.local/multiplayer-lab/results/carry-ranking-current-window-final.json)；主 validator [`carry-ranking-current-window-r2.json`](../../.local/multiplayer-lab/results/carry-ranking-current-window-r2.json)；备用 validator [`carry-ranking-current-window-r2-alternate.json`](../../.local/multiplayer-lab/results/carry-ranking-current-window-r2-alternate.json)。主/备用 journal 均保留在各自 `runtime-mp-client-carry-window-r2/diagnostics/CombatSolver-BugReports/logs/CombatSolver/` 目录。
+- 两个 Host/Client 已 Graceful stop；本轮未观察到 remote-private 泄漏、`SEARCH_SETUP_FAILURE`、自定义网络 API 或自动部署。Carry 验证本身未改源码；本次交接仅更新本文件。新对话不要重新启动游戏或人工刷 R2，先读本节与 `docs/multiplayer/RUNBOOK.md`，再选择下一个独立能力；只有自然出现精确 fixture 时才补 R2 decisive runtime evidence。
+
 ## 项目规则已放宽
 
 当前按“项目主持人 / Tech Lead”方式工作：
