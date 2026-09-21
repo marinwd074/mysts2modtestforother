@@ -31,7 +31,7 @@ internal static partial class CardOnPlaySupport
                 ApplyDirge(simulator, combat, card);
                 break;
             case Eidolon:
-                ApplyEidolon(simulator, combat, card, processedEnemyDeaths);
+                ApplyEidolon(simulator, combat, card);
                 break;
             case KnifeTrap when target != null:
                 ApplyKnifeTrap(simulator, combat, card, target, processedEnemyDeaths);
@@ -107,27 +107,22 @@ internal static partial class CardOnPlaySupport
     private static void ApplyEidolon(
         CombatPredictionSimulator simulator,
         SimulatedCombatState combat,
-        CardModel card,
-        ISet<uint> processedEnemyDeaths)
+        CardModel card)
     {
         PredictedCard[] cards = simulator.State.GetPlayerCombatState(card.Owner)
-            .ExhaustPile.Cards
-            .Where(candidate => candidate.HasKeyword(simulator.State, CardKeyword.Ethereal)
-                && !candidate.HasKeyword(simulator.State, CardKeyword.Unplayable))
+            .Hand.Cards
             .ToArray();
+        int exhaustedCount = 0;
         foreach (PredictedCard candidate in cards)
         {
-            if (!CardExecutionSupport.AutoPlay(
-                    simulator,
-                    combat,
-                    candidate,
-                    null,
-                    processedEnemyDeaths,
-                    nestedChoiceSourceId: card.Id.Entry))
-            {
-                break;
-            }
+            simulator.Exhaust(candidate);
+            if (simulator.HasPendingChoice)
+                return;
+            exhaustedCount++;
         }
+
+        if (exhaustedCount >= 9)
+            combat.Apply<IntangiblePower>(card.Owner.Creature, 1, card.Owner.Creature);
     }
 
     private static void ApplyKnifeTrap(

@@ -1712,6 +1712,32 @@ else {
 }
 
 
+$batch043Path = Join-Path $repositoryRoot 'src/Prediction/CardOnPlaySupport.Batch043.cs'
+$batch043Text = [IO.File]::ReadAllText($batch043Path)
+$eidolonStart = $batch043Text.IndexOf('private static void ApplyEidolon(')
+$eidolonEnd = $batch043Text.IndexOf('private static void ApplyKnifeTrap(', $eidolonStart)
+if ($eidolonStart -lt 0 -or $eidolonEnd -le $eidolonStart) {
+    $violations.Add("${batch043Path}: Eidolon helper boundary is missing")
+}
+else {
+    $eidolonBlock = $batch043Text.Substring($eidolonStart, $eidolonEnd - $eidolonStart)
+    foreach ($requiredEidolonRule in @(
+        '.Hand.Cards',
+        'simulator.Exhaust(candidate)',
+        'exhaustedCount++',
+        'exhaustedCount >= 9',
+        'combat.Apply<IntangiblePower>')) {
+        if (-not $eidolonBlock.Contains($requiredEidolonRule)) {
+            $violations.Add("${batch043Path}: missing 0.107.1 Eidolon rule '$requiredEidolonRule'")
+        }
+    }
+    if ($eidolonBlock.Contains('.ExhaustPile.Cards') -or
+        $eidolonBlock.Contains('CardExecutionSupport.AutoPlay') -or
+        $eidolonBlock.Contains('CardKeyword.Ethereal')) {
+        $violations.Add("${batch043Path}: v0.109 Eidolon exhaust-pile autoplay behavior returned")
+    }
+}
+
 $outbreakCardPath = Join-Path $repositoryRoot 'src/Prediction/CardOnPlaySupport.Batch042.cs'
 $outbreakCardText = [IO.File]::ReadAllText($outbreakCardPath)
 $outbreakStart = $outbreakCardText.IndexOf('case Outbreak:')

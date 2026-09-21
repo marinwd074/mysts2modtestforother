@@ -553,6 +553,9 @@ These later patch notes are especially useful as negative evidence for the
 0.107.1 target:
 
 - v0.108 reworked Tank, changed end-of-turn Orb/Doom ordering, and changed Scrape so globally temporary 0-cost effects also prevent its discard.
+- v0.109 reworked Eidolon from "Exhaust your Hand; 9 Exhausts grant 1 Intangible"
+  into auto-playing all Ethereal cards in the Exhaust Pile; the same patch also
+  reworked Expertise, Well-Laid Plans, and Pillar of Creation.
 - v0.110 reworked Haze to add Weak, reworked Outbreak into an immediate-Poison
   Skill, and increased Sacrifice from double to triple Osty Max HP.
 - v0.111 later changed Guiding Star draw from this turn to next turn,
