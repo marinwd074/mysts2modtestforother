@@ -2563,6 +2563,131 @@ else {
 }
 
 
+# Single-player 0.107.1 version traps that later beta patches reworked.
+# These paths intentionally consume the pinned 0.107.1 CardModel/DynamicVar data
+# instead of copying later card text or later upstream solver behavior.
+$calculatedVarSpecPath = Join-Path $repositoryRoot 'src/Prediction/CalculatedVarSpecRegistry.cs'
+$calculatedVarSpecText = [IO.File]::ReadAllText($calculatedVarSpecPath)
+foreach ($requiredMirageRule in @(
+    'typeof(PreciseCut), typeof(Stack), typeof(Squeeze), typeof(Mirage)',
+    'Mirage => combat.Enemies',
+    '.Where(enemy => simulator.State.GetCreature(enemy).IsAlive)',
+    '.Sum(enemy => combat.GetAmount<PoisonPower>(enemy))')) {
+    if (-not $calculatedVarSpecText.Contains($requiredMirageRule)) {
+        $violations.Add("${calculatedVarSpecPath}: missing 0.107.1 Mirage poison-sum Block rule '$requiredMirageRule'")
+    }
+}
+
+$cardOnPlaySupportPath = Join-Path $repositoryRoot 'src/Prediction/CardOnPlaySupport.cs'
+$cardOnPlaySupportText = [IO.File]::ReadAllText($cardOnPlaySupportPath)
+$fuelStart = $cardOnPlaySupportText.IndexOf('case Fuel:')
+$fuelEnd = $cardOnPlaySupportText.IndexOf('case Haze:', $fuelStart)
+if ($fuelStart -lt 0 -or $fuelEnd -le $fuelStart) {
+    $violations.Add("${cardOnPlaySupportPath}: Fuel OnPlay boundary is missing")
+}
+else {
+    $fuelBlock = $cardOnPlaySupportText.Substring($fuelStart, $fuelEnd - $fuelStart)
+    $fuelEnergy = $fuelBlock.IndexOf('simulator.GainEnergy(card.Owner, card.DynamicVars.Energy.IntValue);')
+    $fuelDraw = $fuelBlock.IndexOf('simulator.Draw(card.Owner, card.DynamicVars.Cards.BaseValue);')
+    if ($fuelEnergy -lt 0 -or $fuelDraw -lt 0 -or $fuelDraw -le $fuelEnergy) {
+        $violations.Add("${cardOnPlaySupportPath}: 0.107.1 Fuel must gain Energy then draw its Cards amount")
+    }
+}
+
+$compactStart = $cardEffectSpecText.IndexOf('case Compact:')
+$compactEnd = $cardEffectSpecText.IndexOf('case Claw claw:', $compactStart)
+if ($compactStart -lt 0 -or $compactEnd -le $compactStart) {
+    $violations.Add("${cardEffectSpecPath}: Compact card-effect boundary is missing")
+}
+else {
+    $compactBlock = $cardEffectSpecText.Substring($compactStart, $compactEnd - $compactStart)
+    foreach ($requiredCompactRule in @(
+        'candidate.Preview.Type == CardType.Status',
+        'CanonicalModels.Card<Fuel>()',
+        'card.IsUpgraded')) {
+        if (-not $compactBlock.Contains($requiredCompactRule)) {
+            $violations.Add("${cardEffectSpecPath}: missing 0.107.1 Compact/Fuel rule '$requiredCompactRule'")
+        }
+    }
+}
+
+$afterGeneratedVersionTrapPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Card/AfterCardGeneratedForCombatMirrors.cs'
+$afterGeneratedVersionTrapText = [IO.File]::ReadAllText($afterGeneratedVersionTrapPath)
+$rocketPunchStart = $afterGeneratedVersionTrapText.IndexOf('private static void HandleRocketPunch(')
+$rocketPunchEnd = $afterGeneratedVersionTrapText.IndexOf('internal sealed class AfterCardGeneratedForCombatMirrorContext', $rocketPunchStart)
+if ($rocketPunchStart -lt 0 -or $rocketPunchEnd -le $rocketPunchStart) {
+    $violations.Add("${afterGeneratedVersionTrapPath}: Rocket Punch hook boundary is missing")
+}
+else {
+    $rocketPunchBlock = $afterGeneratedVersionTrapText.Substring(
+        $rocketPunchStart,
+        $rocketPunchEnd - $rocketPunchStart)
+    foreach ($requiredRocketPunchRule in @(
+        'context.Creator == card.Owner',
+        'context.PreviewCard.Owner == card.Owner',
+        'context.PreviewCard.Type == CardType.Status',
+        'EnergyCost.SetUntilPlayed(0)')) {
+        if (-not $rocketPunchBlock.Contains($requiredRocketPunchRule)) {
+            $violations.Add("${afterGeneratedVersionTrapPath}: missing 0.107.1 Rocket Punch rule '$requiredRocketPunchRule'")
+        }
+    }
+}
+
+$enchantmentOnPlayPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Enchantments/OnPlay/EnchantmentOnPlayMirrors.cs'
+$enchantmentOnPlayText = [IO.File]::ReadAllText($enchantmentOnPlayPath)
+$inkyStart = $enchantmentOnPlayText.IndexOf('private static void HandleInky(')
+$inkyEnd = $enchantmentOnPlayText.IndexOf('private static void HandleMomentum(', $inkyStart)
+if ($inkyStart -lt 0 -or $inkyEnd -le $inkyStart) {
+    $violations.Add("${enchantmentOnPlayPath}: Inky OnPlay boundary is missing")
+}
+else {
+    $inkyBlock = $enchantmentOnPlayText.Substring($inkyStart, $inkyEnd - $inkyStart)
+    foreach ($requiredInkyOnPlayRule in @(
+        'typeof(WeakPower)',
+        'enchantment.DynamicVars.Weak.IntValue',
+        'context.PreviewCard.Owner.Creature')) {
+        if (-not $inkyBlock.Contains($requiredInkyOnPlayRule)) {
+            $violations.Add("${enchantmentOnPlayPath}: missing 0.107.1 Inky Weak rule '$requiredInkyOnPlayRule'")
+        }
+    }
+}
+$modifyDamageMirrorPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Damage/ModifyDamageMirrors.cs'
+$modifyDamageMirrorText = [IO.File]::ReadAllText($modifyDamageMirrorPath)
+if ($modifyDamageMirrorText.Contains('Register<Inky>')) {
+    $violations.Add("${modifyDamageMirrorPath}: 0.107.1 Inky additive damage must remain on the pinned native ModifyDamageAdditive hook")
+}
+foreach ($requiredNativeDamageFallback in @(
+    'private static decimal InvokeOriginalAdditive(',
+    'return listener.ModifyDamageAdditive(',
+    'context.CardSource?.Preview')) {
+    if (-not $modifyDamageMirrorText.Contains($requiredNativeDamageFallback)) {
+        $violations.Add("${modifyDamageMirrorPath}: native additive damage fallback required by 0.107.1 Inky is missing '$requiredNativeDamageFallback'")
+    }
+}
+
+$synchronizeStart = $cardOnPlaySupportText.IndexOf('case Synchronize:')
+$synchronizeEnd = $cardOnPlaySupportText.IndexOf('case TheSmith:', $synchronizeStart)
+if ($synchronizeStart -lt 0 -or $synchronizeEnd -le $synchronizeStart) {
+    $violations.Add("${cardOnPlaySupportPath}: Synchronize OnPlay boundary is missing")
+}
+else {
+    $synchronizeBlock = $cardOnPlaySupportText.Substring(
+        $synchronizeStart,
+        $synchronizeEnd - $synchronizeStart)
+    foreach ($requiredSynchronizeRule in @(
+        '.OrbQueue.Orbs',
+        '.Select(orb => orb.Id)',
+        '.Distinct()',
+        'card.DynamicVars.CalculationBase.IntValue',
+        'card.DynamicVars.CalculationExtra.IntValue * orbTypes',
+        'combat.ApplyTemporaryFocus<SynchronizePower>')) {
+        if (-not $synchronizeBlock.Contains($requiredSynchronizeRule)) {
+            $violations.Add("${cardOnPlaySupportPath}: missing 0.107.1 Synchronize rule '$requiredSynchronizeRule'")
+        }
+    }
+}
+
+
 $rootCardGenerationPoolPath = Join-Path $repositoryRoot 'src/Search/RootCombatCardGenerationPoolSnapshot.cs'
 $rootCardGenerationPoolText = [IO.File]::ReadAllText($rootCardGenerationPoolPath)
 foreach ($requiredGenerationBoundary in @(

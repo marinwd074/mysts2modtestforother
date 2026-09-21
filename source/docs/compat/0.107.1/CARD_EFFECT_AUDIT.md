@@ -76,6 +76,40 @@ live/predicted continuation stamps so branch deduplication and cross-turn reuse
 cannot erase or silently mismatch the next trigger.
 
 
+
+### Single-player post-0.107.1 version traps
+
+A focused later-patch pass also checked single-player cards whose semantics were
+substantially changed after 0.107.1, while intentionally deferring multiplayer
+cards.
+
+- **Mirage:** keep the 0.107.1 calculated Block path: sum Poison on every living
+  enemy in the simulated branch. Do not import the v0.109 Energy-next-turn
+  redesign. The calculation remains in `CalculatedVarSpecRegistry`, so forked
+  Poison state rather than the live combat graph determines the result.
+- **Compact / Fuel:** Compact still transforms transformable Status cards in the
+  Hand into Fuel and propagates Compact's upgrade to those Fuel cards. Fuel must
+  resolve its 0.107.1 sequence in order: gain its Energy, then draw its Cards
+  amount. The v0.108 Fuel redesign that removed card draw is not valid here.
+- **Rocket Punch:** when its owner creates an owned Status, 0.107.1 sets that
+  Status card's Energy cost to zero until played. The v0.110 "reduce cost by 1"
+  behavior must not replace the exact `SetUntilPlayed(0)` semantics.
+- **Inky / Blade of Ink:** 0.107.1 Inky still has its additive attack-damage
+  hook and its OnPlay Weak application. Prediction intentionally leaves Inky
+  unregistered in the custom additive-damage mirror so the pinned native
+  `ModifyDamageAdditive` implementation handles the +1 damage, while the
+  explicit enchantment OnPlay mirror applies Weak. The v0.111 removal of Inky's
+  extra damage must not be backported.
+- **Synchronize:** keep the temporary Focus amount driven by the pinned
+  CalculationBase/CalculationExtra values times the number of distinct current
+  Orb types. Later changes to its Exhaust/upgrade behavior and Focus values are
+  card-model metadata, not constants to copy into prediction.
+
+These checked paths now have source-shape guards in
+`tools/verify-refactor-boundaries.ps1`. Ordinary keyword/cost/value changes
+that are already supplied by the pinned 0.107.1 CardModel remain model-driven
+rather than duplicated in compatibility code.
+
 ### Pillar of Creation version guard
 
 Pillar of Creation is a checked-match version trap rather than a new mismatch.

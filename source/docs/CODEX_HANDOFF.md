@@ -106,17 +106,15 @@
 
 ## 当前下一步
 
-当前主线已从多人能力扩展切换到 **0.107.1 card-effect / continuation source audit**。截至
-`15d45124`，已确认并修正 **41 项** route-affecting 版本/执行语义偏差；Mad Science、
-生成牌链、Orb、Draw、Selection、Flak Cannon、Forge、Bulk Up、Misery、Well-Laid Plans
-等高风险路径已完成一轮版本回退与 continuation 加固。最新补充的 Big Bang 已恢复
-0.107.1 原生 **Stars → Energy → Forge** 顺序，并增加挂起回归断言与静态顺序护栏；
-最新 `0.107.1 compatibility consistency` 全部 PASS。Pillar of Creation 也已作为
-v0.109 版本陷阱补上静态回归护栏：0.107.1 保持“每次由 owner 生成牌都按 Power amount
-获得 Block”，不得引入 first-trigger-per-turn 状态。Pillar of Creation、Summon Forth、
-Seeking Edge、Juggling 已重新对照 0.107.1 本体并确认为 checked matches。
+当前开发范围暂时收窄为 **0.107.1 单人卡牌版本差异**；多人专属牌、队友目标语义和新的
+多人能力扩展先不处理。主线继续按
+`compat/0.107.1/CARD_EFFECT_AUDIT.md` 从后续版本 patch delta 反查 0.107.1，
+优先处理 solver 自己重写的 hard-coded constants、版本条件和 custom execution order。
 
-下一轮继续按 `compat/0.107.1/CARD_EFFECT_AUDIT.md` 的 audit boundary 工作：
-优先检查 **hard-coded constants、版本条件、custom execution order** 的卡牌/Power；
-DynamicVar 驱动的普通 attack/block/draw recipe 降低优先级。多人已收口能力保持不动，
-Carry R2 decisive runtime fixture 仍为可选证据，不人工刷场景。
+截至当前批次，除既有 Mad Science / Orb / Draw / Selection / Forge / Bulk Up / Misery /
+Well-Laid Plans 等修正外，Mirage、Compact/Fuel、Rocket Punch、Inky、Synchronize
+这些后续版本重做陷阱也已加入 0.107.1 静态兼容合同。它们当前旧语义本身已匹配目标版本，
+本批次重点是禁止以后从 0.108–0.111 上游回迁时重新污染。
+
+下一轮继续审计其余**单人**高风险路径；DynamicVar/关键词/费用完全由 0.107.1 CardModel
+提供的普通数值变化保持低优先级。多人 Carry R2 和多人牌均不作为当前阻塞项。
