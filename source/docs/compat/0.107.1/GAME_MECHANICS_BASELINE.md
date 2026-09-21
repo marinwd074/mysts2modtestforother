@@ -552,7 +552,7 @@ future behavior.
 These later patch notes are especially useful as negative evidence for the
 0.107.1 target:
 
-- v0.108 reworked Tank and changed end-of-turn Orb/Doom ordering.
+- v0.108 reworked Tank, changed end-of-turn Orb/Doom ordering, and changed Scrape so globally temporary 0-cost effects also prevent its discard.
 - v0.110 reworked Haze to add Weak, reworked Outbreak into an immediate-Poison
   Skill, and increased Sacrifice from double to triple Osty Max HP.
 - v0.111 later changed Guiding Star draw from this turn to next turn and
@@ -563,6 +563,22 @@ https://steamcommunity.com/app/2868840/announcements/
 
 These deltas explain why later upstream solver code is frequently unsafe to
 copy into the 0.107.1 compatibility branch.
+
+### Scrape cost-modifier boundary
+
+The pinned 0.107.1 `Scrape.OnPlay` attacks, draws its Cards amount, then filters
+the drawn cards with exactly
+`c.EnergyCost.GetWithModifiers(CostModifiers.Local) != 0 || c.EnergyCost.CostsX`
+before discarding them. This means card-local cost changes are visible to
+Scrape, but global combat-cost hooks such as a temporary "next Skill costs 0"
+effect are not. X-cost cards are discarded independently of the numeric local
+cost.
+
+The v0.108 patch explicitly changed this behavior so globally temporary 0-cost
+effects could also save a card from Scrape. That newer rule must not be
+backported into the 0.107.1 solver. The 0.107.1 implementation also does not
+consult Star cost in this discard predicate, preserving the same-update fix
+where zero-Energy cards with a Star cost are kept.
 
 ## Safe audit workflow
 

@@ -1892,6 +1892,24 @@ else {
 }
 
 
+$scrapeStart = $cardDrawMirrorText.IndexOf('public static void ScrapeOnPlay')
+$scrapeEnd = $cardDrawMirrorText.IndexOf('public static void ScrawlOnPlay', $scrapeStart)
+if ($scrapeStart -lt 0 -or $scrapeEnd -le $scrapeStart) {
+    $violations.Add("${cardDrawMirrorPath}: Scrape mirror boundary is missing")
+}
+else {
+    $scrapeBlock = $cardDrawMirrorText.Substring($scrapeStart, $scrapeEnd - $scrapeStart)
+    if (-not $scrapeBlock.Contains('EnergyCost.GetWithModifiers(CostModifiers.Local) != 0')) {
+        $violations.Add("${cardDrawMirrorPath}: 0.107.1 Scrape must test the drawn card's local Energy cost only")
+    }
+    if (-not $scrapeBlock.Contains('EnergyCost.CostsX')) {
+        $violations.Add("${cardDrawMirrorPath}: 0.107.1 Scrape must still discard X-cost cards")
+    }
+    if ($scrapeBlock.Contains('GetEnergyCostValueWithModifiers(context.Simulator)')) {
+        $violations.Add("${cardDrawMirrorPath}: later-version/global-cost Scrape behavior returned")
+    }
+}
+
 $flankingSpec = '[typeof(Flanking)] = [Target<FlankingPower>(_ => 2)]'
 if (-not $cardEffectSpecText.Contains($flankingSpec)) {
     $violations.Add("${cardEffectSpecPath}: 0.107.1 Flanking must apply an instanced FlankingPower amount 2 to its target")
