@@ -2518,6 +2518,20 @@ else {
     if ($madScienceBlock.Contains('AddGeneratedCardsToCombat(cards, PileType.Hand, card.Owner)')) {
         $violations.Add("${cardGenerationMirrorPath}: v0.108 generated-card Mad Science behavior returned")
     }
+    foreach ($requiredMadScienceAttackRule in @(
+        'ContinueMadScienceAttacks(card, context, nextHit: 0, hitCount)',
+        'for (int hitIndex = nextHit; hitIndex < hitCount; hitIndex++)',
+        'DamageCmd.Attack(card.DynamicVars.Damage.BaseValue)',
+        'new MadScienceAttackExecutionFrame(',
+        'hitIndex + 1',
+        'ApplyMadScienceRider(card, context)')) {
+        if (-not $madScienceBlock.Contains($requiredMadScienceAttackRule)) {
+            $violations.Add("${cardGenerationMirrorPath}: missing 0.107.1 Mad Science Violence rule '$requiredMadScienceAttackRule'")
+        }
+    }
+    if ($madScienceBlock.Contains('.WithHitCount(')) {
+        $violations.Add("${cardGenerationMirrorPath}: Mad Science Violence must use separate 0.107.1 AttackCommands, not later grouped-hit semantics")
+    }
 }
 
 if ($violations.Count -gt 0) {

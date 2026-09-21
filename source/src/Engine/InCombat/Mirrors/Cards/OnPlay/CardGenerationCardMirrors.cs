@@ -138,14 +138,16 @@ internal static class CardGenerationCardMirrors
         switch (card.TinkerTimeType)
         {
             case CardType.Attack:
-                DamageCmd.Attack(card.DynamicVars.Damage.BaseValue)
-                    .WithHitCount(card.TinkerTimeRider == TinkerTime.RiderEffect.Violence
-                        ? card.DynamicVars["ViolenceHits"].IntValue
-                        : 1)
-                    .FromCard(card, context.CardPlay)
-                    .Targeting(context.Target)
-                    .Simulate(context.Simulator);
-                break;
+            {
+                // 0.107.1 executes Violence as separate AttackCommands. This matters for
+                // one-attack effects such as Vigor, which are consumed after the first command.
+                context.Simulator.AcknowledgeExecutionDispatch();
+                int hitCount = card.TinkerTimeRider == TinkerTime.RiderEffect.Violence
+                    ? card.DynamicVars["ViolenceHits"].IntValue
+                    : 1;
+                _ = ContinueMadScienceAttacks(card, context, nextHit: 0, hitCount);
+                return;
+            }
             case CardType.Skill:
                 context.GainBlock(card.Owner.Creature);
                 break;
@@ -181,6 +183,41 @@ internal static class CardGenerationCardMirrors
         }
         if (context.Simulator.HasPendingChoice)
             return;
+        ApplyMadScienceRider(card, context);
+    }
+
+    private static bool ContinueMadScienceAttacks(
+        MadScience card,
+        CardOnPlayMirrorContext context,
+        int nextHit,
+        int hitCount)
+    {
+        for (int hitIndex = nextHit; hitIndex < hitCount; hitIndex++)
+        {
+            DamageCmd.Attack(card.DynamicVars.Damage.BaseValue)
+                .FromCard(card, context.CardPlay)
+                .Targeting(context.Target)
+                .Simulate(context.Simulator);
+            if (context.Simulator.HasPendingChoice)
+            {
+                context.Simulator.AppendExecutionContinuation(
+                    new MadScienceAttackExecutionFrame(
+                        context.Card,
+                        context.CardPlay,
+                        hitIndex + 1,
+                        hitCount));
+                return false;
+            }
+        }
+
+        ApplyMadScienceRider(card, context);
+        return !context.Simulator.HasPendingChoice;
+    }
+
+    private static void ApplyMadScienceRider(MadScience card, CardOnPlayMirrorContext context)
+    {
+        if (context.CombatState is not ICombatPredictionEffectSink effects)
+            throw new InvalidOperationException("疯狂科学效果缺少可写的预测状态。");
         switch (card.TinkerTimeRider)
         {
             case TinkerTime.RiderEffect.Sapping:
@@ -224,6 +261,35 @@ internal static class CardGenerationCardMirrors
                 break;
             }
         }
+    }
+
+    private sealed record MadScienceAttackExecutionFrame(
+        PredictedCard Card,
+        CardPlay Play,
+        int NextHit,
+        int HitCount) : ICombatPredictionExecutionFrame
+    {
+        public void PrepareFork(PredictionForkContext context)
+            => CombatPredictionSimulator.PrepareExecutionCardPlay(Card, Play, context);
+
+        public ICombatPredictionExecutionFrame Fork(PredictionForkContext context)
+            => this with
+            {
+                Card = context.RequireRemap(Card),
+                Play = context.RequireRemap(Play)
+            };
+
+        public bool Resume(CombatPredictionSimulator simulator)
+            => ContinueMadScienceAttacks(
+                (MadScience)Card.MutablePreview,
+                new CardOnPlayMirrorContext
+                {
+                    Simulator = simulator,
+                    Card = Card,
+                    CardPlay = Play
+                },
+                NextHit,
+                HitCount);
     }
 
     public static void ManifestAuthorityOnPlay(ManifestAuthority card, CardOnPlayMirrorContext context)
