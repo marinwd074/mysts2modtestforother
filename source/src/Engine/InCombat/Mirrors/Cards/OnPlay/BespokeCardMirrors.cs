@@ -23,6 +23,7 @@ internal static class BespokeCardMirrors
     // this mirror and is gated on the same condition.
     public static void BoneShardsOnPlay(BoneShards card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         if (context.State.GetOsty(card.Owner) is not { } osty || context.State.GetCreature(osty).IsDead)
         {
             return;
@@ -49,6 +50,7 @@ internal static class BespokeCardMirrors
 
     public static void DemonicShieldOnPlay(DemonicShield card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         Creature owner = card.Owner.Creature;
         context.Simulator.Damage(
             [owner],
@@ -64,6 +66,7 @@ internal static class BespokeCardMirrors
 
     public static void InterceptOnPlay(Intercept card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.GainBlock(card.Owner.Creature);
         ContinueOrQueueTail(context, BespokeTailKind.InterceptCoverage);
     }
@@ -81,6 +84,7 @@ internal static class BespokeCardMirrors
 
     public static void FiendFireOnPlay(FiendFire _, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         PredictedCard[] hand = context.OwnerState.Hand.Cards.ToArray();
         _ = ContinueFiendFire(
             context.Simulator,
@@ -112,6 +116,7 @@ internal static class BespokeCardMirrors
 
     public static void LeadingStrikeOnPlay(LeadingStrike card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         DamageCmd.Attack(card.DynamicVars.Damage.BaseValue)
             .FromCard(card, context.CardPlay)
             .Targeting(context.Target)
@@ -140,6 +145,7 @@ internal static class BespokeCardMirrors
 
     public static void MiseryOnPlay(Misery card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         if (context.CombatState is not SimulatedCombatState combat)
             throw new InvalidOperationException("Misery requires writable branch combat state.");
 
@@ -198,6 +204,7 @@ internal static class BespokeCardMirrors
 
     public static void MaulOnPlay(Maul card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         DamageCmd.Attack(card.DynamicVars.Damage.BaseValue)
             .WithHitCount(2)
             .FromCard(card, context.CardPlay)
@@ -229,6 +236,7 @@ internal static class BespokeCardMirrors
 
     public static void TheScytheOnPlay(TheScythe card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         DamageCmd.Attack(card.DynamicVars.Damage.BaseValue)
             .FromCard(card, context.CardPlay)
             .Targeting(context.Target)
@@ -238,6 +246,7 @@ internal static class BespokeCardMirrors
 
     public static void SacrificeOnPlay(Sacrifice card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         if (context.State.GetOsty(card.Owner) is not { } osty || !context.State.GetCreature(osty).IsAlive)
             return;
         int block = context.State.GetCreature(osty).MaxHp * 2;
@@ -247,6 +256,7 @@ internal static class BespokeCardMirrors
 
     public static void SecondWindOnPlay(SecondWind _, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         PredictedCard[] cards = context.OwnerState.Hand.Cards
             .Where(candidate => candidate.Preview.Type != CardType.Attack)
             .ToArray();
@@ -261,6 +271,7 @@ internal static class BespokeCardMirrors
 
     public static void SovereignBladeOnPlay(SovereignBlade card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         bool allEnemies = GetPowerAmount<SeekingEdgePower>(context, card.Owner.Creature) > 0;
         var attack = DamageCmd.Attack(card.DynamicVars.Damage.BaseValue)
             .WithHitCount(card.DynamicVars.Repeat.IntValue)

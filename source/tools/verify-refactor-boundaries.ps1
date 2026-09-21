@@ -2625,6 +2625,33 @@ foreach ($requiredBespokeContinuationRule in $bespokeContinuationRules) {
     }
 }
 
+foreach ($bespokeContinuationMethod in @(
+    'BoneShards',
+    'DemonicShield',
+    'Intercept',
+    'FiendFire',
+    'LeadingStrike',
+    'Misery',
+    'Maul',
+    'TheScythe',
+    'Sacrifice',
+    'SecondWind',
+    'SovereignBlade')) {
+    $methodStart = $bespokeOnPlayText.IndexOf("public static void $($bespokeContinuationMethod)OnPlay")
+    $nextPublic = $bespokeOnPlayText.IndexOf([Environment]::NewLine + '    public static void ', $methodStart + 1)
+    $nextPrivate = $bespokeOnPlayText.IndexOf([Environment]::NewLine + '    private static ', $methodStart + 1)
+    $candidates = @($nextPublic, $nextPrivate) | Where-Object { $_ -gt $methodStart }
+    $methodEnd = if ($candidates.Count -gt 0) { ($candidates | Measure-Object -Minimum).Minimum } else { $bespokeOnPlayText.Length }
+    if ($methodStart -lt 0 -or $methodEnd -le $methodStart) {
+        $violations.Add("${bespokeOnPlayPath}: continuation method boundary missing for $bespokeContinuationMethod")
+        continue
+    }
+    $methodBlock = $bespokeOnPlayText.Substring($methodStart, $methodEnd - $methodStart)
+    if (-not $methodBlock.Contains('context.Simulator.AcknowledgeExecutionDispatch();')) {
+        $violations.Add("${bespokeOnPlayPath}: $bespokeContinuationMethod must acknowledge the adapted execution dispatch before a resumable suffix")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."
