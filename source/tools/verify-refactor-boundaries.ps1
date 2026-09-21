@@ -1703,8 +1703,8 @@ if ($outbreakStart -lt 0 -or $outbreakEnd -le $outbreakStart) {
 }
 else {
     $outbreakBlock = $outbreakCardText.Substring($outbreakStart, $outbreakEnd - $outbreakStart)
-    if (-not $outbreakBlock.Contains('combat.Apply<OutbreakPower>(')
-        -or -not $outbreakBlock.Contains('card.DynamicVars["OutbreakPower"].IntValue')) {
+    if ((-not $outbreakBlock.Contains('combat.Apply<OutbreakPower>(')) -or
+        (-not $outbreakBlock.Contains('card.DynamicVars["OutbreakPower"].IntValue'))) {
         $violations.Add("${outbreakCardPath}: 0.107.1 Outbreak must apply OutbreakPower from its dynamic var")
     }
     if ($outbreakBlock.Contains('ApplyOutbreak(')) {
@@ -1747,9 +1747,9 @@ if (-not (Select-String -LiteralPath $simulatedCombatPath -SimpleMatch 'PowerPre
 }
 $continuationStampPath = Join-Path $repositoryRoot 'src/Runtime/ContinuationStamp.cs'
 $continuationStampText = [IO.File]::ReadAllText($continuationStampPath)
-if (-not $continuationStampText.Contains('PoisonApplications=')
-    -or -not $continuationStampText.Contains('NativeOutbreakPoisonApplications(outbreak)')
-    -or -not $continuationStampText.Contains('OutbreakPoisonApplications(simulator, outbreak)')) {
+if ((-not $continuationStampText.Contains('PoisonApplications=')) -or
+    (-not $continuationStampText.Contains('NativeOutbreakPoisonApplications(outbreak)')) -or
+    (-not $continuationStampText.Contains('OutbreakPoisonApplications(simulator, outbreak)'))) {
     $violations.Add("${continuationStampPath}: Outbreak hidden counter must participate in exact continuation stamps")
 }
 
