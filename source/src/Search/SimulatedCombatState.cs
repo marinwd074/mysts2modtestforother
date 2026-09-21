@@ -262,6 +262,7 @@ internal sealed partial class SimulatedCombatState
             ? _players
             : [localPlayerOnly];
         _rootCardGenerationPools = RootCombatCardGenerationPoolSnapshot.Capture(
+            _players,
             _rootCapturedPlayers,
             _cardMultiplayerConstraint);
         _rootTransformationPools = RootCombatTransformationPoolSnapshot.Capture(

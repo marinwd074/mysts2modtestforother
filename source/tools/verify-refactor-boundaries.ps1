@@ -2189,6 +2189,42 @@ if (-not $simulatedCombatText.Contains('if (simulated is KnockdownPower knockdow
     $violations.Add("${simulatedCombatPath}: Knockdown applier display state must remain branch-local")
 }
 
+
+$rootCardGenerationPoolPath = Join-Path $repositoryRoot 'src/Search/RootCombatCardGenerationPoolSnapshot.cs'
+$rootCardGenerationPoolText = [IO.File]::ReadAllText($rootCardGenerationPoolPath)
+foreach ($requiredGenerationBoundary in @(
+    'IReadOnlyList<Player> colorlessPlayers,',
+    'IReadOnlyList<Player> characterPlayers,',
+    'new(colorlessPlayers.Count, ReferenceEqualityComparer.Instance)',
+    'foreach (Player player in colorlessPlayers)',
+    'new(characterPlayers.Count, ReferenceEqualityComparer.Instance)',
+    'foreach (Player player in characterPlayers)')) {
+    if (-not $rootCardGenerationPoolText.Contains($requiredGenerationBoundary)) {
+        $violations.Add("${rootCardGenerationPoolPath}: missing split multiplayer generation boundary '$requiredGenerationBoundary'")
+    }
+}
+if ($simulatedCombatText -notmatch 'RootCombatCardGenerationPoolSnapshot[.]Capture[(][\s\r\n]*_players,[\s\r\n]*_rootCapturedPlayers,') {
+    $violations.Add("${simulatedCombatPath}: multiplayer root must freeze colorless eligibility for the public roster while keeping character pools local-only")
+}
+$cardGenerationMirrorPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/CardGenerationCardMirrors.cs'
+$cardGenerationMirrorText = [IO.File]::ReadAllText($cardGenerationMirrorPath)
+$largesseStart = $cardGenerationMirrorText.IndexOf('public static void LargesseOnPlay')
+$largesseEnd = $cardGenerationMirrorText.IndexOf('public static void MadScienceOnPlay', $largesseStart)
+if ($largesseStart -lt 0 -or $largesseEnd -le $largesseStart) {
+    $violations.Add("${cardGenerationMirrorPath}: Largesse mirror boundary is missing")
+}
+else {
+    $largesseBlock = $cardGenerationMirrorText.Substring($largesseStart, $largesseEnd - $largesseStart)
+    if (-not $largesseBlock.Contains('context.Simulator') -or
+        -not $largesseBlock.Contains('.GetDistinctUnlockedColorlessForCombat(') -or
+        -not $largesseBlock.Contains('targetPlayer')) {
+        $violations.Add("${cardGenerationMirrorPath}: Largesse must select from the root-frozen target-player colorless generation pool")
+    }
+    if ($largesseBlock.Contains('targetPlayer.GetUnlockedColorlessCards')) {
+        $violations.Add("${cardGenerationMirrorPath}: Largesse background prediction must not reread the remote player's live UnlockState")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."

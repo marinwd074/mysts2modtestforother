@@ -119,8 +119,8 @@ internal static class CardGenerationCardMirrors
     public static void LargesseOnPlay(Largesse card, CardOnPlayMirrorContext context)
     {
         var targetPlayer = context.TargetPlayer;
-        var cards = targetPlayer.GetUnlockedColorlessCards(context.CardMultiplayerConstraint)
-            .GetDistinctForCombat(
+        var cards = context.Simulator
+            .GetDistinctUnlockedColorlessForCombat(
                 targetPlayer,
                 1,
                 context.Rng.CombatCardGeneration,

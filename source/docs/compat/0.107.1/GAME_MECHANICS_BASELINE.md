@@ -584,6 +584,28 @@ For each candidate card or Power:
 9. If runtime order or multiplayer target semantics remain ambiguous, require a
    focused native smoke/differential test instead of guessing.
 
+### Largesse root-isolation boundary
+
+In 0.107.1, Largesse selects one combat-eligible Colorless card from the
+selected ally's unlocked pool using the card owner's CombatCardGeneration RNG.
+CardFactory creates that card with the selected ally as its Owner, and
+AddGeneratedCardToCombat therefore targets that ally's Hand.
+
+The target ally's unlock eligibility is needed to reproduce the legal RNG
+candidate set, but it is not combat-pile state. The multiplayer root now
+freezes Colorless generation eligibility for the whole public player roster on
+the main thread, while character-generation pools remain restricted to
+RootCapturedPlayers. Largesse consumes that frozen candidate set in prediction.
+
+This does **not** make remote Hand state available to the solver. When the
+generated card would be inserted into a non-local player's Hand, the existing
+root-capture boundary still rejects materializing that PlayerCombatState. This
+separates safe generation metadata from remote-private combat state instead of
+weakening the privacy boundary.
+
+**Status: root/live-state isolation confirmed; full Largesse simulation remains
+intentionally unsupported in local-only multiplayer prediction.**
+
 ## Current hold list
 
 Do not change these from public text alone:
@@ -598,7 +620,8 @@ Do not change these from public text alone:
 | Mimic | native calculation/recipient split restored: selected ally supplies Block value, owner receives Block | focused multiplayer differential with target Block modifiers and zero/high Block values |
 | Knockdown | native instanced multiplier semantics matched; missing side-turn expiry restored | focused multiplayer differential with two separate instances, applier exclusion, and Osty dealer identity |
 | Energy Surge / Believe in You | native behavior changes teammate Energy, but the local-only root intentionally does not capture remote PlayerCombatState | introduce a detached remote-public resource sidecar only after proving Energy/Stars are safe public inputs; do not relax remote private-pile capture |
-| Huddle Up / Ignition / Largesse / Glimpse Beyond | native behavior mutates teammate draw/hand/orb state | explicit remote-private-state policy; local cross-turn solver must fail closed rather than materialize teammate piles/orbs |
+| Huddle Up / Ignition / Glimpse Beyond | native behavior mutates teammate draw/hand/orb state | explicit remote-private-state policy; local cross-turn solver must fail closed rather than materialize teammate piles/orbs |
+| Largesse | target-player colorless generation eligibility is now frozen at root without capturing remote combat piles; the generated card still belongs to the target player and would enter their Hand | keep remote Hand private and fail closed at the write boundary; do not treat frozen unlock eligibility as permission to materialize teammate piles |
 | Legion of Bone | native behavior summons/heals Osty for every living player, but current GetOsty fallback can reread player.Osty from the live graph | freeze remote/public pet identity in the root before adding cross-player summon support |
 | current Tracking text | known to be later presentation | pinned DLL only for 0.107.1 values |
 | current Tank text | changed in v0.108 | pinned DLL + v0.108 delta |
