@@ -214,6 +214,15 @@ ActTransitionBossHpStrategy 对两种过 Act恢复都继续生效。累计 route
 这是 solver 配置安全边界，不是游戏版本数值。Act 3 的零基索引 2 与 0.107.1 三个 Boss
 TEST_SUBJECT_BOSS / AEONGLASS_BOSS / QUEEN_BOSS 也已补静态版本护栏。
 
+新问题包 `CombatSolver-0.40.2-LOUSE_PROGENITOR_NORMAL-e54eceb84baa44f3809748a38e6b2725.zip`
+定位到新的 SearchSetupFailure：根快照捕获 LouseProgenitor 时尝试读取不存在的实例成员
+`GrowStrength`，实际 0.107.1 模型使用 private static const `_growStrength = 5`；同时
+`MonsterValueReader` 原先只搜索实例成员，因此仅改名仍会失败。现已让 int/bool/object 编译访问器
+同时支持 instance/static property/field，并将 LouseProgenitor 静态值捕获和 CURL_AND_GROW 消费统一改为
+`_growStrength`。现有 DevotedSculptor `_ritualGain` 仍按实例 readonly 字段路径读取，不受影响。
+该错误会让 LOUSE_PROGENITOR_NORMAL 在 AutoTurnStart 根捕获阶段完全无法搜索，计入新的
+route-affecting mismatch；累计总数由 45 更新为 46。已补静态回归门禁。
+
 最终收尾扫描第五小批继续检查 StrategicEffect / Novelty / memory policy。StrategicEffectModel 中
 cards-per-turn、reachable-cards、Buffer 兜底、Focus/Furnace scaling 等裸数字均属于 solver 的启发式估值，
 不应伪装成 0.107.1 游戏常量；SearchWaveMemoryPolicy 与 SmartLayerMemoryForecast 的 64 MiB 虽同值，

@@ -32,7 +32,7 @@ internal static partial class MonsterMoveEffects
             ["TheInsatiable"] = ["SalivateStrength"],
             ["TheObscura"] = ["HardeningStrikeBlock"],
             ["TheForgotten"] = ["DebilitatingSmogDexStealAmount"],
-            ["LouseProgenitor"] = ["CurlBlock", "GrowStrength"],
+            ["LouseProgenitor"] = ["CurlBlock", "_growStrength"],
             ["Tunneler"] = ["BlockGain"],
             ["Crusher"] = ["AdaptStrengthGain"],
             ["Rocket"] = ["ChargeUpStrengthGain"],

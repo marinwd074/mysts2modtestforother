@@ -28,6 +28,32 @@ $forbiddenSearchReferences = @(
 )
 
 $violations = [System.Collections.Generic.List[string]]::new()
+$monsterValueReaderPath = Join-Path $repositoryRoot 'src/Prediction/MonsterValueReader.cs'
+$monsterValueReaderText = [IO.File]::ReadAllText($monsterValueReaderPath)
+foreach ($monsterReaderRule in @(
+    'BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic',
+    'getter.IsStatic ? null : typed',
+    'field.IsStatic ? null : typed')) {
+    if (-not $monsterValueReaderText.Contains($monsterReaderRule)) {
+        $violations.Add("${monsterValueReaderPath}: monster static member capture drifted '$monsterReaderRule'")
+    }
+}
+
+$monsterStaticValuesPath = Join-Path $repositoryRoot 'src/Prediction/MonsterMoveEffects.StaticValues.cs'
+$monsterStaticValuesText = [IO.File]::ReadAllText($monsterStaticValuesPath)
+if (-not $monsterStaticValuesText.Contains('["LouseProgenitor"] = ["CurlBlock", "_growStrength"]')) {
+    $violations.Add("${monsterStaticValuesPath}: LouseProgenitor 0.107.1 grow strength member must be _growStrength")
+}
+if ($monsterStaticValuesText.Contains('["LouseProgenitor"] = ["CurlBlock", "GrowStrength"]')) {
+    $violations.Add("${monsterStaticValuesPath}: nonexistent LouseProgenitor.GrowStrength leaked into root capture")
+}
+
+$monsterMoveEffectsPath = Join-Path $repositoryRoot 'src/Prediction/MonsterMoveEffects.cs'
+$monsterMoveEffectsText = [IO.File]::ReadAllText($monsterMoveEffectsPath)
+if (-not $monsterMoveEffectsText.Contains('combat.GetMonsterStaticInt(move.Owner, "_growStrength")')) {
+    $violations.Add("${monsterMoveEffectsPath}: LouseProgenitor CURL_AND_GROW must consume captured _growStrength")
+}
+
 $contractRunnerPath = Join-Path $repositoryRoot 'tools/run-contract-tests.ps1'
 $contractRunnerText = [IO.File]::ReadAllText($contractRunnerPath)
 if (-not $contractRunnerText.Contains("Invoke-DotnetContract 'BfwsResearchChecks' 'tools/BfwsResearchChecks/BfwsResearchChecks.csproj'")) {

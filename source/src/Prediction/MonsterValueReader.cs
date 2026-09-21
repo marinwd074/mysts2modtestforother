@@ -23,42 +23,47 @@ internal static class MonsterValueReader
 
     private static Func<MonsterModel, int> Build(Type type, string name)
     {
-        const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
         ParameterExpression input = Expression.Parameter(typeof(MonsterModel), "monster");
         UnaryExpression typed = Expression.Convert(input, type);
-        MemberExpression member = type.GetProperty(name, flags) is PropertyInfo property
-            ? Expression.Property(typed, property)
-            : type.GetField(name, flags) is FieldInfo field
-                ? Expression.Field(typed, field)
-                : throw new MissingMemberException(type.FullName, name);
+        MemberExpression member = BuildMemberAccess(type, name, flags, typed);
         Expression value = member.Type == typeof(int) ? member : Expression.Convert(member, typeof(int));
         return Expression.Lambda<Func<MonsterModel, int>>(value, input).Compile();
     }
 
     private static Func<MonsterModel, bool> BuildBool(Type type, string name)
     {
-        const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
         ParameterExpression input = Expression.Parameter(typeof(MonsterModel), "monster");
         UnaryExpression typed = Expression.Convert(input, type);
-        MemberExpression member = type.GetProperty(name, flags) is PropertyInfo property
-            ? Expression.Property(typed, property)
-            : type.GetField(name, flags) is FieldInfo field
-                ? Expression.Field(typed, field)
-                : throw new MissingMemberException(type.FullName, name);
+        MemberExpression member = BuildMemberAccess(type, name, flags, typed);
         return Expression.Lambda<Func<MonsterModel, bool>>(member, input).Compile();
     }
 
     private static Func<MonsterModel, object?> BuildObject(Type type, string name)
     {
-        const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
         ParameterExpression input = Expression.Parameter(typeof(MonsterModel), "monster");
         UnaryExpression typed = Expression.Convert(input, type);
-        MemberExpression member = type.GetProperty(name, flags) is PropertyInfo property
-            ? Expression.Property(typed, property)
-            : type.GetField(name, flags) is FieldInfo field
-                ? Expression.Field(typed, field)
-                : throw new MissingMemberException(type.FullName, name);
+        MemberExpression member = BuildMemberAccess(type, name, flags, typed);
         UnaryExpression boxed = Expression.Convert(member, typeof(object));
         return Expression.Lambda<Func<MonsterModel, object?>>(boxed, input).Compile();
+    }
+
+    private static MemberExpression BuildMemberAccess(
+        Type type,
+        string name,
+        BindingFlags flags,
+        UnaryExpression typed)
+    {
+        if (type.GetProperty(name, flags) is PropertyInfo property)
+        {
+            MethodInfo getter = property.GetGetMethod(nonPublic: true)
+                ?? throw new MissingMethodException(type.FullName, $"get_{name}");
+            return Expression.Property(getter.IsStatic ? null : typed, property);
+        }
+        if (type.GetField(name, flags) is FieldInfo field)
+            return Expression.Field(field.IsStatic ? null : typed, field);
+        throw new MissingMemberException(type.FullName, name);
     }
 }
