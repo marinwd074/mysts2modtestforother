@@ -28,6 +28,17 @@ $forbiddenSearchReferences = @(
 )
 
 $violations = [System.Collections.Generic.List[string]]::new()
+$retentionOrderPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Retention.cs'
+$retentionOrderText = [IO.File]::ReadAllText($retentionOrderPath)
+foreach ($retentionOrderRule in @(
+    '=> selected.Sort(CompareRetainedOrder);',
+    'private static int CompareRetainedOrder(SearchNode left, SearchNode right)',
+    'CompareCycleCandidateDeterministicFingerprints(left, right)')) {
+    if (-not $retentionOrderText.Contains($retentionOrderRule)) {
+        $violations.Add("${retentionOrderPath}: retained frontier deterministic tie-break drifted '$retentionOrderRule'")
+    }
+}
+
 $monsterValueReaderPath = Join-Path $repositoryRoot 'src/Prediction/MonsterValueReader.cs'
 $monsterValueReaderText = [IO.File]::ReadAllText($monsterValueReaderPath)
 foreach ($monsterReaderRule in @(

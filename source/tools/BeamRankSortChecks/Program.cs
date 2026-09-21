@@ -56,4 +56,45 @@ foreach (bool negative in new[] { false, true })
         entries += n;
     }
 }
-Console.WriteLine(JsonSerializer.Serialize(new { status = "Passed", cases, entries, runtime = Environment.Version.ToString(), scope = "Extracted production score/sort/comparison; minimal immutable snapshot inputs; exact reference order vs original List.Sort" }));
+
+SearchNode Retained(
+    int stable,
+    double score,
+    int retention = int.MaxValue,
+    int longTerm = int.MaxValue,
+    int cycle = int.MaxValue,
+    int cycleExit = int.MaxValue,
+    int crossTurn = int.MaxValue)
+    => new()
+    {
+        Stable = stable,
+        Score = score,
+        RetentionRank = retention,
+        LongTermResourceRetentionRank = longTerm,
+        CycleRetentionRank = cycle,
+        CycleExitRetentionRank = cycleExit,
+        CrossTurnRetentionRank = crossTurn,
+        Snapshot = new()
+    };
+
+SearchNode earlierRank = Retained(2, 0, cycle: 4);
+SearchNode laterRank = Retained(1, double.MaxValue, cycleExit: 5);
+if (Scorer.CompareRetainedOrder(earlierRank, laterRank) >= 0)
+    throw new InvalidOperationException("Retention rank no longer precedes score.");
+
+SearchNode higherScore = Retained(2, 10, cycle: 5);
+SearchNode lowerScore = Retained(1, 9, cycleExit: 5);
+if (Scorer.CompareRetainedOrder(higherScore, lowerScore) >= 0)
+    throw new InvalidOperationException("Score no longer breaks equal retention ranks.");
+
+List<SearchNode> stableTie =
+[
+    Retained(3, 10, cycleExit: 5),
+    Retained(1, 10, cycle: 5),
+    Retained(2, 10, crossTurn: 5),
+];
+stableTie.Sort(Scorer.CompareRetainedOrder);
+if (!stableTie.Select(node => node.Stable).SequenceEqual([1, 2, 3]))
+    throw new InvalidOperationException("Equal retention rank/score lacks deterministic final ordering.");
+
+Console.WriteLine(JsonSerializer.Serialize(new { status = "Passed", cases, entries, retained_tie_cases = 3, runtime = Environment.Version.ToString(), scope = "Extracted production score/sort/comparison plus deterministic retained-order tie break; minimal immutable snapshot inputs" }));

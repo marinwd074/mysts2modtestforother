@@ -228,7 +228,20 @@ cards-per-turn、reachable-cards、Buffer 兜底、Focus/Furnace scaling 等裸�
 不应伪装成 0.107.1 游戏常量；SearchWaveMemoryPolicy 与 SmartLayerMemoryForecast 的 64 MiB 虽同值，
 但分别表示 parent reserve 与 whole-layer forecast 最小余量，当前没有证据要求合并。BFWS 达到
 MaxNoveltyEntries 后仍按“先判断当前 tuple novelty、再限制历史写入”处理，已与仓库 ReferenceNovelty
-和容量 0/1/7 的生成流合同核对，属于设计语义而非 bug。未发现新的 route-affecting mismatch，总数仍为 45。
+和容量 0/1/7 的生成流合同核对，属于设计语义而非 bug。未发现新的 route-affecting mismatch；在后续 Louse 修复后当前总数为 46。
 现有 BfwsResearchChecks 此前未进入 run-contract-tests；已加入 L1 合同套件，并补静态门禁防止再次掉出。
+
+最终收尾扫描第六小批检查 Cycle / Retention / Transposition。Cycle family 的 improvement epoch
+使用 byte 但硬上限仅 4，CycleRegion epoch 使用 int 且预算先 clamp 后 checked；0.107.1 手牌上限也由
+CardPileCmd 的 Draw/Add 两条路径共同限制为 10，因此 HandFingerprintBuffer[10] 不构成越界风险。
+TranspositionFrontier 的 nondominated label 接受/替换逻辑未发现新的状态误合并。
+
+发现并修复 1 个 solver 确定性缺口：Cycle、CycleExit、CrossTurn 的 retention rank 分段允许尾部/头部
+重叠，而 SortRetained 原先在最小 retention rank 与 Score 同时相等时直接返回 0。List.Sort 不保证稳定，
+并行候选输入顺序可能因此改变后续扩展顺序。现在仅在原本完全平局时追加已有的
+CompareCycleCandidateDeterministicFingerprints（StateKey → Action → Parent）作为最终 tie-break；
+所有既有 rank/Score 优先级不变。BeamRankSortChecks 已扩展为直接抽取生产 CompareRetainedOrder，
+覆盖 rank、score 与重叠 rank 的 deterministic tie-break。此项是 solver 确定性修复，不新增
+0.107.1 route-affecting mismatch；当前总数保持 46。
 
 已完成的 Power、continuation、死亡生命周期和 78/78 卡牌 OnPlay 数值不重复展开；多人牌仍暂不作为当前 blocker。

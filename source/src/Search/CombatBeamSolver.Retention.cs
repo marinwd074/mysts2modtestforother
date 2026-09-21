@@ -543,25 +543,32 @@ internal sealed partial class CombatBeamSolver
     }
 
     private static void SortRetained(List<SearchNode> selected)
-        => selected.Sort((left, right) =>
-        {
-            int leftRank = Math.Min(
-                left.RetentionRank,
+        => selected.Sort(CompareRetainedOrder);
+
+    private static int CompareRetainedOrder(SearchNode left, SearchNode right)
+    {
+        int leftRank = Math.Min(
+            left.RetentionRank,
+            Math.Min(
+                left.LongTermResourceRetentionRank,
                 Math.Min(
-                    left.LongTermResourceRetentionRank,
-                    Math.Min(
-                        left.CycleRetentionRank,
-                        Math.Min(left.CycleExitRetentionRank, left.CrossTurnRetentionRank))));
-            int rightRank = Math.Min(
-                right.RetentionRank,
+                    left.CycleRetentionRank,
+                    Math.Min(left.CycleExitRetentionRank, left.CrossTurnRetentionRank))));
+        int rightRank = Math.Min(
+            right.RetentionRank,
+            Math.Min(
+                right.LongTermResourceRetentionRank,
                 Math.Min(
-                    right.LongTermResourceRetentionRank,
-                    Math.Min(
-                        right.CycleRetentionRank,
-                        Math.Min(right.CycleExitRetentionRank, right.CrossTurnRetentionRank))));
-            int byRetention = leftRank.CompareTo(rightRank);
-            return byRetention != 0 ? byRetention : right.Score.CompareTo(left.Score);
-        });
+                    right.CycleRetentionRank,
+                    Math.Min(right.CycleExitRetentionRank, right.CrossTurnRetentionRank))));
+        int byRetention = leftRank.CompareTo(rightRank);
+        if (byRetention != 0)
+            return byRetention;
+        int byScore = right.Score.CompareTo(left.Score);
+        return byScore != 0
+            ? byScore
+            : CompareCycleCandidateDeterministicFingerprints(left, right);
+    }
 
 
     private static long CycleHealthRisk(SearchNode node, int referenceMaxHp)

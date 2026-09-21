@@ -10,6 +10,7 @@ output.mkdir(parents=True, exist_ok=True)
 retention_source = (repo / 'src/Search/CombatBeamSolver.BeamRetentionPolicy.cs').read_text(encoding='utf-8')
 ranking_source = (repo / 'src/Search/CombatBeamSolver.BeamRanking.cs').read_text(encoding='utf-8')
 snapshot_source = (repo / 'src/Search/CombatPlan.cs').read_text(encoding='utf-8')
+retained_source = (repo / 'src/Search/CombatBeamSolver.Retention.cs').read_text(encoding='utf-8')
 
 def block(source, signature):
     start = source.index(signature)
@@ -27,12 +28,23 @@ retained = retention_source[retention_source.index('private int RetainedAttackGr
 retained = retained[:retained.index(';') + 1]
 compare = block(ranking_source, 'internal static int CompareBeamRankOrder(').replace('internal static', 'public static', 1)
 sort = block(retention_source, 'private void SortByBeamRank(List<SearchNode> ranked)').replace('private void', 'public void', 1)
+retained_compare = block(retained_source, 'private static int CompareRetainedOrder(').replace('private static', 'public static', 1)
 fields = sorted(set(re.findall(r'(?:node\.Snapshot|snapshot)\.(\w+)', score + retained)))
 for name in fields + ['OffensiveProgressValue']:
     if not re.search(r'public int ' + name + r'\s*\{', snapshot_source):
         raise RuntimeError(f'Update probe for changed snapshot field: {name}')
 classes = '''namespace CombatSolver;
-internal sealed class SearchNode { public double Score; public int ActionCount; public required SimulationSnapshot Snapshot; }
+internal sealed class SearchNode {
+public double Score;
+public int ActionCount;
+public required SimulationSnapshot Snapshot;
+public int RetentionRank = int.MaxValue;
+public int LongTermResourceRetentionRank = int.MaxValue;
+public int CycleRetentionRank = int.MaxValue;
+public int CycleExitRetentionRank = int.MaxValue;
+public int CrossTurnRetentionRank = int.MaxValue;
+public int Stable;
+}
 internal sealed class SimulationSnapshot {
 '''
 classes += '\n'.join(f'public int {name} {{ get; init; }}' for name in fields + ['OffensiveProgressValue'])
@@ -45,8 +57,10 @@ private readonly bool _isActEndingBoss = boss;
 private readonly int _initialEnemyCount = enemies;
 private readonly Run _run = initial;
 private readonly SolverSearchProfile _profile = new();
+private static int CompareCycleCandidateDeterministicFingerprints(SearchNode left, SearchNode right)
+    => left.Stable.CompareTo(right.Stable);
 '''
-classes += '\n'.join([score, retained, compare, sort]) + '\n}'
+classes += '\n'.join([score, retained, compare, sort, retained_compare]) + '\n}'
 (output / 'Extracted.cs').write_text(classes, encoding='utf-8')
 (output / 'Program.cs').write_bytes((repo / 'tools/BeamRankSortChecks/Program.cs').read_bytes())
 (output / 'Checks.csproj').write_text('''<Project Sdk="Microsoft.NET.Sdk">
