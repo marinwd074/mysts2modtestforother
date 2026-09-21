@@ -131,5 +131,13 @@ Imitation Learning、The Ball 仍全部位于 `#if !STS2_01071` 边界外，已�
 0.107.1 保留 damage-based WasBlockBroken 触发，但更广的 AfterBlockBroken/Expose 路径继续排除。
 本轮仍未发现新的 route-affecting mismatch，总数保持 44。
 
-下一批转向特殊 OnPlay/Hook **执行顺序与 continuation**，优先检查会在 pending choice / generated-card /
-Forge / draw / exhaust 中途挂起后恢复的手写链；多人牌仍暂不作为当前 blocker。
+Release 编译错误已修复：`PowerPredictionStateSupport.cs` 缺失 `using CombatSolver.Engine.Common;`，
+导致 `IPredictionStateForkable` / `PredictionForkContext` 无法解析；修复提交为 `63a1222b`，对应 CI 已通过。
+静态 verifier 现已增加该命名空间回归检查。
+
+continuation 第一批复核了 Capture Spirit、Echoing Slash、End of Days、Omnislice、Shadow Step，以及
+Bespoke/Generated-card 中主动 `AcknowledgeExecutionDispatch` 的多阶段链。现有 opaque Damage/Attack
+整动作回退、Discard continuation、`ContinueOrQueueTail`、Mad Science/Stoke/Jackpot/Manifest Authority
+执行帧边界一致，未发现新的 route-affecting mismatch，总数仍为 44。
+
+下一批继续审计尚未覆盖的 Hook/OnPlay continuation；多人牌仍暂不作为当前 blocker。

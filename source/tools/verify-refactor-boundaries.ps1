@@ -138,6 +138,14 @@ foreach ($modelDrivenRule in @(
     }
 }
 
+$powerPredictionStatePath = Join-Path $repositoryRoot 'src/Prediction/PowerPredictionStateSupport.cs'
+$powerPredictionStateText = [IO.File]::ReadAllText($powerPredictionStatePath)
+if (($powerPredictionStateText.Contains('IPredictionStateForkable') -or
+     $powerPredictionStateText.Contains('PredictionForkContext')) -and
+    -not $powerPredictionStateText.Contains('using CombatSolver.Engine.Common;')) {
+    $violations.Add("${powerPredictionStatePath}: prediction fork types require CombatSolver.Engine.Common import")
+}
+
 $cardPowerLatePath = Join-Path $repositoryRoot 'src/Prediction/CardPowerOnPlaySupport.SToZ.cs'
 $cardPowerLateText = [IO.File]::ReadAllText($cardPowerLatePath)
 foreach ($modelDrivenRule in @(
