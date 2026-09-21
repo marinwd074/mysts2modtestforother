@@ -1793,6 +1793,23 @@ if (-not $scareCardEffectSpecText.Contains('[typeof(Scare)] = [AllEnemies<WeakPo
     $violations.Add("${scareCardEffectSpecPath}: 0.107.1 Scare must apply 1 Weak to every hittable enemy")
 }
 
+$bigBangSpecPath = Join-Path $repositoryRoot 'src/Prediction/CardEffectSpecRegistry.cs'
+$bigBangSpecText = [IO.File]::ReadAllText($bigBangSpecPath)
+$bigBangStart = $bigBangSpecText.IndexOf('case BigBang:')
+$bigBangEnd = $bigBangSpecText.IndexOf('case BloodWall or Breakthrough or Hemokinesis:', $bigBangStart)
+if ($bigBangStart -lt 0 -or $bigBangEnd -le $bigBangStart) {
+    $violations.Add("${bigBangSpecPath}: Big Bang 0.107.1 effect boundary is missing")
+}
+else {
+    $bigBangBlock = $bigBangSpecText.Substring($bigBangStart, $bigBangEnd - $bigBangStart)
+    $bigBangStars = $bigBangBlock.IndexOf('simulator.GainStars(card.Owner, card.DynamicVars.Stars.IntValue)')
+    $bigBangEnergy = $bigBangBlock.IndexOf('simulator.GainEnergy(card.Owner, card.DynamicVars.Energy.IntValue)')
+    $bigBangForge = $bigBangBlock.IndexOf('PersistentPowerSupport.Forge(simulator, card.Owner, card.DynamicVars.Forge.IntValue)')
+    if ($bigBangStars -lt 0 -or $bigBangEnergy -le $bigBangStars -or $bigBangForge -le $bigBangEnergy) {
+        $violations.Add("${bigBangSpecPath}: 0.107.1 Big Bang order must remain Stars -> Energy -> Forge")
+    }
+}
+
 $shiningStrikeSpecPath = Join-Path $repositoryRoot 'src/Prediction/CardEffectSpecRegistry.cs'
 $shiningStrikeSpecText = [IO.File]::ReadAllText($shiningStrikeSpecPath)
 $shiningStrikeStart = $shiningStrikeSpecText.IndexOf('case ShiningStrike:')
