@@ -2551,11 +2551,21 @@ else {
     $madScienceBlock = $cardGenerationMirrorText.Substring(
         $madScienceStart,
         $madScienceEnd - $madScienceStart)
-    if (-not $cardGenerationContinuationText.Contains('context.Simulator.AddToPile(cards, PileType.Hand)')) {
-        $violations.Add("${cardGenerationContinuationPath}: 0.107.1 Mad Science Chaos rider must use ordinary pile insertion")
+    $madScienceRiderStart = $cardGenerationContinuationText.IndexOf('private static bool ContinueMadScienceRider(')
+    $madScienceRiderEnd = $cardGenerationContinuationText.IndexOf('private static bool QueueGenerationCardContinuation(', $madScienceRiderStart)
+    if ($madScienceRiderStart -lt 0 -or $madScienceRiderEnd -le $madScienceRiderStart) {
+        $violations.Add("${cardGenerationContinuationPath}: Mad Science rider continuation boundary is missing")
     }
-    if ($cardGenerationContinuationText.Contains('AddGeneratedCardsToCombat(cards, PileType.Hand, card.Owner)')) {
-        $violations.Add("${cardGenerationContinuationPath}: v0.108 generated-card Mad Science behavior returned")
+    else {
+        $madScienceRiderBlock = $cardGenerationContinuationText.Substring(
+            $madScienceRiderStart,
+            $madScienceRiderEnd - $madScienceRiderStart)
+        if (-not $madScienceRiderBlock.Contains('context.Simulator.AddToPile(cards, PileType.Hand)')) {
+            $violations.Add("${cardGenerationContinuationPath}: 0.107.1 Mad Science Chaos rider must use ordinary pile insertion")
+        }
+        if ($madScienceRiderBlock.Contains('AddGeneratedCardsToCombat(')) {
+            $violations.Add("${cardGenerationContinuationPath}: v0.108 generated-card Mad Science Chaos behavior returned")
+        }
     }
     foreach ($requiredMadScienceAttackRule in @(
         'ContinueMadScienceAttacks(card, context, nextHit: 0, hitCount)',
