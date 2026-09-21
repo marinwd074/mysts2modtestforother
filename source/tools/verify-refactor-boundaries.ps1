@@ -2664,7 +2664,10 @@ foreach ($requiredOrbContinuationRule in @(
     'private sealed record OrbPassiveTriggerExecutionFrame(',
     'private sealed record OrbPassiveAfterModelExecutionFrame(',
     'PrepareExecutionOrb(Orb, context)',
+    'PrepareExecutionEnemyDeathSet(ProcessedEnemyDeaths, context)',
+    'ProcessedEnemyDeaths = context.RequireRemap(ProcessedEnemyDeaths)',
     'context.Register(orb, fork)',
+    'ContinueOrbChannelAfterEvoke(Player, Orb)',
     'ResolveDeathsFirst: true',
     'ResolveDeathsFirst: false')) {
     if (-not $orbContinuationText.Contains($requiredOrbContinuationRule)) {
@@ -2674,7 +2677,8 @@ foreach ($requiredOrbContinuationRule in @(
 foreach ($requiredOrbSimulatorRule in @(
     'new OrbChannelExecutionFrame(player, orb)',
     'new OrbEvokeAfterModelExecutionFrame(evokedOrb, targets.ToArray())',
-    'new OrbPassiveAfterModelExecutionFrame(processedEnemyDeaths.ToArray())',
+    'new OrbPassiveAfterModelExecutionFrame(processedEnemyDeaths)',
+    'ContinueOrbChannelAfterEvoke(player, orb)',
     'ContinueOrbEvokeNext(',
     'ContinueOrbPassiveTriggers(')) {
     if (-not $orbSimulatorText.Contains($requiredOrbSimulatorRule)) {

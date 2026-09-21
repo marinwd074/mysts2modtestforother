@@ -40,7 +40,7 @@ internal sealed partial class CombatPredictionSimulator
         bool dequeue,
         int nextIndex,
         bool resolveDeathsFirst,
-        HashSet<uint> processedEnemyDeaths)
+        ISet<uint> processedEnemyDeaths)
     {
         if (resolveDeathsFirst && State.CombatState is ICombatPredictionEnemyDeathSink initialDeathSink)
         {
@@ -55,7 +55,7 @@ internal sealed partial class CombatPredictionSimulator
                         dequeue,
                         nextIndex,
                         ResolveDeathsFirst: false,
-                        processedEnemyDeaths.ToArray()));
+                        processedEnemyDeaths));
                 return false;
             }
         }
@@ -73,7 +73,7 @@ internal sealed partial class CombatPredictionSimulator
                         dequeue,
                         index + 1,
                         ResolveDeathsFirst: true,
-                        processedEnemyDeaths.ToArray()));
+                        processedEnemyDeaths));
                 return false;
             }
 
@@ -91,7 +91,7 @@ internal sealed partial class CombatPredictionSimulator
                         dequeue,
                         index + 1,
                         ResolveDeathsFirst: false,
-                        processedEnemyDeaths.ToArray()));
+                        processedEnemyDeaths));
                 return false;
             }
         }
@@ -104,7 +104,7 @@ internal sealed partial class CombatPredictionSimulator
         Creature? target,
         int triggerCount,
         int nextIndex,
-        HashSet<uint> processedEnemyDeaths)
+        ISet<uint> processedEnemyDeaths)
     {
         for (int index = nextIndex; index < triggerCount; index++)
         {
@@ -118,14 +118,14 @@ internal sealed partial class CombatPredictionSimulator
                     target,
                     triggerCount,
                     index + 1,
-                    processedEnemyDeaths.ToArray()));
+                    processedEnemyDeaths));
             return false;
         }
 
         return true;
     }
 
-    private bool ContinueOrbPassiveAfterModel(HashSet<uint> processedEnemyDeaths)
+    private bool ContinueOrbPassiveAfterModel(ISet<uint> processedEnemyDeaths)
     {
         if (State.CombatState is ICombatPredictionEnemyDeathSink deathSink)
         {
@@ -145,6 +145,18 @@ internal sealed partial class CombatPredictionSimulator
 
         OrbModel fork = PredictionUtils.CloneModelForSimulation(orb);
         context.Register(orb, fork);
+    }
+
+    private static void PrepareExecutionEnemyDeathSet(
+        ISet<uint> processedEnemyDeaths,
+        PredictionForkContext context)
+    {
+        if (context.TryRemap(processedEnemyDeaths, out ISet<uint>? _))
+            return;
+
+        context.Register<ISet<uint>>(
+            processedEnemyDeaths,
+            new HashSet<uint>(processedEnemyDeaths));
     }
 
     private sealed record OrbChannelBatchExecutionFrame<TOrb>(
@@ -170,7 +182,7 @@ internal sealed partial class CombatPredictionSimulator
             => this with { Orb = context.RequireRemap(Orb) };
 
         public bool Resume(CombatPredictionSimulator simulator)
-            => simulator.OrbChannel(Player, Orb);
+            => simulator.ContinueOrbChannelAfterEvoke(Player, Orb);
     }
 
     private sealed record OrbEvokeAfterModelExecutionFrame(
@@ -197,13 +209,20 @@ internal sealed partial class CombatPredictionSimulator
         bool Dequeue,
         int NextIndex,
         bool ResolveDeathsFirst,
-        IReadOnlyCollection<uint> ProcessedEnemyDeaths) : ICombatPredictionExecutionFrame
+        ISet<uint> ProcessedEnemyDeaths) : ICombatPredictionExecutionFrame
     {
         public void PrepareFork(PredictionForkContext context)
-            => PrepareExecutionOrb(Orb, context);
+        {
+            PrepareExecutionOrb(Orb, context);
+            PrepareExecutionEnemyDeathSet(ProcessedEnemyDeaths, context);
+        }
 
         public ICombatPredictionExecutionFrame Fork(PredictionForkContext context)
-            => this with { Orb = context.RequireRemap(Orb) };
+            => this with
+            {
+                Orb = context.RequireRemap(Orb),
+                ProcessedEnemyDeaths = context.RequireRemap(ProcessedEnemyDeaths)
+            };
 
         public bool Resume(CombatPredictionSimulator simulator)
             => simulator.ContinueOrbEvokeNext(
@@ -213,7 +232,7 @@ internal sealed partial class CombatPredictionSimulator
                 Dequeue,
                 NextIndex,
                 ResolveDeathsFirst,
-                new HashSet<uint>(ProcessedEnemyDeaths));
+                ProcessedEnemyDeaths);
     }
 
     private sealed record OrbPassiveTriggerExecutionFrame(
@@ -221,13 +240,20 @@ internal sealed partial class CombatPredictionSimulator
         Creature? Target,
         int TriggerCount,
         int NextIndex,
-        IReadOnlyCollection<uint> ProcessedEnemyDeaths) : ICombatPredictionExecutionFrame
+        ISet<uint> ProcessedEnemyDeaths) : ICombatPredictionExecutionFrame
     {
         public void PrepareFork(PredictionForkContext context)
-            => PrepareExecutionOrb(Orb, context);
+        {
+            PrepareExecutionOrb(Orb, context);
+            PrepareExecutionEnemyDeathSet(ProcessedEnemyDeaths, context);
+        }
 
         public ICombatPredictionExecutionFrame Fork(PredictionForkContext context)
-            => this with { Orb = context.RequireRemap(Orb) };
+            => this with
+            {
+                Orb = context.RequireRemap(Orb),
+                ProcessedEnemyDeaths = context.RequireRemap(ProcessedEnemyDeaths)
+            };
 
         public bool Resume(CombatPredictionSimulator simulator)
             => simulator.ContinueOrbPassiveTriggers(
@@ -235,16 +261,19 @@ internal sealed partial class CombatPredictionSimulator
                 Target,
                 TriggerCount,
                 NextIndex,
-                new HashSet<uint>(ProcessedEnemyDeaths));
+                ProcessedEnemyDeaths);
     }
 
     private sealed record OrbPassiveAfterModelExecutionFrame(
-        IReadOnlyCollection<uint> ProcessedEnemyDeaths) : ICombatPredictionExecutionFrame
+        ISet<uint> ProcessedEnemyDeaths) : ICombatPredictionExecutionFrame
     {
-        public ICombatPredictionExecutionFrame Fork(PredictionForkContext context) => this;
+        public void PrepareFork(PredictionForkContext context)
+            => PrepareExecutionEnemyDeathSet(ProcessedEnemyDeaths, context);
+
+        public ICombatPredictionExecutionFrame Fork(PredictionForkContext context)
+            => this with { ProcessedEnemyDeaths = context.RequireRemap(ProcessedEnemyDeaths) };
 
         public bool Resume(CombatPredictionSimulator simulator)
-            => simulator.ContinueOrbPassiveAfterModel(
-                new HashSet<uint>(ProcessedEnemyDeaths));
+            => simulator.ContinueOrbPassiveAfterModel(ProcessedEnemyDeaths);
     }
 }

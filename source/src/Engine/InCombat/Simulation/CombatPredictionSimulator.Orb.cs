@@ -41,7 +41,7 @@ internal sealed partial class CombatPredictionSimulator
                     target,
                     triggerCount,
                     NextIndex: 0,
-                    processedEnemyDeaths.ToArray()));
+                    processedEnemyDeaths));
             return;
         }
         // Vanilla calls Hook.AfterModifyingOrbPassiveTriggerCount here, but all listeners are cosmetic.
@@ -50,7 +50,7 @@ internal sealed partial class CombatPredictionSimulator
             target,
             triggerCount,
             nextIndex: 0,
-            new HashSet<uint>(processedEnemyDeaths));
+            processedEnemyDeaths);
     }
 
     // Mirrors OrbCmd.Channel<T> without mutating the real orb queue.
@@ -89,21 +89,25 @@ internal sealed partial class CombatPredictionSimulator
                 return false;
             }
 
-            // Vanilla OrbCmd.Channel immediately calls OrbQueue.TryEnqueue after EvokeNext. If
-            // evoke side effects synchronously channel another orb and refill the freed slot,
-            // vanilla throws "OrbQueue is full" here. Prediction fails closed instead of
-            // reproducing that bug or inventing additional evokes to make room.
-            if (orbQueue.Orbs.Count >= orbQueue.Capacity)
-            {
-                History.RecordRisk(PredictionRiskReason.MethodMirrorIncomplete);
-                return false;
-            }
+        }
+
+        return ContinueOrbChannelAfterEvoke(player, orb);
+    }
+
+    private bool ContinueOrbChannelAfterEvoke(Player player, OrbModel orb)
+    {
+        var orbQueue = State.GetPlayerCombatState(player).OrbQueue;
+
+        // Vanilla resumes after EvokeNext and immediately attempts the enqueue. If Evoke
+        // side effects refill the slot, do not restart OrbChannel and evoke a second orb.
+        if (orbQueue.Capacity > 0 && orbQueue.Orbs.Count >= orbQueue.Capacity)
+        {
+            History.RecordRisk(PredictionRiskReason.MethodMirrorIncomplete);
+            return false;
         }
 
         if (!orbQueue.TryEnqueue(orb))
-        {
             return false;
-        }
 
         History.OrbChanneled(orb);
         HookMirrors.AfterOrbChanneled(this, player, orb);
@@ -127,7 +131,7 @@ internal sealed partial class CombatPredictionSimulator
             dequeue,
             nextIndex: 0,
             resolveDeathsFirst: false,
-            []);
+            new HashSet<uint>());
     }
 
     // Mirrors OrbCmd.Evoke without VFX/SFX, choice-context model stack updates, or real queue mutation.
@@ -181,7 +185,7 @@ internal sealed partial class CombatPredictionSimulator
             if (State.CombatState is ICombatPredictionEnemyDeathSink)
             {
                 AppendExecutionContinuation(
-                    new OrbPassiveAfterModelExecutionFrame(processedEnemyDeaths.ToArray()));
+                    new OrbPassiveAfterModelExecutionFrame(processedEnemyDeaths));
             }
             return;
         }
