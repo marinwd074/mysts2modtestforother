@@ -287,5 +287,11 @@ windows-2025 hosted runner 日志，说明失败发生在 checkout/脚本执行�
 runner。static-consistency 只使用 PowerShell 7/source/XML/git 检查，现改到 ubuntu-latest；contract-tests
 暂留 windows-latest，因为 MultiplayerSnapshotChecks 明确使用 WINDIR/System32/cmd.exe 和 Windows 路径语义。
 这样不削弱任何门禁，同时可区分“Windows runner 分配异常”和“账户级 Actions 配额/账单拒绝”。
+诊断提交 b5e5105 后，ubuntu-latest 的 static-consistency 与 windows-latest 的 contract-tests 仍同时
+steps=null，且都无日志 blob，已排除 Windows runner 专属问题，定位为 GitHub Hosted Actions 在 runner
+分配前的账户/仓库级拒绝。仓库 YAML 无法直接解除该外部限制。为避免恢复后继续无谓消耗私有仓库分钟，
+workflow 现仅在 compatibility workflow 自身或 source 非 docs 文件变化时自动触发；source/docs/** 文档提交
+不再跑完整门禁。另加入同 workflow/ref 的 cancel-in-progress，连续快速提交只保留最新一轮。手动
+workflow_dispatch 保留，代码/tools/target/project 变化仍完整执行门禁。
 
 已完成的 Power、continuation、死亡生命周期和 78/78 卡牌 OnPlay 数值不重复展开；多人牌仍暂不作为当前 blocker。

@@ -2,8 +2,20 @@ name: 0.107.1 compatibility consistency
 
 on:
   push:
+    paths:
+      - '.github/workflows/compatibility.yml'
+      - 'source/**'
+      - '!source/docs/**'
   pull_request:
+    paths:
+      - '.github/workflows/compatibility.yml'
+      - 'source/**'
+      - '!source/docs/**'
   workflow_dispatch:
+
+concurrency:
+  group: compatibility-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   static-consistency:
