@@ -305,6 +305,18 @@ because transformation filtering stays in the pinned native CardFactory; and
 Hand Drill's AfterBlockBroken mirror remains excluded under STS2_01071, so the
 v0.109 Expose interaction is not backported.
 
+A ten-card later-patch pass also found no new route mismatch. Abundance stays
+excluded from the 0.107.1 build because the card was introduced after the
+target version. Brightest Flame keeps its 0.107.1 Max HP loss through
+`DynamicVars.MaxHp`; Rend keeps its 2-Energy / 15(18)-damage model data;
+Rampage keeps 9 base damage and 5(9) scaling through its model vars; Alignment's
+3-Star cost remains model metadata while its Energy gain reads `DynamicVars`;
+Refine Blade keeps Forge 9(13) plus next-turn Energy from model vars; Shroud
+keeps Block 2(3); Time's Up keeps Exhaust through its 0.107.1 keywords; Thunder
+keeps 6(8) through `ThunderPower`'s card dynamic var; and Biased Cognition
+keeps Focus 4(5) through `FocusPower`'s card dynamic var. Later 0.110/0.111
+balance values therefore do not leak into the pinned build.
+
 The multiplayer-card result is tracked separately in
 [`MULTIPLAYER_CARD_COVERAGE.md`](MULTIPLAYER_CARD_COVERAGE.md). "Checked
 match" there means source semantics were compared and no mismatch was found;

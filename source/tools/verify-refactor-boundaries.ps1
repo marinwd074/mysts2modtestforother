@@ -78,6 +78,65 @@ if (-not $afterBlockBrokenText.Contains('#if !STS2_01071') -or
     $violations.Add("${afterBlockBrokenPath}: Hand Drill AfterBlockBroken behavior must remain excluded from 0.107.1")
 }
 
+$cardGenerationMirrorPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/CardGenerationCardMirrors.cs'
+$cardGenerationMirrorText = [IO.File]::ReadAllText($cardGenerationMirrorPath)
+$abundanceStart = $cardGenerationMirrorText.IndexOf('public static void AbundanceOnPlay')
+if ($abundanceStart -ge 0) {
+    $abundancePrefixStart = [Math]::Max(0, $abundanceStart - 120)
+    $abundancePrefix = $cardGenerationMirrorText.Substring($abundancePrefixStart, $abundanceStart - $abundancePrefixStart)
+    if (-not $abundancePrefix.Contains('#if !STS2_01071')) {
+        $violations.Add("${cardGenerationMirrorPath}: post-0.107.1 Abundance must stay outside the STS2_01071 build")
+    }
+}
+
+$cardEffectSpecPath = Join-Path $repositoryRoot 'src/Prediction/CardEffectSpecRegistry.cs'
+$cardEffectSpecText = [IO.File]::ReadAllText($cardEffectSpecPath)
+foreach ($modelDrivenRule in @(
+    'combat.RecordBrightestFlameMaxHpLoss(card.DynamicVars.MaxHp.IntValue)',
+    'ownerState.MaxHp - card.DynamicVars.MaxHp.IntValue',
+    'decimal increase = rampage.DynamicVars["Increase"].BaseValue',
+    'mutableRampage.DynamicVars.Damage.BaseValue += increase')) {
+    if (-not $cardEffectSpecText.Contains($modelDrivenRule)) {
+        $violations.Add("${cardEffectSpecPath}: later-patch numeric trap must remain model-driven '$modelDrivenRule'")
+    }
+}
+
+$corePowerSupportPath = Join-Path $repositoryRoot 'src/Prediction/CorePowerSupport.cs'
+$corePowerSupportText = [IO.File]::ReadAllText($corePowerSupportPath)
+foreach ($modelDrivenRule in @(
+    'PersistentPowerSupport.Forge(simulator, card.Owner, card.DynamicVars.Forge.IntValue)',
+    'combat.AddEnergyNextTurn(card.Owner, card.DynamicVars.Energy.IntValue)',
+    'combat.Apply<FocusPower>(owner, card.DynamicVars["FocusPower"].IntValue, owner)')) {
+    if (-not $corePowerSupportText.Contains($modelDrivenRule)) {
+        $violations.Add("${corePowerSupportPath}: later-patch card value must remain sourced from the pinned CardModel '$modelDrivenRule'")
+    }
+}
+
+$cardPowerLatePath = Join-Path $repositoryRoot 'src/Prediction/CardPowerOnPlaySupport.SToZ.cs'
+$cardPowerLateText = [IO.File]::ReadAllText($cardPowerLatePath)
+foreach ($modelDrivenRule in @(
+    'combat.Apply<ShroudPower>(owner, card.DynamicVars.Block.IntValue, owner)',
+    'combat.Apply<ThunderPower>(owner, card.DynamicVars["ThunderPower"].IntValue, owner)')) {
+    if (-not $cardPowerLateText.Contains($modelDrivenRule)) {
+        $violations.Add("${cardPowerLatePath}: later-patch card value must remain sourced from the pinned CardModel '$modelDrivenRule'")
+    }
+}
+
+$cardOnPlaySupportPath = Join-Path $repositoryRoot 'src/Prediction/CardOnPlaySupport.cs'
+$cardOnPlaySupportText = [IO.File]::ReadAllText($cardOnPlaySupportPath)
+if (-not $cardOnPlaySupportText.Contains('case Alignment:') -or
+    -not $cardOnPlaySupportText.Contains('simulator.GainEnergy(card.Owner, card.DynamicVars.Energy.IntValue);')) {
+    $violations.Add("${cardOnPlaySupportPath}: Alignment effect must stay model-driven; star cost belongs to the pinned CardModel")
+}
+
+$cardOnPlayMirrorsPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/CardOnPlayMirrors.cs'
+$cardOnPlayMirrorsText = [IO.File]::ReadAllText($cardOnPlayMirrorsPath)
+foreach ($genericCard in @('Rend', 'TimesUp')) {
+    if ($cardOnPlayMirrorsText.Contains("registry.Register<$genericCard>")) {
+        $violations.Add("${cardOnPlayMirrorsPath}: $genericCard must not gain a hard-coded post-0.107.1 OnPlay override")
+    }
+}
+
 $poolLifetime = [System.IO.File]::ReadAllText((Join-Path $repositoryRoot 'src/Runtime/NodePoolSignalLifetimePatch.cs'))
 foreach ($required in @('using ((Godot.Collections.Array)signals)', 'using var ownedArray', 'using (connection)', 'using (callable.Method)', 'using (signal.Name)')) {
     if (-not $poolLifetime.Contains($required)) { $violations.Add("Node pool wrapper ownership missing: $required") }

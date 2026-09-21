@@ -108,10 +108,10 @@
 
 当前只处理 **0.107.1 单人卡牌版本差异**。已确认并修正 44 个 route-affecting mismatch。
 
-最新一批检查了 5 个后续版本陷阱：Nightmare 生成、Transfigure 生成、Entropy→Ascender's Bane、
-Hellraiser×Swift×Shining Strike、Expose×Hand Drill。前 3 项和 Expose/Hand Drill 当前已正确保持
-0.107.1 边界；Swift 发现真实漂移并已修正：0.107.1 现在保持“先完成 Draw、后 Disabled”的原始
-await 顺序，若 Draw 内部挂起则通过 fork-safe `SwiftDisableExecutionFrame` 恢复后缀；新版仍可通过
-`Sts2CardPlayCompatibility` 使用先禁用再抽牌的修复行为。
+最新一批连续检查 10 个后续版本陷阱：Abundance、Brightest Flame、Rend、Rampage、Alignment、
+Refine Blade、Shroud、Time's Up、Thunder、Biased Cognition。未发现新的 route-affecting mismatch，
+总数仍为 44。Abundance 正确排除在 STS2_01071；其余牌的后续数值/关键词变化均由目标版本
+CardModel/DynamicVar/keyword 元数据承载，手写路径没有回移 0.110/0.111 的新值。已补静态守卫，
+防止这些版本边界未来被硬编码破坏。
 
-后续按短批次继续：每次只审计/修正一个高风险单人牌路径；多人牌暂不处理。
+后续继续按“后续 patch → 0.107.1 真值 → 只查对应实现”的批量方式，每批可处理约 10 个单人牌版本陷阱。
