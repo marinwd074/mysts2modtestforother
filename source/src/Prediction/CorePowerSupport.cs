@@ -714,7 +714,6 @@ internal static class CorePowerSupport
         Player player)
     {
         SimPlayerCombatState playerState = simulator.State.GetPlayerCombatState(player);
-        EnchantmentLifecycleSupport.BeforeFlush(simulator, player);
         List<PredictedCard>? toFlush = null;
         if (PersistentRelicSupport.ShouldFlush(combat, player))
         {

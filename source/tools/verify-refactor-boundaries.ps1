@@ -2534,6 +2534,63 @@ else {
     }
 }
 
+$turnStartChoiceSupportPath = Join-Path $repositoryRoot 'src/Prediction/TurnStartChoiceSupport.cs'
+$turnStartChoiceSupportText = [IO.File]::ReadAllText($turnStartChoiceSupportPath)
+foreach ($requiredWellLaidPlansChoiceRule in @(
+    'public static bool ResolveSingleTurnRetain(',
+    'Where(card => !card.Preview.ShouldRetainThisTurn)',
+    'PlanChoiceEffect.ApplyRetain,',
+    '0,',
+    'maxCount,',
+    'card.MutablePreview.GiveSingleTurnRetain()')) {
+    if (-not $turnStartChoiceSupportText.Contains($requiredWellLaidPlansChoiceRule)) {
+        $violations.Add("${turnStartChoiceSupportPath}: missing 0.107.1 Well-Laid Plans choice rule '$requiredWellLaidPlansChoiceRule'")
+    }
+}
+$endTurnPowerPath = Join-Path $repositoryRoot 'src/Prediction/EndTurnPowerSupport.cs'
+$endTurnPowerText = [IO.File]::ReadAllText($endTurnPowerPath)
+foreach ($requiredWellLaidPlansPowerRule in @(
+    'public static bool TriggerBeforeFlushLate(',
+    'PersistentRelicSupport.ShouldFlush(combat, player)',
+    'combat.GetPower<WellLaidPlansPower>(player.Creature)',
+    'TurnStartChoiceSupport.ResolveSingleTurnRetain(',
+    'combat.ActiveExecutionChoices')) {
+    if (-not $endTurnPowerText.Contains($requiredWellLaidPlansPowerRule)) {
+        $violations.Add("${endTurnPowerPath}: missing 0.107.1 Well-Laid Plans BeforeFlushLate rule '$requiredWellLaidPlansPowerRule'")
+    }
+}
+$corePowerSupportPath = Join-Path $repositoryRoot 'src/Prediction/CorePowerSupport.cs'
+$corePowerSupportText = [IO.File]::ReadAllText($corePowerSupportPath)
+$flushStart = $corePowerSupportText.IndexOf('public static void FlushPlayerHandAtTurnEnd')
+$flushEnd = $corePowerSupportText.IndexOf('public static void TickDurations', $flushStart)
+if ($flushStart -lt 0 -or $flushEnd -le $flushStart) {
+    $violations.Add("${corePowerSupportPath}: hand-flush helper boundary is missing")
+}
+else {
+    $flushBlock = $corePowerSupportText.Substring($flushStart, $flushEnd - $flushStart)
+    if ($flushBlock.Contains('EnchantmentLifecycleSupport.BeforeFlush')) {
+        $violations.Add("${corePowerSupportPath}: BeforeFlush must execute before Well-Laid Plans BeforeFlushLate, not inside FlushPlayerHandAtTurnEnd")
+    }
+}
+$expansionPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Expansion.cs'
+$expansionText = [IO.File]::ReadAllText($expansionPath)
+$advanceRoundStart = $expansionText.IndexOf('private SearchBoundaryReason AdvanceRound(')
+$advanceRoundEnd = $expansionText.IndexOf('private ActionCandidate BuildCandidate(', $advanceRoundStart)
+if ($advanceRoundStart -lt 0 -or $advanceRoundEnd -le $advanceRoundStart) {
+    $violations.Add("${expansionPath}: AdvanceRound boundary is missing")
+}
+else {
+    $advanceRoundBlock = $expansionText.Substring($advanceRoundStart, $advanceRoundEnd - $advanceRoundStart)
+    $beforeFlushIndex = $advanceRoundBlock.IndexOf('EnchantmentLifecycleSupport.BeforeFlush(simulator, _player)')
+    $beforeFlushLateIndex = $advanceRoundBlock.IndexOf('EndTurnPowerSupport.TriggerBeforeFlushLate(simulator, simulatedCombat, _player)')
+    $flushIndex = $advanceRoundBlock.IndexOf('CorePowerSupport.FlushPlayerHandAtTurnEnd(simulator, simulatedCombat, _player)')
+    if ($beforeFlushIndex -lt 0 -or
+        $beforeFlushLateIndex -le $beforeFlushIndex -or
+        $flushIndex -le $beforeFlushLateIndex) {
+        $violations.Add("${expansionPath}: 0.107.1 end-turn order must be BeforeFlush -> Well-Laid Plans BeforeFlushLate -> FlushPlayerHand")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."

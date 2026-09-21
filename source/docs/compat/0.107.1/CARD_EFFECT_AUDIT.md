@@ -28,7 +28,7 @@ replace the native-vs-predicted runtime differential.
 
 ## Corrected version drift
 
-Twenty-nine route-affecting mismatches have been confirmed in the 0.107.1 source audit:
+Thirty route-affecting mismatches have been confirmed in the 0.107.1 source audit:
 
 | Card | 0.107.1 native behavior | Incorrect solver behavior | Correction |
 |---|---|---|---|
@@ -45,6 +45,7 @@ Twenty-nine route-affecting mismatches have been confirmed in the 0.107.1 source
 | Null | attacks, applies Weak 2/3 to the target, then channels one Dark Orb | the mirror attacked and channeled the Dark Orb but omitted Weak entirely | apply Weak to the target between the attack and Dark-Orb channel, preserving native order |
 | Forgotten Ritual | gains 3/4 Energy only if one of its owner's cards was Exhausted earlier this turn; otherwise playing it has no Energy effect | shared the unconditional Luminesce compensation and always granted Energy | split the case and gate Energy gain on the branch-local exhausted-card history for the owner |
 | Eidolon | Exhausts the owner's current Hand one card at a time; if at least 9 cards were Exhausted this way, applies 1 Intangible | used the v0.109 redesign and auto-played all playable Ethereal cards from the Exhaust Pile | snapshot the current Hand, Exhaust each card through the simulator, preserve the remaining snapshot/count in a fork-safe continuation across Exhaust-triggered choices, then apply Intangible at the native threshold |
+| Well-Laid Plans | during 0.107.1 `BeforeFlushLate`, if the owner's hand will flush, choose 0..1 cards (0..2 upgraded) that are not already retained and give those exact cards single-turn Retain before `FlushPlayerHand` | the Power was applied but its end-turn selector was never mirrored, so the normal flush discarded every non-Retain card | reuse the EndTurn choice pipeline at `PlayerTurnEnd` timing, resolve the 0..Amount hand choice before flush, and call `GiveSingleTurnRetain()` rather than adding a permanent Retain keyword |
 | Scare | applies 1 Weak to every hittable enemy; base card Exhausts and the upgrade only removes Exhaust | no explicit mirror or compensation represented the Weak application, while the later Sidestep replacement has unrelated Energy-next-turn semantics | register the 0.107.1 Scare path explicitly and apply one Weak to every hittable enemy; leave Exhaust handling to the pinned card keyword |
 | Feral | while FeralPower has remaining uses, any owner 0-Energy Attack is returned to the owner's Hand; 0.107.1 does not exclude gameplay dupes/copies | the result-pile mirror excluded `IsDupe` cards, importing the v0.108 fix for History Course's copied Helix Drill | remove the dupe exclusion so the pinned 0.107.1 result-pile hook is mirrored exactly |
 | Shining Strike | attacks, gains 2 Stars, then—unless it has Exhaust or ExhaustOnNextPlay—moves itself from Play to the top of Draw; 0.107.1 does not exclude dupes | only the inferred attack and Star gain were represented, so normal plays and History Course copies fell through to the ordinary result pile instead of returning to Draw | extend the ordered post-attack spec with the native Exhaust checks and Draw-top move, preserving a continuation if AfterStarsGained suspends |

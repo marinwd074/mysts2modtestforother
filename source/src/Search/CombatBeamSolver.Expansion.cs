@@ -2714,6 +2714,17 @@ internal sealed partial class CombatBeamSolver
             // flush the hand or enter phase two after either native phase-one check ended combat.
             if (!simulator.IsInProgress)
                 return SearchBoundaryReason.None;
+
+            // Native 0.107.1 Hook.BeforeFlush runs ordinary BeforeFlush listeners first
+            // (Slumbering Essence in the base game), then BeforeFlushLate. Well-Laid Plans
+            // opens its optional retain selector in the late pass before FlushPlayerHand.
+            EnchantmentLifecycleSupport.BeforeFlush(simulator, _player);
+            if (simulatedCombat.HasPendingChoice
+                || !EndTurnPowerSupport.TriggerBeforeFlushLate(simulator, simulatedCombat, _player))
+            {
+                return SearchBoundaryReason.PendingChoice;
+            }
+
             using (_run.Performance.Measure(SearchMetricPhase.RoundFlush))
                 CorePowerSupport.FlushPlayerHandAtTurnEnd(simulator, simulatedCombat, _player);
             int turnEndShuffleEvents = simulator.ShuffleEventCount;
