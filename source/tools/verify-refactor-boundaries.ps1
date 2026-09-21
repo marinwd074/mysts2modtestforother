@@ -1584,6 +1584,21 @@ foreach ($forbidden in @('Task<', 'Func<', 'Action<')) {
     }
 }
 
+if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/CombatHistoryCounterKey.cs') -SimpleMatch 'simulator.History.GetCounters(owner)' -Quiet)) {
+    $violations.Add('History key must consume incremental totals')
+}
+if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.cs') -SimpleMatch 'root.PlayerCount == 1 && CombatHistoryCounterKey.AppliesTo(root.PlayerCardIds)' -Quiet)) {
+    $violations.Add('History-sensitive transposition key must stay single-player only')
+}
+foreach ($historyFile in @('CombatPredictionHistory.cs', 'CombatPredictionHistory.CardContinuation.cs', 'CombatPredictionHistory.ExecutionContinuation.cs')) {
+    if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot "src/Engine/InCombat/Simulation/$historyFile") -SimpleMatch '_counterOwner, _counters' -Quiet)) {
+        $violations.Add("History fork must inherit counters: $historyFile")
+    }
+}
+if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.StateEvaluation.cs') -SimpleMatch 'CombatHistoryCounterKey.Append(ref key, simulator, _player)' -Quiet)) {
+    $violations.Add('State key no longer includes history counters')
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."

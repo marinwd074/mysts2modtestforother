@@ -48,6 +48,7 @@ function Invoke-DotnetContract {
 Push-Location -LiteralPath $repositoryRoot
 try {
     Invoke-DotnetContract 'StateFingerprintChecks' 'tools/StateFingerprintChecks/StateFingerprintChecks.csproj'
+    Invoke-DotnetContract 'HistoryCounterKeyChecks' 'tools/HistoryCounterKeyChecks/HistoryCounterKeyChecks.csproj'
     Invoke-DotnetContract 'CardHookReceiverChecks' 'tools/CardHookReceiverChecks/CardHookReceiverChecks.csproj'
     Invoke-DotnetContract 'TurnPhaseMirrorChecks' 'tools/TurnPhaseMirrorChecks/TurnPhaseMirrorChecks.csproj'
     Invoke-DotnetContract 'PredictionStateStoreChecks' 'tools/PredictionStateStoreChecks/PredictionStateStoreChecks.csproj'
