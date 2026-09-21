@@ -209,9 +209,9 @@ internal static class CardEffectSpecRegistry
                 break;
             }
             case BigBang:
-                simulator.GainEnergy(card.Owner, card.DynamicVars.Energy.IntValue);
                 if (!simulator.GainStars(card.Owner, card.DynamicVars.Stars.IntValue))
                     return true;
+                simulator.GainEnergy(card.Owner, card.DynamicVars.Energy.IntValue);
                 PersistentPowerSupport.Forge(simulator, card.Owner, card.DynamicVars.Forge.IntValue);
                 applied = true;
                 break;
