@@ -1712,6 +1712,30 @@ else {
 }
 
 
+$generatedCardHookPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Card/AfterCardGeneratedForCombatMirrors.cs'
+$generatedCardHookText = [IO.File]::ReadAllText($generatedCardHookPath)
+$regaliteStart = $generatedCardHookText.IndexOf('private static void HandleRegalite')
+$regaliteEnd = $generatedCardHookText.IndexOf('#if !STS2_01071', $regaliteStart)
+if ($regaliteStart -lt 0 -or $regaliteEnd -le $regaliteStart) {
+    $violations.Add("${generatedCardHookPath}: Regalite generated-card hook boundary is missing")
+}
+else {
+    $regaliteBlock = $generatedCardHookText.Substring($regaliteStart, $regaliteEnd - $regaliteStart)
+    if (-not $regaliteBlock.Contains('context.Creator == relic.Owner') -or
+        -not $regaliteBlock.Contains('GainBlock(relic.Owner.Creature, relic.DynamicVars.Block)')) {
+        $violations.Add("${generatedCardHookPath}: 0.107.1 Regalite must grant Block for every owner-created card")
+    }
+    if ($regaliteBlock.Contains('UsedThisTurn') -or
+        $regaliteBlock.Contains('RegalitePredictionState')) {
+        $violations.Add("${generatedCardHookPath}: v0.110 once-per-turn Regalite behavior returned")
+    }
+}
+$relicPredictionStatePath = Join-Path $repositoryRoot 'src/Prediction/RelicPredictionStateSupport.cs'
+$relicPredictionStateText = [IO.File]::ReadAllText($relicPredictionStatePath)
+if ($relicPredictionStateText.Contains('RegalitePredictionState')) {
+    $violations.Add("${relicPredictionStatePath}: 0.107.1 Regalite has no per-turn prediction state")
+}
+
 $batch043Path = Join-Path $repositoryRoot 'src/Prediction/CardOnPlaySupport.Batch043.cs'
 $batch043Text = [IO.File]::ReadAllText($batch043Path)
 $eidolonStart = $batch043Text.IndexOf('private static void ApplyEidolon(')

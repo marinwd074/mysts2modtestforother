@@ -62,6 +62,16 @@ Outbreak's hidden poison counter is also included in the search fingerprint and
 live/predicted continuation stamps so branch deduplication and cross-turn reuse
 cannot erase or silently mismatch the next trigger.
 
+### Adjacent generated-card hook correction
+
+Regalite is not a card, but its hook changes the value of every card-generation
+route. In the pinned 0.107.1 DLL, each generated card whose creator is the
+relic owner grants 2 Unpowered Block. There is no once-per-turn flag or hidden
+counter. The solver had imported the v0.110 behavior and stopped after the
+first generated card each turn. The mirror now grants Block on every matching
+generation, and the nonexistent Regalite per-turn prediction/fingerprint state
+has been removed.
+
 ## Checked matches
 
 The initial pass also checked several special cases that already match the

@@ -70,19 +70,8 @@ internal static class AfterCardGeneratedForCombatMirrors
 
     private static void HandleRegalite(Regalite relic, AfterCardGeneratedForCombatMirrorContext context)
     {
-        if (context.Creator != relic.Owner)
-        {
-            return;
-        }
-
-        var state = context.StateStore.Get(relic, () => new RegalitePredictionState(relic));
-        if (state.UsedThisTurn)
-        {
-            return;
-        }
-
-        state.UsedThisTurn = true;
-        context.Simulator.GainBlock(relic.Owner.Creature, relic.DynamicVars.Block);
+        if (context.Creator == relic.Owner)
+            context.Simulator.GainBlock(relic.Owner.Creature, relic.DynamicVars.Block);
     }
 
 #if !STS2_01071
@@ -181,12 +170,3 @@ internal sealed class SoulboundPredictionState(SoulboundPower power) : IPredicti
 }
 #endif
 
-internal sealed class RegalitePredictionState(Regalite relic) : IPredictionStateForkable
-{
-    // Regalite's 0.107.1 state is not exposed through the later private field.
-    // The live root is captured before the generated-card hook sequence, so the
-    // state starts unused and is advanced only by the mirrored hook itself.
-    public bool UsedThisTurn { get; set; }
-
-    public object Fork(PredictionForkContext context) => MemberwiseClone();
-}
