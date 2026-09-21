@@ -154,5 +154,16 @@ Colossus、Escape Artist、Hatch、Shrink 的回合边界均与既有适配证�
 `3→2→1→1`；Shrink 的永久负层依赖循环入口 `Amount <= 0` 跳过，因此不会被递减。未发现新的
 route-affecting mismatch，总数仍为 44。该批只保留审计结论，不再增加冗余静态护栏。
 
-下一批继续其余 solver-authored 特殊状态生命周期，不再重复已收口的 continuation 和固定单位；
+Power 生命周期第二批已继续复核：NoDraw、Dark Embrace、Doom、Asleep、Slumber、Battleworn Dummy、
+High Voltage、Territorial、Pale Blue Dot、Smoggy、Consuming Shadow、Nemesis、Juggling、Tender。
+这些路径均已进入原生-vs-模拟回合边界测试入口。Dark Embrace 抽牌中途出现选择时仍走既有
+fail-closed 整阶段重放，不会从半完成状态继续；Nemesis/Tender 隐藏字典随 Fork 复制，Juggling 走
+PredictionStateStore Fork，Pale Blue Dot 内部激活位既随 Fork 复制又进入状态指纹。未发现新的
+route-affecting mismatch，总数仍为 44。
+
+GitHub Actions 在 `9118442e` 上约 5 秒内同时结束两个 job、steps/logs 为空；且该提交相对已全绿的
+`805ad8df` 仅有本 handoff 文档差异，verifier 与 run-contract-tests 逐字一致，因此当前记录为
+runner/checkout 层异常，不据此改战斗源码。
+
+下一批转向 Power amount-change / 临时属性 / Artifact 抵消链，继续找 solver-authored 特殊语义；
 多人牌仍暂不作为当前 blocker。
