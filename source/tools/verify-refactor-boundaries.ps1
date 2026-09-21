@@ -2591,6 +2591,28 @@ else {
     }
 }
 
+$bespokeContinuationRules = @(
+    'private sealed record BespokeTailExecutionFrame(',
+    'private sealed record FiendFireExecutionFrame(',
+    'private sealed record LeadingStrikeExecutionFrame(',
+    'private sealed record SecondWindExecutionFrame(',
+    'ContinueFiendFire(',
+    'ContinueLeadingStrikeShivs(',
+    'ContinueSecondWind(',
+    'BespokeTailKind.BoneShardsGainBlock',
+    'BespokeTailKind.DemonicShieldGainBlock',
+    'BespokeTailKind.InterceptCoverage',
+    'BespokeTailKind.MaulGrowth',
+    'BespokeTailKind.TheScytheGrowth',
+    'BespokeTailKind.SacrificeGainBlock',
+    'BespokeTailKind.SovereignBladeParryBlock',
+    'Cards = Cards.Select(candidate => context.RequireRemap(candidate)).ToArray()')
+foreach ($requiredBespokeContinuationRule in $bespokeContinuationRules) {
+    if (-not $bespokeOnPlayText.Contains($requiredBespokeContinuationRule)) {
+        $violations.Add("${bespokeOnPlayPath}: missing multi-step OnPlay continuation rule '$requiredBespokeContinuationRule'")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."

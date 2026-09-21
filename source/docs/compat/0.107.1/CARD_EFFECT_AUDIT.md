@@ -28,7 +28,7 @@ replace the native-vs-predicted runtime differential.
 
 ## Corrected version drift
 
-Thirty route-affecting mismatches have been confirmed in the 0.107.1 source audit:
+Thirty-one route-affecting mismatches have been confirmed in the 0.107.1 source audit:
 
 | Card | 0.107.1 native behavior | Incorrect solver behavior | Correction |
 |---|---|---|---|
@@ -86,6 +86,25 @@ already imported the v0.109 nerf and tracked Attacks only, which silently
 dropped Skill routes from cross-turn prediction. Both simulated turn history
 and live-root history lookup now accept Attack or Skill while still excluding
 dupes.
+
+### Multi-step OnPlay continuation correction
+
+Several dedicated 0.107.1 card mirrors had the right immediate effects but lost
+the rest of their native OnPlay sequence if an intermediate Exhaust, attack,
+damage, Block, or kill hook opened a prediction choice. The outer card dispatcher
+only resumes the later generic CardSpec suffix; it cannot reconstruct the
+remaining bespoke steps by itself.
+
+The affected mirrors are Bone Shards, Demonic Shield, Intercept, Fiend Fire,
+Leading Strike, Maul, The Scythe, Sacrifice, Second Wind, and Sovereign Blade.
+Their native suffixes are now represented by fork-safe execution frames.
+Fiend Fire preserves its original Hand snapshot and next Exhaust index; Second
+Wind preserves its non-Attack Hand snapshot plus whether the current card still
+needs its post-Exhaust Block; Leading Strike creates each Shiv separately and
+preserves the next Shiv index. Simple post-command suffixes share one tail
+frame. This keeps nested vanilla hooks such as Dark Embrace, Charon's Ashes,
+Forgotten Soul, generated-card hooks, and damage hooks from silently skipping
+the rest of the played card.
 
 ## Checked matches
 

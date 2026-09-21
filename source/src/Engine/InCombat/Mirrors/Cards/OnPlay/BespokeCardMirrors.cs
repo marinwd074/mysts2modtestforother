@@ -33,10 +33,7 @@ internal static class BespokeCardMirrors
             .TargetingAllOpponents(context.CombatState)
             .Simulate(context.Simulator);
 
-        if (context.Simulator.HasPendingChoice)
-            return;
-
-        context.GainBlock(card.Owner.Creature);
+        ContinueOrQueueTail(context, BespokeTailKind.BoneShardsGainBlock);
     }
 
     public static void PactsEndOnPlay(PactsEnd card, CardOnPlayMirrorContext context)
@@ -62,29 +59,13 @@ internal static class BespokeCardMirrors
             owner,
             context.Card,
             null);
-        if (context.Simulator.HasPendingChoice)
-            return;
-
-        context.GainBlock(
-            context.Target,
-            context.Calculate(card.DynamicVars.CalculatedBlock),
-            card.DynamicVars.CalculatedBlock.Props);
+        ContinueOrQueueTail(context, BespokeTailKind.DemonicShieldGainBlock);
     }
 
     public static void InterceptOnPlay(Intercept card, CardOnPlayMirrorContext context)
     {
         context.GainBlock(card.Owner.Creature);
-        if (context.Simulator.HasPendingChoice)
-            return;
-        if (context.CombatState is not SimulatedCombatState combat)
-            throw new InvalidOperationException("Intercept requires writable branch combat state.");
-
-        combat.Apply<CoveredPower>(context.Target, 1, card.Owner.Creature);
-        PowerPredictionStateSupport.ApplyInterceptCoverage(
-            context.Simulator,
-            combat,
-            card.Owner.Creature,
-            context.Target);
+        ContinueOrQueueTail(context, BespokeTailKind.InterceptCoverage);
     }
 
     public static void TwinStrikeOnPlay(TwinStrike _, CardOnPlayMirrorContext context)
@@ -98,20 +79,15 @@ internal static class BespokeCardMirrors
         context.AttackSingle(hitCount: hits);
     }
 
-    public static void FiendFireOnPlay(FiendFire card, CardOnPlayMirrorContext context)
+    public static void FiendFireOnPlay(FiendFire _, CardOnPlayMirrorContext context)
     {
         PredictedCard[] hand = context.OwnerState.Hand.Cards.ToArray();
-        foreach (PredictedCard candidate in hand)
-        {
-            context.Simulator.Exhaust(candidate);
-            if (context.Simulator.HasPendingChoice)
-                return;
-        }
-        DamageCmd.Attack(card.DynamicVars.Damage.BaseValue)
-            .WithHitCount(hand.Length)
-            .FromCard(card, context.CardPlay)
-            .Targeting(context.Target)
-            .Simulate(context.Simulator);
+        _ = ContinueFiendFire(
+            context.Simulator,
+            context.Card,
+            context.CardPlay,
+            hand,
+            nextIndex: 0);
     }
 
     public static void DismantleOnPlay(Dismantle card, CardOnPlayMirrorContext context)
@@ -141,12 +117,17 @@ internal static class BespokeCardMirrors
             .Targeting(context.Target)
             .Simulate(context.Simulator);
         if (context.Simulator.HasPendingChoice)
+        {
+            context.Simulator.AppendExecutionContinuation(
+                new LeadingStrikeExecutionFrame(context.Card, context.CardPlay, NextShiv: 0));
             return;
-        context.Simulator.CreateAndAddGeneratedCardsToCombat<Shiv>(
-            card.Owner,
-            PileType.Hand,
-            card.DynamicVars["Shivs"].IntValue,
-            card.Owner);
+        }
+
+        _ = ContinueLeadingStrikeShivs(
+            context.Simulator,
+            context.Card,
+            context.CardPlay,
+            nextShiv: 0);
     }
 
     public static void MimicOnPlay(Mimic card, CardOnPlayMirrorContext context)
@@ -222,17 +203,7 @@ internal static class BespokeCardMirrors
             .FromCard(card, context.CardPlay)
             .Targeting(context.Target)
             .Simulate(context.Simulator);
-        if (context.Simulator.HasPendingChoice)
-            return;
-        decimal increase = card.DynamicVars["Increase"].BaseValue;
-        foreach (PredictedCard candidate in context.OwnerState.AllCards
-                     .Where(candidate => candidate.Preview is Maul)
-                     .ToArray())
-        {
-            Maul mutable = (Maul)candidate.MutablePreview;
-            mutable.DynamicVars.Damage.BaseValue += increase;
-            mutable._extraDamageFromMaulPlays += increase;
-        }
+        ContinueOrQueueTail(context, BespokeTailKind.MaulGrowth);
     }
 
     public static void SpiteOnPlay(Spite card, CardOnPlayMirrorContext context)
@@ -262,18 +233,7 @@ internal static class BespokeCardMirrors
             .FromCard(card, context.CardPlay)
             .Targeting(context.Target)
             .Simulate(context.Simulator);
-        if (context.Simulator.HasPendingChoice)
-            return;
-        TheScythe mutable = (TheScythe)context.Card.MutablePreview;
-        int increase = card.DynamicVars["Increase"].IntValue;
-        mutable.IncreasedDamage += increase;
-        mutable.CurrentDamage = 13 + mutable.IncreasedDamage;
-        if (mutable.DeckVersion != null
-            && context.CombatState is SimulatedCombatState combat)
-        {
-            combat.RecordLongTermResource(increase);
-            combat.RecordGrowthReward(GrowthSource.TheScythe);
-        }
+        ContinueOrQueueTail(context, BespokeTailKind.TheScytheGrowth);
     }
 
     public static void SacrificeOnPlay(Sacrifice card, CardOnPlayMirrorContext context)
@@ -282,34 +242,21 @@ internal static class BespokeCardMirrors
             return;
         int block = context.State.GetCreature(osty).MaxHp * 2;
         context.Simulator.Kill(osty, force: true);
-        if (context.Simulator.HasPendingChoice)
-            return;
-        context.Simulator.GainBlock(
-            card.Owner.Creature,
-            block,
-            card.DynamicVars.CalculatedBlock.Props,
-            context.Card,
-            context.CardPlay);
+        ContinueOrQueueTail(context, BespokeTailKind.SacrificeGainBlock, block);
     }
 
-    public static void SecondWindOnPlay(SecondWind card, CardOnPlayMirrorContext context)
+    public static void SecondWindOnPlay(SecondWind _, CardOnPlayMirrorContext context)
     {
         PredictedCard[] cards = context.OwnerState.Hand.Cards
             .Where(candidate => candidate.Preview.Type != CardType.Attack)
             .ToArray();
-        foreach (PredictedCard candidate in cards)
-        {
-            context.Simulator.Exhaust(candidate);
-            if (context.Simulator.HasPendingChoice)
-                return;
-            context.Simulator.GainBlock(
-                card.Owner.Creature,
-                card.DynamicVars.Block,
-                context.Card,
-                context.CardPlay);
-            if (context.Simulator.HasPendingChoice)
-                return;
-        }
+        _ = ContinueSecondWind(
+            context.Simulator,
+            context.Card,
+            context.CardPlay,
+            cards,
+            nextIndex: 0,
+            needsBlock: false);
     }
 
     public static void SovereignBladeOnPlay(SovereignBlade card, CardOnPlayMirrorContext context)
@@ -323,19 +270,331 @@ internal static class BespokeCardMirrors
         else
             attack.Targeting(context.Target);
         attack.Simulate(context.Simulator);
-        if (context.Simulator.HasPendingChoice)
-            return;
+        ContinueOrQueueTail(context, BespokeTailKind.SovereignBladeParryBlock);
+    }
 
-        int parry = GetPowerAmount<ParryPower>(context, card.Owner.Creature);
-        if (parry > 0)
+    private static void ContinueOrQueueTail(
+        CardOnPlayMirrorContext context,
+        BespokeTailKind tail,
+        int value = 0)
+    {
+        if (context.Simulator.HasPendingChoice)
         {
-            context.Simulator.GainBlock(
-                card.Owner.Creature,
-                parry,
-                card.DynamicVars.CalculatedBlock.Props,
-                context.Card,
-                context.CardPlay);
+            context.Simulator.AppendExecutionContinuation(
+                new BespokeTailExecutionFrame(context.Card, context.CardPlay, tail, value));
+            return;
         }
+
+        _ = ResumeBespokeTail(context.Simulator, context.Card, context.CardPlay, tail, value);
+    }
+
+    private static bool ResumeBespokeTail(
+        CombatPredictionSimulator simulator,
+        PredictedCard playedCard,
+        CardPlay play,
+        BespokeTailKind tail,
+        int value)
+    {
+        var context = new CardOnPlayMirrorContext
+        {
+            Simulator = simulator,
+            Card = playedCard,
+            CardPlay = play
+        };
+
+        switch (tail)
+        {
+            case BespokeTailKind.BoneShardsGainBlock:
+            {
+                var card = (BoneShards)playedCard.MutablePreview;
+                context.GainBlock(card.Owner.Creature);
+                break;
+            }
+            case BespokeTailKind.DemonicShieldGainBlock:
+            {
+                var card = (DemonicShield)playedCard.MutablePreview;
+                context.GainBlock(
+                    context.Target,
+                    context.Calculate(card.DynamicVars.CalculatedBlock),
+                    card.DynamicVars.CalculatedBlock.Props);
+                break;
+            }
+            case BespokeTailKind.InterceptCoverage:
+            {
+                var card = (Intercept)playedCard.MutablePreview;
+                if (context.CombatState is not SimulatedCombatState combat)
+                    throw new InvalidOperationException("Intercept continuation requires writable branch combat state.");
+                combat.Apply<CoveredPower>(context.Target, 1, card.Owner.Creature);
+                PowerPredictionStateSupport.ApplyInterceptCoverage(
+                    simulator,
+                    combat,
+                    card.Owner.Creature,
+                    context.Target);
+                break;
+            }
+            case BespokeTailKind.MaulGrowth:
+                ApplyMaulGrowth((Maul)playedCard.MutablePreview, context);
+                break;
+            case BespokeTailKind.TheScytheGrowth:
+                ApplyTheScytheGrowth((TheScythe)playedCard.MutablePreview, context);
+                break;
+            case BespokeTailKind.SacrificeGainBlock:
+            {
+                var card = (Sacrifice)playedCard.MutablePreview;
+                simulator.GainBlock(
+                    card.Owner.Creature,
+                    value,
+                    card.DynamicVars.CalculatedBlock.Props,
+                    playedCard,
+                    play);
+                break;
+            }
+            case BespokeTailKind.SovereignBladeParryBlock:
+            {
+                var card = (SovereignBlade)playedCard.MutablePreview;
+                int parry = GetPowerAmount<ParryPower>(context, card.Owner.Creature);
+                if (parry > 0)
+                {
+                    simulator.GainBlock(
+                        card.Owner.Creature,
+                        parry,
+                        card.DynamicVars.CalculatedBlock.Props,
+                        playedCard,
+                        play);
+                }
+                break;
+            }
+            default:
+                throw new ArgumentOutOfRangeException(nameof(tail), tail, null);
+        }
+
+        return !simulator.HasPendingChoice;
+    }
+
+    private static void ApplyMaulGrowth(Maul card, CardOnPlayMirrorContext context)
+    {
+        decimal increase = card.DynamicVars["Increase"].BaseValue;
+        foreach (PredictedCard candidate in context.OwnerState.AllCards
+                     .Where(candidate => candidate.Preview is Maul)
+                     .ToArray())
+        {
+            Maul mutable = (Maul)candidate.MutablePreview;
+            mutable.DynamicVars.Damage.BaseValue += increase;
+            mutable._extraDamageFromMaulPlays += increase;
+        }
+    }
+
+    private static void ApplyTheScytheGrowth(TheScythe card, CardOnPlayMirrorContext context)
+    {
+        TheScythe mutable = (TheScythe)context.Card.MutablePreview;
+        int increase = card.DynamicVars["Increase"].IntValue;
+        mutable.IncreasedDamage += increase;
+        mutable.CurrentDamage = 13 + mutable.IncreasedDamage;
+        if (mutable.DeckVersion != null
+            && context.CombatState is SimulatedCombatState combat)
+        {
+            combat.RecordLongTermResource(increase);
+            combat.RecordGrowthReward(GrowthSource.TheScythe);
+        }
+    }
+
+    private static bool ContinueFiendFire(
+        CombatPredictionSimulator simulator,
+        PredictedCard playedCard,
+        CardPlay play,
+        IReadOnlyList<PredictedCard> cards,
+        int nextIndex)
+    {
+        for (int index = nextIndex; index < cards.Count; index++)
+        {
+            simulator.Exhaust(cards[index]);
+            if (simulator.HasPendingChoice)
+            {
+                simulator.AppendExecutionContinuation(
+                    new FiendFireExecutionFrame(playedCard, play, cards, index + 1));
+                return false;
+            }
+        }
+
+        var card = (FiendFire)playedCard.MutablePreview;
+        DamageCmd.Attack(card.DynamicVars.Damage.BaseValue)
+            .WithHitCount(cards.Count)
+            .FromCard(card, play)
+            .Targeting(play.Target)
+            .Simulate(simulator);
+        return !simulator.HasPendingChoice;
+    }
+
+    private static bool ContinueLeadingStrikeShivs(
+        CombatPredictionSimulator simulator,
+        PredictedCard playedCard,
+        CardPlay play,
+        int nextShiv)
+    {
+        var card = (LeadingStrike)playedCard.MutablePreview;
+        int count = card.DynamicVars["Shivs"].IntValue;
+        for (int index = nextShiv; index < count; index++)
+        {
+            simulator.CreateAndAddGeneratedCardsToCombat<Shiv>(
+                card.Owner,
+                PileType.Hand,
+                1,
+                card.Owner);
+            if (simulator.HasPendingChoice)
+            {
+                simulator.AppendExecutionContinuation(
+                    new LeadingStrikeExecutionFrame(playedCard, play, index + 1));
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool ContinueSecondWind(
+        CombatPredictionSimulator simulator,
+        PredictedCard playedCard,
+        CardPlay play,
+        IReadOnlyList<PredictedCard> cards,
+        int nextIndex,
+        bool needsBlock)
+    {
+        var card = (SecondWind)playedCard.MutablePreview;
+        int index = nextIndex;
+        bool blockCurrent = needsBlock;
+        while (index < cards.Count)
+        {
+            if (!blockCurrent)
+            {
+                simulator.Exhaust(cards[index]);
+                if (simulator.HasPendingChoice)
+                {
+                    simulator.AppendExecutionContinuation(
+                        new SecondWindExecutionFrame(
+                            playedCard,
+                            play,
+                            cards,
+                            index,
+                            NeedsBlock: true));
+                    return false;
+                }
+            }
+
+            simulator.GainBlock(
+                card.Owner.Creature,
+                card.DynamicVars.Block,
+                playedCard,
+                play);
+            if (simulator.HasPendingChoice)
+            {
+                simulator.AppendExecutionContinuation(
+                    new SecondWindExecutionFrame(
+                        playedCard,
+                        play,
+                        cards,
+                        index + 1,
+                        NeedsBlock: false));
+                return false;
+            }
+
+            blockCurrent = false;
+            index++;
+        }
+
+        return true;
+    }
+
+    private enum BespokeTailKind
+    {
+        BoneShardsGainBlock,
+        DemonicShieldGainBlock,
+        InterceptCoverage,
+        MaulGrowth,
+        TheScytheGrowth,
+        SacrificeGainBlock,
+        SovereignBladeParryBlock,
+    }
+
+    private sealed record BespokeTailExecutionFrame(
+        PredictedCard Card,
+        CardPlay Play,
+        BespokeTailKind Tail,
+        int Value) : ICombatPredictionExecutionFrame
+    {
+        public void PrepareFork(PredictionForkContext context)
+            => CombatPredictionSimulator.PrepareExecutionCardPlay(Card, Play, context);
+
+        public ICombatPredictionExecutionFrame Fork(PredictionForkContext context)
+            => this with
+            {
+                Card = context.RequireRemap(Card),
+                Play = context.RequireRemap(Play)
+            };
+
+        public bool Resume(CombatPredictionSimulator simulator)
+            => ResumeBespokeTail(simulator, Card, Play, Tail, Value);
+    }
+
+    private sealed record FiendFireExecutionFrame(
+        PredictedCard Card,
+        CardPlay Play,
+        IReadOnlyList<PredictedCard> Cards,
+        int NextIndex) : ICombatPredictionExecutionFrame
+    {
+        public void PrepareFork(PredictionForkContext context)
+            => CombatPredictionSimulator.PrepareExecutionCardPlay(Card, Play, context);
+
+        public ICombatPredictionExecutionFrame Fork(PredictionForkContext context)
+            => this with
+            {
+                Card = context.RequireRemap(Card),
+                Play = context.RequireRemap(Play),
+                Cards = Cards.Select(candidate => context.RequireRemap(candidate)).ToArray()
+            };
+
+        public bool Resume(CombatPredictionSimulator simulator)
+            => ContinueFiendFire(simulator, Card, Play, Cards, NextIndex);
+    }
+
+    private sealed record LeadingStrikeExecutionFrame(
+        PredictedCard Card,
+        CardPlay Play,
+        int NextShiv) : ICombatPredictionExecutionFrame
+    {
+        public void PrepareFork(PredictionForkContext context)
+            => CombatPredictionSimulator.PrepareExecutionCardPlay(Card, Play, context);
+
+        public ICombatPredictionExecutionFrame Fork(PredictionForkContext context)
+            => this with
+            {
+                Card = context.RequireRemap(Card),
+                Play = context.RequireRemap(Play)
+            };
+
+        public bool Resume(CombatPredictionSimulator simulator)
+            => ContinueLeadingStrikeShivs(simulator, Card, Play, NextShiv);
+    }
+
+    private sealed record SecondWindExecutionFrame(
+        PredictedCard Card,
+        CardPlay Play,
+        IReadOnlyList<PredictedCard> Cards,
+        int NextIndex,
+        bool NeedsBlock) : ICombatPredictionExecutionFrame
+    {
+        public void PrepareFork(PredictionForkContext context)
+            => CombatPredictionSimulator.PrepareExecutionCardPlay(Card, Play, context);
+
+        public ICombatPredictionExecutionFrame Fork(PredictionForkContext context)
+            => this with
+            {
+                Card = context.RequireRemap(Card),
+                Play = context.RequireRemap(Play),
+                Cards = Cards.Select(candidate => context.RequireRemap(candidate)).ToArray()
+            };
+
+        public bool Resume(CombatPredictionSimulator simulator)
+            => ContinueSecondWind(simulator, Card, Play, Cards, NextIndex, NeedsBlock);
     }
 
     private static int GetPowerAmount<TPower>(CardOnPlayMirrorContext context, Creature owner)
