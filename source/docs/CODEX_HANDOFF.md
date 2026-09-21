@@ -271,4 +271,14 @@ ResetRebuildableCaches 也跳过 active probe，避免内存重建后 probe labe
 明确清除后节点恢复普通转置剪枝。stand-pat baseline 仍只作为 turn-start 的语义比较证据，不进入普通
 StateKey/transposition。该项是 solver 剪枝正确性修复，不新增 0.107.1 版本 mismatch；计数仍为 46。
 
+最终收尾扫描第九小批审计 TurnSetupChoices / TurnSetupPlayState 与边界元数据。两项 TurnSetup 数据仅用于
+最终 continuation 从自身 parent 链重放，以及运行时用 TurnSetupPlayState 校验 live state；transposition
+不会替换 surviving node 的 parent 链，因此不需要进入 label。随后发现 BoundaryReason 是真正遗漏项：
+BuildStateKey 不包含 boundary，而最终路线排序、turn-outcome 可比性和 continuation 构建都会读取它。
+旧 transposition 因此可能让 UnsupportedEffect/PendingChoice 终止节点与相同 StateKey 的正常可继续节点互相支配。
+现在 TranspositionLabel 纳入 SearchBoundaryReason，并要求 boundary 相等才允许支配；普通 admission、
+expanded table 和 ResetRebuildableCaches 均传入节点 boundary。BeamRankSortChecks 增加双向不同 boundary
+不得合并合同，总数扩展到 10 组。HasPredictionRisk 当前只确认用于风险摘要，未发现改变合法动作或最终
+排序，因此本批不扩大转置键。该项是 solver 剪枝正确性修复，不新增 0.107.1 版本 mismatch；计数仍为 46。
+
 已完成的 Power、continuation、死亡生命周期和 78/78 卡牌 OnPlay 数值不重复展开；多人牌仍暂不作为当前 blocker。

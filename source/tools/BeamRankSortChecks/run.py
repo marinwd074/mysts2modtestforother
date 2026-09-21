@@ -31,12 +31,14 @@ compare = block(ranking_source, 'internal static int CompareBeamRankOrder(').rep
 sort = block(retention_source, 'private void SortByBeamRank(List<SearchNode> ranked)').replace('private void', 'public void', 1)
 retained_compare = block(retained_source, 'private static int CompareRetainedOrder(').replace('private static', 'public static', 1)
 route_traits = block(snapshot_source, 'internal enum SearchRouteTraits')
+boundary_reason = block(snapshot_source, 'internal enum SearchBoundaryReason')
 fields = sorted(set(re.findall(r'(?:node\.Snapshot|snapshot)\.(\w+)', score + retained)))
 for name in fields + ['OffensiveProgressValue']:
     if not re.search(r'public int ' + name + r'\s*\{', snapshot_source):
         raise RuntimeError(f'Update probe for changed snapshot field: {name}')
 classes = '''namespace CombatSolver;
 ''' + route_traits + '''
+''' + boundary_reason + '''
 internal sealed record CombatProgressState(int Stable);
 internal sealed class SearchNode {
 public double Score;
@@ -82,14 +84,16 @@ internal sealed partial class CombatBeamSolver
         SearchRouteTraits nextTraits,
         bool nextHasNonPotionAction,
         int firstProgress = 0,
-        int nextProgress = 0)
+        int nextProgress = 0,
+        SearchBoundaryReason firstBoundary = SearchBoundaryReason.None,
+        SearchBoundaryReason nextBoundary = SearchBoundaryReason.None)
     {
         TranspositionLabel first = new(
             0, 0, 0, 0, 1, 10, firstTraits, firstHasNonPotionAction,
-            new CombatProgressState(firstProgress));
+            firstBoundary, new CombatProgressState(firstProgress));
         TranspositionLabel next = new(
             0, 0, 0, 0, 1, 10, nextTraits, nextHasNonPotionAction,
-            new CombatProgressState(nextProgress));
+            nextBoundary, new CombatProgressState(nextProgress));
         return new TranspositionFrontier(first).TryAccept(next);
     }
 }

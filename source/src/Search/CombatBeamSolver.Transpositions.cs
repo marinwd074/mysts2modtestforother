@@ -11,6 +11,7 @@ internal sealed partial class CombatBeamSolver
         double Score,
         SearchRouteTraits Traits,
         bool HasNonPotionAction,
+        SearchBoundaryReason BoundaryReason,
         CombatProgressState CombatProgress);
 
     private sealed class TranspositionFrontier(TranspositionLabel first)
@@ -56,6 +57,7 @@ internal sealed partial class CombatBeamSolver
                 && left.Score >= right.Score
                 && (left.Traits & right.Traits) == right.Traits
                 && (!left.HasNonPotionAction || right.HasNonPotionAction)
+                && left.BoundaryReason == right.BoundaryReason
                 && left.CombatProgress == right.CombatProgress;
     }
 

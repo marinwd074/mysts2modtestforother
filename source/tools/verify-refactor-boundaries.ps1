@@ -51,9 +51,11 @@ $transpositionText = [IO.File]::ReadAllText($transpositionPath)
 foreach ($transpositionRule in @(
     'SearchRouteTraits Traits',
     'bool HasNonPotionAction',
+    'SearchBoundaryReason BoundaryReason',
     'CombatProgressState CombatProgress',
     '(left.Traits & right.Traits) == right.Traits',
     '(!left.HasNonPotionAction || right.HasNonPotionAction)',
+    'left.BoundaryReason == right.BoundaryReason',
     'left.CombatProgress == right.CombatProgress')) {
     if (-not $transpositionText.Contains($transpositionRule)) {
         $violations.Add("${transpositionPath}: path-sensitive transposition dominance drifted '$transpositionRule'")
@@ -65,6 +67,7 @@ $transpositionModelText = [IO.File]::ReadAllText($transpositionModelPath)
 foreach ($transpositionRebuildRule in @(
     'node.Traits,',
     'node.HasNonPotionAction,',
+    'node.BoundaryReason,',
     'node.CombatProgress);',
     'Transpositions.TryGetValue(node.StateKey, out TranspositionFrontier? existing)',
     '_ = existing.TryAccept(label);')) {

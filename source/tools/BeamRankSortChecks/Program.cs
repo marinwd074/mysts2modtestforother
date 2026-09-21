@@ -137,4 +137,16 @@ if (!CombatBeamSolver.TryAcceptTranspositionForCheck(
         firstProgress: 2, nextProgress: 1))
     throw new InvalidOperationException("Different combat-progress histories were incorrectly merged.");
 
-Console.WriteLine(JsonSerializer.Serialize(new { status = "Passed", cases, entries, retained_tie_cases = 3, transposition_path_cases = 8, runtime = Environment.Version.ToString(), scope = "Extracted production ranking plus retained-order and path-sensitive transposition contracts" }));
+if (!CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.None, false,
+        SearchRouteTraits.None, false,
+        firstBoundary: SearchBoundaryReason.None,
+        nextBoundary: SearchBoundaryReason.UnsupportedEffect)
+    || !CombatBeamSolver.TryAcceptTranspositionForCheck(
+        SearchRouteTraits.None, false,
+        SearchRouteTraits.None, false,
+        firstBoundary: SearchBoundaryReason.PendingChoice,
+        nextBoundary: SearchBoundaryReason.None))
+    throw new InvalidOperationException("Different search boundaries were incorrectly merged.");
+
+Console.WriteLine(JsonSerializer.Serialize(new { status = "Passed", cases, entries, retained_tie_cases = 3, transposition_path_cases = 10, runtime = Environment.Version.ToString(), scope = "Extracted production ranking plus retained-order and path-sensitive transposition contracts" }));
