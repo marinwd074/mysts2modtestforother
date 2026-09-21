@@ -149,5 +149,10 @@ Forbidden Grimoire 的 `RecordLongTermResource(50)` 是 solver 战略估值，�
 
 近期编译回归也已收口：`bb29ce1c` 修复两条 Release warning 源码，`ae918241` 将历史计数改为读取
 稳定的预测卡牌快照 `play.Card.Owner`，并补齐纯合同测试桩；对应 GitHub CI 已通过。
-下一批转向其余 solver-authored 特殊语义/状态生命周期，不再重复已收口的 continuation 和固定单位；
+Power 生命周期第一批也已复核：Debilitate、Magic Bomb、Monologue、Oblivion、Sic Em、Strangle、
+Colossus、Escape Artist、Hatch、Shrink 的回合边界均与既有适配证据一致。Escape Artist 保持
+`3→2→1→1`；Shrink 的永久负层依赖循环入口 `Amount <= 0` 跳过，因此不会被递减。未发现新的
+route-affecting mismatch，总数仍为 44；非直观生命周期已补静态护栏。
+
+下一批继续其余 solver-authored 特殊状态生命周期，不再重复已收口的 continuation 和固定单位；
 多人牌仍暂不作为当前 blocker。

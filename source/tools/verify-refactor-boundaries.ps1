@@ -271,6 +271,38 @@ foreach ($fixedCounterRule in @(
     }
 }
 
+$endTurnPowerPath = Join-Path $repositoryRoot 'src/Prediction/EndTurnPowerSupport.cs'
+$endTurnPowerText = [IO.File]::ReadAllText($endTurnPowerPath)
+foreach ($lifecycleRule in @(
+    'case ColossusPower when side == CombatSide.Enemy:',
+    'combat.SetAmount<ColossusPower>(owner, power.Amount - 1);',
+    'case EscapeArtistPower when ownerParticipates && power.Amount > 1:',
+    'combat.SetAmount<EscapeArtistPower>(owner, power.Amount - 1);',
+    'case HatchPower when ownerParticipates:',
+    'combat.SetAmount<HatchPower>(owner, power.Amount - 1);',
+    'case ShrinkPower when ownerParticipates:',
+    'combat.SetPowerAmount(power, power.Amount - 1);',
+    'if (power.Amount <= 0)')) {
+    if (-not $endTurnPowerText.Contains($lifecycleRule)) {
+        $violations.Add("${endTurnPowerPath}: audited Power lifecycle drifted '$lifecycleRule'")
+    }
+}
+
+$endTurnPowerBatch048Path = Join-Path $repositoryRoot 'src/Prediction/EndTurnPowerSupport.Batch048.cs'
+$endTurnPowerBatch048Text = [IO.File]::ReadAllText($endTurnPowerBatch048Path)
+foreach ($lifecycleRule in @(
+    'case DebilitatePower when ownerParticipates:',
+    'combat.SetPowerAmount(power, power.Amount - 1);',
+    'case MagicBombPower when ownerParticipates',
+    'case MonologuePower monologue when ownerParticipates:',
+    'case OblivionPower when side == CombatSide.Player:',
+    'case SicEmPower when ownerParticipates:',
+    'case StranglePower when ownerParticipates:')) {
+    if (-not $endTurnPowerBatch048Text.Contains($lifecycleRule)) {
+        $violations.Add("${endTurnPowerBatch048Path}: audited Power lifecycle drifted '$lifecycleRule'")
+    }
+}
+
 if (-not $cardPowerSupportText.Contains('combat.Apply<HauntPower>(owner, card.DynamicVars.HpLoss.IntValue, owner)')) {
     $violations.Add("${cardPowerSupportPath}: Haunt 0.107.1 HP-loss amount must come from the pinned card model")
 }
