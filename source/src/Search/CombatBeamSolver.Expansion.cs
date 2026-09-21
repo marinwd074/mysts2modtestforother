@@ -3638,7 +3638,8 @@ internal sealed partial class CombatBeamSolver
         CombatProgressState transpositionProgress = null!;
         TranspositionLabel dominating = new(
             0, 0, 0, 0, 1, 10, SearchRouteTraits.None, HasNonPotionAction: false,
-            BoundaryReason: SearchBoundaryReason.None, CombatProgress: transpositionProgress);
+            BoundaryReason: SearchBoundaryReason.None, PlayerDead: false, AllEnemiesDead: false,
+            CombatProgress: transpositionProgress);
         TranspositionLabel dominated = new(
             0, 0, 0, 0, 2, 9, SearchRouteTraits.None, HasNonPotionAction: false,
             BoundaryReason: SearchBoundaryReason.None, CombatProgress: transpositionProgress);
@@ -3823,6 +3824,8 @@ internal sealed partial class CombatBeamSolver
             candidate.Traits,
             candidate.HasNonPotionAction,
             candidate.BoundaryReason,
+            candidate.Snapshot.PlayerDead,
+            candidate.Snapshot.AllEnemiesDead,
             candidate.CombatProgress);
         if (!_run.Transpositions.TryGetValue(candidate.StateKey, out TranspositionFrontier? frontier))
         {
@@ -3875,6 +3878,8 @@ internal sealed partial class CombatBeamSolver
             node.Traits,
             node.HasNonPotionAction,
             node.BoundaryReason,
+            node.Snapshot.PlayerDead,
+            node.Snapshot.AllEnemiesDead,
             node.CombatProgress);
         if (!_run.ExpandedTranspositions.TryGetValue(node.StateKey, out TranspositionFrontier? frontier))
         {

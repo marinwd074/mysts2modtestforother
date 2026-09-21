@@ -297,4 +297,13 @@ workflow_dispatch 保留，代码/tools/target/project 变化仍完整执行门�
 contract suite 与 git diff --check；支持 -NoRestore / -SkipPython 透传。它不替代 GitHub required check，
 只保证本地/Codex 可运行与云 workflow 相同的源码门禁。
 
+最终收尾扫描第十小批审计 IsTerminal / TerminalStamp。TerminalStamp 本身不需要整体进入
+transposition：其 outcome 已投影为 SimulationSnapshot.PlayerDead / AllEnemiesDead，终局回合又由 StateKey
+中的 turn 区分。但这两个终局标志此前未进入 TranspositionLabel。尤其 defeat 路径允许 native pending loss
+已经锁定后由后续效果恢复当前 HP，因此 PlayerDead=true 不能可靠地从 HP/StateKey 反推；相同 StateKey 的
+live/defeat 路线理论上可被错误合并。现已要求 PlayerDead 与 AllEnemiesDead 均相等才允许转置支配，并同步
+admission、expanded table 与 ResetRebuildableCaches。BeamRankSortChecks 新增 live-vs-defeat 与
+victory-vs-nonvictory 双向合同，path-sensitive transposition cases 从 10 扩到 14。该项是 solver 剪枝
+正确性修复，不新增 0.107.1 版本 mismatch；计数仍为 46。
+
 已完成的 Power、continuation、死亡生命周期和 78/78 卡牌 OnPlay 数值不重复展开；多人牌仍暂不作为当前 blocker。

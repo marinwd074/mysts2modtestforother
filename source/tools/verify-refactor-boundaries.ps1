@@ -52,10 +52,14 @@ foreach ($transpositionRule in @(
     'SearchRouteTraits Traits',
     'bool HasNonPotionAction',
     'SearchBoundaryReason BoundaryReason',
+    'bool PlayerDead',
+    'bool AllEnemiesDead',
     'CombatProgressState CombatProgress',
     '(left.Traits & right.Traits) == right.Traits',
     '(!left.HasNonPotionAction || right.HasNonPotionAction)',
     'left.BoundaryReason == right.BoundaryReason',
+    'left.PlayerDead == right.PlayerDead',
+    'left.AllEnemiesDead == right.AllEnemiesDead',
     'left.CombatProgress == right.CombatProgress')) {
     if (-not $transpositionText.Contains($transpositionRule)) {
         $violations.Add("${transpositionPath}: path-sensitive transposition dominance drifted '$transpositionRule'")
@@ -68,6 +72,8 @@ foreach ($transpositionRebuildRule in @(
     'node.Traits,',
     'node.HasNonPotionAction,',
     'node.BoundaryReason,',
+    'node.Snapshot.PlayerDead,',
+    'node.Snapshot.AllEnemiesDead,',
     'node.CombatProgress);',
     'Transpositions.TryGetValue(node.StateKey, out TranspositionFrontier? existing)',
     '_ = existing.TryAccept(label);')) {

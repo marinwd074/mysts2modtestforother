@@ -86,14 +86,20 @@ internal sealed partial class CombatBeamSolver
         int firstProgress = 0,
         int nextProgress = 0,
         SearchBoundaryReason firstBoundary = SearchBoundaryReason.None,
-        SearchBoundaryReason nextBoundary = SearchBoundaryReason.None)
+        SearchBoundaryReason nextBoundary = SearchBoundaryReason.None,
+        bool firstPlayerDead = false,
+        bool nextPlayerDead = false,
+        bool firstAllEnemiesDead = false,
+        bool nextAllEnemiesDead = false)
     {
         TranspositionLabel first = new(
             0, 0, 0, 0, 1, 10, firstTraits, firstHasNonPotionAction,
-            firstBoundary, new CombatProgressState(firstProgress));
+            firstBoundary, firstPlayerDead, firstAllEnemiesDead,
+            new CombatProgressState(firstProgress));
         TranspositionLabel next = new(
             0, 0, 0, 0, 1, 10, nextTraits, nextHasNonPotionAction,
-            nextBoundary, new CombatProgressState(nextProgress));
+            nextBoundary, nextPlayerDead, nextAllEnemiesDead,
+            new CombatProgressState(nextProgress));
         return new TranspositionFrontier(first).TryAccept(next);
     }
 }
