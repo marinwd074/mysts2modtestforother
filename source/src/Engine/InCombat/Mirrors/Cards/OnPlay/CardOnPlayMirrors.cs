@@ -79,6 +79,7 @@ internal static partial class CardOnPlayMirrors
         registry.Register<BoneShards>(BespokeCardMirrors.BoneShardsOnPlay);
         registry.Register<DaggerSpray>(BespokeCardMirrors.DaggerSprayOnPlay);
         registry.Register<PactsEnd>(BespokeCardMirrors.PactsEndOnPlay);
+        registry.Register<ExpectAFight>(BespokeCardMirrors.ExpectAFightOnPlay);
         registry.Register<TwinStrike>(BespokeCardMirrors.TwinStrikeOnPlay);
         registry.Register<HeavenlyDrill>(BespokeCardMirrors.HeavenlyDrillOnPlay);
         registry.Register<Dismantle>(BespokeCardMirrors.DismantleOnPlay);

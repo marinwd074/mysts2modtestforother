@@ -1793,6 +1793,67 @@ else {
     }
 }
 
+
+$calculatedVarSpecPath = Join-Path $repositoryRoot 'src/Prediction/CalculatedVarSpecRegistry.cs'
+$calculatedVarSpecText = [IO.File]::ReadAllText($calculatedVarSpecPath)
+$sacrificeCalculatedStart = $calculatedVarSpecText.IndexOf('Sacrifice =>')
+$sacrificeCalculatedEnd = $calculatedVarSpecText.IndexOf('TimesUp =>', $sacrificeCalculatedStart)
+if ($sacrificeCalculatedStart -lt 0 -or $sacrificeCalculatedEnd -le $sacrificeCalculatedStart) {
+    $violations.Add("${calculatedVarSpecPath}: Sacrifice calculated-var boundary is missing")
+}
+else {
+    $sacrificeCalculatedBlock = $calculatedVarSpecText.Substring(
+        $sacrificeCalculatedStart,
+        $sacrificeCalculatedEnd - $sacrificeCalculatedStart)
+    if (-not $sacrificeCalculatedBlock.Contains('GetOstyMaxHp(simulator, model.Owner) * 2')) {
+        $violations.Add("${calculatedVarSpecPath}: 0.107.1 Sacrifice calculated block must use Osty max HP x2")
+    }
+    if ($sacrificeCalculatedBlock.Contains('GetOstyMaxHp(simulator, model.Owner) * 3')) {
+        $violations.Add("${calculatedVarSpecPath}: later-version Sacrifice x3 calculated block returned")
+    }
+}
+
+$expectFightStart = $calculatedVarSpecText.IndexOf('ExpectAFight =>')
+$expectFightEnd = $calculatedVarSpecText.IndexOf('HelixDrill =>', $expectFightStart)
+if ($expectFightStart -lt 0 -or $expectFightEnd -le $expectFightStart) {
+    $violations.Add("${calculatedVarSpecPath}: Expect a Fight calculated-var boundary is missing")
+}
+else {
+    $expectFightCalculatedBlock = $calculatedVarSpecText.Substring(
+        $expectFightStart,
+        $expectFightEnd - $expectFightStart)
+    if (-not $expectFightCalculatedBlock.Contains('candidate.Preview.Type == CardType.Attack')) {
+        $violations.Add("${calculatedVarSpecPath}: 0.107.1 Expect a Fight energy must count Attack cards in hand")
+    }
+    if ($expectFightCalculatedBlock.Contains('StrengthPower')) {
+        $violations.Add("${calculatedVarSpecPath}: incorrect Strength-based Expect a Fight calculation returned")
+    }
+}
+
+$cardOnPlayRegistryPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/CardOnPlayMirrors.cs'
+if (-not (Select-String -LiteralPath $cardOnPlayRegistryPath -SimpleMatch 'registry.Register<ExpectAFight>(BespokeCardMirrors.ExpectAFightOnPlay);' -Quiet)) {
+    $violations.Add("${cardOnPlayRegistryPath}: 0.107.1 Expect a Fight requires its dedicated OnPlay mirror")
+}
+$bespokeOnPlayPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/BespokeCardMirrors.cs'
+$bespokeOnPlayText = [IO.File]::ReadAllText($bespokeOnPlayPath)
+$expectFightMirrorStart = $bespokeOnPlayText.IndexOf('public static void ExpectAFightOnPlay')
+$expectFightMirrorEnd = $bespokeOnPlayText.IndexOf('public static void TwinStrikeOnPlay', $expectFightMirrorStart)
+if ($expectFightMirrorStart -lt 0 -or $expectFightMirrorEnd -le $expectFightMirrorStart) {
+    $violations.Add("${bespokeOnPlayPath}: Expect a Fight mirror boundary is missing")
+}
+else {
+    $expectFightMirrorBlock = $bespokeOnPlayText.Substring(
+        $expectFightMirrorStart,
+        $expectFightMirrorEnd - $expectFightMirrorStart)
+    if ((-not $expectFightMirrorBlock.Contains('context.Simulator.GainEnergy(')) -or
+        (-not $expectFightMirrorBlock.Contains('card.DynamicVars["CalculatedEnergy"]'))) {
+        $violations.Add("${bespokeOnPlayPath}: Expect a Fight must gain its calculated energy before the post-mirror power effect")
+    }
+}
+if (-not $cardEffectSpecText.Contains('[typeof(ExpectAFight)] = [Owner<NoEnergyGainPower>(_ => 1)]')) {
+    $violations.Add("${cardEffectSpecPath}: 0.107.1 Expect a Fight must apply one NoEnergyGainPower after gaining energy")
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."

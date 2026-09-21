@@ -45,6 +45,11 @@ internal static class BespokeCardMirrors
             context.AttackAllOpponents();
     }
 
+    public static void ExpectAFightOnPlay(ExpectAFight card, CardOnPlayMirrorContext context)
+        => context.Simulator.GainEnergy(
+            card.Owner,
+            context.Calculate(card.DynamicVars["CalculatedEnergy"]));
+
     public static void TwinStrikeOnPlay(TwinStrike _, CardOnPlayMirrorContext context)
         => context.AttackSingle(hitCount: 2);
 

@@ -98,14 +98,15 @@ internal static class CalculatedVarSpecRegistry
             Supermassive => CountGeneratedCards(simulator, model.Owner),
             Sacrifice => simulator.State.GetOsty(model.Owner) is { } sacrificeOsty
                 && simulator.State.GetCreature(sacrificeOsty).IsAlive
-                ? combat.GetOstyMaxHp(simulator, model.Owner) * 3
+                ? combat.GetOstyMaxHp(simulator, model.Owner) * 2
                 : 0,
             TimesUp => target == null ? 0 : combat.GetAmount<DoomPower>(target),
             MementoMori => combat.GetCardsDiscardedThisTurn(owner),
             SoulStorm => playerState.ExhaustPile.Cards.Count(candidate => candidate.Preview is Soul),
             Voltaic => CountLightningChannels(simulator, model.Owner),
             TearAsunder => 1 + CountUnblockedDamageEvents(simulator, owner),
-            ExpectAFight => Math.Max(0, combat.GetAmount<StrengthPower>(owner)),
+            ExpectAFight => playerState.Hand.Cards.Count(candidate =>
+                candidate.Preview.Type == CardType.Attack),
             HelixDrill => Math.Max(0, combat.GetEnergySpentThisTurn(model.Owner)
                 - card.GetEnergyCostWithModifiers(simulator, playerState)),
             PullFromBelow => CountEtherealPlays(simulator, model.Owner),

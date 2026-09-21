@@ -43,6 +43,7 @@ internal static class CardEffectSpecRegistry
         [typeof(Delay)] = [Owner<EnergyNextTurnPower>(card => card.DynamicVars.Energy.IntValue)],
         [typeof(DyingStar)] = [AllEnemies<DyingStarPower>("StrengthLoss")],
         [typeof(Equilibrium)] = [Owner<RetainHandPower>("Equilibrium")],
+        [typeof(ExpectAFight)] = [Owner<NoEnergyGainPower>(_ => 1)],
         [typeof(FlameBarrier)] = [Owner<FlameBarrierPower>("DamageBack")],
         [typeof(FocusedStrike)] = [Owner<FocusedStrikePower>("FocusPower")],
         [typeof(Glow)] = [Owner<DrawCardsNextTurnPower>(card => card.DynamicVars.Cards.IntValue)],

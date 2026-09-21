@@ -22,17 +22,17 @@ replace the native-vs-predicted runtime differential.
 
 ## Corrected version drift
 
-Six route-affecting mismatches were confirmed in the first pass:
+Seven route-affecting mismatches have been confirmed in the 0.107.1 source audit:
 
 | Card | 0.107.1 native behavior | Incorrect solver behavior | Correction |
 |---|---|---|---|
 | Tracking | first play applies TrackingPower 2, later plays +1; against Weak targets the power amount is the damage multiplier | applied 50 and interpreted it as percentage bonus | use 2 then +1 and multiply by the branch power amount |
-| Sacrifice | kills the living Osty and gains block equal to 2x Osty's max HP | used 3x max HP | restore 2x |
+| Sacrifice | calculates block as 2x the living Osty's max HP, then kills Osty and gains that block | both the OnPlay mirror and calculated-var registry had x3 drift | restore x2 in both execution and calculated-variable paths |
 | Haze | applies Poison to all hittable enemies; upgrade increases Poison | also applied Weak | remove the Weak application |
 | Outbreak | applies OutbreakPower 11/15; every third positive Poison application by the owner deals that amount as Unpowered damage to all hittable enemies | immediately applied Poison to all enemies and triggered Poison damage when the card was played | restore the persistent power, its hidden 0/1/2 poison counter, and its third-application damage trigger |
 | Guiding Star | attacks, then immediately draws Cards this turn | also added DrawCardsNextTurnPower | remove the deferred draw compensation and rely on the native-order inferred draw |
-| Fight Through | gains block and adds one Wound to discard | added two Wounds | generate exactly one Wound |
 | Well-Laid Plans | applies WellLaidPlansPower using RetainAmount (1, upgraded to 2) | always applied one stack | read RetainAmount from the 0.107.1 card model |
+| Expect a Fight | gains energy equal to the number of Attack cards currently in hand, then applies one NoEnergyGainPower | calculated energy from Strength and had no complete OnPlay mirror | count hand Attacks, gain that energy first, then apply NoEnergyGainPower |
 
 These differences materially affect route ranking, so source-shape guards in
 `tools/verify-refactor-boundaries.ps1` reject the later-version semantics.
