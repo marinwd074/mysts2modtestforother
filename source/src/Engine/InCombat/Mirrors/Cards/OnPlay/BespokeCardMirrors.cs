@@ -149,6 +149,14 @@ internal static class BespokeCardMirrors
             card.Owner);
     }
 
+    public static void MimicOnPlay(Mimic card, CardOnPlayMirrorContext context)
+    {
+        context.GainBlock(
+            card.Owner.Creature,
+            context.Calculate(card.DynamicVars.CalculatedBlock),
+            card.DynamicVars.CalculatedBlock.Props);
+    }
+
     public static void MaulOnPlay(Maul card, CardOnPlayMirrorContext context)
     {
         DamageCmd.Attack(card.DynamicVars.Damage.BaseValue)

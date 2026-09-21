@@ -570,6 +570,10 @@ Do not change these from public text alone:
 | Hammer Time | gameplay/DLL semantics confirmed; Forge propagation and recursion suppression restored in solver source | focused multiplayer native differential covering one and multiple Hammer Time owners plus exhausted Sovereign Blades |
 | Demonic Shield | native self-damage-before-shared-Block order restored in solver source | focused multiplayer differential including Rupture/Tungsten/Block-modifier interactions |
 | Sneaky | native Power application restored; existing cross-player Attack trigger mirror matches DLL | focused multiplayer differential with remote Attack, Replay, and Shadowmeld Block modification |
+| Mimic | native calculation/recipient split restored: selected ally supplies Block value, owner receives Block | focused multiplayer differential with target Block modifiers and zero/high Block values |
+| Energy Surge / Believe in You | native behavior changes teammate Energy, but the local-only root intentionally does not capture remote PlayerCombatState | introduce a detached remote-public resource sidecar only after proving Energy/Stars are safe public inputs; do not relax remote private-pile capture |
+| Huddle Up / Ignition / Largesse / Glimpse Beyond | native behavior mutates teammate draw/hand/orb state | explicit remote-private-state policy; local cross-turn solver must fail closed rather than materialize teammate piles/orbs |
+| Legion of Bone | native behavior summons/heals Osty for every living player, but current GetOsty fallback can reread player.Osty from the live graph | freeze remote/public pet identity in the root before adding cross-player summon support |
 | current Tracking text | known to be later presentation | pinned DLL only for 0.107.1 values |
 | current Tank text | changed in v0.108 | pinned DLL + v0.108 delta |
 | current Haze/Outbreak/Sacrifice text | changed after 0.107.1 | pinned DLL + later patch delta |

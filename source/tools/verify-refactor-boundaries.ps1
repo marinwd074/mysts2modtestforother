@@ -2145,6 +2145,34 @@ foreach ($requiredSneakyRule in @(
     }
 }
 
+
+$mimicRegistryRule = 'registry.Register<Mimic>(BespokeCardMirrors.MimicOnPlay);'
+if (-not $cardOnPlayRegistryText.Contains($mimicRegistryRule)) {
+    $violations.Add("${cardOnPlayRegistryPath}: 0.107.1 Mimic requires a dedicated owner-Block OnPlay mirror")
+}
+if (-not $cardOnPlayCatalogText.Contains('typeof(Mimic)')) {
+    $violations.Add("${cardOnPlayCatalogPath}: Mimic must remain in the compensated OnPlay catalog")
+}
+$mimicStart = $bespokeOnPlayText.IndexOf('public static void MimicOnPlay')
+$mimicEnd = $bespokeOnPlayText.IndexOf('public static void MaulOnPlay', $mimicStart)
+if ($mimicStart -lt 0 -or $mimicEnd -le $mimicStart) {
+    $violations.Add("${bespokeOnPlayPath}: Mimic mirror boundary is missing")
+}
+else {
+    $mimicBlock = $bespokeOnPlayText.Substring($mimicStart, $mimicEnd - $mimicStart)
+    foreach ($requiredMimicRule in @(
+        'card.Owner.Creature',
+        'context.Calculate(card.DynamicVars.CalculatedBlock)',
+        'card.DynamicVars.CalculatedBlock.Props')) {
+        if (-not $mimicBlock.Contains($requiredMimicRule)) {
+            $violations.Add("${bespokeOnPlayPath}: missing 0.107.1 Mimic rule '$requiredMimicRule'")
+        }
+    }
+    if ($mimicBlock.Contains('context.GainBlock(context.Target')) {
+        $violations.Add("${bespokeOnPlayPath}: Mimic must gain Block on its owner, not on the selected ally")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."
