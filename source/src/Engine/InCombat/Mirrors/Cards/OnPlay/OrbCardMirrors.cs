@@ -2,241 +2,179 @@ using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Combat.History.Entries;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Cards;
-using MegaCrit.Sts2.Core.Models.Powers;
-using CombatSolver.Engine.Common;
 using MegaCrit.Sts2.Core.Models.Orbs;
+using CombatSolver.Engine.Common;
 using CombatSolver.Engine.InCombat.Simulation;
 
 namespace CombatSolver.Engine.InCombat.Mirrors.Cards.OnPlay;
 
-internal static class OrbCardMirrors
+internal static partial class OrbCardMirrors
 {
-    public static void BallLightningOnPlay(BallLightning card, CardOnPlayMirrorContext context)
+    public static void BallLightningOnPlay(BallLightning _, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.AttackSingle();
-        if (context.Simulator.HasPendingChoice)
-            return;
-        context.Simulator.OrbChannel<LightningOrb>(card.Owner);
+        ContinueOrQueueTail(context, OrbCardTailKind.BallLightningChannel);
     }
 
-    public static void ChaosOnPlay(Chaos card, CardOnPlayMirrorContext context)
+    public static void ChaosOnPlay(Chaos _, CardOnPlayMirrorContext context)
     {
-        for (var i = 0; i < card.DynamicVars.Repeat.IntValue; i++)
-        {
-            var orb = OrbModel.GetRandomOrb(context.Rng.CombatOrbGeneration).ToMutable();
-            context.Simulator.OrbChannel(card.Owner, orb);
-            if (context.Simulator.HasPendingChoice)
-                return;
-        }
+        context.Simulator.AcknowledgeExecutionDispatch();
+        _ = ContinueChaos(context, nextIndex: 0);
     }
 
     public static void ChillOnPlay(Chill card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.Simulator.OrbChannel<FrostOrb>(card.Owner, context.State.HittableEnemies.Count);
     }
 
-    public static void ColdSnapOnPlay(ColdSnap card, CardOnPlayMirrorContext context)
+    public static void ColdSnapOnPlay(ColdSnap _, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.AttackSingle();
-        if (context.Simulator.HasPendingChoice)
-            return;
-        context.Simulator.OrbChannel<FrostOrb>(card.Owner);
+        ContinueOrQueueTail(context, OrbCardTailKind.ColdSnapChannel);
     }
 
     public static void ConsumingShadowOnPlay(ConsumingShadow card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.Simulator.OrbChannel<DarkOrb>(card.Owner, card.DynamicVars.Repeat.IntValue);
-        if (context.Simulator.HasPendingChoice)
-            return;
-        if (context.State.CombatState is not ICombatPredictionEffectSink effects)
-            throw new InvalidOperationException("吞噬暗影结算缺少可写的预测状态。");
-        effects.ApplyPower(
-            typeof(ConsumingShadowPower),
-            card.Owner.Creature,
-            card.DynamicVars["ConsumingShadowPower"].IntValue,
-            card.Owner.Creature);
+        ContinueOrQueueTail(context, OrbCardTailKind.ConsumingShadowPower);
     }
 
     public static void CoolheadedOnPlay(Coolheaded card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.Simulator.OrbChannel<FrostOrb>(card.Owner);
-        if (context.Simulator.HasPendingChoice)
-            return;
-        context.Simulator.Draw(card.Owner, card.DynamicVars.Cards.BaseValue);
+        ContinueOrQueueTail(context, OrbCardTailKind.CoolheadedDraw);
     }
 
     public static void DarknessOnPlay(Darkness card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.Simulator.OrbChannel<DarkOrb>(card.Owner);
-        if (context.Simulator.HasPendingChoice)
-            return;
-
-        var triggerCount = card.IsUpgraded ? 2 : 1;
-        var darkOrbs = context.OwnerState.OrbQueue.Orbs.OfType<DarkOrb>().ToArray();
-        foreach (var darkOrb in darkOrbs)
-        {
-            for (var i = 0; i < triggerCount; i++)
-            {
-                context.Simulator.OrbPassive(darkOrb);
-                if (context.Simulator.HasPendingChoice)
-                    return;
-            }
-        }
+        ContinueOrQueueTail(context, OrbCardTailKind.DarknessPassives);
     }
 
     public static void DualcastOnPlay(Dualcast card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.Simulator.OrbEvokeNext(card.Owner, repeat: 2);
     }
 
     public static void FusionOnPlay(Fusion card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.Simulator.OrbChannel<PlasmaOrb>(card.Owner);
     }
 
     public static void GlacierOnPlay(Glacier card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.GainBlock(card.Owner.Creature);
-        if (context.Simulator.HasPendingChoice)
-            return;
-        context.Simulator.OrbChannel<FrostOrb>(card.Owner, 2);
+        ContinueOrQueueTail(context, OrbCardTailKind.GlacierChannels);
     }
 
     public static void GlassworkOnPlay(Glasswork card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.GainBlock(card.Owner.Creature);
-        if (context.Simulator.HasPendingChoice)
-            return;
-        context.Simulator.OrbChannel<GlassOrb>(card.Owner);
+        ContinueOrQueueTail(context, OrbCardTailKind.GlassworkChannel);
     }
 
-    public static void IceLanceOnPlay(IceLance card, CardOnPlayMirrorContext context)
+    public static void IceLanceOnPlay(IceLance _, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.AttackSingle();
-        if (context.Simulator.HasPendingChoice)
-            return;
-        context.Simulator.OrbChannel<FrostOrb>(card.Owner, card.DynamicVars.Repeat.IntValue);
+        ContinueOrQueueTail(context, OrbCardTailKind.IceLanceChannels);
     }
 
-    public static void IgnitionOnPlay(Ignition card, CardOnPlayMirrorContext context)
+    public static void IgnitionOnPlay(Ignition _, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.Simulator.OrbChannel<PlasmaOrb>(context.TargetPlayer);
     }
 
-    public static void MeteorStrikeOnPlay(MeteorStrike card, CardOnPlayMirrorContext context)
+    public static void MeteorStrikeOnPlay(MeteorStrike _, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.AttackSingle();
-        if (context.Simulator.HasPendingChoice)
-            return;
-        context.Simulator.OrbChannel<PlasmaOrb>(card.Owner, 3);
+        ContinueOrQueueTail(context, OrbCardTailKind.MeteorStrikeChannels);
     }
 
     public static void MultiCastOnPlay(MultiCast card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         var repeat = context.Card.ResolveEnergyXValue(context.State) + (card.IsUpgraded ? 1 : 0);
         context.Simulator.OrbEvokeNext(card.Owner, repeat);
     }
 
-    public static void NullOnPlay(Null card, CardOnPlayMirrorContext context)
+    public static void NullOnPlay(Null _, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.AttackSingle();
-        if (context.Simulator.HasPendingChoice)
-            return;
-
-        SimulatedCombatState combat = context.CombatState as SimulatedCombatState
-            ?? throw new InvalidOperationException("Null requires simulated combat state.");
-        combat.Apply<WeakPower>(
-            context.Target,
-            card.DynamicVars.Weak.IntValue,
-            card.Owner.Creature);
-        if (context.Simulator.HasPendingChoice)
-            return;
-
-        context.Simulator.OrbChannel<DarkOrb>(card.Owner);
+        ContinueOrQueueTail(context, OrbCardTailKind.NullWeakThenDark);
     }
 
     public static void QuadcastOnPlay(Quadcast card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.Simulator.OrbEvokeNext(card.Owner, repeat: card.DynamicVars.Repeat.IntValue);
     }
 
     public static void RainbowOnPlay(Rainbow card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.Simulator.OrbChannel<LightningOrb>(card.Owner);
-        if (context.Simulator.HasPendingChoice)
-            return;
-        context.Simulator.OrbChannel<FrostOrb>(card.Owner);
-        if (context.Simulator.HasPendingChoice)
-            return;
-        context.Simulator.OrbChannel<DarkOrb>(card.Owner);
+        ContinueOrQueueTail(context, OrbCardTailKind.RainbowFrostThenDark);
     }
 
-    public static void RefractOnPlay(Refract card, CardOnPlayMirrorContext context)
+    public static void RefractOnPlay(Refract _, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.AttackSingle(hitCount: 2);
-        if (context.Simulator.HasPendingChoice)
-            return;
-        context.Simulator.OrbChannel<GlassOrb>(card.Owner, card.DynamicVars.Repeat.IntValue);
+        ContinueOrQueueTail(context, OrbCardTailKind.RefractChannels);
     }
 
     public static void ShadowShieldOnPlay(ShadowShield card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.GainBlock(card.Owner.Creature);
-        if (context.Simulator.HasPendingChoice)
-            return;
-        context.Simulator.OrbChannel<DarkOrb>(card.Owner);
+        ContinueOrQueueTail(context, OrbCardTailKind.ShadowShieldChannel);
     }
 
-    public static void ShatterOnPlay(Shatter card, CardOnPlayMirrorContext context)
+    public static void ShatterOnPlay(Shatter _, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.AttackAllOpponents();
-        if (context.Simulator.HasPendingChoice)
-            return;
-
-        var orbCount = context.OwnerState.OrbQueue.Orbs.Count;
-        for (var i = 0; i < orbCount; i++)
-        {
-            context.Simulator.OrbEvokeNext(card.Owner, repeat: 2);
-            if (context.Simulator.HasPendingChoice)
-                return;
-        }
+        ContinueOrQueueTail(context, OrbCardTailKind.ShatterEvokes);
     }
 
     public static void SpinnerOnPlay(Spinner card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         if (card.IsUpgraded)
-        {
             context.Simulator.OrbChannel<GlassOrb>(card.Owner);
-        }
     }
 
     public static void TempestOnPlay(Tempest card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         var count = context.Card.ResolveEnergyXValue(context.State) + (card.IsUpgraded ? 1 : 0);
         context.Simulator.OrbChannel<LightningOrb>(card.Owner, count);
     }
 
-    public static void TeslaCoilOnPlay(TeslaCoil card, CardOnPlayMirrorContext context)
+    public static void TeslaCoilOnPlay(TeslaCoil _, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.AttackSingle();
-        if (context.Simulator.HasPendingChoice)
-            return;
-
-        var triggerCount = card.IsUpgraded ? 2 : 1;
-        var lightningOrbs = context.OwnerState.OrbQueue.Orbs.OfType<LightningOrb>().ToArray();
-        foreach (var lightningOrb in lightningOrbs)
-        {
-            for (var i = 0; i < triggerCount; i++)
-            {
-                context.Simulator.OrbPassive(lightningOrb, context.Target);
-                if (context.Simulator.HasPendingChoice)
-                    return;
-            }
-        }
+        ContinueOrQueueTail(context, OrbCardTailKind.TeslaPassives);
     }
 
     public static void VoltaicOnPlay(Voltaic card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         var count = CombatManager.Instance.History.Entries
             .OfType<OrbChanneledEntry>()
             .Count(entry => entry.Actor.Player == card.Owner && entry.Orb is LightningOrb);
@@ -250,6 +188,7 @@ internal static class OrbCardMirrors
 
     public static void ZapOnPlay(Zap card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.Simulator.OrbChannel<LightningOrb>(card.Owner);
     }
 }

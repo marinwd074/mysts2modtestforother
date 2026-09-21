@@ -28,7 +28,7 @@ replace the native-vs-predicted runtime differential.
 
 ## Corrected version drift
 
-Thirty-one route-affecting mismatches have been confirmed in the 0.107.1 source audit:
+Thirty-two route-affecting mismatches have been confirmed in the 0.107.1 source audit:
 
 | Card | 0.107.1 native behavior | Incorrect solver behavior | Correction |
 |---|---|---|---|
@@ -105,6 +105,23 @@ preserves the next Shiv index. Simple post-command suffixes share one tail
 frame. This keeps nested vanilla hooks such as Dark Embrace, Charon's Ashes,
 Forgotten Soul, generated-card hooks, and damage hooks from silently skipping
 the rest of the played card.
+
+### Orb command and card continuation correction
+
+The 0.107.1 Orb cards use ordered async command chains: attacks or Block can
+precede Channel, Channel can evict and Evoke an existing Orb, and cards such as
+Chaos, Darkness, Shatter, and Tesla Coil continue loops after each awaited Orb
+operation. Prediction previously returned as soon as an intermediate hook
+opened a choice, so the remainder of the native command chain could disappear.
+
+Orb command helpers now retain their own suffixes across a suspended choice
+(Evoke -> AfterOrbEvoked, repeated Evoke/death cleanup, full-slot Channel ->
+enqueue, repeated Channel, and repeated passive triggers). Orb card mirrors
+acknowledge the adapted CardModel.OnPlay dispatch and preserve their card-level
+suffix independently. Shared tail frames cover attack/Block -> Channel and
+Channel -> draw/Power chains, while Chaos, Darkness, Shatter, and Tesla Coil
+store explicit loop indices and fork-remapped Orb snapshots. This mirrors the
+0.107.1 await order without replaying already completed Orb effects.
 
 ## Checked matches
 

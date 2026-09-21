@@ -2687,6 +2687,66 @@ foreach ($requiredOrbSimulatorRule in @(
 }
 
 
+$orbCardMirrorPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/OrbCardMirrors.cs'
+$orbCardMirrorText = [IO.File]::ReadAllText($orbCardMirrorPath)
+$orbCardContinuationPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/OrbCardMirrors.ExecutionContinuation.cs'
+$orbCardContinuationText = [IO.File]::ReadAllText($orbCardContinuationPath)
+foreach ($requiredOrbCardContinuationRule in @(
+    'private sealed record OrbCardTailExecutionFrame(',
+    'private sealed record ChaosExecutionFrame(',
+    'private sealed record DarknessPassiveExecutionFrame(',
+    'private sealed record ShatterExecutionFrame(',
+    'private sealed record TeslaPassiveExecutionFrame(',
+    'ContinueOrQueueTail(',
+    'ContinueChaos(',
+    'ContinueDarknessPassives(',
+    'ContinueShatterEvokes(',
+    'ContinueTeslaPassives(',
+    'Orbs = Orbs.Select(orb => context.RequireRemap(orb)).ToArray()')) {
+    if (-not $orbCardContinuationText.Contains($requiredOrbCardContinuationRule)) {
+        $violations.Add("${orbCardContinuationPath}: missing Orb-card continuation rule '$requiredOrbCardContinuationRule'")
+    }
+}
+foreach ($orbCardMethod in @(
+    'BallLightning',
+    'Chaos',
+    'Chill',
+    'ColdSnap',
+    'ConsumingShadow',
+    'Coolheaded',
+    'Darkness',
+    'Dualcast',
+    'Fusion',
+    'Glacier',
+    'Glasswork',
+    'IceLance',
+    'Ignition',
+    'MeteorStrike',
+    'MultiCast',
+    'Null',
+    'Quadcast',
+    'Rainbow',
+    'Refract',
+    'ShadowShield',
+    'Shatter',
+    'Spinner',
+    'Tempest',
+    'TeslaCoil',
+    'Voltaic',
+    'Zap')) {
+    $methodStart = $orbCardMirrorText.IndexOf("public static void $($orbCardMethod)OnPlay")
+    $nextMethod = $orbCardMirrorText.IndexOf([Environment]::NewLine + '    public static void ', $methodStart + 1)
+    $methodEnd = if ($nextMethod -gt $methodStart) { $nextMethod } else { $orbCardMirrorText.Length }
+    if ($methodStart -lt 0 -or $methodEnd -le $methodStart) {
+        $violations.Add("${orbCardMirrorPath}: Orb-card method boundary missing for $orbCardMethod")
+        continue
+    }
+    $methodBlock = $orbCardMirrorText.Substring($methodStart, $methodEnd - $methodStart)
+    if (-not $methodBlock.Contains('context.Simulator.AcknowledgeExecutionDispatch();')) {
+        $violations.Add("${orbCardMirrorPath}: $orbCardMethod must acknowledge its resumable OnPlay dispatch")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."
