@@ -3059,6 +3059,66 @@ foreach ($requiredFlakContinuationRule in @(
     }
 }
 
+$rootCombatHistoryPath = Join-Path $repositoryRoot 'src/Search/RootCombatHistorySnapshot.cs'
+$rootCombatHistoryText = [IO.File]::ReadAllText($rootCombatHistoryPath)
+foreach ($requiredRootHistoryEntry in @(
+    'CardGeneratedEntry[] CardsGenerated',
+    'OrbChanneledEntry[] OrbsChanneled',
+    'history.Entries.OfType<CardGeneratedEntry>().ToArray()',
+    'history.Entries.OfType<OrbChanneledEntry>().ToArray()')) {
+    if (-not $rootCombatHistoryText.Contains($requiredRootHistoryEntry)) {
+        $violations.Add("${rootCombatHistoryPath}: missing frozen calculated-card history entry '$requiredRootHistoryEntry'")
+    }
+}
+
+$cardEventHistoryPath = Join-Path $repositoryRoot 'src/Search/SimulatedCombatState.CardEventHistory.cs'
+$cardEventHistoryText = [IO.File]::ReadAllText($cardEventHistoryPath)
+foreach ($requiredHistoryRule in @(
+    'GetFinishedCardPlaysForCalculatedVar',
+    'GetGeneratedCardsForCalculatedVar',
+    'GetLightningChannelsForCalculatedVar',
+    'GetUnblockedDamageEventsForCalculatedVar',
+    'GetEtherealPlaysForCalculatedVar',
+    'GetCardsDrawnForCalculatedVar',
+    'AppendCalculatedCardHistoryFingerprint',
+    'AppendLiveCalculatedCardHistory',
+    'AppendPredictedCalculatedCardHistory')) {
+    if (-not $cardEventHistoryText.Contains($requiredHistoryRule)) {
+        $violations.Add("${cardEventHistoryPath}: missing history-sensitive calculated-card rule '$requiredHistoryRule'")
+    }
+}
+
+if ($calculatedVarSpecText.Contains('CombatManager.Instance.History')) {
+    $violations.Add("${calculatedVarSpecPath}: calculated vars must use frozen root history plus branch-local prediction history")
+}
+foreach ($requiredCalculatedHistoryCall in @(
+    'GetGeneratedCardsForCalculatedVar',
+    'GetLightningChannelsForCalculatedVar',
+    'GetUnblockedDamageEventsForCalculatedVar',
+    'GetEtherealPlaysForCalculatedVar',
+    'GetFinishedCardPlaysForCalculatedVar',
+    'GetCardsDrawnForCalculatedVar')) {
+    if (-not $calculatedVarSpecText.Contains($requiredCalculatedHistoryCall)) {
+        $violations.Add("${calculatedVarSpecPath}: missing frozen history call '$requiredCalculatedHistoryCall'")
+    }
+}
+
+$simulatedCombatStatePath = Join-Path $repositoryRoot 'src/Search/SimulatedCombatState.cs'
+$simulatedCombatStateText = [IO.File]::ReadAllText($simulatedCombatStatePath)
+if (-not $simulatedCombatStateText.Contains('AppendCalculatedCardHistoryFingerprint(ref fingerprint, simulator);')) {
+    $violations.Add("${simulatedCombatStatePath}: history-sensitive calculated vars must participate in state fingerprinting")
+}
+
+$continuationStampPath = Join-Path $repositoryRoot 'src/Runtime/ContinuationStamp.cs'
+$continuationStampText = [IO.File]::ReadAllText($continuationStampPath)
+foreach ($requiredHistoryStamp in @(
+    'SimulatedCombatState.AppendLiveCalculatedCardHistory(text, player);',
+    'combat.AppendPredictedCalculatedCardHistory(text, simulator, player);')) {
+    if (-not $continuationStampText.Contains($requiredHistoryStamp)) {
+        $violations.Add("${continuationStampPath}: missing history-sensitive continuation stamp '$requiredHistoryStamp'")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."

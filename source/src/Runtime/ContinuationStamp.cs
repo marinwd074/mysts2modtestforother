@@ -130,6 +130,7 @@ internal sealed record ContinuationStamp(string StateText)
         AppendLivePile(text, pcs.DiscardPile, 'C');
         AppendLivePile(text, pcs.ExhaustPile, 'X');
         SimulatedCombatState.AppendLiveTurnCardHistory(text, state, player);
+        SimulatedCombatState.AppendLiveCalculatedCardHistory(text, player);
         AppendOrbs(text, pcs.OrbQueue.Capacity, pcs.OrbQueue.Orbs);
         AppendPotions(text, player, player.GetPotionAtSlotIndex);
         SimulatedCombatState.AppendLiveStatefulRelics(text, player);
@@ -197,6 +198,7 @@ internal sealed record ContinuationStamp(string StateText)
         AppendPredictedPile(text, pcs.DiscardPile, 'C');
         AppendPredictedPile(text, pcs.ExhaustPile, 'X');
         combat.AppendPredictedTurnCardHistory(text, player);
+        combat.AppendPredictedCalculatedCardHistory(text, simulator, player);
         AppendPredictedOrbs(text, simulator, pcs.OrbQueue.Capacity, pcs.OrbQueue.Orbs);
         AppendPotions(text, player, slot => combat.GetPotionAtSlot(player, slot));
         combat.AppendPredictedStatefulRelics(text, player);

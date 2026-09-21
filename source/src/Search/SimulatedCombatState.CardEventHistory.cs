@@ -23,6 +23,101 @@ internal sealed partial class SimulatedCombatState
     public int GetCardsDrawnBeforePrediction(Player player)
         => _rootHistory.CardsDrawn.Count(entry => entry.Actor.Player == player);
 
+    public int GetFinishedCardPlaysForCalculatedVar(CombatPredictionSimulator simulator)
+        => _rootHistory.CardPlaysFinished.Length
+           + simulator.History.OfType<CombatPredictionCardPlayFinishedEntry>().Count();
+
+    public int GetGeneratedCardsForCalculatedVar(CombatPredictionSimulator simulator, Player player)
+        => _rootHistory.CardsGenerated.Count(entry => entry.Creator == player)
+           + simulator.History.OfType<CombatPredictionCardGeneratedEntry>()
+               .Count(entry => entry.Creator == player);
+
+    public int GetLightningChannelsForCalculatedVar(CombatPredictionSimulator simulator, Player player)
+        => _rootHistory.OrbsChanneled.Count(entry => entry.Actor.Player == player && entry.Orb is LightningOrb)
+           + simulator.History.OfType<CombatPredictionOrbChanneledEntry>()
+               .Count(entry => entry.Orb.Owner == player && entry.Orb is LightningOrb);
+
+    public int GetUnblockedDamageEventsForCalculatedVar(
+        CombatPredictionSimulator simulator,
+        Creature receiver)
+        => _rootHistory.DamageReceived.Count(entry =>
+               entry.Receiver == receiver && entry.Result.UnblockedDamage > 0)
+           + simulator.History.OfType<CombatPredictionDamageReceivedEntry>()
+               .Count(entry => entry.Receiver == receiver && entry.Result.UnblockedDamage > 0);
+
+    public int GetEtherealPlaysForCalculatedVar(CombatPredictionSimulator simulator, Player player)
+        => _rootHistory.CardPlaysFinished.Count(entry =>
+               entry.CardPlay.Card.Owner == player && entry.WasEthereal)
+           + simulator.History.OfType<CombatPredictionCardPlayFinishedEntry>()
+               .Count(entry => entry.CardPlay.Card.Owner == player && entry.WasEthereal);
+
+    public int GetCardsDrawnForCalculatedVar(CombatPredictionSimulator simulator, Player player)
+        => GetCardsDrawnBeforePrediction(player)
+           + simulator.History.OfType<CombatPredictionCardDrawnEntry>()
+               .Count(entry => entry.Card.Owner == player);
+
+    public static void AppendLiveCalculatedCardHistory(StringBuilder text, Player player)
+    {
+        var history = CombatManager.Instance.History;
+        AppendCalculatedCardHistory(
+            text,
+            history.CardPlaysFinished.Count(),
+            history.Entries.OfType<CardGeneratedEntry>().Count(entry => entry.Creator == player),
+            history.Entries.OfType<OrbChanneledEntry>()
+                .Count(entry => entry.Actor.Player == player && entry.Orb is LightningOrb),
+            history.Entries.OfType<DamageReceivedEntry>()
+                .Count(entry => entry.Receiver == player.Creature && entry.Result.UnblockedDamage > 0),
+            history.CardPlaysFinished.Count(entry =>
+                entry.CardPlay.Card.Owner == player && entry.WasEthereal),
+            history.Entries.OfType<CardDrawnEntry>().Count(entry => entry.Actor.Player == player));
+    }
+
+    public void AppendPredictedCalculatedCardHistory(
+        StringBuilder text,
+        CombatPredictionSimulator simulator,
+        Player player)
+        => AppendCalculatedCardHistory(
+            text,
+            GetFinishedCardPlaysForCalculatedVar(simulator),
+            GetGeneratedCardsForCalculatedVar(simulator, player),
+            GetLightningChannelsForCalculatedVar(simulator, player),
+            GetUnblockedDamageEventsForCalculatedVar(simulator, player.Creature),
+            GetEtherealPlaysForCalculatedVar(simulator, player),
+            GetCardsDrawnForCalculatedVar(simulator, player));
+
+    public void AppendCalculatedCardHistoryFingerprint(
+        ref StateFingerprintBuilder fingerprint,
+        CombatPredictionSimulator simulator)
+    {
+        fingerprint.Add("history_sensitive_calculated_cards");
+        fingerprint.Add(GetFinishedCardPlaysForCalculatedVar(simulator));
+        foreach (Player player in _rootCapturedPlayers.OrderBy(player => player.NetId))
+        {
+            fingerprint.Add(player.NetId);
+            fingerprint.Add(GetGeneratedCardsForCalculatedVar(simulator, player));
+            fingerprint.Add(GetLightningChannelsForCalculatedVar(simulator, player));
+            fingerprint.Add(GetUnblockedDamageEventsForCalculatedVar(simulator, player.Creature));
+            fingerprint.Add(GetEtherealPlaysForCalculatedVar(simulator, player));
+            fingerprint.Add(GetCardsDrawnForCalculatedVar(simulator, player));
+        }
+    }
+
+    private static void AppendCalculatedCardHistory(
+        StringBuilder text,
+        int finishedCardPlays,
+        int generatedCards,
+        int lightningChannels,
+        int unblockedDamageEvents,
+        int etherealPlays,
+        int cardsDrawn)
+        => text.Append(";HC=")
+            .Append(finishedCardPlays).Append('/')
+            .Append(generatedCards).Append('/')
+            .Append(lightningChannels).Append('/')
+            .Append(unblockedDamageEvents).Append('/')
+            .Append(etherealPlays).Append('/')
+            .Append(cardsDrawn);
+
     public void RecordCardExhausted(Creature actor)
         => (_cardsExhaustedThisTurn ??= [])[actor] = GetCardsExhaustedThisTurn(actor) + 1;
 

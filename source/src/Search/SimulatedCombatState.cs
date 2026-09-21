@@ -2321,6 +2321,7 @@ internal sealed partial class SimulatedCombatState
         AddPlayerIntMap(ref fingerprint, 'z', _starsGainedThisTurn);
         AddPlayerIntMap(ref fingerprint, 'n', _nonHandDrawsThisTurn);
         AddPlayerIntMap(ref fingerprint, 's', _statusCardsDrawnThisTurn);
+        AppendCalculatedCardHistoryFingerprint(ref fingerprint, simulator);
         AddCreatureIntMap(ref fingerprint, 'Q', _cardPlaySeriesStartedThisTurn);
         AddCreatureIntMap(ref fingerprint, 'q', _zeroCostAttackStartsThisTurn);
         AddCreatureIntMap(ref fingerprint, 'a', _attackPlayStartsThisTurn);

@@ -14,6 +14,8 @@ internal sealed record RootCombatHistorySnapshot(
     StarsModifiedEntry[] StarsModified,
     CardDrawnEntry[] CardsDrawn,
     CardExhaustedEntry[] CardsExhausted,
+    CardGeneratedEntry[] CardsGenerated,
+    OrbChanneledEntry[] OrbsChanneled,
     BlockGainedEntry[] BlockGained)
 {
     public static RootCombatHistorySnapshot Capture()
@@ -30,6 +32,8 @@ internal sealed record RootCombatHistorySnapshot(
             history.Entries.OfType<StarsModifiedEntry>().ToArray(),
             history.Entries.OfType<CardDrawnEntry>().ToArray(),
             history.Entries.OfType<CardExhaustedEntry>().ToArray(),
+            history.Entries.OfType<CardGeneratedEntry>().ToArray(),
+            history.Entries.OfType<OrbChanneledEntry>().ToArray(),
             history.Entries.OfType<BlockGainedEntry>().ToArray());
     }
 }
