@@ -30,6 +30,7 @@ internal static class CardGenerationCardMirrors
 
     public static void BundleOfJoyOnPlay(BundleOfJoy card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         var cards = context.Simulator
             .GetDistinctUnlockedColorlessForCombat(
                 card.Owner,
@@ -43,6 +44,7 @@ internal static class CardGenerationCardMirrors
 
     public static void DistractionOnPlay(Distraction card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         var cards = card.Owner.GetUnlockedCharacterCards(context.CardMultiplayerConstraint)
             .Where(candidate => candidate.Type == CardType.Skill)
             .GetDistinctForCombat(
@@ -71,6 +73,7 @@ internal static class CardGenerationCardMirrors
 
     public static void InfernalBladeOnPlay(InfernalBlade card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         var cards = context.Simulator
             .GetDistinctUnlockedCharacterAttacksForCombat(
                 card.Owner,
@@ -85,6 +88,7 @@ internal static class CardGenerationCardMirrors
 
     public static void JackOfAllTradesOnPlay(JackOfAllTrades card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         var cards = card.Owner.GetUnlockedColorlessCards(context.CardMultiplayerConstraint)
             .Where(candidate => candidate is not JackOfAllTrades)
             .GetDistinctForCombat(
@@ -99,6 +103,7 @@ internal static class CardGenerationCardMirrors
 
     public static void JackpotOnPlay(Jackpot card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.AttackSingle();
         if (context.Simulator.HasPendingChoice)
             return;
@@ -118,6 +123,7 @@ internal static class CardGenerationCardMirrors
 
     public static void LargesseOnPlay(Largesse card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         var targetPlayer = context.TargetPlayer;
         var cards = context.Simulator
             .GetDistinctUnlockedColorlessForCombat(
@@ -294,6 +300,7 @@ internal static class CardGenerationCardMirrors
 
     public static void ManifestAuthorityOnPlay(ManifestAuthority card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         context.GainBlock(card.Owner.Creature);
         if (context.Simulator.HasPendingChoice)
             return;
@@ -312,6 +319,7 @@ internal static class CardGenerationCardMirrors
 
     public static void MetamorphosisOnPlay(Metamorphosis card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         var cards = context.Simulator
             .GetUnlockedCharacterAttacksForCombat(
                 card.Owner,
@@ -440,6 +448,7 @@ internal static class CardGenerationCardMirrors
 
     public static void WhiteNoiseOnPlay(WhiteNoise card, CardOnPlayMirrorContext context)
     {
+        context.Simulator.AcknowledgeExecutionDispatch();
         var cards = card.Owner.GetUnlockedCharacterCards(context.CardMultiplayerConstraint)
             .Where(candidate => candidate.Type == CardType.Power)
             .GetDistinctForCombat(

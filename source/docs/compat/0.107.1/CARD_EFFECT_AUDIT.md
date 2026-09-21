@@ -104,6 +104,13 @@ stores the actual Power instance and next loop index, not a frozen trigger
 count. Stoke now likewise preserves its initial Hand snapshot and next Exhaust
 index before entering the generated-card batch.
 
+Dedicated generation-card OnPlay handlers now also acknowledge that resumable
+generated-card batch. This lets a choice opened by an
+`AfterCardGeneratedForCombat` hook resume after the already-completed card
+prefix instead of forcing an avoidable whole-card replay. Opaque Attack/Damage
+commands keep their separate rejection boundary, so this acknowledgement does
+not make a partially completed attack resumable.
+
 ### Multi-step OnPlay continuation correction
 
 Several dedicated 0.107.1 card mirrors had the right immediate effects but lost

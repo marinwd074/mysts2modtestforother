@@ -2822,6 +2822,32 @@ foreach ($requiredCardDrawContinuationRule in @(
     }
 }
 
+foreach ($generatedCardContinuationMethod in @(
+    'BundleOfJoy',
+    'Distraction',
+    'InfernalBlade',
+    'JackOfAllTrades',
+    'Jackpot',
+    'Largesse',
+    'ManifestAuthority',
+    'Metamorphosis',
+    'Stoke',
+    'WhiteNoise')) {
+    $methodStart = $cardGenerationMirrorText.IndexOf("public static void $($generatedCardContinuationMethod)OnPlay")
+    $nextPublic = $cardGenerationMirrorText.IndexOf([Environment]::NewLine + '    public static void ', $methodStart + 1)
+    $nextPrivate = $cardGenerationMirrorText.IndexOf([Environment]::NewLine + '    private static ', $methodStart + 1)
+    $candidates = @($nextPublic, $nextPrivate) | Where-Object { $_ -gt $methodStart }
+    $methodEnd = if ($candidates.Count -gt 0) { ($candidates | Measure-Object -Minimum).Minimum } else { $cardGenerationMirrorText.Length }
+    if ($methodStart -lt 0 -or $methodEnd -le $methodStart) {
+        $violations.Add("${cardGenerationMirrorPath}: generated-card method boundary missing for $generatedCardContinuationMethod")
+        continue
+    }
+    $methodBlock = $cardGenerationMirrorText.Substring($methodStart, $methodEnd - $methodStart)
+    if (-not $methodBlock.Contains('context.Simulator.AcknowledgeExecutionDispatch();')) {
+        $violations.Add("${cardGenerationMirrorPath}: $generatedCardContinuationMethod must acknowledge generated-card execution continuation")
+    }
+}
+
 $generatedContinuationPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.CardGenerationContinuation.cs'
 $generatedContinuationText = [IO.File]::ReadAllText($generatedContinuationPath)
 foreach ($requiredGeneratedContinuationRule in @(
