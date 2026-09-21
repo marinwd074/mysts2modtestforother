@@ -106,15 +106,10 @@
 
 ## 当前下一步
 
-当前开发范围暂时收窄为 **0.107.1 单人卡牌版本差异**；多人专属牌、队友目标语义和新的
-多人能力扩展先不处理。主线继续按
-`compat/0.107.1/CARD_EFFECT_AUDIT.md` 从后续版本 patch delta 反查 0.107.1，
-优先处理 solver 自己重写的 hard-coded constants、版本条件和 custom execution order。
+当前只处理 **0.107.1 单人卡牌版本差异**。已确认并修正 42 个 route-affecting mismatch。
 
-截至当前批次，除既有 Mad Science / Orb / Draw / Selection / Forge / Bulk Up / Misery /
-Well-Laid Plans 等修正外，Mirage、Compact/Fuel、Rocket Punch、Inky、Synchronize
-这些后续版本重做陷阱也已加入 0.107.1 静态兼容合同。它们当前旧语义本身已匹配目标版本，
-本批次重点是禁止以后从 0.108–0.111 上游回迁时重新污染。
+最新修正：Voltaic 的 OnPlay 不再读取可变的 live `CombatManager.Instance.History`，
+改为复用 `GetLightningChannelsForCalculatedVar`，严格使用冻结 root 历史 + 当前分支新增
+Lightning channel 历史。
 
-下一轮继续审计其余**单人**高风险路径；DynamicVar/关键词/费用完全由 0.107.1 CardModel
-提供的普通数值变化保持低优先级。多人 Carry R2 和多人牌均不作为当前阻塞项。
+后续按短批次继续：每次只审计/修正一个高风险单人牌路径；多人牌暂不处理。

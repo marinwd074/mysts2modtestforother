@@ -28,7 +28,7 @@ replace the native-vs-predicted runtime differential.
 
 ## Corrected version drift
 
-Forty-one route-affecting mismatches have been confirmed in the 0.107.1 source audit:
+Forty-two route-affecting mismatches have been confirmed in the 0.107.1 source audit:
 
 | Card | 0.107.1 native behavior | Incorrect solver behavior | Correction |
 |---|---|---|---|
@@ -44,6 +44,7 @@ Forty-one route-affecting mismatches have been confirmed in the 0.107.1 source a
 | Expertise | draws only enough cards to bring the current hand to 6 cards (7 upgraded) | drew 6/7 additional cards and gave the drawn cards single-turn Retain | draw target minus current hand size and remove the later-version Retain behavior |
 | Scrape | after attacking and drawing 4/5 cards, discards each drawn X-cost card or card whose **local** Energy cost is nonzero; global combat-cost hooks are ignored | tested each drawn card with the solver's all-modifiers cost helper, so a global temporary 0-cost effect could incorrectly save a card from Scrape | use the pinned DLL's `EnergyCost.GetWithModifiers(CostModifiers.Local)` predicate and keep X-cost handling separate |
 | Null | attacks, applies Weak 2/3 to the target, then channels one Dark Orb | the mirror attacked and channeled the Dark Orb but omitted Weak entirely | apply Weak to the target between the attack and Dark-Orb channel, preserving native order |
+| Voltaic | counts all Lightning Orbs channeled by its owner earlier in combat, then channels that many Lightning Orbs | dedicated OnPlay reread mutable live combat history instead of the frozen root snapshot | use `GetLightningChannelsForCalculatedVar`, combining frozen root history with branch-local channels only |
 | Forgotten Ritual | gains 3/4 Energy only if one of its owner's cards was Exhausted earlier this turn; otherwise playing it has no Energy effect | shared the unconditional Luminesce compensation and always granted Energy | split the case and gate Energy gain on the branch-local exhausted-card history for the owner |
 | Eidolon | Exhausts the owner's current Hand one card at a time; if at least 9 cards were Exhausted this way, applies 1 Intangible | used the v0.109 redesign and auto-played all playable Ethereal cards from the Exhaust Pile | snapshot the current Hand, Exhaust each card through the simulator, preserve the remaining snapshot/count in a fork-safe continuation across Exhaust-triggered choices, then apply Intangible at the native threshold |
 | Well-Laid Plans | during 0.107.1 `BeforeFlushLate`, if the owner's hand will flush, choose 0..1 cards (0..2 upgraded) that are not already retained and give those exact cards single-turn Retain before `FlushPlayerHand` | the Power was applied but its end-turn selector was never mirrored, so the normal flush discarded every non-Retain card | reuse the EndTurn choice pipeline at `PlayerTurnEnd` timing, resolve the 0..Amount hand choice before flush, and call `GiveSingleTurnRetain()` rather than adding a permanent Retain keyword |

@@ -2971,6 +2971,21 @@ $cardDrawSequencePath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/C
 $cardDrawSequenceText = [IO.File]::ReadAllText($cardDrawSequencePath)
 $cardDrawContinuationPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/CardDrawCardMirrors.ExecutionContinuation.cs'
 $cardDrawContinuationText = [IO.File]::ReadAllText($cardDrawContinuationPath)
+$voltaicStart = $orbCardMirrorText.IndexOf('public static void VoltaicOnPlay')
+$voltaicEnd = $orbCardMirrorText.IndexOf('public static void ZapOnPlay', $voltaicStart)
+if ($voltaicStart -lt 0 -or $voltaicEnd -le $voltaicStart) {
+    $violations.Add("${orbCardMirrorPath}: Voltaic mirror boundary is missing")
+}
+else {
+    $voltaicBlock = $orbCardMirrorText.Substring($voltaicStart, $voltaicEnd - $voltaicStart)
+    if (-not $voltaicBlock.Contains('GetLightningChannelsForCalculatedVar(context.Simulator, card.Owner)')) {
+        $violations.Add("${orbCardMirrorPath}: Voltaic must use frozen root + branch-local Lightning history")
+    }
+    if ($voltaicBlock.Contains('CombatManager.Instance.History')) {
+        $violations.Add("${orbCardMirrorPath}: Voltaic must not reread mutable live combat history")
+    }
+}
+
 foreach ($cardDrawContinuationMethod in @(
     'Adrenaline',
     'Offering',

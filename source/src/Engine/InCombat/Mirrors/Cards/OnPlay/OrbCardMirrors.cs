@@ -1,5 +1,3 @@
-using MegaCrit.Sts2.Core.Combat;
-using MegaCrit.Sts2.Core.Combat.History.Entries;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.Models.Orbs;
@@ -175,14 +173,9 @@ internal static partial class OrbCardMirrors
     public static void VoltaicOnPlay(Voltaic card, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        var count = CombatManager.Instance.History.Entries
-            .OfType<OrbChanneledEntry>()
-            .Count(entry => entry.Actor.Player == card.Owner && entry.Orb is LightningOrb);
-
-        count += context.Simulator.History
-            .OfType<CombatPredictionOrbChanneledEntry>()
-            .Count(entry => entry.Orb.Owner == card.Owner && entry.Orb is LightningOrb);
-
+        SimulatedCombatState combat = context.CombatState as SimulatedCombatState
+            ?? throw new InvalidOperationException("Voltaic requires frozen branch combat history.");
+        int count = combat.GetLightningChannelsForCalculatedVar(context.Simulator, card.Owner);
         context.Simulator.OrbChannel<LightningOrb>(card.Owner, count);
     }
 
