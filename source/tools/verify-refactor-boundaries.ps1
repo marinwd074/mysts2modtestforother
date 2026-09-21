@@ -1588,15 +1588,19 @@ if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/Comb
     $violations.Add('History key must consume incremental totals')
 }
 $historySolverPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.cs'
-if (-not (Select-String -LiteralPath $historySolverPath -SimpleMatch 'root.PlayerCount == 1' -Quiet)
-    -or -not (Select-String -LiteralPath $historySolverPath -SimpleMatch 'CombatHistoryCounterKey.AppliesTo(root.PlayerCardIds)' -Quiet)) {
-    $violations.Add('History-sensitive transposition key must stay single-player only')
+if (-not (Select-String -LiteralPath $historySolverPath -SimpleMatch 'root.PlayerCount == 1' -Quiet)) {
+    $violations.Add('History-sensitive transposition key lost the single-player gate')
+}
+if (-not (Select-String -LiteralPath $historySolverPath -SimpleMatch 'CombatHistoryCounterKey.AppliesTo(root.PlayerCardIds)' -Quiet)) {
+    $violations.Add('History-sensitive transposition key lost the reader-card gate')
 }
 foreach ($historyFile in @('CombatPredictionHistory.cs', 'CombatPredictionHistory.CardContinuation.cs', 'CombatPredictionHistory.ExecutionContinuation.cs')) {
     $historyPath = Join-Path $repositoryRoot "src/Engine/InCombat/Simulation/$historyFile"
-    if (-not (Select-String -LiteralPath $historyPath -SimpleMatch '_counterOwner' -Quiet)
-        -or -not (Select-String -LiteralPath $historyPath -SimpleMatch '_counters' -Quiet)) {
-        $violations.Add("History fork must inherit counters: $historyFile")
+    if (-not (Select-String -LiteralPath $historyPath -SimpleMatch '_counterOwner' -Quiet)) {
+        $violations.Add("History fork lost counter owner: $historyFile")
+    }
+    if (-not (Select-String -LiteralPath $historyPath -SimpleMatch '_counters' -Quiet)) {
+        $violations.Add("History fork lost counter totals: $historyFile")
     }
 }
 if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.StateEvaluation.cs') -SimpleMatch 'CombatHistoryCounterKey.Append(ref key, simulator, _player)' -Quiet)) {
