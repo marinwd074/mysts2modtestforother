@@ -7,6 +7,9 @@ internal sealed partial class CombatBeamSolver
         int PotionStrategicCost,
         int FutureSoldHp,
         int CumulativePlayerHpLost,
+        bool AllPlayersAlive,
+        double TeamLossRatio,
+        double WorstPlayerLossRatio,
         int ActionCount,
         double Score,
         SearchRouteTraits Traits,
@@ -56,6 +59,9 @@ internal sealed partial class CombatBeamSolver
                 && left.PotionStrategicCost <= right.PotionStrategicCost
                 && left.FutureSoldHp <= right.FutureSoldHp
                 && left.CumulativePlayerHpLost <= right.CumulativePlayerHpLost
+                && (left.AllPlayersAlive || !right.AllPlayersAlive)
+                && left.TeamLossRatio <= right.TeamLossRatio
+                && left.WorstPlayerLossRatio <= right.WorstPlayerLossRatio
                 && left.ActionCount <= right.ActionCount
                 && left.Score >= right.Score
                 && (left.Traits & right.Traits) == right.Traits
@@ -64,7 +70,18 @@ internal sealed partial class CombatBeamSolver
                 && left.PlayerDead == right.PlayerDead
                 && left.AllEnemiesDead == right.AllEnemiesDead
                 && left.PredictionGaps.SequenceEqual(right.PredictionGaps)
-                && left.CombatProgress == right.CombatProgress;
+                && left.CombatProgress == right.CombatProgress
+                && (left.CumulativePlayerHpLost < right.CumulativePlayerHpLost
+                    || left.AllPlayersAlive && !right.AllPlayersAlive
+                    || left.TeamLossRatio < right.TeamLossRatio
+                    || left.WorstPlayerLossRatio < right.WorstPlayerLossRatio
+                    || left.ActionCount < right.ActionCount
+                    || left.Score > right.Score
+                    || left.PotionCount < right.PotionCount
+                    || left.PotionStrategicCost < right.PotionStrategicCost
+                    || left.FutureSoldHp < right.FutureSoldHp
+                    || left.Traits != right.Traits
+                    || left.HasNonPotionAction != right.HasNonPotionAction);
     }
 
 }

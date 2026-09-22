@@ -35,7 +35,7 @@
 
 1. `ShadowTeammatePlanner` 已从单队友 Top-K 扩为 Team Top-K：队友按 NetId 依次在同一预测世界上模拟，每处理完一个队友就按 EnemyDurability / TeamEffectiveHp / WorstPlayerEffectiveHpRatio / TeamEnergy / TeamStars / 动作数重新取 Pareto 前沿并压回全局 beam=4，因此不会形成 K^N 笛卡尔爆炸。强制结束自己出牌的 shadow 卡只结束该队友分支，切换到下一队友前会消费 prediction-only end request；所有候选仍只存在于 simulator fork，不生成 `PlanAction`。每条 Shadow route 现在还携带独立 `ProcessedEnemyDeaths`，每次卡牌分叉复制并更新，避免跨 Shadow 动作丢失敌人死亡生命周期状态；接主搜索时可直接从 parent snapshot 的集合初始化。
 2. Joint EndTurn 主接线已落地，并补齐精确回放：每个 Joint EndTurn 都携带非执行的 `ShadowForecastPlan`，记录本次选中世界线的队友动作；即使队友 0-action，非 null metadata 也明确表示 Joint 世界。搜索/最终注释回放会按记录的 PlayerNetId + HandIndex + SemanticKey + TargetCombatId 在 detached simulator 中重放，再走全队 End → Enemy Side → 全队 Start；不重新跑 Top-K 猜一次。Deployment 不读取此字段，真实执行权限仍只有本地 EndTurn/本地牌。
-3. TeamLossRatio / WorstPlayerLossRatio 已接入 Joint terminal/final ordering；下一步把团队风险/收益进一步接进 Beam 中途保路，避免辅助队友的好路线在抵达完整终局前被本地分数剪掉，然后确认真实队友行为或世界状态偏离预测时立即 Fresh Search。
+3. Team-Safety 中途保路已接入：transposition label/dominance 现在携带 AllPlayersAlive / TeamLossRatio / WorstPlayerLossRatio，因此“本地分更高但团队战损更差”的历史不再支配团队安全历史；多人 RankBest 还从现有 Beam 名额中固定保护最多 3 个无权重代表（最低团队战损、最低最差玩家战损、全员存活池内最佳敌方推进），MultiObjectiveDominates 也加入同一团队安全约束。未增加 Beam/时间/内存预算，单人路径不启用这组 Beam 保路键。下一步确认真实队友行为或世界状态偏离预测时立即 Fresh Search，并补一次本地 Build。
 
 ## 当前开发 / 性能规则
 

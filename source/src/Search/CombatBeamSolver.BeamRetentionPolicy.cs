@@ -757,6 +757,11 @@ internal sealed partial class CombatBeamSolver
             }
 
             List<SearchNode> required = [];
+            if (_routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn)
+            {
+                foreach (SearchNode teamCandidate in BuildTeamSafetyPortfolio(ranked))
+                    AddRequired(required, teamCandidate, limit);
+            }
             foreach (IGrouping<int, SearchNode> victoryGroup in ranked
                          .Where(IsCompleteVictory)
                          .GroupBy(node => node.PotionCount)
@@ -1273,6 +1278,49 @@ internal sealed partial class CombatBeamSolver
         }
 
 
+
+        private IEnumerable<SearchNode> BuildTeamSafetyPortfolio(
+            IReadOnlyList<SearchNode> nodes)
+        {
+            if (nodes.Count == 0)
+                yield break;
+
+            IReadOnlyList<SearchNode> pool = nodes.Any(node => node.Snapshot.AllPlayersAlive)
+                ? nodes.Where(node => node.Snapshot.AllPlayersAlive).ToArray()
+                : nodes;
+
+            SearchNode bestTeamLoss = pool
+                .OrderBy(node => node.Snapshot.TeamLossRatio)
+                .ThenBy(node => node.Snapshot.WorstPlayerLossRatio)
+                .ThenBy(node => node.Snapshot.AliveEnemyCount)
+                .ThenBy(node => node.Snapshot.EnemyHp)
+                .ThenByDescending(BeamRankScore)
+                .First();
+            yield return bestTeamLoss;
+
+            SearchNode bestWorstPlayer = pool
+                .OrderBy(node => node.Snapshot.WorstPlayerLossRatio)
+                .ThenBy(node => node.Snapshot.TeamLossRatio)
+                .ThenBy(node => node.Snapshot.AliveEnemyCount)
+                .ThenBy(node => node.Snapshot.EnemyHp)
+                .ThenByDescending(BeamRankScore)
+                .First();
+            if (!ReferenceEquals(bestWorstPlayer, bestTeamLoss))
+                yield return bestWorstPlayer;
+
+            SearchNode bestEnemyProgress = pool
+                .OrderBy(node => node.Snapshot.AliveEnemyCount)
+                .ThenBy(node => node.Snapshot.EnemyHp)
+                .ThenBy(node => node.Snapshot.TeamLossRatio)
+                .ThenBy(node => node.Snapshot.WorstPlayerLossRatio)
+                .ThenByDescending(BeamRankScore)
+                .First();
+            if (!ReferenceEquals(bestEnemyProgress, bestTeamLoss)
+                && !ReferenceEquals(bestEnemyProgress, bestWorstPlayer))
+            {
+                yield return bestEnemyProgress;
+            }
+        }
 
         private static bool IsBetterDefensive(SearchNode candidate, SearchNode? current)
             => current == null
@@ -1972,9 +2020,15 @@ internal sealed partial class CombatBeamSolver
             {
                 return false;
             }
+            bool useTeamSafety =
+                _routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn;
             bool noWorse = left.Snapshot.ProjectedPlayerHp >= right.Snapshot.ProjectedPlayerHp
                 && left.Snapshot.PlayerMaxHp >= right.Snapshot.PlayerMaxHp
                 && left.Snapshot.CumulativePlayerHpLost <= right.Snapshot.CumulativePlayerHpLost
+                && (!useTeamSafety
+                    || (left.Snapshot.AllPlayersAlive || !right.Snapshot.AllPlayersAlive)
+                        && left.Snapshot.TeamLossRatio <= right.Snapshot.TeamLossRatio
+                        && left.Snapshot.WorstPlayerLossRatio <= right.Snapshot.WorstPlayerLossRatio)
                 && left.Snapshot.LongTermResourceValue >= right.Snapshot.LongTermResourceValue
                 && left.Snapshot.StrategicHpCredit >= right.Snapshot.StrategicHpCredit
                 && (left.Snapshot.RelicCounters.SatisfiedMask & right.Snapshot.RelicCounters.SatisfiedMask)
@@ -2013,6 +2067,10 @@ internal sealed partial class CombatBeamSolver
             bool strictlyBetter = left.Snapshot.ProjectedPlayerHp > right.Snapshot.ProjectedPlayerHp
                 || left.Snapshot.PlayerMaxHp > right.Snapshot.PlayerMaxHp
                 || left.Snapshot.CumulativePlayerHpLost < right.Snapshot.CumulativePlayerHpLost
+                || useTeamSafety && left.Snapshot.AllPlayersAlive && !right.Snapshot.AllPlayersAlive
+                || useTeamSafety && left.Snapshot.TeamLossRatio < right.Snapshot.TeamLossRatio
+                || useTeamSafety
+                    && left.Snapshot.WorstPlayerLossRatio < right.Snapshot.WorstPlayerLossRatio
                 || left.Snapshot.LongTermResourceValue > right.Snapshot.LongTermResourceValue
                 || left.Snapshot.AngerCopiesGenerated < right.Snapshot.AngerCopiesGenerated
                 || _theftPolicy == SolverTheftPolicy.PreserveResources
