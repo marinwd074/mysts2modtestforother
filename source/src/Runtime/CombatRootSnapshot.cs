@@ -189,7 +189,10 @@ internal sealed class CombatRootSnapshot
         SimulatedCombatState simulatedCombat = new(
             state,
             liveCombatHookListeners,
-            localPlayerOnly: null);
+            localPlayerOnly: null,
+            localActionPlayer: capabilities.IsMultiplayer && capabilities.CanSearch
+                ? player
+                : null);
         CombatPredictionSimulator simulator = new(simulatedCombat);
         if (capabilities.IsMultiplayer && capabilities.CanSearch)
             MultiplayerRootCaptureContracts.Verify(state, simulator, player);
