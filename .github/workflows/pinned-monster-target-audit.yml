@@ -1,0 +1,51 @@
+name: Pinned 0.107.1 monster target audit
+
+on:
+  push:
+    paths:
+      - '.github/workflows/pinned-monster-target-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  extract-monster-move-il:
+    runs-on: windows-latest
+    steps:
+      - name: Check out pinned game body and source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          lfs: true
+
+      - name: Verify pinned sts2.dll
+        shell: pwsh
+        run: |
+          $dll = '.\game-body\data_sts2_windows_x86_64\sts2.dll'
+          if (-not (Test-Path -LiteralPath $dll)) {
+            throw "Missing pinned assembly: $dll"
+          }
+          $actual = (Get-FileHash -LiteralPath $dll -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expected = 'a1f9e653f1e28e4076558fee1e60d218619cb7e057b887c6417f62c62c6d7a52'
+          if ($actual -ne $expected) {
+            throw "Pinned assembly hash mismatch. expected=$expected actual=$actual"
+          }
+          Write-Output "PINNED_STS2_DLL_OK sha256=$actual"
+
+      - name: Extract monster move IL evidence
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path '.\.local\game-inspection' | Out-Null
+          dotnet run --project '.\source\tools\Sts2LocalInspector\Sts2LocalInspector.csproj' -c Release -- `
+            --game-dir '.\game-body' `
+            --output '.\.local\game-inspection\sts2-local-index.json' `
+            --monster-move-il-output '.\.local\game-inspection\monster-moves-0.107.1.json'
+
+      - name: Upload pinned monster IL evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: monster-moves-0.107.1
+          path: .local/game-inspection/monster-moves-0.107.1.json
+          if-no-files-found: error
+          retention-days: 7
