@@ -47,6 +47,7 @@ internal sealed partial class SimulatedCombatState
     private readonly IReadOnlyList<Creature> _playerCreatures;
     private readonly IReadOnlyList<Player> _players;
     private readonly IReadOnlyList<Player> _rootCapturedPlayers;
+    private readonly IReadOnlyList<Player> _rootActionPlayers;
     private readonly IReadOnlyList<ModifierModel> _modifiers;
     private readonly MultiplayerScalingModel? _multiplayerScalingModel;
     private readonly EncounterModel? _encounter;
@@ -244,7 +245,8 @@ internal sealed partial class SimulatedCombatState
     public SimulatedCombatState(
         CombatState inner,
         AbstractModel[]? capturedCombatHookListeners = null,
-        Player? localPlayerOnly = null)
+        Player? localPlayerOnly = null,
+        Player? localActionPlayer = null)
     {
         if (!NGame.IsMainThread())
             throw new InvalidOperationException("Live combat state can only be captured on the main thread.");
@@ -258,9 +260,14 @@ internal sealed partial class SimulatedCombatState
         _players = inner.Players.ToArray();
         if (localPlayerOnly != null && !_players.Contains(localPlayerOnly))
             throw new InvalidOperationException("本地玩家不在当前战斗玩家名册中。");
+        if (localActionPlayer != null && !_players.Contains(localActionPlayer))
+            throw new InvalidOperationException("动作玩家不在当前战斗玩家名册中。");
         _rootCapturedPlayers = localPlayerOnly is null
             ? _players
             : [localPlayerOnly];
+        _rootActionPlayers = localActionPlayer is null
+            ? _rootCapturedPlayers
+            : [localActionPlayer];
         _rootCardGenerationPools = RootCombatCardGenerationPoolSnapshot.Capture(
             _players,
             _rootCapturedPlayers,
@@ -474,6 +481,7 @@ internal sealed partial class SimulatedCombatState
         _playerCreatures = source._playerCreatures;
         _players = source._players;
         _rootCapturedPlayers = source._rootCapturedPlayers;
+        _rootActionPlayers = source._rootActionPlayers;
         _modifiers = source._modifiers;
         _multiplayerScalingModel = source._multiplayerScalingModel;
         _encounter = source._encounter;
@@ -554,6 +562,8 @@ internal sealed partial class SimulatedCombatState
     public IReadOnlyList<Player> Players => _players;
     IReadOnlyList<Player> ICombatPredictionRootCaptureBoundary.RootCapturedPlayers
         => _rootCapturedPlayers;
+    IReadOnlyList<Player> ICombatPredictionRootCaptureBoundary.RootActionPlayers
+        => _rootActionPlayers;
     public IReadOnlyList<ModifierModel> Modifiers => _modifiers;
     public MultiplayerScalingModel? MultiplayerScalingModel => _multiplayerScalingModel;
     public int RoundNumber
