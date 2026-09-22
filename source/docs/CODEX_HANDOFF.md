@@ -32,7 +32,7 @@
 
 ## 当前未完成
 
-1. 实现 `ShadowTeammatePlanner`：直接在 forked prediction state 上读取队友真实手牌/能量/目标，生成小宽度 Top-K 队友动作分支；这些动作只进入预测世界，绝不进入 Deployment。
+1. `ShadowTeammatePlanner` 的合法动作生成层已落地：它在 detached prediction fork 上读取队友真实 Hand、动态费用和目标类型，枚举 AnyEnemy / AnyPlayer / AnyAlly 等精确目标，输出只用于预测的 `ShadowTeammateActionCandidate`；候选不生成 `PlanAction`，且若队友意外进入 `RootActionPlayers` 会直接拒绝。下一步在这些候选上实现小宽度 Top-K 分支执行/排序。
 2. 把 Shadow 队友分支接入回合推进，取消“多人遇 Shared Shuffle 必停”的主路径；每条世界线使用自身 forked RNG 继续模拟到 Victory/Death。
 3. 最终多人目标改为字典序：全队存活 → TeamLossRatio 最小 → WorstPlayerLossRatio 最小 → CombatEndedTurn 最早；真实队友行为或世界状态偏离预测后立即 Fresh Search。
 
