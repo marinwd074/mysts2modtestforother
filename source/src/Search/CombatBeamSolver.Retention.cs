@@ -659,12 +659,21 @@ internal sealed partial class CombatBeamSolver
         {
             return;
         }
-        node.Snapshot.SetContinuation(ContinuationStamp.CapturePredicted(
-            _player,
-            node.Snapshot.Simulator,
-            node.Turn,
-            _forecast,
-            _startTurnNumber));
+        CombatPredictionSimulator simulator =
+            (CombatPredictionSimulator)node.Snapshot.Simulator;
+        StateFingerprint? remoteFingerprint = root.AllowsLocalPlayerOnlySearch
+            ? MultiplayerContinuationRemoteFingerprint.CapturePredicted(
+                simulator,
+                _player)
+            : null;
+        node.Snapshot.SetContinuation(
+            ContinuationStamp.CapturePredicted(
+                _player,
+                simulator,
+                node.Turn,
+                _forecast,
+                _startTurnNumber),
+            remoteFingerprint);
     }
 
     private static void ValidateHistoricalSimulatorsReleased(IReadOnlyList<SearchNode> candidates)
