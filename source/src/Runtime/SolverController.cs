@@ -1522,7 +1522,7 @@ internal static partial class SolverController
                 || !ReferenceEquals(CombatManager.Instance.DebugOnlyGetState(), state)
                 || MultiplayerWorldTracker.WorldVersion != worldVersion
                 || !CanSolve(state, out _)
-                || !AutomaticCalculationEnabled
+                || (!AutomaticCalculationEnabled && !_combat.MultiplayerSafeAutoEnabled)
                 || !UnattendedTestRunner.AutomaticTurnSearchEnabled
                 || _combat.AutomaticSearchPaused)
             {
