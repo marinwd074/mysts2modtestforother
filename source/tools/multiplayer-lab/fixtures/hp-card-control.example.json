@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "name": "hp-card-control",
+  "waitFor": "local_playable_turn",
+  "commands": [
+    "damage 20 0",
+    "heal 5 0",
+    "energy 10",
+    "block 12 0",
+    "card TAG_TEAM hand",
+    "card STRIKE_IRONCLAD hand"
+  ]
+}
