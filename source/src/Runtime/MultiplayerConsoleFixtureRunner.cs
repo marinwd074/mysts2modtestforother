@@ -35,9 +35,44 @@ internal static class MultiplayerConsoleFixtureRunner
 
     private static bool _scheduled;
     private static bool _terminal;
+    private static bool _hostConsoleReady;
     private static string? _activeFixtureName;
 
     internal static string? ActiveFixtureName => _activeFixtureName;
+
+    internal static void EnableHostConsoleForLab(CombatState state)
+    {
+        if (_hostConsoleReady
+            || System.Environment.GetEnvironmentVariable("COMBATSOLVER_MULTIPLAYER_LAB_HOST_CONSOLE") != "1"
+            || !SolverSessionCapabilities.IsNetworkMultiplayer
+            || state.Players.Count < 2)
+        {
+            return;
+        }
+
+        string? instanceRoot = System.Environment.GetEnvironmentVariable("COMBATSOLVER_MULTIPLAYER_INSTANCE");
+        if (string.IsNullOrWhiteSpace(instanceRoot)
+            || !File.Exists(Path.Combine(instanceRoot, "instance.json"))
+            || !File.Exists(Path.Combine(instanceRoot, "multiplayer-profile.json")))
+        {
+            Entry.Logger.Warn("[CombatSolver/MultiplayerFixture] HOST_CONSOLE_REJECT reason=instance_ownership_missing");
+            return;
+        }
+
+        using JsonDocument profile = JsonDocument.Parse(File.ReadAllText(
+            Path.Combine(instanceRoot, "multiplayer-profile.json")));
+        if (!profile.RootElement.TryGetProperty("profile", out JsonElement name)
+            || name.GetString() != "HostCombatSolver")
+        {
+            Entry.Logger.Warn("[CombatSolver/MultiplayerFixture] HOST_CONSOLE_REJECT reason=profile_mismatch");
+            return;
+        }
+
+        // Every peer must execute the native ConsoleCmdGameAction or checksums diverge.
+        _ = new DevConsole(true);
+        _hostConsoleReady = true;
+        Entry.Logger.Info("[CombatSolver/MultiplayerFixture] HOST_CONSOLE_READY profile=HostCombatSolver");
+    }
 
     internal static void TrySchedule(CombatState state)
     {

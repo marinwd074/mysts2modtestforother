@@ -37,16 +37,16 @@ if ($ForceSteamOff.IsPresent -and $AllowSteam.IsPresent) {
     throw 'ForceSteamOff and AllowSteam are mutually exclusive.'
 }
 $forceSteamOffEffective = -not $AllowSteam.IsPresent
-$modRestartPolicy = if ($Role -eq 'Client' -and $profileName -in @('ClientRitsuOnly', 'ClientCombatSolver')) {
+$modRestartPolicy = if ($profileName -in @('HostCombatSolver', 'ClientRitsuOnly', 'ClientCombatSolver')) {
     'warmup_mod_load_then_restart_before_evidence'
 } else {
     'none'
 }
-if ($Role -eq 'Host' -and $profileName -ne 'HostVanilla') {
-    throw "Host launcher requires HostVanilla, received $profileName."
+if ($Role -eq 'Host' -and $profileName -notin @('HostVanilla', 'HostCombatSolver')) {
+    throw "Host launcher requires a Host profile, received $profileName."
 }
-if ($Role -eq 'Client' -and $profileName -eq 'HostVanilla') {
-    throw 'Client launcher cannot use a HostVanilla instance.'
+if ($Role -eq 'Client' -and $profileName -in @('HostVanilla', 'HostCombatSolver')) {
+    throw 'Client launcher cannot use a Host instance.'
 }
 if ($Role -eq 'Host' -and $ClientId -ne 0) {
     throw 'ClientId is only valid for a Client launcher.'
@@ -119,6 +119,9 @@ $startInfo.WindowStyle = [Diagnostics.ProcessWindowStyle]::Normal
 $startInfo.Environment['APPDATA'] = $instance.RoamingRoot
 $startInfo.Environment['LOCALAPPDATA'] = $instance.LocalRoot
 $startInfo.Environment['COMBATSOLVER_MULTIPLAYER_INSTANCE'] = $instance.Root
+if ($Role -eq 'Host' -and $profileName -eq 'HostCombatSolver') {
+    $startInfo.Environment['COMBATSOLVER_MULTIPLAYER_LAB_HOST_CONSOLE'] = '1'
+}
 if ($null -ne $ownedConsoleFixturePath) {
     $startInfo.Environment['COMBATSOLVER_MULTIPLAYER_CONSOLE_FIXTURE'] = $ownedConsoleFixturePath
 }

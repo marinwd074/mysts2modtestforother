@@ -91,6 +91,7 @@ public static class Entry
             || NGame.Instance == null)
             return;
 
+        MultiplayerConsoleFixtureRunner.EnableHostConsoleForLab(state);
         MultiplayerConsoleFixtureRunner.TrySchedule(state);
 
         SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);

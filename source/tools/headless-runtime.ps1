@@ -561,12 +561,12 @@ function Get-HeadlessMultiplayerSnapshotPlan(
     [string]$RitsuLibTargetVersion,
     [string]$BaseGameVersion = ''
 ) {
-    if ($Profile -notin @('HostVanilla', 'ClientVanilla', 'ClientRitsuOnly', 'ClientCombatSolver')) {
+    if ($Profile -notin @('HostVanilla', 'HostCombatSolver', 'ClientVanilla', 'ClientRitsuOnly', 'ClientCombatSolver')) {
         throw "Unsupported multiplayer snapshot profile: $Profile"
     }
 
-    $needsRitsu = $Profile -in @('ClientRitsuOnly', 'ClientCombatSolver')
-    $needsSolver = $Profile -eq 'ClientCombatSolver'
+    $needsRitsu = $Profile -in @('HostCombatSolver', 'ClientRitsuOnly', 'ClientCombatSolver')
+    $needsSolver = $Profile -in @('HostCombatSolver', 'ClientCombatSolver')
     Assert-HeadlessNoReparsePoint $Context.SourceGameRoot
     $baseSources = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
     foreach ($item in Get-ChildItem -LiteralPath $Context.SourceGameRoot -Recurse -Force) {

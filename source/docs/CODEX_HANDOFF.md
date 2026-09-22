@@ -2,6 +2,12 @@
 
 ## 当前技术状态
 
+### 2026-09-22 MultiplayerOnly / Tag Team 实机 fixture 检查点
+
+- 当前 `main` 的 Release 构建 0 error / 0 warning；新增 MultiplayerOnly 边界验证器（PASS/FAIL/UNVERIFIED）及合成自测并接入 L1，完整 CI 门禁 `PASS: 28 FAIL: 0 SKIP: 0`。所有 MultiplayerOnly 卡仍由 `multiplayer_only_card` 拒绝，未开放 Safe Execute 白名单。
+- 首次真实三方 `HostVanilla + ClientCombatSolver(1000,1001)` 运行在第一个 networked console `energy 10` 后出现 checksum divergence：两个 Client 认为玩家 1000 能量为 13，Vanilla Host 仍为 3。`tag-team-source` fixture 完成，但 Safe Auto 未开启，`tag-team-aoe` 未完成；两项 runtime validator 均为 `UNVERIFIED`，不能归因于 Tag Team 或部署边界。原始日志与结果见 [`multiplayer-only-boundary-2026-09-22.json`](multiplayer/evidence/multiplayer-only-boundary-2026-09-22.json)、[`tag-team-runtime-2026-09-22.json`](multiplayer/evidence/tag-team-runtime-2026-09-22.json)。
+- 用户批准改用 Modded Host 后，已新增仅 owned Lab 启用的 `HostCombatSolver` profile 与 Host 原生 DevConsole 初始化；Host/两个 Client 均已重新 warm-up。正式第二次启动尚未进入战斗，因用户当前不方便操作 GUI 而 Graceful stop。Modded Host 的三端同步、MultiplayerOnly 停止及 Tag Team replay 仍待实机验证。
+
 ### 2026-09-22 Safe Auto 本机三回合回归
 
 - 当前 `main` 的 Release 构建为 0 warning / 0 error；完整 CI 门禁 `PASS: 27 FAIL: 0 SKIP: 0`。本机 `sts2.dll` SHA-256 与 pinned 0.107.1 值一致。

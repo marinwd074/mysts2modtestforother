@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "status": "UNVERIFIED",
+  "validatedDate": "2026-09-22",
+  "gameVersion": "0.107.1",
+  "attempt": {
+    "hostProfile": "HostVanilla",
+    "clientProfile": "ClientCombatSolver",
+    "clientIds": [1000, 1001],
+    "steamTransport": "off",
+    "sourceFixtureCompleted": true,
+    "safeAutoEnabled": false,
+    "classifiedBoundaryObserved": false,
+    "reason": "The first state divergence occurred after networked console command energy 10: clients observed player 1000 energy 13, while the Vanilla Host observed 3. The run ended before Safe Auto or a MultiplayerOnly deployment boundary."
+  },
+  "validator": "MULTIPLAYER_ONLY_BOUNDARY_UNVERIFIED",
+  "classifierContract": "multiplayer_only_card",
+  "hostLog": ".local/multiplayer-lab/runtime-mp-host/logs/20260922-141050-host-e573ddae.log",
+  "hostLogSha256": "7B909E717BC52EC9F9088A24EBDD6BBA03AE2BD5F1CCB684240CDADCFEDA5C39",
+  "clientCombatJournal": ".local/multiplayer-lab/runtime-mp-client-solver/diagnostics/CombatSolver-BugReports/logs/CombatSolver/7656-8bb7c41dea3749279ba75a977ef83d37/combat-7d9eb81da873468f91c6abecc06488ad.jsonl",
+  "clientCombatJournalSha256": "2A68511CDC91775F387CB600B088D485C9A14736B356509A11DF7E91F0BD2978",
+  "validatorSummary": ".local/multiplayer-lab/results/multiplayer-only-boundary-20260922.json",
+  "moddedHostFollowup": "Lab-only HostCombatSolver profile and console initialization were added with user approval, but no battle was entered on the formal second launch; runtime behavior remains unverified.",
+  "safeExecuteWhitelistEnabled": false
+}

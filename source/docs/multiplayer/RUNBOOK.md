@@ -103,6 +103,19 @@ pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
 
 ## Multiplayer Console Fixture v1
 
+**2026-09-22 runtime limitation:** With `HostVanilla`, the first networked `energy 10`
+command changed the two Clients' player energy to 13 while the Host retained 3; the game
+reported a checksum divergence before Tag Team or Safe Auto could be tested. Do not use
+`HostVanilla` with console fixtures as runtime evidence. A separate, owned
+`HostCombatSolver` Lab profile now enables the native DevConsole on the Host for this
+experiment; its synchronized runtime behavior is still `UNVERIFIED`. Non-fixture
+Host/Client tests continue to use `HostVanilla`.
+
+For a resumed fixture experiment, prepare `HostCombatSolver -Instance mp-host-modded`,
+then start `runtime-mp-host-modded` with `start-host.ps1 -ForceSteamOff`. Its first
+Mod load is warm-up; Graceful stop and launch it again before collecting evidence.
+Reprepare and warm-up both Client instances whenever their CombatSolver payload changes.
+
 Console Fixture 只用于 owned `ClientCombatSolver` Multiplayer Lab 实例，用游戏自己的
 `DevConsole.ProcessCommand()` 执行命令。真实多人中，命令仍由游戏检查 `IsNetworked`，
 networked command 会走原生 `ConsoleCmdGameAction` / `ActionQueueSynchronizer`，不新增
