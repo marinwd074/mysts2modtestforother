@@ -19,6 +19,7 @@ internal readonly record struct ShadowTeammateActionCandidate(
 internal sealed record ShadowTeammateRoute(
     CombatPredictionSimulator Simulator,
     IReadOnlyList<ShadowTeammateActionCandidate> Actions,
+    IReadOnlySet<uint> ProcessedEnemyDeaths,
     bool CompleteVictory,
     bool AllPlayersAlive,
     bool TurnEndRequested,
@@ -82,6 +83,7 @@ internal static class ShadowTeammatePlanner
     internal static ShadowTeammatePlanResult BuildTeamTopKRoutes(
         CombatPredictionSimulator source,
         Player localPlayer,
+        IReadOnlySet<uint>? processedEnemyDeaths = null,
         int beamWidth = DefaultBeamWidth,
         int maxActionsPerPlayer = DefaultMaxActions)
     {
@@ -97,7 +99,10 @@ internal static class ShadowTeammatePlanner
             .OrderBy(player => player.NetId)
             .ToArray();
         List<ShadowTeammateRoute> worlds =
-            [CaptureRoute(source.Fork(), Array.Empty<ShadowTeammateActionCandidate>())];
+            [CaptureRoute(
+                source.Fork(),
+                Array.Empty<ShadowTeammateActionCandidate>(),
+                CaptureProcessedEnemyDeaths(source, processedEnemyDeaths))];
         int expandedBranches = 0;
         int pendingChoiceBranches = 0;
         bool hitActionDepthLimit = false;
@@ -118,6 +123,7 @@ internal static class ShadowTeammatePlanner
                 ShadowTeammatePlanResult forecast = BuildTopKRoutes(
                     world.Simulator,
                     teammate,
+                    world.ProcessedEnemyDeaths,
                     beamWidth,
                     maxActionsPerPlayer);
                 expandedBranches = checked(expandedBranches + forecast.ExpandedBranches);
@@ -139,7 +145,10 @@ internal static class ShadowTeammatePlanner
                     for (int index = 0; index < teammateRoute.Actions.Count; index++)
                         combined[world.Actions.Count + index] = teammateRoute.Actions[index];
 
-                    nextWorlds.Add(CaptureRoute(teammateRoute.Simulator, combined));
+                    nextWorlds.Add(CaptureRoute(
+                        teammateRoute.Simulator,
+                        combined,
+                        teammateRoute.ProcessedEnemyDeaths));
                 }
             }
 
@@ -156,6 +165,7 @@ internal static class ShadowTeammatePlanner
     internal static ShadowTeammatePlanResult BuildTopKRoutes(
         CombatPredictionSimulator source,
         Player teammate,
+        IReadOnlySet<uint>? processedEnemyDeaths = null,
         int beamWidth = DefaultBeamWidth,
         int maxActions = DefaultMaxActions)
     {
@@ -167,7 +177,8 @@ internal static class ShadowTeammatePlanner
 
         ShadowTeammateRoute seed = CaptureRoute(
             source.Fork(),
-            Array.Empty<ShadowTeammateActionCandidate>());
+            Array.Empty<ShadowTeammateActionCandidate>(),
+            CaptureProcessedEnemyDeaths(source, processedEnemyDeaths));
         List<ShadowTeammateRoute> frontier = [seed];
         List<ShadowTeammateRoute> completed = [];
         int expandedBranches = 0;
@@ -237,7 +248,7 @@ internal static class ShadowTeammatePlanner
         }
 
         Creature? target = combat.GetCreature(candidate.TargetCombatId);
-        HashSet<uint> processedEnemyDeaths = [];
+        HashSet<uint> processedEnemyDeaths = [.. parent.ProcessedEnemyDeaths];
         combat.BeginActionChoices((IReadOnlyList<PlanCardChoice>?)null);
         bool completed;
         try
@@ -275,13 +286,14 @@ internal static class ShadowTeammatePlanner
         for (int index = 0; index < parent.Actions.Count; index++)
             actions[index] = parent.Actions[index];
         actions[^1] = candidate;
-        child = CaptureRoute(simulator, actions);
+        child = CaptureRoute(simulator, actions, processedEnemyDeaths);
         return true;
     }
 
     private static ShadowTeammateRoute CaptureRoute(
         CombatPredictionSimulator simulator,
-        IReadOnlyList<ShadowTeammateActionCandidate> actions)
+        IReadOnlyList<ShadowTeammateActionCandidate> actions,
+        IReadOnlySet<uint> processedEnemyDeaths)
     {
         SimulatedCombatState combat = (SimulatedCombatState)simulator.State.CombatState;
         int enemyDurability = 0;
@@ -317,6 +329,7 @@ internal static class ShadowTeammatePlanner
         return new ShadowTeammateRoute(
             simulator,
             actions,
+            new HashSet<uint>(processedEnemyDeaths),
             simulator.TerminalStamp is { Outcome: CombatTerminalOutcome.Victory },
             allPlayersAlive,
             combat.PlayerTurnEndRequested,
@@ -443,6 +456,26 @@ internal static class ShadowTeammatePlanner
                 return comparison;
         }
         return 0;
+    }
+
+    private static HashSet<uint> CaptureProcessedEnemyDeaths(
+        CombatPredictionSimulator simulator,
+        IReadOnlySet<uint>? processedEnemyDeaths)
+    {
+        if (processedEnemyDeaths != null)
+            return [.. processedEnemyDeaths];
+
+        HashSet<uint> captured = [];
+        SimulatedCombatState combat = (SimulatedCombatState)simulator.State.CombatState;
+        foreach (Creature enemy in combat.KnownEnemies)
+        {
+            if (enemy.CombatId is uint combatId
+                && simulator.State.GetCreature(enemy).IsDead)
+            {
+                captured.Add(combatId);
+            }
+        }
+        return captured;
     }
 
     private static void AssertShadowPlayer(
