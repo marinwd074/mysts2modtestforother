@@ -62,11 +62,17 @@ void PlayerBoundaryContractChecks()
         "A locally readable remote player is recognized as captured.");
     MultiplayerAdvisorBoundaryContracts.RequireCapturedPlayer(captured, remote);
     Check(true, "A side-turn phase may read a captured remote player.");
+
+    IReadOnlyList<Player> actionPlayers = [local];
     Check(
         ReferenceEquals(
-            MultiplayerAdvisorBoundaryContracts.SelectEndTurnPlayers([local, remote], captured),
-            captured),
-        "EndTurn returns the captured readable roster.");
+            MultiplayerAdvisorBoundaryContracts.SelectEndTurnPlayers([local, remote], actionPlayers),
+            actionPlayers),
+        "EndTurn keeps the action scope local even when the readable roster includes a teammate.");
+    Check(
+        !MultiplayerAdvisorBoundaryContracts.IsCapturedPlayer(actionPlayers, remote),
+        "A readable remote player is not promoted into the local action scope.");
+
     IReadOnlyList<Player> singleplayerRoster = [local, remote];
     Check(
         ReferenceEquals(
