@@ -3920,7 +3920,7 @@ internal sealed partial class CombatBeamSolver
 
         if (targetType is TargetType.AnyPlayer or TargetType.AnyAlly)
         {
-            IReadOnlyList<Creature> targets = simulator.State.GetValidManualTargets(
+            IReadOnlyList<Creature> targets = simulator.State.CombatState.GetValidManualTargets(
                 card.Preview.Owner.Creature,
                 targetType);
             for (int index = 0; index < targets.Count; index++)
@@ -3950,7 +3950,7 @@ internal sealed partial class CombatBeamSolver
 
         if (targetType is TargetType.AnyPlayer or TargetType.AnyAlly)
         {
-            IReadOnlyList<Creature> targets = simulator.State.GetValidManualTargets(
+            IReadOnlyList<Creature> targets = simulator.State.CombatState.GetValidManualTargets(
                 potion.Owner.Creature,
                 targetType);
             for (int index = 0; index < targets.Count; index++)
