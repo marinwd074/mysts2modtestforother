@@ -4,7 +4,6 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $sourceRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
-$taskPath = Join-Path $sourceRoot 'docs/multiplayer/NEXT_LOCAL_01071_MONSTER_TARGET_AUDIT.md'
 $auditPath = Join-Path $sourceRoot 'docs/compat/0.107.1/MONSTER_TARGET_FANOUT_AUDIT.md'
 $runtimePath = Join-Path $sourceRoot 'src/Prediction/MonsterMoveEffects.cs'
 $runtimeTargetsPath = Join-Path $sourceRoot 'src/Prediction/MonsterMoveEffects.MultiplayerTargets.cs'
@@ -13,21 +12,7 @@ $knowledgeChoicePath = Join-Path $sourceRoot 'src/Prediction/KnowledgeDemonChoic
 $knowledgeStatePath = Join-Path $sourceRoot 'src/Search/SimulatedCombatState.KnowledgeDemon.cs'
 $stateEvaluationPath = Join-Path $sourceRoot 'src/Search/CombatBeamSolver.StateEvaluation.cs'
 
-$taskLines = [IO.File]::ReadAllLines($taskPath)
 $auditLines = [IO.File]::ReadAllLines($auditPath)
-
-$expectedMoves = [System.Collections.Generic.List[string]]::new()
-foreach ($line in $taskLines) {
-    if ($line -match '^- `(?<move>[^`]+\.[^`]+)`$') {
-        $expectedMoves.Add($Matches.move)
-    }
-}
-if ($expectedMoves.Count -ne 64) {
-    throw "Expected 64 pinned monster target audit moves, found $($expectedMoves.Count)."
-}
-if (($expectedMoves | Select-Object -Unique).Count -ne $expectedMoves.Count) {
-    throw 'Pinned monster target audit task contains duplicate moves.'
-}
 
 $allowedNative = @(
     'PENDING_PINNED_IL',
@@ -85,19 +70,9 @@ foreach ($line in $auditLines) {
     }
 }
 
-if ($rows.Count -ne $expectedMoves.Count) {
-    throw "Expected $($expectedMoves.Count) monster target audit rows, found $($rows.Count)."
-}
-
-foreach ($move in $expectedMoves) {
-    if (-not $rows.ContainsKey($move)) {
-        throw "Missing monster target audit row: $move"
-    }
-}
-foreach ($move in $rows.Keys) {
-    if ($move -notin $expectedMoves) {
-        throw "Unexpected monster target audit row: $move"
-    }
+$expectedMoveCount = 64
+if ($rows.Count -ne $expectedMoveCount) {
+    throw "Expected $expectedMoveCount monster target audit rows, found $($rows.Count)."
 }
 
 $pending = @($rows.Values | Where-Object Native -eq 'PENDING_PINNED_IL').Count

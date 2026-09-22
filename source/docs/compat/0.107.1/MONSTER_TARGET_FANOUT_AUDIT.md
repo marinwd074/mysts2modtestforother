@@ -8,6 +8,7 @@ Truth source:
 - game commit: `59260271`
 - assembly: `game-body/data_sts2_windows_x86_64/sts2.dll`
 - required SHA-256: `a1f9e653f1e28e4076558fee1e60d218619cb7e057b887c6417f62c62c6d7a52`
+- the 64-row table in this file is the canonical move-set contract; completed task notes are not runtime/test inputs.
 
 Do not replace `PENDING_PINNED_IL` with a conclusion derived only from a current-beta
 decompilation or wiki. Run `Sts2LocalInspector --monster-move-il-output` against the
