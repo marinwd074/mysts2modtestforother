@@ -4,11 +4,11 @@
 
 ### 2026-09-22 pinned monster-target runtime 检查点
 
-- `b875293a` 与 `c628a72d` 的 GitHub compatibility CI 均已 PASS。确定性 50 项与 owner-once 9 项已先后接入完整 captured player roster。
-- pinned IL 进一步收口 4 个 per-target RNG：Noisebot Noise / Soul Fysh Beckon 直接按 roster 顺序复用现有单目标实现，随机位置继续顺序消费共享 Shuffle RNG；Thieving Hopper Thievery 严格保持“遍历 living targets 选牌并消费 CombatCardGeneration、全部 RemoveFromCombat → 再逐张建立 Swipe”的原生两阶段；The Insatiable Liquify Ground 严格保持“全目标 Sandpit → 每目标 6 张 Frantic Escape 随机插入 → owner HasLiquified=true”的原生相位。
-- The Insatiable 的 `HasLiquified` 现进入 root monster state、fingerprint 与 continuation 描述，避免该 owner 状态在 Fork/跨回合比较中丢失。
-- audit 当前 63/64 为 `FanOutSafe`。唯一未开放的是 `KnowledgeDemon.CURSE_OF_KNOWLEDGE_MOVE`：原生为每名 living player 独立 BlockingPlayerChoiceContext，而 solver 目前只拥有一个 pending choice 生命周期，因此继续 `NeedsRemoteChoiceFailClosed`。
-- 本检查点仍只声明 code/contract；未新增 Host/Client runtime PASS。下一步不要继续扩大普通怪物 fanout，优先设计/验证 multiplayer per-player choice continuation，或转回 Safe Auto/多人牌的实机门禁。
+- `b924fa28` compatibility CI 已 PASS。pinned 0.107.1 monster target 审计的 63 个可确定建模 move 已完成多人 fanout：52 个 simple、9 个 owner-once split，以及 Thieving Hopper / The Insatiable 两个 phase-sensitive RNG 路径。
+- 唯一剩余的 `KnowledgeDemon.CURSE_OF_KNOWLEDGE_MOVE` 继续保持 `NeedsRemoteChoiceFailClosed`。pinned IL 已确认：每名 living player 同时建立独立 `BlockingPlayerChoiceContext`，所有 `ChooseCurse` 共用同一个 counter，只有 `Task.WhenAll` 完成后 counter 才 +1。
+- 现已修正此前“本地 Choice 解决后可能继续搜索、从而漏掉远端 Choice”的安全缺口：多人 Knowledge Demon 不再先结算本地诅咒，而是创建明确的 uncontrolled-remote-choice 状态；Snapshot 将其映射为 `UnsupportedEffect`。求解器不会为远端玩家选择诅咒，也不会把远端选择当成可优化分支。
+- 单人 Knowledge Demon 选择路径保持原逻辑。该改动只收紧多人预测边界，不扩大 `RootActionPlayers`、不新增网络协议、不声明 Host/Client runtime PASS。
+- monster target fanout 到此停止扩张。下一步转回 Multiplayer Safe Auto / multiplayer-only card 的真实 runtime 门禁；若未来要支持 Knowledge Demon，必须先设计“不可控远端 choice uncertainty”语义，而不是普通搜索 Choice branching。
 
 ### 2026-09-22 readable-state 审计检查点
 

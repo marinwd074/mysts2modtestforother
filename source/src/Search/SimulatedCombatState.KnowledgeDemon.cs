@@ -9,6 +9,9 @@ internal sealed partial class SimulatedCombatState
 
     public KnowledgeDemonChoiceRequest? PendingKnowledgeDemonChoice { get; private set; }
 
+    public bool HasUnsupportedKnowledgeDemonMultiplayerChoice
+        => PendingKnowledgeDemonChoice is { IsUncontrolledRemoteChoice: true };
+
     public int GetKnowledgeDemonCurseCounter(Creature source)
     {
         if (_knowledgeDemonCurseCounters?.TryGetValue(source, out int predicted) == true)

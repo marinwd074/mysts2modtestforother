@@ -690,6 +690,13 @@ internal static partial class MonsterMoveEffects
                 combat.ApplyDampen(simulator, player, move.Owner);
                 return true;
             case ("KnowledgeDemon", "CURSE_OF_KNOWLEDGE_MOVE"):
+                if (simulator.State.PlayerCreatures.Count > 1)
+                {
+                    KnowledgeDemonChoiceSupport.BlockOnUncontrolledMultiplayerChoice(
+                        combat,
+                        move.Owner);
+                    return true;
+                }
                 KnowledgeDemonChoiceSupport.Resolve(
                     combat,
                     move.Owner,

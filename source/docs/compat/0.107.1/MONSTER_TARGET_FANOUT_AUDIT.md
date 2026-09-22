@@ -34,9 +34,11 @@ including Noisebot Noise and Soul Fysh Beckon, whose random pile positions advan
 Shuffle RNG sequentially. 9 owner-once rows use the explicit split path. Thieving Hopper
 Thievery preserves the native two-phase order (select/remove for every living target, then
 create Swipe state), and The Insatiable Liquify Ground preserves its two target loops before
-setting `HasLiquified` once. Only Knowledge Demon Curse of Knowledge remains fail-closed due
-to per-player blocking choices. This is code/contract state only; no new Host/Client runtime
-PASS is claimed here.
+setting `HasLiquified` once. Knowledge Demon Curse of Knowledge remains the sole non-fanout row: pinned 0.107.1 starts
+one independent blocking choice per living player concurrently and advances its shared counter only
+after Task.WhenAll completes. Multiplayer prediction now stops at an explicit UnsupportedEffect
+boundary before applying a local-only curse or treating a remote player's choice as an optimizable
+branch. This is code/contract state only; no new Host/Client runtime PASS is claimed here.
 
 | Monster.Move | Native target class | Dead filtering | RNG/choice/private dependency | Solver action |
 |---|---|---|---|---|

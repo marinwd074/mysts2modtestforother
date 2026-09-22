@@ -7,6 +7,9 @@ $sourceRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $taskPath = Join-Path $sourceRoot 'docs/multiplayer/NEXT_LOCAL_01071_MONSTER_TARGET_AUDIT.md'
 $auditPath = Join-Path $sourceRoot 'docs/compat/0.107.1/MONSTER_TARGET_FANOUT_AUDIT.md'
 $runtimePath = Join-Path $sourceRoot 'src/Prediction/MonsterMoveEffects.cs'
+$knowledgeChoicePath = Join-Path $sourceRoot 'src/Prediction/KnowledgeDemonChoiceSupport.cs'
+$knowledgeStatePath = Join-Path $sourceRoot 'src/Search/SimulatedCombatState.KnowledgeDemon.cs'
+$stateEvaluationPath = Join-Path $sourceRoot 'src/Search/CombatBeamSolver.StateEvaluation.cs'
 
 $taskLines = [IO.File]::ReadAllLines($taskPath)
 $auditLines = [IO.File]::ReadAllLines($auditPath)
@@ -192,6 +195,30 @@ if (-not $runtimeText.Contains('List<(Creature Target, PredictedCard Card)> stol
 }
 if (-not $runtimeText.Contains('combat.SetMonsterBool(move.Owner, "HasLiquified", true);')) {
     throw 'Liquify Ground no longer records the native HasLiquified owner state.'
+}
+
+$remoteChoiceRows = @($rows.GetEnumerator() | Where-Object { $_.Value.Action -eq 'NeedsRemoteChoiceFailClosed' })
+if ($remoteChoiceRows.Count -ne 1 -or $remoteChoiceRows[0].Key -ne 'KnowledgeDemon.CURSE_OF_KNOWLEDGE_MOVE') {
+    throw 'Knowledge Demon must remain the only pinned remote-choice fail-closed row.'
+}
+
+$knowledgeChoiceText = [IO.File]::ReadAllText($knowledgeChoicePath)
+$knowledgeStateText = [IO.File]::ReadAllText($knowledgeStatePath)
+$stateEvaluationText = [IO.File]::ReadAllText($stateEvaluationPath)
+if (-not $runtimeText.Contains('KnowledgeDemonChoiceSupport.BlockOnUncontrolledMultiplayerChoice(')
+    -or -not $runtimeText.Contains('simulator.State.PlayerCreatures.Count > 1')) {
+    throw 'Multiplayer Knowledge Demon no longer stops before local-only curse resolution.'
+}
+if (-not $knowledgeChoiceText.Contains('IsUncontrolledRemoteChoice: true')
+    -or -not $knowledgeChoiceText.Contains('远端 Knowledge Demon 玩家选择不能作为本地求解器可优化分支')) {
+    throw 'Knowledge Demon remote choice is no longer explicitly non-optimizable.'
+}
+if (-not $knowledgeStateText.Contains('HasUnsupportedKnowledgeDemonMultiplayerChoice')) {
+    throw 'Knowledge Demon multiplayer choice lost its explicit unsupported-state marker.'
+}
+if (-not $stateEvaluationText.Contains('if (combat.HasUnsupportedKnowledgeDemonMultiplayerChoice)')
+    -or -not $stateEvaluationText.Contains('boundary = SearchBoundaryReason.UnsupportedEffect;')) {
+    throw 'Knowledge Demon multiplayer choice is no longer mapped to UnsupportedEffect.'
 }
 
 Write-Output "MONSTER_TARGET_FANOUT_AUDIT_CHECKS_PASS rows=$($rows.Count) resolved=$resolved pending=$pending runtimeFanOut=$($runtimePairs.Count)"
