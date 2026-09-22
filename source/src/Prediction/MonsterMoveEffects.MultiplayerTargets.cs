@@ -4,83 +4,9 @@ namespace CombatSolver;
 
 internal static partial class MonsterMoveEffects
 {
-// Exact allow-list from the hash-verified 0.107.1 monster target fanout audit.
-    // Only these move-specific effects may reuse the captured player roster. RNG, choice,
-    // and unresolved rows are deliberately not widened by this path.
-    private static bool IsPinnedSimpleFanOutSafe(string monsterType, string moveId)
-        => (monsterType, moveId) is
-            ("MagiKnight", "DAMPEN_MOVE") or
-            ("TestSubject", "SKULL_BASH_MOVE") or
-            ("SludgeSpinner", "OIL_SPRAY_MOVE") or
-            ("Flyconid", "VULNERABLE_SPORES_MOVE") or
-            ("Flyconid", "FRAIL_SPORES_MOVE") or
-            ("FrogKnight", "TONGUE_LASH") or
-            ("GlobeHead", "SHOCKING_SLAP") or
-            ("BowlbugSilk", "TOXIC_SPIT_MOVE") or
-            ("HauntedShip", "HAUNT_MOVE") or
-            ("HunterKiller", "TENDERIZING_GOOP_MOVE") or
-            ("KinPriest", "ORB_OF_FRAILTY_MOVE") or
-            ("KinPriest", "ORB_OF_WEAKNESS_MOVE") or
-            ("LeafSlimeM", "STICKY_SHOT") or
-            ("LeafSlimeS", "GOOP_MOVE") or
-            ("Mawler", "ROAR_MOVE") or
-            ("Myte", "TOXIC_MOVE") or
-            ("Chomper", "SCREECH_MOVE") or
-            ("MechaKnight", "FLAMETHROWER_MOVE") or
-            ("PunchConstruct", "FAST_PUNCH_MOVE") or
-            ("CorpseSlug", "GOOP_MOVE") or
-            ("SoulFysh", "SCREAM_MOVE") or
-            ("EyeWithTeeth", "DISTRACT_MOVE") or
-            ("Ovicopter", "TENDERIZER_MOVE") or
-            ("Stabbot", "STAB_MOVE") or
-            ("ShrinkerBeetle", "SHRINKER_MOVE") or
-            ("VineShambler", "GRASPING_VINES_MOVE") or
-            ("SlitheringStrangler", "CONSTRICT") or
-            ("SpectralKnight", "HEX") or
-            ("SoulNexus", "DRAIN_LIFE_MOVE") or
-            ("SlimedBerserker", "VOMIT_ICHOR_MOVE") or
-            ("TerrorEel", "TERROR_MOVE") or
-            ("TwigSlimeM", "STICKY_SHOT_MOVE") or
-            ("PhrogParasite", "INFECT_MOVE") or
-            ("Vantom", "DISMEMBER_MOVE") or
-            ("OwlMagistrate", "VERDICT") or
-            ("CeremonialBeast", "BEAST_CRY_MOVE") or
-            ("Queen", "PUPPET_STRINGS_MOVE") or
-            ("Queen", "YOU_ARE_MINE_MOVE") or
-            ("LouseProgenitor", "WEB_CANNON_MOVE") or
-            ("Crusher", "BUG_STING_MOVE") or
-            ("TrackerRubyRaider", "TRACK_MOVE") or
-            ("Noisebot", "NOISE_MOVE") or
-            ("SoulFysh", "BECKON_MOVE") or
-            ("SoulFysh", "GAZE_MOVE") or
-            ("Axebot", "HAMMER_UPPERCUT_MOVE") or
-            ("FakeMerchantMonster", "THROW_RELIC_MOVE") or
-            ("FossilStalker", "TACKLE_MOVE") or
-            ("DecimillipedeSegmentBack", "CONSTRICT_MOVE") or
-            ("DecimillipedeSegmentFront", "CONSTRICT_MOVE") or
-            ("DecimillipedeSegmentMiddle", "CONSTRICT_MOVE") or
-            ("LivingFog", "ADVANCED_GAS_MOVE") or
-            ("TwoTailedRat", "SCREECH_MOVE");
-
-    private static bool IsPinnedSplitFanOutSafe(string monsterType, string moveId)
-        => (monsterType, moveId) is
-            ("Aeonglass", "INCREASING_INTENSITY_MOVE") or
-            ("TestSubject", "BURNING_GROWL_MOVE") or
-            ("LagavulinMatriarch", "SOUL_SIPHON_MOVE") or
-            ("Wriggler", "WRIGGLE_MOVE") or
-            ("TheLost", "DEBILITATING_SMOG") or
-            ("SlimedBerserker", "LEECHING_HUG_MOVE") or
-            ("TheForgotten", "MIASMA") or
-            ("WaterfallGiant", "STOMP_MOVE") or
-            ("GremlinMerc", "DOUBLE_SMASH_MOVE");
-
-    private static bool IsPinnedSpecialRngFanOutSafe(string monsterType, string moveId)
-        => (monsterType, moveId) is
-            ("ThievingHopper", "THIEVERY_MOVE") or
-            ("TheInsatiable", "LIQUIFY_GROUND_MOVE");
-
-
-
+// Exact 0.107.1 move classification from the pinned target fanout audit.
+// Runtime dispatch is intentionally a single switch: audit groups remain evidence,
+// but multiplayer prediction should classify each move only once.
     private enum MultiplayerTargetMode
     {
         SingleTarget,
@@ -96,13 +22,74 @@ internal static partial class MonsterMoveEffects
     {
         if (playerCount <= 1)
             return MultiplayerTargetMode.SingleTarget;
-        if (IsPinnedSplitFanOutSafe(monsterType, moveId))
-            return MultiplayerTargetMode.PerPlayerThenOwnerOnce;
-        if (IsPinnedSpecialRngFanOutSafe(monsterType, moveId))
-            return MultiplayerTargetMode.SpecialRng;
-        if (IsPinnedSimpleFanOutSafe(monsterType, moveId))
-            return MultiplayerTargetMode.PerPlayer;
-        return MultiplayerTargetMode.SingleTarget;
+
+        return (monsterType, moveId) switch
+        {
+            ("MagiKnight", "DAMPEN_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("TestSubject", "SKULL_BASH_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("SludgeSpinner", "OIL_SPRAY_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("Flyconid", "VULNERABLE_SPORES_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("Flyconid", "FRAIL_SPORES_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("FrogKnight", "TONGUE_LASH") => MultiplayerTargetMode.PerPlayer,
+            ("GlobeHead", "SHOCKING_SLAP") => MultiplayerTargetMode.PerPlayer,
+            ("BowlbugSilk", "TOXIC_SPIT_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("HauntedShip", "HAUNT_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("HunterKiller", "TENDERIZING_GOOP_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("KinPriest", "ORB_OF_FRAILTY_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("KinPriest", "ORB_OF_WEAKNESS_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("LeafSlimeM", "STICKY_SHOT") => MultiplayerTargetMode.PerPlayer,
+            ("LeafSlimeS", "GOOP_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("Mawler", "ROAR_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("Myte", "TOXIC_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("Chomper", "SCREECH_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("MechaKnight", "FLAMETHROWER_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("PunchConstruct", "FAST_PUNCH_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("CorpseSlug", "GOOP_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("SoulFysh", "SCREAM_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("EyeWithTeeth", "DISTRACT_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("Ovicopter", "TENDERIZER_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("Stabbot", "STAB_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("ShrinkerBeetle", "SHRINKER_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("VineShambler", "GRASPING_VINES_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("SlitheringStrangler", "CONSTRICT") => MultiplayerTargetMode.PerPlayer,
+            ("SpectralKnight", "HEX") => MultiplayerTargetMode.PerPlayer,
+            ("SoulNexus", "DRAIN_LIFE_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("SlimedBerserker", "VOMIT_ICHOR_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("TerrorEel", "TERROR_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("TwigSlimeM", "STICKY_SHOT_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("PhrogParasite", "INFECT_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("Vantom", "DISMEMBER_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("OwlMagistrate", "VERDICT") => MultiplayerTargetMode.PerPlayer,
+            ("CeremonialBeast", "BEAST_CRY_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("Queen", "PUPPET_STRINGS_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("Queen", "YOU_ARE_MINE_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("LouseProgenitor", "WEB_CANNON_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("Crusher", "BUG_STING_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("TrackerRubyRaider", "TRACK_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("Noisebot", "NOISE_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("SoulFysh", "BECKON_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("SoulFysh", "GAZE_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("Axebot", "HAMMER_UPPERCUT_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("FakeMerchantMonster", "THROW_RELIC_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("FossilStalker", "TACKLE_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("DecimillipedeSegmentBack", "CONSTRICT_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("DecimillipedeSegmentFront", "CONSTRICT_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("DecimillipedeSegmentMiddle", "CONSTRICT_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("LivingFog", "ADVANCED_GAS_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("TwoTailedRat", "SCREECH_MOVE") => MultiplayerTargetMode.PerPlayer,
+            ("Aeonglass", "INCREASING_INTENSITY_MOVE") => MultiplayerTargetMode.PerPlayerThenOwnerOnce,
+            ("TestSubject", "BURNING_GROWL_MOVE") => MultiplayerTargetMode.PerPlayerThenOwnerOnce,
+            ("LagavulinMatriarch", "SOUL_SIPHON_MOVE") => MultiplayerTargetMode.PerPlayerThenOwnerOnce,
+            ("Wriggler", "WRIGGLE_MOVE") => MultiplayerTargetMode.PerPlayerThenOwnerOnce,
+            ("TheLost", "DEBILITATING_SMOG") => MultiplayerTargetMode.PerPlayerThenOwnerOnce,
+            ("SlimedBerserker", "LEECHING_HUG_MOVE") => MultiplayerTargetMode.PerPlayerThenOwnerOnce,
+            ("TheForgotten", "MIASMA") => MultiplayerTargetMode.PerPlayerThenOwnerOnce,
+            ("WaterfallGiant", "STOMP_MOVE") => MultiplayerTargetMode.PerPlayerThenOwnerOnce,
+            ("GremlinMerc", "DOUBLE_SMASH_MOVE") => MultiplayerTargetMode.PerPlayerThenOwnerOnce,
+            ("ThievingHopper", "THIEVERY_MOVE") => MultiplayerTargetMode.SpecialRng,
+            ("TheInsatiable", "LIQUIFY_GROUND_MOVE") => MultiplayerTargetMode.SpecialRng,
+            _ => MultiplayerTargetMode.SingleTarget,
+        };
     }
 
     public static bool Apply(

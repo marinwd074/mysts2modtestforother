@@ -4,6 +4,13 @@
 > 基础代码仍以 CombatSolver 0.40.2 为起点；本表只描述这个 fork 从开始改造后的能力演进。  
 > 版本号按里程碑归并，不要求一版对应一个 commit。细节需要时再查对应 Git 历史。
 
+## v0.16 — 多人怪物调度热路径收敛
+**2026-09-22**
+
+- 63 个 pinned 0.107.1 FanOutSafe move 从 3 套字符串分类函数合并为一次 `MultiplayerTargetMode` switch。
+- 每次多人怪物 Move 预测只做一次目标模式分类；支持范围、owner-once 顺序、RNG/Choice 特例均保持不变。
+- fanout 合同测试改为直接解析 `move -> target mode`，不再依赖函数布局或代码格式。
+
 ## v0.15 — 历史上下文与生成数据清理
 **2026-09-22**
 

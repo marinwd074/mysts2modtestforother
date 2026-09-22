@@ -30,9 +30,9 @@ Allowed solver actions:
 
 Runtime status (2026-09-22): 63/64 audited moves are now `FanOutSafe`.
 
-Runtime architecture (fork v0.14): this table is compatibility evidence, not the primary
+Runtime architecture (fork v0.14/v0.16): this table is compatibility evidence, not the primary
 multiplayer dispatcher. Ordinary per-player effects now route through
-`MonsterMoveEffects.MultiplayerTargets.cs`; the main `MonsterMoveEffects.cs` keeps the single-target implementation. The nine mixed
+`MonsterMoveEffects.MultiplayerTargets.cs`; v0.16 classifies all 63 supported moves in one target-mode switch rather than three sequential allow-list checks; the main `MonsterMoveEffects.cs` keeps the single-target implementation. The nine mixed
 moves are explicitly split into per-player target effects and one owner effect; RNG / Choice
 special cases remain explicit instead of being forced through the generic path.
 Existing monsters use captured live HP/MaxHP directly. Only future simulated spawns/hatches

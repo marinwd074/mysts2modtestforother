@@ -97,23 +97,25 @@ $runtimeTargetsText = [IO.File]::ReadAllText($runtimeTargetsPath)
 # from the main implementation without depending on one giant source file.
 $runtimeText = $runtimeTargetsText + [Environment]::NewLine + $runtimeMainText
 $runtimePairs = @{}
-$runtimeGroups = @(
-    [pscustomobject]@{ Name = 'simple'; Pattern = '(?s)private static bool IsPinnedSimpleFanOutSafe\(.*?(?=\r?\n\s*private static bool IsPinnedSplitFanOutSafe)' },
-    [pscustomobject]@{ Name = 'split'; Pattern = '(?s)private static bool IsPinnedSplitFanOutSafe\(.*?(?=\r?\n\s*private static bool IsPinnedSpecialRngFanOutSafe)' },
-    [pscustomobject]@{ Name = 'special-rng'; Pattern = '(?s)private static bool IsPinnedSpecialRngFanOutSafe\(.*?(?=\r?\n\s*private enum MultiplayerTargetMode)' }
-)
-foreach ($group in $runtimeGroups) {
-    $allowListMatch = [regex]::Match($runtimeText, $group.Pattern)
-    if (-not $allowListMatch.Success) {
-        throw "MonsterMoveEffects is missing the pinned $($group.Name) FanOutSafe runtime allow-list."
+$dispatchMatch = [regex]::Match(
+    $runtimeTargetsText,
+    '(?s)private static MultiplayerTargetMode ResolveMultiplayerTargetMode\(.*?return \(monsterType, moveId\) switch\s*\{(?<arms>.*?)_ => MultiplayerTargetMode\.SingleTarget,')
+if (-not $dispatchMatch.Success) {
+    throw 'MonsterMoveEffects multiplayer target-mode switch is missing.'
+}
+$modeGroups = @{
+    PerPlayer = 'simple'
+    PerPlayerThenOwnerOnce = 'split'
+    SpecialRng = 'special-rng'
+}
+foreach ($match in [regex]::Matches(
+    $dispatchMatch.Groups['arms'].Value,
+    '\("(?<monster>[^"]+)", "(?<move>[^"]+)"\) => MultiplayerTargetMode\.(?<mode>PerPlayer|PerPlayerThenOwnerOnce|SpecialRng),')) {
+    $key = "$($match.Groups['monster'].Value).$($match.Groups['move'].Value)"
+    if ($runtimePairs.ContainsKey($key)) {
+        throw "Duplicate runtime FanOutSafe pair: $key"
     }
-    foreach ($match in [regex]::Matches($allowListMatch.Value, '\("(?<monster>[^"]+)", "(?<move>[^"]+)"\)')) {
-        $key = "$($match.Groups['monster'].Value).$($match.Groups['move'].Value)"
-        if ($runtimePairs.ContainsKey($key)) {
-            throw "Duplicate runtime FanOutSafe pair across runtime groups: $key"
-        }
-        $runtimePairs[$key] = $group.Name
-    }
+    $runtimePairs[$key] = $modeGroups[$match.Groups['mode'].Value]
 }
 if ($runtimePairs.Count -ne $fanOutSafeMoves.Count) {
     throw "Runtime FanOutSafe allow-list count mismatch: audit=$($fanOutSafeMoves.Count) runtime=$($runtimePairs.Count)."
@@ -128,13 +130,13 @@ foreach ($move in $runtimePairs.Keys) {
         throw "Runtime fanout contains a move not classified FanOutSafe by pinned IL: $move"
     }
 }
-if (($runtimeMainText.Contains('private static bool IsPinnedSimpleFanOutSafe')) -or
-    ($runtimeMainText.Contains('private enum MultiplayerTargetMode'))) {
+if (($runtimeMainText.Contains('private enum MultiplayerTargetMode')) -or
+    ($runtimeMainText.Contains('ResolveMultiplayerTargetMode('))) {
     throw 'Multiplayer monster target routing leaked back into MonsterMoveEffects.cs.'
 }
 if ((-not $runtimeTargetsText.Contains('private enum MultiplayerTargetMode')) -or
     (-not $runtimeTargetsText.Contains('ApplyPerPlayerTargets(')) -or
-    (-not $runtimeTargetsText.Contains('ResolveMultiplayerTargetMode('))) {
+    (-not $runtimeTargetsText.Contains('return (monsterType, moveId) switch'))) {
     throw 'Dedicated multiplayer monster target dispatcher is incomplete.'
 }
 

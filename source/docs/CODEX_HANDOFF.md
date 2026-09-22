@@ -15,6 +15,7 @@
 - 单人 0.107.1 卡牌/怪物兼容审计已完成主要收口；Axebot `AXEBOTS_NORMAL` 旧 `RespawnCount` 崩溃已由用户实机确认解决。
 - pinned monster target fanout：63 个可确定 move 已建模；Knowledge Demon 的远端 Choice 继续 fail closed。
 - v0.14 已把多人怪物目标 dispatcher 从 64KB 主文件拆到独立 `MonsterMoveEffects.MultiplayerTargets.cs`；普通效果统一 per-player，9 个 mixed move 已明确拆成 target-effect × players + owner-effect × 1，2 个 RNG 特例保持显式实现。已有怪物 HP 直接使用 root snapshot，不做二次人数缩放。
+- v0.16 将 63 项多人怪物目标分类合并为一次 target-mode switch，避免每个模拟 Move 依次经过 3 套字符串分类器；支持范围不变。
 - Multiplayer MP-0 / Advisor / Safe Execute MP-2A/B/C / Reactive Carry 已有真实 Host/Client 基线。
 - Multiplayer Safe Auto 已完成真实 3 个本地回合 Smoke：每回合 fresh request/search、原生 PlayCardAction + EndPlayerTurnAction，无旧授权跨回合复用。
 - Carry Ranking R1 已有 runtime 证据；R2 decisive runtime 仍 `UNVERIFIED`，不是当前 blocker。
