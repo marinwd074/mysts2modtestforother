@@ -4,24 +4,10 @@
 
 ### 2026-09-22 TheBookOfAges 完整 UI 测试集成
 
-- 用户确认已取得上游作者许可；不再只保留最小同步代码，改为保留完整 GM Console UI 和主要测试功能。
-- 完整上游仓库作为 test-only submodule 接入 `source/tools/multiplayer-lab/MultiplayerTestTools/TheBookOfAges`，固定 commit `234a74ccbaf46d7e385ed318c64857f1f7a90cae`；包含 UI、图片、本地化、Services、GameActions 及多人网络同步实现。
-- 该模块不引用进 CombatSolver 正式 csproj/solution、不进入发布包，只服务 Multiplayer Lab；未来不用时可以整块删除。
-- 现有 Workshop 安装脚本继续用于快速部署作者已构建版本到 Host/Client；需要定制 fixture 时再在 test-only 源码中改并单独构建。
-
-### 2026-09-22 TheBookOfAges 多人测试控制台接入
-
-- 选定现成 `TheBookOfAges / GM Console` 作为多人 fixture 控制台候选。作者公开页面明确标注 Multiplayer Supported；公开源码 manifest 为 `v1.0.8`、`min_game_version=0.107.1`、依赖 `BaseLib >= 3.3.0`。
-- 新增 `source/tools/multiplayer-lab/install-the-book-of-ages.ps1`，从本机 Steam Workshop item `3747634356`（TheBookOfAges）和 `3737335127`（BaseLib）提取必须文件并安装到所有指定 owned Host/Client instance；每端 SHA-256 必须一致，运行中的实例拒绝修改。
-- 第三方仓库没有声明许可证，因此不把其 DLL/PCK/源码复制进本公开仓库；脚本只消费用户本机已经下载的 Workshop 内容。
-- 下一步优先验证“所有端同装后，用 GM Console 给指定玩家加一张测试牌”是否仍出现 game-data mismatch。只有同步稳定后才把它用于 Tag Team / MultiplayerOnly runtime fixture。
-
-### 2026-09-22 Shared Console Mod 测试路径
-
-- 为后续多人卡 fixture 增加 `source/tools/multiplayer-lab/install-shared-console-mod.ps1`：用户提供本地 JSON-only console enabler，脚本把同一文件安装到所有指定 owned Host/Client instance，并逐端校验 SHA-256。
-- 该路径的目的只是让所有端的 console-enabler Mod 集合一致，避免“仅一个 Client 启用控制台”这一已知污染因素；第三方 Mod 文件本身不进入仓库。
-- snapshot rebuild 后必须重新安装；运行中的 instance 拒绝修改。
-- 这不自动恢复旧 Console Fixture 的正式证据资格。具体 `card/energy/block/... ` 命令是否能在 0.107.1 保持同步，仍需单独实机验证；失败时继续按 diagnostic-only 处理。
+- 用户确认已取得上游作者许可；完整 GM Console UI、图片、本地化、Services、GameActions 及多人网络同步实现作为 test-only submodule 接入 `source/tools/multiplayer-lab/MultiplayerTestTools/TheBookOfAges`。
+- 固定上游 commit `234a74ccbaf46d7e385ed318c64857f1f7a90cae`；该模块不引用进 CombatSolver 正式 csproj/solution、不进入发布包，只服务 Multiplayer Lab，未来可整块删除。
+- 旧的 `install-the-book-of-ages.ps1` 与 `install-shared-console-mod.ps1` 已删除。后续直接从已集成 test-only 模块构建/部署到各测试端，不再维护 Workshop/外部 Console Mod 安装路径。
+- 下一步先验证所有端使用同一 GM Console 构建后，最小加牌/资源修改是否仍触发 game-data mismatch；同步稳定后再用于 Tag Team / MultiplayerOnly runtime fixture。
 
 ### 2026-09-22 Console Fixture 联机证据边界修正
 

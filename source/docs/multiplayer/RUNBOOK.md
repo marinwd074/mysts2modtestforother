@@ -123,71 +123,16 @@ CombatSolver 正式项目或发布包；未来测试结束可直接删除整个 
 git submodule update --init --recursive -- source/tools/multiplayer-lab/MultiplayerTestTools/TheBookOfAges
 ~~~
 
-运行时仍可用 `install-the-book-of-ages.ps1` 从 Steam Workshop 已构建版本部署到所有
-Host/Client；需要修改测试控制台行为时，直接在该 test-only submodule/source 工作并单独构建，
-不要把 GM 功能编进 CombatSolver 主程序集。
-
-## TheBookOfAges / GM Console（推荐多人测试工具）
-
-已选用现成的 **岁月史书 TheBookOfAges / GM Console** 作为下一阶段多人测试控制台。
-作者公开说明该 Mod 支持多人修改；公开源码 manifest 为 `v1.0.8`，
-`min_game_version=0.107.1`，依赖 `BaseLib >= 3.3.0`。Steam Workshop Item：
-
-- TheBookOfAges: `3747634356`
-- BaseLib: `3737335127`
-
-仓库不转载第三方 DLL/PCK。使用
-`install-the-book-of-ages.ps1` 从本机 Steam Workshop 已下载内容中提取
-`BaseLib.{json,dll,pck}` 和 `TheBookOfAges.{json,dll,pck}`，并把字节完全相同的文件
-安装到本轮所有 owned Host/Client instance。
-
-~~~powershell
-$labRoot = 'D:\yingye\CombatSolver\.local\multiplayer-lab'
-pwsh -NoLogo -NoProfile -File .\install-the-book-of-ages.ps1 `
-  -InstanceRoot @(
-    "$labRoot\runtime-mp-host",
-    "$labRoot\runtime-mp-client-solver",
-    "$labRoot\runtime-mp-client-observer"
-  )
-~~~
+运行时不再维护额外的 Workshop / 外部 Console Mod 安装脚本。完整 GM Console
+测试源码已作为 test-only submodule 固定在仓库中；需要测试时由 Codex 在本地构建该模块，
+并把构建产物作为 Multiplayer Lab 测试依赖部署到所有参与端。
 
 要求：
 
-- Steam Workshop 对应 item 必须已经下载到本机；缺失时脚本直接失败，不静默换版本。
-- 所有参与端使用相同来源文件，脚本逐文件 SHA-256 校验。
-- instance 正在运行时拒绝安装。
-- game snapshot rebuild 后重新运行安装脚本。
-- 该 Mod 本身标注支持联机，但 **CombatSolver 的正式 evidence 仍需验证具体 GM 操作是否在
-  pinned 0.107.1 下保持 Host/Client 状态一致**；先从加牌/能量这种最小 fixture 开始。
-
-## Shared Console Mod（所有端同装）
-
-为了避免“只有 Solver Client 开控制台”造成联机 Mod/数据不一致，Lab 现在提供
-`install-shared-console-mod.ps1`。它不把第三方 Mod 文件提交进仓库；只接受用户本地已有的
-JSON-only console enabler，并把**完全相同的文件**复制到所有参与本轮测试的 owned
-Host/Client 私有实例，同时校验 SHA-256 一致。
-
-推荐使用轻量的 Dev Console Enabler 一类 Mod，只负责开启游戏自带控制台。先准备实例，再安装：
-
-~~~powershell
-$labRoot = 'D:\yingye\CombatSolver\.local\multiplayer-lab'
-pwsh -NoLogo -NoProfile -File .\install-shared-console-mod.ps1 `
-  -ConsoleModPath 'D:\path\to\DevConsoleEnabler.json' `
-  -InstanceRoot @(
-    "$labRoot\runtime-mp-host",
-    "$labRoot\runtime-mp-client-solver",
-    "$labRoot\runtime-mp-client-observer"
-  )
-~~~
-
-规则：
-
-- Host 和所有参与 Client 必须安装同一文件、同一 SHA-256。
-- 运行中的实例禁止修改。
-- `prepare-instances.ps1` 重建 game snapshot 后需要重新运行本脚本。
-- 该脚本只解决“各端 Mod 集合一致”问题；它**不证明任意 debug command 都是网络安全的**。
-- 正式 runtime evidence 仍要单独确认具体命令不会造成 desync。现有单 Client
-  Console Fixture 继续视为 diagnostic-only。
+- Host 和所有参与 Client 使用同一测试工具源码 revision / 构建产物。
+- 测试工具只用于 Multiplayer Lab，不进入 CombatSolver 正式发布包。
+- 具体 GM 操作是否能在 pinned 0.107.1 保持同步仍需单独 runtime 验证。
+- 旧的单 Client Console Fixture 继续视为 diagnostic-only。
 
 ## Multiplayer Console Fixture v1 — 非正式联机证据
 
