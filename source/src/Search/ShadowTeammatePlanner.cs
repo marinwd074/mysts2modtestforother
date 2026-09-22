@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
@@ -353,7 +354,7 @@ internal static class ShadowTeammatePlanner
         ShadowTeammateRoute parent,
         Player teammate,
         ShadowTeammateActionCandidate candidate,
-        out ShadowTeammateRoute? child)
+        [NotNullWhen(true)] out ShadowTeammateRoute? child)
     {
         CombatPredictionSimulator simulator = parent.Simulator.Fork();
         HashSet<uint> processedEnemyDeaths = [.. parent.ProcessedEnemyDeaths];
