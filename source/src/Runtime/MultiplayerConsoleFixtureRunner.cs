@@ -94,6 +94,8 @@ internal static class MultiplayerConsoleFixtureRunner
             localPlayer = LocalContext.GetMe(state);
             if (localPlayer?.PlayerCombatState?.Phase != PlayerTurnPhase.Play)
                 throw new InvalidOperationException("local_playable_turn_timeout");
+            Player executionPlayer = localPlayer
+                ?? throw new InvalidOperationException("local_player_missing");
             if (!CombatManager.Instance.IsInProgress
                 || !ReferenceEquals(CombatManager.Instance.DebugOnlyGetState(), state))
             {
@@ -123,7 +125,7 @@ internal static class MultiplayerConsoleFixtureRunner
                 void OnBeforeActionExecuted(GameAction action)
                 {
                     if (action is ConsoleCmdGameAction consoleAction
-                        && consoleAction.OwnerId == localPlayer.NetId
+                        && consoleAction.OwnerId == executionPlayer.NetId
                         && string.Equals(consoleAction.Cmd, command, StringComparison.Ordinal))
                     {
                         nativeCommandStarted.TrySetResult(true);
