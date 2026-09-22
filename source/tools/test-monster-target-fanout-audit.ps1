@@ -160,7 +160,8 @@ foreach ($move in $splitExpected) {
         throw "Move requiring owner-once ordering is not in the split fanout path: $move"
     }
 }
-if (-not $runtimeText.Contains('ApplyPerPlayerThenOwnerOnce(simulator, combat, move, out killedOwner)')) {
+if ((-not $runtimeTargetsText.Contains('MultiplayerTargetMode.PerPlayerThenOwnerOnce =>')) -or
+    (-not $runtimeMainText.Contains('private static bool ApplyPerPlayerThenOwnerOnce('))) {
     throw 'Pinned owner-once moves are no longer routed through ApplyPerPlayerThenOwnerOnce.'
 }
 if ((-not $runtimeText.Contains('ApplyPerPlayerTargetEffect(')) -or
