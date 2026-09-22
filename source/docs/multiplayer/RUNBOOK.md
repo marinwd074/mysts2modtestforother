@@ -101,69 +101,37 @@ pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
 
 然后再进行 Host/Join/Ready 和对应 Smoke。
 
-## Multiplayer Console Fixture v1
+## 完整 GM Console 测试源码
 
-**2026-09-22 runtime limitation:** With `HostVanilla`, the first networked `energy 10`
-command changed the two Clients' player energy to 13 while the Host retained 3; the game
-reported a checksum divergence before Tag Team or Safe Auto could be tested. Do not use
-`HostVanilla` with console fixtures as runtime evidence. A separate, owned
-`HostCombatSolver` Lab profile now enables the native DevConsole on the Host for this
-experiment; its synchronized runtime behavior is still `UNVERIFIED`. Non-fixture
-Host/Client tests continue to use `HostVanilla`.
+为了后续多人测试方便，完整 `TheBookOfAges / GM Console` 已作为 **test-only submodule**
+接入：
 
-For a resumed fixture experiment, prepare `HostCombatSolver -Instance mp-host-modded`,
-then start `runtime-mp-host-modded` with `start-host.ps1 -ForceSteamOff`. Its first
-Mod load is warm-up; Graceful stop and launch it again before collecting evidence.
-Reprepare and warm-up both Client instances whenever their CombatSolver payload changes.
+`source/tools/multiplayer-lab/MultiplayerTestTools/TheBookOfAges`
 
-Console Fixture 只用于 owned `ClientCombatSolver` Multiplayer Lab 实例，用游戏自己的
-`DevConsole.ProcessCommand()` 执行命令。真实多人中，命令仍由游戏检查 `IsNetworked`，
-networked command 会走原生 `ConsoleCmdGameAction` / `ActionQueueSynchronizer`，不新增
-CombatSolver 网络协议，也不模拟键盘输入。
+固定上游 commit：
 
-v1 白名单：`card`、`power`、`energy`、`block`、`potion`、`draw`、`heal`、`damage`。
-`god`、`instant` 等 local-only/debug convenience 命令不允许进入 fixture。Runtime 还会
-反射确认目标游戏里的实际 command 存在且 `IsNetworked=true`，否则 fail closed。
+`234a74ccbaf46d7e385ed318c64857f1f7a90cae`
 
-先静态验证 fixture：
+这次不再裁掉 UI：保留原作者的 GM 页面、图片、本地化、卡牌/能力/药水/遗物/怪物等工具，
+以及其多人 `GameAction / INetAction / ActionQueueSynchronizer` 同步实现。该模块不进入
+CombatSolver 正式项目或发布包；未来测试结束可直接删除整个 `MultiplayerTestTools`
+目录和 submodule 记录。
+
+首次本机使用：
 
 ~~~powershell
-pwsh -NoLogo -NoProfile -File .\validate-console-fixture.ps1 `
-  -FixturePath .\fixtures\tag-team-basic.example.json
+git submodule update --init --recursive -- source/tools/multiplayer-lab/MultiplayerTestTools/TheBookOfAges
 ~~~
 
-然后把 fixture 交给 **正式重启后的 Solver Client**：
+运行时不再维护额外的 Workshop / 外部 Console Mod 安装脚本。完整 GM Console
+测试源码已作为 test-only submodule 固定在仓库中；需要测试时由 Codex 在本地构建该模块，
+并把构建产物作为 Multiplayer Lab 测试依赖部署到所有参与端。
 
-~~~powershell
-pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
-  -InstanceRoot "$labRoot\runtime-mp-client-solver" `
-  -ClientId 1000 `
-  -ForceSteamOff `
-  -MultiplayerMode safe-execute-lab `
-  -ConsoleFixturePath .\fixtures\tag-team-basic.example.json
-~~~
+要求：
 
-`start-instance.ps1` 会先验证输入，并把 fixture 复制到该 owned instance 的
-`console-fixtures\active.json`；Runtime 只接受 instance root 内的路径。普通桌面启动、
-`HostVanilla`、`ClientRitsuOnly` 或缺少 probe-evidence ownership marker 的进程都不能
-执行 fixture。它不会修改正常 `settings.save`，而是在 Lab 进程内部创建允许 debug
-commands 的 `DevConsole`。
-
-进入真实多人战斗并到 Solver Client 的可操作回合后，fixture 只执行一次。日志应按顺序出现
-`FIXTURE_ARMED`、每条命令的 `FIXTURE_COMMAND_START` / `FIXTURE_COMMAND_RESULT`，最后
-`FIXTURE_COMPLETE`。运行时链路验证：
-
-~~~powershell
-pwsh -NoLogo -NoProfile -File .\validate-console-fixture-results.ps1 `
-  -LogPath '<post-restart-client-log-or-journal>' `
-  -FixturePath .\fixtures\tag-team-basic.example.json `
-  -OutputPath '.\.local\multiplayer-lab\results\console-fixture-summary.json'
-~~~
-
-该 validator 的 PASS **只证明 fixture 被 Lab Runtime 完整调度**。Host/Client 的实际
-状态一致性以及 Tag Team/Beacon 等牌的语义仍需各自 differential；不得把 fixture PASS
-直接升级成多人牌 runtime PASS。
-
+- Host 和所有参与 Client 使用同一测试工具源码 revision / 构建产物。
+- 测试工具只用于 Multiplayer Lab，不进入 CombatSolver 正式发布包。
+- 具体 GM 操作是否能在 pinned 0.107.1 保持同步仍需单独 runtime 验证。
 
 ## MP-2 Safe Execute 正式 token Smoke
 

@@ -1269,21 +1269,22 @@ internal sealed partial class CombatBeamSolver
                          item.SourceFamily,
                          item.Outcome)))
             {
-                if (!outcome.Any(item =>
-                        item.Candidate.OrderedMutationObservationRequested))
+                bool hasObservationRequest = false;
+                SearchNode? survivor = null;
+                foreach (var item in outcome)
                 {
-                    continue;
+                    SearchNode candidate = item.Candidate;
+                    hasObservationRequest |= candidate.OrderedMutationObservationRequested;
+                    if (!retainedSet.Contains(candidate))
+                        continue;
+                    if (survivor == null
+                        || IsBetterOrderedMutationRepresentative(candidate, survivor))
+                    {
+                        survivor = candidate;
+                    }
                 }
-                List<SearchNode> survivors = outcome
-                    .Select(item => item.Candidate)
-                    .Where(retainedSet.Contains)
-                    .ToList();
-                if (survivors.Count == 0)
+                if (!hasObservationRequest || survivor == null)
                     continue;
-                SearchNode survivor = survivors.Aggregate((best, candidate) =>
-                    IsBetterOrderedMutationRepresentative(candidate, best)
-                        ? candidate
-                        : best);
                 survivor.OrderedMutationContinuationBridge = true;
             }
 
@@ -1302,20 +1303,45 @@ internal sealed partial class CombatBeamSolver
                              (IEqualityComparer<SearchNode>)
                                  ReferenceEqualityComparer.Instance))
             {
-                List<SearchNode> survivors = children.ToList();
                 // Exactly one child carries the remaining window. Prefer a child which the
                 // ordinary ranker already selected; a portfolio-only backup has MaxValue rank.
-                // This transfers, rather than duplicates, the observation obligation.
-                SearchNode carrier = survivors
-                    .OrderBy(candidate => candidate.RetentionRank)
-                    .ThenBy(candidate => candidate,
-                        Comparer<SearchNode>.Create(
-                            CompareOrderedMutationRepresentatives))
-                    .First();
-                foreach (SearchNode survivor in survivors)
+                // A single pass preserves OrderBy/ThenBy's first-on-exact-tie stability without
+                // allocating a temporary list or sorter.
+                SearchNode? carrier = null;
+                foreach (SearchNode survivor in children)
+                {
                     survivor.OrderedMutationContinuationBridge = false;
-                carrier.OrderedMutationContinuationBridge = true;
+                    if (carrier == null
+                        || survivor.RetentionRank < carrier.RetentionRank
+                        || survivor.RetentionRank == carrier.RetentionRank
+                            && CompareOrderedMutationRepresentatives(survivor, carrier) < 0)
+                    {
+                        carrier = survivor;
+                    }
+                }
+                (carrier ?? throw new InvalidOperationException(
+                    "有序变异 continuation carrier 分组不能为空。"))
+                    .OrderedMutationContinuationBridge = true;
             }
+        }
+
+        private static T SelectBestByComparison<T>(
+            IEnumerable<T> candidates,
+            IComparer<T> comparer)
+        {
+            bool hasBest = false;
+            T best = default!;
+            foreach (T candidate in candidates)
+            {
+                if (!hasBest || comparer.Compare(candidate, best) < 0)
+                {
+                    best = candidate;
+                    hasBest = true;
+                }
+            }
+            if (!hasBest)
+                throw new InvalidOperationException("有序变异 representative 分组不能为空。");
+            return best;
         }
 
         private static int AvailableOrderedMutationLayerAdmissions(
@@ -1345,11 +1371,27 @@ internal sealed partial class CombatBeamSolver
             List<T> representatives = [];
             foreach (IGrouping<TKey, T> obligation in candidates.GroupBy(obligationSelector))
             {
-                List<T> members = obligation.ToList();
-                List<T> selected = members.Where(isAlreadySelected).ToList();
-                representatives.Add((selected.Count > 0 ? selected : members)
-                    .OrderBy(candidate => candidate, comparer)
-                    .First());
+                bool hasAny = false;
+                bool hasSelected = false;
+                T bestAny = default!;
+                T bestSelected = default!;
+                foreach (T candidate in obligation)
+                {
+                    if (!hasAny || comparer.Compare(candidate, bestAny) < 0)
+                    {
+                        bestAny = candidate;
+                        hasAny = true;
+                    }
+                    if (isAlreadySelected(candidate)
+                        && (!hasSelected || comparer.Compare(candidate, bestSelected) < 0))
+                    {
+                        bestSelected = candidate;
+                        hasSelected = true;
+                    }
+                }
+                if (!hasAny)
+                    throw new InvalidOperationException("有序变异 obligation 分组不能为空。");
+                representatives.Add(hasSelected ? bestSelected : bestAny);
             }
             representatives.Sort(comparison);
             return representatives;
@@ -1543,7 +1585,7 @@ internal sealed partial class CombatBeamSolver
                     outcomeSelector(candidate),
                     anchorOutcome))
                 .GroupBy(outcomeSelector)
-                .Select(group => group.OrderBy(candidate => candidate, comparer).First())
+                .Select(group => SelectBestByComparison(group, comparer))
                 .ToList();
             if (representatives.Count == 0)
                 return [];
@@ -1592,10 +1634,11 @@ internal sealed partial class CombatBeamSolver
             // Round-robin outcomes across source families. If the fairest packet cannot fit a
             // hard lease/layer bound, the caller can try the next family rather than repeatedly
             // starving every admissible fallback behind one impossible packet.
+            int roundCount = 0;
+            foreach (var family in families)
+                roundCount = Math.Max(roundCount, family.Candidates.Count);
             List<T> ordered = new(representatives.Count);
-            for (int round = 0;
-                 families.Any(family => round < family.Candidates.Count);
-                 round++)
+            for (int round = 0; round < roundCount; round++)
             {
                 foreach (var family in families)
                 {
@@ -1617,35 +1660,26 @@ internal sealed partial class CombatBeamSolver
         {
             TOutcome anchorOutcome = outcomeSelector(anchor);
             IComparer<T> comparer = Comparer<T>.Create(comparison);
-            List<T> distinctCandidates = candidates
-                .Where(candidate => !EqualityComparer<TOutcome>.Default.Equals(
-                    outcomeSelector(candidate),
-                    anchorOutcome))
-                .GroupBy(outcomeSelector)
-                .Select(group => group.OrderBy(candidate => candidate, comparer).First())
-                .OrderBy(candidate => candidate, comparer)
-                .ToList();
-            if (distinctCandidates.Count == 0)
+            bool hasCompanion = false;
+            companion = default!;
+            long bestDistance = default;
+            foreach (IGrouping<TOutcome, T> outcome in candidates.GroupBy(outcomeSelector))
             {
-                companion = default!;
-                return false;
-            }
-
-            companion = distinctCandidates[0];
-            long bestDistance = semanticDistance(anchor, companion);
-            for (int index = 1; index < distinctCandidates.Count; index++)
-            {
-                T candidate = distinctCandidates[index];
+                if (EqualityComparer<TOutcome>.Default.Equals(outcome.Key, anchorOutcome))
+                    continue;
+                T candidate = SelectBestByComparison(outcome, comparer);
                 long distance = semanticDistance(anchor, candidate);
-                if (distance > bestDistance
+                if (!hasCompanion
+                    || distance > bestDistance
                     || distance == bestDistance
                         && comparison(candidate, companion) < 0)
                 {
                     companion = candidate;
                     bestDistance = distance;
+                    hasCompanion = true;
                 }
             }
-            return true;
+            return hasCompanion;
         }
 
         internal static List<T> SelectDistinctOrderedMutationCompanionPacketCandidates<
@@ -1664,7 +1698,7 @@ internal sealed partial class CombatBeamSolver
                     outcomeSelector(candidate),
                     anchorOutcome))
                 .GroupBy(outcomeSelector)
-                .Select(group => group.OrderBy(candidate => candidate, comparer).First())
+                .Select(group => SelectBestByComparison(group, comparer))
                 .OrderBy(candidate => candidate, comparer)
                 .ToList();
         }
@@ -2488,10 +2522,16 @@ internal sealed partial class CombatBeamSolver
                 IEnumerable<OrderedMutationContinuationPacket> packets,
                 IComparer<OrderedMutationContinuationPacket> comparer)
         {
-            List<OrderedMutationContinuationPacket> candidates = packets.ToList();
-            OrderedMutationContinuationPacket qualityLeader = candidates
-                .OrderBy(packet => packet, comparer)
-                .First();
+            List<OrderedMutationContinuationPacket> candidates = [];
+            OrderedMutationContinuationPacket? qualityLeader = null;
+            foreach (OrderedMutationContinuationPacket packet in packets)
+            {
+                candidates.Add(packet);
+                if (qualityLeader == null || comparer.Compare(packet, qualityLeader) < 0)
+                    qualityLeader = packet;
+            }
+            qualityLeader ??= throw new InvalidOperationException(
+                "有序变异 continuation packet 分组不能为空。");
             SearchNode qualityOutcome = qualityLeader.Candidates[0];
             StateFingerprint qualityOption =
                 BuildOrderedMutationContinuationOptionKey(qualityOutcome.Action!);
@@ -2647,15 +2687,61 @@ internal sealed partial class CombatBeamSolver
                          OrderedMutationAdmissionClaimSource> outcome in
                      sources.GroupBy(source => source.Key))
             {
-                List<OrderedMutationAdmissionClaimSource> members = outcome.ToList();
-                OrderedMutationAdmissionClaimSource representative = members
-                    .OrderByDescending(source => selected.Contains(source.Candidate))
-                    .ThenBy(source => source.Packet, packetComparer)
-                    .ThenBy(source => source.Reason)
-                    .First();
-                HashSet<OrderedMutationAdmissionClaimReason> reasons = members
-                    .Select(source => source.Reason)
-                    .ToHashSet();
+                bool hasRepresentative = false;
+                bool representativeSelected = false;
+                OrderedMutationAdmissionClaimSource representative = default;
+                HashSet<OrderedMutationAdmissionClaimReason> reasons = [];
+                bool handoffCrossedProofBoundary = false;
+                bool observationCrossedProofBoundary = false;
+                bool counterfactualContinuationHandoff = false;
+                bool counterfactualRequestsObservation = false;
+                bool ordinaryCrossedProofBoundary = false;
+                bool ordinaryContinuationHandoff = false;
+                bool ordinaryRequestsObservation = false;
+
+                foreach (OrderedMutationAdmissionClaimSource source in outcome)
+                {
+                    bool sourceSelected = selected.Contains(source.Candidate);
+                    if (!hasRepresentative
+                        || sourceSelected && !representativeSelected
+                        || sourceSelected == representativeSelected
+                            && packetComparer.Compare(source.Packet, representative.Packet) < 0
+                        || sourceSelected == representativeSelected
+                            && packetComparer.Compare(source.Packet, representative.Packet) == 0
+                            && source.Reason < representative.Reason)
+                    {
+                        representative = source;
+                        representativeSelected = sourceSelected;
+                        hasRepresentative = true;
+                    }
+
+                    reasons.Add(source.Reason);
+                    handoffCrossedProofBoundary |=
+                        source.Reason == OrderedMutationAdmissionClaimReason.Handoff
+                        && source.CrossedProofBoundary;
+                    observationCrossedProofBoundary |=
+                        source.Reason == OrderedMutationAdmissionClaimReason.Observation
+                        && source.CrossedProofBoundary;
+                    counterfactualContinuationHandoff |=
+                        source.Reason == OrderedMutationAdmissionClaimReason.Counterfactual
+                        && source.ContinuationHandoff;
+                    counterfactualRequestsObservation |=
+                        source.Reason == OrderedMutationAdmissionClaimReason.Counterfactual
+                        && source.RequestsObservation;
+                    ordinaryCrossedProofBoundary |=
+                        source.Reason == OrderedMutationAdmissionClaimReason.Ordinary
+                        && source.CrossedProofBoundary;
+                    ordinaryContinuationHandoff |=
+                        source.Reason == OrderedMutationAdmissionClaimReason.Ordinary
+                        && source.ContinuationHandoff;
+                    ordinaryRequestsObservation |=
+                        source.Reason == OrderedMutationAdmissionClaimReason.Ordinary
+                        && source.RequestsObservation;
+                }
+
+                if (!hasRepresentative)
+                    throw new InvalidOperationException("有序变异 admission claim 分组不能为空。");
+
                 claims.Add(new OrderedMutationAdmissionClaim(
                     outcome.Key,
                     representative.Packet with
@@ -2664,27 +2750,13 @@ internal sealed partial class CombatBeamSolver
                     },
                     representative.Candidate,
                     reasons,
-                    HandoffCrossedProofBoundary: members.Any(source =>
-                        source.Reason == OrderedMutationAdmissionClaimReason.Handoff
-                        && source.CrossedProofBoundary),
-                    ObservationCrossedProofBoundary: members.Any(source =>
-                        source.Reason == OrderedMutationAdmissionClaimReason.Observation
-                        && source.CrossedProofBoundary),
-                    CounterfactualContinuationHandoff: members.Any(source =>
-                        source.Reason == OrderedMutationAdmissionClaimReason.Counterfactual
-                        && source.ContinuationHandoff),
-                    CounterfactualRequestsObservation: members.Any(source =>
-                        source.Reason == OrderedMutationAdmissionClaimReason.Counterfactual
-                        && source.RequestsObservation),
-                    OrdinaryCrossedProofBoundary: members.Any(source =>
-                        source.Reason == OrderedMutationAdmissionClaimReason.Ordinary
-                        && source.CrossedProofBoundary),
-                    OrdinaryContinuationHandoff: members.Any(source =>
-                        source.Reason == OrderedMutationAdmissionClaimReason.Ordinary
-                        && source.ContinuationHandoff),
-                    OrdinaryRequestsObservation: members.Any(source =>
-                        source.Reason == OrderedMutationAdmissionClaimReason.Ordinary
-                        && source.RequestsObservation)));
+                    handoffCrossedProofBoundary,
+                    observationCrossedProofBoundary,
+                    counterfactualContinuationHandoff,
+                    counterfactualRequestsObservation,
+                    ordinaryCrossedProofBoundary,
+                    ordinaryContinuationHandoff,
+                    ordinaryRequestsObservation));
             }
             return claims;
         }

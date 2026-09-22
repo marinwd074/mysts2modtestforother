@@ -3,7 +3,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('HostVanilla', 'HostCombatSolver', 'ClientVanilla', 'ClientRitsuOnly', 'ClientCombatSolver')]
+    [ValidateSet('HostVanilla', 'ClientVanilla', 'ClientRitsuOnly', 'ClientCombatSolver')]
     [string]$Profile,
 
     [string]$Instance = '',
@@ -35,7 +35,6 @@ $sourceRoot = Get-HeadlessCanonicalPath (Join-Path $PSScriptRoot '..\..')
 if ([string]::IsNullOrWhiteSpace($Instance)) {
     $Instance = switch ($Profile) {
         'HostVanilla' { 'mp-host' }
-        'HostCombatSolver' { 'mp-host-modded' }
         'ClientCombatSolver' { 'mp-client-solver' }
         'ClientRitsuOnly' { 'mp-client-ritsu' }
         'ClientVanilla' { 'mp-client-vanilla' }

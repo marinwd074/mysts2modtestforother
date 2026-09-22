@@ -17,8 +17,6 @@ param(
 
     [UInt64]$ClientId = 0,
 
-    [string]$ConsoleFixturePath = '',
-
     [switch]$ForceSteamOff,
 
     [switch]$AllowSteam
@@ -29,7 +27,6 @@ $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot '..\headless-runtime.ps1')
 . (Join-Path $PSScriptRoot 'multiplayer-common.ps1')
-. (Join-Path $PSScriptRoot 'console-fixture-common.ps1')
 
 $instance = Read-MultiplayerInstance $InstanceRoot
 $profileName = [string]$instance.Profile.profile
@@ -37,30 +34,23 @@ if ($ForceSteamOff.IsPresent -and $AllowSteam.IsPresent) {
     throw 'ForceSteamOff and AllowSteam are mutually exclusive.'
 }
 $forceSteamOffEffective = -not $AllowSteam.IsPresent
-$modRestartPolicy = if ($profileName -in @('HostCombatSolver', 'ClientRitsuOnly', 'ClientCombatSolver')) {
+$modRestartPolicy = if ($Role -eq 'Client' -and $profileName -in @('ClientRitsuOnly', 'ClientCombatSolver')) {
     'warmup_mod_load_then_restart_before_evidence'
 } else {
     'none'
 }
-if ($Role -eq 'Host' -and $profileName -notin @('HostVanilla', 'HostCombatSolver')) {
-    throw "Host launcher requires a Host profile, received $profileName."
+if ($Role -eq 'Host' -and $profileName -ne 'HostVanilla') {
+    throw "Host launcher requires HostVanilla, received $profileName."
 }
-if ($Role -eq 'Client' -and $profileName -in @('HostVanilla', 'HostCombatSolver')) {
-    throw 'Client launcher cannot use a Host instance.'
+if ($Role -eq 'Client' -and $profileName -eq 'HostVanilla') {
+    throw 'Client launcher cannot use a HostVanilla instance.'
 }
 if ($Role -eq 'Host' -and $ClientId -ne 0) {
     throw 'ClientId is only valid for a Client launcher.'
 }
-if (-not [string]::IsNullOrWhiteSpace($ConsoleFixturePath) -and
-    ($Role -ne 'Client' -or $profileName -ne 'ClientCombatSolver')) {
-    throw 'Console fixtures are restricted to an owned ClientCombatSolver lab instance.'
-}
 
 $existingState = Get-MultiplayerOwnedProcessState $instance
 if ($existingState.state -eq 'Owned') {
-    if (-not [string]::IsNullOrWhiteSpace($ConsoleFixturePath)) {
-        throw 'The instance is already running; restart it to apply a console fixture.'
-    }
     [ordered]@{
         status = 'ALREADY_RUNNING'
         role = $Role
@@ -76,17 +66,6 @@ if ($existingState.state -eq 'Owned') {
 }
 if ($existingState.state -eq 'Stale') {
     Remove-MultiplayerProcessMarker $instance
-}
-
-$ownedConsoleFixturePath = $null
-if (-not [string]::IsNullOrWhiteSpace($ConsoleFixturePath)) {
-    $fixture = Read-MultiplayerConsoleFixture -FixturePath $ConsoleFixturePath
-    $fixtureRoot = Join-Path $instance.Root 'console-fixtures'
-    Assert-MultiplayerPathWithin -Child $fixtureRoot -Parent $instance.Root
-    New-Item -ItemType Directory -Path $fixtureRoot -Force | Out-Null
-    $ownedConsoleFixturePath = Join-Path $fixtureRoot 'active.json'
-    Assert-MultiplayerPathWithin -Child $ownedConsoleFixturePath -Parent $instance.Root
-    Copy-Item -LiteralPath $fixture.Path -Destination $ownedConsoleFixturePath -Force
 }
 
 New-Item -ItemType Directory -Path $instance.LogsRoot, $instance.RoamingRoot, $instance.LocalRoot -Force | Out-Null
@@ -119,12 +98,6 @@ $startInfo.WindowStyle = [Diagnostics.ProcessWindowStyle]::Normal
 $startInfo.Environment['APPDATA'] = $instance.RoamingRoot
 $startInfo.Environment['LOCALAPPDATA'] = $instance.LocalRoot
 $startInfo.Environment['COMBATSOLVER_MULTIPLAYER_INSTANCE'] = $instance.Root
-if ($Role -eq 'Host' -and $profileName -eq 'HostCombatSolver') {
-    $startInfo.Environment['COMBATSOLVER_MULTIPLAYER_LAB_HOST_CONSOLE'] = '1'
-}
-if ($null -ne $ownedConsoleFixturePath) {
-    $startInfo.Environment['COMBATSOLVER_MULTIPLAYER_CONSOLE_FIXTURE'] = $ownedConsoleFixturePath
-}
 if ($Role -eq 'Client') {
     # Probe evidence is deliberately Lab-only; ordinary desktop launches stay quiet.
     $startInfo.Environment['COMBATSOLVER_MULTIPLAYER_PROBE_EVIDENCE'] = '1'
@@ -163,7 +136,6 @@ try {
         fastMpMode = if ([string]::IsNullOrWhiteSpace($FastMpMode)) { $null } else { $FastMpMode }
         multiplayerMode = if ([string]::IsNullOrWhiteSpace($MultiplayerMode)) { $null } else { $MultiplayerMode }
         clientId = if ($ClientId -eq 0) { $null } else { $ClientId }
-        consoleFixturePath = $ownedConsoleFixturePath
         forceSteamOff = $forceSteamOffEffective
         modRestartPolicy = $modRestartPolicy
         runtimeEvidenceEligible = $false
@@ -179,7 +151,6 @@ try {
         processMarkerPath = $instance.ProcessMarkerPath
         multiplayerMode = if ([string]::IsNullOrWhiteSpace($MultiplayerMode)) { $null } else { $MultiplayerMode }
         clientId = if ($ClientId -eq 0) { $null } else { $ClientId }
-        consoleFixturePath = $ownedConsoleFixturePath
         forceSteamOff = $forceSteamOffEffective
         modRestartPolicy = $modRestartPolicy
         runtimeEvidenceEligible = $false
