@@ -249,18 +249,18 @@ Codex 只负责启动/停止进程、读取 journal 和运行验证器。2026-09
 Reactive Carry 是当前显式 `safe-execute` 的跨回合边界。一次部署的安全本地牌序列若以
 当前路线的 `EndTurn` 结束，Runtime 只在最后一次边界复核成功后通过原生
 `EndPlayerTurnAction` 结束回合；随后旧 session、route generation 和 authorization
-全部失效。下一本地回合必须重新 Probe、capture、search、authorize，不从上一回合恢复。
+全部失效。下一本地回合必须重新 Probe/capture；若 live teammate state、local continuation state 与全部战斗 RNG 都和 Joint 预测完全一致，可以复用该 continuation，但旧 deployment/session/authorization 仍必须失效并为新回合重新授权；任一字段偏离则必须 fresh search。
 Potion、Choice、Replay、队友控制、Instant 和旧跨回合路线复用仍关闭。
 
 本阶段固定做三轮代表性真实 Smoke：
 
-- **A**：本地安全牌序列 → 原生 Safe EndTurn → 多人推进 → 下一回合 Fresh Probe/Search。
+- **A**：本地安全牌序列 → 原生 Safe EndTurn → 多人推进 → 下一回合 Fresh Probe/Capture；状态完全一致时允许 exact Joint continuation reuse，否则 Fresh Search。
 - **B**：Safe EndTurn 后、下一本地决策前由观察 Client 做一次普通公开行动；验证公开
   变化被观察且下一决策来自 fresh search。若同一 journal 有多次尝试，使用
   `-RequestId` 只选择一个完整 session。
 - **C**：连续 3 个本地回合，每回合一次 Solver“执行本回合”；观察 Client 只在 Solver
   已结束回合后正常行动，不在部署期间制造远端干扰。要求 3 个 distinct request/turn、
-  每回合 native EndTurn 和 fresh search，且没有 abort/stale/custom-network marker。
+  每回合 native EndTurn、fresh Probe/Capture，并且下一计划只能二选一：exact Joint continuation reuse 或 Fresh Search；没有 abort/stale/custom-network marker。
 
 通用验证器：
 
@@ -279,9 +279,8 @@ Smoke C 不传 `-RequestId`，以便验证整份正式 journal 没有中止或�
 
 Safe Auto 只在显式 `-MultiplayerMode safe-execute` 下可用。进入稳定本地回合后，只点击一次
 “安全自动：关”把它切成“安全自动：开”；之后 **不要再点击“执行本回合”**。目标是连续至少
-3 个本地回合都由 Runtime 自己完成：fresh/validated search → 新
-`MultiplayerSafeExecutionSession` → 安全本地普通牌 → 原生 Safe EndTurn → 下一本地回合重新
-Probe/Search/authorize。旧 request/session/route authorization 不得跨回合复用。
+3 个本地回合都由 Runtime 自己完成：Fresh Probe/Capture → exact Joint continuation reuse 或 Fresh Search → 新
+`MultiplayerSafeExecutionSession` → 安全本地普通牌 → 原生 Safe EndTurn。旧 request/session/route authorization 不得跨回合复用；只有预测状态与战斗 RNG 完全一致时路线 continuation 才能复用。
 
 运行时日志必须包含每回合 `MP_SAFE_AUTO_ARMED`；第一回合如果复用按钮开启前已经完成的最新
 路线，会记录 `source=existing_result`，后续正常搜索完成记录
@@ -298,10 +297,34 @@ pwsh -NoLogo -NoProfile -File .\validate-safe-auto-results.ps1 `
 ~~~
 
 PASS 必须同时证明：Safe Auto 在测量窗口只启用一次；至少 3 个 distinct request/turn；
-3 个回合都有自动 arm、Safe EndTurn、fresh Probe/capture 和 fresh search；启用后没有新的
+3 个回合都有自动 arm、Safe EndTurn、fresh Probe/capture；每个下一回合要么出现 exact Joint continuation reuse，且 `SEARCH_REUSED` 明确 `old_authorization_dead=true new_authorization_pending=true`，要么走 Fresh Search；启用后没有新的
 `UI_ACTION action=deploy`；没有 `MP_SAFE_AUTO_STOP`、远端部署中止、旧 request 复用或
 自定义网络路径。2026-09-22 真实 Host/Client 三回合 Smoke 已通过上述验证器，
 结果见 [`evidence/safe-auto-runtime-2026-09-22.json`](evidence/safe-auto-runtime-2026-09-22.json)。
+
+## Joint Forecast Continuation Smoke
+
+新联合预测的 continuation 实机验证分成两种，不再把“每回合都 Fresh Search”当作唯一正确结果：
+
+- **Reuse**：选择尽量确定的局面（推荐让观察队友没有可打牌或不做额外动作），本地 Safe EndTurn 后等待下一本地回合。要求 Fresh Probe/Capture 后出现 `SEARCH_REUSED` 与 `MP_LOCAL_XTURN_CONTINUATION_REUSED ... local_state_exact=true reason=exact`；live/predicted `ContinuationStamp` 同时覆盖本地战斗状态与 Shuffle/CardGeneration/CardSelection/EnergyCosts/Targets/Orb/MonsterAi/Niche RNG。
+- **Mismatch**：在 EndTurn 后让观察队友执行与预测世界不同的可读动作。默认要求 `MP_LOCAL_XTURN_CONTINUATION_REJECTED ... reason=remote_public_mismatch`，随后 `SEARCH_REUSE_MISS` 使用同一 reject reason，并启动 Multiplayer Advisor 或 Safe Execute Fresh Search。不得再出现同一 turn/route 的 continuation reuse。
+
+验证命令：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-joint-continuation-results.ps1 `
+  -LogPath '<post-restart-client-log>' `
+  -Mode Reuse `
+  -OutputPath '.\.local\multiplayer-lab\results\joint-continuation-reuse.json'
+
+pwsh -NoLogo -NoProfile -File .\validate-joint-continuation-results.ps1 `
+  -LogPath '<post-restart-client-log>' `
+  -Mode Mismatch `
+  -ExpectedRejectReason remote_public_mismatch `
+  -OutputPath '.\.local\multiplayer-lab\results\joint-continuation-mismatch.json'
+~~~
+
+退出码仍为 0=PASS、1=FAIL、2=UNVERIFIED。Reuse 与 Mismatch 都通过后，才把 Joint continuation runtime 从合同覆盖提升为实机证据。
 
 ## MP-2A 收尾
 
