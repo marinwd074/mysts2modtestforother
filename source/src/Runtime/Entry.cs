@@ -86,11 +86,15 @@ public static class Entry
 
     private static void OnTurnStarted(CombatState state)
     {
-        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
         if (!Enabled
             || state.CurrentSide != CombatSide.Player
-            || NGame.Instance == null
-            || !capabilities.CanSearch)
+            || NGame.Instance == null)
+            return;
+
+        MultiplayerConsoleFixtureRunner.TrySchedule(state);
+
+        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
+        if (!capabilities.CanSearch)
             return;
         if (capabilities.IsMultiplayer)
         {
