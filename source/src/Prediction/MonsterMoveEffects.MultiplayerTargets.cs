@@ -124,7 +124,7 @@ internal static partial class MonsterMoveEffects
         {
             MultiplayerTargetMode.PerPlayer => ApplyPerPlayerTargets(
                 simulator, combat, move, out killedOwner, plannedChoices),
-            MultiplayerTargetMode.PerPlayerThenOwnerOnce => ApplySplitFanOut(
+            MultiplayerTargetMode.PerPlayerThenOwnerOnce => ApplyPerPlayerThenOwnerOnce(
                 simulator, combat, move, out killedOwner),
             MultiplayerTargetMode.SpecialRng => ApplySpecialMultiplayerMove(
                 simulator, combat, move, player, out killedOwner, plannedChoices),

@@ -9,8 +9,8 @@
 
 - 多人怪物不再在主 `MonsterMoveEffects.cs` 内维护完整目标路由；新增独立 `MonsterMoveEffects.MultiplayerTargets.cs`。
 - 普通多人效果收敛为“当前玩家集合逐个调用既有单目标逻辑”，共享 preamble 只执行一次。
-- 9 个 owner-once 和 2 个 RNG 特例暂时保持既有已验证实现，不做高风险一次性重写。
-- 63 项 pinned 0.107.1 fanout 清单降级为兼容证明/分类依据，而不是未来扩展的架构模型。
+- 9 个 mixed move 已机械等价拆成 `ApplyPerPlayerTargetEffect` 与 `ApplyOwnerEffectOnce`；执行顺序保持 owner prelude → players → owner once。
+- 2 个 RNG 特例和 Knowledge Demon Choice 继续显式处理；63 项 pinned 0.107.1 fanout 清单降级为兼容证明/分类依据，而不是未来扩展的架构模型。
 - 已有怪物 HP / MaxHP 直接信任战斗 root snapshot；只有模拟中新生成/孵化怪物才调用游戏原生多人 HP scaling。
 - 删除已经完成且会误导上下文的 `NEXT_LOCAL_01071_MONSTER_TARGET_AUDIT.md`。
 

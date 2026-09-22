@@ -185,8 +185,12 @@ foreach ($move in $splitExpected) {
         throw "Move requiring owner-once ordering is not in the split fanout path: $move"
     }
 }
-if (-not $runtimeText.Contains('ApplySplitFanOut(simulator, combat, move, out killedOwner)')) {
-    throw 'Pinned split fanout allow-list is no longer routed through ApplySplitFanOut.'
+if (-not $runtimeText.Contains('ApplyPerPlayerThenOwnerOnce(simulator, combat, move, out killedOwner)')) {
+    throw 'Pinned owner-once moves are no longer routed through ApplyPerPlayerThenOwnerOnce.'
+}
+if ((-not $runtimeText.Contains('ApplyPerPlayerTargetEffect(')) -or
+    (-not $runtimeText.Contains('ApplyOwnerEffectOnce('))) {
+    throw 'Pinned owner-once path is not split into per-player target and owner-once effects.'
 }
 if (-not $runtimeText.Contains('combat.RecordThievery(simulator, move.Owner);')) {
     throw 'Gremlin Merc split fanout lost its pre-target thievery side effect.'

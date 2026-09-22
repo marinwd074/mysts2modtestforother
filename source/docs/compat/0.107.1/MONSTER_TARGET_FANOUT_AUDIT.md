@@ -31,8 +31,9 @@ Runtime status (2026-09-22): 63/64 audited moves are now `FanOutSafe`.
 
 Runtime architecture (fork v0.14): this table is compatibility evidence, not the primary
 multiplayer dispatcher. Ordinary per-player effects now route through
-`MonsterMoveEffects.MultiplayerTargets.cs`; the main `MonsterMoveEffects.cs` keeps the
-single-target implementation and the already-verified owner-once / RNG special cases.
+`MonsterMoveEffects.MultiplayerTargets.cs`; the main `MonsterMoveEffects.cs` keeps the single-target implementation. The nine mixed
+moves are explicitly split into per-player target effects and one owner effect; RNG / Choice
+special cases remain explicit instead of being forced through the generic path.
 Existing monsters use captured live HP/MaxHP directly. Only future simulated spawns/hatches
 invoke the game's native multiplayer HP scaling helper.
 52 mechanically replay the existing single-target effect in captured player-roster order,
