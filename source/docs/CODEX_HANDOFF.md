@@ -24,11 +24,12 @@
   `source/tools/multiplayer-lab/MultiplayerTestTools/TheBookOfAges`
   固定上游 commit `234a74ccbaf46d7e385ed318c64857f1f7a90cae`。它不进入 CombatSolver 正式构建/发布。
 - 2026-09-22 同构 GM Console 实机 Smoke 已通过：Host/Client 加载同一 DLL/PCK 与 BaseLib 构建，进入同一战斗且没有 game-data mismatch；Host 和 Client 各发起一次 `energy 1` 并在两端执行，Host 发放并实际打出原生 `CARD.TANK`，owner 为 Host player 1、无目标，动作在两端结算并生成 checksum。摘要见 `docs/multiplayer/evidence/gm-console-multiplayer-smoke-2026-09-22.json`。Client 反向打出本轮按用户要求未执行。
+- 首批源码语义明确的 MultiplayerOnly 卡已接入 Safe Execute admission：Beacon of Hope、Flanking、Gang Up、Knockdown、Sneaky。它们仍受本地出牌者、可读敌方目标、无 Choice、无 Replay、WorldVersion 与 bounded session 重验证约束；Tag Team、Tank 及其他跨玩家后续/资源语义继续 fail closed。
 
 ## 当前未完成
 
-1. 补充 Client 反向 `TANK` 出牌及 `Tag Team` 原生语义证据；Host 方向 `TANK` 已通过，其他 MultiplayerOnly 牌仍未验证。
-2. 只有 Tag Team 原生语义和安全边界都通过后，才设计 **TAG_TEAM-only** Safe Execute whitelist；其他 MultiplayerOnly 牌继续 fail closed。
+1. 为首批五张已开放牌补充定向合同覆盖；当前共享 Safe Execute policy 合同已通过。
+2. 继续审计 Tag Team、Tank 等需要跨玩家后续效果的卡，保持 fail closed 直到目标/所有者与网络副作用边界明确。
 3. Boot Up Strength 精确数值 differential 仍可补，但不阻塞当前多人阶段。
 
 ## 当前开发 / 性能规则

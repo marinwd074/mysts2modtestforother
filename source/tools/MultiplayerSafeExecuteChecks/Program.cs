@@ -38,7 +38,11 @@ Check(Structural(replay: true).Reason == "replay_semantics", "Replay semantics f
 Check(Structural(choice: true).Reason == "choice_required", "Choice-driving cards fail closed.");
 Check(Resolved(localPlayer: false).Reason == "local_player_missing", "Missing local player fails closed.");
 Check(Resolved(localCard: false).Reason == "local_card_missing", "A card outside the local hand fails closed.");
-Check(Resolved(multiplayerOnly: true).Reason == "multiplayer_only_card", "Multiplayer-only cards remain outside MP-2A.");
+Check(Resolved(multiplayerOnly: true).Reason == "multiplayer_only_card", "Unpromoted multiplayer-only cards remain fail-closed.");
+Check(
+    MultiplayerSafeExecutePolicy.ClassifyResolved(
+        new(true, true, true, false, false, false, false, true)).IsSafe,
+    "A promoted deterministic multiplayer-only card passes the resolved gate.");
 Check(Resolved(hasTarget: true, targetExists: false).Reason == "target_missing", "Missing target fails closed.");
 Check(
     Resolved(hasTarget: true, targetExists: true, allowedTarget: false).Reason == "remote_player_or_unknown_target",

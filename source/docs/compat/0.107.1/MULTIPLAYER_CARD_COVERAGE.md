@@ -12,6 +12,9 @@ Truth source:
 - game version: `v0.107.1`, game commit `59260271`
 - `sts2.dll` SHA-256:
   `a1f9e653f1e28e4076558fee1e60d218619cb7e057b887c6417f62c62c6d7a52`
+
+中文括号内容是源码本地化未随当前仓库提供时的简述名；代码与证据仍使用原始
+card id。
 - the pinned DLL contains exactly **21** multiplayer-only card model types
 
 Status vocabulary:
@@ -35,27 +38,27 @@ static/contract evidence, not a substitute for that differential.
 
 | Card | 0.107.1 route-relevant behavior | Solver/source status | Local cross-turn boundary / remaining evidence |
 |---|---|---|---|
-| Beacon of Hope | owner gains Block -> living teammates gain half the post-modifier amount; recursion guarded | **source-confirmed** | focused multiplayer differential for fractional Block, recipient modifiers, and recursion |
+| 希望 beacon（Beacon of Hope） | 出牌者获得格挡，存活队友获得修正后格挡的一半；防递归 | **source-confirmed / Safe Execute 已开放** | 仍依赖分数值格挡与递归边界合同 |
 | Believe in You | selected ally gains 2/3 Energy | **boundary / fail closed** | teammate Energy is now root-captured; selected-ally Energy mutation and Safe Execute targeting still need focused source/runtime promotion |
 | Coordinate | selected ally gains temporary Strength 5/8 | **source-confirmed** | public Power-state differential; preserve temporary-Strength restoration |
 | Demonic Shield | lose 1 HP first, then selected ally gains Block equal to owner's resulting current Block | **source-confirmed** | differential with HP-loss hooks and Block modifiers |
 | Energy Surge | every living player ally gains 2/3 Energy | **boundary / fail closed** | teammate Energy is root-captured; all-player Energy fan-out still needs exact 0.107.1 differential and deployment-contract promotion |
-| Flanking | instanced debuff; attacks from creatures other than applier deal 2x to target until target-side end | **source-confirmed** | multiplayer differential for applier exclusion, stacking, and expiry |
-| Gang Up | damage = base plus bonus per same-side, non-owner Powered Attack hit on target this turn | **checked match** | calculated-var uses branch/root damage-event history; multi-hit and Osty dealer events are counted separately |
+| 夹击（Flanking） | 施加实例减益；非出牌者造成的攻击伤害在目标侧回合结束前为 2 倍 | **source-confirmed / Safe Execute 已开放** | 需保持出牌者排除、叠层和到期语义 |
+| 围攻（Gang Up） | 基础伤害加上本回合同阵营、非出牌者对目标造成的强化攻击次数加成 | **checked match / Safe Execute 已开放** | 分支历史分别统计多段攻击与 Osty 出牌者 |
 | Glimpse Beyond | creates Soul cards for each living player and inserts them into each owner's Draw pile | **boundary / fail closed** | teammate Draw piles are root-captured, but multi-owner generated-card insertion/ownership has not been promoted or runtime-differentialed |
 | Hammer Time | when owner Forges, every other living player Forges same amount; HammerTime-sourced Forge does not recurse | **source-confirmed** | teammate card state is now root-captured, so source prediction can inspect it; focused multi-player Forge differential and execution staging are still required |
 | Huddle Up | every living player ally draws 2/3 cards | **boundary / fail closed** | teammate Draw/Hand is root-captured; all-player draw ordering, hooks, and Safe Execute world-delta attribution still need promotion/evidence |
 | Ignition | selected ally channels Plasma | **boundary / fail closed** | teammate Orb queues are root-captured; selected-ally channel/evoke semantics and target execution still need focused validation |
 | Intercept | owner gains Block; Covered zeros covered ally Powered Attack damage and Intercept multiplies owner's corresponding damage by covered-count+1 | **source-confirmed** | reciprocal-Intercept and death/expiry native differential |
-| Knockdown | instanced 2x/3x multiplier for other allied Powered Attacks; instance expires on debuffed side-turn end | **source-confirmed** | differential with multiple instances, applier exclusion, Osty dealer identity |
+| 击倒（Knockdown） | 其他己方强化攻击获得 2/3 倍实例倍率；减益方回合结束时消耗 | **source-confirmed / Safe Execute 已开放** | 需保持多实例、出牌者排除与 Osty 出牌者身份 |
 | Largesse | select from target ally's unlocked Colorless pool; generated card is owned by target and enters target Hand | **isolation-only** | target generation pool and Hand can be detached into the root; ownership-sensitive generation/choice/write semantics still require focused modeling and runtime evidence |
 | Legion of Bone | summon/heal Osty for each living player | **boundary / fail closed** | readable player/pet state can be captured, but all-player Osty summon/heal lifecycle and death interactions still need explicit source/runtime validation |
 | Lift | selected ally gains 11/16 Block | **checked match** | straight-line AnyAlly Block recipe matches native command |
 | Mimic | selected ally supplies current Block calculation; Mimic owner receives that Block | **source-confirmed** | differential with target Block modifiers and zero/high Block |
 | Rally | every living player ally gains 12/17 Block | **checked match** | generic AllAllies Block recipe uses branch-local player/liveness filtering |
-| Sneaky | apply 1/2 SneakyPower; each Attack played by another creature grants owner that much Unpowered Block | **source-confirmed** | future teammate actions are not invented by local planning; differential for observed remote Attack/Replay interactions |
-| Tag Team | attack, then instanced debuff replays a qualifying Attack by another player; consumed after modifying play count | **checked match** | existing TagTeamPower play-count mirror handles AnyEnemy and AllEnemies target semantics and consumes the instance |
-| Tank | apply TankPower; owner takes 2x Powered Attack damage and living teammates receive Guarded for 0.5x, with applier-death cleanup | **source-confirmed** | focused multiplayer differential; keep 0.107.1 2x/0.5x semantics rather than v0.108 rewrite |
+| 鬼祟（Sneaky） | 施加 1/2 层鬼祟；其他生物出攻击牌时，出牌者获得等量无强化格挡 | **source-confirmed / Safe Execute 已开放** | 不生成未来队友动作，只处理已观察到的动作 |
+| 组队（Tag Team） | 先攻击，再施加实例减益；其他玩家的合格攻击会重放并在修改出牌次数后消耗 | **checked match / Safe Execute 关闭** | 现有 TagTeamPower 镜像支持单敌人与全敌人目标；队友后续重放仍不纳入安全执行 |
+| 坦克（Tank） | 出牌者获得坦克并承受 2 倍强化攻击伤害；存活队友获得 0.5 倍防护，出牌者死亡时清理 | **source-confirmed / Safe Execute 关闭** | 保持 0.107.1 的 2 倍/0.5 倍语义，不采用 v0.108 改写 |
 
 ## Online patch-history cross-check
 
@@ -108,24 +111,25 @@ target remains the pinned v0.107.1 model/DLL, not the live wiki card page.
 
 ## Safe Execute staging (source-only; no runtime promotion)
 
-This staging is preparation for a later multiplayer-card deployment phase. It does
-not change the current classifier: all `MultiplayerOnly` cards still fail closed
-until a later code change and Host/Client evidence explicitly promote a subset.
+The first source-confirmed deterministic subset is now admitted by the Safe
+Execute classifier. Admission remains limited to local ownership, readable
+targets, no Choice, no replay action, and the bounded deployment/session gates.
 
 ### Stage A — local/public execution candidates
 
 These cards are the first candidates for a future source/contract-only whitelist
 because playing them does not require a teammate target or teammate-private state:
 
-- `Beacon of Hope`
-- `Flanking`
-- `Gang Up`
-- `Knockdown`
-- `Sneaky`
-- `Tag Team`
+- `Beacon of Hope` — 已开放
+- `Flanking` — 已开放
+- `Gang Up` — 已开放
+- `Knockdown` — 已开放
+- `Sneaky` — 已开放
+- `Tag Team` — 保持关闭；后续队友攻击重放不属于本批安全执行
 
-They still require focused contracts before the classifier changes, and runtime
-promotion remains blocked on Host/Client evidence.
+The five opened cards use the existing deterministic card/power mirrors and
+still require the normal live revalidation boundary. Runtime Host/Client
+evidence is only required if source behavior and local simulation diverge.
 
 ### Stage B — public teammate target or intentional remote-public mutation
 

@@ -20,7 +20,8 @@ internal readonly record struct MultiplayerSafeActionResolvedFacts(
     bool HasTarget,
     bool TargetExists,
     bool IsAllowedTarget,
-    bool HasIncompleteTargetIdentity);
+    bool HasIncompleteTargetIdentity,
+    bool IsPromotedMultiplayerOnlyCard = false);
 
 internal readonly record struct MultiplayerSafeExecuteLabFacts(
     string? ModeToken,
@@ -326,7 +327,7 @@ internal static class MultiplayerSafeExecutePolicy
             return new(false, "local_player_missing");
         if (!facts.HasLocalCard)
             return new(false, "local_card_missing");
-        if (facts.IsMultiplayerOnlyCard)
+        if (facts.IsMultiplayerOnlyCard && !facts.IsPromotedMultiplayerOnlyCard)
             return new(false, "multiplayer_only_card");
         if (facts.HasTarget)
         {

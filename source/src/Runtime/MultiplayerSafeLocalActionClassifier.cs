@@ -4,6 +4,7 @@ using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Cards;
 
 namespace CombatSolver;
 
@@ -64,8 +65,16 @@ internal static class MultiplayerSafeLocalActionClassifier
                 TargetExists: targetExists,
                 IsAllowedTarget: allowedTarget,
                 HasIncompleteTargetIdentity: !hasTarget
-                    && (action.TargetIndex != -1 || !string.IsNullOrEmpty(action.TargetName))));
+                    && (action.TargetIndex != -1 || !string.IsNullOrEmpty(action.TargetName)),
+                IsPromotedMultiplayerOnlyCard: card != null && IsPromotedMultiplayerOnlyCard(card)));
     }
+
+    private static bool IsPromotedMultiplayerOnlyCard(CardModel card)
+        => card is BeaconOfHope
+            or Flanking
+            or GangUp
+            or Knockdown
+            or Sneaky;
 
     public static IReadOnlyList<PlanAction> TakeSafePrefix(
         CombatState state,
