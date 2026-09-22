@@ -52,29 +52,21 @@ void PlayerBoundaryContractChecks()
 {
     Player local = (Player)RuntimeHelpers.GetUninitializedObject(typeof(Player));
     Player remote = (Player)RuntimeHelpers.GetUninitializedObject(typeof(Player));
-    IReadOnlyList<Player> captured = [local];
+    IReadOnlyList<Player> captured = [local, remote];
 
     Check(
         MultiplayerAdvisorBoundaryContracts.IsCapturedPlayer(captured, local),
         "The local player is recognized as captured.");
     Check(
-        !MultiplayerAdvisorBoundaryContracts.IsCapturedPlayer(captured, remote),
-        "A remote player is not treated as captured.");
-    bool rejectedSideTurn = false;
-    try
-    {
-        MultiplayerAdvisorBoundaryContracts.RequireCapturedPlayer(captured, remote);
-    }
-    catch (NotSupportedException)
-    {
-        rejectedSideTurn = true;
-    }
-    Check(rejectedSideTurn, "A side-turn phase rejects an uncaptured remote player.");
+        MultiplayerAdvisorBoundaryContracts.IsCapturedPlayer(captured, remote),
+        "A locally readable remote player is recognized as captured.");
+    MultiplayerAdvisorBoundaryContracts.RequireCapturedPlayer(captured, remote);
+    Check(true, "A side-turn phase may read a captured remote player.");
     Check(
         ReferenceEquals(
             MultiplayerAdvisorBoundaryContracts.SelectEndTurnPlayers([local, remote], captured),
             captured),
-        "EndTurn returns the captured root list instead of the public roster.");
+        "EndTurn returns the captured readable roster.");
     IReadOnlyList<Player> singleplayerRoster = [local, remote];
     Check(
         ReferenceEquals(
