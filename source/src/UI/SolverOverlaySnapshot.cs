@@ -340,13 +340,7 @@ internal sealed record SolverOverlaySnapshot(
         // A partial/incomplete route can stop inside the turn before a TurnOutcome is
         // materialized. Do not treat the missing annotation as zero energy: the selected
         // search node already contains the exact predicted resource state at that point.
-        for (SearchNode? node = result.BestNode; node?.Parent != null; node = node.Parent)
-        {
-            if (node.Action?.Turn == turn)
-                return node.Snapshot.Energy;
-        }
-
-        return 0;
+        return result.Snapshot.Turn == turn ? result.Snapshot.Energy : 0;
     }
 
     internal static SolverOverlayActionSnapshot CaptureAction(

@@ -73,6 +73,7 @@ internal sealed partial class CombatBeamSolver
 
     private sealed partial class BeamRetentionPolicy(
         SolverSearchProfile _profile,
+        SearchRoutePolicy _routePolicy,
         bool _isActEndingBoss,
         BossHpRelief _bossHpRelief,
         PostCombatRelicHealProfile _postCombatRelicHeal,
@@ -145,7 +146,8 @@ internal sealed partial class CombatBeamSolver
                             _initialPlayerMaxHp,
                             _bossHpRelief,
                             _postCombatRelicHeal,
-                            _theftPolicy) < 0))
+                            _theftPolicy,
+                            _routePolicy) < 0))
                 {
                     potionFreeBaseline = candidate;
                 }
