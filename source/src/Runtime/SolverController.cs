@@ -1269,6 +1269,22 @@ internal static partial class SolverController
         bool multiplayerWorldChanged = capabilities.IsMultiplayer
             && MultiplayerClientProbe.Observe(current, "main_thread_monitor");
         bool enteredMultiplayerSession = capabilities.IsMultiplayer && !_multiplayerInertSessionObserved;
+        if (multiplayerWorldChanged
+            && capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute
+            && MultiplayerClientProbe.LastReactiveDelta is { } reactiveDelta
+            && MultiplayerSafeExecutePolicy.ShouldStopSafeAutoForObservedWorldDelta(
+                _combat.MultiplayerSafeAutoEnabled,
+                deploymentActive: _deployment != null,
+                reactiveDelta.LocalPrivateChanged,
+                reactiveDelta.TurnBoundaryChanged))
+        {
+            _combat.MultiplayerSafeAutoEnabled = false;
+            _combat.MultiplayerSafeExecuteDeploymentRequested = false;
+            Entry.Logger.Warn(
+                $"[CombatSolver/MultiplayerSafeExecute] MP_SAFE_AUTO_STOP " +
+                $"reason=manual_local_state_change world_version={MultiplayerWorldTracker.WorldVersion}");
+            SolverOverlay.RefreshControls();
+        }
         if (capabilities.IsMultiplayer)
         {
             _multiplayerInertSessionObserved = true;
