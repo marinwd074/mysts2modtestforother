@@ -234,6 +234,13 @@ internal static class MultiplayerConsoleFixtureRunner
             reason = "name_missing";
             return false;
         }
+        if (fixture.Name.Any(character =>
+                !char.IsAsciiLetterOrDigit(character)
+                && character is not '.' and not '_' and not '-'))
+        {
+            reason = "name_format";
+            return false;
+        }
         if (!string.Equals(
                 fixture.WaitFor,
                 LocalPlayableTurnWaitToken,
