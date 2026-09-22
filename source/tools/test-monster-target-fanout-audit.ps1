@@ -6,6 +6,7 @@ $ErrorActionPreference = 'Stop'
 $sourceRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $taskPath = Join-Path $sourceRoot 'docs/multiplayer/NEXT_LOCAL_01071_MONSTER_TARGET_AUDIT.md'
 $auditPath = Join-Path $sourceRoot 'docs/compat/0.107.1/MONSTER_TARGET_FANOUT_AUDIT.md'
+$runtimePath = Join-Path $sourceRoot 'src/Prediction/MonsterMoveEffects.cs'
 
 $taskLines = [IO.File]::ReadAllLines($taskPath)
 $auditLines = [IO.File]::ReadAllLines($auditPath)
@@ -96,5 +97,50 @@ foreach ($move in $rows.Keys) {
 
 $pending = @($rows.Values | Where-Object Native -eq 'PENDING_PINNED_IL').Count
 $resolved = $rows.Count - $pending
-Write-Output "MONSTER_TARGET_FANOUT_AUDIT_CHECKS_PASS rows=$($rows.Count) resolved=$resolved pending=$pending"
+
+$fanOutSafeMoves = @(
+    $rows.GetEnumerator() |
+        Where-Object { $_.Value.Action -eq 'FanOutSafe' } |
+        ForEach-Object { $_.Key }
+)
+if ($fanOutSafeMoves.Count -ne 50) {
+    throw "Expected 50 pinned FanOutSafe rows, found $($fanOutSafeMoves.Count)."
+}
+
+$runtimeText = [IO.File]::ReadAllText($runtimePath)
+$allowListMatch = [regex]::Match(
+    $runtimeText,
+    '(?s)private static bool IsPinnedFanOutSafe\(.*?(?=\r?\n\s*public static void ApplyBeforeAttack)')
+if (-not $allowListMatch.Success) {
+    throw 'MonsterMoveEffects is missing the pinned FanOutSafe runtime allow-list.'
+}
+$runtimePairs = @{}
+foreach ($match in [regex]::Matches($allowListMatch.Value, '\("(?<monster>[^"]+)", "(?<move>[^"]+)"\)')) {
+    $key = "$($match.Groups['monster'].Value).$($match.Groups['move'].Value)"
+    if ($runtimePairs.ContainsKey($key)) {
+        throw "Duplicate runtime FanOutSafe pair: $key"
+    }
+    $runtimePairs[$key] = $true
+}
+if ($runtimePairs.Count -ne $fanOutSafeMoves.Count) {
+    throw "Runtime FanOutSafe allow-list count mismatch: audit=$($fanOutSafeMoves.Count) runtime=$($runtimePairs.Count)."
+}
+foreach ($move in $fanOutSafeMoves) {
+    if (-not $runtimePairs.ContainsKey($move)) {
+        throw "Pinned FanOutSafe move is not enabled in runtime fanout: $move"
+    }
+}
+foreach ($move in $runtimePairs.Keys) {
+    if (-not $rows.ContainsKey($move) -or $rows[$move].Action -ne 'FanOutSafe') {
+        throw "Runtime fanout contains a move not classified FanOutSafe by pinned IL: $move"
+    }
+}
+if (-not $runtimeText.Contains('foreach (Creature target in simulator.State.PlayerCreatures)')) {
+    throw 'Pinned runtime fanout no longer enumerates the captured player roster.'
+}
+if (-not $runtimeText.Contains('bool applySharedPreamble = true;')) {
+    throw 'Pinned runtime fanout no longer protects one-per-move shared preamble state.'
+}
+
+Write-Output "MONSTER_TARGET_FANOUT_AUDIT_CHECKS_PASS rows=$($rows.Count) resolved=$resolved pending=$pending runtimeFanOut=$($runtimePairs.Count)"
 exit 0

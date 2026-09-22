@@ -28,6 +28,13 @@ Allowed solver actions:
 `FanOutSafe`, `NeedsPerTargetRng`, `NeedsRemoteChoiceFailClosed`,
 `NeedsMoreModeling`, `NoChange`.
 
+Runtime status (2026-09-22): the exact 50 `FanOutSafe` rows below are now the
+allow-list for move-specific multiplayer target fanout in `MonsterMoveEffects`.
+The existing single-target effect implementation is replayed in captured player-roster
+order, while shared move preamble state executes once. The remaining 4 per-target RNG,
+1 remote-choice, and 9 needs-more-modeling rows are not widened by this path.
+This is code/contract state only; no new Host/Client runtime PASS is claimed here.
+
 | Monster.Move | Native target class | Dead filtering | RNG/choice/private dependency | Solver action |
 |---|---|---|---|---|
 | `ThievingHopper.THIEVERY_MOVE` | PerTargetLoop | Explicit `target.IsDead` skip | Enumeration order; per-target deck/pet-owner resolution, `_stealPriorities`, `CombatCardGeneration` RNG, one `SwipePower` per stolen card | NeedsPerTargetRng |

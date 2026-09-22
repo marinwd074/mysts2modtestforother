@@ -2,14 +2,14 @@
 
 ## 当前技术状态
 
-### 2026-09-22 pinned monster-target 工具检查点
+### 2026-09-22 pinned monster-target runtime 检查点
 
-- 当前基线：`bd02760a`。
-- `88edb1ad` 新增 `Sts2LocalInspector --monster-move-il-output`：只读 PE/.NET metadata，先校验 pinned 0.107.1 `sts2.dll` SHA-256，再导出怪物 Move IL；`0c6c4e5c` 已把该 extractor 接进本机审计任务。
-- `304ef267` 修正 IL `InlineString` 输出格式，避免 raw-string/拼接歧义；`eb2536c7` 扩大 async state-machine 捕获，确保 `ShockingSlap` / `ThunderStrike` 这类 handler 名不含 `Move` 的怪物行动不会被漏掉。
-- `bd02760a` 预建 `docs/compat/0.107.1/MONSTER_TARGET_FANOUT_AUDIT.md`，64 个待审 move 全部列出并标记 `PENDING_PINNED_IL`；本机任务只需填 `Native target class / Dead filtering / RNG-choice-private dependency / Solver action`。
-- `be980316` 已修正多人怪物伤害路径中的无效 C# pattern；`97d0ff8d` / `8de28ae5` 已把多人牌 coverage 与 LIMITATIONS 从旧 local-player-only root 说法更新为 readable-state root + local-action scope。
-- 下一步本机 Codex：执行 `docs/multiplayer/NEXT_LOCAL_01071_MONSTER_TARGET_AUDIT.md`，产出 hash-verified IL JSON 并填写 64 行审计表；未得到 pinned DLL 证据前，不批量改 `MonsterMoveEffects` 的 Debuff/Status fanout。
+- pinned 0.107.1 IL 审计已完成：64/64 行基于 SHA-256 `a1f9e653f1e28e4076558fee1e60d218619cb7e057b887c6417f62c62c6d7a52` 的 `sts2.dll` 分类；结果为 50 `FanOutSafe`、4 `NeedsPerTargetRng`、1 `NeedsRemoteChoiceFailClosed`、9 `NeedsMoreModeling`。
+- 运行时现在只对这 50 个 `FanOutSafe` move 使用完整 `simulator.State.PlayerCreatures` fanout；继续复用现有单目标 effect 逻辑，按捕获 roster 顺序逐目标执行，不扩大 `RootActionPlayers`，也不生成队友动作。
+- 怪物自身共享 preamble 每个 move 只执行一次，避免 `TwoTailedRat.SCREECH_MOVE` 的 `_turnsUntilSummonable` 在多人 fanout 中重复递减；`OwlMagistrate.VERDICT` 的重复 Soar 清零保持幂等。
+- 静态合同直接把 runtime allow-list 与 pinned audit 的 50 行做集合相等校验；14 个非安全分类不能误入 fanout。
+- 本检查点只声明 code/contract 接线，不声明新的 Host/Client runtime PASS。下一步优先拆解 9 个 `NeedsMoreModeling` 的“目标效果 + owner-once 副作用”，能证明等价的再逐项开放；4 个 per-target RNG 与 Knowledge Demon remote choice 继续保持未扩展边界。
+
 ### 2026-09-22 readable-state 审计检查点
 
 - 当前 HEAD：`9115977e9317087afc933e9919ab2c196de77d8b`。
