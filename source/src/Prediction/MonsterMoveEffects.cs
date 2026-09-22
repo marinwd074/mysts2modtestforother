@@ -1290,6 +1290,7 @@ internal static partial class MonsterMoveEffects
                 combat.ApplyTargeted<SandpitPower>(move.Owner, player, 4, move.Owner);
                 simulator.AddToCombat<FranticEscape>(player, PileType.Draw, 3, null, CardPilePosition.Random);
                 simulator.AddToCombat<FranticEscape>(player, PileType.Discard, 3, null, CardPilePosition.Random);
+                combat.SetMonsterBool(move.Owner, "HasLiquified", true);
                 return true;
             case ("ThievingHopper", "FLUTTER_MOVE"):
                 combat.Apply<FlutterPower>(move.Owner, 5, move.Owner);
