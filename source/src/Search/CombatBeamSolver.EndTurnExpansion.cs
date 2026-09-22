@@ -12,11 +12,141 @@ internal sealed partial class CombatBeamSolver
             PlanActionKind.EndTurn,
             node.Turn,
             TurnStartChoices: choices.Count == 0 ? null : choices);
+
+        if (choices.Count == 0 && CanUseJointForecastEndTurn(node))
+        {
+            bool producedJointBranch = false;
+            foreach ((PlanAction jointAction, SimulationSnapshot jointSnapshot) in
+                     BuildJointForecastEndTurnBranches(node, action))
+            {
+                producedJointBranch = true;
+                yield return (jointAction, jointSnapshot);
+            }
+            if (producedJointBranch)
+                yield break;
+        }
+
         SimulationSnapshot snapshot = ReplayAction(node, action);
         foreach ((PlanAction resolvedAction, SimulationSnapshot resolvedSnapshot) in
                  ResolveRoundChoiceBranches(node, action, snapshot))
         {
             yield return (resolvedAction, resolvedSnapshot);
+        }
+    }
+
+    private bool CanUseJointForecastEndTurn(SearchNode node)
+    {
+        if (policy.RoutePolicy != SearchRoutePolicy.MultiplayerLocalCrossTurn)
+            return false;
+        CombatPredictionSimulator simulator =
+            (CombatPredictionSimulator)node.Snapshot.Simulator;
+        if (simulator.State.RootCapturedPlayers.Count <= 1)
+            return false;
+        SimulatedCombatState combat =
+            (SimulatedCombatState)simulator.State.CombatState;
+        // Extra turns are per-player in native multiplayer. Keep the old path until
+        // Joint forecast tracks the exact subset of players taking that extra side turn.
+        return !combat.HasPotentialExtraPlayerTurn(simulator.State.RootCapturedPlayers);
+    }
+
+    private IEnumerable<(PlanAction Action, SimulationSnapshot Snapshot)>
+        BuildJointForecastEndTurnBranches(
+            SearchNode node,
+            PlanAction action)
+    {
+        CombatPredictionSimulator source =
+            (CombatPredictionSimulator)node.Snapshot.Simulator;
+        int sourceShuffleEvents = source.ShuffleEventCount;
+        int roundHistoryEntryStart = source.History.Entries.Count;
+
+        ShadowTeammatePlanResult forecast = ShadowTeammatePlanner.BuildTeamTopKRoutes(
+            source,
+            _player,
+            node.Snapshot.ProcessedEnemyDeaths);
+
+        foreach (ShadowTeammateRoute route in forecast.Routes)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CombatPredictionSimulator simulator = route.Simulator;
+            SimulatedCombatState combat =
+                (SimulatedCombatState)simulator.State.CombatState;
+            ForkableSet<uint> processedEnemyDeaths =
+                new(route.ProcessedEnemyDeaths);
+            int shufflesCrossed = checked(
+                node.Snapshot.ShufflesCrossed
+                + simulator.ShuffleEventCount
+                - sourceShuffleEvents);
+
+            TurnStartChoiceCursor roundChoices = new(null);
+            combat.BeginActionChoices(roundChoices);
+            combat.SetActionChoiceTiming(PlanChoiceTiming.PlayerTurnEnd);
+            bool completed = true;
+            SearchBoundaryReason boundary = SearchBoundaryReason.None;
+            try
+            {
+                if (simulator.IsInProgress)
+                {
+                    int playerSideShuffleEvents = simulator.ShuffleEventCount;
+                    completed = PlayerTurnEndLifecycle.RunForecastFullPlayerSideEnd(
+                        simulator,
+                        combat,
+                        simulator.State.RootCapturedPlayers,
+                        processedEnemyDeaths,
+                        out _);
+                    shufflesCrossed = checked(
+                        shufflesCrossed
+                        + simulator.ShuffleEventCount
+                        - playerSideShuffleEvents);
+                }
+
+                if (!completed || combat.HasPendingChoice)
+                    continue;
+
+                simulator.CheckWinCondition(combat.GetPlayerTurnNumber(_player));
+                if (simulator.IsInProgress)
+                {
+                    boundary = AdvanceEnemySideAndPlayerStart(
+                        simulator,
+                        combat,
+                        simulator.State.GetPlayerCombatState(_player),
+                        node.Turn - _startTurnNumber,
+                        processedEnemyDeaths,
+                        ref shufflesCrossed,
+                        roundChoices,
+                        takingExtraTurn: false,
+                        hasActiveEmotionChip: false,
+                        roundHistoryEntryStart,
+                        turnStartChoices: null,
+                        roundCheckpointCapture: null,
+                        jointForecast: true);
+                }
+
+                _ = combat.ConsumePlayerTurnEndRequest();
+                if (boundary == SearchBoundaryReason.PendingChoice
+                    || combat.HasPendingChoice)
+                {
+                    continue;
+                }
+                if (boundary == SearchBoundaryReason.None
+                    && !SettleReplayActionBoundary(simulator, combat))
+                {
+                    continue;
+                }
+
+                int turn = combat.GetPlayerTurnNumber(_player);
+                SimulationSnapshot snapshot = Snapshot(
+                    simulator,
+                    turn,
+                    node.ActionCount + 1,
+                    shufflesCrossed,
+                    boundary,
+                    processedEnemyDeaths);
+                yield return (action, snapshot);
+            }
+            finally
+            {
+                combat.EndActionChoices();
+            }
         }
     }
 
