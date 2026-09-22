@@ -39,6 +39,9 @@
     <NoWarn>$(NoWarn);CS0436</NoWarn>
     <MemoryCleanerProject>$(MSBuildProjectDirectory)/tools/CombatSolver.MemoryCleaner/CombatSolver.MemoryCleaner.csproj</MemoryCleanerProject>
     <MemoryCleanerOutput>$(MSBuildProjectDirectory)/tools/CombatSolver.MemoryCleaner/bin/$(Configuration)/net48/CombatSolver.MemoryCleaner.exe</MemoryCleanerOutput>
+    <!-- Keep docs, tools and local/test-only trees out of SDK default item discovery.
+         Explicit tool projects/CompatibilitySmoke includes continue to opt in separately. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);docs/**;tools/**;outputs/**;.local/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <Import Project="$(RitsuLibReferencesProps)" Condition="Exists('$(RitsuLibReferencesProps)')" />

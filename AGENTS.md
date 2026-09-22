@@ -20,6 +20,14 @@
 - 正确性优先于性能；不得通过扩大 Beam、节点、时间、内存或 GC 预算掩盖模拟错误。
 - Multiplayer Lab / Probe / Advisor / Safe Execute 等能力必须按证据逐级开放；未达到既定实机证据门槛时，不把实验能力静默升级为正式玩家默认能力。
 
+## 默认上下文纪律
+
+- 新任务默认只读取：本文件、`source/AGENTS.md`、`source/docs/CODEX_HANDOFF.md`，以及任务直接涉及的源码/文档。
+- 不得为了“了解完整历史”自动批量读取 `source/docs/performance/`、`strategy/`、`audits/`、`issues/`、`releases/`、`history/`、`runtime-evidence/` 或 test-only submodule；只有定位特定回归、比较指定基线或用户明确要求时才定向读取。
+- `source/docs/TEST_MATRIX.md` 只在决定验证范围时读取；`source/docs/multiplayer/RUNBOOK.md` 只在真实 Host/Client Lab 操作前读取。
+- dated 报告、旧批次总结、旧 commit SHA 和历史 PASS 不是当前事实。当前状态以 `CODEX_HANDOFF.md` + 当前源码 + 当前验证结果为准。
+- 搜索仓库时优先 symbol/path/keyword 定向检索；禁止先把整个 docs、tools 或历史目录加载进上下文。
+
 ## Multiplayer 实机操作记忆
 
 - 任何 Multiplayer Lab / Host+Client 实机操作开始前，必须先读 `source/docs/multiplayer/RUNBOOK.md`；该文件记录已经踩过的启动/重启/Steam/证据收集事实，优先于重新试错。

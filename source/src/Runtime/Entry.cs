@@ -30,7 +30,8 @@ public static class Entry
         try
         {
             CombatBugReportPaths.EnsureOutputDirectories();
-            CombatBugReportPaths.SyncGameLogs(Path.Combine(OS.GetUserDataDir(), "logs"));
+            // Game logs are mirrored on-demand by CombatBugReportExporter.ExportCurrentAsync.
+            // Avoid enumerating/copying all native logs on every mod startup.
             logDirectory = CombatBugReportPaths.ModLogsDirectory;
         }
         catch (Exception error)

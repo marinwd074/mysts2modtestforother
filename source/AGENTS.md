@@ -48,21 +48,15 @@ Agent 可以在当前目标需要时自主：
 
 ## 4. 当前事实与检索
 
-优先使用现有真源：
+默认真源只读最小集合：
 
-- `docs/ARCHITECTURE.md`
-- `docs/TESTING_LAYERS.md`
-- `docs/TEST_MATRIX.md`
-- `docs/DEVELOPMENT_NOTES.md`
-- `docs/CODEX_HANDOFF.md`
-- `docs/compat/0.107.1/README.md`
-- `docs/CHECKPOINT_REPLAY.md`
-- `docs/HEADLESS_TESTING.md`
-- `docs/multiplayer/RUNBOOK.md`：多人实机启动的固定操作事实；进行任何 Host/Client Lab 运行前先读。
+- `docs/CODEX_HANDOFF.md`：当前状态、未完成项和下一步。
+- `docs/ARCHITECTURE.md`：只有涉及职责/状态所有权/依赖边界时读取。
+- `docs/TEST_MATRIX.md`：只有需要决定验证层级或入口时读取。
+- `docs/compat/0.107.1/README.md`：只有版本语义/兼容问题时读取。
+- `docs/multiplayer/RUNBOOK.md`：只有真实 Host/Client Lab 操作前读取。
 
-历史目录、`runtime-evidence/` 和 `.local/` 不再“默认禁止读取”。需要定位回归、比较基线或核对旧结论时可以直接定向检索；仍应避免无目的全仓库扫描。
-
-旧规则中引用的 `.agents/skills/.../SKILL.md` 当前仓库并不存在，不再把它们作为任务前置条件。
+`docs/performance/`、`strategy/`、`audits/`、`issues/`、`releases/`、`history/`、`runtime-evidence/` 和 `tools/multiplayer-lab/MultiplayerTestTools/` 都是**按需上下文**，不得在普通任务开始时整目录加载。历史结论需要追溯时优先 Git history + 精确文件，而不是把旧报告当当前规则。
 
 ## 5. 验证
 
