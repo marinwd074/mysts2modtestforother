@@ -391,4 +391,29 @@ Check(
             new(false, "remote_player_or_unknown_target")),
     "Unsupported Choice, Potion, or teammate/unknown-target boundaries stop Safe Auto instead of looping.");
 
+Check(
+    MultiplayerSafeExecutePolicy.ShouldStopSafeAutoForObservedWorldDelta(
+        safeAutoEnabled: true,
+        deploymentActive: false,
+        localPrivateChanged: true,
+        turnBoundaryChanged: false),
+    "An unowned same-turn local private mutation stops Safe Auto as manual takeover.");
+Check(
+    !MultiplayerSafeExecutePolicy.ShouldStopSafeAutoForObservedWorldDelta(
+        safeAutoEnabled: true,
+        deploymentActive: true,
+        localPrivateChanged: true,
+        turnBoundaryChanged: false)
+    && !MultiplayerSafeExecutePolicy.ShouldStopSafeAutoForObservedWorldDelta(
+        safeAutoEnabled: true,
+        deploymentActive: false,
+        localPrivateChanged: true,
+        turnBoundaryChanged: true)
+    && !MultiplayerSafeExecutePolicy.ShouldStopSafeAutoForObservedWorldDelta(
+        safeAutoEnabled: true,
+        deploymentActive: false,
+        localPrivateChanged: false,
+        turnBoundaryChanged: false),
+    "Solver-owned actions, turn boundaries, and remote-only changes do not stop Safe Auto.");
+
 Console.WriteLine($"PASS: {checks} multiplayer safe-execute policy checks");
