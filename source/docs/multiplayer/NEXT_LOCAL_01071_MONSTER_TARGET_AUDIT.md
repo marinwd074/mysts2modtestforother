@@ -1,5 +1,9 @@
 # Next local task — 0.107.1 monster target fanout audit
 
+Status: **COMPLETE — pinned 0.107.1 IL evidence captured and 64/64 rows classified.**
+Evidence: workflow run `35687197017`, artifact `monster-moves-0.107.1`, assembly SHA-256 `a1f9e653f1e28e4076558fee1e60d218619cb7e057b887c6417f62c62c6d7a52`.
+Result: 50 `FanOutSafe`, 4 `NeedsPerTargetRng`, 1 `NeedsRemoteChoiceFailClosed`, 9 `NeedsMoreModeling`. Runtime solver code was intentionally not changed in this audit task.
+
 Purpose: resolve the remaining multiplayer enemy-turn semantic gap without guessing from later game builds.
 
 ## Hard truth source
