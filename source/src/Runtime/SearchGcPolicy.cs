@@ -304,8 +304,11 @@ internal static partial class SearchGcPolicy
                                         InstallNoGcRecoveryProbe(memoryPressureSignal,
                                             noGcRegionBudgetBytes, noGcRegionLohBudgetBytes);
                                         _activeSearches++;
-                                        Entry.Logger.Info(
-                                            "[CombatSolver/Test] GC_LATENCY policy=combat_scoped_no_gc_region_reuse");
+                                        if (DetailedGcDiagnosticsEnabled)
+                                        {
+                                            Entry.Logger.Info(
+                                                                                        "[CombatSolver/Test] GC_LATENCY policy=combat_scoped_no_gc_region_reuse");
+                                        }
                                         return new ExclusiveGcSearchScope(
                                             allocatedBytesAtEntry, memoryPressureSignal, lifecycleAtEntry);
                                     }
@@ -353,15 +356,18 @@ internal static partial class SearchGcPolicy
                                 _noGcRegionAllocatedBytesAtStart = GC.GetTotalAllocatedBytes(precise: false);
                                 _lastEstablishedNoGcRegionBudgetBytesForTesting =
                                     effectiveBudget.TotalBytes;
-                                Entry.Logger.Info(
-                                    $"[CombatSolver/Test] GC_LATENCY policy=combat_scoped_no_gc_region " +
-                                    $"configured_budget={noGcRegionBudgetBytes} " +
-                                    $"effective_budget={effectiveBudget.TotalBytes} " +
-                                    $"effective_loh_budget={effectiveBudget.LohBytes} " +
-                                    $"system_memory_load={effectiveBudget.MemoryLoadBytes} " +
-                                    $"system_memory_limit={effectiveBudget.SystemMemoryLimitBytes} " +
-                                    $"capped={effectiveBudget.Capped.ToString().ToLowerInvariant()} " +
-                                    $"current={GCSettings.LatencyMode}");
+                                if (DetailedGcDiagnosticsEnabled)
+                                {
+                                    Entry.Logger.Info(
+                                                                        $"[CombatSolver/Test] GC_LATENCY policy=combat_scoped_no_gc_region " +
+                                                                        $"configured_budget={noGcRegionBudgetBytes} " +
+                                                                        $"effective_budget={effectiveBudget.TotalBytes} " +
+                                                                        $"effective_loh_budget={effectiveBudget.LohBytes} " +
+                                                                        $"system_memory_load={effectiveBudget.MemoryLoadBytes} " +
+                                                                        $"system_memory_limit={effectiveBudget.SystemMemoryLimitBytes} " +
+                                                                        $"capped={effectiveBudget.Capped.ToString().ToLowerInvariant()} " +
+                                                                        $"current={GCSettings.LatencyMode}");
+                                }
                             }
                             else
                             {
@@ -370,14 +376,17 @@ internal static partial class SearchGcPolicy
                                 _noGcRegionBudgetBytes = 0;
                                 _noGcRegionLohBudgetBytes = 0;
                                 RestoreLatencyModeLocked();
-                                Entry.Logger.Info(
-                                    $"[CombatSolver/Test] GC_LATENCY policy=no_gc_region_unavailable " +
-                                    $"reason={FormatStartOutcome(startOutcome)} " +
-                                    $"configured_budget={noGcRegionBudgetBytes} " +
-                                    $"effective_budget={effectiveBudget.TotalBytes} " +
-                                    $"system_memory_load={effectiveBudget.MemoryLoadBytes} " +
-                                    $"system_memory_limit={effectiveBudget.SystemMemoryLimitBytes} " +
-                                    $"fallback={GCSettings.LatencyMode}");
+                                if (DetailedGcDiagnosticsEnabled)
+                                {
+                                    Entry.Logger.Info(
+                                                                        $"[CombatSolver/Test] GC_LATENCY policy=no_gc_region_unavailable " +
+                                                                        $"reason={FormatStartOutcome(startOutcome)} " +
+                                                                        $"configured_budget={noGcRegionBudgetBytes} " +
+                                                                        $"effective_budget={effectiveBudget.TotalBytes} " +
+                                                                        $"system_memory_load={effectiveBudget.MemoryLoadBytes} " +
+                                                                        $"system_memory_limit={effectiveBudget.SystemMemoryLimitBytes} " +
+                                                                        $"fallback={GCSettings.LatencyMode}");
+                                }
                             }
                             if (_noGcRegionActive)
                             {
@@ -481,8 +490,11 @@ internal static partial class SearchGcPolicy
                     _activeSearches++;
                     _defaultGcSearches++;
                     memoryPressureSignal.Disable();
-                    Entry.Logger.Info(
-                        "[CombatSolver/Test] GC_LATENCY policy=clr_default no_gc_enabled=false");
+                    if (DetailedGcDiagnosticsEnabled)
+                    {
+                        Entry.Logger.Info(
+                                                "[CombatSolver/Test] GC_LATENCY policy=clr_default no_gc_enabled=false");
+                    }
                     return new DefaultGcSearchScope(lifecycleAtEntry);
                 }
             }
@@ -914,11 +926,14 @@ internal static partial class SearchGcPolicy
                 _deferredReclaimCompletion = new TaskCompletionSource(
                     TaskCreationOptions.RunContinuationsAsynchronously);
                 _deferredReclaimTask = _deferredReclaimCompletion.Task;
-                Entry.Logger.Info(
-                    $"[CombatSolver/Test] MEMORY_RECLAIM stage=deferred " +
-                    $"reason={reason} active_searches={_activeSearches} " +
-                    $"gen2_required={_reclaimRequired.ToString().ToLowerInvariant()} " +
-                    DescribeProcessMemory());
+                if (DetailedGcDiagnosticsEnabled)
+                {
+                    Entry.Logger.Info(
+                                        $"[CombatSolver/Test] MEMORY_RECLAIM stage=deferred " +
+                                        $"reason={reason} active_searches={_activeSearches} " +
+                                        $"gen2_required={_reclaimRequired.ToString().ToLowerInvariant()} " +
+                                        DescribeProcessMemory());
+                }
             }
             return _deferredReclaimTask;
         }
@@ -932,11 +947,14 @@ internal static partial class SearchGcPolicy
             _reclaimCompletion = new TaskCompletionSource(
                 TaskCreationOptions.RunContinuationsAsynchronously);
             _reclaimTask = _reclaimCompletion.Task;
-            Entry.Logger.Info(
-                $"[CombatSolver/Test] MEMORY_RECLAIM stage=requested " +
-                $"id={_activeReclaimSequence} reason={reason} active_searches={_activeSearches} " +
-                $"gen2_required={_reclaimRequired.ToString().ToLowerInvariant()} " +
-                DescribeProcessMemory());
+            if (DetailedGcDiagnosticsEnabled)
+            {
+                Entry.Logger.Info(
+                                $"[CombatSolver/Test] MEMORY_RECLAIM stage=requested " +
+                                $"id={_activeReclaimSequence} reason={reason} active_searches={_activeSearches} " +
+                                $"gen2_required={_reclaimRequired.ToString().ToLowerInvariant()} " +
+                                DescribeProcessMemory());
+            }
         }
         if (!_reclaimActive
             && _activeSearches == 0
@@ -972,11 +990,14 @@ internal static partial class SearchGcPolicy
         _activeReclaimSequence = checked(++_nextReclaimSequence);
         _reclaimCompletion = completion;
         _reclaimTask = completion.Task;
-        Entry.Logger.Info(
-            $"[CombatSolver/Test] MEMORY_RECLAIM stage=requested " +
-            $"id={_activeReclaimSequence} reason={reason} active_searches=0 " +
-            $"gen2_required={_reclaimRequired.ToString().ToLowerInvariant()} " +
-            "source=deferred " + DescribeProcessMemory());
+        if (DetailedGcDiagnosticsEnabled)
+        {
+            Entry.Logger.Info(
+                        $"[CombatSolver/Test] MEMORY_RECLAIM stage=requested " +
+                        $"id={_activeReclaimSequence} reason={reason} active_searches=0 " +
+                        $"gen2_required={_reclaimRequired.ToString().ToLowerInvariant()} " +
+                        "source=deferred " + DescribeProcessMemory());
+        }
     }
 
     private static void RequireCollectionAfterNextReferenceReleaseLocked()
@@ -1042,13 +1063,16 @@ internal static partial class SearchGcPolicy
             _backgroundReclaimStartedCountForTesting++;
         else
             _noGcRegionExitWithoutCollectionCountForTesting++;
-        Entry.Logger.Info(
-            $"[CombatSolver/Test] MEMORY_RECLAIM stage=started " +
-            $"id={reclaimSequence} reason={reason} gen2_required={collectGeneration2.ToString().ToLowerInvariant()} " +
-            $"end_no_gc={endNoGcRegion.ToString().ToLowerInvariant()} " +
-            $"region_allocated={regionAllocatedBytes} region_budget={regionBudgetBytes} " +
-            $"largest_search_allocated={largestSearchAllocatedBytes} " +
-            DescribeProcessMemory());
+        if (DetailedGcDiagnosticsEnabled)
+        {
+            Entry.Logger.Info(
+                        $"[CombatSolver/Test] MEMORY_RECLAIM stage=started " +
+                        $"id={reclaimSequence} reason={reason} gen2_required={collectGeneration2.ToString().ToLowerInvariant()} " +
+                        $"end_no_gc={endNoGcRegion.ToString().ToLowerInvariant()} " +
+                        $"region_allocated={regionAllocatedBytes} region_budget={regionBudgetBytes} " +
+                        $"largest_search_allocated={largestSearchAllocatedBytes} " +
+                        DescribeProcessMemory());
+        }
 
         _ = Task.Run(async () =>
         {
@@ -1067,10 +1091,13 @@ internal static partial class SearchGcPolicy
                     EndNoGcRegion();
                 if (restoreLatencyMode)
                     GCSettings.LatencyMode = previousMode;
-                Entry.Logger.Info(
-                    $"[CombatSolver/Test] MEMORY_RECLAIM stage=region_exited " +
-                    $"id={reclaimSequence} reason={reason} " +
-                    DescribeProcessMemory());
+                if (DetailedGcDiagnosticsEnabled)
+                {
+                    Entry.Logger.Info(
+                                        $"[CombatSolver/Test] MEMORY_RECLAIM stage=region_exited " +
+                                        $"id={reclaimSequence} reason={reason} " +
+                                        DescribeProcessMemory());
+                }
 
                 BackgroundGen2Completion completedCollection = default;
                 int generation2CollectionsBefore = GC.CollectionCount(GC.MaxGeneration);
@@ -1086,10 +1113,13 @@ internal static partial class SearchGcPolicy
                         collectionCoverageEpoch = _referenceReleaseEpoch;
                         _activeGeneration2CoverageEpoch = collectionCoverageEpoch;
                     }
-                    Entry.Logger.Info(
-                        $"[CombatSolver/Test] MEMORY_RECLAIM stage=gen2_started " +
-                        $"id={reclaimSequence} reason={reason} coverage_epoch={collectionCoverageEpoch} " +
-                        DescribeProcessMemory());
+                    if (DetailedGcDiagnosticsEnabled)
+                    {
+                        Entry.Logger.Info(
+                                                $"[CombatSolver/Test] MEMORY_RECLAIM stage=gen2_started " +
+                                                $"id={reclaimSequence} reason={reason} coverage_epoch={collectionCoverageEpoch} " +
+                                                DescribeProcessMemory());
+                    }
                     await PauseGeneration2CoverageForTestingAsync(
                         afterCoverageCapture: true);
                     completedCollection = trimWorkingSet
@@ -1200,10 +1230,13 @@ internal static partial class SearchGcPolicy
                     if (failure == null && (_regionExitRequired || _reclaimRequired))
                         RequestReclaimLocked(_reclaimReason);
                 }
-                Entry.Logger.Info(
-                    $"[CombatSolver/Test] MEMORY_RECLAIM stage=finished " +
-                    $"id={reclaimSequence} reason={reason} success={(failure == null).ToString().ToLowerInvariant()} " +
-                    DescribeProcessMemory());
+                if (DetailedGcDiagnosticsEnabled)
+                {
+                    Entry.Logger.Info(
+                                        $"[CombatSolver/Test] MEMORY_RECLAIM stage=finished " +
+                                        $"id={reclaimSequence} reason={reason} success={(failure == null).ToString().ToLowerInvariant()} " +
+                                        DescribeProcessMemory());
+                }
                 if (failure == null)
                 {
                     completion.SetResult();
@@ -1433,14 +1466,20 @@ internal static partial class SearchGcPolicy
             }
             if (_noGcRegionActive)
             {
-                Entry.Logger.Info(
-                    "[CombatSolver/Test] GC_LATENCY no_gc_region_retained_until_combat_reset=true");
+                if (DetailedGcDiagnosticsEnabled)
+                {
+                    Entry.Logger.Info(
+                                        "[CombatSolver/Test] GC_LATENCY no_gc_region_retained_until_combat_reset=true");
+                }
                 return;
             }
             RestoreLatencyModeLocked();
-            Entry.Logger.Info(
-                $"[CombatSolver/Test] GC_LATENCY exit restored={GCSettings.LatencyMode} " +
-                $"entry={_previousMode}");
+            if (DetailedGcDiagnosticsEnabled)
+            {
+                Entry.Logger.Info(
+                                $"[CombatSolver/Test] GC_LATENCY exit restored={GCSettings.LatencyMode} " +
+                                $"entry={_previousMode}");
+            }
         }
     }
 
@@ -1504,13 +1543,16 @@ internal static partial class SearchGcPolicy
                 ? CalculateReusableHeapBytes(memory.HeapSizeBytes, memory.FragmentedBytes,
                     GC.GetTotalMemory(forceFullCollection: false))
                 : 0);
-        Entry.Logger.Info(
-            $"[CombatSolver/Test] GC_SEARCH_ALLOCATION_LIMIT limit={allocationLimitBytes} " +
-            $"remaining_region={remainingRegionBytes} region_budget={regionBudgetBytes} " +
-            $"loh_budget={lohBudgetBytes} configured_budget={configuredRegionBudgetBytes} " +
-            $"system_memory_load={memory.MemoryLoadBytes} " +
-            $"system_pressure_source={(OperatingSystem.IsWindows() ? "physical" : "allocation_projection")} " +
-            $"system_memory_limit={systemMemoryLimitBytes}");
+        if (DetailedGcDiagnosticsEnabled)
+        {
+            Entry.Logger.Info(
+                        $"[CombatSolver/Test] GC_SEARCH_ALLOCATION_LIMIT limit={allocationLimitBytes} " +
+                        $"remaining_region={remainingRegionBytes} region_budget={regionBudgetBytes} " +
+                        $"loh_budget={lohBudgetBytes} configured_budget={configuredRegionBudgetBytes} " +
+                        $"system_memory_load={memory.MemoryLoadBytes} " +
+                        $"system_pressure_source={(OperatingSystem.IsWindows() ? "physical" : "allocation_projection")} " +
+                        $"system_memory_limit={systemMemoryLimitBytes}");
+        }
     }
 
     private static bool HasUnexpectedNoGcLoss()
@@ -1804,19 +1846,7 @@ internal static partial class SearchGcPolicy
         }
     }
 
-    private static string DescribeProcessMemory()
-    {
-        GCMemoryInfo memory = GC.GetGCMemoryInfo();
-        using Process process = Process.GetCurrentProcess();
-        process.Refresh();
-        return $"working_set={process.WorkingSet64} private_bytes={process.PrivateMemorySize64} " +
-               $"managed_live={GC.GetTotalMemory(forceFullCollection: false)} " +
-               $"managed_heap={memory.HeapSizeBytes} fragmented={memory.FragmentedBytes} managed_committed={memory.TotalCommittedBytes} " +
-               $"memory_load={memory.MemoryLoadBytes} high_memory_threshold={memory.HighMemoryLoadThresholdBytes} " +
-               $"total_available={memory.TotalAvailableMemoryBytes} " +
-               $"gen0={GC.CollectionCount(0)} gen1={GC.CollectionCount(1)} gen2={GC.CollectionCount(2)} " +
-               $"latency={GCSettings.LatencyMode} tick_ms={Environment.TickCount64}";
-    }
+
 
     private static NoGcRegionStartOutcome TryStartNoGcRegion(
         long totalSize,
@@ -1913,8 +1943,11 @@ internal static partial class SearchGcPolicy
                 GC.GetTotalMemory(forceFullCollection: false))
             : 0;
         long effectiveBudget = CalculateAllocationCapacity(configuredBudgetBytes, systemLimit, memoryLoad, reusableHeap);
-        Entry.Logger.Info($"[CombatSolver/Test] GC_ALLOCATION_CAPACITY physical_load={memoryLoad} " +
-            $"system_limit={systemLimit} reusable_heap={reusableHeap} effective_budget={effectiveBudget}");
+        if (DetailedGcDiagnosticsEnabled)
+        {
+            Entry.Logger.Info($"[CombatSolver/Test] GC_ALLOCATION_CAPACITY physical_load={memoryLoad} " +
+                        $"system_limit={systemLimit} reusable_heap={reusableHeap} effective_budget={effectiveBudget}");
+        }
         if (effectiveBudget < MinimumNoGcRegionBudgetBytes)
             effectiveBudget = 0;
         long effectiveLohBudget = effectiveBudget == 0

@@ -4,6 +4,14 @@
 > 基础代码仍以 CombatSolver 0.40.2 为起点；本表只描述这个 fork 从开始改造后的能力演进。  
 > 版本号按里程碑归并，不要求一版对应一个 commit。细节需要时再查对应 Git 历史。
 
+## v0.19 — GC 热路径诊断降噪
+**2026-09-22**
+
+- 高频 `GC_LATENCY`、搜索分配预算和 `MEMORY_RECLAIM` 阶段追踪改为详细诊断模式才写入。
+- 正常游戏不再为这些日志反复构造长字符串或调用 `Process.Refresh()`/进程内存采样；GC 决策本身完全不变。
+- 无人测试、存在 `performance-recording.json`，或设置 `COMBATSOLVER_GC_DIAGNOSTICS=1` 时自动保留完整详细追踪。
+- 错误/警告、等待、手动 GC 和最终回收结果日志仍保持默认可见。
+
 ## v0.18 — GC Policy 测试接口模块化
 **2026-09-22**
 

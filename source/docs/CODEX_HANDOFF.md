@@ -40,6 +40,7 @@
 - 问题包的 Godot 游戏日志只在真正导出问题包时同步，不再在 Mod 初始化时复制。
 - 不通过增加搜索时间、Beam、内存或 GC 预算掩盖正确性问题。
 - v0.18 起 `SearchGcPolicy` 的测试暂停/故障注入/计数接口独立到 `SearchGcPolicy.TestHooks.cs`；主文件只维护真实 GC 策略。
+- v0.19 起高频 GC 详细追踪默认关闭；`COMBATSOLVER_GC_DIAGNOSTICS=1`、performance recording 或无人测试会重新开启，GC 行为不变。
 
 ## 验证入口
 
