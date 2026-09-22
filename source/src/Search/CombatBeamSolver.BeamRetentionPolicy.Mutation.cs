@@ -1634,10 +1634,11 @@ internal sealed partial class CombatBeamSolver
             // Round-robin outcomes across source families. If the fairest packet cannot fit a
             // hard lease/layer bound, the caller can try the next family rather than repeatedly
             // starving every admissible fallback behind one impossible packet.
+            int roundCount = 0;
+            foreach (var family in families)
+                roundCount = Math.Max(roundCount, family.Candidates.Count);
             List<T> ordered = new(representatives.Count);
-            for (int round = 0;
-                 families.Any(family => round < family.Candidates.Count);
-                 round++)
+            for (int round = 0; round < roundCount; round++)
             {
                 foreach (var family in families)
                 {

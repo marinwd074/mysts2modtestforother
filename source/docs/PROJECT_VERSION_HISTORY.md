@@ -4,6 +4,13 @@
 > 基础代码仍以 CombatSolver 0.40.2 为起点；本表只描述这个 fork 从开始改造后的能力演进。  
 > 版本号按里程碑归并，不要求一版对应一个 commit。细节需要时再查对应 Git 历史。
 
+## v0.23 — Ordered Mutation companion 扫描优化
+**2026-09-22**
+
+- `TrySelectOrderedMutationSemanticCompanion` 不再先排序/物化全部 distinct outcome；改为 outcome 分组后直接单遍按“最大 semantic distance + quality tie-break”选择。
+- coverage round-robin 预先计算最大轮数，去掉每一轮重复的 `families.Any(...)` 扫描。
+- outcome 去重、质量比较、distance tie-break 与 round-robin 输出顺序保持不变。
+
 ## v0.22 — Ordered Mutation 组内代表选择优化
 **2026-09-22**
 

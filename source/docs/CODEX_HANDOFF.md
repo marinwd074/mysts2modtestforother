@@ -44,6 +44,7 @@
 - v0.20 将 ordered-mutation retention 中 3 处只为选最佳项而产生的 List/排序改为稳定单遍扫描；排名和 tie-break 不变。
 - v0.21 继续把 continuation quality leader 与 admission claim coalesce 改为单遍扫描，减少排序、List 和重复枚举；优先级不变。
 - v0.22 将 3 处 outcome-group 的 `OrderBy(...).First()` 改为稳定单遍 representative 选择；组间排序不变。
+- v0.23 将 semantic companion 最终选择改为分组后单遍扫描，并把 coverage round-robin 的逐轮 `Any` 改为一次最大轮数计算；选择/tie-break/输出顺序不变。
 
 ## 验证入口
 
