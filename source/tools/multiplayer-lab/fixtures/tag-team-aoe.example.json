@@ -4,7 +4,6 @@
   "waitFor": "local_playable_turn",
   "commands": [
     "energy 10",
-    "card TAG_TEAM hand",
     "card HYPERBEAM hand"
   ]
 }
