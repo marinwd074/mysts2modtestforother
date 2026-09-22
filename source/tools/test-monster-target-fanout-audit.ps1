@@ -153,13 +153,13 @@ foreach ($move in $runtimePairs.Keys) {
         throw "Runtime fanout contains a move not classified FanOutSafe by pinned IL: $move"
     }
 }
-if ($runtimeMainText.Contains('private static bool IsPinnedSimpleFanOutSafe')
-    -or $runtimeMainText.Contains('private enum MultiplayerTargetMode')) {
+if (($runtimeMainText.Contains('private static bool IsPinnedSimpleFanOutSafe')) -or
+    ($runtimeMainText.Contains('private enum MultiplayerTargetMode'))) {
     throw 'Multiplayer monster target routing leaked back into MonsterMoveEffects.cs.'
 }
-if (-not $runtimeTargetsText.Contains('private enum MultiplayerTargetMode')
-    -or -not $runtimeTargetsText.Contains('ApplyPerPlayerTargets(')
-    -or -not $runtimeTargetsText.Contains('ResolveMultiplayerTargetMode(')) {
+if ((-not $runtimeTargetsText.Contains('private enum MultiplayerTargetMode')) -or
+    (-not $runtimeTargetsText.Contains('ApplyPerPlayerTargets(')) -or
+    (-not $runtimeTargetsText.Contains('ResolveMultiplayerTargetMode('))) {
     throw 'Dedicated multiplayer monster target dispatcher is incomplete.'
 }
 
