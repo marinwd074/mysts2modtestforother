@@ -101,6 +101,32 @@ pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
 
 然后再进行 Host/Join/Ready 和对应 Smoke。
 
+## 完整 GM Console 测试源码
+
+为了后续多人测试方便，完整 `TheBookOfAges / GM Console` 已作为 **test-only submodule**
+接入：
+
+`source/tools/multiplayer-lab/MultiplayerTestTools/TheBookOfAges`
+
+固定上游 commit：
+
+`234a74ccbaf46d7e385ed318c64857f1f7a90cae`
+
+这次不再裁掉 UI：保留原作者的 GM 页面、图片、本地化、卡牌/能力/药水/遗物/怪物等工具，
+以及其多人 `GameAction / INetAction / ActionQueueSynchronizer` 同步实现。该模块不进入
+CombatSolver 正式项目或发布包；未来测试结束可直接删除整个 `MultiplayerTestTools`
+目录和 submodule 记录。
+
+首次本机使用：
+
+~~~powershell
+git submodule update --init --recursive -- source/tools/multiplayer-lab/MultiplayerTestTools/TheBookOfAges
+~~~
+
+运行时仍可用 `install-the-book-of-ages.ps1` 从 Steam Workshop 已构建版本部署到所有
+Host/Client；需要修改测试控制台行为时，直接在该 test-only submodule/source 工作并单独构建，
+不要把 GM 功能编进 CombatSolver 主程序集。
+
 ## TheBookOfAges / GM Console（推荐多人测试工具）
 
 已选用现成的 **岁月史书 TheBookOfAges / GM Console** 作为下一阶段多人测试控制台。

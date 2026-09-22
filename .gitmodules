@@ -1,0 +1,3 @@
+[submodule "source/tools/multiplayer-lab/MultiplayerTestTools/TheBookOfAges"]
+	path = source/tools/multiplayer-lab/MultiplayerTestTools/TheBookOfAges
+	url = https://github.com/253506088/TheBookOfAges-public.git

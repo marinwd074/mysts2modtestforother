@@ -2,6 +2,13 @@
 
 ## 当前技术状态
 
+### 2026-09-22 TheBookOfAges 完整 UI 测试集成
+
+- 用户确认已取得上游作者许可；不再只保留最小同步代码，改为保留完整 GM Console UI 和主要测试功能。
+- 完整上游仓库作为 test-only submodule 接入 `source/tools/multiplayer-lab/MultiplayerTestTools/TheBookOfAges`，固定 commit `234a74ccbaf46d7e385ed318c64857f1f7a90cae`；包含 UI、图片、本地化、Services、GameActions 及多人网络同步实现。
+- 该模块不引用进 CombatSolver 正式 csproj/solution、不进入发布包，只服务 Multiplayer Lab；未来不用时可以整块删除。
+- 现有 Workshop 安装脚本继续用于快速部署作者已构建版本到 Host/Client；需要定制 fixture 时再在 test-only 源码中改并单独构建。
+
 ### 2026-09-22 TheBookOfAges 多人测试控制台接入
 
 - 选定现成 `TheBookOfAges / GM Console` 作为多人 fixture 控制台候选。作者公开页面明确标注 Multiplayer Supported；公开源码 manifest 为 `v1.0.8`、`min_game_version=0.107.1`、依赖 `BaseLib >= 3.3.0`。
