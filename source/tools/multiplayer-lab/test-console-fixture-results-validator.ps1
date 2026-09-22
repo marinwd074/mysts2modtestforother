@@ -45,6 +45,18 @@ try {
 
     [IO.File]::WriteAllLines($logPath, @(
         '[CombatSolver/MultiplayerFixture] FIXTURE_ARMED name=tag-team-basic commands=3',
+        '[CombatSolver/MultiplayerFixture] FIXTURE_COMMAND_START name=tag-team-basic index=0 command="energy 10" world_version=10',
+        '[CombatSolver/MultiplayerFixture] FIXTURE_COMMAND_RESULT name=tag-team-basic index=0 success=true message="Enqueued energy" world_version_before=10 world_version_after=11',
+        '[CombatSolver/MultiplayerFixture] FIXTURE_COMMAND_START name=tag-team-basic index=1 command="card HYPERBEAM hand" world_version=11',
+        '[CombatSolver/MultiplayerFixture] FIXTURE_COMMAND_RESULT name=tag-team-basic index=1 success=true message="Enqueued card" world_version_before=11 world_version_after=12',
+        '[CombatSolver/MultiplayerFixture] FIXTURE_COMMAND_START name=tag-team-basic index=2 command="damage 3 0" world_version=12',
+        '[CombatSolver/MultiplayerFixture] FIXTURE_COMMAND_RESULT name=tag-team-basic index=2 success=true message="Enqueued damage" world_version_before=12 world_version_after=13',
+        '[CombatSolver/MultiplayerFixture] FIXTURE_COMPLETE name=tag-team-basic commands=3 world_version=13'
+    ))
+    Invoke-Expected 1
+
+    [IO.File]::WriteAllLines($logPath, @(
+        '[CombatSolver/MultiplayerFixture] FIXTURE_ARMED name=tag-team-basic commands=3',
         '[CombatSolver/MultiplayerFixture] FIXTURE_COMMAND_START name=tag-team-basic index=0 command="energy 10" world_version=10'
     ))
     Invoke-Expected 2
