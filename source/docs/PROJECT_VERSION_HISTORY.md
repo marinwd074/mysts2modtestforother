@@ -8,6 +8,14 @@
 
 <!-- project-versions -->
 
+## 1.84 — 预测：多人怪物目标与多段攻击
+
+2026-09-22 · 大更新 · `project-v1.84`
+
+- 新增：审计 pinned 怪物目标、静态成员和可安全 fan-out 的 Move。
+- 修复：保留 per-player 与 owner-once 效果顺序、每目标 RNG 和死亡清理；未知远端 Choice 停止预测。
+- 修复：修复 Axebot Boot Up 和 Liquify 的版本语义。
+
 ## 1.74 — 预测：队友只读状态与本地行动范围
 
 2026-09-22 · 大更新 · `project-v1.74`

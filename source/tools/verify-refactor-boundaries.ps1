@@ -116,6 +116,37 @@ if ($monsterStaticValuesText.Contains('["LouseProgenitor"] = ["CurlBlock", "Grow
     $violations.Add("${monsterStaticValuesPath}: nonexistent LouseProgenitor.GrowStrength leaked into root capture")
 }
 
+$monsterMoveSemanticsPath = Join-Path $repositoryRoot 'src/Prediction/MonsterMoveSemantics.cs'
+$monsterMoveSemanticsText = [IO.File]::ReadAllText($monsterMoveSemanticsPath)
+foreach ($multiplayerMonsterAttackRule in @(
+    'simulator.State.PlayerCreatures,',
+    'public static IReadOnlyList<DamageResult> DamagePlayers(',
+    'return simulator.Damage(players, baseDamage, ValueProp.Move, attacker);',
+    'if (result.WasFullyBlocked)',
+    'bool anyPlayerAlive = false;')) {
+    if (-not $monsterMoveSemanticsText.Contains($multiplayerMonsterAttackRule)) {
+        $violations.Add("${monsterMoveSemanticsPath}: multiplayer monster attack targeting drifted '$multiplayerMonsterAttackRule'")
+    }
+}
+
+$predictionDamagePath = Join-Path $repositoryRoot 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.Damage.cs'
+$predictionDamageText = [IO.File]::ReadAllText($predictionDamagePath)
+if (-not $predictionDamageText.Contains('hookCombat.NotifyPlayerHooksDeactivated(player);')) {
+    $violations.Add("${predictionDamagePath}: simulated player death must deactivate that player's later hooks")
+}
+
+$simulatedCombatStatePath = Join-Path $repositoryRoot 'src/Search/SimulatedCombatState.cs'
+$simulatedCombatStateText = [IO.File]::ReadAllText($simulatedCombatStatePath)
+foreach ($deadPlayerHookRule in @(
+    'private bool HasInactiveCapturedPlayer()',
+    'private bool IsOwnedByInactivePlayer(AbstractModel listener)',
+    'internal void NotifyPlayerHooksDeactivated(Player player)',
+    'if (IsOwnedByInactivePlayer(listener))')) {
+    if (-not $simulatedCombatStateText.Contains($deadPlayerHookRule)) {
+        $violations.Add("${simulatedCombatStatePath}: multiplayer dead-player hook boundary drifted '$deadPlayerHookRule'")
+    }
+}
+
 $monsterMoveEffectsPath = Join-Path $repositoryRoot 'src/Prediction/MonsterMoveEffects.cs'
 $monsterMoveEffectsText = [IO.File]::ReadAllText($monsterMoveEffectsPath)
 if (-not $monsterMoveEffectsText.Contains('combat.GetMonsterStaticInt(move.Owner, "_growStrength")')) {

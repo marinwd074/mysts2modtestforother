@@ -120,6 +120,7 @@ internal sealed partial class SimulatedCombatState
             "Tunneler" => Bool("_isStunned"),
             "LagavulinMatriarch" or "SlumberingBeetle" => Bool("_isAwake"),
             "Queen" => Bool("_hasAmalgamDied"),
+            "TheInsatiable" => Bool("HasLiquified"),
             _ => "-",
         };
 
@@ -139,6 +140,7 @@ internal sealed partial class SimulatedCombatState
             "Tunneler" => Bool("_isStunned"),
             "LagavulinMatriarch" or "SlumberingBeetle" => Bool("_isAwake"),
             "Queen" => Bool("_hasAmalgamDied"),
+            "TheInsatiable" => Bool("HasLiquified"),
             _ => "-",
         };
 

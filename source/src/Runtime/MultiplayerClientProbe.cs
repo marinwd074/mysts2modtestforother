@@ -580,7 +580,7 @@ internal static class MultiplayerClientProbe
                 break;
             case MadScience madScience:
                 fingerprint.Add((int)madScience.TinkerTimeType);
-                fingerprint.Add(madScience.TinkerTimeRider);
+                fingerprint.Add((int)madScience.TinkerTimeRider);
                 break;
             case Rampage rampage:
                 fingerprint.Add(rampage.ExtraDamageFromPlays);
@@ -664,9 +664,6 @@ internal static class MultiplayerClientProbe
 
             switch (power)
             {
-                case RitualPower ritual:
-                    fingerprint.Add(ritual._wasJustAppliedByEnemy);
-                    break;
                 case SurroundedPower surrounded:
                     fingerprint.Add((int)surrounded.Facing);
                     break;

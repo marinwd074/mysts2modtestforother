@@ -22,7 +22,6 @@ internal static class MonsterMoveSemantics
         if (simulator.HasPendingChoice)
             return simulatedPlayer.IsDead;
         bool fullyBlockedAttack = false;
-        bool playerDied = false;
         AttackCommand? attackContext = move.AttackHits.Count > 0
             ? simulator.BeginAttackContext(
                 new AttackCommand(0m)
@@ -39,18 +38,18 @@ internal static class MonsterMoveSemantics
             foreach (ForecastAttackHit hit in move.AttackHits)
             {
                 int baseDamage = combat.AdjustMonsterMoveDamage(move.Owner, move.Move.Id, hit.BaseDamage);
-                IReadOnlyList<DamageResult> results = DamagePlayer(
+                IReadOnlyList<DamageResult> results = DamagePlayers(
                     simulator,
                     combat,
                     move.Owner,
-                    player,
+                    simulator.State.PlayerCreatures,
                     baseDamage);
                 if (simulator.HasPendingChoice)
                     return simulatedPlayer.IsDead;
                 simulator.AddAttackContextHit(attackContext!, results);
                 foreach (DamageResult result in results)
                 {
-                    if (ReferenceEquals(result.Receiver, player) && result.WasFullyBlocked)
+                    if (result.WasFullyBlocked)
                         fullyBlockedAttack = true;
                 }
                 CorePowerSupport.ApplyEnemyDeathPowers(
@@ -60,12 +59,18 @@ internal static class MonsterMoveSemantics
                     processedEnemyDeaths);
                 if (simulator.HasPendingChoice)
                     return simulatedPlayer.IsDead;
-                if (simulatedPlayer.IsDead)
+                // FromMonster recomputes the living player target set for every hit. The local
+                // solver owner dying does not end a multiplayer combat while a teammate survives,
+                // so later hits must still reach the remaining players.
+                bool anyPlayerAlive = false;
+                foreach (Creature candidate in simulator.State.PlayerCreatures)
                 {
-                    playerDied = true;
+                    if (!simulator.State.GetCreature(candidate).IsAlive)
+                        continue;
+                    anyPlayerAlive = true;
                     break;
                 }
-                if (simulator.State.GetCreature(move.Owner).IsDead)
+                if (!anyPlayerAlive || simulator.State.GetCreature(move.Owner).IsDead)
                     break;
             }
 
@@ -79,8 +84,6 @@ internal static class MonsterMoveSemantics
 
         if (simulator.HasPendingChoice)
             return simulatedPlayer.IsDead;
-        if (playerDied)
-            return true;
         if (fullyBlockedAttack && combat.GetAmount<ImbalancedPower>(move.Owner) > 0)
         {
             if (move.Owner.Monster is BowlbugRock)
@@ -121,14 +124,32 @@ internal static class MonsterMoveSemantics
         Creature attacker,
         Creature player,
         int baseDamage)
+        => DamagePlayers(simulator, combat, attacker, [player], baseDamage);
+
+    /// <summary>
+    /// Mirrors monster <see cref="AttackCommand"/> targeting. FromMonster targets the complete
+    /// player-creature roster in one CreatureCmd.Damage dispatch; teammate actions remain
+    /// unmodeled, but deterministic enemy damage still affects every captured player.
+    /// </summary>
+    public static IReadOnlyList<DamageResult> DamagePlayers(
+        CombatPredictionSimulator simulator,
+        SimulatedCombatState combat,
+        Creature attacker,
+        IReadOnlyList<Creature> players,
+        int baseDamage)
     {
-        Creature? osty = player.Player is { } owner ? simulator.State.GetOsty(owner) : null;
-        int? suppressedDieForYou = null;
-        if (osty != null
-            && simulator.State.GetCreature(osty).IsDead
-            && combat.GetAmount<DieForYouPower>(osty) is > 0 and var amount)
+        List<(Creature Osty, int Amount)>? suppressedDieForYou = null;
+        foreach (Creature target in players)
         {
-            suppressedDieForYou = amount;
+            Creature? osty = target.Player is { } owner ? simulator.State.GetOsty(owner) : null;
+            if (osty == null || !simulator.State.GetCreature(osty).IsDead)
+                continue;
+
+            int amount = combat.GetAmount<DieForYouPower>(osty);
+            if (amount <= 0)
+                continue;
+
+            (suppressedDieForYou ??= []).Add((osty, amount));
             combat.SetAmount<DieForYouPower>(osty, 0);
         }
 
@@ -137,13 +158,16 @@ internal static class MonsterMoveSemantics
             using (simulator.PushDamageSource(
                 CombatDamageSource.For(CombatDamageSourceKind.MonsterMove, attacker.Monster?.Id.Entry)))
             {
-                return simulator.Damage(player, baseDamage, ValueProp.Move, attacker);
+                return simulator.Damage(players, baseDamage, ValueProp.Move, attacker);
             }
         }
         finally
         {
-            if (suppressedDieForYou is { } restoredAmount)
-                combat.SetAmount<DieForYouPower>(osty!, restoredAmount);
+            if (suppressedDieForYou != null)
+            {
+                foreach ((Creature osty, int amount) in suppressedDieForYou)
+                    combat.SetAmount<DieForYouPower>(osty, amount);
+            }
         }
     }
 }

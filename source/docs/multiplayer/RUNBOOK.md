@@ -319,8 +319,8 @@ pwsh -NoLogo -NoProfile -File .\validate-safe-auto-results.ps1 `
 PASS 必须同时证明：Safe Auto 在测量窗口只启用一次；至少 3 个 distinct request/turn；
 3 个回合都有自动 arm、Safe EndTurn、fresh Probe/capture 和 fresh search；启用后没有新的
 `UI_ACTION action=deploy`；没有 `MP_SAFE_AUTO_STOP`、远端部署中止、旧 request 复用或
-自定义网络路径。当前只有 code/contract/CI 证据，**真实 Host/Client Safe Auto Smoke 尚未
-完成，不得提前记 runtime PASS**。
+自定义网络路径。2026-09-22 真实 Host/Client 三回合 Smoke 已通过上述验证器，
+结果见 [`evidence/safe-auto-runtime-2026-09-22.json`](evidence/safe-auto-runtime-2026-09-22.json)。
 
 ## MP-2A 收尾
 

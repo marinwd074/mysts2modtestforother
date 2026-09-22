@@ -1698,7 +1698,10 @@ internal sealed partial class SimulatedCombatState
         if (CanReuseHookListenerCache && _effectiveRunHookListeners != null)
             return _effectiveRunHookListeners;
         IReadOnlyList<AbstractModel> combatListeners = GetActiveHookListeners();
-        if (_rootRunHookListeners.Length == 0)
+        IReadOnlyList<AbstractModel> runListeners = HasInactiveCapturedPlayer()
+            ? _rootRunHookListeners.Where(listener => !IsOwnedByInactivePlayer(listener)).ToArray()
+            : _rootRunHookListeners;
+        if (runListeners.Count == 0)
         {
             _effectiveRunHookListeners = combatListeners;
             return _effectiveRunHookListeners;
@@ -1708,7 +1711,7 @@ internal sealed partial class SimulatedCombatState
         // 同一序列，把整表拷贝降成一个两字段对象。消费方（HookListenerEnumerable、无人测试
         // 的下标断言）全部按 Count/索引访问，看到的元素与顺序完全一致。
         _effectiveRunHookListeners = new ConcatenatedListenerView(
-            _rootRunHookListeners,
+            runListeners,
             combatListeners);
         return _effectiveRunHookListeners;
     }
@@ -1718,6 +1721,28 @@ internal sealed partial class SimulatedCombatState
         if (CanReuseHookListenerCache && _activeHookListeners != null)
             return _activeHookListeners;
         IReadOnlyList<AbstractModel> complete = GetEffectiveHookListeners();
+
+        // Native CombatState drops every player-owned listener once Player.DeactivateHooks runs.
+        // A multiplayer prediction must do the same after a simulated teammate death. In that
+        // uncommon state filter the complete list, including the card/orb suffix; the optimized
+        // prefix-only path remains unchanged while every captured player is alive.
+        if (HasInactiveCapturedPlayer())
+        {
+            List<AbstractModel> activeAfterPlayerDeath = new(complete.Count);
+            for (int index = 0; index < complete.Count; index++)
+            {
+                AbstractModel listener = complete[index];
+                if (IsOwnedByInactivePlayer(listener))
+                    continue;
+                if (listener is PowerModel power && !ContainsCreature(power.Owner))
+                    continue;
+                activeAfterPlayerDeath.Add(listener);
+            }
+            _activeHookListenerPrefix = null;
+            _activeHookListeners = activeAfterPlayerDeath;
+            return _activeHookListeners;
+        }
+
         ConcatenatedListenerView? segmented = complete as ConcatenatedListenerView;
         if (segmented is not null && _activeHookListenerPrefix is { } activePrefix)
         {
@@ -1750,6 +1775,43 @@ internal sealed partial class SimulatedCombatState
             : segmented == null ? active : new ConcatenatedListenerView(active, segmented.Suffix);
         _activeHookListenerPrefix = segmented is not null ? active ?? listeners : null;
         return _activeHookListeners;
+    }
+
+    private bool HasInactiveCapturedPlayer()
+    {
+        if (_predictionState == null)
+            return false;
+        for (int index = 0; index < _rootCapturedPlayers.Count; index++)
+        {
+            if (!_predictionState.GetCreature(_rootCapturedPlayers[index].Creature).IsAlive)
+                return true;
+        }
+        return false;
+    }
+
+    private bool IsOwnedByInactivePlayer(AbstractModel listener)
+    {
+        if (_predictionState == null)
+            return false;
+        Player? owner = listener switch
+        {
+            PowerModel power => power.Owner.Player,
+            RelicModel relic => relic.Owner,
+            PotionModel potion => potion.Owner,
+            CardModel card => card.Owner,
+            AfflictionModel affliction when affliction.HasCard => affliction.Card.Owner,
+            EnchantmentModel enchantment when enchantment.HasCard => enchantment.Card.Owner,
+            OrbModel orb => orb.Owner,
+            _ => null,
+        };
+        return owner != null && !_predictionState.GetCreature(owner.Creature).IsAlive;
+    }
+
+    internal void NotifyPlayerHooksDeactivated(Player player)
+    {
+        if (_predictionState != null && _predictionState.GetCreature(player.Creature).IsAlive)
+            throw new InvalidOperationException("Cannot deactivate prediction hooks for a living player.");
+        InvalidateHookListeners();
     }
 
     private IReadOnlyList<AbstractModel> GetEffectiveHookListeners()

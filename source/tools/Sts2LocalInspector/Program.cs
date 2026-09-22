@@ -29,7 +29,7 @@ internal static class Program
             if (args.Contains("--self-test", StringComparer.OrdinalIgnoreCase))
                 return SelfTest();
 
-            var (gameArg, outputArg) = ParseArgs(args);
+            var (gameArg, outputArg, monsterMoveIlOutputArg, monsterStaticSourceArg) = ParseArgs(args);
             var gameDir = gameArg ?? ResolveGameDir();
             if (string.IsNullOrWhiteSpace(gameDir) || !Directory.Exists(gameDir))
             {
@@ -51,6 +51,29 @@ internal static class Program
             var result = Inspect(gameDir, dataDir, assemblyPath);
             Directory.CreateDirectory(Path.GetDirectoryName(output)!);
             File.WriteAllText(output, JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
+
+            if (!string.IsNullOrWhiteSpace(monsterMoveIlOutputArg))
+            {
+                var monsterMoveOutput = Path.GetFullPath(monsterMoveIlOutputArg);
+                var monsterMoveEvidence = MonsterMoveIlInspector.InspectPinned01071(assemblyPath);
+                Directory.CreateDirectory(Path.GetDirectoryName(monsterMoveOutput)!);
+                File.WriteAllText(
+                    monsterMoveOutput,
+                    JsonSerializer.Serialize(monsterMoveEvidence, new JsonSerializerOptions { WriteIndented = true }));
+                Console.WriteLine(
+                    "STS2_MONSTER_MOVE_IL_PASS output=" + monsterMoveOutput
+                    + " methods=" + monsterMoveEvidence.Methods.Count);
+            }
+
+            if (!string.IsNullOrWhiteSpace(monsterStaticSourceArg))
+            {
+                var sourcePath = Path.GetFullPath(monsterStaticSourceArg);
+                var validated = MonsterStaticMemberInspector.Validate(assemblyPath, sourcePath);
+                Console.WriteLine(
+                    "STS2_MONSTER_STATIC_MEMBERS_PASS source=" + sourcePath
+                    + " types=" + validated.Types
+                    + " members=" + validated.Members);
+            }
 
             Console.WriteLine("STS2_LOCAL_INSPECTOR_PASS output=" + output);
             Console.WriteLine("types=" + result.Metadata.TotalTypes
@@ -204,24 +227,44 @@ internal static class Program
         return candidates.FirstOrDefault(Directory.Exists);
     }
 
-    private static (string? GameDir, string? Output) ParseArgs(string[] args)
+    private static (
+        string? GameDir,
+        string? Output,
+        string? MonsterMoveIlOutput,
+        string? MonsterStaticSource) ParseArgs(string[] args)
     {
         string? game = null;
         string? output = null;
+        string? monsterMoveIlOutput = null;
+        string? monsterStaticSource = null;
         for (var i = 0; i < args.Length; i++)
         {
             if (args[i] == "--game-dir" && i + 1 < args.Length) game = args[++i];
             else if (args[i] == "--output" && i + 1 < args.Length) output = args[++i];
+            else if (args[i] == "--monster-move-il-output" && i + 1 < args.Length)
+                monsterMoveIlOutput = args[++i];
+            else if (args[i] == "--monster-static-source" && i + 1 < args.Length)
+                monsterStaticSource = args[++i];
             else throw new ArgumentException("Unknown or incomplete argument: " + args[i]);
         }
-        return (game, output);
+        return (game, output, monsterMoveIlOutput, monsterStaticSource);
     }
 
     private static int SelfTest()
     {
-        var metadata = ReadMetadata(typeof(Program).Assembly.Location);
-        if (metadata.TotalTypes <= 0 || string.IsNullOrWhiteSpace(JsonSerializer.Serialize(metadata))) return 1;
-        Console.WriteLine("STS2_LOCAL_INSPECTOR_SELF_TEST_PASS types=" + metadata.TotalTypes);
+        string assemblyPath = typeof(Program).Assembly.Location;
+        var metadata = ReadMetadata(assemblyPath);
+        if (metadata.TotalTypes <= 0 || string.IsNullOrWhiteSpace(JsonSerializer.Serialize(metadata)))
+            return 1;
+
+        int decodedInstructions = MonsterMoveIlInspector.SelfTestDecoder(assemblyPath);
+        if (decodedInstructions <= 0 || !MonsterStaticMemberInspector.SelfTest())
+            return 1;
+
+        Console.WriteLine(
+            "STS2_LOCAL_INSPECTOR_SELF_TEST_PASS types=" + metadata.TotalTypes
+            + " il_instructions=" + decodedInstructions
+            + " static_parser=true");
         return 0;
     }
 

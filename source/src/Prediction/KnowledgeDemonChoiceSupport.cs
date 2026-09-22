@@ -11,7 +11,8 @@ internal sealed record KnowledgeDemonChoiceRequest(
     Creature Source,
     int Counter,
     string SourceId,
-    IReadOnlyList<string> OptionIds);
+    IReadOnlyList<string> OptionIds,
+    bool IsUncontrolledRemoteChoice = false);
 
 internal static class KnowledgeDemonChoiceSupport
 {
@@ -21,6 +22,22 @@ internal static class KnowledgeDemonChoiceSupport
         [CanonicalModels.Card<Disintegration>().Id.Entry, CanonicalModels.Card<Sloth>().Id.Entry],
         [CanonicalModels.Card<Disintegration>().Id.Entry, CanonicalModels.Card<WasteAway>().Id.Entry],
     ];
+
+    public static void BlockOnUncontrolledMultiplayerChoice(
+        SimulatedCombatState combat,
+        Creature source)
+    {
+        int counter = combat.GetKnowledgeDemonCurseCounter(source);
+        if ((uint)counter >= (uint)OptionsByCounter.Length)
+            throw new InvalidOperationException($"知识恶魔诅咒计数超出范围：{counter}。");
+
+        combat.SetPendingKnowledgeDemonChoice(new KnowledgeDemonChoiceRequest(
+            source,
+            counter,
+            $"KNOWLEDGE_DEMON_REMOTE_UNCONTROLLED:{source.CombatId ?? uint.MaxValue}:{counter}",
+            [],
+            IsUncontrolledRemoteChoice: true));
+    }
 
     public static void Resolve(
         SimulatedCombatState combat,
@@ -72,6 +89,12 @@ internal static class KnowledgeDemonChoiceSupport
         KnowledgeDemonChoiceRequest request,
         SolverDisplayNames displayNames)
     {
+        if (request.IsUncontrolledRemoteChoice)
+        {
+            throw new InvalidOperationException(
+                "远端 Knowledge Demon 玩家选择不能作为本地求解器可优化分支。");
+        }
+
         List<PlanCardChoice> choices = new(request.OptionIds.Count);
         for (int optionIndex = 0; optionIndex < request.OptionIds.Count; optionIndex++)
         {
