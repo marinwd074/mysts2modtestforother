@@ -41,6 +41,7 @@ internal static class PatchRegistration
         patcher.RegisterPatch<RichTextEnvironmentLifetimePatch>();
         patcher.RegisterPatch<NodePoolSignalLifetimePatch>();
         patcher.RegisterPatch<CombatInstantModePatch>();
+        patcher.RegisterPatch<TagTeamFixtureObservationPatch>();
 #if !STS2_01071
         patcher.RegisterPatch<UnattendedTestIsolationPatch>();
         patcher.RegisterPatch<UnattendedHeadlessFtuePatch>();
