@@ -10,17 +10,28 @@ $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('combat-solver-tag-team-' + [G
 New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
 $sourceLog = Join-Path $tempRoot 'source.log'
 $attackLog = Join-Path $tempRoot 'attack.log'
+$combinedLog = Join-Path $tempRoot 'combined.log'
 
 function Invoke-Expected {
     param(
         [Parameter(Mandatory = $true)][int]$ExpectedExit,
         [Parameter(Mandatory = $true)][ValidateSet('PASS','FAIL','UNVERIFIED')][string]$ExpectedStatus
     )
+    $combined = [Collections.Generic.List[string]]::new()
+    foreach ($path in @($sourceLog, $attackLog)) {
+        if (Test-Path -LiteralPath $path) {
+            foreach ($line in Get-Content -LiteralPath $path) {
+                $combined.Add([string]$line)
+            }
+        }
+    }
+    [IO.File]::WriteAllLines($combinedLog, $combined)
+
     $output = @(& pwsh -NoLogo -NoProfile -File (Join-Path $scriptRoot 'validate-tag-team-fixture.ps1') `
-        -LogPath $sourceLog,$attackLog -Json 2>$null)
+        -LogPath $combinedLog -Json 2>$null)
     $actualExit = $LASTEXITCODE
     if ($actualExit -ne $ExpectedExit) {
-        throw "Tag Team validator returned $actualExit, expected $ExpectedExit."
+        throw "Tag Team validator returned $actualExit, expected $ExpectedExit. Output: $($output -join ' | ')"
     }
     $machine = ($output -join [Environment]::NewLine) | ConvertFrom-Json
     if ([string]$machine.status -ne $ExpectedStatus) {
