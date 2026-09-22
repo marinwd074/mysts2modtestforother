@@ -1,10 +1,9 @@
 {
   "schemaVersion": 1,
-  "name": "tag-team-basic",
+  "name": "tag-team-source",
   "waitFor": "local_playable_turn",
   "commands": [
     "energy 10",
-    "card TAG_TEAM hand",
-    "card STRIKE_IRONCLAD hand"
+    "card TAG_TEAM hand"
   ]
 }
