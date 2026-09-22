@@ -2,6 +2,13 @@
 
 ## 当前技术状态
 
+### 2026-09-22 pinned monster static-member guard 完成
+
+- Axebot 修复后，新增 `Sts2LocalInspector --monster-static-source`，直接解析 `MonsterMoveEffects.StaticValues.cs` 并对 hash-pinned 0.107.1 `sts2.dll` 元数据逐项验证怪物类型及 field/property。
+- pinned workflow Run `35691169998` 已通过真实 DLL 校验：SHA-256 `a1f9e653f1e28e4076558fee1e60d218619cb7e057b887c6417f62c62c6d7a52`，monster move IL 933 methods，static-member guard **35 types / 51 members PASS**。
+- workflow 现在在 `MonsterMoveEffects.StaticValues.cs`、`MonsterValueReader.cs` 或 inspector 变化时自动触发；普通 inspector self-test 也覆盖清单解析器。该 guard 只证明成员存在，不替代 move 数值公式 IL 审计。
+- 当前代码基线包含 `efaa9682`、`614f8e93`、`01ee3a72`。Axebot `AXEBOTS_NORMAL` 实机复测仍待本地游戏执行，不能仅凭 CI 标为 runtime PASS。
+
 ### 2026-09-22 Axebot 0.107.1 runtime 问题包修复
 
 - 用户问题包 `fcca6db5-cd96-42d4-830b-bc9b7e0112f4.zip` 在 `AXEBOTS_NORMAL` 的 AutoTurnStart 根捕获阶段稳定报 `MissingMemberException: Axebot.RespawnCount not found`，因此没有生成路线；replan 计数也保持 0，属于 search setup failure，不是 continuation/replan 问题。
