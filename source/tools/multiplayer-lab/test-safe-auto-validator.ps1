@@ -44,6 +44,12 @@ try {
     [IO.File]::WriteAllLines($fixture, $lines)
     Invoke-Validator 1
 
+    Write-PassFixture
+    $lines = [Collections.Generic.List[string]](Get-Content -LiteralPath $fixture)
+    $lines.Insert(3, '[CombatSolver/MultiplayerSafeExecute] MP_SAFE_AUTO_STOP reason=manual_local_state_change world_version=14')
+    [IO.File]::WriteAllLines($fixture, $lines)
+    Invoke-Validator 1
+
     [IO.File]::WriteAllLines($fixture, @(
         '[CombatSolver/MultiplayerSafeExecute] MP_SAFE_AUTO_ARMED source=search_completion generation=1 turn=1 world_version=1'
     ))
