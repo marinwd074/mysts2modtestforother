@@ -1659,35 +1659,26 @@ internal sealed partial class CombatBeamSolver
         {
             TOutcome anchorOutcome = outcomeSelector(anchor);
             IComparer<T> comparer = Comparer<T>.Create(comparison);
-            List<T> distinctCandidates = candidates
-                .Where(candidate => !EqualityComparer<TOutcome>.Default.Equals(
-                    outcomeSelector(candidate),
-                    anchorOutcome))
-                .GroupBy(outcomeSelector)
-                .Select(group => SelectBestByComparison(group, comparer))
-                .OrderBy(candidate => candidate, comparer)
-                .ToList();
-            if (distinctCandidates.Count == 0)
+            bool hasCompanion = false;
+            companion = default!;
+            long bestDistance = default;
+            foreach (IGrouping<TOutcome, T> outcome in candidates.GroupBy(outcomeSelector))
             {
-                companion = default!;
-                return false;
-            }
-
-            companion = distinctCandidates[0];
-            long bestDistance = semanticDistance(anchor, companion);
-            for (int index = 1; index < distinctCandidates.Count; index++)
-            {
-                T candidate = distinctCandidates[index];
+                if (EqualityComparer<TOutcome>.Default.Equals(outcome.Key, anchorOutcome))
+                    continue;
+                T candidate = SelectBestByComparison(outcome, comparer);
                 long distance = semanticDistance(anchor, candidate);
-                if (distance > bestDistance
+                if (!hasCompanion
+                    || distance > bestDistance
                     || distance == bestDistance
                         && comparison(candidate, companion) < 0)
                 {
                     companion = candidate;
                     bestDistance = distance;
+                    hasCompanion = true;
                 }
             }
-            return true;
+            return hasCompanion;
         }
 
         internal static List<T> SelectDistinctOrderedMutationCompanionPacketCandidates<
