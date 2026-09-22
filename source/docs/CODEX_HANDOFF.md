@@ -33,9 +33,9 @@
 
 ## 当前未完成
 
-1. `ShadowTeammatePlanner` 的合法动作生成层已落地：它在 detached prediction fork 上读取队友真实 Hand、动态费用和目标类型，枚举 AnyEnemy / AnyPlayer / AnyAlly 等精确目标，输出只用于预测的 `ShadowTeammateActionCandidate`；候选不生成 `PlanAction`，且若队友意外进入 `RootActionPlayers` 会直接拒绝。下一步在这些候选上实现小宽度 Top-K 分支执行/排序。
-2. 把 Shadow 队友分支接入回合推进，取消“多人遇 Shared Shuffle 必停”的主路径；每条世界线使用自身 forked RNG 继续模拟到 Victory/Death。
-3. 最终多人目标改为字典序：全队存活 → TeamLossRatio 最小 → WorstPlayerLossRatio 最小 → CombatEndedTurn 最早；真实队友行为或世界状态偏离预测后立即 Fresh Search。
+1. `ShadowTeammatePlanner` Top-K 当前回合分支已落地：每个候选都从 detached simulator `Fork()`，按单人回放同语义执行 `ManualPlay → enemy-death powers → action-boundary settle → win check`；默认 beam=4、最多 12 次动作，并始终保留“现在结束出牌”的路线。保留算法不是单一拍脑袋分数，而是对 EnemyDurability / TeamEffectiveHp / WorstPlayerEffectiveHpRatio / Stars / 动作数取 Pareto 前沿，再沿攻防前沿均匀采样 Top-K。需要显式卡牌选择的分支当前计入 `PendingChoiceBranches` 并留待复用现有 choice branching。
+2. 下一步把 Shadow Top-K 接入回合推进，取消“多人遇 Shared Shuffle 必停”的主路径；每条世界线使用自身 forked RNG 继续模拟到 Victory/Death。
+3. 完成 Joint terminal state 后，把动态斩杀策略当前的本地战损比输入替换为 TeamLossRatio / WorstPlayerLossRatio，并让真实队友行为或世界状态偏离预测后立即 Fresh Search。
 
 ## 当前开发 / 性能规则
 
