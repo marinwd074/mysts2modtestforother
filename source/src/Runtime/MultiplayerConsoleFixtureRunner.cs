@@ -27,7 +27,7 @@ internal static class MultiplayerConsoleFixtureRunner
     internal const int MaxCommandLength = 256;
 
     private static readonly HashSet<string> AllowedVerbs = new(
-        ["card", "power", "energy", "block", "potion", "draw"],
+        ["card", "power", "energy", "block", "potion", "draw", "heal", "damage"],
         StringComparer.OrdinalIgnoreCase);
     private static readonly Lazy<IReadOnlyDictionary<string, bool>> NetworkedCommands =
         new(DiscoverNetworkedCommands);
