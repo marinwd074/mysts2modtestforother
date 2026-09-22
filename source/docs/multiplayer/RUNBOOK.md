@@ -101,6 +101,57 @@ pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
 
 然后再进行 Host/Join/Ready 和对应 Smoke。
 
+## Multiplayer Console Fixture v1
+
+Console Fixture 只用于 owned `ClientCombatSolver` Multiplayer Lab 实例，用游戏自己的
+`DevConsole.ProcessCommand()` 执行命令。真实多人中，命令仍由游戏检查 `IsNetworked`，
+networked command 会走原生 `ConsoleCmdGameAction` / `ActionQueueSynchronizer`，不新增
+CombatSolver 网络协议，也不模拟键盘输入。
+
+v1 白名单：`card`、`power`、`energy`、`block`、`potion`、`draw`、`heal`、`damage`。
+`god`、`instant` 等 local-only/debug convenience 命令不允许进入 fixture。Runtime 还会
+反射确认目标游戏里的实际 command 存在且 `IsNetworked=true`，否则 fail closed。
+
+先静态验证 fixture：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-console-fixture.ps1 `
+  -FixturePath .\fixtures\tag-team-basic.example.json
+~~~
+
+然后把 fixture 交给 **正式重启后的 Solver Client**：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
+  -InstanceRoot "$labRoot\runtime-mp-client-solver" `
+  -ClientId 1000 `
+  -ForceSteamOff `
+  -MultiplayerMode safe-execute-lab `
+  -ConsoleFixturePath .\fixtures\tag-team-basic.example.json
+~~~
+
+`start-instance.ps1` 会先验证输入，并把 fixture 复制到该 owned instance 的
+`console-fixtures\active.json`；Runtime 只接受 instance root 内的路径。普通桌面启动、
+`HostVanilla`、`ClientRitsuOnly` 或缺少 probe-evidence ownership marker 的进程都不能
+执行 fixture。它不会修改正常 `settings.save`，而是在 Lab 进程内部创建允许 debug
+commands 的 `DevConsole`。
+
+进入真实多人战斗并到 Solver Client 的可操作回合后，fixture 只执行一次。日志应按顺序出现
+`FIXTURE_ARMED`、每条命令的 `FIXTURE_COMMAND_START` / `FIXTURE_COMMAND_RESULT`，最后
+`FIXTURE_COMPLETE`。运行时链路验证：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-console-fixture-results.ps1 `
+  -LogPath '<post-restart-client-log-or-journal>' `
+  -FixturePath .\fixtures\tag-team-basic.example.json `
+  -OutputPath '.\.local\multiplayer-lab\results\console-fixture-summary.json'
+~~~
+
+该 validator 的 PASS **只证明 fixture 被 Lab Runtime 完整调度**。Host/Client 的实际
+状态一致性以及 Tag Team/Beacon 等牌的语义仍需各自 differential；不得把 fixture PASS
+直接升级成多人牌 runtime PASS。
+
+
 ## MP-2 Safe Execute 正式 token Smoke
 
 正式 token 只接受明确的 `COMBATSOLVER_MULTIPLAYER_MODE=safe-execute` opt-in，

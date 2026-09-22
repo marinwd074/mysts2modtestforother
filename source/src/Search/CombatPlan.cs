@@ -1679,10 +1679,10 @@ internal sealed class SolverResult
             if (mismatch is not null)
             {
                 // ExpectedState == actual above is the hard local/enemy/RNG contract.
-                // ContinuationStamp.P also covers all public powers. Therefore a remaining
-                // remote_public_mismatch is auxiliary teammate HP/block drift; Carry Ranking
-                // v1 does not use that drift to change CarryPreference, so a full Beam rerun
-                // would throw away an otherwise exact local route without improving legality.
+                // The legacy RemotePublicFingerprint now also contains teammate cards,
+                // resources and potions that are readable in the local process. A mismatch
+                // therefore cannot be classified as harmless HP/block drift; the soft-reuse
+                // hook below intentionally fails closed and forces a fresh search.
                 if (string.Equals(
                         mismatch,
                         "remote_public_mismatch",

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "name": "tag-team-aoe",
+  "waitFor": "local_playable_turn",
+  "commands": [
+    "energy 10",
+    "card HYPERBEAM hand"
+  ]
+}

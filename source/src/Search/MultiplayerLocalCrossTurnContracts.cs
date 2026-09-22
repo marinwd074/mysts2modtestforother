@@ -132,31 +132,14 @@ internal static class MultiplayerLocalCrossTurnContracts
         => DescribeContinuationMismatch(input) is null;
 
     /// <summary>
-    /// Allows the cached local route to survive a teammate-only public HP/block delta,
-    /// but only after the caller has already proven the full local continuation stamp is
-    /// exact. Remote power changes are part of ContinuationStamp.P, so they cannot reach
-    /// this path. Combat identity, local identity, multiplayer rules and monotonic world
-    /// advancement remain hard gates.
+    /// Legacy compatibility hook. The remote fingerprint now includes every teammate
+    /// combat field already readable in the local process (cards/resources/potions in
+    /// addition to public HP/block/powers), so a mismatch can no longer be proven to be
+    /// harmless public drift. Fail closed and force a fresh search.
     /// </summary>
     internal static bool CanSoftReuseRemotePublicDelta(
         MultiplayerContinuationMatchInput input)
-        => input.ExpectedRemotePublicFingerprint != input.ActualRemotePublicFingerprint
-            && input.ActualWorldVersion > Math.Max(
-                input.ExpectedSourceWorldVersion,
-                input.MinimumWorldVersion)
-            && string.Equals(
-                input.ExpectedCombatIdentity,
-                input.ActualCombatIdentity,
-                StringComparison.Ordinal)
-            && string.Equals(
-                input.ExpectedLocalNetId,
-                input.ActualLocalNetId,
-                StringComparison.Ordinal)
-            && input.ExpectedMultiplayerScalingHooks == input.ActualMultiplayerScalingHooks
-            && string.Equals(
-                input.ExpectedCardMultiplayerConstraint,
-                input.ActualCardMultiplayerConstraint,
-                StringComparison.Ordinal);
+        => false;
 
     internal static string? DescribeContinuationMismatch(
         MultiplayerContinuationMatchInput input)

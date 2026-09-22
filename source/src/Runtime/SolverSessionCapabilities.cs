@@ -53,8 +53,8 @@ internal readonly record struct SolverSessionCapabilitySet(
 internal static class SolverSessionCapabilities
 {
     internal const string MultiplayerModeEnvironmentVariable = "COMBATSOLVER_MULTIPLAYER_MODE";
-    private const string ProbeEvidenceEnvironmentVariable = "COMBATSOLVER_MULTIPLAYER_PROBE_EVIDENCE";
-    private const string MultiplayerInstanceEnvironmentVariable = "COMBATSOLVER_MULTIPLAYER_INSTANCE";
+    internal const string ProbeEvidenceEnvironmentVariable = "COMBATSOLVER_MULTIPLAYER_PROBE_EVIDENCE";
+    internal const string MultiplayerInstanceEnvironmentVariable = "COMBATSOLVER_MULTIPLAYER_INSTANCE";
     private static readonly Lazy<bool> SafeExecuteFormalOptedIn = new(EvaluateSafeExecuteFormalOptIn);
     private static readonly Lazy<bool> SafeExecuteLabAuthorized = new(EvaluateSafeExecuteLabAuthorization);
 
@@ -116,7 +116,7 @@ internal static class SolverSessionCapabilities
         => MultiplayerSafeExecutePolicy.CanGrantFormalCapability(
             Environment.GetEnvironmentVariable(MultiplayerModeEnvironmentVariable));
 
-    private static bool IsOwnedCombatSolverClientInstance(string? instanceRoot)
+    internal static bool IsOwnedCombatSolverClientInstance(string? instanceRoot)
     {
         if (string.IsNullOrWhiteSpace(instanceRoot))
             return false;
@@ -169,7 +169,7 @@ internal static class SolverSessionCapabilities
         return string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsTruthy(string? value)
+    internal static bool IsTruthy(string? value)
         => string.Equals(value, "1", StringComparison.OrdinalIgnoreCase)
            || string.Equals(value, "true", StringComparison.OrdinalIgnoreCase)
            || string.Equals(value, "yes", StringComparison.OrdinalIgnoreCase);

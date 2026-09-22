@@ -15,12 +15,11 @@ internal sealed partial class CombatPredictionSimulator
     /// </summary>
     internal bool SimulateEndPlayerTurnBeforeOrbPassives(int playerTurn)
     {
-        // Advisor roots capture only the local player's private turn state. The
-        // public combat roster still contains teammates, but their hand/pile
-        // phases must not be materialized while searching the local turn.
+        // Multiplayer roots may read teammate state, but only the solver-owned local
+        // action scope may advance through the turn-end lifecycle.
         var playersEndingTurn = MultiplayerAdvisorBoundaryContracts.SelectEndTurnPlayers(
             State.Players,
-            State.RootCapturedPlayers);
+            State.RootActionPlayers);
 
         foreach (var player in playersEndingTurn)
         {
@@ -51,7 +50,7 @@ internal sealed partial class CombatPredictionSimulator
             return true;
         var playersEndingTurn = MultiplayerAdvisorBoundaryContracts.SelectEndTurnPlayers(
             State.Players,
-            State.RootCapturedPlayers);
+            State.RootActionPlayers);
 
         foreach (var player in playersEndingTurn)
         {

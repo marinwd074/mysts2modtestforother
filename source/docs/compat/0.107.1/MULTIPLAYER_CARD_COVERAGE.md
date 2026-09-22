@@ -1,5 +1,7 @@
 # STS2 0.107.1 multiplayer-card coverage
 
+> **2026-09-22 boundary update:** the multiplayer prediction root may capture teammate combat state that is already materialized in the local process. `RootActionPlayers` remains local-only. Teammate state is a frozen root snapshot for one search; teammate future actions are not generated. At a real later local turn, any changed readable-teammate fingerprint rejects the old continuation and forces a fresh search. A short-lived `282393c9` post-yield stale-read guard was reverted because prediction Fork/Attach itself rereads captured players and therefore incorrectly truncated valid T2/T3 local-cross-turn routes. Older `local-player-only` / `remote private not materialized` wording below is historical policy, not a claim that the client cannot hold those values.
+
 This is the source-audit ledger for every card marked multiplayer-only in the
 repository-pinned `v0.107.1` assembly. It exists so later work does not mix
 current-beta cards, later patch behavior, or teammate-private state into the
@@ -52,6 +54,114 @@ static/contract evidence, not a substitute for that differential.
 | Sneaky | apply 1/2 SneakyPower; each Attack played by another creature grants owner that much Unpowered Block | **source-confirmed** | future teammate actions are not invented by local planning; differential for observed remote Attack/Replay interactions |
 | Tag Team | attack, then instanced debuff replays a qualifying Attack by another player; consumed after modifying play count | **checked match** | existing TagTeamPower play-count mirror handles AnyEnemy and AllEnemies target semantics and consumes the instance |
 | Tank | apply TankPower; owner takes 2x Powered Attack damage and living teammates receive Guarded for 0.5x, with applier-death cleanup | **source-confirmed** | focused multiplayer differential; keep 0.107.1 2x/0.5x semantics rather than v0.108 rewrite |
+
+## Online patch-history cross-check
+
+The current multiplayer wiki mixes the target main build with later beta cards and
+later balance changes. For 0.107.1 work, use the pinned assembly above as truth and
+treat public patch history only as a cross-check.
+
+Important version traps confirmed against public patch history:
+
+- `Beacon of Hope`: v0.100 made the Power non-stacking. v0.108 then raised its
+  Energy cost from 1 to 2, so the 0.107.1 target is still the pre-v0.108 version.
+- `Believe in You`: old pre-release history includes a temporary 0 -> 1 cost
+  change, but the Early Access card was reintroduced in v0.98 and v0.100 changed
+  the granted Energy from 3/4 to 2/3. Do not reconstruct 0.107.1 from the old
+  v0.83 pre-release card.
+- `Mimic`: the old v0.74 pre-release card temporarily lost Exhaust, but Early
+  Access v0.98 reintroduced the card. In the target-era card, base Mimic has
+  Exhaust and the upgraded card removes it; do not reuse the old v0.74 result.
+- `Radiate`: v0.101 fixed multiplayer counting so Stars gained by other players
+  do not contribute. The mirror reads `GetStarsGainedThisTurn(model.Owner)`.
+- `Haunt`: v0.101 fixed it proccing when another player plays a Soul. The mirror
+  requires the Soul owner creature to equal the Haunt power owner.
+- `Huddle Up`: v0.100 added Exhaust and clarified the text to `ALL players`.
+  The draw effect remains 2/3 cards; generic card result-location handling owns
+  the Exhaust behavior.
+- `Tag Team`: v0.104 expanded Replay to attacks that deal damage to ALL enemies.
+  The 0.107.1 mirror must therefore preserve both single-enemy and all-enemy
+  qualifying attack semantics.
+- `Largesse`: v0.104 fixed ownership-sensitive interactions so Pillar of Creation,
+  Supermassive, and Arsenal proc for the player who played Largesse, not the ally
+  receiving the generated card. In the mirror, the generated card owner is the
+  selected target while `creator` remains the Largesse player; these are
+  intentionally different identities.
+- `Stratagem`: v0.104 removed the multiplayer card-pool ban after the original
+  multiplayer bug was fixed. It is not a multiplayer-exclusive card, but it is
+  legal in the 0.107.1 multiplayer colorless pool.
+- `Gold Axe`: v0.105 changed its multiplayer scaling to count cards played by ALL
+  players rather than only its owner. This is another multiplayer semantic on a
+  non-exclusive card and should not be confused with the 21-card exclusive set.
+- v0.108 added 15 more multiplayer cards (`Midnight`, `Blaze`, `Outrage`,
+  `Blade Symphony`, `Concoct`, `Fade`, `Plot`, `Constellation`, `Underworld`,
+  `Soulbound`, `Cacophony`, `Hibernate`, `One for All`, `Imitation Learning`,
+  `The Ball`). They are outside the 0.107.1 target and must not be added to this
+  coverage matrix.
+- v0.109 added `Tutor` and re-enabled Well-Laid Plans in multiplayer. Both are
+  also outside the 0.107.1 target.
+
+This cross-check is intentionally descriptive. Numeric/effect truth for the
+target remains the pinned v0.107.1 model/DLL, not the live wiki card page.
+
+## Safe Execute staging (source-only; no runtime promotion)
+
+This staging is preparation for a later multiplayer-card deployment phase. It does
+not change the current classifier: all `MultiplayerOnly` cards still fail closed
+until a later code change and Host/Client evidence explicitly promote a subset.
+
+### Stage A — local/public execution candidates
+
+These cards are the first candidates for a future source/contract-only whitelist
+because playing them does not require a teammate target or teammate-private state:
+
+- `Beacon of Hope`
+- `Flanking`
+- `Gang Up`
+- `Knockdown`
+- `Sneaky`
+- `Tag Team`
+
+They still require focused contracts before the classifier changes, and runtime
+promotion remains blocked on Host/Client evidence.
+
+### Stage B — public teammate target or intentional remote-public mutation
+
+Defer these until Safe Execute can distinguish an expected cross-player public
+mutation from unrelated remote interference:
+
+- `Coordinate`
+- `Demonic Shield`
+- `Hammer Time`
+- `Intercept`
+- `Lift`
+- `Mimic`
+- `Rally`
+- `Tank`
+
+### Stage C — keep fail closed under the local-only root contract
+
+These require remote resources or teammate-private combat state and must not be
+enabled merely by adding them to a card-name whitelist:
+
+- `Believe in You`
+- `Energy Surge`
+- `Glimpse Beyond`
+- `Huddle Up`
+- `Ignition`
+- `Largesse`
+- `Legion of Bone`
+
+### Non-exclusive multiplayer semantics already cross-checked
+
+- `Gold Axe`: finished-card count is global across the observed combat history;
+  predicted history only adds actions actually simulated on the local branch.
+- `Radiate`: Stars are counted for `model.Owner`, not all players.
+- `Haunt`: only a Soul owned by the Haunt owner can trigger the power.
+- `Strangle`: the before-play pair is created only when the card owner equals the
+  Strangle applier's player, so teammate card plays do not proc it.
+- `Stratagem`: remains implemented and is legal in the 0.107.1 multiplayer
+  colorless pool.
 
 ## Local-only policy
 
