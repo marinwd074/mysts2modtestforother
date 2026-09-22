@@ -1345,6 +1345,7 @@ internal sealed class SimulationSnapshot(
     public SearchBoundaryReason BoundaryReason { get; } = boundaryReason;
     public IReadOnlyList<PredictionGap> PredictionGaps { get; } = predictionGaps;
     public ContinuationStamp? Continuation { get; private set; }
+    public StateFingerprint? ContinuationRemoteFingerprint { get; private set; }
 
     public CombatPredictionSimulator Simulator => _simulator
         ?? throw new InvalidOperationException(
@@ -1352,8 +1353,13 @@ internal sealed class SimulationSnapshot(
 
     public bool HasSimulator => _simulator != null;
 
-    public void SetContinuation(ContinuationStamp continuation)
-        => Continuation = continuation;
+    public void SetContinuation(
+        ContinuationStamp continuation,
+        StateFingerprint? remoteFingerprint = null)
+    {
+        Continuation = continuation;
+        ContinuationRemoteFingerprint = remoteFingerprint;
+    }
 
     public void ReleaseSimulator(
         [CallerMemberName] string caller = "",
