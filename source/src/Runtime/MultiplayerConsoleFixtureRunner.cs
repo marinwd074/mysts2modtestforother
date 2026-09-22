@@ -35,6 +35,9 @@ internal static class MultiplayerConsoleFixtureRunner
 
     private static bool _scheduled;
     private static bool _terminal;
+    private static string? _activeFixtureName;
+
+    internal static string? ActiveFixtureName => _activeFixtureName;
 
     internal static void TrySchedule(CombatState state)
     {
@@ -58,6 +61,7 @@ internal static class MultiplayerConsoleFixtureRunner
             return;
         }
 
+        _activeFixtureName = fixture.Name;
         _scheduled = true;
         Entry.Logger.Info(
             $"[CombatSolver/MultiplayerFixture] FIXTURE_ARMED name={fixture.Name} commands={fixture.Commands.Length}");
