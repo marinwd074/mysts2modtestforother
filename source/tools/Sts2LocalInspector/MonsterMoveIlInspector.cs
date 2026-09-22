@@ -83,6 +83,42 @@ internal static class MonsterMoveIlInspector
         return new MonsterMoveIlEvidence(1, actualHash, methods);
     }
 
+    internal static int SelfTestDecoder(string assemblyPath)
+    {
+        using FileStream stream = File.OpenRead(assemblyPath);
+        using PEReader pe = new(stream, PEStreamOptions.LeaveOpen);
+        if (!pe.HasMetadata)
+            throw new InvalidDataException(assemblyPath + " has no .NET metadata.");
+
+        MetadataReader reader = pe.GetMetadataReader();
+        foreach (TypeDefinitionHandle typeHandle in reader.TypeDefinitions)
+        {
+            TypeDefinition type = reader.GetTypeDefinition(typeHandle);
+            if (!string.Equals(reader.GetString(type.Namespace), "Sts2LocalInspector", StringComparison.Ordinal)
+                || !string.Equals(reader.GetString(type.Name), "Program", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            foreach (MethodDefinitionHandle methodHandle in type.GetMethods())
+            {
+                MethodDefinition method = reader.GetMethodDefinition(methodHandle);
+                if (!string.Equals(reader.GetString(method.Name), "Main", StringComparison.Ordinal)
+                    || method.RelativeVirtualAddress == 0)
+                {
+                    continue;
+                }
+
+                MethodBodyBlock body = pe.GetMethodBody(method.RelativeVirtualAddress);
+                IReadOnlyList<IlInstructionEvidence> decoded =
+                    Decode(body.GetILBytes().ToArray(), reader);
+                return decoded.Count;
+            }
+        }
+
+        throw new InvalidDataException("Sts2LocalInspector.Program.Main IL body was not found.");
+    }
+
     private static bool TryGetMonsterOwner(
         MetadataReader reader,
         TypeDefinitionHandle handle,

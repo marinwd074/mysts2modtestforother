@@ -235,9 +235,18 @@ internal static class Program
 
     private static int SelfTest()
     {
-        var metadata = ReadMetadata(typeof(Program).Assembly.Location);
-        if (metadata.TotalTypes <= 0 || string.IsNullOrWhiteSpace(JsonSerializer.Serialize(metadata))) return 1;
-        Console.WriteLine("STS2_LOCAL_INSPECTOR_SELF_TEST_PASS types=" + metadata.TotalTypes);
+        string assemblyPath = typeof(Program).Assembly.Location;
+        var metadata = ReadMetadata(assemblyPath);
+        if (metadata.TotalTypes <= 0 || string.IsNullOrWhiteSpace(JsonSerializer.Serialize(metadata)))
+            return 1;
+
+        int decodedInstructions = MonsterMoveIlInspector.SelfTestDecoder(assemblyPath);
+        if (decodedInstructions <= 0)
+            return 1;
+
+        Console.WriteLine(
+            "STS2_LOCAL_INSPECTOR_SELF_TEST_PASS types=" + metadata.TotalTypes
+            + " il_instructions=" + decodedInstructions);
         return 0;
     }
 
