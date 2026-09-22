@@ -100,12 +100,17 @@ internal interface ICombatPredictionStateOwner
 internal interface ICombatPredictionRootCaptureBoundary
 {
     /// <summary>
-    /// Players whose private combat state was intentionally materialized into the root.
-    /// A multiplayer local-player projection may still expose the native public player
-    /// roster through <c>ICombatState.Players</c>, but it must never eagerly materialize
-    /// teammate piles through this boundary.
+    /// Players whose combat state was intentionally materialized into the detached root.
+    /// In multiplayer this may include every player state already readable by the local
+    /// game process.
     /// </summary>
     IReadOnlyList<MegaCrit.Sts2.Core.Entities.Players.Player> RootCapturedPlayers { get; }
+
+    /// <summary>
+    /// Players whose turn/action lifecycle the solver is allowed to advance. Read scope
+    /// is deliberately wider than action scope in multiplayer.
+    /// </summary>
+    IReadOnlyList<MegaCrit.Sts2.Core.Entities.Players.Player> RootActionPlayers { get; }
 
     void AssertCanCaptureCreature(MegaCrit.Sts2.Core.Entities.Creatures.Creature creature);
 
