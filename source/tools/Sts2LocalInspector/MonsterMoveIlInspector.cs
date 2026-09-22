@@ -67,7 +67,7 @@ internal static class MonsterMoveIlInspector
                     declaringTypeName,
                     methodName,
                     MetadataTokens.GetToken(methodHandle),
-                    Decode(body.GetILBytes().ToArray(), reader)));
+                    Decode(body.GetILBytes() ?? [], reader)));
             }
         }
 
@@ -111,7 +111,7 @@ internal static class MonsterMoveIlInspector
 
                 MethodBodyBlock body = pe.GetMethodBody(method.RelativeVirtualAddress);
                 IReadOnlyList<IlInstructionEvidence> decoded =
-                    Decode(body.GetILBytes().ToArray(), reader);
+                    Decode(body.GetILBytes() ?? [], reader);
                 return decoded.Count;
             }
         }
