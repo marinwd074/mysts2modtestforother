@@ -102,7 +102,7 @@ internal static class MultiplayerConsoleFixtureRunner
                 throw new InvalidOperationException("solver_deployment_active");
 
             await RunManager.Instance.ActionExecutor.FinishedExecutingActions().WaitAsync(token);
-            DevConsole console = new(shouldAllowDebugCommands: true);
+            DevConsole console = new(true);
 
             for (int index = 0; index < fixture.Commands.Length; index++)
             {
