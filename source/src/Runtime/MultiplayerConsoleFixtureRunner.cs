@@ -43,7 +43,7 @@ internal static class MultiplayerConsoleFixtureRunner
     {
         if (_scheduled || _terminal)
             return;
-        string? fixturePath = Environment.GetEnvironmentVariable(FixtureEnvironmentVariable);
+        string? fixturePath = System.Environment.GetEnvironmentVariable(FixtureEnvironmentVariable);
         if (string.IsNullOrWhiteSpace(fixturePath))
             return;
 
@@ -61,12 +61,14 @@ internal static class MultiplayerConsoleFixtureRunner
             return;
         }
 
-        _activeFixtureName = fixture.Name;
+        MultiplayerConsoleFixtureDefinition executionFixture = fixture
+            ?? throw new InvalidOperationException("fixture_missing_after_validation");
+        _activeFixtureName = executionFixture.Name;
         _scheduled = true;
         Entry.Logger.Info(
-            $"[CombatSolver/MultiplayerFixture] FIXTURE_ARMED name={fixture.Name} commands={fixture.Commands.Length}");
+            $"[CombatSolver/MultiplayerFixture] FIXTURE_ARMED name={executionFixture.Name} commands={executionFixture.Commands.Length}");
         Task task = SolverController.StartCombatDeferredOperation(
-            token => RunFixtureAsync(state, fixture, token));
+            token => RunFixtureAsync(state, executionFixture, token));
         TaskHelper.RunSafely(task);
     }
 
@@ -197,9 +199,9 @@ internal static class MultiplayerConsoleFixtureRunner
     {
         fixture = null;
         reason = string.Empty;
-        string? instanceRoot = Environment.GetEnvironmentVariable(
+        string? instanceRoot = System.Environment.GetEnvironmentVariable(
             SolverSessionCapabilities.MultiplayerInstanceEnvironmentVariable);
-        if (!SolverSessionCapabilities.IsTruthy(Environment.GetEnvironmentVariable(
+        if (!SolverSessionCapabilities.IsTruthy(System.Environment.GetEnvironmentVariable(
                 SolverSessionCapabilities.ProbeEvidenceEnvironmentVariable)))
         {
             reason = "probe_evidence_disabled";

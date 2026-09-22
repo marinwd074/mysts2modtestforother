@@ -1057,20 +1057,34 @@ internal sealed partial class CombatBeamSolver
                 existing.TryAccept(new TranspositionLabel(
                     root.PotionCount,
                     root.PotionStrategicCost,
-                    0,
+                    root.FutureSoldHp,
                     root.Snapshot.CumulativePlayerHpLost,
-                    0,
-                    root.Score));
+                    root.ActionCount,
+                    root.Score,
+                    root.Traits,
+                    root.HasNonPotionAction,
+                    root.BoundaryReason,
+                    root.Snapshot.PlayerDead,
+                    root.Snapshot.AllEnemiesDead,
+                    root.Snapshot.PredictionGaps,
+                    root.CombatProgress));
             else
                 _run.Transpositions.Add(
                     root.StateKey,
                     new TranspositionFrontier(new TranspositionLabel(
                         root.PotionCount,
                         root.PotionStrategicCost,
-                        0,
+                        root.FutureSoldHp,
                         root.Snapshot.CumulativePlayerHpLost,
-                        0,
-                        root.Score)));
+                        root.ActionCount,
+                        root.Score,
+                        root.Traits,
+                        root.HasNonPotionAction,
+                        root.BoundaryReason,
+                        root.Snapshot.PlayerDead,
+                        root.Snapshot.AllEnemiesDead,
+                        root.Snapshot.PredictionGaps,
+                        root.CombatProgress)));
         }
         if (frontier.Count == 0)
             throw new InvalidOperationException("固定搜索前缀与全部回合准备选牌分支都不相容。");

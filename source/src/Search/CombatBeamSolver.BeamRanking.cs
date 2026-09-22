@@ -150,7 +150,8 @@ internal sealed partial class CombatBeamSolver
         Func<T, OrdinaryBeamTacticalValues> describeTactical)
         where T : class
     {
-        Dictionary<(int Turn, TranspositionLabel Policy),
+        Dictionary<(int Turn, int PotionCount, int PotionStrategicCost, int FutureSoldHp,
+            int CumulativePlayerHpLost, int ActionCount, double Score),
             List<(int Position, T Candidate, OrdinaryBeamTacticalValues Values)>> cohorts = [];
         for (int position = 0; position < group.Count; position++)
         {
@@ -160,13 +161,14 @@ internal sealed partial class CombatBeamSolver
             // Leave their positions fixed without blocking other positions in this group.
             if (values.HasRetainedRoutingChoice)
                 continue;
-            var key = (values.Turn, new TranspositionLabel(
+            var key = (
+                values.Turn,
                 values.PotionCount,
                 values.PotionStrategicCost,
                 values.FutureSoldHp,
                 values.CumulativePlayerHpLost,
                 values.ActionCount,
-                values.Score));
+                values.Score);
             if (!cohorts.TryGetValue(key, out var cohort))
             {
                 cohort = [];
