@@ -42,7 +42,7 @@ internal static class MultiplayerRootCaptureContracts
 
         foreach (Player player in live.Players)
         {
-            _ = simulator.State.GetPlayerCombatState(player);
+            VerifyExactPlayerCombatState(player, simulator);
 
             SimCreatureState frozen = simulator.State.GetCreature(player.Creature);
             if (ReferenceEquals(frozen, player.Creature))
@@ -64,6 +64,63 @@ internal static class MultiplayerRootCaptureContracts
         {
             throw new PredictionUnsupportedException(
                 "A locally readable player relic was not captured into the multiplayer root.");
+        }
+    }
+
+    private static void VerifyExactPlayerCombatState(
+        Player player,
+        CombatPredictionSimulator simulator)
+    {
+        PlayerCombatState live = player.PlayerCombatState
+            ?? throw new InvalidOperationException(
+                $"Player {player.NetId} has no live combat state during root capture.");
+        SimPlayerCombatState predicted = simulator.State.GetPlayerCombatState(player);
+
+        if (predicted.Energy != live.Energy
+            || predicted.Stars != live.Stars
+            || predicted.Phase != live.Phase)
+        {
+            throw new InvalidOperationException(
+                $"Player {player.NetId} resource state differs from the multiplayer prediction root.");
+        }
+
+        VerifyPile(player, "hand", live.Hand.Cards, predicted.Hand.Cards);
+        VerifyPile(player, "draw", live.DrawPile.Cards, predicted.DrawPile.Cards);
+        VerifyPile(player, "discard", live.DiscardPile.Cards, predicted.DiscardPile.Cards);
+        VerifyPile(player, "exhaust", live.ExhaustPile.Cards, predicted.ExhaustPile.Cards);
+        VerifyPile(player, "play", live.PlayPile.Cards, predicted.PlayPile.Cards);
+
+        if (predicted.OrbQueue.Capacity != live.OrbQueue.Capacity
+            || !predicted.OrbQueue.Orbs.Select(orb => orb.Id.Entry)
+                .SequenceEqual(live.OrbQueue.Orbs.Select(orb => orb.Id.Entry), StringComparer.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Player {player.NetId} orb state differs from the multiplayer prediction root.");
+        }
+    }
+
+    private static void VerifyPile(
+        Player player,
+        string pileName,
+        IReadOnlyList<MegaCrit.Sts2.Core.Models.CardModel> liveCards,
+        IReadOnlyList<PredictedCard> predictedCards)
+    {
+        if (liveCards.Count != predictedCards.Count)
+        {
+            throw new InvalidOperationException(
+                $"Player {player.NetId} {pileName} count differs from the multiplayer prediction root.");
+        }
+
+        for (int index = 0; index < liveCards.Count; index++)
+        {
+            MegaCrit.Sts2.Core.Models.CardModel liveCard = liveCards[index];
+            PredictedCard predictedCard = predictedCards[index];
+            if (!string.Equals(liveCard.Id.Entry, predictedCard.Preview.Id.Entry, StringComparison.Ordinal)
+                || liveCard.CurrentUpgradeLevel != predictedCard.Preview.CurrentUpgradeLevel)
+            {
+                throw new InvalidOperationException(
+                    $"Player {player.NetId} {pileName}[{index}] differs from the multiplayer prediction root.");
+            }
         }
     }
 }

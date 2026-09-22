@@ -28,12 +28,13 @@
 - `AnyAlly` 空目标问题已从目标生成层修正，并补齐相同根因的 `AnyPlayer` 分支；卡牌/药水的玩家目标枚举使用预测态目标解析，不靠部署期判空或异常兜底。`RootActionPlayers` 仍只包含本地玩家。
 - 单人搜索算法向多人本地跨回合模式的第一批迁移已落地：`SinglePlayerFullRoute` 与 `MultiplayerLocalCrossTurn` 现在共用 full-search heuristics，因此 Novelty Portfolio、成长预算、遗物目标、成长机会目标和长期收益评估不再因多人能力表中的 `CanCrossTurnSearch=false` 被关闭；`MultiplayerCurrentTurnOnly` 仍保持精简。执行权限、队友动作、共享 Shuffle RNG 边界和多人牌手动出牌规则均未放宽。
 - 问题包 `25b905c1322b41e6b9a8e10baeae5606` 复现 0 费 Anger 被遗漏：T2 手牌含 `ANGER(0)`，Solver 选择 Tremble→Dismantle→Strike→EndTurn，并在 Shuffle 边界形成 `PartialLocalCrossTurnProjection`。已修正多人未完成路线的最终排序：确定的 Enemy HP 进展现在先于 Anger copy 长期惩罚；单人和完整胜利路线保持原排序。
+- 多人新基线改为“完整联合战斗预测 + 滚动重规划”：旧的 partial-route/Carry 补丁仅作为历史兼容层，不再作为目标架构。第一阶段已把预测根中现有的完整队友状态正式暴露为 `TeammateForecastStates`，包含 Hand/Draw/Discard/Exhaust/Play 的有序语义快照、Energy/Stars、HP/Block、Phase、Turn、Orbs；Root capture 同时逐玩家核对 live 与 detached prediction 的五牌堆顺序、资源和 Orb 状态。执行权限没有变化，`RootActionPlayers` 仍只有本地玩家。
 
 ## 当前未完成
 
-1. 继续把剩余单人搜索能力迁到多人本地跨回合模式，优先审计药水推荐、回合开始选择/选择题和仍由 session capability 关闭的搜索质量入口；只迁搜索/推荐，不扩大多人自动执行。
-2. 多人团队价值评分尚未补齐；队友格挡、力量、能量等公开收益仍可能被低估。
-3. 继续审计 Tag Team、Tank 等复杂多人牌；MultiplayerOnly 继续由玩家手动出牌。
+1. 实现 `ShadowTeammatePlanner`：直接在 forked prediction state 上读取队友真实手牌/能量/目标，生成小宽度 Top-K 队友动作分支；这些动作只进入预测世界，绝不进入 Deployment。
+2. 把 Shadow 队友分支接入回合推进，取消“多人遇 Shared Shuffle 必停”的主路径；每条世界线使用自身 forked RNG 继续模拟到 Victory/Death。
+3. 最终多人目标改为字典序：全队存活 → TeamLossRatio 最小 → WorstPlayerLossRatio 最小 → CombatEndedTurn 最早；真实队友行为或世界状态偏离预测后立即 Fresh Search。
 
 ## 当前开发 / 性能规则
 
