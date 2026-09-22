@@ -25,13 +25,14 @@
   固定上游 commit `234a74ccbaf46d7e385ed318c64857f1f7a90cae`。它不进入 CombatSolver 正式构建/发布。
 - 2026-09-22 同构 GM Console 实机 Smoke 已通过：Host/Client 加载同一 DLL/PCK 与 BaseLib 构建，进入同一战斗且没有 game-data mismatch；Host 和 Client 各发起一次 `energy 1` 并在两端执行，Host 发放并实际打出原生 `CARD.TANK`，owner 为 Host player 1、无目标，动作在两端结算并生成 checksum。摘要见 `docs/multiplayer/evidence/gm-console-multiplayer-smoke-2026-09-22.json`。Client 反向打出本轮按用户要求未执行。
 - MultiplayerOnly 卡现在统一为**搜索/推荐可见、玩家手动出牌**：Safe Execute 不再自动打任何 MultiplayerOnly 卡；遇到多人牌时停止自动前缀但保留 Safe Auto，等待玩家手动完成原生目标选择与出牌，状态变化后再 Fresh Search。此前已验证的 Beacon of Hope、Flanking、Gang Up、Knockdown、Sneaky、Lift、Rally、Mimic、Coordinate 仍保留预测语义，但不再进入自动执行。
-- `AnyAlly` 空目标问题已从目标生成层修正，并补齐相同根因的 `AnyPlayer` 分支；卡牌/药水的玩家目标枚举复用 `GetValidManualTargets()`，不靠部署期判空或异常兜底。`RootActionPlayers` 仍只包含本地玩家。
+- `AnyAlly` 空目标问题已从目标生成层修正，并补齐相同根因的 `AnyPlayer` 分支；卡牌/药水的玩家目标枚举使用预测态目标解析，不靠部署期判空或异常兜底。`RootActionPlayers` 仍只包含本地玩家。
+- 单人搜索算法向多人本地跨回合模式的第一批迁移已落地：`SinglePlayerFullRoute` 与 `MultiplayerLocalCrossTurn` 现在共用 full-search heuristics，因此 Novelty Portfolio、成长预算、遗物目标、成长机会目标和长期收益评估不再因多人能力表中的 `CanCrossTurnSearch=false` 被关闭；`MultiplayerCurrentTurnOnly` 仍保持精简。执行权限、队友动作、共享 Shuffle RNG 边界和多人牌手动出牌规则均未放宽。
 
 ## 当前未完成
 
-1. 为第二批公开队友效果补充更细的运行时目标/生命周期差异时，再考虑定向实机确认。
-2. 继续审计 Tag Team、Tank 等需要跨玩家后续效果的卡，保持 fail closed 直到目标/所有者与网络副作用边界明确。
-3. Boot Up Strength 精确数值 differential 仍可补，但不阻塞当前多人阶段。
+1. 继续把剩余单人搜索能力迁到多人本地跨回合模式，优先审计药水推荐、回合开始选择/选择题和仍由 session capability 关闭的搜索质量入口；只迁搜索/推荐，不扩大多人自动执行。
+2. 多人团队价值评分尚未补齐；队友格挡、力量、能量等公开收益仍可能被低估。
+3. 继续审计 Tag Team、Tank 等复杂多人牌；MultiplayerOnly 继续由玩家手动出牌。
 
 ## 当前开发 / 性能规则
 

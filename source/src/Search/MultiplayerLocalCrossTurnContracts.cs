@@ -46,6 +46,10 @@ internal static class MultiplayerLocalCrossTurnContracts
     internal static bool IsCurrentTurnOnly(SearchRoutePolicy policy)
         => policy == SearchRoutePolicy.MultiplayerCurrentTurnOnly;
 
+    internal static bool CanUseFullSearchHeuristics(SearchRoutePolicy policy)
+        => policy is SearchRoutePolicy.SinglePlayerFullRoute
+            or SearchRoutePolicy.MultiplayerLocalCrossTurn;
+
     internal static bool CanUsePersistentRouteCache(SearchRoutePolicy policy)
         => policy == SearchRoutePolicy.SinglePlayerFullRoute;
 

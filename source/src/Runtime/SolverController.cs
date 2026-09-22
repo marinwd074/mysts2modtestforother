@@ -456,6 +456,8 @@ internal static partial class SolverController
                 => SearchRoutePolicy.MultiplayerLocalCrossTurn,
             _ => SearchRoutePolicy.MultiplayerCurrentTurnOnly,
         };
+        bool useFullSearchHeuristics =
+            MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(routePolicy);
         SearchPolicySnapshot policy = new(
             settings.Profile,
             effectivePotionPolicy,
@@ -482,7 +484,7 @@ internal static partial class SolverController
             CurrentTurnOnly = MultiplayerLocalCrossTurnContracts.IsCurrentTurnOnly(routePolicy),
             UseNoveltyPortfolio = (settings.UseNoveltyPortfolio
                 || UnattendedTestRunner.UseNoveltyPortfolioOverride)
-                && capabilities.CanCrossTurnSearch,
+                && useFullSearchHeuristics,
             UseBeamWidthPortfolio = settings.UseBeamWidthPortfolio
                 || UnattendedTestRunner.UseBeamWidthPortfolioOverride,
             BeamWidthPortfolioWidths = UnattendedTestRunner.BeamWidthPortfolioWidthsOverride,
@@ -490,16 +492,16 @@ internal static partial class SolverController
                 && SearchPolicySnapshot.IsAct3BossEncounter(state.RunState.CurrentActIndex, state.Encounter?.Id.Entry),
             // 这里记的是玩家填的原始值；「不考虑局外收益」的折算交给快照上的 Effective* 一处做，
             // 免得两边各判一次而走岔。问题包里两样都在，方便看出当时是填了额度还是开了开关。
-            GrowthBudgets = capabilities.CanCrossTurnSearch ? settings.GrowthBudgets : default,
-            RelicTargets = capabilities.CanCrossTurnSearch
+            GrowthBudgets = useFullSearchHeuristics ? settings.GrowthBudgets : default,
+            RelicTargets = useFullSearchHeuristics
                 ? RelicCounterCatalog.Capture(state, settings.RelicStrategyEnabled, settings.RelicCounterRules)
                 : [],
             StopAtAcceptableBattleHpLoss = settings.StopAtAcceptableBattleHpLoss,
             BrightestFlameMaxHpLossLimit = settings.BrightestFlameMaxHpLossLimit,
-            GrowthOpportunityTargets = capabilities.CanCrossTurnSearch
+            GrowthOpportunityTargets = useFullSearchHeuristics
                 ? GrowthOpportunityPolicy.Capture(state)
                 : GrowthOpportunityTargets.Empty,
-            IgnoreLongTermRewards = settings.IgnoreLongTermRewards || !capabilities.CanCrossTurnSearch,
+            IgnoreLongTermRewards = settings.IgnoreLongTermRewards || !useFullSearchHeuristics,
         };
         CombatBugReportExporter.RecordSearchPolicy(state, policy);
         return policy;
