@@ -53,6 +53,48 @@ static/contract evidence, not a substitute for that differential.
 | Tag Team | attack, then instanced debuff replays a qualifying Attack by another player; consumed after modifying play count | **checked match** | existing TagTeamPower play-count mirror handles AnyEnemy and AllEnemies target semantics and consumes the instance |
 | Tank | apply TankPower; owner takes 2x Powered Attack damage and living teammates receive Guarded for 0.5x, with applier-death cleanup | **source-confirmed** | focused multiplayer differential; keep 0.107.1 2x/0.5x semantics rather than v0.108 rewrite |
 
+## Online patch-history cross-check
+
+The current multiplayer wiki mixes the target main build with later beta cards and
+later balance changes. For 0.107.1 work, use the pinned assembly above as truth and
+treat public patch history only as a cross-check.
+
+Important version traps confirmed against public patch history:
+
+- `Beacon of Hope`: v0.100 made the Power non-stacking. v0.108 then raised its
+  Energy cost from 1 to 2, so the 0.107.1 target is still the pre-v0.108 version.
+- `Believe in You`: old pre-release history includes a temporary 0 -> 1 cost
+  change, but the Early Access card was reintroduced in v0.98 and v0.100 changed
+  the granted Energy from 3/4 to 2/3. Do not reconstruct 0.107.1 from the old
+  v0.83 pre-release card.
+- `Huddle Up`: v0.100 added Exhaust and clarified the text to `ALL players`.
+  The draw effect remains 2/3 cards; generic card result-location handling owns
+  the Exhaust behavior.
+- `Tag Team`: v0.104 expanded Replay to attacks that deal damage to ALL enemies.
+  The 0.107.1 mirror must therefore preserve both single-enemy and all-enemy
+  qualifying attack semantics.
+- `Largesse`: v0.104 fixed ownership-sensitive interactions so Pillar of Creation,
+  Supermassive, and Arsenal proc for the player who played Largesse, not the ally
+  receiving the generated card. In the mirror, the generated card owner is the
+  selected target while `creator` remains the Largesse player; these are
+  intentionally different identities.
+- `Stratagem`: v0.104 removed the multiplayer card-pool ban after the original
+  multiplayer bug was fixed. It is not a multiplayer-exclusive card, but it is
+  legal in the 0.107.1 multiplayer colorless pool.
+- `Gold Axe`: v0.105 changed its multiplayer scaling to count cards played by ALL
+  players rather than only its owner. This is another multiplayer semantic on a
+  non-exclusive card and should not be confused with the 21-card exclusive set.
+- v0.108 added 15 more multiplayer cards (`Midnight`, `Blaze`, `Outrage`,
+  `Blade Symphony`, `Concoct`, `Fade`, `Plot`, `Constellation`, `Underworld`,
+  `Soulbound`, `Cacophony`, `Hibernate`, `One for All`, `Imitation Learning`,
+  `The Ball`). They are outside the 0.107.1 target and must not be added to this
+  coverage matrix.
+- v0.109 added `Tutor` and re-enabled Well-Laid Plans in multiplayer. Both are
+  also outside the 0.107.1 target.
+
+This cross-check is intentionally descriptive. Numeric/effect truth for the
+target remains the pinned v0.107.1 model/DLL, not the live wiki card page.
+
 ## Local-only policy
 
 The matrix deliberately does **not** aim for "all multiplayer cards simulate
