@@ -168,7 +168,7 @@ internal static partial class MonsterMoveEffects
     // Exact allow-list from the hash-verified 0.107.1 monster target fanout audit.
     // Only these move-specific effects may reuse the captured player roster. RNG, choice,
     // and unresolved rows are deliberately not widened by this path.
-    private static bool IsPinnedFanOutSafe(string monsterType, string moveId)
+    private static bool IsPinnedSimpleFanOutSafe(string monsterType, string moveId)
         => (monsterType, moveId) is
             ("MagiKnight", "DAMPEN_MOVE") or
             ("TestSubject", "SKULL_BASH_MOVE") or
@@ -220,6 +220,18 @@ internal static partial class MonsterMoveEffects
             ("DecimillipedeSegmentMiddle", "CONSTRICT_MOVE") or
             ("LivingFog", "ADVANCED_GAS_MOVE") or
             ("TwoTailedRat", "SCREECH_MOVE");
+
+    private static bool IsPinnedSplitFanOutSafe(string monsterType, string moveId)
+        => (monsterType, moveId) is
+            ("Aeonglass", "INCREASING_INTENSITY_MOVE") or
+            ("TestSubject", "BURNING_GROWL_MOVE") or
+            ("LagavulinMatriarch", "SOUL_SIPHON_MOVE") or
+            ("Wriggler", "WRIGGLE_MOVE") or
+            ("TheLost", "DEBILITATING_SMOG") or
+            ("SlimedBerserker", "LEECHING_HUG_MOVE") or
+            ("TheForgotten", "MIASMA") or
+            ("WaterfallGiant", "STOMP_MOVE") or
+            ("GremlinMerc", "DOUBLE_SMASH_MOVE");
 
     public static void ApplyBeforeAttack(
         CombatPredictionSimulator simulator,
@@ -293,7 +305,9 @@ internal static partial class MonsterMoveEffects
         MonsterModel monster = move.Owner.Monster!;
         string type = monster.GetType().Name;
         string id = move.Move.Id;
-        if (!IsPinnedFanOutSafe(type, id) || simulator.State.PlayerCreatures.Count <= 1)
+        bool simpleFanOut = IsPinnedSimpleFanOutSafe(type, id);
+        bool splitFanOut = IsPinnedSplitFanOutSafe(type, id);
+        if ((!simpleFanOut && !splitFanOut) || simulator.State.PlayerCreatures.Count <= 1)
         {
             return ApplySingleTarget(
                 simulator,
@@ -304,6 +318,8 @@ internal static partial class MonsterMoveEffects
                 plannedChoices,
                 applySharedPreamble: true);
         }
+        if (splitFanOut)
+            return ApplySplitFanOut(simulator, combat, move, out killedOwner);
 
         bool handled = false;
         killedOwner = false;
@@ -326,6 +342,172 @@ internal static partial class MonsterMoveEffects
         return handled;
     }
 
+    private static bool ApplySplitFanOut(
+        CombatPredictionSimulator simulator,
+        SimulatedCombatState combat,
+        ForecastMove move,
+        out bool killedOwner)
+    {
+        killedOwner = false;
+        MonsterModel monster = move.Owner.Monster!;
+        string type = monster.GetType().Name;
+        string id = move.Move.Id;
+        ApplySharedPreamble(simulator, combat, move, monster, type, id);
+
+        // Native DOUBLE_SMASH steals once before applying the target-list Weak.
+        if (type == "GremlinMerc" && id == "DOUBLE_SMASH_MOVE")
+            combat.RecordThievery(simulator, move.Owner);
+
+        foreach (Creature target in simulator.State.PlayerCreatures)
+        {
+            switch ((type, id))
+            {
+                case ("Aeonglass", "INCREASING_INTENSITY_MOVE"):
+                {
+                    SimPlayerCombatState playerState = simulator.State.GetPlayerCombatState(
+                        target.Player ?? throw new InvalidOperationException("永世沙漏的目标不是玩家。"));
+                    foreach (PredictedCard card in playerState.AllCards)
+                    {
+                        if (card.Preview is Wither)
+                            ((Wither)card.MutablePreview).FakeUpgrade();
+                    }
+                    simulator.CreateAndAddGeneratedCardsToCombat<Wither>(
+                        target.Player,
+                        PileType.Discard,
+                        combat.GetMonsterStaticInt(move.Owner, "WitherAmount"),
+                        null);
+                    break;
+                }
+                case ("TestSubject", "BURNING_GROWL_MOVE"):
+                    simulator.AddToCombat<Burn>(
+                        target,
+                        PileType.Discard,
+                        combat.GetMonsterStaticInt(move.Owner, "BurningGrowlBurnCount"),
+                        null);
+                    break;
+                case ("LagavulinMatriarch", "SOUL_SIPHON_MOVE"):
+                    combat.Apply<StrengthPower>(target, -2, move.Owner);
+                    combat.Apply<DexterityPower>(target, -2, move.Owner);
+                    break;
+                case ("Wriggler", "WRIGGLE_MOVE"):
+                    simulator.AddToCombat<Infection>(target, PileType.Discard, 1, null);
+                    break;
+                case ("TheLost", "DEBILITATING_SMOG"):
+                    combat.Apply<StrengthPower>(
+                        target,
+                        -combat.GetMonsterStaticInt(move.Owner, "DebilitatingSmogStrengthStealAmount"),
+                        move.Owner);
+                    break;
+                case ("SlimedBerserker", "LEECHING_HUG_MOVE"):
+                    Debuff<WeakPower>(combat, target, 3, move.Owner);
+                    break;
+                case ("TheForgotten", "MIASMA"):
+                    combat.Apply<DexterityPower>(
+                        target,
+                        -combat.GetMonsterStaticInt(move.Owner, "DebilitatingSmogDexStealAmount"),
+                        move.Owner);
+                    break;
+                case ("WaterfallGiant", "STOMP_MOVE"):
+                    Debuff<WeakPower>(combat, target, 1, move.Owner);
+                    break;
+                case ("GremlinMerc", "DOUBLE_SMASH_MOVE"):
+                    Debuff<WeakPower>(combat, target, 2, move.Owner);
+                    break;
+                default:
+                    throw new InvalidOperationException(
+                        $"未实现 pinned split fanout: {type}.{id}");
+            }
+
+            if (simulator.HasPendingChoice)
+                return true;
+        }
+
+        switch ((type, id))
+        {
+            case ("Aeonglass", "INCREASING_INTENSITY_MOVE"):
+                combat.AdvanceAeonglassWitherUpgrade(move.Owner);
+                combat.Apply<StrengthPower>(
+                    move.Owner,
+                    combat.GetMonsterStaticInt(move.Owner, "IncreasingIntensityBaseStrength")
+                        + combat.AdvanceAeonglassAdditionalStrength(move.Owner),
+                    move.Owner);
+                break;
+            case ("TestSubject", "BURNING_GROWL_MOVE"):
+                combat.Apply<StrengthPower>(
+                    move.Owner,
+                    combat.GetMonsterStaticInt(move.Owner, "BurningGrowlStrengthGain"),
+                    move.Owner);
+                break;
+            case ("LagavulinMatriarch", "SOUL_SIPHON_MOVE"):
+                combat.Apply<StrengthPower>(move.Owner, 2, move.Owner);
+                break;
+            case ("Wriggler", "WRIGGLE_MOVE"):
+                combat.Apply<StrengthPower>(move.Owner, 2, move.Owner);
+                break;
+            case ("TheLost", "DEBILITATING_SMOG"):
+                combat.Apply<StrengthPower>(
+                    move.Owner,
+                    combat.GetMonsterStaticInt(move.Owner, "DebilitatingSmogStrengthStealAmount"),
+                    move.Owner);
+                break;
+            case ("SlimedBerserker", "LEECHING_HUG_MOVE"):
+                combat.Apply<StrengthPower>(move.Owner, 3, move.Owner);
+                break;
+            case ("TheForgotten", "MIASMA"):
+                GainBlock(simulator, move.Owner, 8);
+                combat.Apply<DexterityPower>(
+                    move.Owner,
+                    combat.GetMonsterStaticInt(move.Owner, "DebilitatingSmogDexStealAmount"),
+                    move.Owner);
+                break;
+            case ("WaterfallGiant", "STOMP_MOVE"):
+                combat.Apply<SteamEruptionPower>(move.Owner, 3, move.Owner);
+                break;
+            case ("GremlinMerc", "DOUBLE_SMASH_MOVE"):
+                break;
+            default:
+                throw new InvalidOperationException(
+                    $"未实现 pinned split fanout shared effect: {type}.{id}");
+        }
+
+        return true;
+    }
+
+    private static void ApplySharedPreamble(
+        CombatPredictionSimulator simulator,
+        SimulatedCombatState combat,
+        ForecastMove move,
+        MonsterModel monster,
+        string type,
+        string id)
+    {
+        combat.ResolveReviveMove(simulator, move.Owner, id);
+        if (id == "STUNNED")
+        {
+            switch (monster)
+            {
+                case LagavulinMatriarch:
+                case SlumberingBeetle:
+                    combat.SetMonsterBool(move.Owner, "_isAwake", true);
+                    combat.SetAmount<PlatingPower>(move.Owner, 0);
+                    break;
+                case Tunneler:
+                    combat.SetMonsterBool(move.Owner, "_isStunned", false);
+                    break;
+            }
+        }
+
+        if (type == "FrogKnight" && id == "BEETLE_CHARGE")
+            combat.SetMonsterBool(move.Owner, "_hasBeetleCharged", true);
+        if (type == "TwoTailedRat" && id is "SCRATCH_MOVE" or "DISEASE_BITE_MOVE" or "SCREECH_MOVE")
+        {
+            combat.SetMonsterInt(
+                move.Owner,
+                "_turnsUntilSummonable",
+                combat.GetMonsterInt(move.Owner, "_turnsUntilSummonable") - 1);
+        }
+    }
+
     private static bool ApplySingleTarget(
         CombatPredictionSimulator simulator,
         SimulatedCombatState combat,
@@ -341,33 +523,7 @@ internal static partial class MonsterMoveEffects
         string id = move.Move.Id;
 
         if (applySharedPreamble)
-        {
-            combat.ResolveReviveMove(simulator, move.Owner, id);
-            if (id == "STUNNED")
-            {
-                switch (monster)
-                {
-                    case LagavulinMatriarch:
-                    case SlumberingBeetle:
-                        combat.SetMonsterBool(move.Owner, "_isAwake", true);
-                        combat.SetAmount<PlatingPower>(move.Owner, 0);
-                        break;
-                    case Tunneler:
-                        combat.SetMonsterBool(move.Owner, "_isStunned", false);
-                        break;
-                }
-            }
-
-            if (type == "FrogKnight" && id == "BEETLE_CHARGE")
-                combat.SetMonsterBool(move.Owner, "_hasBeetleCharged", true);
-            if (type == "TwoTailedRat" && id is "SCRATCH_MOVE" or "DISEASE_BITE_MOVE" or "SCREECH_MOVE")
-            {
-                combat.SetMonsterInt(
-                    move.Owner,
-                    "_turnsUntilSummonable",
-                    combat.GetMonsterInt(move.Owner, "_turnsUntilSummonable") - 1);
-            }
-        }
+            ApplySharedPreamble(simulator, combat, move, monster, type, id);
 
         switch ((type, id))
         {

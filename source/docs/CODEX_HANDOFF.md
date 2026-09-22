@@ -4,11 +4,11 @@
 
 ### 2026-09-22 pinned monster-target runtime 检查点
 
-- pinned 0.107.1 IL 审计已完成：64/64 行基于 SHA-256 `a1f9e653f1e28e4076558fee1e60d218619cb7e057b887c6417f62c62c6d7a52` 的 `sts2.dll` 分类；结果为 50 `FanOutSafe`、4 `NeedsPerTargetRng`、1 `NeedsRemoteChoiceFailClosed`、9 `NeedsMoreModeling`。
-- 运行时现在只对这 50 个 `FanOutSafe` move 使用完整 `simulator.State.PlayerCreatures` fanout；继续复用现有单目标 effect 逻辑，按捕获 roster 顺序逐目标执行，不扩大 `RootActionPlayers`，也不生成队友动作。
-- 怪物自身共享 preamble 每个 move 只执行一次，避免 `TwoTailedRat.SCREECH_MOVE` 的 `_turnsUntilSummonable` 在多人 fanout 中重复递减；`OwlMagistrate.VERDICT` 的重复 Soar 清零保持幂等。
-- 静态合同直接把 runtime allow-list 与 pinned audit 的 50 行做集合相等校验；14 个非安全分类不能误入 fanout。
-- 本检查点只声明 code/contract 接线，不声明新的 Host/Client runtime PASS。下一步优先拆解 9 个 `NeedsMoreModeling` 的“目标效果 + owner-once 副作用”，能证明等价的再逐项开放；4 个 per-target RNG 与 Knowledge Demon remote choice 继续保持未扩展边界。
+- `b875293a` 已通过 GitHub CI：`static-consistency PASS`、`contract-tests PASS`。该提交先开放 pinned 0.107.1 审计中的 50 个机械 `FanOutSafe` move。
+- 其余 9 个原 `NeedsMoreModeling` 已进一步拆解为“全玩家 target phase + owner-once phase”：Aeonglass Increasing Intensity、Test Subject Burning Growl、Lagavulin Matriarch Soul Siphon、Wriggler Wriggle、The Lost Debilitating Smog、Slimed Berserker Leeching Hug、The Forgotten Miasma、Waterfall Giant Stomp、Gremlin Merc Double Smash。Gremlin Merc 的 Thievery 保持在 target fanout 前执行一次；其余 owner Strength/Block/counter 副作用在全体目标效果后执行一次。
+- runtime fanout 总计现为 59 个确定性 move：50 个 simple fanout + 9 个 split fanout；静态合同要求两组并集与 audit 的 `FanOutSafe` 集合完全一致，并要求 9 个 owner-once move 必须留在 split path。
+- 仍未开放的只有 4 个 `NeedsPerTargetRng`（Thieving Hopper Thievery、The Insatiable Liquify Ground、Noisebot Noise、Soul Fysh Beckon）和 1 个 `NeedsRemoteChoiceFailClosed`（Knowledge Demon Curse of Knowledge）。它们继续保持现有单目标/fail-closed 边界。
+- 本检查点仍只声明 code/contract，不声明新的 Host/Client runtime PASS。下一步优先处理 4 个 per-target RNG 的共享 RNG 顺序与远端牌堆写入语义；Knowledge Demon choice 单独保留到多玩家 choice 生命周期有明确方案后再动。
 
 ### 2026-09-22 readable-state 审计检查点
 

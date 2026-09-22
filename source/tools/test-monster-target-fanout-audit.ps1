@@ -103,24 +103,28 @@ $fanOutSafeMoves = @(
         Where-Object { $_.Value.Action -eq 'FanOutSafe' } |
         ForEach-Object { $_.Key }
 )
-if ($fanOutSafeMoves.Count -ne 50) {
-    throw "Expected 50 pinned FanOutSafe rows, found $($fanOutSafeMoves.Count)."
+if ($fanOutSafeMoves.Count -ne 59) {
+    throw "Expected 59 pinned FanOutSafe rows, found $($fanOutSafeMoves.Count)."
 }
 
 $runtimeText = [IO.File]::ReadAllText($runtimePath)
-$allowListMatch = [regex]::Match(
-    $runtimeText,
-    '(?s)private static bool IsPinnedFanOutSafe\(.*?(?=\r?\n\s*public static void ApplyBeforeAttack)')
-if (-not $allowListMatch.Success) {
-    throw 'MonsterMoveEffects is missing the pinned FanOutSafe runtime allow-list.'
-}
 $runtimePairs = @{}
-foreach ($match in [regex]::Matches($allowListMatch.Value, '\("(?<monster>[^"]+)", "(?<move>[^"]+)"\)')) {
-    $key = "$($match.Groups['monster'].Value).$($match.Groups['move'].Value)"
-    if ($runtimePairs.ContainsKey($key)) {
-        throw "Duplicate runtime FanOutSafe pair: $key"
+$runtimeGroups = @(
+    [pscustomobject]@{ Name = 'simple'; Pattern = '(?s)private static bool IsPinnedSimpleFanOutSafe\(.*?(?=\r?\n\s*private static bool IsPinnedSplitFanOutSafe)' },
+    [pscustomobject]@{ Name = 'split'; Pattern = '(?s)private static bool IsPinnedSplitFanOutSafe\(.*?(?=\r?\n\s*public static void ApplyBeforeAttack)' }
+)
+foreach ($group in $runtimeGroups) {
+    $allowListMatch = [regex]::Match($runtimeText, $group.Pattern)
+    if (-not $allowListMatch.Success) {
+        throw "MonsterMoveEffects is missing the pinned $($group.Name) FanOutSafe runtime allow-list."
     }
-    $runtimePairs[$key] = $true
+    foreach ($match in [regex]::Matches($allowListMatch.Value, '\("(?<monster>[^"]+)", "(?<move>[^"]+)"\)')) {
+        $key = "$($match.Groups['monster'].Value).$($match.Groups['move'].Value)"
+        if ($runtimePairs.ContainsKey($key)) {
+            throw "Duplicate runtime FanOutSafe pair across runtime groups: $key"
+        }
+        $runtimePairs[$key] = $group.Name
+    }
 }
 if ($runtimePairs.Count -ne $fanOutSafeMoves.Count) {
     throw "Runtime FanOutSafe allow-list count mismatch: audit=$($fanOutSafeMoves.Count) runtime=$($runtimePairs.Count)."
@@ -139,7 +143,29 @@ if (-not $runtimeText.Contains('foreach (Creature target in simulator.State.Play
     throw 'Pinned runtime fanout no longer enumerates the captured player roster.'
 }
 if (-not $runtimeText.Contains('bool applySharedPreamble = true;')) {
-    throw 'Pinned runtime fanout no longer protects one-per-move shared preamble state.'
+    throw 'Pinned simple fanout no longer protects one-per-move shared preamble state.'
+}
+$splitExpected = @(
+    'Aeonglass.INCREASING_INTENSITY_MOVE',
+    'TestSubject.BURNING_GROWL_MOVE',
+    'LagavulinMatriarch.SOUL_SIPHON_MOVE',
+    'Wriggler.WRIGGLE_MOVE',
+    'TheLost.DEBILITATING_SMOG',
+    'SlimedBerserker.LEECHING_HUG_MOVE',
+    'TheForgotten.MIASMA',
+    'WaterfallGiant.STOMP_MOVE',
+    'GremlinMerc.DOUBLE_SMASH_MOVE'
+)
+foreach ($move in $splitExpected) {
+    if (-not $runtimePairs.ContainsKey($move) -or $runtimePairs[$move] -ne 'split') {
+        throw "Move requiring owner-once ordering is not in the split fanout path: $move"
+    }
+}
+if (-not $runtimeText.Contains('ApplySplitFanOut(simulator, combat, move, out killedOwner)')) {
+    throw 'Pinned split fanout allow-list is no longer routed through ApplySplitFanOut.'
+}
+if (-not $runtimeText.Contains('combat.RecordThievery(simulator, move.Owner);')) {
+    throw 'Gremlin Merc split fanout lost its pre-target thievery side effect.'
 }
 
 Write-Output "MONSTER_TARGET_FANOUT_AUDIT_CHECKS_PASS rows=$($rows.Count) resolved=$resolved pending=$pending runtimeFanOut=$($runtimePairs.Count)"
