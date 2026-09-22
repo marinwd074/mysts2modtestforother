@@ -232,6 +232,8 @@ internal static partial class SolverController
                 SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Canceled);
             CancelDeployment();
             _combat.FullAutoEnabled = false;
+            _combat.MultiplayerSafeAutoEnabled = false;
+            _combat.MultiplayerSafeExecuteDeploymentRequested = false;
             _combat.State = null;
             _combat.LatestResult = null;
             _combat.LatestStamp = null;
@@ -269,6 +271,8 @@ internal static partial class SolverController
         bool controllerSearchCanceled = _search != null || _deferredSearchCts != null;
         int? generation = _search?.Generation;
         _combat.FullAutoEnabled = false;
+        _combat.MultiplayerSafeAutoEnabled = false;
+        _combat.MultiplayerSafeExecuteDeploymentRequested = false;
         _combat.AutomaticSearchPaused = true;
         _combat.AutomaticSearchPausedTurn = LocalContext.GetMe(
             CombatManager.Instance.DebugOnlyGetState())?.PlayerCombatState?.TurnNumber;
