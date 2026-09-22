@@ -25,6 +25,7 @@ internal enum SearchReason
     Deploy,
     FullAuto,
     DeploymentDrift,
+    CrossPlayerBoundary,
     PlanExhausted,
 }
 
@@ -35,6 +36,7 @@ internal enum ReplanCause
     ManualDivergence,
     ContinuationMissing,
     DeploymentDrift,
+    CrossPlayerBoundary,
     PlanExhausted,
     ExplicitRequest,
 }

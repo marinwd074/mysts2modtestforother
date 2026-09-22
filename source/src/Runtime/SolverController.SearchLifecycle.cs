@@ -129,6 +129,7 @@ internal static partial class SolverController
         {
             SearchReason.AutoTurnStart => ReplanCause.InitialSearch,
             SearchReason.DeploymentDrift => ReplanCause.DeploymentDrift,
+            SearchReason.CrossPlayerBoundary => ReplanCause.CrossPlayerBoundary,
             SearchReason.PlanExhausted => ReplanCause.PlanExhausted,
             _ => ReplanCause.ExplicitRequest,
         };

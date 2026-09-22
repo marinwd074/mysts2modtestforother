@@ -636,7 +636,7 @@ internal static partial class SolverController
                             RequestSearch(
                                 host,
                                 state,
-                                SearchReason.DeploymentDrift,
+                                SearchReason.CrossPlayerBoundary,
                                 deployWhenReady: _combat.MultiplayerSafeAutoEnabled);
                         }
                         return;
