@@ -9,12 +9,11 @@
 - 旧的 `install-the-book-of-ages.ps1` 与 `install-shared-console-mod.ps1` 已删除。后续直接从已集成 test-only 模块构建/部署到各测试端，不再维护 Workshop/外部 Console Mod 安装路径。
 - 下一步先验证所有端使用同一 GM Console 构建后，最小加牌/资源修改是否仍触发 game-data mismatch；同步稳定后再用于 Tag Team / MultiplayerOnly runtime fixture。
 
-### 2026-09-22 Console Fixture 联机证据边界修正
+### 2026-09-22 旧测试控制台清理
 
-- 用户实机确认：在 pinned 0.107.1 多人联机中启用/执行 console 相关 fixture 会出现“游戏数据不相同”一类一致性/不同步提示；提示里看到的 `1000` 与 Lab 默认 FastMP ClientId/NetId 一致，不能把它解释为某个游戏数值本身。
-- 因此 Console Fixture 从现在起降级为 **diagnostic-only**：可以用于命令链路、离线/隔离调试和 validator 自测，但不得再作为 MultiplayerOnly、Tag Team 或其他多人卡语义的正式 runtime evidence。
-- 后续 Tag Team / MultiplayerOnly 测试禁止用 `card TAG_TEAM hand`、`energy 10` 等 console 注入构造正式场景；应通过正常游戏流程自然获得目标牌/状态，或仅增加不改变战斗状态的 observation patch。不要为了构造 fixture 临时放宽 classifier 或网络同步边界。
-- 现有 `ClientId=1000` 本身仍是单个本地 FastMP Client 的既有默认值；第二 Client 继续使用唯一 ID（如 1001）。当前没有证据表明“1000 这个 ID 本身”就是不同步根因。
+- CombatSolver 旧的单 Client 状态注入链路已经整组删除：Runtime runner、启动参数/环境变量、fixture JSON、validator/self-test 和 Tag Team 专用观察补丁均不再保留。
+- Multiplayer Lab 后续统一使用独立 test-only `TheBookOfAges / GM Console` 模块构造测试状态；CombatSolver 正式 Runtime 不再内置调试控制台注入。
+- 历史上“只在一个 Client 注入 debug 状态”会造成 game-data mismatch，因此不要重新引入该路径。
 
 ### 2026-09-22 Safe Auto 本机三回合回归
 
@@ -62,7 +61,6 @@
 - MP-2C：已直接将 MP2B 泛化为当前回合 bounded N-action，policy ceiling 为 6；当前合同 40 项、正常/干扰验证器各 6 个合成用例和 Release 构建已通过。真实正常 Smoke 自动完成 3 张牌，真实远端干扰 Smoke 在完成 2 张后中止并重新搜索；摘要见 [`mp2c-smoke-2026-09-20.json`](multiplayer/evidence/mp2c-smoke-2026-09-20.json)。
 - Multiplayer Carry Ranking v1：已接入主线程捕获的公开远端/敌人上下文、纯确定性 evaluator 和最终路线排序 tie-break；11 项 Multiplayer Carry Ranking 离线合同与 Release 构建通过。仅显式 Advisor/Safe Execute 使用，默认 Probe/单人保持原排序；远端私有状态、队友行为预测和未知敌方目标均保持 fail-closed/neutral。运行时目标分类已补齐：仅原版怪物的公开 AttackIntent 按 0.107.1 原生 `AttackCommand.FromMonster → TargetingAllOpponents` 合同标为 `AllPlayers`，非攻击/第三方怪物保持 `Unknown`；root 日志已增加机器可读 `all_player_threats/unknown_threats`，并新增 R1/R2 validator 与 CI 合成自测。R1 已在 `SLIMES_WEAK` 真实 Advisor journal 中 PASS（1 名远端、3 敌人、2 个 `AllPlayers` threat、1 个 Unknown，remote private=false）；R2 当前保持 `UNVERIFIED`，但不再作为阶段阻塞项。`f54506c3` 已完成真实回归：Release 0 errors（2 warnings）、11/11 Carry contracts、validator self-test 全 PASS；`carryWindow=current_turn_pre_end` 与 `carryObservationActionCount=3` 对齐第一处 EndTurn，且 `futureOnlyKillCredited=false`。两次真实 `SLIMES_WEAK` fixture 中威胁 `TWIG_SLIME_S` 搜索时仍为 15 HP，而当前 T1 只有两张 `Strike=6`、`Bash=8` 在 T2 才抽到，因此没有形成当前回合可击杀的等价 tie，R2 正确返回 UNVERIFIED。决定性 flip 继续由第 10 项纯合同保证；真实 R1 + 当前窗口回归已证明 runtime 接线与安全语义。后续仅在自然出现合适 fixture 时补 R2 decisive runtime evidence，不再人工刷场景。
 - Multiplayer Carry v2 / Safe Auto foundation：`4275aff` + `7b9f634` 已落地。新增独立 `MultiplayerSafeAutoEnabled`，不复用单人 `FullAutoEnabled`；仅显式 `MultiplayerSafeExecute` 会话可开启。搜索完成后只由 Safe Auto 或一次性 Execute 授权触发部署；每次部署仍新建 `MultiplayerSafeExecutionSession`，Safe EndTurn 后旧 request/session/route authorization 继续清除，Safe Auto 状态本身可跨本地回合保留。Potion、Choice、teammate/unknown target 等不支持边界会停止 Safe Auto，6-action ceiling 允许继续 fresh search；用户手动 Stop Search / 关闭 Solver 同样会清理 Safe Auto。UI 在 Safe Execute 多人会话下显示“安全自动”。GitHub CI Run #435 曾验证 `MultiplayerSafeExecuteChecks=56 PASS` 与 Safe Auto validator 合成自测；真实 Host/Client 三回合结果见本文件顶部的 2026-09-22 记录。
-- Multiplayer Console Fixture v1 / Tag Team semantic evidence：当前基线 `ad6fdf0`。Lab fixture 已通过游戏原生 networked console 路径支持 `card / power / energy / block / potion / draw / heal / damage`，Runner 会等待对应 `ConsoleCmdGameAction` 真正执行并核对精确命令。Tag Team 已拆成双 Client fixture：`tag-team-source` 只给来源玩家 `TAG_TEAM`，`tag-team-aoe` 只给另一玩家 `HYPERBEAM`；新增 Lab-only `TagTeamFixtureObservationPatch`，直接观察原生 `TagTeamPower.ModifyCardPlayCount`，仅当另一玩家的 HYPERBEAM 获得额外 play 时记录 `TAG_TEAM_REPLAY_OBSERVED`。对应 validator 要求 source/attack 两个 fixture 都完成、owner != applier、且 1 -> 2（extra_plays=1）才 PASS；完整 L1 与 static-consistency 在 GitHub CI Run #465 PASS。**这只证明 code/contract；真实双 Client runtime 仍未执行，不能记 runtime PASS，也不能据此开放 MultiplayerOnly Safe Execute。**
 - Multiplayer Lab snapshot：已改为 schema 2 的持久 base-game snapshot + profile overlay 增量同步。marker 拆分 `baseGameId`、`ritsuArtifactId`、`combatSolverArtifactId`；游戏版本/底座变化、底座完整性失败或旧 schema 才全量重建，overlay 采用临时 managed tree + SHA-256 + rename/rollback。CombatSolver/RitsuLib 变化分别只更新各自 payload，HostVanilla 不因 CombatSolver 构建变化重建；`prepare-instances` 输出 `FULL_REBUILD` / `OVERLAY_UPDATED` / `REUSED` 和 `copiedFiles`。ownership、no-reparse-point、运行中禁止覆盖和正式证据隔离合同保持不变。
 - Multiplayer Instant、Potion、Choice、Replay、单人 Full Auto 和队友目标继续关闭；显式 Safe Execute 下已新增实验性 Safe Auto，但不扩大动作边界：仍只部署当前真实本地回合的安全本地普通牌与安全 EndTurn，每个本地回合重新授权；默认 Probe 不自动升级。
 - 本轮没有为 MP2B 声明新的 GitHub Actions 结果；实机结论来自隔离 Multiplayer Lab 的 Host/Client journal 与对应验证器，不等同于 GitHub Actions 结果。

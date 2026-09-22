@@ -91,8 +91,6 @@ public static class Entry
             || NGame.Instance == null)
             return;
 
-        MultiplayerConsoleFixtureRunner.TrySchedule(state);
-
         SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
         if (!capabilities.CanSearch)
             return;
