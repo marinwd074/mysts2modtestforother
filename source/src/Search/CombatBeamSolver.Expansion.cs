@@ -3782,11 +3782,15 @@ internal sealed partial class CombatBeamSolver
             Cycle: coarseCycle);
         CombatProgressState transpositionProgress = null!;
         TranspositionLabel dominating = new(
-            0, 0, 0, 0, 1, 10, SearchRouteTraits.None, HasNonPotionAction: false,
+            0, 0, 0, 0,
+            AllPlayersAlive: true, TeamLossRatio: 0, WorstPlayerLossRatio: 0,
+            ActionCount: 1, Score: 10, SearchRouteTraits.None, HasNonPotionAction: false,
             BoundaryReason: SearchBoundaryReason.None, PlayerDead: false, AllEnemiesDead: false,
             PredictionGaps: [], CombatProgress: transpositionProgress);
         TranspositionLabel dominated = new(
-            0, 0, 0, 0, 2, 9, SearchRouteTraits.None, HasNonPotionAction: false,
+            0, 0, 0, 0,
+            AllPlayersAlive: true, TeamLossRatio: 0, WorstPlayerLossRatio: 0,
+            ActionCount: 2, Score: 9, SearchRouteTraits.None, HasNonPotionAction: false,
             BoundaryReason: SearchBoundaryReason.None, PlayerDead: false, AllEnemiesDead: false,
             PredictionGaps: [], CombatProgress: transpositionProgress);
 
