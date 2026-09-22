@@ -28,7 +28,10 @@ internal static class MultiplayerSafeLocalActionClassifier
                     || action.NestedChoicesBeforePrimary != 0
                     || action.TurnStartChoices is { Count: > 0 }));
         if (!structural.IsSafe)
+        {
+            LogLiftClassification(action, structural);
             return structural;
+        }
 
         Player? localPlayer = LocalContext.GetMe(state);
         CardModel? card = null;
@@ -65,7 +68,7 @@ internal static class MultiplayerSafeLocalActionClassifier
             }
         }
 
-        return MultiplayerSafeExecutePolicy.ClassifyResolved(
+        SafeLocalActionDecision decision = MultiplayerSafeExecutePolicy.ClassifyResolved(
             new(
                 HasLocalPlayer: localPlayer?.PlayerCombatState != null,
                 HasLocalCard: card != null,
@@ -76,6 +79,18 @@ internal static class MultiplayerSafeLocalActionClassifier
                 HasIncompleteTargetIdentity: !hasTarget
                     && (action.TargetIndex != -1 || !string.IsNullOrEmpty(action.TargetName)),
                 IsPromotedMultiplayerOnlyCard: isPromotedMultiplayerOnlyCard));
+        LogLiftClassification(action, decision);
+        return decision;
+    }
+
+    private static void LogLiftClassification(PlanAction action, SafeLocalActionDecision decision)
+    {
+        if (!string.Equals(action.CardId, "LIFT", StringComparison.Ordinal))
+            return;
+        Entry.Logger.Info(
+            $"[LIFT-DIAG] CLASSIFY safe={decision.IsSafe.ToString().ToLowerInvariant()} " +
+            $"reason={decision.Reason} ends_continuation={decision.EndsContinuation.ToString().ToLowerInvariant()} " +
+            $"target_combat_id={action.TargetCombatId?.ToString() ?? "-"}");
     }
 
     public static IReadOnlyList<PlanAction> TakeSafePrefix(
