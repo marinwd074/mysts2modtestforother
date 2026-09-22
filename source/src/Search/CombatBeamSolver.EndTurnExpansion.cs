@@ -1,3 +1,5 @@
+using CombatSolver.Engine.InCombat.Simulation;
+
 namespace CombatSolver;
 
 // End-turn materialization is isolated from the general action expansion body;
