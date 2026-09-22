@@ -9,15 +9,23 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: pinned-monster-target-audit-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   extract-monster-move-il:
     runs-on: windows-latest
     steps:
-      - name: Check out pinned game body and source
+      - name: Check out source and LFS pointers
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-          lfs: true
+
+      - name: Fetch only pinned sts2.dll
+        shell: pwsh
+        run: |
+          git lfs pull --include="game-body/data_sts2_windows_x86_64/sts2.dll" --exclude=""
 
       - name: Verify pinned sts2.dll
         shell: pwsh
