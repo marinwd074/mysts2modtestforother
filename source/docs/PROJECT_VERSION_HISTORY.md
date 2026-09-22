@@ -4,6 +4,13 @@
 > 基础代码仍以 CombatSolver 0.40.2 为起点；本表只描述这个 fork 从开始改造后的能力演进。  
 > 版本号按里程碑归并，不要求一版对应一个 commit。细节需要时再查对应 Git 历史。
 
+## v0.18 — GC Policy 测试接口模块化
+**2026-09-22**
+
+- `SearchGcPolicy.cs` 中测试计数、暂停边界和故障注入接口拆到独立 `SearchGcPolicy.TestHooks.cs`。
+- 真实 GC 生命周期/回收策略与测试控制面分离，行为不变，降低单文件上下文和后续误改风险。
+- `CombatSolver.GcPolicyChecks` 显式编译新的 test-hooks partial，继续验证同一套生产 GC 逻辑。
+
 ## v0.17 — 历史报告与快照分配瘦身
 **2026-09-22**
 
