@@ -358,6 +358,16 @@ internal static class MultiplayerSafeExecutePolicy
         => stop.IsSafe
            || string.Equals(stop.Reason, BoundedActionCeilingReason, StringComparison.Ordinal);
 
+    internal static bool ShouldStopSafeAutoForObservedWorldDelta(
+        bool safeAutoEnabled,
+        bool deploymentActive,
+        bool localPrivateChanged,
+        bool turnBoundaryChanged)
+        => safeAutoEnabled
+           && !deploymentActive
+           && localPrivateChanged
+           && !turnBoundaryChanged;
+
     internal static IReadOnlyList<T> TakeBoundedSafePrefix<T>(
         IReadOnlyList<T> actions,
         Func<T, SafeLocalActionDecision> classify,
