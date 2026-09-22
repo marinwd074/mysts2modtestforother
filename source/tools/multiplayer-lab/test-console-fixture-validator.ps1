@@ -71,6 +71,14 @@ try {
     })
     Invoke-Expected $badSchema 1
 
+    $badName = Write-Fixture 'bad-name.json' ([ordered]@{
+        schemaVersion = 1
+        name = 'tag team ambiguous'
+        waitFor = 'local_playable_turn'
+        commands = @('draw 1')
+    })
+    Invoke-Expected $badName 1
+
     Write-Output 'PASS: multiplayer console fixture validator checks'
     exit 0
 }
