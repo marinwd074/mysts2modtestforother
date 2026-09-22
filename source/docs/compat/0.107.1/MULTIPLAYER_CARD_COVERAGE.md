@@ -67,6 +67,13 @@ Important version traps confirmed against public patch history:
   change, but the Early Access card was reintroduced in v0.98 and v0.100 changed
   the granted Energy from 3/4 to 2/3. Do not reconstruct 0.107.1 from the old
   v0.83 pre-release card.
+- `Mimic`: the old v0.74 pre-release card temporarily lost Exhaust, but Early
+  Access v0.98 reintroduced the card. In the target-era card, base Mimic has
+  Exhaust and the upgraded card removes it; do not reuse the old v0.74 result.
+- `Radiate`: v0.101 fixed multiplayer counting so Stars gained by other players
+  do not contribute. The mirror reads `GetStarsGainedThisTurn(model.Owner)`.
+- `Haunt`: v0.101 fixed it proccing when another player plays a Soul. The mirror
+  requires the Soul owner creature to equal the Haunt power owner.
 - `Huddle Up`: v0.100 added Exhaust and clarified the text to `ALL players`.
   The draw effect remains 2/3 cards; generic card result-location handling owns
   the Exhaust behavior.
