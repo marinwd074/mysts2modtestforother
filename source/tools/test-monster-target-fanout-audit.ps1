@@ -217,19 +217,16 @@ if ($remoteChoiceRows.Count -ne 1 -or $remoteChoiceRows[0].Key -ne 'KnowledgeDem
 $knowledgeChoiceText = [IO.File]::ReadAllText($knowledgeChoicePath)
 $knowledgeStateText = [IO.File]::ReadAllText($knowledgeStatePath)
 $stateEvaluationText = [IO.File]::ReadAllText($stateEvaluationPath)
-if (-not $runtimeText.Contains('KnowledgeDemonChoiceSupport.BlockOnUncontrolledMultiplayerChoice(')
-    -or -not $runtimeText.Contains('simulator.State.PlayerCreatures.Count > 1')) {
+if ((-not $runtimeText.Contains('KnowledgeDemonChoiceSupport.BlockOnUncontrolledMultiplayerChoice(')) -or (-not $runtimeText.Contains('simulator.State.PlayerCreatures.Count > 1'))) {
     throw 'Multiplayer Knowledge Demon no longer stops before local-only curse resolution.'
 }
-if (-not $knowledgeChoiceText.Contains('IsUncontrolledRemoteChoice: true')
-    -or -not $knowledgeChoiceText.Contains('远端 Knowledge Demon 玩家选择不能作为本地求解器可优化分支')) {
+if ((-not $knowledgeChoiceText.Contains('IsUncontrolledRemoteChoice: true')) -or (-not $knowledgeChoiceText.Contains('远端 Knowledge Demon 玩家选择不能作为本地求解器可优化分支'))) {
     throw 'Knowledge Demon remote choice is no longer explicitly non-optimizable.'
 }
 if (-not $knowledgeStateText.Contains('HasUnsupportedKnowledgeDemonMultiplayerChoice')) {
     throw 'Knowledge Demon multiplayer choice lost its explicit unsupported-state marker.'
 }
-if (-not $stateEvaluationText.Contains('if (combat.HasUnsupportedKnowledgeDemonMultiplayerChoice)')
-    -or -not $stateEvaluationText.Contains('boundary = SearchBoundaryReason.UnsupportedEffect;')) {
+if ((-not $stateEvaluationText.Contains('if (combat.HasUnsupportedKnowledgeDemonMultiplayerChoice)')) -or (-not $stateEvaluationText.Contains('boundary = SearchBoundaryReason.UnsupportedEffect;'))) {
     throw 'Knowledge Demon multiplayer choice is no longer mapped to UnsupportedEffect.'
 }
 
