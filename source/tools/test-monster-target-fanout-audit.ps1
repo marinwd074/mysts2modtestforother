@@ -57,10 +57,10 @@ foreach ($line in $auditLines) {
     $action = $Matches.action.Trim()
 
     if ($native -notin $allowedNative) {
-        throw "Invalid native target class for $move: $native"
+        throw "Invalid native target class for ${move}: $native"
     }
     if ($action -notin $allowedActions) {
-        throw "Invalid solver action for $move: $action"
+        throw "Invalid solver action for ${move}: $action"
     }
 
     if ($native -eq 'PENDING_PINNED_IL') {
