@@ -211,6 +211,8 @@ internal static partial class MonsterMoveEffects
             ("LouseProgenitor", "WEB_CANNON_MOVE") or
             ("Crusher", "BUG_STING_MOVE") or
             ("TrackerRubyRaider", "TRACK_MOVE") or
+            ("Noisebot", "NOISE_MOVE") or
+            ("SoulFysh", "BECKON_MOVE") or
             ("SoulFysh", "GAZE_MOVE") or
             ("Axebot", "HAMMER_UPPERCUT_MOVE") or
             ("FakeMerchantMonster", "THROW_RELIC_MOVE") or
@@ -233,6 +235,11 @@ internal static partial class MonsterMoveEffects
             ("WaterfallGiant", "STOMP_MOVE") or
             ("GremlinMerc", "DOUBLE_SMASH_MOVE");
 
+    private static bool IsPinnedSpecialRngFanOutSafe(string monsterType, string moveId)
+        => (monsterType, moveId) is
+            ("ThievingHopper", "THIEVERY_MOVE") or
+            ("TheInsatiable", "LIQUIFY_GROUND_MOVE");
+
     public static void ApplyBeforeAttack(
         CombatPredictionSimulator simulator,
         SimulatedCombatState combat,
@@ -251,47 +258,76 @@ internal static partial class MonsterMoveEffects
             }
         }
 
-        if (move.Owner.Monster?.GetType().Name != "ThievingHopper"
-            || move.Move.Id != "THIEVERY_MOVE"
-            || player.Player is not { } targetPlayer)
+        if (move.Owner.Monster?.GetType().Name == "ThievingHopper"
+            && move.Move.Id == "THIEVERY_MOVE")
         {
-            return;
+            ApplyThieveryFanOut(simulator, combat, move, player);
         }
+    }
 
-        SimPlayerCombatState state = simulator.State.GetPlayerCombatState(targetPlayer);
-        List<PredictedCard> cards = state.DrawPile.Cards
-            .Concat(state.DiscardPile.Cards)
-            .Where(card => card.Preview.DeckVersion != null)
-            .ToList();
-        if (cards.Count == 0)
-            return;
+    private static void ApplyThieveryFanOut(
+        CombatPredictionSimulator simulator,
+        SimulatedCombatState combat,
+        ForecastMove move,
+        Creature fallbackPlayer)
+    {
+        IReadOnlyList<Creature> targets = simulator.State.PlayerCreatures.Count > 1
+            ? simulator.State.PlayerCreatures
+            : [fallbackPlayer];
+        List<(Creature Target, PredictedCard Card)> stolenCards = [];
 
-        IEnumerable<PredictedCard> candidates = cards;
-        Func<PredictedCard, bool>[] priorities =
-        [
-            card => card.Preview.Enchantment is not Imbued && card.Preview.Rarity == CardRarity.Uncommon,
-            card => card.Preview.Enchantment is not Imbued
-                && card.Preview.Rarity is CardRarity.Common or CardRarity.Rare or CardRarity.Event,
-            card => card.Preview.Enchantment is not Imbued
-                && card.Preview.Rarity is CardRarity.Basic or CardRarity.Quest,
-            card => card.Preview.Rarity == CardRarity.Ancient || card.Preview.Enchantment is Imbued,
-        ];
-        foreach (Func<PredictedCard, bool> priority in priorities)
+        // Pinned 0.107.1 first enumerates every target, skips dead targets, consumes
+        // CombatCardGeneration once per successful steal, and removes all selected cards.
+        foreach (Creature target in targets)
         {
-            PredictedCard[] preferred = cards.Where(priority).ToArray();
-            if (preferred.Length == 0)
+            if (!simulator.State.GetCreature(target).IsAlive)
                 continue;
-            candidates = preferred;
-            break;
+            Player? targetPlayer = target.Player ?? target.PetOwner;
+            if (targetPlayer == null)
+                continue;
+
+            SimPlayerCombatState state = simulator.State.GetPlayerCombatState(targetPlayer);
+            List<PredictedCard> cards = state.DrawPile.Cards
+                .Concat(state.DiscardPile.Cards)
+                .Where(card => card.Preview.DeckVersion != null)
+                .ToList();
+            if (cards.Count == 0)
+                continue;
+
+            IEnumerable<PredictedCard> candidates = cards;
+            Func<PredictedCard, bool>[] priorities =
+            [
+                card => card.Preview.Enchantment is not Imbued && card.Preview.Rarity == CardRarity.Uncommon,
+                card => card.Preview.Enchantment is not Imbued
+                    && card.Preview.Rarity is CardRarity.Common or CardRarity.Rare or CardRarity.Event,
+                card => card.Preview.Enchantment is not Imbued
+                    && card.Preview.Rarity is CardRarity.Basic or CardRarity.Quest,
+                card => card.Preview.Rarity == CardRarity.Ancient || card.Preview.Enchantment is Imbued,
+            ];
+            foreach (Func<PredictedCard, bool> priority in priorities)
+            {
+                PredictedCard[] preferred = cards.Where(priority).ToArray();
+                if (preferred.Length == 0)
+                    continue;
+                candidates = preferred;
+                break;
+            }
+
+            PredictedCard stolen = simulator.Rng.CombatCardGeneration.NextItem(candidates)
+                ?? throw new InvalidOperationException("飞贼的偷牌候选非空但没有选中牌。");
+            simulator.RemoveFromCombat(stolen);
+            combat.RecordStolenCard(simulator);
+            stolenCards.Add((target, stolen));
         }
 
-        PredictedCard stolen = simulator.Rng.CombatCardGeneration.NextItem(candidates)
-            ?? throw new InvalidOperationException("飞贼的偷牌候选非空但没有选中牌。");
-        simulator.RemoveFromCombat(stolen);
-        combat.RecordStolenCard(simulator);
-        SwipePower swipe = combat.AddPowerInstance<SwipePower>(move.Owner, 1, move.Owner);
-        swipe._target = player;
-        swipe.StolenCard = stolen.Preview;
+        // Native then performs the Swipe/steal phase only after every selected card has
+        // already left its owner's pile. Preserve that cross-player ordering exactly.
+        foreach ((Creature target, PredictedCard stolen) in stolenCards)
+        {
+            SwipePower swipe = combat.AddPowerInstance<SwipePower>(move.Owner, 1, move.Owner);
+            swipe._target = target;
+            swipe.StolenCard = stolen.Preview;
+        }
     }
 
     public static bool Apply(
@@ -307,7 +343,9 @@ internal static partial class MonsterMoveEffects
         string id = move.Move.Id;
         bool simpleFanOut = IsPinnedSimpleFanOutSafe(type, id);
         bool splitFanOut = IsPinnedSplitFanOutSafe(type, id);
-        if ((!simpleFanOut && !splitFanOut) || simulator.State.PlayerCreatures.Count <= 1)
+        bool specialRngFanOut = IsPinnedSpecialRngFanOutSafe(type, id);
+        if ((!simpleFanOut && !splitFanOut && !specialRngFanOut)
+            || simulator.State.PlayerCreatures.Count <= 1)
         {
             return ApplySingleTarget(
                 simulator,
@@ -320,6 +358,21 @@ internal static partial class MonsterMoveEffects
         }
         if (splitFanOut)
             return ApplySplitFanOut(simulator, combat, move, out killedOwner);
+        if (specialRngFanOut)
+        {
+            if (type == "TheInsatiable" && id == "LIQUIFY_GROUND_MOVE")
+                return ApplyLiquifyGroundFanOut(simulator, combat, move, out killedOwner);
+
+            // THIEVERY_MOVE is fully handled before attack and has no post-attack effect.
+            return ApplySingleTarget(
+                simulator,
+                combat,
+                move,
+                player,
+                out killedOwner,
+                plannedChoices,
+                applySharedPreamble: true);
+        }
 
         bool handled = false;
         killedOwner = false;
@@ -340,6 +393,43 @@ internal static partial class MonsterMoveEffects
                 break;
         }
         return handled;
+    }
+
+    private static bool ApplyLiquifyGroundFanOut(
+        CombatPredictionSimulator simulator,
+        SimulatedCombatState combat,
+        ForecastMove move,
+        out bool killedOwner)
+    {
+        killedOwner = false;
+        MonsterModel monster = move.Owner.Monster!;
+        string type = monster.GetType().Name;
+        string id = move.Move.Id;
+        ApplySharedPreamble(simulator, combat, move, monster, type, id);
+
+        // Pinned 0.107.1 has two separate target loops: all Sandpit applications first,
+        // then six Frantic Escape insertions per player. Do not interleave these phases.
+        foreach (Creature target in simulator.State.PlayerCreatures)
+        {
+            combat.ApplyTargeted<SandpitPower>(move.Owner, target, 4, move.Owner);
+            if (simulator.HasPendingChoice)
+                return true;
+        }
+
+        foreach (Creature target in simulator.State.PlayerCreatures)
+        {
+            simulator.AddToCombat<FranticEscape>(
+                target, PileType.Draw, 3, null, CardPilePosition.Random);
+            if (simulator.HasPendingChoice)
+                return true;
+            simulator.AddToCombat<FranticEscape>(
+                target, PileType.Discard, 3, null, CardPilePosition.Random);
+            if (simulator.HasPendingChoice)
+                return true;
+        }
+
+        combat.SetMonsterBool(move.Owner, "HasLiquified", true);
+        return true;
     }
 
     private static bool ApplySplitFanOut(

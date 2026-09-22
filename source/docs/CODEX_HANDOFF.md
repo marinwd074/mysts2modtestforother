@@ -4,11 +4,11 @@
 
 ### 2026-09-22 pinned monster-target runtime 检查点
 
-- `b875293a` 已通过 GitHub CI：`static-consistency PASS`、`contract-tests PASS`。该提交先开放 pinned 0.107.1 审计中的 50 个机械 `FanOutSafe` move。
-- 其余 9 个原 `NeedsMoreModeling` 已进一步拆解为“全玩家 target phase + owner-once phase”：Aeonglass Increasing Intensity、Test Subject Burning Growl、Lagavulin Matriarch Soul Siphon、Wriggler Wriggle、The Lost Debilitating Smog、Slimed Berserker Leeching Hug、The Forgotten Miasma、Waterfall Giant Stomp、Gremlin Merc Double Smash。Gremlin Merc 的 Thievery 保持在 target fanout 前执行一次；其余 owner Strength/Block/counter 副作用在全体目标效果后执行一次。
-- runtime fanout 总计现为 59 个确定性 move：50 个 simple fanout + 9 个 split fanout；静态合同要求两组并集与 audit 的 `FanOutSafe` 集合完全一致，并要求 9 个 owner-once move 必须留在 split path。
-- 仍未开放的只有 4 个 `NeedsPerTargetRng`（Thieving Hopper Thievery、The Insatiable Liquify Ground、Noisebot Noise、Soul Fysh Beckon）和 1 个 `NeedsRemoteChoiceFailClosed`（Knowledge Demon Curse of Knowledge）。它们继续保持现有单目标/fail-closed 边界。
-- 本检查点仍只声明 code/contract，不声明新的 Host/Client runtime PASS。下一步优先处理 4 个 per-target RNG 的共享 RNG 顺序与远端牌堆写入语义；Knowledge Demon choice 单独保留到多玩家 choice 生命周期有明确方案后再动。
+- `b875293a` 与 `c628a72d` 的 GitHub compatibility CI 均已 PASS。确定性 50 项与 owner-once 9 项已先后接入完整 captured player roster。
+- pinned IL 进一步收口 4 个 per-target RNG：Noisebot Noise / Soul Fysh Beckon 直接按 roster 顺序复用现有单目标实现，随机位置继续顺序消费共享 Shuffle RNG；Thieving Hopper Thievery 严格保持“遍历 living targets 选牌并消费 CombatCardGeneration、全部 RemoveFromCombat → 再逐张建立 Swipe”的原生两阶段；The Insatiable Liquify Ground 严格保持“全目标 Sandpit → 每目标 6 张 Frantic Escape 随机插入 → owner HasLiquified=true”的原生相位。
+- The Insatiable 的 `HasLiquified` 现进入 root monster state、fingerprint 与 continuation 描述，避免该 owner 状态在 Fork/跨回合比较中丢失。
+- audit 当前 63/64 为 `FanOutSafe`。唯一未开放的是 `KnowledgeDemon.CURSE_OF_KNOWLEDGE_MOVE`：原生为每名 living player 独立 BlockingPlayerChoiceContext，而 solver 目前只拥有一个 pending choice 生命周期，因此继续 `NeedsRemoteChoiceFailClosed`。
+- 本检查点仍只声明 code/contract；未新增 Host/Client runtime PASS。下一步不要继续扩大普通怪物 fanout，优先设计/验证 multiplayer per-player choice continuation，或转回 Safe Auto/多人牌的实机门禁。
 
 ### 2026-09-22 readable-state 审计检查点
 

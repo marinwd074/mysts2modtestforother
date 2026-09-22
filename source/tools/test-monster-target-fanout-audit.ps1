@@ -97,21 +97,26 @@ foreach ($move in $rows.Keys) {
 
 $pending = @($rows.Values | Where-Object Native -eq 'PENDING_PINNED_IL').Count
 $resolved = $rows.Count - $pending
+$perTargetRng = @($rows.Values | Where-Object Action -eq 'NeedsPerTargetRng').Count
+if ($perTargetRng -ne 0) {
+    throw "Pinned per-target RNG audit still has unresolved rows: $perTargetRng"
+}
 
 $fanOutSafeMoves = @(
     $rows.GetEnumerator() |
         Where-Object { $_.Value.Action -eq 'FanOutSafe' } |
         ForEach-Object { $_.Key }
 )
-if ($fanOutSafeMoves.Count -ne 59) {
-    throw "Expected 59 pinned FanOutSafe rows, found $($fanOutSafeMoves.Count)."
+if ($fanOutSafeMoves.Count -ne 63) {
+    throw "Expected 63 pinned FanOutSafe rows, found $($fanOutSafeMoves.Count)."
 }
 
 $runtimeText = [IO.File]::ReadAllText($runtimePath)
 $runtimePairs = @{}
 $runtimeGroups = @(
     [pscustomobject]@{ Name = 'simple'; Pattern = '(?s)private static bool IsPinnedSimpleFanOutSafe\(.*?(?=\r?\n\s*private static bool IsPinnedSplitFanOutSafe)' },
-    [pscustomobject]@{ Name = 'split'; Pattern = '(?s)private static bool IsPinnedSplitFanOutSafe\(.*?(?=\r?\n\s*public static void ApplyBeforeAttack)' }
+    [pscustomobject]@{ Name = 'split'; Pattern = '(?s)private static bool IsPinnedSplitFanOutSafe\(.*?(?=\r?\n\s*private static bool IsPinnedSpecialRngFanOutSafe)' },
+    [pscustomobject]@{ Name = 'special-rng'; Pattern = '(?s)private static bool IsPinnedSpecialRngFanOutSafe\(.*?(?=\r?\n\s*public static void ApplyBeforeAttack)' }
 )
 foreach ($group in $runtimeGroups) {
     $allowListMatch = [regex]::Match($runtimeText, $group.Pattern)
@@ -166,6 +171,27 @@ if (-not $runtimeText.Contains('ApplySplitFanOut(simulator, combat, move, out ki
 }
 if (-not $runtimeText.Contains('combat.RecordThievery(simulator, move.Owner);')) {
     throw 'Gremlin Merc split fanout lost its pre-target thievery side effect.'
+}
+$rngExpected = @(
+    'ThievingHopper.THIEVERY_MOVE',
+    'TheInsatiable.LIQUIFY_GROUND_MOVE'
+)
+foreach ($move in $rngExpected) {
+    if (-not $runtimePairs.ContainsKey($move) -or $runtimePairs[$move] -ne 'special-rng') {
+        throw "Phase-sensitive RNG move is not in the special RNG fanout path: $move"
+    }
+}
+if (-not $runtimePairs.ContainsKey('Noisebot.NOISE_MOVE') -or $runtimePairs['Noisebot.NOISE_MOVE'] -ne 'simple') {
+    throw 'Noisebot.NOISE_MOVE must use sequential simple fanout.'
+}
+if (-not $runtimePairs.ContainsKey('SoulFysh.BECKON_MOVE') -or $runtimePairs['SoulFysh.BECKON_MOVE'] -ne 'simple') {
+    throw 'SoulFysh.BECKON_MOVE must use sequential simple fanout.'
+}
+if (-not $runtimeText.Contains('List<(Creature Target, PredictedCard Card)> stolenCards = [];')) {
+    throw 'Thieving Hopper no longer separates card removal from Swipe creation.'
+}
+if (-not $runtimeText.Contains('combat.SetMonsterBool(move.Owner, "HasLiquified", true);')) {
+    throw 'Liquify Ground no longer records the native HasLiquified owner state.'
 }
 
 Write-Output "MONSTER_TARGET_FANOUT_AUDIT_CHECKS_PASS rows=$($rows.Count) resolved=$resolved pending=$pending runtimeFanOut=$($runtimePairs.Count)"

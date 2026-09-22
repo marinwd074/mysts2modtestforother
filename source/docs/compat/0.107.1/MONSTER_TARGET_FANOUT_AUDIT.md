@@ -28,21 +28,23 @@ Allowed solver actions:
 `FanOutSafe`, `NeedsPerTargetRng`, `NeedsRemoteChoiceFailClosed`,
 `NeedsMoreModeling`, `NoChange`.
 
-Runtime status (2026-09-22): all 59 deterministic rows below are now `FanOutSafe`.
-50 mechanically replay the existing single-target effect in captured player-roster order.
-The former 9 `NeedsMoreModeling` rows use an explicit split path so target-list effects run
-for every captured player while owner-only Strength/Block/counters run exactly once in the
-pinned native order (including Gremlin Merc's pre-target steal). The remaining 4 per-target
-RNG rows and 1 remote-choice row are not widened. This is code/contract state only; no new
-Host/Client runtime PASS is claimed here.
+Runtime status (2026-09-22): 63/64 audited moves are now `FanOutSafe`.
+52 mechanically replay the existing single-target effect in captured player-roster order,
+including Noisebot Noise and Soul Fysh Beckon, whose random pile positions advance the shared
+Shuffle RNG sequentially. 9 owner-once rows use the explicit split path. Thieving Hopper
+Thievery preserves the native two-phase order (select/remove for every living target, then
+create Swipe state), and The Insatiable Liquify Ground preserves its two target loops before
+setting `HasLiquified` once. Only Knowledge Demon Curse of Knowledge remains fail-closed due
+to per-player blocking choices. This is code/contract state only; no new Host/Client runtime
+PASS is claimed here.
 
 | Monster.Move | Native target class | Dead filtering | RNG/choice/private dependency | Solver action |
 |---|---|---|---|---|
-| `ThievingHopper.THIEVERY_MOVE` | PerTargetLoop | Explicit `target.IsDead` skip | Enumeration order; per-target deck/pet-owner resolution, `_stealPriorities`, `CombatCardGeneration` RNG, one `SwipePower` per stolen card | NeedsPerTargetRng |
+| `ThievingHopper.THIEVERY_MOVE` | PerTargetLoop | Explicit `target.IsDead` skip | Enumeration order; per-target deck/pet-owner resolution, `_stealPriorities`, `CombatCardGeneration` RNG, one `SwipePower` per stolen card | FanOutSafe |
 | `KnowledgeDemon.CURSE_OF_KNOWLEDGE_MOVE` | PerPlayerChoice | Explicit `target.IsDead` skip in `ChooseCurse` | Enumeration order; per-player `BlockingPlayerChoiceContext`, curse set/counter and target player; solver currently owns only one pending choice | NeedsRemoteChoiceFailClosed |
 | `MagiKnight.DAMPEN_MOVE` | PerTargetLoop | No explicit target-death skip in move IL | Enumeration order; existing `DampenPower` caster set and per-target upgraded-card state; both are already mirrored/fingerprinted | FanOutSafe |
 | `Aeonglass.INCREASING_INTENSITY_MOVE` | PerTargetLoop | No explicit target-death skip in move IL | Enumeration order; per-player Wither mutation, then shared `WitherUpgradeCount`, owner Strength and `AdditionalStrength` advance once | FanOutSafe |
-| `TheInsatiable.LIQUIFY_GROUND_MOVE` | PerTargetLoop | No explicit target-death skip in move IL | Enumeration order; per-target `SandpitPower` and generated `FranticEscape` placement, plus owner `HasLiquified` once | NeedsPerTargetRng |
+| `TheInsatiable.LIQUIFY_GROUND_MOVE` | PerTargetLoop | No explicit target-death skip in move IL | Enumeration order; per-target `SandpitPower` and generated `FranticEscape` placement, plus owner `HasLiquified` once | FanOutSafe |
 | `TestSubject.SKULL_BASH_MOVE` | AllTargets | No explicit target-death skip; forwards supplied targets | Single target-list Vulnerable application after generic Attack; no per-target RNG/choice | FanOutSafe |
 | `TestSubject.BURNING_GROWL_MOVE` | AllTargets | No explicit target-death skip; forwards supplied targets | Burns use supplied target list; owner Strength gain occurs once after target effect | FanOutSafe |
 | `SludgeSpinner.OIL_SPRAY_MOVE` | AllTargets | No explicit target-death skip; forwards supplied targets | Single target-list Weak application after generic Attack; no per-target RNG/choice | FanOutSafe |
@@ -89,8 +91,8 @@ Host/Client runtime PASS is claimed here.
 | `LouseProgenitor.WEB_CANNON_MOVE` | AllTargets | No explicit target-death skip; forwards supplied targets | Single target-list Frail application after generic Attack; no per-target RNG/choice | FanOutSafe |
 | `Crusher.BUG_STING_MOVE` | AllTargets | No explicit target-death skip; forwards supplied targets | Target-list Weak and Frail applications after generic multi-hit Attack; deterministic | FanOutSafe |
 | `TrackerRubyRaider.TRACK_MOVE` | AllTargets | No explicit target-death skip; forwards supplied targets | Target/VFX setup is deterministic; gameplay Frail command consumes supplied target list | FanOutSafe |
-| `Noisebot.NOISE_MOVE` | PerTargetLoop | No explicit target-death skip in move IL | Enumeration order; per-target generated Dazed cards and draw-pile insertion modeled by solver with random position | NeedsPerTargetRng |
-| `SoulFysh.BECKON_MOVE` | PerTargetLoop | No explicit target-death skip in move IL | Enumeration order; per-target generated Beckon cards and draw-pile insertion modeled by solver with random position | NeedsPerTargetRng |
+| `Noisebot.NOISE_MOVE` | PerTargetLoop | No explicit target-death skip in move IL | Enumeration order; per-target generated Dazed cards and draw-pile insertion modeled by solver with random position | FanOutSafe |
+| `SoulFysh.BECKON_MOVE` | PerTargetLoop | No explicit target-death skip in move IL | Enumeration order; per-target generated Beckon cards and draw-pile insertion modeled by solver with random position | FanOutSafe |
 | `SoulFysh.GAZE_MOVE` | PerTargetLoop | No explicit target-death skip in move IL | Enumeration order; per-target generated Beckon discard insertion after generic Attack; no random position in solver path | FanOutSafe |
 | `Axebot.HAMMER_UPPERCUT_MOVE` | AllTargets | No explicit target-death skip; forwards supplied targets | Target-list Weak and Frail applications after generic Attack; deterministic | FanOutSafe |
 | `FakeMerchantMonster.THROW_RELIC_MOVE` | AllTargets | No explicit target-death skip; forwards supplied targets | Single target-list Frail application after generic Attack; no per-target RNG/choice | FanOutSafe |
