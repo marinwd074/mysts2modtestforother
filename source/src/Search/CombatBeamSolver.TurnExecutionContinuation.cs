@@ -27,6 +27,7 @@ internal sealed partial class CombatBeamSolver
         public bool SideStarted;
         public int DrawCount;
         public bool WillShuffle;
+        public bool AllowSharedShuffleForecast;
         public int DrawHistoryStart;
 
         public PlayerStartProgress Fork(PredictionForkContext context)
@@ -53,7 +54,9 @@ internal sealed partial class CombatBeamSolver
     private static SearchBoundaryReason ContinuePlayerStart(CombatPredictionSimulator simulator,
         SimulatedCombatState combat, PlayerStartProgress progress, PlayerStartStage stage,
         CombatBeamSolver? captureOwner = null, RoundReplayCheckpointCapture? capture = null,
-        SearchPerformanceMetrics? metrics = null)
+        SearchPerformanceMetrics? metrics = null,
+        bool stopBeforeSideStart = false,
+        bool suppressContinuation = false)
     {
         simulator.AcknowledgeExecutionDispatch();
         Player player = progress.Player;
@@ -74,10 +77,13 @@ internal sealed partial class CombatBeamSolver
         bool Suspended(PlayerStartStage next)
         {
             if (!combat.HasPendingChoice) return false;
-            simulator.AppendExecutionContinuation(new PlayerStartFrame(progress, next));
+            if (!suppressContinuation)
+                simulator.AppendExecutionContinuation(new PlayerStartFrame(progress, next));
             return true;
         }
-        using var beforeChoice = !progress.SideStarted && stage <= PlayerStartStage.AfterPlayer
+        using var beforeChoice = !stopBeforeSideStart
+            && !progress.SideStarted
+            && stage <= PlayerStartStage.AfterPlayer
             ? choices.BeforeNextTake(StartSide) : null;
         if (stage <= PlayerStartStage.BeforeHand)
         {
@@ -100,7 +106,8 @@ internal sealed partial class CombatBeamSolver
             }
             int effectiveDraw = Math.Min(progress.DrawCount, combat.GetMaxHandSize(player) - playerState.Hand.Cards.Count);
             progress.WillShuffle = effectiveDraw > playerState.DrawPile.Cards.Count && !playerState.DiscardPile.IsEmpty;
-            if (MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
+            if (!progress.AllowSharedShuffleForecast
+                && MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
                     progress.RoutePolicy,
                     progress.RootSetup,
                     progress.WillShuffle))
@@ -131,6 +138,8 @@ internal sealed partial class CombatBeamSolver
             combat.TriggerAfterPlayerTurnStart(simulator, player.Creature, choices);
             if (Suspended(PlayerStartStage.Side)) return SearchBoundaryReason.PendingChoice;
         }
+        if (stopBeforeSideStart)
+            return SearchBoundaryReason.None;
         if (stage <= PlayerStartStage.Side && !progress.SideStarted)
         {
             StartSide();
