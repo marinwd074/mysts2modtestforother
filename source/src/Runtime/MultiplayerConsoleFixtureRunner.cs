@@ -5,6 +5,7 @@ using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.DevConsole;
 using MegaCrit.Sts2.Core.DevConsole.ConsoleCommands;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.GameActions;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Runs;
@@ -116,16 +117,40 @@ internal static class MultiplayerConsoleFixtureRunner
                     $"name={fixture.Name} index={index} command={QuoteForLog(command)} " +
                     $"world_version={beforeWorldVersion}");
 
-                CmdResult result = console.ProcessCommand(command);
-                if (!result.success)
-                    throw new InvalidOperationException($"command_{index}_rejected:{result.msg}");
+                ActionExecutor executor = RunManager.Instance.ActionExecutor;
+                TaskCompletionSource<bool> nativeCommandStarted = new(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+                void OnBeforeActionExecuted(GameAction action)
+                {
+                    if (action is ConsoleCmdGameAction consoleAction
+                        && consoleAction.OwnerId == localPlayer.NetId
+                        && string.Equals(consoleAction.Cmd, command, StringComparison.Ordinal))
+                    {
+                        nativeCommandStarted.TrySetResult(true);
+                    }
+                }
 
-                if (result.task != null)
-                    await result.task.WaitAsync(token);
+                executor.BeforeActionExecuted += OnBeforeActionExecuted;
+                CmdResult result;
+                try
+                {
+                    result = console.ProcessCommand(command);
+                    if (!result.success)
+                        throw new InvalidOperationException($"command_{index}_rejected:{result.msg}");
 
-                await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
-                token.ThrowIfCancellationRequested();
-                await RunManager.Instance.ActionExecutor.FinishedExecutingActions().WaitAsync(token);
+                    if (result.task != null)
+                        await result.task.WaitAsync(token);
+
+                    await nativeCommandStarted.Task.WaitAsync(
+                        TimeSpan.FromSeconds(10),
+                        token);
+                    await executor.FinishedExecutingActions().WaitAsync(token);
+                }
+                finally
+                {
+                    executor.BeforeActionExecuted -= OnBeforeActionExecuted;
+                }
+
                 await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
                 token.ThrowIfCancellationRequested();
 
