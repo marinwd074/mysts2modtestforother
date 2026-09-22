@@ -51,8 +51,13 @@ internal static class MonsterMoveIlInspector
                 MethodDefinition method = reader.GetMethodDefinition(methodHandle);
                 string methodName = reader.GetString(method.Name);
                 bool moveMethod = methodName.Contains("Move", StringComparison.Ordinal);
+                // Native move handlers are not consistently named *Move (for example
+                // ShockingSlap and ThunderStrike). Their async state machines still expose
+                // MoveNext, so retain every compiler-generated async body nested under a
+                // monster type and let the audit filter by declaring handler name.
                 bool asyncMoveBody = string.Equals(methodName, "MoveNext", StringComparison.Ordinal)
-                    && declaringTypeName.Contains("Move", StringComparison.Ordinal);
+                    && declaringTypeName.StartsWith("<", StringComparison.Ordinal)
+                    && declaringTypeName.Contains(">d__", StringComparison.Ordinal);
                 if ((!moveMethod && !asyncMoveBody) || method.RelativeVirtualAddress == 0)
                     continue;
 
