@@ -20,10 +20,12 @@ Status vocabulary:
   represented in solver source. This is not a runtime claim.
 - **checked match**: the existing generic/specialized path was compared with
   0.107.1 and no source mismatch was found; no corrective code was required.
-- **boundary / fail closed**: exact native semantics require remote state that
-  the local-only solver intentionally does not materialize or predict.
-- **isolation-only**: safe root metadata is frozen to prevent background live
-  reads, but the effect still stops at a remote-private write boundary.
+- **boundary / fail closed**: the readable root may contain the required teammate
+  state, but the exact cross-player effect is not yet promoted through search /
+  execution contracts or lacks focused 0.107.1 Host/Client evidence.
+- **isolation-only**: the needed teammate state is detached into the root, but
+  some ownership / generation / mutation semantics still require explicit
+  modeling or validation before the card can leave fail-closed staging.
 
 No row below is "runtime-confirmed" unless a future entry explicitly links a
 native Host/Client differential. GitHub Actions compatibility/L1 tests are
@@ -34,20 +36,20 @@ static/contract evidence, not a substitute for that differential.
 | Card | 0.107.1 route-relevant behavior | Solver/source status | Local cross-turn boundary / remaining evidence |
 |---|---|---|---|
 | Beacon of Hope | owner gains Block -> living teammates gain half the post-modifier amount; recursion guarded | **source-confirmed** | focused multiplayer differential for fractional Block, recipient modifiers, and recursion |
-| Believe in You | selected ally gains 2/3 Energy | **boundary / fail closed** | remote Energy is not part of the local root PlayerCombatState; require a detached public-resource design before support |
+| Believe in You | selected ally gains 2/3 Energy | **boundary / fail closed** | teammate Energy is now root-captured; selected-ally Energy mutation and Safe Execute targeting still need focused source/runtime promotion |
 | Coordinate | selected ally gains temporary Strength 5/8 | **source-confirmed** | public Power-state differential; preserve temporary-Strength restoration |
 | Demonic Shield | lose 1 HP first, then selected ally gains Block equal to owner's resulting current Block | **source-confirmed** | differential with HP-loss hooks and Block modifiers |
-| Energy Surge | every living player ally gains 2/3 Energy | **boundary / fail closed** | same remote-resource boundary as Believe in You; do not capture teammate piles just to obtain Energy |
+| Energy Surge | every living player ally gains 2/3 Energy | **boundary / fail closed** | teammate Energy is root-captured; all-player Energy fan-out still needs exact 0.107.1 differential and deployment-contract promotion |
 | Flanking | instanced debuff; attacks from creatures other than applier deal 2x to target until target-side end | **source-confirmed** | multiplayer differential for applier exclusion, stacking, and expiry |
 | Gang Up | damage = base plus bonus per same-side, non-owner Powered Attack hit on target this turn | **checked match** | calculated-var uses branch/root damage-event history; multi-hit and Osty dealer events are counted separately |
-| Glimpse Beyond | creates Soul cards for each living player and inserts them into each owner's Draw pile | **boundary / fail closed** | directly mutates remote private Draw piles |
-| Hammer Time | when owner Forges, every other living player Forges same amount; HammerTime-sourced Forge does not recurse | **source-confirmed** | remote Forge can require teammate private card state, so local-only prediction may stop at that boundary; runtime differential still needed |
-| Huddle Up | every living player ally draws 2/3 cards | **boundary / fail closed** | directly reads/mutates remote Draw/Hand state |
-| Ignition | selected ally channels Plasma | **boundary / fail closed** | remote Orb queue is not materialized by the local-only root |
+| Glimpse Beyond | creates Soul cards for each living player and inserts them into each owner's Draw pile | **boundary / fail closed** | teammate Draw piles are root-captured, but multi-owner generated-card insertion/ownership has not been promoted or runtime-differentialed |
+| Hammer Time | when owner Forges, every other living player Forges same amount; HammerTime-sourced Forge does not recurse | **source-confirmed** | teammate card state is now root-captured, so source prediction can inspect it; focused multi-player Forge differential and execution staging are still required |
+| Huddle Up | every living player ally draws 2/3 cards | **boundary / fail closed** | teammate Draw/Hand is root-captured; all-player draw ordering, hooks, and Safe Execute world-delta attribution still need promotion/evidence |
+| Ignition | selected ally channels Plasma | **boundary / fail closed** | teammate Orb queues are root-captured; selected-ally channel/evoke semantics and target execution still need focused validation |
 | Intercept | owner gains Block; Covered zeros covered ally Powered Attack damage and Intercept multiplies owner's corresponding damage by covered-count+1 | **source-confirmed** | reciprocal-Intercept and death/expiry native differential |
 | Knockdown | instanced 2x/3x multiplier for other allied Powered Attacks; instance expires on debuffed side-turn end | **source-confirmed** | differential with multiple instances, applier exclusion, Osty dealer identity |
-| Largesse | select from target ally's unlocked Colorless pool; generated card is owned by target and enters target Hand | **isolation-only** | target Colorless eligibility is root-frozen for the public roster; remote Hand remains private and write must fail closed |
-| Legion of Bone | summon/heal Osty for each living player | **boundary / fail closed** | freeze remote/public pet identity before cross-player summon support; never reread mutable live pet state in background |
+| Largesse | select from target ally's unlocked Colorless pool; generated card is owned by target and enters target Hand | **isolation-only** | target generation pool and Hand can be detached into the root; ownership-sensitive generation/choice/write semantics still require focused modeling and runtime evidence |
+| Legion of Bone | summon/heal Osty for each living player | **boundary / fail closed** | readable player/pet state can be captured, but all-player Osty summon/heal lifecycle and death interactions still need explicit source/runtime validation |
 | Lift | selected ally gains 11/16 Block | **checked match** | straight-line AnyAlly Block recipe matches native command |
 | Mimic | selected ally supplies current Block calculation; Mimic owner receives that Block | **source-confirmed** | differential with target Block modifiers and zero/high Block |
 | Rally | every living player ally gains 12/17 Block | **checked match** | generic AllAllies Block recipe uses branch-local player/liveness filtering |
@@ -139,10 +141,13 @@ mutation from unrelated remote interference:
 - `Rally`
 - `Tank`
 
-### Stage C — keep fail closed under the local-only root contract
+### Stage C — keep fail closed pending cross-player semantic promotion
 
-These require remote resources or teammate-private combat state and must not be
-enabled merely by adding them to a card-name whitelist:
+These depend on teammate resources, piles, Orbs, generated-card ownership, or
+pet lifecycle. Those values may now be readable in the detached root, but
+readability alone is not enough to enable deployment: exact mutation semantics,
+choice/RNG ordering, world-delta attribution, and Host/Client evidence still
+have to be established.
 
 - `Believe in You`
 - `Energy Surge`
@@ -163,23 +168,26 @@ enabled merely by adding them to a card-name whitelist:
 - `Stratagem`: remains implemented and is legal in the 0.107.1 multiplayer
   colorless pool.
 
-## Local-only policy
+## Readable-root / local-action policy
 
-The matrix deliberately does **not** aim for "all multiplayer cards simulate
-everything." The multiplayer route predicts only the local player's decisions.
-Public enemy/creature/Power state may be branch-local input, but teammate
-Hand/Draw/Discard/Exhaust order, Orb queue, and similar private combat state are
-not prediction inputs.
+The multiplayer route predicts only the local player's decisions, but the root
+may detach any teammate combat state already materialized in the local game
+process. That currently includes teammate Hand/Draw/Discard/Exhaust, Energy,
+Stars, Orb queue, potions, relics, Powers, generation pools, creature state and
+other captured hook state. `RootActionPlayers` remains local-only.
 
-For remote-resource cards such as Believe in You and Energy Surge, a future
-implementation must first prove that the resource is a safe public input and
-store it in a detached root sidecar. Expanding `RootCapturedPlayers` to obtain
-that value is not acceptable because it would also expose private piles.
+Readable teammate state is a **frozen root input**, not a teammate-behavior
+model. Search may evaluate deterministic effects that consume or mutate that
+detached state only where the exact 0.107.1 semantics have been implemented.
+It must never invent a teammate card choice, future action, or hidden network
+read. When the real multiplayer world changes, the teammate readable-state
+fingerprint invalidates continuation reuse and forces a fresh capture/search.
 
-For private-state cards such as Huddle Up, Ignition, Glimpse Beyond, and
-Largesse, stopping the local future route is the correct behavior until there
-is an explicit architecture for that information. Do not fill the gap with a
-teammate model or guessed future actions.
+Therefore cards such as Believe in You, Energy Surge, Huddle Up, Ignition,
+Glimpse Beyond, Largesse, and Legion of Bone remain staged fail-closed because
+their cross-player mutation / choice / RNG / lifecycle contracts are not yet
+fully promoted and runtime-validated — **not** because the root is forbidden
+from reading teammate state.
 
 ## Version boundary
 
