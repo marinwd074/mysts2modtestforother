@@ -1,3 +1,5 @@
+using System.Runtime;
+
 namespace CombatSolver;
 
 // Test observability and deterministic pause/failure injection for GC policy contracts.

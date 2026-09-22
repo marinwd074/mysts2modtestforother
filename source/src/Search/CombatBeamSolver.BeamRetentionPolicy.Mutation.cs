@@ -2530,8 +2530,9 @@ internal sealed partial class CombatBeamSolver
                 if (qualityLeader == null || comparer.Compare(packet, qualityLeader) < 0)
                     qualityLeader = packet;
             }
-            qualityLeader ??= throw new InvalidOperationException(
-                "有序变异 continuation packet 分组不能为空。");
+            if (qualityLeader == null)
+                throw new InvalidOperationException(
+                    "有序变异 continuation packet 分组不能为空。");
             SearchNode qualityOutcome = qualityLeader.Candidates[0];
             StateFingerprint qualityOption =
                 BuildOrderedMutationContinuationOptionKey(qualityOutcome.Action!);
