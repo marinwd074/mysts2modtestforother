@@ -202,7 +202,7 @@ internal static class MultiplayerContinuationRemoteFingerprint
         }
         StringBuilder relicState = new();
         SimulatedCombatState.AppendLiveStatefulRelics(relicState, player);
-        RelicPredictionStateSupport.AppendLiveContinuation(relicState, player.Relics);
+        RelicPredictionStateSupport.AppendLiveContinuation(relicState, player);
         fingerprint.Add(relicState.ToString());
     }
 
@@ -246,7 +246,7 @@ internal static class MultiplayerContinuationRemoteFingerprint
         for (int slot = 0; slot < potionSlotCount; slot++)
             fingerprint.Add(combat.GetPotionAtSlot(player, slot)?.Id.Entry ?? "-");
 
-        IReadOnlyList<MegaCrit.Sts2.Core.Models.Relics.RelicModel> relics = combat.RelicsOf(player);
+        IReadOnlyList<MegaCrit.Sts2.Core.Models.RelicModel> relics = combat.RelicsOf(player);
         fingerprint.Add(relics.Count);
         foreach (var relic in relics)
         {
