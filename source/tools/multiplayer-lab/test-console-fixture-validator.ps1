@@ -40,7 +40,9 @@ try {
             'energy 10',
             'card TAG_TEAM hand',
             'card STRIKE_IRONCLAD hand',
-            'block 7'
+            'block 7',
+            'damage 3 0',
+            'heal 3 0'
         )
     })
     Invoke-Expected $valid 0
