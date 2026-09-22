@@ -94,7 +94,8 @@ internal sealed partial class CombatBeamSolver
         SimulatedCombatState combat,
         IReadOnlyList<Player> playersStartingTurn,
         ISet<uint> processedEnemyDeaths,
-        ref int shufflesCrossed)
+        ref int shufflesCrossed,
+        bool actionChoicesAlreadyActive = false)
     {
         Player[] alivePlayers = playersStartingTurn
             .Where(player => simulator.State.GetCreature(player.Creature).IsAlive)
@@ -160,8 +161,11 @@ internal sealed partial class CombatBeamSolver
                 return SearchBoundaryReason.PendingChoice;
         }
 
-        TurnStartChoiceCursor choices = new(null);
-        combat.BeginActionChoices(choices);
+        TurnStartChoiceCursor choices = actionChoicesAlreadyActive
+            ? combat.ActiveExecutionChoices
+            : new TurnStartChoiceCursor(null);
+        if (!actionChoicesAlreadyActive)
+            combat.BeginActionChoices(choices);
         try
         {
             List<PlayerStartProgress> progressByPlayer = new(alivePlayers.Length);
@@ -225,7 +229,8 @@ internal sealed partial class CombatBeamSolver
         }
         finally
         {
-            combat.EndActionChoices();
+            if (!actionChoicesAlreadyActive)
+                combat.EndActionChoices();
         }
 
         return SearchBoundaryReason.None;

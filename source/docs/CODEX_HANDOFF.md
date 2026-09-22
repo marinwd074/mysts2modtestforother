@@ -34,7 +34,7 @@
 ## 当前未完成
 
 1. `ShadowTeammatePlanner` 已从单队友 Top-K 扩为 Team Top-K：队友按 NetId 依次在同一预测世界上模拟，每处理完一个队友就按 EnemyDurability / TeamEffectiveHp / WorstPlayerEffectiveHpRatio / TeamEnergy / TeamStars / 动作数重新取 Pareto 前沿并压回全局 beam=4，因此不会形成 K^N 笛卡尔爆炸。强制结束自己出牌的 shadow 卡只结束该队友分支，切换到下一队友前会消费 prediction-only end request；所有候选仍只存在于 simulator fork，不生成 `PlanAction`。每条 Shadow route 现在还携带独立 `ProcessedEnemyDeaths`，每次卡牌分叉复制并更新，避免跨 Shadow 动作丢失敌人死亡生命周期状态；接主搜索时可直接从 parent snapshot 的集合初始化。
-2. 多人共享 Player Side 的两端生命周期都已具备 prediction-only 批量入口：End 使用 `RunForecastFullPlayerSideEnd`；Start 使用 `AdvanceForecastPlayerSideStart`，共享 Before/After side hooks 只触发一次，而每个存活玩家复用现有 `ContinuePlayerStart` 完成能量、抽牌、AfterPlayerTurnStart、Orb/AutoPlay。Joint forecast 的 `PlayerStartProgress.AllowSharedShuffleForecast` 只在 detached 世界中放开 Shuffle；普通 `MultiplayerLocalCrossTurn` 仍保留旧 Shuffle 边界。遇到 turn-start choice 时当前 Joint 分支 fail closed，不伪造选择。下一步把 EndTurn 真正分裂成 Shadow Team Top-K → 全队 End → Enemy Side → 全队 Start。
+2. 多人共享 Player Side 的两端生命周期都已具备 prediction-only 批量入口；现有 `AdvanceRound` 也已把玩家侧之后的怪物阶段/下一回合抽成 `AdvanceEnemySideAndPlayerStart`。旧路径仍以 `jointForecast=false` 调用，行为不变；Joint 路径可在同一 action-choice scope 中复用该 helper，并在怪物侧结束时对全队结算 Poison/NoDraw/EmotionChip round damage，再进入批量 Player-Side Start。Joint forecast 的 Shuffle 只在 detached 世界中放开；turn-start choice 仍 fail closed。下一步只剩把 `BuildEndTurnBranches` 接到 Shadow Team Top-K。
 3. 完成 Joint terminal state 后，把动态斩杀策略当前的本地战损比输入替换为 TeamLossRatio / WorstPlayerLossRatio，并让真实队友行为或世界状态偏离预测后立即 Fresh Search。
 
 ## 当前开发 / 性能规则
