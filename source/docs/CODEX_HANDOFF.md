@@ -2,6 +2,14 @@
 
 ## 当前技术状态
 
+### 2026-09-22 pinned monster-target 工具检查点
+
+- 当前基线：`bd02760a`。
+- `88edb1ad` 新增 `Sts2LocalInspector --monster-move-il-output`：只读 PE/.NET metadata，先校验 pinned 0.107.1 `sts2.dll` SHA-256，再导出怪物 Move IL；`0c6c4e5c` 已把该 extractor 接进本机审计任务。
+- `304ef267` 修正 IL `InlineString` 输出格式，避免 raw-string/拼接歧义；`eb2536c7` 扩大 async state-machine 捕获，确保 `ShockingSlap` / `ThunderStrike` 这类 handler 名不含 `Move` 的怪物行动不会被漏掉。
+- `bd02760a` 预建 `docs/compat/0.107.1/MONSTER_TARGET_FANOUT_AUDIT.md`，64 个待审 move 全部列出并标记 `PENDING_PINNED_IL`；本机任务只需填 `Native target class / Dead filtering / RNG-choice-private dependency / Solver action`。
+- `be980316` 已修正多人怪物伤害路径中的无效 C# pattern；`97d0ff8d` / `8de28ae5` 已把多人牌 coverage 与 LIMITATIONS 从旧 local-player-only root 说法更新为 readable-state root + local-action scope。
+- 下一步本机 Codex：执行 `docs/multiplayer/NEXT_LOCAL_01071_MONSTER_TARGET_AUDIT.md`，产出 hash-verified IL JSON 并填写 64 行审计表；未得到 pinned DLL 证据前，不批量改 `MonsterMoveEffects` 的 Debuff/Status fanout。
 ### 2026-09-22 readable-state 审计检查点
 
 - 当前 HEAD：`9115977e9317087afc933e9919ab2c196de77d8b`。
