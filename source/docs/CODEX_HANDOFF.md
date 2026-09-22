@@ -6,21 +6,21 @@
 
 - 当前 `main` 的 Release 构建为 0 warning / 0 error；完整 CI 门禁 `PASS: 27 FAIL: 0 SKIP: 0`。本机 `sts2.dll` SHA-256 与 pinned 0.107.1 值一致。
 - 固定 `HostVanilla + ClientCombatSolver`、Steam transport off、Client warm-up 后第二次启动的真实战斗中，用户只开启一次“安全自动”；正式 combat journal 记录本地回合 1/2/3 分别使用新 request 1/2/3、新 route generation 1/2/3，各有 3 次原生 `PlayCardAction` 和 1 次原生 `EndPlayerTurnAction`。每次 EndTurn 后重新 Probe/capture/search，未见第二次手动 Execute、远端中止或自定义网络路径。`validate-safe-auto-results.ps1` 返回 `MULTIPLAYER_SAFE_AUTO_PASS`；两个实例均 Graceful stop。摘要见 [`safe-auto-runtime-2026-09-22.json`](multiplayer/evidence/safe-auto-runtime-2026-09-22.json)。
-- Axebot `AXEBOTS_NORMAL` runtime 仍为 `UNVERIFIED`：当前 GUI 实例没有该遭遇的直达入口；0.107.1 生产构建的无人值守请求入口处于禁用状态，一次 headless 尝试因此超时，不能算 Axebot 代码失败或 PASS。Boot Up 数值 differential 同样未验证。MultiplayerOnly 的 `multiplayer_only_card` 分类仍有静态合同；未构造稳定的最佳路线触边场景，runtime 停止行为仍为 `UNVERIFIED`。
+- Axebot `AXEBOTS_NORMAL` 求解问题为 **PASS（用户实机确认）**：用户在修复后的实际战斗中确认已能正常求解、旧问题已解决。本次未核验该次 combat journal，因此不单独声明日志级 root capture、搜索完成或合法路线合同 PASS；Boot Up Strength 数值 differential 仍为 `UNVERIFIED`。MultiplayerOnly 的 `multiplayer_only_card` 分类仍有静态合同；未构造稳定的最佳路线触边场景，runtime 停止行为仍为 `UNVERIFIED`。
 
 ### 2026-09-22 pinned monster static-member guard 完成
 
 - Axebot 修复后，新增 `Sts2LocalInspector --monster-static-source`，直接解析 `MonsterMoveEffects.StaticValues.cs` 并对 hash-pinned 0.107.1 `sts2.dll` 元数据逐项验证怪物类型及 field/property。
 - pinned workflow Run `35691169998` 已通过真实 DLL 校验：SHA-256 `a1f9e653f1e28e4076558fee1e60d218619cb7e057b887c6417f62c62c6d7a52`，monster move IL 933 methods，static-member guard **35 types / 51 members PASS**。
 - workflow 现在在 `MonsterMoveEffects.StaticValues.cs`、`MonsterValueReader.cs` 或 inspector 变化时自动触发；普通 inspector self-test 也覆盖清单解析器。该 guard 只证明成员存在，不替代 move 数值公式 IL 审计。
-- 当前代码基线包含 `efaa9682`、`614f8e93`、`01ee3a72`。Axebot `AXEBOTS_NORMAL` 实机复测仍待本地游戏执行，不能仅凭 CI 标为 runtime PASS。
+- 当前代码基线包含 `efaa9682`、`614f8e93`、`01ee3a72`。Axebot `AXEBOTS_NORMAL` 后续已由用户在实际战斗中确认可以求解；本轮未独立核验 journal。
 
 ### 2026-09-22 Axebot 0.107.1 runtime 问题包修复
 
 - 用户问题包 `fcca6db5-cd96-42d4-830b-bc9b7e0112f4.zip` 在 `AXEBOTS_NORMAL` 的 AutoTurnStart 根捕获阶段稳定报 `MissingMemberException: Axebot.RespawnCount not found`，因此没有生成路线；replan 计数也保持 0，属于 search setup failure，不是 continuation/replan 问题。
 - pinned 0.107.1 DLL IL 已核对 `Axebot.<BootUpMove>d__30.MoveNext`：原生 Strength 为 `BootUpStrGain * (2 - StockAmount)`，调用 `get_StockAmount`；不存在 `RespawnCount` 成员。
 - 已把静态根捕获从 `RespawnCount` 改为 `StockAmount`，并同步修正 BOOT_UP_MOVE 公式。合同脚本现在同时拒绝任何 Axebot `RespawnCount` 回归并锁定 `2 - StockAmount`。
-- 该问题包的错误发生在战斗 root snapshot 物化，修复后仍需要本机用同一 Axebot replay/runtime 场景复测，不能仅凭静态 CI 声明实机 PASS。
+- 该问题包的错误发生在战斗 root snapshot 物化。用户现已在修复后的 Axebot 实际战斗中确认可以求解；没有本次 journal 或 Boot Up 数值 differential 证据。
 
 ### 2026-09-22 pinned monster-target runtime 检查点
 
