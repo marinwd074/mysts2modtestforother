@@ -2,6 +2,15 @@
 
 ## 当前技术状态
 
+### 2026-09-22 readable-state 审计检查点
+
+- 当前 HEAD：`9115977e9317087afc933e9919ab2c196de77d8b`。
+- `a834ee4a` 已撤销 `282393c9` 的 post-yield stale-read 方案。原因已确认：`CombatPredictionState.Fork()` 会重新 Attach，Attach/Hook materialization 会再次读取全部 `RootCapturedPlayers`；“本地 EndTurn 后任何队友状态读取都判过期”会无条件误杀合法 T2/T3 本地跨回合路线。当前正确模型恢复为：队友状态在一次搜索内是冻结 root 快照；`RootActionPlayers` 仍只有本地玩家；真实后续回合重新采集 teammate fingerprint，有变化就 Fresh Search。
+- `a834ee4a` GitHub Actions 已完成：`static-consistency PASS`、`contract-tests PASS`。这不是完整游戏 Release build；完整构建仍依赖本机 STS2/RitsuLib。
+- `9115977e` 补齐队友牌 fingerprint：除牌 ID/升级/附魔/异常/对象身份外，现在纳入本地费用、星能费用、Replay、Exhaust/Sly/Retain、DeckVersion/removed 标记、语义 DynamicVars，以及 Claw/Genetic Algorithm/Maul/Mad Science/Rampage/The Scythe 等已知私有语义计数。对象身份仍保留，因为原生 `NetCombatCardDb` 同样按战斗内稳定的 `CardModel` 实例映射网络卡牌 ID。
+- 保存本检查点时，`9115977e` 的 GitHub Actions Run `35684582193` 尚在运行，不能写成 PASS。
+- 下一步只做两件事：① 等/查 `9115977e` CI；② 继续审计 readable root 是否还有字段未进入 teammate continuation fingerprint，以及是否存在 `RootCapturedPlayers` 被误用于动作推进的调用点。不要重新引入“post-yield 读取即过期”。
+
 - **2026-09-22 readable-state root 边界更新**：多人搜索 root 允许捕获本地进程已经物化的队友战斗状态，但 `RootActionPlayers` 仍严格只有本地玩家。队友状态在一次搜索内是**冻结 root 快照**：搜索不会生成队友动作，也不会把读取权限升级成控制权；未来真实回合到来时，continuation 会重新采集本地可读队友 fingerprint，任何变化都拒绝旧路线并 Fresh Search。`282393c9` 曾尝试把本地 EndTurn 后的队友 `PlayerCombatState` 立即标为过期，但该机制会在预测 Fork 的内部重新 Attach 时误触发并截断 T2/T3，本轮已撤销。旧交接中“remote private 一律不可读 / local-player-only root”的描述属于历史实现，不再作为当前架构事实。
 - CombatSolver `0.40.2`；目标游戏 / RitsuLib `0.107.1`；兼容符号 `STS2_01071`。
 - MP-0 Core / lifecycle：PASS。
