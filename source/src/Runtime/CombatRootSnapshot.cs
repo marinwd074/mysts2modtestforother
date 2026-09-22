@@ -29,8 +29,9 @@ internal sealed class CombatRootSnapshot
     public ContinuationStamp ContinuationStamp { get; }
     public int PlayerCount { get; }
     /// <summary>
-    /// The root was captured for an explicitly approved local-player-only multiplayer
-    /// capability. This is deliberately false for the current read-only Probe profile.
+    /// The root was captured for an explicitly approved multiplayer search capability.
+    /// Search actions remain local-player-owned, but every player state already readable
+    /// from the local game process may be captured into the detached prediction root.
     /// </summary>
     public bool AllowsLocalPlayerOnlySearch { get; }
     public int StartTurnNumber { get; }
@@ -163,7 +164,7 @@ internal sealed class CombatRootSnapshot
             state.Players.Count,
             capabilities.IsMultiplayer);
         IReadOnlyList<Player>? rootCapturedPlayers = capabilities.IsMultiplayer && capabilities.CanSearch
-            ? [player]
+            ? state.Players.ToArray()
             : null;
 
         PowerDynamicVarWarmup.EnsureMaterialized(state);
@@ -188,7 +189,7 @@ internal sealed class CombatRootSnapshot
         SimulatedCombatState simulatedCombat = new(
             state,
             liveCombatHookListeners,
-            rootCapturedPlayers is { } ? player : null);
+            localPlayerOnly: null);
         CombatPredictionSimulator simulator = new(simulatedCombat);
         if (capabilities.IsMultiplayer && capabilities.CanSearch)
             MultiplayerRootCaptureContracts.Verify(state, simulator, player);
@@ -266,7 +267,7 @@ internal sealed class CombatRootSnapshot
                 $"remote_players={carryRankingContext.RemotePlayers.Count} " +
                 $"enemies={carryRankingContext.Enemies.Count} " +
                 $"all_player_threats={allPlayerThreats} unknown_threats={unknownThreats} " +
-                "remote_private=false context_reused=false " +
+                "remote_private_read=true context_reused=false " +
                 $"public_fingerprint={carryRankingContext.PublicFingerprint}");
         }
 
