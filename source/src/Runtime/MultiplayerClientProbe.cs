@@ -664,9 +664,6 @@ internal static class MultiplayerClientProbe
 
             switch (power)
             {
-                case RitualPower ritual:
-                    fingerprint.Add(ritual._wasJustAppliedByEnemy);
-                    break;
                 case SurroundedPower surrounded:
                     fingerprint.Add((int)surrounded.Facing);
                     break;
