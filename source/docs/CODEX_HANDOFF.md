@@ -14,6 +14,7 @@
 
 - 单人 0.107.1 卡牌/怪物兼容审计已完成主要收口；Axebot `AXEBOTS_NORMAL` 旧 `RespawnCount` 崩溃已由用户实机确认解决。
 - pinned monster target fanout：63 个可确定 move 已建模；Knowledge Demon 的远端 Choice 继续 fail closed。
+- v0.14 第一阶段已把多人怪物目标 dispatcher 从 64KB 主文件拆到独立 `MonsterMoveEffects.MultiplayerTargets.cs`；普通玩家效果统一走 per-player 调度，owner-once / RNG 特例保持原行为。已有怪物 HP 直接使用 root snapshot，不做二次人数缩放。
 - Multiplayer MP-0 / Advisor / Safe Execute MP-2A/B/C / Reactive Carry 已有真实 Host/Client 基线。
 - Multiplayer Safe Auto 已完成真实 3 个本地回合 Smoke：每回合 fresh request/search、原生 PlayCardAction + EndPlayerTurnAction，无旧授权跨回合复用。
 - Carry Ranking R1 已有 runtime 证据；R2 decisive runtime 仍 `UNVERIFIED`，不是当前 blocker。
@@ -23,6 +24,8 @@
   固定上游 commit `234a74ccbaf46d7e385ed318c64857f1f7a90cae`。它不进入 CombatSolver 正式构建/发布。
 
 ## 当前未完成
+
+- 怪物 v0.14 后续只做等价迁移：逐步把 mixed move 明确拆成 target-effect / owner-effect-once；特殊 RNG / Choice 不强行泛化。
 
 1. 验证 Host + 各 Client 使用同一 GM Console 构建时，最小加牌/资源修改是否仍出现 game-data mismatch。
 2. 用同步稳定的测试工具获得 MultiplayerOnly / Tag Team 真实语义证据。

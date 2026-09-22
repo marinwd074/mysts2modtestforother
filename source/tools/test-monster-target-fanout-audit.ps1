@@ -7,6 +7,7 @@ $sourceRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $taskPath = Join-Path $sourceRoot 'docs/multiplayer/NEXT_LOCAL_01071_MONSTER_TARGET_AUDIT.md'
 $auditPath = Join-Path $sourceRoot 'docs/compat/0.107.1/MONSTER_TARGET_FANOUT_AUDIT.md'
 $runtimePath = Join-Path $sourceRoot 'src/Prediction/MonsterMoveEffects.cs'
+$runtimeTargetsPath = Join-Path $sourceRoot 'src/Prediction/MonsterMoveEffects.MultiplayerTargets.cs'
 $staticValuesPath = Join-Path $sourceRoot 'src/Prediction/MonsterMoveEffects.StaticValues.cs'
 $knowledgeChoicePath = Join-Path $sourceRoot 'src/Prediction/KnowledgeDemonChoiceSupport.cs'
 $knowledgeStatePath = Join-Path $sourceRoot 'src/Search/SimulatedCombatState.KnowledgeDemon.cs'
@@ -115,7 +116,11 @@ if ($fanOutSafeMoves.Count -ne 63) {
     throw "Expected 63 pinned FanOutSafe rows, found $($fanOutSafeMoves.Count)."
 }
 
-$runtimeText = [IO.File]::ReadAllText($runtimePath)
+$runtimeMainText = [IO.File]::ReadAllText($runtimePath)
+$runtimeTargetsText = [IO.File]::ReadAllText($runtimeTargetsPath)
+# Put the dispatcher first so the allow-list regex can still terminate at ApplyBeforeAttack
+# from the main implementation without depending on one giant source file.
+$runtimeText = $runtimeTargetsText + [Environment]::NewLine + $runtimeMainText
 $runtimePairs = @{}
 $runtimeGroups = @(
     [pscustomobject]@{ Name = 'simple'; Pattern = '(?s)private static bool IsPinnedSimpleFanOutSafe\(.*?(?=\r?\n\s*private static bool IsPinnedSplitFanOutSafe)' },
@@ -148,6 +153,16 @@ foreach ($move in $runtimePairs.Keys) {
         throw "Runtime fanout contains a move not classified FanOutSafe by pinned IL: $move"
     }
 }
+if ($runtimeMainText.Contains('private static bool IsPinnedSimpleFanOutSafe')
+    -or $runtimeMainText.Contains('private enum MultiplayerTargetMode')) {
+    throw 'Multiplayer monster target routing leaked back into MonsterMoveEffects.cs.'
+}
+if (-not $runtimeTargetsText.Contains('private enum MultiplayerTargetMode')
+    -or -not $runtimeTargetsText.Contains('ApplyPerPlayerTargets(')
+    -or -not $runtimeTargetsText.Contains('ResolveMultiplayerTargetMode(')) {
+    throw 'Dedicated multiplayer monster target dispatcher is incomplete.'
+}
+
 if (-not $runtimeText.Contains('foreach (Creature target in simulator.State.PlayerCreatures)')) {
     throw 'Pinned runtime fanout no longer enumerates the captured player roster.'
 }

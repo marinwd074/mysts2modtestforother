@@ -8,7 +8,6 @@ Truth source:
 - game commit: `59260271`
 - assembly: `game-body/data_sts2_windows_x86_64/sts2.dll`
 - required SHA-256: `a1f9e653f1e28e4076558fee1e60d218619cb7e057b887c6417f62c62c6d7a52`
-- local task: [NEXT_LOCAL_01071_MONSTER_TARGET_AUDIT.md](../../multiplayer/NEXT_LOCAL_01071_MONSTER_TARGET_AUDIT.md)
 
 Do not replace `PENDING_PINNED_IL` with a conclusion derived only from a current-beta
 decompilation or wiki. Run `Sts2LocalInspector --monster-move-il-output` against the
@@ -29,6 +28,13 @@ Allowed solver actions:
 `NeedsMoreModeling`, `NoChange`.
 
 Runtime status (2026-09-22): 63/64 audited moves are now `FanOutSafe`.
+
+Runtime architecture (fork v0.14): this table is compatibility evidence, not the primary
+multiplayer dispatcher. Ordinary per-player effects now route through
+`MonsterMoveEffects.MultiplayerTargets.cs`; the main `MonsterMoveEffects.cs` keeps the
+single-target implementation and the already-verified owner-once / RNG special cases.
+Existing monsters use captured live HP/MaxHP directly. Only future simulated spawns/hatches
+invoke the game's native multiplayer HP scaling helper.
 52 mechanically replay the existing single-target effect in captured player-roster order,
 including Noisebot Noise and Soul Fysh Beckon, whose random pile positions advance the shared
 Shuffle RNG sequentially. 9 owner-once rows use the explicit split path. Thieving Hopper
