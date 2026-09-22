@@ -27,6 +27,19 @@ internal static class MultiplayerRootCaptureContracts
         if (!MultiplayerAdvisorBoundaryContracts.IsCapturedPlayer(captured, localPlayer))
             throw new InvalidOperationException("Multiplayer root omitted the local player.");
 
+        IReadOnlyList<Player> actionPlayers = simulator.State.RootActionPlayers;
+        if (actionPlayers.Count != 1 || !ReferenceEquals(actionPlayers[0], localPlayer))
+        {
+            throw new InvalidOperationException(
+                "Multiplayer prediction action scope must contain exactly the local player.");
+        }
+        if (actionPlayers.Any(player =>
+                !MultiplayerAdvisorBoundaryContracts.IsCapturedPlayer(captured, player)))
+        {
+            throw new InvalidOperationException(
+                "Multiplayer prediction action scope escaped the readable root.");
+        }
+
         foreach (Player player in live.Players)
         {
             _ = simulator.State.GetPlayerCombatState(player);
