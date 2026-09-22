@@ -106,14 +106,14 @@ $cursor = if ($armed.Count -gt 0) { [int]$armed[0].Index } else { -1 }
 for ($index = 0; $index -lt $fixture.Commands.Count; $index++) {
     $expectedCommandJson = ([string]$fixture.Commands[$index] | ConvertTo-Json -Compress)
     $startPattern = '\[CombatSolver/MultiplayerFixture\] FIXTURE_COMMAND_START\b.*\bname=' + $escapedName + '\b.*\bindex=' + $index + '\b.*\bcommand=' + [regex]::Escape($expectedCommandJson) + '(?:\s|$)'
-    $starts = Find-FirstAfter -AfterIndex $cursor -Pattern $startPattern
+    $starts = @(Find-FirstAfter -AfterIndex $cursor -Pattern $startPattern)
     if ($starts.Count -ne 1) {
         $sequenceProblems.Add("index=$index missing FIXTURE_COMMAND_START")
         continue
     }
     $start = $starts[0]
     $resultPattern = '\[CombatSolver/MultiplayerFixture\] FIXTURE_COMMAND_RESULT\b.*\bname=' + $escapedName + '\b.*\bindex=' + $index + '\b.*\bsuccess=true\b'
-    $results = Find-FirstAfter -AfterIndex $start.Index -Pattern $resultPattern
+    $results = @(Find-FirstAfter -AfterIndex $start.Index -Pattern $resultPattern)
     if ($results.Count -ne 1) {
         $sequenceProblems.Add("index=$index missing successful FIXTURE_COMMAND_RESULT")
         $cursor = [int]$start.Index
