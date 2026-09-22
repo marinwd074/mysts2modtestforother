@@ -13,6 +13,9 @@ on:
       - '!source/docs/**'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: compatibility-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -25,6 +28,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Verify target version guard
         shell: pwsh
@@ -54,6 +59,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Run L1 pure contract tests
         shell: pwsh
