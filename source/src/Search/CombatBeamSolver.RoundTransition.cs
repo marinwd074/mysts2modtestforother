@@ -204,7 +204,7 @@ internal sealed partial class CombatBeamSolver
                         CombatSide.Player,
                         participants,
                         decrementPlating: combat.RoundNumber > 1,
-                        takingExtraTurn: false))
+                        isExtraTurn: false))
                 {
                     return SearchBoundaryReason.PendingChoice;
                 }
