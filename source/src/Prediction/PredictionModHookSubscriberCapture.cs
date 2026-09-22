@@ -60,7 +60,8 @@ internal sealed class PredictionModHookSubscriberCapture
         foreach (AbstractModel subscriber in combatSubscribers)
             ValidateSubscriber(subscriber, "combat");
         AdaptedOnPlaySnapshot? onPlay = PredictionModPatchAudit.CaptureCardOnPlay(
-            EnumerateAuditableCards(runState, combat, capturedPlayers));
+            EnumerateAuditableCards(runState, combat, capturedPlayers),
+            SolverSessionCapabilities.Capture(combat).IsMultiplayer);
 
         Dictionary<Player, int> maxHandSizes = [];
         IEnumerable<Player> players = capturedPlayers ?? combat.Players;
