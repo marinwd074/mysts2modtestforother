@@ -40,6 +40,10 @@ internal static class MultiplayerSafeLocalActionClassifier
                 .FirstOrDefault();
         }
 
+        bool isPromotedMultiplayerOnlyCard = card is not null
+            && card.MultiplayerConstraint == CardMultiplayerConstraint.MultiplayerOnly
+            && string.Equals(card.Id.Entry, "LIFT", StringComparison.Ordinal);
+
         bool hasTarget = action.TargetCombatId is not null;
         bool targetExists = false;
         bool allowedTarget = false;
@@ -51,7 +55,13 @@ internal static class MultiplayerSafeLocalActionClassifier
             {
                 bool isLocalTarget = targetId == localPlayer.Creature.CombatId;
                 bool isEnemyTarget = state.Enemies.Any(enemy => enemy.CombatId == targetId);
-                allowedTarget = isLocalTarget || isEnemyTarget;
+                bool isLivingTeammateTarget = state.Players.Any(candidate =>
+                    candidate.NetId != localPlayer.NetId
+                    && candidate.Creature.CombatId == targetId
+                    && !candidate.Creature.IsDead);
+                allowedTarget = isPromotedMultiplayerOnlyCard
+                    ? isLivingTeammateTarget
+                    : isLocalTarget || isEnemyTarget;
             }
         }
 
@@ -64,7 +74,8 @@ internal static class MultiplayerSafeLocalActionClassifier
                 TargetExists: targetExists,
                 IsAllowedTarget: allowedTarget,
                 HasIncompleteTargetIdentity: !hasTarget
-                    && (action.TargetIndex != -1 || !string.IsNullOrEmpty(action.TargetName))));
+                    && (action.TargetIndex != -1 || !string.IsNullOrEmpty(action.TargetName)),
+                IsPromotedMultiplayerOnlyCard: isPromotedMultiplayerOnlyCard));
     }
 
     public static IReadOnlyList<PlanAction> TakeSafePrefix(
