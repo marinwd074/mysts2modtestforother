@@ -7,6 +7,7 @@ $sourceRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $taskPath = Join-Path $sourceRoot 'docs/multiplayer/NEXT_LOCAL_01071_MONSTER_TARGET_AUDIT.md'
 $auditPath = Join-Path $sourceRoot 'docs/compat/0.107.1/MONSTER_TARGET_FANOUT_AUDIT.md'
 $runtimePath = Join-Path $sourceRoot 'src/Prediction/MonsterMoveEffects.cs'
+$staticValuesPath = Join-Path $sourceRoot 'src/Prediction/MonsterMoveEffects.StaticValues.cs'
 $knowledgeChoicePath = Join-Path $sourceRoot 'src/Prediction/KnowledgeDemonChoiceSupport.cs'
 $knowledgeStatePath = Join-Path $sourceRoot 'src/Search/SimulatedCombatState.KnowledgeDemon.cs'
 $stateEvaluationPath = Join-Path $sourceRoot 'src/Search/CombatBeamSolver.StateEvaluation.cs'
@@ -195,6 +196,17 @@ if (-not $runtimeText.Contains('List<(Creature Target, PredictedCard Card)> stol
 }
 if (-not $runtimeText.Contains('combat.SetMonsterBool(move.Owner, "HasLiquified", true);')) {
     throw 'Liquify Ground no longer records the native HasLiquified owner state.'
+}
+
+$staticValuesText = [IO.File]::ReadAllText($staticValuesPath)
+if (-not $staticValuesText.Contains('["Axebot"] = ["BootUpBlock", "BootUpStrGain", "StockAmount"]')) {
+    throw 'Axebot static capture must use pinned 0.107.1 StockAmount.'
+}
+if ($staticValuesText.Contains('"RespawnCount"') -or $runtimeText.Contains('"RespawnCount"')) {
+    throw 'Axebot 0.107.1 path must not reference the nonexistent RespawnCount member.'
+}
+if (-not $runtimeText.Contains('(2 - combat.GetMonsterStaticInt(move.Owner, "StockAmount"))')) {
+    throw 'Axebot BOOT_UP_MOVE lost the pinned 0.107.1 BootUpStrGain * (2 - StockAmount) formula.'
 }
 
 $remoteChoiceRows = @($rows.GetEnumerator() | Where-Object { $_.Value.Action -eq 'NeedsRemoteChoiceFailClosed' })

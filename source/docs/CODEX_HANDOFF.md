@@ -2,6 +2,13 @@
 
 ## 当前技术状态
 
+### 2026-09-22 Axebot 0.107.1 runtime 问题包修复
+
+- 用户问题包 `fcca6db5-cd96-42d4-830b-bc9b7e0112f4.zip` 在 `AXEBOTS_NORMAL` 的 AutoTurnStart 根捕获阶段稳定报 `MissingMemberException: Axebot.RespawnCount not found`，因此没有生成路线；replan 计数也保持 0，属于 search setup failure，不是 continuation/replan 问题。
+- pinned 0.107.1 DLL IL 已核对 `Axebot.<BootUpMove>d__30.MoveNext`：原生 Strength 为 `BootUpStrGain * (2 - StockAmount)`，调用 `get_StockAmount`；不存在 `RespawnCount` 成员。
+- 已把静态根捕获从 `RespawnCount` 改为 `StockAmount`，并同步修正 BOOT_UP_MOVE 公式。合同脚本现在同时拒绝任何 Axebot `RespawnCount` 回归并锁定 `2 - StockAmount`。
+- 该问题包的错误发生在战斗 root snapshot 物化，修复后仍需要本机用同一 Axebot replay/runtime 场景复测，不能仅凭静态 CI 声明实机 PASS。
+
 ### 2026-09-22 pinned monster-target runtime 检查点
 
 - `b924fa28` compatibility CI 已 PASS。pinned 0.107.1 monster target 审计的 63 个可确定建模 move 已完成多人 fanout：52 个 simple、9 个 owner-once split，以及 Thieving Hopper / The Insatiable 两个 phase-sensitive RNG 路径。

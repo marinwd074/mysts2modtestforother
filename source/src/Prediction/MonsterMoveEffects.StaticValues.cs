@@ -37,7 +37,7 @@ internal static partial class MonsterMoveEffects
             ["Crusher"] = ["AdaptStrengthGain"],
             ["Rocket"] = ["ChargeUpStrengthGain"],
             ["PhantasmalGardener"] = ["EnlargeStr"],
-            ["Axebot"] = ["BootUpBlock", "BootUpStrGain", "RespawnCount"],
+            ["Axebot"] = ["BootUpBlock", "BootUpStrGain", "StockAmount"],
             ["Aeonglass"] = ["EbbBlock", "WitherAmount", "IncreasingIntensityBaseStrength"],
             ["AxeRubyRaider"] = ["SwingBlock"],
             ["DevotedSculptor"] = ["_ritualGain"],

@@ -1154,7 +1154,7 @@ internal static partial class MonsterMoveEffects
                 combat.Apply<StrengthPower>(
                     move.Owner,
                     combat.GetMonsterStaticInt(move.Owner, "BootUpStrGain") *
-                    combat.GetMonsterStaticInt(move.Owner, "RespawnCount"),
+                    (2 - combat.GetMonsterStaticInt(move.Owner, "StockAmount")),
                     move.Owner);
                 return true;
             case ("Axebot", "HAMMER_UPPERCUT_MOVE"):
