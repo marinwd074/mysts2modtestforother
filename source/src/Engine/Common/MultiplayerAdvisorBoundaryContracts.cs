@@ -31,22 +31,22 @@ internal static class MultiplayerAdvisorBoundaryContracts
     }
 
     /// <summary>
-    /// EndTurn must consume the captured root list, never expand it to the public roster.
-    /// The subset check catches a malformed root before a private combat state is touched.
+    /// EndTurn must consume the explicit action-owner list, never expand it to the readable
+    /// player roster. The subset check catches malformed ownership before turn state mutates.
     /// </summary>
     internal static IReadOnlyList<Player> SelectEndTurnPlayers(
         IReadOnlyList<Player> publicPlayers,
-        IReadOnlyList<Player> rootCapturedPlayers)
+        IReadOnlyList<Player> actionPlayers)
     {
-        for (int index = 0; index < rootCapturedPlayers.Count; index++)
+        for (int index = 0; index < actionPlayers.Count; index++)
         {
-            if (!IsCapturedPlayer(publicPlayers, rootCapturedPlayers[index]))
+            if (!IsCapturedPlayer(publicPlayers, actionPlayers[index]))
             {
                 throw new InvalidOperationException(
                     "EndTurn root contains a player outside the public combat roster.");
             }
         }
-        return rootCapturedPlayers;
+        return actionPlayers;
     }
 
     internal static bool ShouldApplyEnemyBlockScaling(
