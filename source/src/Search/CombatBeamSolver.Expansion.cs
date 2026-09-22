@@ -3916,6 +3916,21 @@ internal sealed partial class CombatBeamSolver
             yield break;
         }
 
+        if (simulator.GetTargetType(card) == TargetType.AnyAlly)
+        {
+            IReadOnlyList<Creature> teammates = simulator.State
+                .GetTeammatesOf(card.Preview.Owner.Creature);
+            for (int i = 0; i < teammates.Count; i++)
+            {
+                Creature teammate = teammates[i];
+                if (teammate.IsPlayer
+                    && !ReferenceEquals(teammate, card.Preview.Owner.Creature)
+                    && teammate.IsAlive)
+                    yield return (i, teammate);
+            }
+            yield break;
+        }
+
         yield return (-1, null);
     }
 

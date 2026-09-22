@@ -1,0 +1,15 @@
+{
+  "reportDate": "2026-09-22",
+  "symptom": "Search replay failed because Lift was generated without a teammate target.",
+  "schemaVersion": 1,
+  "cardName": "托举（Lift）",
+  "fix": "Enumerate living player teammates, excluding the local owner, for AnyAlly card actions.",
+  "sourceArchive": "2026-09-22-lift-anyally-null-target.zip",
+  "sha256": "54BE249B56A5DE37B1FF0D5936FA2C3F698B86DE9CB64AE337A73AA299FDAC8E",
+  "sizeBytes": 364630,
+  "card": "LIFT",
+  "gameVersion": "0.107.1",
+  "solverVersion": "0.40.2",
+  "rootCause": "Card target enumeration handled AnyEnemy only and emitted target=null for AnyAlly.",
+  "kind": "runtime-regression"
+}
