@@ -142,12 +142,12 @@ internal static class MonsterMoveSemantics
         foreach (Creature target in players)
         {
             Creature? osty = target.Player is { } owner ? simulator.State.GetOsty(owner) : null;
-            if (osty == null
-                || !simulator.State.GetCreature(osty).IsDead
-                || combat.GetAmount<DieForYouPower>(osty) is not (> 0) amount)
-            {
+            if (osty == null || !simulator.State.GetCreature(osty).IsDead)
                 continue;
-            }
+
+            int amount = combat.GetAmount<DieForYouPower>(osty);
+            if (amount <= 0)
+                continue;
 
             (suppressedDieForYou ??= []).Add((osty, amount));
             combat.SetAmount<DieForYouPower>(osty, 0);
