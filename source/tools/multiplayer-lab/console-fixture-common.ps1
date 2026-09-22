@@ -6,7 +6,9 @@ $script:MultiplayerConsoleFixtureAllowedVerbs = @(
     'energy',
     'block',
     'potion',
-    'draw'
+    'draw',
+    'heal',
+    'damage'
 )
 
 function Read-MultiplayerConsoleFixture {
