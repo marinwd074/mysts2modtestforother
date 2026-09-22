@@ -508,6 +508,7 @@ internal static partial class SolverController
                             action,
                             target,
                             state,
+                            liveSafety.EndsContinuation,
                             hasNextAction);
                     MultiplayerSafeActionRevalidationDecision decision =
                         MultiplayerSafeExecutePolicy.RevalidateAction(facts);
@@ -536,6 +537,40 @@ internal static partial class SolverController
                         return;
                     }
                     lastAcceptedBoundary = afterBoundary;
+                    if (liveSafety.EndsContinuation)
+                    {
+                        _combat.MultiplayerSafeExecuteDeploymentRequested = false;
+                        _combat.ContinuationSource = null;
+                        _combat.LatestResult = null;
+                        _combat.LatestStamp = null;
+                        InvalidateRenderedRouteAdoptionSeed();
+                        CompleteDeployment(deployment);
+                        SolverOverlay.ShowDeploymentComplete(
+                            host,
+                            turn,
+                            actionIndex + 1,
+                            endedTurn: false,
+                            completionMessage: "多人牌已执行，正在基于最新多人状态重新计算。");
+                        _combat.LastSolverDeployedTurn = turn;
+                        Entry.Logger.Info(
+                            $"[CombatSolver/MultiplayerSafeExecute] CROSS_PLAYER_BOUNDARY_REPLAN " +
+                            $"request_id={safeSession.RequestId} turn={turn} action_index={actionIndex} " +
+                            $"card={action.CardId} target={action.TargetCombatId?.ToString() ?? "-"} " +
+                            $"world_version={afterBoundary.WorldVersion}");
+                        if (CombatManager.Instance.IsInProgress
+                            && IsCurrentCombatLifecycle(
+                                state,
+                                Volatile.Read(ref _combatLifecycleGeneration))
+                            && CanSolve(state, out _))
+                        {
+                            RequestSearch(
+                                host,
+                                state,
+                                SearchReason.DeploymentDrift,
+                                deployWhenReady: _combat.MultiplayerSafeAutoEnabled);
+                        }
+                        return;
+                    }
                     if ((!hasNextAction || safeSession.State == MultiplayerSafeExecutionState.Completed)
                         && plannedEndTurn == null)
                     {
@@ -1051,6 +1086,7 @@ internal static partial class SolverController
         PlanAction action,
         Creature? expectedTarget,
         CombatState state,
+        bool expectedRemotePublicMutation,
         bool hasNextAction)
     {
         PlayerCombatState? liveCombat = player.PlayerCombatState;
@@ -1084,6 +1120,7 @@ internal static partial class SolverController
             EnergyStateConsistent: energyConsistent && starsConsistent,
             TargetIdentityStable: targetStable,
             RemotePublicStateUnchanged: before.RemotePublicFingerprint == after.RemotePublicFingerprint,
+            ExpectedRemotePublicMutation: expectedRemotePublicMutation,
             EnemyStateMatchesExpectedTarget: EnemyStateMatchesExpectedTarget(
                 before.Enemies,
                 after.Enemies,
