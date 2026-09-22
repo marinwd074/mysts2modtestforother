@@ -7,6 +7,7 @@
 | 目的 | 文件 |
 |---|---|
 | 当前状态 / 下一步 | [CODEX_HANDOFF.md](CODEX_HANDOFF.md) |
+| 本 fork 版本演进 | [PROJECT_VERSION_HISTORY.md](PROJECT_VERSION_HISTORY.md) |
 | 架构、职责、状态所有权 | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | 当前验证入口 / 能力状态 | [TEST_MATRIX.md](TEST_MATRIX.md) |
 | 当前开发方向 | [DEVELOPMENT_NOTES.md](DEVELOPMENT_NOTES.md) |
