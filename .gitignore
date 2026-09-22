@@ -18,27 +18,11 @@
 /source/.godot/
 /source/tools/**/bin/
 /source/tools/**/obj/
-# Large performance JSON exports are kept in the GitHub Release archive below.
-/source/docs/performance/admitted-expansion-jobs-20260908.json
-/source/docs/performance/backend-cpu-hotspots-20260908.json
-/source/docs/performance/bowlbugs-wave-admission-20260912.json
-/source/docs/performance/choice-continuation-expansion-implementation-20260914.json
-/source/docs/performance/choice-continuation-search-20260914.json
-/source/docs/performance/choice-source-inventory-20260912.json
-/source/docs/performance/crab-latency-20260914.json
-/source/docs/performance/derived-work-reuse-20260915.json
-/source/docs/performance/five-candidates-20260913.json
-/source/docs/performance/gc-issue36-results.json
-/source/docs/performance/gc-issue36-round2-results.json
-/source/docs/performance/general-allocation-20260914.json
-/source/docs/performance/hotspot-exploration-20260913.json
-/source/docs/performance/memory-tenfold-20260913.json
-/source/docs/performance/perf2-integration-20260909.json
-/source/docs/performance/performance-pr-20260915.json
-/source/docs/performance/queen-replay-optimization-20260913.json
-/source/docs/performance/six-directions-20260913.json
-/source/docs/performance/six-memory-20260913.json
-/source/docs/performance/snapshot-replay-followup-20260909.json
+# One-shot performance/strategy machine output stays local or in external archives.
+/source/docs/performance/**/*.json
+/source/docs/performance/**/*.patch
+/source/docs/strategy/**/*.json
+/source/docs/strategy/**/*.patch
 !.github/
 !.github/workflows/
 !.github/workflows/**

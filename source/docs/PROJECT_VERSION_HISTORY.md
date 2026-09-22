@@ -4,6 +4,14 @@
 > 基础代码仍以 CombatSolver 0.40.2 为起点；本表只描述这个 fork 从开始改造后的能力演进。  
 > 版本号按里程碑归并，不要求一版对应一个 commit。细节需要时再查对应 Git 历史。
 
+## v0.15 — 历史上下文与生成数据清理
+**2026-09-22**
+
+- 从当前工作树移除 101 个上游 release notes；本 fork 只保留自己的 `PROJECT_VERSION_HISTORY.md`。
+- 移除 38 个一次性 performance / strategy JSON 与 patch（约 1.9 MB）；历史仍可从 Git 恢复。
+- `.gitignore` 改为按目录禁止重新跟踪 performance / strategy 生成型 JSON/patch。
+- 默认工作树进一步聚焦当前源码、当前规范和可重跑合同，减少 Agent/Codex 误读旧实验结果。
+
 ## v0.14 — 怪物目标调度模块化
 **2026-09-22**
 

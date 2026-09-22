@@ -33,6 +33,7 @@
 ## 当前开发 / 性能规则
 
 - 默认上下文只读本 handoff + 任务直接相关文件；不要批量加载 dated performance/audit/strategy 历史。
+- v0.15 起，上游 release notes 与一次性 performance/strategy JSON/patch 不再保留在当前树；追溯旧结果使用 Git history。
 - 主项目 Release 已排除 `src/Testing/**`；`tools/**` 和 test-only GM Console 不属于正式程序集。
 - 问题包的 Godot 游戏日志只在真正导出问题包时同步，不再在 Mod 初始化时复制。
 - 不通过增加搜索时间、Beam、内存或 GC 预算掩盖正确性问题。

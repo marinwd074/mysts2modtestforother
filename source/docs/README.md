@@ -22,6 +22,11 @@
 
 机器运行证据只在需要核验某个具体 PASS/FAIL 时读取对应文件；不要把 evidence 目录当项目说明书。
 
+## 历史归档
+
+- 上游 CombatSolver 的 0.17–0.40.2 release notes 已从当前工作树移除；本 fork 只维护 [PROJECT_VERSION_HISTORY.md](PROJECT_VERSION_HISTORY.md)。
+- 一次性 performance / strategy JSON、patch 不再跟踪；需要旧数据时从 Git history 或既有归档取回。
+
 ## 维护规则
 
 - 当前状态只写进当前真源，不追加历史流水账。
