@@ -29,7 +29,7 @@ internal static class Program
             if (args.Contains("--self-test", StringComparer.OrdinalIgnoreCase))
                 return SelfTest();
 
-            var (gameArg, outputArg, monsterMoveIlOutputArg) = ParseArgs(args);
+            var (gameArg, outputArg, monsterMoveIlOutputArg, monsterStaticSourceArg) = ParseArgs(args);
             var gameDir = gameArg ?? ResolveGameDir();
             if (string.IsNullOrWhiteSpace(gameDir) || !Directory.Exists(gameDir))
             {
@@ -63,6 +63,16 @@ internal static class Program
                 Console.WriteLine(
                     "STS2_MONSTER_MOVE_IL_PASS output=" + monsterMoveOutput
                     + " methods=" + monsterMoveEvidence.Methods.Count);
+            }
+
+            if (!string.IsNullOrWhiteSpace(monsterStaticSourceArg))
+            {
+                var sourcePath = Path.GetFullPath(monsterStaticSourceArg);
+                var validated = MonsterStaticMemberInspector.Validate(assemblyPath, sourcePath);
+                Console.WriteLine(
+                    "STS2_MONSTER_STATIC_MEMBERS_PASS source=" + sourcePath
+                    + " types=" + validated.Types
+                    + " members=" + validated.Members);
             }
 
             Console.WriteLine("STS2_LOCAL_INSPECTOR_PASS output=" + output);
@@ -217,20 +227,27 @@ internal static class Program
         return candidates.FirstOrDefault(Directory.Exists);
     }
 
-    private static (string? GameDir, string? Output, string? MonsterMoveIlOutput) ParseArgs(string[] args)
+    private static (
+        string? GameDir,
+        string? Output,
+        string? MonsterMoveIlOutput,
+        string? MonsterStaticSource) ParseArgs(string[] args)
     {
         string? game = null;
         string? output = null;
         string? monsterMoveIlOutput = null;
+        string? monsterStaticSource = null;
         for (var i = 0; i < args.Length; i++)
         {
             if (args[i] == "--game-dir" && i + 1 < args.Length) game = args[++i];
             else if (args[i] == "--output" && i + 1 < args.Length) output = args[++i];
             else if (args[i] == "--monster-move-il-output" && i + 1 < args.Length)
                 monsterMoveIlOutput = args[++i];
+            else if (args[i] == "--monster-static-source" && i + 1 < args.Length)
+                monsterStaticSource = args[++i];
             else throw new ArgumentException("Unknown or incomplete argument: " + args[i]);
         }
-        return (game, output, monsterMoveIlOutput);
+        return (game, output, monsterMoveIlOutput, monsterStaticSource);
     }
 
     private static int SelfTest()
@@ -241,12 +258,13 @@ internal static class Program
             return 1;
 
         int decodedInstructions = MonsterMoveIlInspector.SelfTestDecoder(assemblyPath);
-        if (decodedInstructions <= 0)
+        if (decodedInstructions <= 0 || !MonsterStaticMemberInspector.SelfTest())
             return 1;
 
         Console.WriteLine(
             "STS2_LOCAL_INSPECTOR_SELF_TEST_PASS types=" + metadata.TotalTypes
-            + " il_instructions=" + decodedInstructions);
+            + " il_instructions=" + decodedInstructions
+            + " static_parser=true");
         return 0;
     }
 
