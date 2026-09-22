@@ -52,9 +52,9 @@ internal sealed record MultiplayerProbeSnapshot(
     bool CustomNetworkPacketSent);
 
 /// <summary>
-/// Main-thread-only action boundary used by MP-2B. Local private state, remote public
-/// state and enemy state are kept separate so a local card can account for its own target
-/// mutation without silently accepting a concurrent remote-player mutation.
+/// Main-thread-only action boundary used by MP-2B. Local state, locally readable remote
+/// state, and enemy state are kept separate so a local card can account for its own target
+/// mutation without silently accepting a concurrent teammate mutation.
 /// </summary>
 internal sealed record MultiplayerSafeExecutionBoundary(
     long WorldVersion,
@@ -71,9 +71,9 @@ internal sealed record MultiplayerSafeExecutionBoundary(
     string[] Enemies);
 
 /// <summary>
-/// Read-only Phase 0 observation for a network multiplayer client. It records only the
-/// local player's visible combat state and public enemy state; it never starts a search,
-/// mutates CombatState/RNG, enqueues an action, or sends a packet.
+/// Read-only observation for a network multiplayer client. It may read any combat state
+/// already materialized in the local game process; it never requests additional remote
+/// data, mutates CombatState/RNG, enqueues an action, or sends a packet.
 /// </summary>
 internal static class MultiplayerClientProbe
 {
@@ -246,6 +246,7 @@ internal static class MultiplayerClientProbe
                 $"[CombatSolver/MultiplayerProbe] MP_REACTIVE_WORLD_DELTA " +
                 $"world_version={MultiplayerWorldTracker.WorldVersion} reason={reason} " +
                 $"remote_public_changed={(previousReactive != reactivePublicFingerprint).ToString().ToLowerInvariant()} " +
+                $"remote_readable_changed={(previousReactive != reactivePublicFingerprint).ToString().ToLowerInvariant()} " +
                 $"local_private_changed={(previousLocal != localBoundaryFingerprint).ToString().ToLowerInvariant()} " +
                 "fresh_probe=true");
         }
@@ -293,6 +294,8 @@ internal static class MultiplayerClientProbe
         CombatState state,
         Player? localPlayer)
     {
+        // Legacy method name retained for serialized/runtime contract compatibility.
+        // The fingerprint now includes every teammate field already readable locally.
         StateFingerprintBuilder fingerprint = new();
         fingerprint.Add(state.Players.Count);
         fingerprint.Add(state.RoundNumber);
@@ -301,8 +304,12 @@ internal static class MultiplayerClientProbe
             ? -1
             : state.MultiplayerScalingModel.ShouldReceiveCombatHooks ? 1 : 0);
         fingerprint.Add(state.RunState.CardMultiplayerConstraint.ToString());
-        foreach (string token in RemotePlayerTokens(state, localPlayer))
-            fingerprint.Add(token);
+        foreach (Player player in state.Players
+                     .Where(candidate => localPlayer == null || candidate.NetId != localPlayer.NetId)
+                     .OrderBy(candidate => candidate.NetId))
+        {
+            AppendCompactPlayer(ref fingerprint, player, includePrivateState: true);
+        }
         return fingerprint.Finish();
     }
 
@@ -310,6 +317,8 @@ internal static class MultiplayerClientProbe
         CombatState state,
         Player? localPlayer)
     {
+        // Legacy name: continuation now invalidates on any locally readable teammate
+        // combat-state change, including cards/resources/potions when the client has them.
         StateFingerprintBuilder fingerprint = new();
         fingerprint.Add(state.Players.Count);
         fingerprint.Add(state.MultiplayerScalingModel is null
@@ -320,12 +329,7 @@ internal static class MultiplayerClientProbe
                      .Where(candidate => localPlayer == null || candidate.NetId != localPlayer.NetId)
                      .OrderBy(candidate => candidate.NetId))
         {
-            fingerprint.Add(player.NetId.ToString());
-            fingerprint.Add(player.Character.Id.Entry);
-            fingerprint.Add(player.Creature.CurrentHp);
-            fingerprint.Add(player.Creature.MaxHp);
-            fingerprint.Add(player.Creature.Block);
-            AppendCompactPowers(ref fingerprint, player.Creature.Powers);
+            AppendCompactPlayer(ref fingerprint, player, includePrivateState: true);
         }
         return fingerprint.Finish();
     }
@@ -449,7 +453,7 @@ internal static class MultiplayerClientProbe
         {
             if (localPlayer != null && player.NetId == localPlayer.NetId)
                 continue;
-            AppendCompactPlayer(ref fingerprint, player, includePrivateState: false);
+            AppendCompactPlayer(ref fingerprint, player, includePrivateState: true);
         }
 
         fingerprint.Add(state.Enemies.Count);
