@@ -80,14 +80,14 @@ internal sealed partial class CombatBeamSolver
             TurnStartChoiceCursor roundChoices = new(null);
             combat.BeginActionChoices(roundChoices);
             combat.SetActionChoiceTiming(PlanChoiceTiming.PlayerTurnEnd);
-            bool completed = true;
+            bool valid = true;
             SearchBoundaryReason boundary = SearchBoundaryReason.None;
             try
             {
                 if (simulator.IsInProgress)
                 {
                     int playerSideShuffleEvents = simulator.ShuffleEventCount;
-                    completed = PlayerTurnEndLifecycle.RunForecastFullPlayerSideEnd(
+                    bool completed = PlayerTurnEndLifecycle.RunForecastFullPlayerSideEnd(
                         simulator,
                         combat,
                         simulator.State.RootCapturedPlayers,
@@ -97,56 +97,58 @@ internal sealed partial class CombatBeamSolver
                         shufflesCrossed
                         + simulator.ShuffleEventCount
                         - playerSideShuffleEvents);
+                    valid = completed && !combat.HasPendingChoice;
                 }
 
-                if (!completed || combat.HasPendingChoice)
-                    continue;
-
-                simulator.CheckWinCondition(combat.GetPlayerTurnNumber(_player));
-                if (simulator.IsInProgress)
+                if (valid)
                 {
-                    boundary = AdvanceEnemySideAndPlayerStart(
-                        simulator,
-                        combat,
-                        simulator.State.GetPlayerCombatState(_player),
-                        node.Turn - _startTurnNumber,
-                        processedEnemyDeaths,
-                        ref shufflesCrossed,
-                        roundChoices,
-                        takingExtraTurn: false,
-                        hasActiveEmotionChip: false,
-                        roundHistoryEntryStart,
-                        turnStartChoices: null,
-                        roundCheckpointCapture: null,
-                        jointForecast: true);
-                }
+                    simulator.CheckWinCondition(combat.GetPlayerTurnNumber(_player));
+                    if (simulator.IsInProgress)
+                    {
+                        boundary = AdvanceEnemySideAndPlayerStart(
+                            simulator,
+                            combat,
+                            simulator.State.GetPlayerCombatState(_player),
+                            node.Turn - _startTurnNumber,
+                            processedEnemyDeaths,
+                            ref shufflesCrossed,
+                            roundChoices,
+                            takingExtraTurn: false,
+                            hasActiveEmotionChip: false,
+                            roundHistoryEntryStart,
+                            turnStartChoices: null,
+                            roundCheckpointCapture: null,
+                            jointForecast: true);
+                    }
 
-                _ = combat.ConsumePlayerTurnEndRequest();
-                if (boundary == SearchBoundaryReason.PendingChoice
-                    || combat.HasPendingChoice)
-                {
-                    continue;
+                    valid = boundary != SearchBoundaryReason.PendingChoice
+                        && !combat.HasPendingChoice;
                 }
-                if (boundary == SearchBoundaryReason.None
-                    && !SettleReplayActionBoundary(simulator, combat))
-                {
-                    continue;
-                }
-
-                int turn = combat.GetPlayerTurnNumber(_player);
-                SimulationSnapshot snapshot = Snapshot(
-                    simulator,
-                    turn,
-                    node.ActionCount + 1,
-                    shufflesCrossed,
-                    boundary,
-                    processedEnemyDeaths);
-                yield return (action, snapshot);
             }
             finally
             {
                 combat.EndActionChoices();
             }
+
+            if (!valid)
+                continue;
+
+            _ = combat.ConsumePlayerTurnEndRequest();
+            if (boundary == SearchBoundaryReason.None
+                && !SettleReplayActionBoundary(simulator, combat))
+            {
+                continue;
+            }
+
+            int turn = combat.GetPlayerTurnNumber(_player);
+            SimulationSnapshot snapshot = Snapshot(
+                simulator,
+                turn,
+                node.ActionCount + 1,
+                shufflesCrossed,
+                boundary,
+                processedEnemyDeaths);
+            yield return (action, snapshot);
         }
     }
 

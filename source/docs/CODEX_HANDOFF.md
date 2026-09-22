@@ -34,7 +34,7 @@
 ## 当前未完成
 
 1. `ShadowTeammatePlanner` 已从单队友 Top-K 扩为 Team Top-K：队友按 NetId 依次在同一预测世界上模拟，每处理完一个队友就按 EnemyDurability / TeamEffectiveHp / WorstPlayerEffectiveHpRatio / TeamEnergy / TeamStars / 动作数重新取 Pareto 前沿并压回全局 beam=4，因此不会形成 K^N 笛卡尔爆炸。强制结束自己出牌的 shadow 卡只结束该队友分支，切换到下一队友前会消费 prediction-only end request；所有候选仍只存在于 simulator fork，不生成 `PlanAction`。每条 Shadow route 现在还携带独立 `ProcessedEnemyDeaths`，每次卡牌分叉复制并更新，避免跨 Shadow 动作丢失敌人死亡生命周期状态；接主搜索时可直接从 parent snapshot 的集合初始化。
-2. Joint EndTurn 主接线已落地：`MultiplayerLocalCrossTurn` 的普通无选择 EndTurn 会先用 Shadow Team Top-K 生成最多 K 条队友行为世界，再对每条世界执行全队 Player-Side End → 复用怪物侧 helper → 全队 Player-Side Start，并生成真正可继续被主 Beam fork 的 `SimulationSnapshot`；Shadow 动作仍不会进入 `PlanAction`/Deployment。各世界线独立继承 RNG、Shuffle 计数和 `ForkableSet<uint> ProcessedEnemyDeaths`。若所有 Joint 世界都因 Choice 无法完成则回退旧 EndTurn；任何玩家持有未熔化 Pael’s Eye 时暂时走旧路径，因为原生 Extra Turn 是玩家子集语义，尚未纳入 Joint。
+2. Joint EndTurn 主接线已落地：`MultiplayerLocalCrossTurn` 的普通无选择 EndTurn 会先用 Shadow Team Top-K 生成最多 K 条队友行为世界，再对每条世界执行全队 Player-Side End → 复用怪物侧 helper → 全队 Player-Side Start，并生成真正可继续被主 Beam fork 的 `SimulationSnapshot`；Shadow 动作仍不会进入 `PlanAction`/Deployment。各世界线独立继承 RNG、Shuffle 计数和 `ForkableSet<uint> ProcessedEnemyDeaths`。Joint route 会在退出 `ActionChoices` scope 后再 settle/snapshot/yield，避免快照携带执行期 choice cursor。若所有 Joint 世界都因 Choice 无法完成则回退旧 EndTurn；任何玩家持有未熔化 Pael’s Eye 时暂时走旧路径，因为原生 Extra Turn 是玩家子集语义，尚未纳入 Joint。
 3. 完成 Joint terminal state 后，把动态斩杀策略当前的本地战损比输入替换为 TeamLossRatio / WorstPlayerLossRatio，并让真实队友行为或世界状态偏离预测后立即 Fresh Search。
 
 ## 当前开发 / 性能规则
