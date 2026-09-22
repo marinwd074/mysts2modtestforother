@@ -102,6 +102,65 @@ Important version traps confirmed against public patch history:
 This cross-check is intentionally descriptive. Numeric/effect truth for the
 target remains the pinned v0.107.1 model/DLL, not the live wiki card page.
 
+## Safe Execute staging (source-only; no runtime promotion)
+
+This staging is preparation for a later multiplayer-card deployment phase. It does
+not change the current classifier: all `MultiplayerOnly` cards still fail closed
+until a later code change and Host/Client evidence explicitly promote a subset.
+
+### Stage A — local/public execution candidates
+
+These cards are the first candidates for a future source/contract-only whitelist
+because playing them does not require a teammate target or teammate-private state:
+
+- `Beacon of Hope`
+- `Flanking`
+- `Gang Up`
+- `Knockdown`
+- `Sneaky`
+- `Tag Team`
+
+They still require focused contracts before the classifier changes, and runtime
+promotion remains blocked on Host/Client evidence.
+
+### Stage B — public teammate target or intentional remote-public mutation
+
+Defer these until Safe Execute can distinguish an expected cross-player public
+mutation from unrelated remote interference:
+
+- `Coordinate`
+- `Demonic Shield`
+- `Hammer Time`
+- `Intercept`
+- `Lift`
+- `Mimic`
+- `Rally`
+- `Tank`
+
+### Stage C — keep fail closed under the local-only root contract
+
+These require remote resources or teammate-private combat state and must not be
+enabled merely by adding them to a card-name whitelist:
+
+- `Believe in You`
+- `Energy Surge`
+- `Glimpse Beyond`
+- `Huddle Up`
+- `Ignition`
+- `Largesse`
+- `Legion of Bone`
+
+### Non-exclusive multiplayer semantics already cross-checked
+
+- `Gold Axe`: finished-card count is global across the observed combat history;
+  predicted history only adds actions actually simulated on the local branch.
+- `Radiate`: Stars are counted for `model.Owner`, not all players.
+- `Haunt`: only a Soul owned by the Haunt owner can trigger the power.
+- `Strangle`: the before-play pair is created only when the card owner equals the
+  Strangle applier's player, so teammate card plays do not proc it.
+- `Stratagem`: remains implemented and is legal in the 0.107.1 multiplayer
+  colorless pool.
+
 ## Local-only policy
 
 The matrix deliberately does **not** aim for "all multiplayer cards simulate
