@@ -1293,6 +1293,13 @@ internal static partial class SolverController
                     {
                         Entry.Logger.Info(
                             $"[CombatSolver/MultiplayerSafeExecute] MP2B_WORLD_CHANGED " +
+                            $"timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
+                            $"world_version={MultiplayerWorldTracker.WorldVersion} " +
+                            $"reason={MultiplayerWorldTracker.LastReason} " +
+                            $"session_state={_deployment?.SafeExecutionSession?.State.ToString() ?? "-"}");
+                        Entry.Logger.Info(
+                            $"[LIFT-DIAG] WORLD_VERSION_CHANGE " +
+                            $"timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
                             $"world_version={MultiplayerWorldTracker.WorldVersion} " +
                             $"reason={MultiplayerWorldTracker.LastReason} " +
                             $"session_state={_deployment?.SafeExecutionSession?.State.ToString() ?? "-"}");
@@ -1367,6 +1374,12 @@ internal static partial class SolverController
 
     private static void InvalidateMultiplayerSearch(CombatState state)
     {
+        Entry.Logger.Info(
+            $"[LIFT-DIAG] INVALIDATE_MULTIPLAYER_SEARCH " +
+            $"timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
+            $"world_version={MultiplayerWorldTracker.WorldVersion} " +
+            $"reason={MultiplayerWorldTracker.LastReason} " +
+            $"session_state={_deployment?.SafeExecutionSession?.State.ToString() ?? "-"}");
         CancelMultiplayerDebouncedSearch();
         CancelDeferredSearch();
         CancelSearch();
@@ -1434,6 +1447,7 @@ internal static partial class SolverController
             : "[CombatSolver/MultiplayerAdvisor] WORLD_INVALIDATED";
         Entry.Logger.Info(
             $"{invalidationPrefix} " +
+            $"timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
             $"world_version={MultiplayerWorldTracker.WorldVersion} " +
             $"reason={MultiplayerWorldTracker.LastReason} " +
             $"turn={LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0} " +

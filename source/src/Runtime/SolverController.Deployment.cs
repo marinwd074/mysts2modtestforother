@@ -505,6 +505,7 @@ internal static partial class SolverController
                     {
                         Entry.Logger.Info(
                             $"[CombatSolver/MultiplayerSafeExecute] NATIVE_ACTION_CAPTURED " +
+                            $"timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
                             $"request_id={safeSession?.RequestId ?? 0} action_index={actionIndex} " +
                             $"type={queuedAction.GetType().Name} turn={turn} card={action.CardId} " +
                             $"local_net_id={player.NetId} custom_network_api_used=false");
@@ -622,6 +623,7 @@ internal static partial class SolverController
                         _combat.LastSolverDeployedTurn = turn;
                         Entry.Logger.Info(
                             $"[CombatSolver/MultiplayerSafeExecute] CROSS_PLAYER_BOUNDARY_REPLAN " +
+                            $"timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
                             $"request_id={safeSession.RequestId} turn={turn} action_index={actionIndex} " +
                             $"card={action.CardId} target={action.TargetCombatId?.ToString() ?? "-"} " +
                             $"world_version={afterBoundary.WorldVersion}");
@@ -1418,7 +1420,13 @@ internal static partial class SolverController
                     $"target={playCard.Target?.CombatId.ToString() ?? "-"} " +
                     $"reference_equal={referenceEqual.ToString().ToLowerInvariant()}");
                 if (referenceEqual)
-                    captured.TrySetResult(action);
+                {
+                    bool accepted = captured.TrySetResult(action);
+                    Entry.Logger.Info(
+                        $"[LIFT-DIAG] CAPTURE_SET_RESULT timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
+                        $"accepted={accepted.ToString().ToLowerInvariant()} " +
+                        $"token_requested={token.IsCancellationRequested.ToString().ToLowerInvariant()}");
+                }
                 return;
             }
             if (matches(action))
@@ -1433,11 +1441,23 @@ internal static partial class SolverController
                 return await captured.Task.WaitAsync(token);
             try
             {
-                return await captured.Task.WaitAsync(TimeSpan.FromSeconds(5), token);
+                GameAction capturedAction = await captured.Task.WaitAsync(TimeSpan.FromSeconds(5), token);
+                Entry.Logger.Info(
+                    $"[LIFT-DIAG] CAPTURE_AWAIT_RETURNED timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
+                    $"type={capturedAction.GetType().Name} " +
+                    $"token_requested={token.IsCancellationRequested.ToString().ToLowerInvariant()}");
+                return capturedAction;
             }
             catch (TimeoutException)
             {
                 Entry.Logger.Warn("[LIFT-DIAG] CAPTURE_TIMEOUT");
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                Entry.Logger.Warn(
+                    $"[LIFT-DIAG] CAPTURE_CANCELED timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
+                    $"token_requested={token.IsCancellationRequested.ToString().ToLowerInvariant()}");
                 throw;
             }
         }
@@ -1493,6 +1513,10 @@ internal static partial class SolverController
         _deployment = null;
         if (deployment == null)
             return;
+        Entry.Logger.Info(
+            $"[LIFT-DIAG] CANCEL_DEPLOYMENT timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
+            $"turn={deployment.StartTurnNumber} " +
+            $"session_state={deployment.SafeExecutionSession?.State.ToString() ?? "-"}");
         deployment.SafeExecutionSession?.Abort("deployment_cancelled");
         deployment.Cancellation.Cancel();
         QueueDeploymentReferenceRelease(deployment);
