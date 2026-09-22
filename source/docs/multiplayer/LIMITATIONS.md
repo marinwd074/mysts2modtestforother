@@ -7,13 +7,13 @@
 - continuation 的 legacy `RemotePublicFingerprint` 名称暂时保留兼容性，但内容已经覆盖本地可读队友状态；任何该 fingerprint 变化都要求 Fresh Search，不再允许 remote-public soft reuse。
 - 下方历史章节里“remote private 不可访问”“local-player-only root”的文字记录的是当时实现与 Smoke 结论。它们仍可作为历史证据，但不能再用来推断当前客户端内存中不存在队友状态。`282393c9` 的 post-yield stale-read 方案已确认会和现有 Fork/Attach 机制冲突，不再作为当前边界。
 
-本文件只保留当前多人阶段的可审计结论和仍有效的限制。机器事实以 [Phase 0 矩阵](../evidence/phase0-matrix-2026-09-19.json) 为准：MP-0 Core 与受控生命周期 Hardening 为 `PASS`；重连后的 Advisor 远端私有药水语义仍按合同 fail-closed；MP-2A 显式一动作 Safe Execute、MP-2B 两动作正常/干扰 Smoke 与 MP-2C bounded N-action 正常/干扰 Smoke 均已通过。
+本文件同时保留当前多人结论与早期历史证据。机器事实以 [Phase 0 矩阵](../evidence/phase0-matrix-2026-09-19.json) 及后续提交为准：MP-0 Core 与受控生命周期 Hardening 为 `PASS`；早期 Advisor 的远端药水 fail-closed 记录属于旧 local-player-only root 证据，当前 readable-state root 已可捕获本地进程中实际物化的队友药水/战斗状态；MP-2A 显式一动作 Safe Execute、MP-2B 两动作正常/干扰 Smoke 与 MP-2C bounded N-action 正常/干扰 Smoke 均已通过。
 
 ## 当前状态
 
 - **MP-0 Core：PASS**：A/B/C 连接矩阵、本地私有状态只读采集、远端公开战斗状态、双 Client 公共敌人状态对照和 Probe 只读契约均有证据。
 - **MP-0 Hardening：PASS（受控生命周期）**：Host 退出并重新创建房间后，Client 收到 Quit、重新握手、Join、Ready，并再次进入有效战斗；进程停止不计作生命周期证据。
-- **MP-1 Advisor：SMOKE PASS（受控范围）**：静态合同与 Release 构建已通过；默认仍是 Probe，只有 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才进入当前回合的只读路线显示，不执行动作。fresh `-bbfix` client 已形成 `SEARCH_COMPLETE=5`、原生完成通知和路线回放证据，Probe 保持只读；远端私有字段保持 `Unknown`，未知远端遗物仍 fail closed。
+- **MP-1 Advisor：SMOKE PASS（受控范围）**：静态合同与历史 Release 构建已通过；默认仍是 Probe，只有 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才进入只读路线显示，不执行动作。早期 `-bbfix` Smoke 发生在 local-player-only root 阶段；当前 root 已扩大为本地可读队友状态捕获，但这不等于所有跨玩家牌/怪物效果都已 runtime-confirmed。
 - **MP-2A Safe Execute Lab Smoke：PASS（受控范围，2026-09-20）**：HostVanilla + ClientCombatSolver 在 `safe-execute-lab` 中完成一次本地普通牌的原生 `PlayCardAction`；能量/手牌/敌方生命按预期变化，且验证器 7 项检查全部 PASS。
 - **MP-2A Safe Execute：PASS（显式一动作范围，2026-09-20）**：正式 `safe-execute` token 已在 HostVanilla + ClientCombatSolver 中完成一次本地普通牌 Smoke；验证器 7 项检查全部 PASS。摘要见 [`evidence/mp2-safe-execute-formal-2026-09-20.json`](../evidence/mp2-safe-execute-formal-2026-09-20.json)。这是 MP2B 之前的一动作基线，不代表当前两动作实机已通过。
 - **MP-2B Safe Execute：实机 PASS（2026-09-20）**：显式 SafeExecutionSession、两动作上限、动作后稳定世界等待、预期本地变化与远端/未知变化归因已通过真实 Host/Client Smoke。正常验证器返回 `MULTIPLAYER_MP-2B_PASS`，远端干扰验证器返回 `MULTIPLAYER_MP-2B_REMOTE_ABORT_PASS`；摘要见 [`mp2b-smoke-2026-09-20.json`](evidence/mp2b-smoke-2026-09-20.json)。
@@ -85,16 +85,16 @@
 ## 当前限制
 
 - 直接 Host 逐时刻敌人公开状态导出仍未单独采集；当前 `enemyStateSync` 仅表示两个独立 CombatSolver Client 的公开状态集合对照。
-- MP-1 Advisor 的首轮真实 Smoke 已通过受控验收；无药水重连场景和非空远端药水 fail-closed 场景均已实机覆盖；固定工作量单人 post-MP1 spot 对照已完成且路线/工作量无回归，但更广稳定性仍待收口，未知远端遗物和远端私有药水的 fail-closed 门禁不可移除。对照证据见 `runtime-evidence/20260920-post-mp1-performance/`。
-- 重连后的远端私有药水库存仍不可访问，Advisor 必须保持 fail-closed；如需支持正向搜索语义，应另立受控 public-state 设计与合同，不在本次 MP-0 生命周期收口中静默放开。退出阶段的 `CombatBugReportExporter` `NullReferenceException` 另需独立 triage。
+- MP-1 Advisor 的早期无药水/非空远端药水场景仍保留为历史回归证据，但其中“未知远端遗物/药水必须不可读”的门禁已被 readable-state root 架构取代。当前真正必须保留的是：只读取本地进程已经物化的数据、后台搜索不回读 live state、队友动作不被预测、真实 teammate fingerprint 变化必须 Fresh Search。对照证据见 `runtime-evidence/20260920-post-mp1-performance/`。
+- 当前客户端若已物化队友药水库存，readable-state root 可以读取并冻结该状态；不再以“远端私有药水一律不可访问”作为当前门禁。仍未完成逐项语义/执行验证的跨玩家效果继续 fail-closed。退出阶段的 `CombatBugReportExporter` `NullReferenceException` 仍是独立 triage 项。
 - MP-2 Safe Execute 的正式能力只接受显式 `COMBATSOLVER_MULTIPLAYER_MODE=safe-execute` opt-in；一动作与两动作 Host/Client Smoke 是历史基线，当前 MP-2C 运行时最多执行 6 张连续安全本地普通 PlayCard，并在每张牌后做动作归因与重验证。默认多人仍是 Probe；`safe-execute-lab` 继续要求 Multiplayer Lab、匹配的 `ClientCombatSolver` ownership/profile marker 和 Probe evidence。Safe EndTurn 已在显式 `safe-execute` 下通过；药水、选择、Replay、队友目标、Full Auto 和 Instant 仍关闭。Local Cross-Turn 的 T3 Fix/X2 已有本轮实机证据，但默认多人仍不改变为自动执行模式。
 - Multiplayer Carry Ranking v1 只使用远端公开 HP/MaxHP/Block/回合阶段、公开 Powers、敌人公开状态和公开多人约束；不读取或预测远端手牌、牌堆、能量、药水、私有遗物或下一张牌。原版怪物公开 AttackIntent 依据 0.107.1 `AttackCommand.FromMonster` 的 all-opponents 合同标为 `AllPlayers`；非攻击和第三方怪物仍保持 Unknown/neutral，且 Carry 只在本地质量兼容候选之间比较。
-- Multiplayer Local Cross-Turn 当前限制：搜索结果可包含本地未来回合，但只允许部署当前真实本地回合；Safe EndTurn 后旧 authorization 必须失效，只有对本地/敌人/远端公开 fingerprint、多人约束和单调 WorldVersion 完成严格对账后才复用 continuation。任何不匹配都必须 Fresh Probe + Fresh Root + Fresh Search；队友私有行为不作为确定输入。T3 Fix 与 X2 已完成实机验证；本地 Play 且当前 turn 缺失 cached continuation 的核心调度状态转换已由运行时共用 `MultiplayerContinuationScheduleDecision` 和 12 项合同收口；自然 Host/Client marker 仅保留为可选额外证据。
+- Multiplayer Local Cross-Turn 当前限制：搜索结果可包含本地未来回合，但只允许部署当前真实本地回合；Safe EndTurn 后旧 authorization 必须失效，只有对本地/敌人/**本地可读队友状态** fingerprint、多人约束和单调 WorldVersion 完成严格对账后才复用 continuation。任何不匹配都必须 Fresh Probe + Fresh Root + Fresh Search；队友未来动作仍不作为确定输入。T3 Fix 与 X2 已完成实机验证；本地 Play 且当前 turn 缺失 cached continuation 的核心调度状态转换已由运行时共用 `MultiplayerContinuationScheduleDecision` 和 12 项合同收口；自然 Host/Client marker 仅保留为可选额外证据。
 
 ## 当前安全边界
 
 - Runtime 默认 `MultiplayerProbe`：只读采集，不搜索、不部署、不自动选牌、不自动 EndTurn、不发送自定义网络包；Carry Ranking 不在 Probe 模式启用。
-- Advisor 仅显式环境变量 opt-in，并受 local-player root capture contract 和远端 fail-closed 语义约束；Safe Execute 也仅显式 opt-in。MP-2C bounded N-action、Reactive Carry、Local Cross-Turn T3/X2 与 Shared-RNG Shuffle Boundary 均已有实机证据。Carry Ranking R1 已真实 PASS，current-turn threat window 也已真实 PASS；R2 decisive flip 仍为 `UNVERIFIED`，仅表示尚未自然遇到完整 pre-carry tie。两次正式 fixture 中 threat durability=15、当前回合攻击无法精确 lethal，validator 正确保持 UNVERIFIED。该项现为可选补充证据，不再要求继续人工刷场景。
+- Advisor 仅显式环境变量 opt-in，并受 **readable-state root + local-action scope** 约束；Safe Execute 也仅显式 opt-in。读取队友本地可见状态不会扩大 `RootActionPlayers`，未验证的跨玩家语义继续 fail-closed。MP-2C bounded N-action、Reactive Carry、Local Cross-Turn T3/X2 与 Shared-RNG Shuffle Boundary 均已有实机证据。Carry Ranking R1 已真实 PASS，current-turn threat window 也已真实 PASS；R2 decisive flip 仍为 `UNVERIFIED`，仅表示尚未自然遇到完整 pre-carry tie。两次正式 fixture 中 threat durability=15、当前回合攻击无法精确 lethal，validator 正确保持 UNVERIFIED。该项现为可选补充证据，不再要求继续人工刷场景。
 - 证据文件仅由 Lab 环境写入；schema v2 使用 `runSeed` / `combatSegmentId`，紧凑 fingerprint 不能替代缺失的生命周期证据。
 
 ## Source of truth
