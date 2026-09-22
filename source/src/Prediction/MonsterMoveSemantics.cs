@@ -160,10 +160,11 @@ internal static class MonsterMoveSemantics
         }
         finally
         {
-            if (suppressedDieForYou == null)
-                return;
-            foreach ((Creature osty, int amount) in suppressedDieForYou)
-                combat.SetAmount<DieForYouPower>(osty, amount);
+            if (suppressedDieForYou != null)
+            {
+                foreach ((Creature osty, int amount) in suppressedDieForYou)
+                    combat.SetAmount<DieForYouPower>(osty, amount);
+            }
         }
     }
 }
