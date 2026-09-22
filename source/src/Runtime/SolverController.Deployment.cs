@@ -491,7 +491,11 @@ internal static partial class SolverController
                         return;
                     }
 
-                    bool hasNextAction = actionIndex + 1 < actions.Count;
+                    // A cross-player public mutation is a hard replanning boundary. The
+                    // native action is accepted, but the old route must never consume its
+                    // next action against a changed teammate/world snapshot.
+                    bool hasNextAction = actionIndex + 1 < actions.Count
+                        && !liveSafety.EndsContinuation;
                     MultiplayerSafeActionRevalidationFacts facts =
                         BuildSafeActionRevalidationFacts(
                             beforeBoundary!,

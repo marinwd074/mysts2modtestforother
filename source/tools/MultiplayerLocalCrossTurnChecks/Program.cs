@@ -35,9 +35,24 @@ Check(
     !MultiplayerLocalCrossTurnContracts.IsCurrentTurnOnly(SearchRoutePolicy.SinglePlayerFullRoute)
         && MultiplayerLocalCrossTurnContracts.IsCurrentTurnOnly(SearchRoutePolicy.MultiplayerCurrentTurnOnly)
         && !MultiplayerLocalCrossTurnContracts.IsCurrentTurnOnly(SearchRoutePolicy.MultiplayerLocalCrossTurn)
+        && MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(SearchRoutePolicy.SinglePlayerFullRoute)
+        && !MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(SearchRoutePolicy.MultiplayerCurrentTurnOnly)
+        && MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(SearchRoutePolicy.MultiplayerLocalCrossTurn)
         && MultiplayerLocalCrossTurnContracts.CanUsePersistentRouteCache(SearchRoutePolicy.SinglePlayerFullRoute)
         && !MultiplayerLocalCrossTurnContracts.CanUsePersistentRouteCache(SearchRoutePolicy.MultiplayerLocalCrossTurn),
-    "Singleplayer, Probe/current-turn, and multiplayer local-cross-turn route policies stay distinct; persistent route cache remains singleplayer-only.");
+    "Singleplayer and multiplayer local-cross-turn share full search heuristics while current-turn-only remains reduced; persistent route cache stays singleplayer-only.");
+
+Check(
+    !MultiplayerLocalCrossTurnContracts.DelayAngerCopyPreferenceUntilAfterEnemyHp(
+        SearchRoutePolicy.SinglePlayerFullRoute,
+        completeVictory: false)
+        && !MultiplayerLocalCrossTurnContracts.DelayAngerCopyPreferenceUntilAfterEnemyHp(
+            SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            completeVictory: true)
+        && MultiplayerLocalCrossTurnContracts.DelayAngerCopyPreferenceUntilAfterEnemyHp(
+            SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            completeVictory: false),
+    "Incomplete multiplayer local-cross-turn routes rank deterministic enemy HP before Anger copy count, while singleplayer and complete victories keep the original long-term ordering.");
 
 Check(
     MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(

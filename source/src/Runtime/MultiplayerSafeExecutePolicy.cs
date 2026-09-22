@@ -1,8 +1,14 @@
 namespace CombatSolver;
 
-internal readonly record struct SafeLocalActionDecision(bool IsSafe, string Reason)
+internal readonly record struct SafeLocalActionDecision(
+    bool IsSafe,
+    string Reason,
+    bool EndsContinuation = false)
 {
     public static SafeLocalActionDecision Allow { get; } = new(true, "safe_local_play_card");
+
+    public static SafeLocalActionDecision CrossPlayerPublicBoundary { get; }
+        = new(true, "cross_player_public_boundary", EndsContinuation: true);
 }
 
 internal readonly record struct MultiplayerSafeActionStructuralFacts(
@@ -20,7 +26,8 @@ internal readonly record struct MultiplayerSafeActionResolvedFacts(
     bool HasTarget,
     bool TargetExists,
     bool IsAllowedTarget,
-    bool HasIncompleteTargetIdentity);
+    bool HasIncompleteTargetIdentity,
+    bool IsPromotedMultiplayerOnlyCard = false);
 
 internal readonly record struct MultiplayerSafeExecuteLabFacts(
     string? ModeToken,
@@ -300,6 +307,7 @@ internal static class MultiplayerSafeExecutePolicy
     internal const string SingleActionLimitReason = "mp2a_single_action_limit";
     internal const string BoundedActionCeilingReason = "mp2c_action_ceiling";
     internal const string TwoActionLimitReason = BoundedActionCeilingReason;
+    internal const string ManualMultiplayerCardReason = "multiplayer_only_manual_play";
     internal const string FormalModeToken = "safe-execute";
     internal const string LabModeToken = "safe-execute-lab";
 
@@ -327,7 +335,7 @@ internal static class MultiplayerSafeExecutePolicy
         if (!facts.HasLocalCard)
             return new(false, "local_card_missing");
         if (facts.IsMultiplayerOnlyCard)
-            return new(false, "multiplayer_only_card");
+            return new(false, ManualMultiplayerCardReason);
         if (facts.HasTarget)
         {
             if (!facts.TargetExists)
@@ -356,7 +364,8 @@ internal static class MultiplayerSafeExecutePolicy
 
     internal static bool ShouldKeepSafeAutoAfterBoundary(SafeLocalActionDecision stop)
         => stop.IsSafe
-           || string.Equals(stop.Reason, BoundedActionCeilingReason, StringComparison.Ordinal);
+           || string.Equals(stop.Reason, BoundedActionCeilingReason, StringComparison.Ordinal)
+           || string.Equals(stop.Reason, ManualMultiplayerCardReason, StringComparison.Ordinal);
 
     internal static IReadOnlyList<T> TakeBoundedSafePrefix<T>(
         IReadOnlyList<T> actions,

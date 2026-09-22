@@ -3904,26 +3904,8 @@ internal sealed partial class CombatBeamSolver
         PredictedCard card,
         CombatPredictionSimulator simulator)
     {
-        if (simulator.GetTargetType(card) == TargetType.AnyEnemy)
-        {
-            IReadOnlyList<Creature> enemies = simulator.State.Enemies;
-            for (int i = 0; i < enemies.Count; i++)
-            {
-                Creature target = enemies[i];
-                if (simulator.State.IsHittable(target))
-                    yield return (i, target);
-            }
-            yield break;
-        }
-
-        yield return (-1, null);
-    }
-
-    private IEnumerable<(int Index, Creature? Target)> TargetsForPotion(
-        PotionModel potion,
-        CombatPredictionSimulator simulator)
-    {
-        if (potion.TargetType == TargetType.AnyEnemy)
+        TargetType targetType = simulator.GetTargetType(card);
+        if (targetType == TargetType.AnyEnemy)
         {
             IReadOnlyList<Creature> enemies = simulator.State.Enemies;
             for (int index = 0; index < enemies.Count; index++)
@@ -3935,14 +3917,54 @@ internal sealed partial class CombatBeamSolver
             yield break;
         }
 
-        if (potion.TargetType is TargetType.AnyPlayer or TargetType.Self)
+        if (targetType is TargetType.AnyPlayer or TargetType.AnyAlly)
+        {
+            IReadOnlyList<Creature> targets = simulator.State.GetValidManualTargets(
+                card.Preview.Owner.Creature,
+                targetType);
+            for (int index = 0; index < targets.Count; index++)
+                yield return (index, targets[index]);
+            yield break;
+        }
+
+        yield return (-1, null);
+    }
+
+    private IEnumerable<(int Index, Creature? Target)> TargetsForPotion(
+        PotionModel potion,
+        CombatPredictionSimulator simulator)
+    {
+        TargetType targetType = potion.TargetType;
+        if (targetType == TargetType.AnyEnemy)
+        {
+            IReadOnlyList<Creature> enemies = simulator.State.Enemies;
+            for (int index = 0; index < enemies.Count; index++)
+            {
+                Creature enemy = enemies[index];
+                if (simulator.State.IsHittable(enemy))
+                    yield return (index, enemy);
+            }
+            yield break;
+        }
+
+        if (targetType is TargetType.AnyPlayer or TargetType.AnyAlly)
+        {
+            IReadOnlyList<Creature> targets = simulator.State.GetValidManualTargets(
+                potion.Owner.Creature,
+                targetType);
+            for (int index = 0; index < targets.Count; index++)
+                yield return (index, targets[index]);
+            yield break;
+        }
+
+        if (targetType == TargetType.Self)
         {
             if (simulator.State.GetCreature(_player.Creature).IsAlive)
                 yield return (-1, null);
             yield break;
         }
 
-        if (potion.TargetType is TargetType.AllEnemies or TargetType.TargetedNoCreature)
+        if (targetType is TargetType.AllEnemies or TargetType.TargetedNoCreature)
             yield return (-1, null);
     }
 

@@ -238,7 +238,8 @@ internal sealed partial class CombatBeamSolver
                             initialPlayerMaxHp,
                             bossHpRelief,
                             postCombatRelicHeal,
-                            theftPolicy) >= 0)
+                            theftPolicy,
+                            routePolicy) >= 0)
                 {
                     continue;
                 }
@@ -364,11 +365,22 @@ internal sealed partial class CombatBeamSolver
                 .ThenBy(candidate => candidate.PolicyHpDeficit)
                 .ThenBy(candidate => candidate.HealthResourceCost)
                 .ThenByDescending(candidate => candidate.Features.LongTermResourceValue)
-                .ThenBy(candidate => candidate.Features.AngerCopiesGenerated)
+                .ThenBy(candidate =>
+                    MultiplayerLocalCrossTurnContracts.DelayAngerCopyPreferenceUntilAfterEnemyHp(
+                        routePolicy,
+                        candidate.CompleteVictory)
+                        ? 0
+                        : candidate.Features.AngerCopiesGenerated)
                 .ThenBy(candidate => CombatBeamSolver.PolicyBoundaryRank(candidate.Features.BoundaryReason))
                 .ThenBy(candidate => candidate.OptionalPotionCount)
                 .ThenBy(candidate => candidate.StrategicSold)
                 .ThenBy(candidate => candidate.Features.EnemyHp)
+                .ThenBy(candidate =>
+                    MultiplayerLocalCrossTurnContracts.DelayAngerCopyPreferenceUntilAfterEnemyHp(
+                        routePolicy,
+                        candidate.CompleteVictory)
+                        ? candidate.Features.AngerCopiesGenerated
+                        : 0)
                 // Carry is a final multiplayer tie-break after local safety, resource,
                 // potion, and enemy-health ordering. It cannot outrank hard local quality.
                 .ThenByDescending(candidate => candidate.CarryEvaluation.CarryPreference)
@@ -480,7 +492,8 @@ internal sealed partial class CombatBeamSolver
         int initialPlayerMaxHp,
         BossHpRelief bossHpRelief,
         PostCombatRelicHealProfile postCombatRelicHeal,
-        SolverTheftPolicy? theftPolicy)
+        SolverTheftPolicy? theftPolicy,
+        SearchRoutePolicy routePolicy)
     {
         SimulationSnapshot leftSnapshot = left.Snapshot;
         SimulationSnapshot rightSnapshot = right.Snapshot;
@@ -563,9 +576,16 @@ internal sealed partial class CombatBeamSolver
         comparison = rightSnapshot.LongTermResourceValue.CompareTo(leftSnapshot.LongTermResourceValue);
         if (comparison != 0)
             return comparison;
-        comparison = leftSnapshot.AngerCopiesGenerated.CompareTo(rightSnapshot.AngerCopiesGenerated);
-        if (comparison != 0)
-            return comparison;
+        bool delayAngerPreference =
+            MultiplayerLocalCrossTurnContracts.DelayAngerCopyPreferenceUntilAfterEnemyHp(
+                routePolicy,
+                completeVictory: leftWon && rightWon);
+        if (!delayAngerPreference)
+        {
+            comparison = leftSnapshot.AngerCopiesGenerated.CompareTo(rightSnapshot.AngerCopiesGenerated);
+            if (comparison != 0)
+                return comparison;
+        }
         comparison = PolicyBoundaryRank(leftSnapshot.BoundaryReason)
             .CompareTo(PolicyBoundaryRank(rightSnapshot.BoundaryReason));
         if (comparison != 0)
@@ -573,6 +593,12 @@ internal sealed partial class CombatBeamSolver
         comparison = leftSnapshot.EnemyHp.CompareTo(rightSnapshot.EnemyHp);
         if (comparison != 0)
             return comparison;
+        if (delayAngerPreference)
+        {
+            comparison = leftSnapshot.AngerCopiesGenerated.CompareTo(rightSnapshot.AngerCopiesGenerated);
+            if (comparison != 0)
+                return comparison;
+        }
         comparison = right.Score.CompareTo(left.Score);
         if (comparison != 0)
             return comparison;

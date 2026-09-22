@@ -328,8 +328,19 @@ internal sealed record SolverOverlaySnapshot(
             enemyHpLost,
             result.HpLostByTurn.GetValueOrDefault(turn),
             result.HpRecoveredByTurn.GetValueOrDefault(turn),
-            result.EnergyLeftByTurn.GetValueOrDefault(turn),
+            ResolveEnergyLeft(result, turn),
             result.CombatEndedTurn == turn);
+    }
+
+    private static int ResolveEnergyLeft(SolverResult result, int turn)
+    {
+        if (result.EnergyLeftByTurn.TryGetValue(turn, out int annotated))
+            return annotated;
+
+        // A partial/incomplete route can stop inside the turn before a TurnOutcome is
+        // materialized. Do not treat the missing annotation as zero energy: the selected
+        // search node already contains the exact predicted resource state at that point.
+        return result.Snapshot.Turn == turn ? result.Snapshot.Energy : 0;
     }
 
     internal static SolverOverlayActionSnapshot CaptureAction(

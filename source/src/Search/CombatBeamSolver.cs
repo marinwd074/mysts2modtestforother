@@ -89,6 +89,7 @@ internal sealed partial class CombatBeamSolver(
     private BeamRetentionPolicy? _retention;
     private BeamRetentionPolicy Retention => _retention ??= new BeamRetentionPolicy(
         _profile,
+        policy.RoutePolicy,
         _isActEndingBoss,
         _strategicBossHpRelief,
         root.PostCombatRelicHeal,

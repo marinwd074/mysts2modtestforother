@@ -1,4 +1,5 @@
 using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Hooks;
@@ -116,6 +117,19 @@ internal sealed class CombatPredictionState
             : Players;
 
     public IReadOnlyList<Creature> HittableEnemies => _hittableEnemies ??= new HittableEnemyView(this);
+
+    public IReadOnlyList<Creature> GetValidManualTargets(Creature self, TargetType targetType)
+    {
+        return targetType switch
+        {
+            TargetType.AnyPlayer =>
+                [.. PlayerCreatures.Where(creature => GetCreature(creature).IsAlive)],
+            TargetType.AnyAlly =>
+                [.. PlayerCreatures.Where(creature =>
+                    !ReferenceEquals(creature, self) && GetCreature(creature).IsAlive)],
+            _ => [],
+        };
+    }
 
     public SimCreatureState GetCreature(Creature creature)
     {
