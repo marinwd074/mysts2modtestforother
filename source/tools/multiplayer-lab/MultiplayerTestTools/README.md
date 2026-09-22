@@ -18,5 +18,4 @@ Checkout:
 git submodule update --init --recursive -- source/tools/multiplayer-lab/MultiplayerTestTools/TheBookOfAges
 ~~~
 
-The normal Lab installer can still consume the Workshop-built version for runtime testing.
-The submodule exists so Codex can inspect, patch, and build the full GM Console source/UI locally when needed.
+The normal Lab installer does not deploy GM Console. Build this pinned submodule and deploy the same DLL, manifest and PCK to every participating Lab instance; keep Workshop Console copies out of the test.

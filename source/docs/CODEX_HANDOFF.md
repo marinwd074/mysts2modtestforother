@@ -23,13 +23,13 @@
 - 完整 `TheBookOfAges / GM Console` 作为 **test-only submodule** 保留在：
   `source/tools/multiplayer-lab/MultiplayerTestTools/TheBookOfAges`
   固定上游 commit `234a74ccbaf46d7e385ed318c64857f1f7a90cae`。它不进入 CombatSolver 正式构建/发布。
+- 2026-09-22 同构 GM Console 最小实机 Smoke 已通过：Host/Client 加载同一 DLL/PCK 与 BaseLib 构建，进入同一战斗且没有 game-data mismatch；Host 和 Client 各发起一次 `energy 1` 并在两端执行，Host 发放一张原生 `STRIKE_IRONCLAD` 并在两端各执行一次。摘要见 `docs/multiplayer/evidence/gm-console-multiplayer-smoke-2026-09-22.json`。这只证明测试工具的最小双向链路，不证明多人牌出牌语义。
 
 ## 当前未完成
 
-1. 验证 Host + 各 Client 使用同一 GM Console 构建时，最小加牌/资源修改是否仍出现 game-data mismatch。
-2. 用同步稳定的测试工具获得 MultiplayerOnly / Tag Team 真实语义证据。
-3. 只有 Tag Team 原生语义和安全边界都通过后，才设计 **TAG_TEAM-only** Safe Execute whitelist；其他 MultiplayerOnly 牌继续 fail closed。
-4. Boot Up Strength 精确数值 differential 仍可补，但不阻塞当前多人阶段。
+1. 用已验证可同步的 GM Console 获得 MultiplayerOnly / Tag Team **实际出牌**语义证据；本轮只验证了 `TANK` 发放，没有打出多人牌。
+2. 只有 Tag Team 原生语义和安全边界都通过后，才设计 **TAG_TEAM-only** Safe Execute whitelist；其他 MultiplayerOnly 牌继续 fail closed。
+3. Boot Up Strength 精确数值 differential 仍可补，但不阻塞当前多人阶段。
 
 ## 当前开发 / 性能规则
 

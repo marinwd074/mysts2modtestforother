@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "status": "PASS",
+  "scope": "Identical GM Console boot and minimal bidirectional synchronization",
+  "validatedDate": "2026-09-22",
+  "gameVersion": "0.107.1",
+  "gmConsoleRevision": "234a74ccbaf46d7e385ed318c64857f1f7a90cae",
+  "gmConsoleDllSha256": "19343AFF3243791F9C9411A9CC4757E2954083E3E9B19B51D396C87121F967B9",
+  "gmConsolePckSha256": "C5A2547BE862587BF59FA2F6E17C684B37F7F5E3791ED1BDDFD3A48ADA258681",
+  "baseLibVersion": "3.4.7",
+  "hostProfile": "HostVanilla plus test-only BaseLib and GM Console",
+  "clientProfile": "ClientCombatSolver plus test-only BaseLib and GM Console",
+  "steamTransport": "off",
+  "clientWarmupExcluded": true,
+  "stopMode": "Graceful",
+  "runSeed": "YDHHVUXCVM",
+  "observedEnemy": "NIBBITS_WEAK",
+  "boot": "PASS",
+  "gameDataMismatch": false,
+  "resourceMutation": "PASS",
+  "resourceActions": [
+    "Host player 1: energy 1 via ConsoleCmdGameAction, executed once on each peer",
+    "Client player 1000: energy 1 via ConsoleCmdGameAction, executed once on each peer"
+  ],
+  "cardInjection": "PASS",
+  "cardActions": [
+    "Host player 1: CARD.TANK count 1 upgrade 0, synchronized and executed once on each peer; card was not played",
+    "Host player 1: base-game CARD.STRIKE_IRONCLAD count 1 upgrade 1, synchronized and executed once on each peer"
+  ],
+  "reverseDirection": "PASS",
+  "tagTeamPlaySemantics": "UNVERIFIED",
+  "hostLog": ".local/multiplayer-lab/runtime-mp-host/logs/20260922-174818-host-e3e625dc.log",
+  "hostLogSha256": "2CD55288D55DC9F9BE299C3791DBE5384D15F5C89511EBCCB70753D11270308A",
+  "clientLog": ".local/multiplayer-lab/runtime-mp-client-solver/logs/20260922-174825-client-0ffa6b53.log",
+  "clientLogSha256": "A6250408F9EF3D1A651F7EED1ABAAFB26043DF28C4DB0685DA9AE306E80EDF81"
+}

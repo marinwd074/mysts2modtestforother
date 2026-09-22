@@ -131,7 +131,7 @@ git submodule update --init --recursive -- source/tools/multiplayer-lab/Multipla
 
 - Host 和所有参与 Client 使用同一测试工具源码 revision / 构建产物。
 - 测试工具只用于 Multiplayer Lab，不进入 CombatSolver 正式发布包。
-- 具体 GM 操作是否能在 pinned 0.107.1 保持同步仍需单独 runtime 验证。
+- pinned 0.107.1 的一次最小 Host/Client Smoke 已确认同构 DLL/PCK 正常进战斗、双向 `energy 1` 与单张原生加牌同步；见 [`evidence/gm-console-multiplayer-smoke-2026-09-22.json`](evidence/gm-console-multiplayer-smoke-2026-09-22.json)。Tag Team 实际出牌语义仍未验证。
 
 ## MP-2 Safe Execute 正式 token Smoke
 
