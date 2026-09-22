@@ -173,8 +173,9 @@ Windows 和 Linux 的无人测试入口分别为 `tools/run-unattended-test.ps1`
 
 ## 开源、许可与代码来源
 
-第三方代码、许可、来源关系和书面许可记录集中见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，并随每个二进制发布包提供。
+本仓库是 [Torch1230/CombatSolver](https://github.com/Torch1230/CombatSolver) 的修改版，当前主要维护
+《杀戮尖塔 2》`0.107.1` 兼容性与搜索器修正。它不是上游官方仓库。
 
-- [Combat Solver GitHub 仓库](https://github.com/xwr20070408-cloud/CombatSolver)
-
-Combat Solver 采用 [MIT License](LICENSE)。
+CombatSolver 采用 [MIT License](LICENSE)。MIT 要求保留的上游版权声明继续保留在 LICENSE 中。
+Random Foreseer 的来源关系、署名和既有许可记录集中保留在
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，并随二进制发布包提供。
