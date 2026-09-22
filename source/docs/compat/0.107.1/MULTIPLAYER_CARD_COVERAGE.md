@@ -40,7 +40,7 @@ static/contract evidence, not a substitute for that differential.
 |---|---|---|---|
 | 希望 beacon（Beacon of Hope） | 出牌者获得格挡，存活队友获得修正后格挡的一半；防递归 | **source-confirmed / Safe Execute 已开放** | 仍依赖分数值格挡与递归边界合同 |
 | Believe in You | selected ally gains 2/3 Energy | **boundary / fail closed** | teammate Energy is now root-captured; selected-ally Energy mutation and Safe Execute targeting still need focused source/runtime promotion |
-| Coordinate | selected ally gains temporary Strength 5/8 | **source-confirmed** | public Power-state differential; preserve temporary-Strength restoration |
+| 协调（Coordinate） | 选定队友获得 5/8 点临时力量 | **source-confirmed / Safe Execute 已开放** | 复用临时力量恢复语义；动作完成后重新搜索 |
 | Demonic Shield | lose 1 HP first, then selected ally gains Block equal to owner's resulting current Block | **source-confirmed** | differential with HP-loss hooks and Block modifiers |
 | Energy Surge | every living player ally gains 2/3 Energy | **boundary / fail closed** | teammate Energy is root-captured; all-player Energy fan-out still needs exact 0.107.1 differential and deployment-contract promotion |
 | 夹击（Flanking） | 施加实例减益；非出牌者造成的攻击伤害在目标侧回合结束前为 2 倍 | **source-confirmed / Safe Execute 已开放** | 需保持出牌者排除、叠层和到期语义 |
@@ -53,9 +53,9 @@ static/contract evidence, not a substitute for that differential.
 | 击倒（Knockdown） | 其他己方强化攻击获得 2/3 倍实例倍率；减益方回合结束时消耗 | **source-confirmed / Safe Execute 已开放** | 需保持多实例、出牌者排除与 Osty 出牌者身份 |
 | Largesse | select from target ally's unlocked Colorless pool; generated card is owned by target and enters target Hand | **isolation-only** | target generation pool and Hand can be detached into the root; ownership-sensitive generation/choice/write semantics still require focused modeling and runtime evidence |
 | Legion of Bone | summon/heal Osty for each living player | **boundary / fail closed** | readable player/pet state can be captured, but all-player Osty summon/heal lifecycle and death interactions still need explicit source/runtime validation |
-| Lift | selected ally gains 11/16 Block | **checked match** | straight-line AnyAlly Block recipe matches native command |
-| Mimic | selected ally supplies current Block calculation; Mimic owner receives that Block | **source-confirmed** | differential with target Block modifiers and zero/high Block |
-| Rally | every living player ally gains 12/17 Block | **checked match** | generic AllAllies Block recipe uses branch-local player/liveness filtering |
+| 提振（Lift） | 选定队友获得 11/16 点格挡 | **checked match / Safe Execute 已开放** | AnyAlly 格挡配方匹配原生命令；动作完成后重新搜索 |
+| 模仿（Mimic） | 读取选定队友当前格挡，出牌者获得等量格挡 | **source-confirmed / Safe Execute 已开放** | 目标格挡是公开状态；动作完成后重新搜索 |
+| 集结（Rally） | 每名存活玩家队友获得 12/17 点格挡 | **checked match / Safe Execute 已开放** | AllAllies 按分支玩家存活状态处理；动作完成后重新搜索 |
 | 鬼祟（Sneaky） | 施加 1/2 层鬼祟；其他生物出攻击牌时，出牌者获得等量无强化格挡 | **source-confirmed / Safe Execute 已开放** | 不生成未来队友动作，只处理已观察到的动作 |
 | 组队（Tag Team） | 先攻击，再施加实例减益；其他玩家的合格攻击会重放并在修改出牌次数后消耗 | **checked match / Safe Execute 关闭** | 现有 TagTeamPower 镜像支持单敌人与全敌人目标；队友后续重放仍不纳入安全执行 |
 | 坦克（Tank） | 出牌者获得坦克并承受 2 倍强化攻击伤害；存活队友获得 0.5 倍防护，出牌者死亡时清理 | **source-confirmed / Safe Execute 关闭** | 保持 0.107.1 的 2 倍/0.5 倍语义，不采用 v0.108 改写 |
@@ -109,7 +109,7 @@ Important version traps confirmed against public patch history:
 This cross-check is intentionally descriptive. Numeric/effect truth for the
 target remains the pinned v0.107.1 model/DLL, not the live wiki card page.
 
-## Safe Execute staging (source-only; no runtime promotion)
+## Safe Execute staging
 
 The first source-confirmed deterministic subset is now admitted by the Safe
 Execute classifier. Admission remains limited to local ownership, readable
@@ -133,16 +133,19 @@ evidence is only required if source behavior and local simulation diverge.
 
 ### Stage B — public teammate target or intentional remote-public mutation
 
-Defer these until Safe Execute can distinguish an expected cross-player public
-mutation from unrelated remote interference:
+These cards use the explicit cross-player public boundary: execute the native
+action once, end the current continuation, and require Fresh Search:
 
 - `Coordinate`
-- `Demonic Shield`
-- `Hammer Time`
-- `Intercept`
 - `Lift`
 - `Mimic`
 - `Rally`
+
+The remaining cards in this category stay deferred:
+
+- `Demonic Shield`
+- `Hammer Time`
+- `Intercept`
 - `Tank`
 
 ### Stage C — keep fail closed pending cross-player semantic promotion

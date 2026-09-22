@@ -44,6 +44,7 @@ internal static class MultiplayerSafeLocalActionClassifier
         bool hasTarget = action.TargetCombatId is not null;
         bool targetExists = false;
         bool allowedTarget = false;
+        bool crossPlayerPublicCard = card is Lift or Rally or Mimic or Coordinate;
         if (action.TargetCombatId is { } targetId)
         {
             Creature? target = state.GetCreature(targetId);
@@ -52,11 +53,14 @@ internal static class MultiplayerSafeLocalActionClassifier
             {
                 bool isLocalTarget = targetId == localPlayer.Creature.CombatId;
                 bool isEnemyTarget = state.Enemies.Any(enemy => enemy.CombatId == targetId);
-                allowedTarget = isLocalTarget || isEnemyTarget;
+                bool isTeammateTarget = state.GetTeammatesOf(localPlayer.Creature)
+                    .Any(teammate => teammate.CombatId == targetId
+                        && teammate.IsAlive);
+                allowedTarget = isLocalTarget || isEnemyTarget || (crossPlayerPublicCard && isTeammateTarget);
             }
         }
 
-        return MultiplayerSafeExecutePolicy.ClassifyResolved(
+        SafeLocalActionDecision resolved = MultiplayerSafeExecutePolicy.ClassifyResolved(
             new(
                 HasLocalPlayer: localPlayer?.PlayerCombatState != null,
                 HasLocalCard: card != null,
@@ -67,6 +71,9 @@ internal static class MultiplayerSafeLocalActionClassifier
                 HasIncompleteTargetIdentity: !hasTarget
                     && (action.TargetIndex != -1 || !string.IsNullOrEmpty(action.TargetName)),
                 IsPromotedMultiplayerOnlyCard: card != null && IsPromotedMultiplayerOnlyCard(card)));
+        return resolved.IsSafe && crossPlayerPublicCard
+            ? SafeLocalActionDecision.CrossPlayerPublicBoundary
+            : resolved;
     }
 
     private static bool IsPromotedMultiplayerOnlyCard(CardModel card)

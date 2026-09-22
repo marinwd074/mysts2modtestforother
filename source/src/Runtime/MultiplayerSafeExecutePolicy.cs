@@ -1,8 +1,14 @@
 namespace CombatSolver;
 
-internal readonly record struct SafeLocalActionDecision(bool IsSafe, string Reason)
+internal readonly record struct SafeLocalActionDecision(
+    bool IsSafe,
+    string Reason,
+    bool EndsContinuation = false)
 {
     public static SafeLocalActionDecision Allow { get; } = new(true, "safe_local_play_card");
+
+    public static SafeLocalActionDecision CrossPlayerPublicBoundary { get; }
+        = new(true, "cross_player_public_boundary", EndsContinuation: true);
 }
 
 internal readonly record struct MultiplayerSafeActionStructuralFacts(

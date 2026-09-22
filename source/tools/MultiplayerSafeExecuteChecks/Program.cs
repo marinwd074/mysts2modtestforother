@@ -43,6 +43,14 @@ Check(
     MultiplayerSafeExecutePolicy.ClassifyResolved(
         new(true, true, true, false, false, false, false, true)).IsSafe,
     "A promoted deterministic multiplayer-only card passes the resolved gate.");
+Check(
+    SafeLocalActionDecision.CrossPlayerPublicBoundary.IsSafe
+        && SafeLocalActionDecision.CrossPlayerPublicBoundary.EndsContinuation,
+    "Cross-player public effects end the current Safe Execute continuation.");
+Check(
+    Resolved(hasTarget: true, targetExists: true, allowedTarget: false).Reason
+        == "remote_player_or_unknown_target",
+    "An unapproved remote-player target remains fail-closed.");
 Check(Resolved(hasTarget: true, targetExists: false).Reason == "target_missing", "Missing target fails closed.");
 Check(
     Resolved(hasTarget: true, targetExists: true, allowedTarget: false).Reason == "remote_player_or_unknown_target",
