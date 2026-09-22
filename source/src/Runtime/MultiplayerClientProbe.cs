@@ -320,21 +320,12 @@ internal static class MultiplayerClientProbe
         CombatState state,
         Player? localPlayer)
     {
-        // Legacy name: continuation now invalidates on any locally readable teammate
-        // combat-state change, including cards/resources/potions when the client has them.
-        StateFingerprintBuilder fingerprint = new();
-        fingerprint.Add(state.Players.Count);
-        fingerprint.Add(state.MultiplayerScalingModel is null
-            ? -1
-            : state.MultiplayerScalingModel.ShouldReceiveCombatHooks ? 1 : 0);
-        fingerprint.Add(state.RunState.CardMultiplayerConstraint.ToString());
-        foreach (Player player in state.Players
-                     .Where(candidate => localPlayer == null || candidate.NetId != localPlayer.NetId)
-                     .OrderBy(candidate => candidate.NetId))
-        {
-            AppendCompactPlayer(ref fingerprint, player, includePrivateState: true);
-        }
-        return fingerprint.Finish();
+        Player resolvedLocal = localPlayer
+            ?? throw new InvalidOperationException(
+                "Multiplayer continuation fingerprint requires the local player.");
+        return MultiplayerContinuationRemoteFingerprint.CaptureLive(
+            state,
+            resolvedLocal);
     }
 
     private static StateFingerprint ReactivePublicFingerprint(

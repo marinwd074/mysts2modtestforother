@@ -377,7 +377,9 @@ internal sealed partial class CombatBeamSolver
             }
             MultiplayerContinuationExpectation? multiplayerExpectation =
                 root.AllowsLocalPlayerOnlySearch
-                    ? CreateMultiplayerContinuationExpectation(expected)
+                    ? CreateMultiplayerContinuationExpectation(
+                        expected,
+                        (CombatPredictionSimulator)node.Snapshot.Simulator)
                     : null;
             continuations.Add(new CachedContinuation(
                 expected,
@@ -415,7 +417,8 @@ internal sealed partial class CombatBeamSolver
     }
 
     private MultiplayerContinuationExpectation CreateMultiplayerContinuationExpectation(
-        ContinuationStamp expected)
+        ContinuationStamp expected,
+        CombatPredictionSimulator simulator)
     {
         if (string.IsNullOrWhiteSpace(expected.CombatIdentity))
         {
@@ -425,7 +428,9 @@ internal sealed partial class CombatBeamSolver
         return new MultiplayerContinuationExpectation(
             expected.CombatIdentity,
             _player.NetId.ToString(),
-            root.CarryRankingContext.RemotePublicFingerprint,
+            MultiplayerContinuationRemoteFingerprint.CapturePredicted(
+                simulator,
+                _player),
             root.CarryRankingContext.MultiplayerScalingHooks,
             root.CarryRankingContext.CardMultiplayerConstraint,
             root.CarryRankingContext.WorldVersion);

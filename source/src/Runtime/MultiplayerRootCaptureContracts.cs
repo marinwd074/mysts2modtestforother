@@ -52,6 +52,16 @@ internal static class MultiplayerRootCaptureContracts
             }
         }
 
+        StateFingerprint liveRemote =
+            MultiplayerContinuationRemoteFingerprint.CaptureLive(live, localPlayer);
+        StateFingerprint predictedRemote =
+            MultiplayerContinuationRemoteFingerprint.CapturePredicted(simulator, localPlayer);
+        if (liveRemote != predictedRemote)
+        {
+            throw new InvalidOperationException(
+                "Multiplayer continuation teammate fingerprint differs from the detached prediction root.");
+        }
+
         if (simulator.State.CombatState is SimulatedCombatState simulated
             && !simulated.RootMultiplayerScalingIsDetached)
         {
