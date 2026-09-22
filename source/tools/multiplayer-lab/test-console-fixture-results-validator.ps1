@@ -55,10 +55,10 @@ try {
         '[CombatSolver/MultiplayerFixture] FIXTURE_COMMAND_RESULT name=tag-team-basic index=2 success=true message="Enqueued damage" world_version_before=12 world_version_after=13',
         '[CombatSolver/MultiplayerFixture] FIXTURE_COMPLETE name=tag-team-basic commands=3 world_version=13'
     ))
-    Invoke-Expected 0 PASS
+    Invoke-Expected -ExpectedExit 0 -ExpectedStatus PASS
 
     Add-Content -LiteralPath $logPath -Value '[CombatSolver/MultiplayerFixture] FIXTURE_FAIL name=tag-team-basic exception=InvalidOperationException message="boom"'
-    Invoke-Expected 1 FAIL
+    Invoke-Expected -ExpectedExit 1 -ExpectedStatus FAIL
 
     [IO.File]::WriteAllLines($logPath, @(
         '[CombatSolver/MultiplayerFixture] FIXTURE_ARMED name=tag-team-basic commands=3',
@@ -76,7 +76,7 @@ try {
         '[CombatSolver/MultiplayerFixture] FIXTURE_ARMED name=tag-team-basic commands=3',
         '[CombatSolver/MultiplayerFixture] FIXTURE_COMMAND_START name=tag-team-basic index=0 command="energy 10" world_version=10'
     ))
-    Invoke-Expected 2 UNVERIFIED
+    Invoke-Expected -ExpectedExit 2 -ExpectedStatus UNVERIFIED
 
     Write-Output 'MULTIPLAYER_CONSOLE_FIXTURE_RUNTIME_VALIDATOR_PASS'
 }
