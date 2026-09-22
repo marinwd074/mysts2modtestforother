@@ -34,7 +34,7 @@
 ## 当前未完成
 
 1. `ShadowTeammatePlanner` Top-K 当前回合分支已落地：每个候选都从 detached simulator `Fork()`，按单人回放同语义执行 `ManualPlay → enemy-death powers → action-boundary settle → win check`；默认 beam=4、最多 12 次动作，并始终保留“现在结束出牌”的路线。保留算法不是单一拍脑袋分数，而是对 EnemyDurability / TeamEffectiveHp / WorstPlayerEffectiveHpRatio / Stars / 动作数取 Pareto 前沿，再沿攻防前沿均匀采样 Top-K。需要显式卡牌选择的分支当前计入 `PendingChoiceBranches` 并留待复用现有 choice branching。
-2. 下一步把 Shadow Top-K 接入回合推进，取消“多人遇 Shared Shuffle 必停”的主路径；每条世界线使用自身 forked RNG 继续模拟到 Victory/Death。
+2. 已确认原生多人时序是“所有玩家共享 Player Side，全部 Ready 后统一 phase one / phase two，再进入 Enemy Side”，不是串行独立玩家回合。为此已新增 prediction-only 批量 EndTurn API：可显式传入已捕获的 forecast players，并用 `RunForecastPhaseOne` 一次处理全队 side-end/orb/DoTurnEnd 语义；旧路径仍只从 `RootActionPlayers` 取本地玩家，执行权限未扩大。下一步让本地 EndTurn 在统一 phase-one 之前分裂成 Shadow Top-K 世界线，然后每条世界线走全队 phase one/flush/phase two → Enemy Side。
 3. 完成 Joint terminal state 后，把动态斩杀策略当前的本地战损比输入替换为 TeamLossRatio / WorstPlayerLossRatio，并让真实队友行为或世界状态偏离预测后立即 Fresh Search。
 
 ## 当前开发 / 性能规则

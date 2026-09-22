@@ -29,6 +29,46 @@ internal static class PlayerTurnEndLifecycle
         return true;
     }
 
+    public static bool RunForecastPhaseOne(
+        CombatPredictionSimulator simulator,
+        SimulatedCombatState combat,
+        IReadOnlyList<Player> players)
+    {
+        if (players.Count == 0)
+            throw new ArgumentException("Forecast player-side end requires at least one player.", nameof(players));
+
+        Creature[] participants = players.Select(static player => player.Creature).ToArray();
+        foreach (Player player in players)
+            simulator.State.GetPlayerCombatState(player).Phase = PlayerTurnPhase.End;
+
+        EndTurnPowerSupport.TriggerVeryEarly(combat, participants);
+        if (combat.HasPendingChoice)
+            return false;
+        TurnStartRelicSupport.TriggerBeforeSideTurnEnd(simulator, combat, participants);
+        if (combat.HasPendingChoice)
+            return false;
+
+        int playerTurn = combat.GetPlayerTurnNumber(players[0]);
+        if (!simulator.SimulateForecastEndPlayerTurnBeforeOrbPassives(playerTurn, players))
+            return false;
+        if (simulator.IsOverOrEnding)
+            return true;
+
+        foreach (Player player in players)
+        {
+            if (!OrbLifecycleSupport.TriggerBeforeTurnEnd(simulator, combat, player)
+                || combat.HasPendingChoice)
+            {
+                return false;
+            }
+        }
+
+        if (!simulator.SimulateForecastEndPlayerTurnAfterOrbPassives(playerTurn, players))
+            return false;
+        CorePowerSupport.CompletePlayerEarlySideTurnEndEffects(combat, participants);
+        return !combat.HasPendingChoice;
+    }
+
     public static bool RunPhaseOne(
         CombatPredictionSimulator simulator,
         SimulatedCombatState combat,

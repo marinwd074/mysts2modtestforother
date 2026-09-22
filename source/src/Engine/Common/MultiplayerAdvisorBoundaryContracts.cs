@@ -49,6 +49,25 @@ internal static class MultiplayerAdvisorBoundaryContracts
         return actionPlayers;
     }
 
+    /// <summary>
+    /// Joint forecast may advance captured remote players without granting them action/deployment
+    /// ownership. This validates only prediction-state membership; RootActionPlayers is unchanged.
+    /// </summary>
+    internal static IReadOnlyList<Player> SelectForecastEndTurnPlayers(
+        IReadOnlyList<Player> capturedPlayers,
+        IReadOnlyList<Player> forecastPlayers)
+    {
+        for (int index = 0; index < forecastPlayers.Count; index++)
+        {
+            if (!IsCapturedPlayer(capturedPlayers, forecastPlayers[index]))
+            {
+                throw new InvalidOperationException(
+                    "Forecast EndTurn contains a player outside the captured combat roster.");
+            }
+        }
+        return forecastPlayers;
+    }
+
     internal static bool ShouldApplyEnemyBlockScaling(
         bool isPrimaryEnemy,
         bool isSecondaryEnemy,

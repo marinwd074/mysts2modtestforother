@@ -14,13 +14,25 @@ internal sealed partial class CombatPredictionSimulator
     /// Currently mirrors the prediction-relevant parts of <see cref="CombatManager.EndPlayerTurnPhaseOneInternal()"/>.
     /// </summary>
     internal bool SimulateEndPlayerTurnBeforeOrbPassives(int playerTurn)
-    {
-        // Multiplayer roots may read teammate state, but only the solver-owned local
-        // action scope may advance through the turn-end lifecycle.
-        var playersEndingTurn = MultiplayerAdvisorBoundaryContracts.SelectEndTurnPlayers(
-            State.Players,
-            State.RootActionPlayers);
+        => SimulateEndPlayerTurnBeforeOrbPassivesCore(
+            playerTurn,
+            MultiplayerAdvisorBoundaryContracts.SelectEndTurnPlayers(
+                State.Players,
+                State.RootActionPlayers));
 
+    internal bool SimulateForecastEndPlayerTurnBeforeOrbPassives(
+        int playerTurn,
+        IReadOnlyList<Player> forecastPlayers)
+        => SimulateEndPlayerTurnBeforeOrbPassivesCore(
+            playerTurn,
+            MultiplayerAdvisorBoundaryContracts.SelectForecastEndTurnPlayers(
+                State.RootCapturedPlayers,
+                forecastPlayers));
+
+    private bool SimulateEndPlayerTurnBeforeOrbPassivesCore(
+        int playerTurn,
+        IReadOnlyList<Player> playersEndingTurn)
+    {
         foreach (var player in playersEndingTurn)
         {
             State.GetPlayerCombatState(player).Phase = PlayerTurnPhase.AutoPostPlay;
@@ -45,12 +57,27 @@ internal sealed partial class CombatPredictionSimulator
     }
 
     internal bool SimulateEndPlayerTurnAfterOrbPassives(int playerTurn)
+        => SimulateEndPlayerTurnAfterOrbPassivesCore(
+            playerTurn,
+            MultiplayerAdvisorBoundaryContracts.SelectEndTurnPlayers(
+                State.Players,
+                State.RootActionPlayers));
+
+    internal bool SimulateForecastEndPlayerTurnAfterOrbPassives(
+        int playerTurn,
+        IReadOnlyList<Player> forecastPlayers)
+        => SimulateEndPlayerTurnAfterOrbPassivesCore(
+            playerTurn,
+            MultiplayerAdvisorBoundaryContracts.SelectForecastEndTurnPlayers(
+                State.RootCapturedPlayers,
+                forecastPlayers));
+
+    private bool SimulateEndPlayerTurnAfterOrbPassivesCore(
+        int playerTurn,
+        IReadOnlyList<Player> playersEndingTurn)
     {
         if (IsOverOrEnding)
             return true;
-        var playersEndingTurn = MultiplayerAdvisorBoundaryContracts.SelectEndTurnPlayers(
-            State.Players,
-            State.RootActionPlayers);
 
         foreach (var player in playersEndingTurn)
         {
