@@ -210,8 +210,8 @@ internal static class MonsterMoveIlInspector
                 offset += 4;
                 try
                 {
-                    return """ + reader.GetUserString(
-                        MetadataTokens.UserStringHandle(token & 0x00ffffff)) + """;
+                    return "\"" + reader.GetUserString(
+                        MetadataTokens.UserStringHandle(token & 0x00ffffff)) + "\"";
                 }
                 catch
                 {
