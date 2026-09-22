@@ -2,6 +2,13 @@
 
 ## 当前技术状态
 
+### 2026-09-22 Console Fixture 联机证据边界修正
+
+- 用户实机确认：在 pinned 0.107.1 多人联机中启用/执行 console 相关 fixture 会出现“游戏数据不相同”一类一致性/不同步提示；提示里看到的 `1000` 与 Lab 默认 FastMP ClientId/NetId 一致，不能把它解释为某个游戏数值本身。
+- 因此 Console Fixture 从现在起降级为 **diagnostic-only**：可以用于命令链路、离线/隔离调试和 validator 自测，但不得再作为 MultiplayerOnly、Tag Team 或其他多人卡语义的正式 runtime evidence。
+- 后续 Tag Team / MultiplayerOnly 测试禁止用 `card TAG_TEAM hand`、`energy 10` 等 console 注入构造正式场景；应通过正常游戏流程自然获得目标牌/状态，或仅增加不改变战斗状态的 observation patch。不要为了构造 fixture 临时放宽 classifier 或网络同步边界。
+- 现有 `ClientId=1000` 本身仍是单个本地 FastMP Client 的既有默认值；第二 Client 继续使用唯一 ID（如 1001）。当前没有证据表明“1000 这个 ID 本身”就是不同步根因。
+
 ### 2026-09-22 Safe Auto 本机三回合回归
 
 - 当前 `main` 的 Release 构建为 0 warning / 0 error；完整 CI 门禁 `PASS: 27 FAIL: 0 SKIP: 0`。本机 `sts2.dll` SHA-256 与 pinned 0.107.1 值一致。
