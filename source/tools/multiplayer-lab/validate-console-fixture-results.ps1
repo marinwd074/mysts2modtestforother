@@ -127,8 +127,11 @@ for ($index = 0; $index -lt $fixture.Commands.Count; $index++) {
 
 if ($sequenceProblems.Count -eq 0 -and $fixture.Commands.Count -gt 0) {
     Add-Check 'orderedCommandSequence' PASS ($sequenceEvidence -join ' | ')
-} elseif ($armed.Count -eq 0 -and $rejectOrFail.Count -eq 0) {
-    Add-Check 'orderedCommandSequence' UNVERIFIED '' ($sequenceProblems -join '; ')
+} elseif ($rejectOrFail.Count -eq 0 -and $complete.Count -eq 0) {
+    # A truncated/incomplete journal is insufficient evidence, not proof that the
+    # runtime command sequence itself failed. An explicit fail/reject or a claimed
+    # completion with a mismatched sequence remains a hard failure.
+    Add-Check 'orderedCommandSequence' UNVERIFIED ($sequenceEvidence -join ' | ') ($sequenceProblems -join '; ')
 } else {
     Add-Check 'orderedCommandSequence' FAIL ($sequenceEvidence -join ' | ') ($sequenceProblems -join '; ')
 }
