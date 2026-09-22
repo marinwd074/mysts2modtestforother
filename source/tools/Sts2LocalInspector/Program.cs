@@ -29,7 +29,7 @@ internal static class Program
             if (args.Contains("--self-test", StringComparer.OrdinalIgnoreCase))
                 return SelfTest();
 
-            var (gameArg, outputArg) = ParseArgs(args);
+            var (gameArg, outputArg, monsterMoveIlOutputArg) = ParseArgs(args);
             var gameDir = gameArg ?? ResolveGameDir();
             if (string.IsNullOrWhiteSpace(gameDir) || !Directory.Exists(gameDir))
             {
@@ -51,6 +51,19 @@ internal static class Program
             var result = Inspect(gameDir, dataDir, assemblyPath);
             Directory.CreateDirectory(Path.GetDirectoryName(output)!);
             File.WriteAllText(output, JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
+
+            if (!string.IsNullOrWhiteSpace(monsterMoveIlOutputArg))
+            {
+                var monsterMoveOutput = Path.GetFullPath(monsterMoveIlOutputArg);
+                var monsterMoveEvidence = MonsterMoveIlInspector.InspectPinned01071(assemblyPath);
+                Directory.CreateDirectory(Path.GetDirectoryName(monsterMoveOutput)!);
+                File.WriteAllText(
+                    monsterMoveOutput,
+                    JsonSerializer.Serialize(monsterMoveEvidence, new JsonSerializerOptions { WriteIndented = true }));
+                Console.WriteLine(
+                    "STS2_MONSTER_MOVE_IL_PASS output=" + monsterMoveOutput
+                    + " methods=" + monsterMoveEvidence.Methods.Count);
+            }
 
             Console.WriteLine("STS2_LOCAL_INSPECTOR_PASS output=" + output);
             Console.WriteLine("types=" + result.Metadata.TotalTypes
@@ -204,17 +217,20 @@ internal static class Program
         return candidates.FirstOrDefault(Directory.Exists);
     }
 
-    private static (string? GameDir, string? Output) ParseArgs(string[] args)
+    private static (string? GameDir, string? Output, string? MonsterMoveIlOutput) ParseArgs(string[] args)
     {
         string? game = null;
         string? output = null;
+        string? monsterMoveIlOutput = null;
         for (var i = 0; i < args.Length; i++)
         {
             if (args[i] == "--game-dir" && i + 1 < args.Length) game = args[++i];
             else if (args[i] == "--output" && i + 1 < args.Length) output = args[++i];
+            else if (args[i] == "--monster-move-il-output" && i + 1 < args.Length)
+                monsterMoveIlOutput = args[++i];
             else throw new ArgumentException("Unknown or incomplete argument: " + args[i]);
         }
-        return (game, output);
+        return (game, output, monsterMoveIlOutput);
     }
 
     private static int SelfTest()
