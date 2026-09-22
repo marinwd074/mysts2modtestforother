@@ -104,6 +104,8 @@ internal sealed record SolverSettingsData
     public bool IgnoreLongTermRewards { get; init; }
     public BossHpStrategy ActTransitionBossHpStrategy { get; init; } = BossHpStrategy.ProgressionFirst;
     public BossHpStrategy FinalBossHpStrategy { get; init; } = BossHpStrategy.ProgressionFirst;
+    public MultiplayerCombatObjectiveStrategy MultiplayerCombatObjectiveStrategy { get; init; }
+        = MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo;
     public int AcceptableBattleHpLoss { get; init; }
     public bool StopAtAcceptableBattleHpLoss { get; init; } = true;
     public int PerformanceMigrationVersion { get; init; }
@@ -156,6 +158,8 @@ internal sealed record SolverSettingsSnapshot(
     public GrowthValues GrowthBudgets { get; init; }
     public int? BrightestFlameMaxHpLossLimit { get; init; }
     public bool IgnoreLongTermRewards { get; init; }
+    public MultiplayerCombatObjectiveStrategy MultiplayerCombatObjectiveStrategy { get; init; }
+        = MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo;
     public bool UseBeamWidthPortfolio { get; init; }
     public bool UseNoveltyPortfolio { get; init; }
 }
@@ -252,6 +256,7 @@ internal static class SolverSettings
             $"show_speedx_warning={migrated.ShowSpeedXWarning} " +
             $"act_transition_boss_hp_strategy={migrated.ActTransitionBossHpStrategy} " +
             $"final_boss_hp_strategy={migrated.FinalBossHpStrategy} " +
+            $"multiplayer_combat_objective={migrated.MultiplayerCombatObjectiveStrategy} " +
             $"acceptable_battle_hp_loss={migrated.AcceptableBattleHpLoss} " +
             $"search_notifications_enabled={migrated.SearchCompletionNotificationsEnabled} " +
             $"search_notification_mode={migrated.SearchCompletionNotificationMode} " +
@@ -303,6 +308,7 @@ internal static class SolverSettings
             StopAtAcceptableBattleHpLoss = data.StopAtAcceptableBattleHpLoss,
             BrightestFlameMaxHpLossLimit = data.BrightestFlameMaxHpLossLimit,
             IgnoreLongTermRewards = data.IgnoreLongTermRewards,
+            MultiplayerCombatObjectiveStrategy = data.MultiplayerCombatObjectiveStrategy,
             UseBeamWidthPortfolio = data.UseBeamWidthPortfolio,
             UseNoveltyPortfolio = data.UseNoveltyPortfolio,
         };
@@ -558,6 +564,11 @@ internal static class SolverSettings
         }
         if (!Enum.IsDefined(data.FinalBossHpStrategy))
             throw new InvalidDataException($"Unknown final boss HP strategy {data.FinalBossHpStrategy}.");
+        if (!Enum.IsDefined(data.MultiplayerCombatObjectiveStrategy))
+        {
+            throw new InvalidDataException(
+                $"Unknown multiplayer combat objective {data.MultiplayerCombatObjectiveStrategy}.");
+        }
         if (data.AcceptableBattleHpLoss < 0
             || data.AcceptableBattleHpLoss > MaximumAcceptableBattleHpLoss)
         {

@@ -120,6 +120,8 @@ internal sealed partial class CombatBeamSolver(
         policy.Diagnostics,
         _detailedDiagnostics,
         policy.RoutePolicy,
+        policy.MultiplayerCombatObjectiveStrategy,
+        policy.MultiplayerEnemyDurabilityRatio,
         _startTurnNumber,
         root.CarryRankingContext,
         battleDamage,

@@ -16,6 +16,8 @@ internal sealed partial class CombatBeamSolver
         SearchDiagnosticsSink diagnostics,
         bool detailedDiagnostics,
         SearchRoutePolicy routePolicy,
+        MultiplayerCombatObjectiveStrategy multiplayerCombatObjectiveStrategy,
+        double multiplayerEnemyDurabilityRatio,
         int startTurnNumber,
         MultiplayerCarryRankingContext carryRankingContext,
         BattleDamageSnapshot battleDamage,
@@ -344,6 +346,11 @@ internal sealed partial class CombatBeamSolver
                         && passesAmbergrisPolicy;
                 })
                 .ToList();
+            bool useLethalTempoTradeoff =
+                MultiplayerCombatObjectivePolicy.UsesLethalTempoTradeoff(
+                    routePolicy,
+                    multiplayerCombatObjectiveStrategy,
+                    multiplayerEnemyDurabilityRatio);
             var selected = policyEligibleCandidates
                 .OrderByDescending(candidate => candidate.CompleteVictory)
                 // A live incomplete fallback is always preferable to a dead fallback. For
@@ -357,6 +364,16 @@ internal sealed partial class CombatBeamSolver
                 .ThenBy(candidate => candidate.Snapshot.ProjectedDeathSaveUseCount)
                 .ThenBy(candidate => theftPolicy == SolverTheftPolicy.PreserveResources
                     ? candidate.Features.OutstandingStolenResource : 0)
+                // In the multiplayer lethal window, one earlier turn is worth up to five
+                // percentage points of local loss for now. Joint search will feed this same
+                // policy TeamLossRatio once teammate outcomes are part of the terminal state.
+                .ThenBy(candidate => useLethalTempoTradeoff && candidate.CompleteVictory
+                    ? MultiplayerCombatObjectivePolicy.LethalTempoScore(
+                        candidate.StrategicHpDeficit,
+                        initialPlayerMaxHp,
+                        candidate.CombatEndedTurn ?? int.MaxValue,
+                        startTurnNumber)
+                    : 0d)
                 // Compare HP after the requested recovery objective.
                 .ThenBy(candidate => candidate.StrategicHpDeficit)
                 .ThenByDescending(candidate => candidate.Snapshot.StrategyGoalHpCredit)
@@ -393,6 +410,15 @@ internal sealed partial class CombatBeamSolver
                     && candidate.HasCurrentTurnCardAction)
                 .ThenBy(candidate => candidate.Features.ActionCount)
                 .ToList();
+            if (emitDiagnostics && routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn)
+            {
+                diagnostics.Info(
+                    $"[CombatSolver/Multiplayer] MP_OBJECTIVE strategy={multiplayerCombatObjectiveStrategy} " +
+                    $"enemy_durability_ratio={multiplayerEnemyDurabilityRatio:0.000} " +
+                    $"lethal_tradeoff={useLethalTempoTradeoff.ToString().ToLowerInvariant()} " +
+                    $"lethal_threshold={MultiplayerCombatObjectivePolicy.LethalDurabilityRatioThreshold:0.00} " +
+                    $"loss_ratio_per_turn={MultiplayerCombatObjectivePolicy.ExtraLossRatioPerTurnSaved:0.00}");
+            }
             if (selected.Count == 0)
             {
                 throw new PotionPolicyUnsatisfiedException(

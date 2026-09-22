@@ -482,6 +482,10 @@ internal static partial class SolverController
             Interaction = interaction,
             RoutePolicy = routePolicy,
             CurrentTurnOnly = MultiplayerLocalCrossTurnContracts.IsCurrentTurnOnly(routePolicy),
+            MultiplayerCombatObjectiveStrategy = settings.MultiplayerCombatObjectiveStrategy,
+            MultiplayerEnemyDurabilityRatio = capabilities.IsMultiplayer
+                ? MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(state.Enemies)
+                : 1d,
             UseNoveltyPortfolio = (settings.UseNoveltyPortfolio
                 || UnattendedTestRunner.UseNoveltyPortfolioOverride)
                 && useFullSearchHeuristics,
