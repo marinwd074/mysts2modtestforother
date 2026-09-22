@@ -130,7 +130,7 @@ internal sealed record PlanRelicEffect(
 
 /// <summary>
 /// Forecast-only metadata for multiplayer EndTurn replay. Deployment never executes these actions.
-</summary>
+/// </summary>
 internal sealed record ShadowForecastPlan(
     IReadOnlyList<ShadowTeammateActionCandidate> Actions);
 
