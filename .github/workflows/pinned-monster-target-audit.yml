@@ -4,6 +4,9 @@ on:
   push:
     paths:
       - '.github/workflows/pinned-monster-target-audit.yml'
+      - 'source/src/Prediction/MonsterMoveEffects.StaticValues.cs'
+      - 'source/src/Prediction/MonsterValueReader.cs'
+      - 'source/tools/Sts2LocalInspector/**'
   workflow_dispatch:
 
 permissions:
@@ -48,7 +51,8 @@ jobs:
           dotnet run --project '.\source\tools\Sts2LocalInspector\Sts2LocalInspector.csproj' -c Release -- `
             --game-dir '.\game-body' `
             --output '.\.local\game-inspection\sts2-local-index.json' `
-            --monster-move-il-output '.\.local\game-inspection\monster-moves-0.107.1.json'
+            --monster-move-il-output '.\.local\game-inspection\monster-moves-0.107.1.json' `
+            --monster-static-source '.\source\src\Prediction\MonsterMoveEffects.StaticValues.cs'
 
       - name: Upload pinned monster IL evidence
         uses: actions/upload-artifact@v4
