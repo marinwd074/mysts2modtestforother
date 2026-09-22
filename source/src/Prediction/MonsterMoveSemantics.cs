@@ -22,7 +22,6 @@ internal static class MonsterMoveSemantics
         if (simulator.HasPendingChoice)
             return simulatedPlayer.IsDead;
         bool fullyBlockedAttack = false;
-        bool playerDied = false;
         AttackCommand? attackContext = move.AttackHits.Count > 0
             ? simulator.BeginAttackContext(
                 new AttackCommand(0m)
@@ -50,7 +49,7 @@ internal static class MonsterMoveSemantics
                 simulator.AddAttackContextHit(attackContext!, results);
                 foreach (DamageResult result in results)
                 {
-                    if (ReferenceEquals(result.Receiver, player) && result.WasFullyBlocked)
+                    if (result.WasFullyBlocked)
                         fullyBlockedAttack = true;
                 }
                 CorePowerSupport.ApplyEnemyDeathPowers(
@@ -60,12 +59,18 @@ internal static class MonsterMoveSemantics
                     processedEnemyDeaths);
                 if (simulator.HasPendingChoice)
                     return simulatedPlayer.IsDead;
-                if (simulatedPlayer.IsDead)
+                // FromMonster recomputes the living player target set for every hit. The local
+                // solver owner dying does not end a multiplayer combat while a teammate survives,
+                // so later hits must still reach the remaining players.
+                bool anyPlayerAlive = false;
+                foreach (Creature candidate in simulator.State.PlayerCreatures)
                 {
-                    playerDied = true;
+                    if (!simulator.State.GetCreature(candidate).IsAlive)
+                        continue;
+                    anyPlayerAlive = true;
                     break;
                 }
-                if (simulator.State.GetCreature(move.Owner).IsDead)
+                if (!anyPlayerAlive || simulator.State.GetCreature(move.Owner).IsDead)
                     break;
             }
 
@@ -79,8 +84,6 @@ internal static class MonsterMoveSemantics
 
         if (simulator.HasPendingChoice)
             return simulatedPlayer.IsDead;
-        if (playerDied)
-            return true;
         if (fullyBlockedAttack && combat.GetAmount<ImbalancedPower>(move.Owner) > 0)
         {
             if (move.Owner.Monster is BowlbugRock)
