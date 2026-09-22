@@ -74,6 +74,11 @@ Lobby、wire 或战斗证据。
   PID、进程出生时间和 executable path；没有 ownership 证据就停止。默认使用
   `Graceful` 关闭窗口并等待游戏正常退出，让 CombatSolver journal 有机会排空；
   只有清理卡死实例时才显式使用 `-Mode Force`，强制结束可能丢失缓冲证据。
+- **Console Fixture 不再作为正式 Host/Client evidence。** 2026-09-22 实机确认：
+  在目标 0.107.1 联机中，console/debug state injection 会触发“游戏数据不相同”类
+  一致性提示；日志/提示中的 `1000` 应优先按 FastMP ClientId/NetId 理解，而不是
+  当作游戏数值。现有 console fixture/validator 仅保留诊断和工具自测用途。Tag Team、
+  MultiplayerOnly boundary 等正式 differential 必须使用正常游戏状态或只读 observation patch。
 - `collect-results.ps1` 只复制指定实例的日志/Probe JSONL，并生成
   `UNVERIFIED` matrix 模板，模板包含 Vanilla、RitsuLib、CombatSolver 三组
   `profileResults`；Lab 进程会把诊断写入实例下的
