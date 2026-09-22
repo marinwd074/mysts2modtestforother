@@ -56,11 +56,6 @@ internal sealed record MultiplayerProbeSnapshot(
 /// state and enemy state are kept separate so a local card can account for its own target
 /// mutation without silently accepting a concurrent remote-player mutation.
 /// </summary>
-internal readonly record struct MultiplayerReactiveWorldDelta(
-    bool RemotePublicChanged,
-    bool LocalPrivateChanged,
-    bool TurnBoundaryChanged);
-
 internal sealed record MultiplayerSafeExecutionBoundary(
     long WorldVersion,
     int ObservationSequence,
@@ -102,11 +97,8 @@ internal static class MultiplayerClientProbe
     private static string? _lastTurnIdentity;
     private static StateFingerprint? _lastReactivePublicFingerprint;
     private static StateFingerprint? _lastLocalBoundaryFingerprint;
-    private static MultiplayerReactiveWorldDelta? _lastReactiveDelta;
     private static AppendOnlyEventLog<MultiplayerProbeSnapshot>? _evidenceLog;
     private static bool _evidenceDisabled;
-
-    internal static MultiplayerReactiveWorldDelta? LastReactiveDelta => _lastReactiveDelta;
 
     private static bool EvidenceEnabled
         => IsTruthy(Environment.GetEnvironmentVariable(EvidenceEnvironmentVariable));
@@ -123,7 +115,6 @@ internal static class MultiplayerClientProbe
         _lastTurnIdentity = null;
         _lastReactivePublicFingerprint = null;
         _lastLocalBoundaryFingerprint = null;
-        _lastReactiveDelta = null;
         lock (CardIdentityGate)
         {
             CardIdentityIds.Clear();
@@ -140,7 +131,6 @@ internal static class MultiplayerClientProbe
         _lastTurnIdentity = null;
         _lastReactivePublicFingerprint = null;
         _lastLocalBoundaryFingerprint = null;
-        _lastReactiveDelta = null;
         lock (CardIdentityGate)
         {
             CardIdentityIds.Clear();
@@ -247,34 +237,21 @@ internal static class MultiplayerClientProbe
         _observationSequence++;
         StateFingerprint? previousReactivePublicFingerprint = _lastReactivePublicFingerprint;
         StateFingerprint? previousLocalBoundaryFingerprint = _lastLocalBoundaryFingerprint;
-        string currentTurnIdentity = TurnIdentityToken(state, localPlayer);
-        string? previousTurnIdentity = _lastTurnIdentity;
-        bool turnBoundaryChanged = previousTurnIdentity != null
-            && !string.Equals(previousTurnIdentity, currentTurnIdentity, StringComparison.Ordinal);
         _lastReactivePublicFingerprint = reactivePublicFingerprint;
         _lastLocalBoundaryFingerprint = localBoundaryFingerprint;
-        _lastTurnIdentity = currentTurnIdentity;
         if (previousReactivePublicFingerprint is { } previousReactive
             && previousLocalBoundaryFingerprint is { } previousLocal)
         {
-            bool remotePublicChanged = previousReactive != reactivePublicFingerprint;
-            bool localPrivateChanged = previousLocal != localBoundaryFingerprint;
-            _lastReactiveDelta = new(
-                remotePublicChanged,
-                localPrivateChanged,
-                turnBoundaryChanged);
             Entry.Logger.Info(
                 $"[CombatSolver/MultiplayerProbe] MP_REACTIVE_WORLD_DELTA " +
                 $"world_version={MultiplayerWorldTracker.WorldVersion} reason={reason} " +
-                $"remote_public_changed={remotePublicChanged.ToString().ToLowerInvariant()} " +
-                $"local_private_changed={localPrivateChanged.ToString().ToLowerInvariant()} " +
-                $"turn_boundary_changed={turnBoundaryChanged.ToString().ToLowerInvariant()} " +
+                $"remote_public_changed={(previousReactive != reactivePublicFingerprint).ToString().ToLowerInvariant()} " +
+                $"local_private_changed={(previousLocal != localBoundaryFingerprint).ToString().ToLowerInvariant()} " +
                 "fresh_probe=true");
         }
-        else
-        {
-            _lastReactiveDelta = null;
-        }
+        string currentTurnIdentity = TurnIdentityToken(state, localPlayer);
+        string? previousTurnIdentity = _lastTurnIdentity;
+        _lastTurnIdentity = currentTurnIdentity;
         if (previousTurnIdentity != null
             && !string.Equals(previousTurnIdentity, currentTurnIdentity, StringComparison.Ordinal))
         {
