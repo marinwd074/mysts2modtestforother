@@ -33,7 +33,7 @@
 
 ## 当前未完成
 
-1. `ShadowTeammatePlanner` Top-K 当前回合分支已落地：每个候选都从 detached simulator `Fork()`，按单人回放同语义执行 `ManualPlay → enemy-death powers → action-boundary settle → win check`；默认 beam=4、最多 12 次动作，并始终保留“现在结束出牌”的路线。保留算法不是单一拍脑袋分数，而是对 EnemyDurability / TeamEffectiveHp / WorstPlayerEffectiveHpRatio / Stars / 动作数取 Pareto 前沿，再沿攻防前沿均匀采样 Top-K。需要显式卡牌选择的分支当前计入 `PendingChoiceBranches` 并留待复用现有 choice branching。
+1. `ShadowTeammatePlanner` 已从单队友 Top-K 扩为 Team Top-K：队友按 NetId 依次在同一预测世界上模拟，每处理完一个队友就按 EnemyDurability / TeamEffectiveHp / WorstPlayerEffectiveHpRatio / TeamEnergy / TeamStars / 动作数重新取 Pareto 前沿并压回全局 beam=4，因此不会形成 K^N 笛卡尔爆炸。强制结束自己出牌的 shadow 卡只结束该队友分支，切换到下一队友前会消费 prediction-only end request；所有候选仍只存在于 simulator fork，不生成 `PlanAction`。
 2. 已确认原生多人时序是“所有玩家共享 Player Side，全部 Ready 后统一 phase one / phase two，再进入 Enemy Side”，不是串行独立玩家回合。prediction-only EndTurn 现在已有完整批量入口 `RunForecastFullPlayerSideEnd`：对显式 forecast players 一次执行全队 ethereal/turn-end hand effects、history commit、BeforeFlush、逐人 hand flush、统一 phase two、enemy-death compensation，并返回该阶段实际发生的 shuffle 次数。旧路径仍只从 `RootActionPlayers` 取本地玩家，执行权限未扩大。下一步让本地 EndTurn 在统一 phase-one 之前分裂成 Shadow Top-K 世界线，并把每条 route simulator 喂给此入口后继续 Enemy Side。
 3. 完成 Joint terminal state 后，把动态斩杀策略当前的本地战损比输入替换为 TeamLossRatio / WorstPlayerLossRatio，并让真实队友行为或世界状态偏离预测后立即 Fresh Search。
 

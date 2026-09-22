@@ -20,14 +20,15 @@ internal sealed record ShadowTeammateRoute(
     CombatPredictionSimulator Simulator,
     IReadOnlyList<ShadowTeammateActionCandidate> Actions,
     bool CompleteVictory,
-    bool TeammateAlive,
+    bool AllPlayersAlive,
     bool TurnEndRequested,
     int EnemyDurability,
     int TeamEffectiveHp,
     double WorstPlayerEffectiveHpRatio,
-    int TeammateStars)
+    int TeamEnergy,
+    int TeamStars)
 {
-    internal bool IsTerminal => CompleteVictory || !TeammateAlive || TurnEndRequested;
+    internal bool IsTerminal => CompleteVictory || !AllPlayersAlive || TurnEndRequested;
 }
 
 internal readonly record struct ShadowTeammatePlanResult(
@@ -78,6 +79,80 @@ internal static class ShadowTeammatePlanner
         return candidates;
     }
 
+    internal static ShadowTeammatePlanResult BuildTeamTopKRoutes(
+        CombatPredictionSimulator source,
+        Player localPlayer,
+        int beamWidth = DefaultBeamWidth,
+        int maxActionsPerPlayer = DefaultMaxActions)
+    {
+        if (beamWidth < 1)
+            throw new ArgumentOutOfRangeException(nameof(beamWidth));
+        if (maxActionsPerPlayer < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxActionsPerPlayer));
+        if (!source.State.RootActionPlayers.Any(player => ReferenceEquals(player, localPlayer)))
+            throw new InvalidOperationException("Joint shadow forecast local player is outside RootActionPlayers.");
+
+        Player[] teammates = source.State.RootCapturedPlayers
+            .Where(player => !ReferenceEquals(player, localPlayer))
+            .OrderBy(player => player.NetId)
+            .ToArray();
+        List<ShadowTeammateRoute> worlds =
+            [CaptureRoute(source.Fork(), Array.Empty<ShadowTeammateActionCandidate>())];
+        int expandedBranches = 0;
+        int pendingChoiceBranches = 0;
+        bool hitActionDepthLimit = false;
+
+        for (int teammateIndex = 0; teammateIndex < teammates.Length; teammateIndex++)
+        {
+            Player teammate = teammates[teammateIndex];
+            List<ShadowTeammateRoute> nextWorlds = [];
+            foreach (ShadowTeammateRoute world in worlds)
+            {
+                if (world.CompleteVictory
+                    || !world.Simulator.State.GetCreature(teammate.Creature).IsAlive)
+                {
+                    nextWorlds.Add(world);
+                    continue;
+                }
+
+                ShadowTeammatePlanResult forecast = BuildTopKRoutes(
+                    world.Simulator,
+                    teammate,
+                    beamWidth,
+                    maxActionsPerPlayer);
+                expandedBranches = checked(expandedBranches + forecast.ExpandedBranches);
+                pendingChoiceBranches = checked(
+                    pendingChoiceBranches + forecast.PendingChoiceBranches);
+                hitActionDepthLimit |= forecast.HitActionDepthLimit;
+
+                foreach (ShadowTeammateRoute teammateRoute in forecast.Routes)
+                {
+                    SimulatedCombatState combat =
+                        (SimulatedCombatState)teammateRoute.Simulator.State.CombatState;
+                    _ = combat.ConsumePlayerTurnEndRequest();
+
+                    ShadowTeammateActionCandidate[] combined =
+                        new ShadowTeammateActionCandidate[
+                            world.Actions.Count + teammateRoute.Actions.Count];
+                    for (int index = 0; index < world.Actions.Count; index++)
+                        combined[index] = world.Actions[index];
+                    for (int index = 0; index < teammateRoute.Actions.Count; index++)
+                        combined[world.Actions.Count + index] = teammateRoute.Actions[index];
+
+                    nextWorlds.Add(CaptureRoute(teammateRoute.Simulator, combined));
+                }
+            }
+
+            worlds = RetainParetoSpectrum(nextWorlds, beamWidth);
+        }
+
+        return new ShadowTeammatePlanResult(
+            worlds,
+            expandedBranches,
+            pendingChoiceBranches,
+            hitActionDepthLimit);
+    }
+
     internal static ShadowTeammatePlanResult BuildTopKRoutes(
         CombatPredictionSimulator source,
         Player teammate,
@@ -92,7 +167,6 @@ internal static class ShadowTeammatePlanner
 
         ShadowTeammateRoute seed = CaptureRoute(
             source.Fork(),
-            teammate,
             Array.Empty<ShadowTeammateActionCandidate>());
         List<ShadowTeammateRoute> frontier = [seed];
         List<ShadowTeammateRoute> completed = [];
@@ -201,13 +275,12 @@ internal static class ShadowTeammatePlanner
         for (int index = 0; index < parent.Actions.Count; index++)
             actions[index] = parent.Actions[index];
         actions[^1] = candidate;
-        child = CaptureRoute(simulator, teammate, actions);
+        child = CaptureRoute(simulator, actions);
         return true;
     }
 
     private static ShadowTeammateRoute CaptureRoute(
         CombatPredictionSimulator simulator,
-        Player teammate,
         IReadOnlyList<ShadowTeammateActionCandidate> actions)
     {
         SimulatedCombatState combat = (SimulatedCombatState)simulator.State.CombatState;
@@ -222,30 +295,36 @@ internal static class ShadowTeammatePlanner
         }
 
         int teamEffectiveHp = 0;
+        int teamEnergy = 0;
+        int teamStars = 0;
+        bool allPlayersAlive = true;
         double worstPlayerEffectiveHpRatio = double.PositiveInfinity;
         foreach (Player player in simulator.State.RootCapturedPlayers)
         {
             SimCreatureState state = simulator.State.GetCreature(player.Creature);
+            SimPlayerCombatState playerState = simulator.State.GetPlayerCombatState(player);
             int effectiveHp = Math.Max(0, state.CurrentHp) + Math.Max(0, state.Block);
             teamEffectiveHp = checked(teamEffectiveHp + effectiveHp);
+            teamEnergy = checked(teamEnergy + Math.Max(0, playerState.Energy));
+            teamStars = checked(teamStars + Math.Max(0, playerState.Stars));
+            allPlayersAlive &= state.IsAlive;
             double ratio = effectiveHp / (double)Math.Max(1, state.MaxHp);
             worstPlayerEffectiveHpRatio = Math.Min(worstPlayerEffectiveHpRatio, ratio);
         }
         if (double.IsPositiveInfinity(worstPlayerEffectiveHpRatio))
             worstPlayerEffectiveHpRatio = 0d;
 
-        SimCreatureState teammateState = simulator.State.GetCreature(teammate.Creature);
-        SimPlayerCombatState teammateCombatState = simulator.State.GetPlayerCombatState(teammate);
         return new ShadowTeammateRoute(
             simulator,
             actions,
             simulator.TerminalStamp is { Outcome: CombatTerminalOutcome.Victory },
-            teammateState.IsAlive,
+            allPlayersAlive,
             combat.PlayerTurnEndRequested,
             enemyDurability,
             teamEffectiveHp,
             worstPlayerEffectiveHpRatio,
-            teammateCombatState.Stars);
+            teamEnergy,
+            teamStars);
     }
 
     private static List<ShadowTeammateRoute> RetainParetoSpectrum(
@@ -302,21 +381,23 @@ internal static class ShadowTeammatePlanner
     private static bool Dominates(ShadowTeammateRoute left, ShadowTeammateRoute right)
     {
         bool noWorse = (left.CompleteVictory || !right.CompleteVictory)
-            && (left.TeammateAlive || !right.TeammateAlive)
+            && (left.AllPlayersAlive || !right.AllPlayersAlive)
             && left.EnemyDurability <= right.EnemyDurability
             && left.TeamEffectiveHp >= right.TeamEffectiveHp
             && left.WorstPlayerEffectiveHpRatio >= right.WorstPlayerEffectiveHpRatio
-            && left.TeammateStars >= right.TeammateStars
+            && left.TeamEnergy >= right.TeamEnergy
+            && left.TeamStars >= right.TeamStars
             && left.Actions.Count <= right.Actions.Count;
         if (!noWorse)
             return false;
 
         return left.CompleteVictory != right.CompleteVictory
-            || left.TeammateAlive != right.TeammateAlive
+            || left.AllPlayersAlive != right.AllPlayersAlive
             || left.EnemyDurability != right.EnemyDurability
             || left.TeamEffectiveHp != right.TeamEffectiveHp
             || !left.WorstPlayerEffectiveHpRatio.Equals(right.WorstPlayerEffectiveHpRatio)
-            || left.TeammateStars != right.TeammateStars
+            || left.TeamEnergy != right.TeamEnergy
+            || left.TeamStars != right.TeamStars
             || left.Actions.Count != right.Actions.Count;
     }
 
@@ -327,7 +408,7 @@ internal static class ShadowTeammatePlanner
         int comparison = right.CompleteVictory.CompareTo(left.CompleteVictory);
         if (comparison != 0)
             return comparison;
-        comparison = right.TeammateAlive.CompareTo(left.TeammateAlive);
+        comparison = right.AllPlayersAlive.CompareTo(left.AllPlayersAlive);
         if (comparison != 0)
             return comparison;
         comparison = left.EnemyDurability.CompareTo(right.EnemyDurability);
@@ -339,7 +420,10 @@ internal static class ShadowTeammatePlanner
         comparison = right.WorstPlayerEffectiveHpRatio.CompareTo(left.WorstPlayerEffectiveHpRatio);
         if (comparison != 0)
             return comparison;
-        comparison = right.TeammateStars.CompareTo(left.TeammateStars);
+        comparison = right.TeamEnergy.CompareTo(left.TeamEnergy);
+        if (comparison != 0)
+            return comparison;
+        comparison = right.TeamStars.CompareTo(left.TeamStars);
         if (comparison != 0)
             return comparison;
         comparison = left.Actions.Count.CompareTo(right.Actions.Count);
