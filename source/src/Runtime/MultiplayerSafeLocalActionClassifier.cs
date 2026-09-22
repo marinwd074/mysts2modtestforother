@@ -4,7 +4,6 @@ using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Models;
-using MegaCrit.Sts2.Core.Models.Cards;
 
 namespace CombatSolver;
 
@@ -44,7 +43,6 @@ internal static class MultiplayerSafeLocalActionClassifier
         bool hasTarget = action.TargetCombatId is not null;
         bool targetExists = false;
         bool allowedTarget = false;
-        bool crossPlayerPublicCard = card is Lift or Rally or Mimic or Coordinate;
         if (action.TargetCombatId is { } targetId)
         {
             Creature? target = state.GetCreature(targetId);
@@ -53,14 +51,11 @@ internal static class MultiplayerSafeLocalActionClassifier
             {
                 bool isLocalTarget = targetId == localPlayer.Creature.CombatId;
                 bool isEnemyTarget = state.Enemies.Any(enemy => enemy.CombatId == targetId);
-                bool isTeammateTarget = state.GetTeammatesOf(localPlayer.Creature)
-                    .Any(teammate => teammate.CombatId == targetId
-                        && teammate.IsAlive);
-                allowedTarget = isLocalTarget || isEnemyTarget || (crossPlayerPublicCard && isTeammateTarget);
+                allowedTarget = isLocalTarget || isEnemyTarget;
             }
         }
 
-        SafeLocalActionDecision resolved = MultiplayerSafeExecutePolicy.ClassifyResolved(
+        return MultiplayerSafeExecutePolicy.ClassifyResolved(
             new(
                 HasLocalPlayer: localPlayer?.PlayerCombatState != null,
                 HasLocalCard: card != null,
@@ -69,19 +64,8 @@ internal static class MultiplayerSafeLocalActionClassifier
                 TargetExists: targetExists,
                 IsAllowedTarget: allowedTarget,
                 HasIncompleteTargetIdentity: !hasTarget
-                    && (action.TargetIndex != -1 || !string.IsNullOrEmpty(action.TargetName)),
-                IsPromotedMultiplayerOnlyCard: card != null && IsPromotedMultiplayerOnlyCard(card)));
-        return resolved.IsSafe && crossPlayerPublicCard
-            ? SafeLocalActionDecision.CrossPlayerPublicBoundary
-            : resolved;
+                    && (action.TargetIndex != -1 || !string.IsNullOrEmpty(action.TargetName))));
     }
-
-    private static bool IsPromotedMultiplayerOnlyCard(CardModel card)
-        => card is BeaconOfHope
-            or Flanking
-            or GangUp
-            or Knockdown
-            or Sneaky;
 
     public static IReadOnlyList<PlanAction> TakeSafePrefix(
         CombatState state,

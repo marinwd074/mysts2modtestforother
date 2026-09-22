@@ -113,9 +113,9 @@ target remains the pinned v0.107.1 model/DLL, not the live wiki card page.
 
 > 当前执行策略：所有 `MultiplayerOnly` 卡只参与搜索/推荐，不由 Safe Execute 自动出牌。遇到多人牌时由玩家手动完成原生目标选择与出牌，随后基于新状态 Fresh Search。
 
-The first source-confirmed deterministic subset is now admitted by the Safe
-Execute classifier. Admission remains limited to local ownership, readable
-targets, no Choice, no replay action, and the bounded deployment/session gates.
+Safe Execute no longer admits MultiplayerOnly cards. Their prediction support
+is still used to rank and display routes, but the runtime stops before the first
+MultiplayerOnly action so the player performs the native play and target selection.
 
 ### Stage A — local/public execution candidates
 
