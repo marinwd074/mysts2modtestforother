@@ -21,6 +21,7 @@ $logPath = Join-Path $tempRoot 'fixture.log'
 function Invoke-Expected {
     param(
         [int]$ExpectedExit,
+        [Parameter(Mandatory = $true)]
         [ValidateSet('PASS','FAIL','UNVERIFIED')]
         [string]$ExpectedStatus
     )
@@ -70,7 +71,7 @@ try {
         '[CombatSolver/MultiplayerFixture] FIXTURE_COMMAND_RESULT name=tag-team-basic index=2 success=true message="Enqueued damage" world_version_before=12 world_version_after=13',
         '[CombatSolver/MultiplayerFixture] FIXTURE_COMPLETE name=tag-team-basic commands=3 world_version=13'
     ))
-    Invoke-Expected 1
+    Invoke-Expected -ExpectedExit 1 -ExpectedStatus FAIL
 
     [IO.File]::WriteAllLines($logPath, @(
         '[CombatSolver/MultiplayerFixture] FIXTURE_ARMED name=tag-team-basic commands=3',
