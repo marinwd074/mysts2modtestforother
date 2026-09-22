@@ -243,6 +243,34 @@ Smoke C 不传 `-RequestId`，以便验证整份正式 journal 没有中止或�
 0=PASS、1=FAIL、2=UNVERIFIED。2026-09-20 的 A/B/C 均已通过，机器摘要见
 [`evidence/reactive-carry-smoke-2026-09-20.json`](evidence/reactive-carry-smoke-2026-09-20.json)。
 
+## Carry v2 / Multiplayer Safe Auto Smoke
+
+Safe Auto 只在显式 `-MultiplayerMode safe-execute` 下可用。进入稳定本地回合后，只点击一次
+“安全自动：关”把它切成“安全自动：开”；之后 **不要再点击“执行本回合”**。目标是连续至少
+3 个本地回合都由 Runtime 自己完成：fresh/validated search → 新
+`MultiplayerSafeExecutionSession` → 安全本地普通牌 → 原生 Safe EndTurn → 下一本地回合重新
+Probe/Search/authorize。旧 request/session/route authorization 不得跨回合复用。
+
+运行时日志必须包含每回合 `MP_SAFE_AUTO_ARMED`；第一回合如果复用按钮开启前已经完成的最新
+路线，会记录 `source=existing_result`，后续正常搜索完成记录
+`source=search_completion`。任何 Potion、Choice、teammate/unknown target、
+multiplayer-only card 等当前不支持边界都应停止 Safe Auto，而不是不断重算同一局面。
+
+正式三回合验证命令：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-safe-auto-results.ps1 `
+  -LogPath '<post-restart-client-combat-journal.jsonl>' `
+  -MinLocalTurns 3 `
+  -OutputPath '.\.local\multiplayer-lab\results\safe-auto-summary.json'
+~~~
+
+PASS 必须同时证明：Safe Auto 在测量窗口只启用一次；至少 3 个 distinct request/turn；
+3 个回合都有自动 arm、Safe EndTurn、fresh Probe/capture 和 fresh search；启用后没有新的
+`UI_ACTION action=deploy`；没有 `MP_SAFE_AUTO_STOP`、远端部署中止、旧 request 复用或
+自定义网络路径。当前只有 code/contract/CI 证据，**真实 Host/Client Safe Auto Smoke 尚未
+完成，不得提前记 runtime PASS**。
+
 ## MP-2A 收尾
 
 游戏进程停止仍由 Codex/Agent 负责，默认使用 Graceful；只有游戏窗口中的点击交给用户。
@@ -260,7 +288,8 @@ pwsh -NoLogo -NoProfile -File .\validate-mp2a-results.ps1 `
   -OutputPath '.\.local\multiplayer-lab\results\mp2a-summary.json'
 ~~~
 
-默认安装仍不因本手册自动进入 Safe Execute；只有 Reactive Carry 的显式 Safe Execute
-会在最新安全路线边界上调用原生 EndTurn。Multiplayer Instant、Potion、Choice、Full
-Auto、旧跨回合路线和队友目标仍保持关闭。MP2B/MP2C 历史边界与 Reactive Carry 当前
-证据分别见上文；后续扩大能力边界仍需独立计划和独立实机证据。
+默认安装仍不因本手册自动进入 Safe Execute。显式 Safe Execute 已包含 Reactive Carry，
+并新增实验性 Safe Auto；Safe Auto 只持续重新授权当前本地安全边界，不等同于单人 Full Auto。
+Multiplayer Instant、Potion、Choice、单人 Full Auto、Replay 和队友目标仍保持关闭。
+MP2B/MP2C 历史边界、Reactive Carry 与 Safe Auto 的证据分别见上文；后续扩大能力边界仍需
+独立计划和独立实机证据。
