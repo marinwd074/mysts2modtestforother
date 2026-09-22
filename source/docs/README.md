@@ -26,6 +26,7 @@
 
 - 上游 CombatSolver 的 0.17–0.40.2 release notes 已从当前工作树移除；本 fork 只维护 [PROJECT_VERSION_HISTORY.md](PROJECT_VERSION_HISTORY.md)。
 - 一次性 performance / strategy JSON、patch 不再跟踪；需要旧数据时从 Git history 或既有归档取回。
+- dated performance / strategy / audit / issue / refactoring 报告也不再留在当前工作树；当前树只保留长期规范和可重跑合同。
 
 ## 维护规则
 

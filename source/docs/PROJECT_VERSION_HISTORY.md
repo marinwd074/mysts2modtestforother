@@ -4,6 +4,14 @@
 > 基础代码仍以 CombatSolver 0.40.2 为起点；本表只描述这个 fork 从开始改造后的能力演进。  
 > 版本号按里程碑归并，不要求一版对应一个 commit。细节需要时再查对应 Git 历史。
 
+## v0.17 — 历史报告与快照分配瘦身
+**2026-09-22**
+
+- 从当前树移除 86 个 dated performance / strategy / audit / issue / refactoring 历史报告（约 1.1 MB）；需要时从 Git history 恢复。
+- 默认文档上下文进一步收敛到当前规范、版本兼容、运行证据和可重跑合同。
+- 怪物 root snapshot 对没有 static-int 成员的怪物复用共享空字典，不再为每只怪物分配新的空 `Dictionary`。
+- generated testing JSON 加入 `.gitignore`，防止一次性结果重新污染仓库。
+
 ## v0.16 — 多人怪物调度热路径收敛
 **2026-09-22**
 

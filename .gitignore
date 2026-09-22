@@ -23,6 +23,7 @@
 /source/docs/performance/**/*.patch
 /source/docs/strategy/**/*.json
 /source/docs/strategy/**/*.patch
+/source/docs/testing/generated-*.json
 !.github/
 !.github/workflows/
 !.github/workflows/**
