@@ -349,7 +349,11 @@ internal sealed partial class CombatBeamSolver
                 continue;
             int forecastOffset = node.Turn - _startTurnNumber;
             ContinuationStamp? expected = node.Snapshot.Continuation;
-            if (expected == null)
+            StateFingerprint? remoteFingerprint =
+                node.Snapshot.ContinuationRemoteFingerprint;
+            bool needsRemoteFingerprint =
+                root.AllowsLocalPlayerOnlySearch && remoteFingerprint is null;
+            if (expected == null || needsRemoteFingerprint)
             {
                 SimulationSnapshot? turnSetupRoot = _includeTurnSetup
                     ? ReplayTurnSetup(node.GetTurnSetupChoices())
@@ -362,12 +366,19 @@ internal sealed partial class CombatBeamSolver
                         turnSetupRoot,
                         _startTurnNumber,
                         priorActionCount: 0);
-                    expected = ContinuationStamp.CapturePredicted(
+                    expected ??= ContinuationStamp.CapturePredicted(
                         _player,
                         replayed.Simulator,
                         node.Turn,
                         _forecast,
                         _startTurnNumber);
+                    if (needsRemoteFingerprint)
+                    {
+                        remoteFingerprint =
+                            MultiplayerContinuationRemoteFingerprint.CapturePredicted(
+                                replayed.Simulator,
+                                _player);
+                    }
                 }
                 finally
                 {
@@ -375,14 +386,18 @@ internal sealed partial class CombatBeamSolver
                     turnSetupRoot?.ReleaseSimulator();
                 }
             }
+            ContinuationStamp resolvedExpected = expected
+                ?? throw new InvalidOperationException("续用路径没有可用的预测 continuation。");
             MultiplayerContinuationExpectation? multiplayerExpectation =
                 root.AllowsLocalPlayerOnlySearch
                     ? CreateMultiplayerContinuationExpectation(
-                        expected,
-                        (CombatPredictionSimulator)node.Snapshot.Simulator)
+                        resolvedExpected,
+                        remoteFingerprint
+                            ?? throw new InvalidOperationException(
+                                "多人续用路线缺少冻结的队友状态指纹。"))
                     : null;
             continuations.Add(new CachedContinuation(
-                expected,
+                resolvedExpected,
                 node.Turn,
                 forecastOffset,
                 multiplayerExpectation));
@@ -418,7 +433,7 @@ internal sealed partial class CombatBeamSolver
 
     private MultiplayerContinuationExpectation CreateMultiplayerContinuationExpectation(
         ContinuationStamp expected,
-        CombatPredictionSimulator simulator)
+        StateFingerprint remoteFingerprint)
     {
         if (string.IsNullOrWhiteSpace(expected.CombatIdentity))
         {
@@ -428,9 +443,7 @@ internal sealed partial class CombatBeamSolver
         return new MultiplayerContinuationExpectation(
             expected.CombatIdentity,
             _player.NetId.ToString(),
-            MultiplayerContinuationRemoteFingerprint.CapturePredicted(
-                simulator,
-                _player),
+            remoteFingerprint,
             root.CarryRankingContext.MultiplayerScalingHooks,
             root.CarryRankingContext.CardMultiplayerConstraint,
             root.CarryRankingContext.WorldVersion);
