@@ -27,6 +27,7 @@
 - MultiplayerOnly 卡现在统一为**搜索/推荐可见、玩家手动出牌**：Safe Execute 不再自动打任何 MultiplayerOnly 卡；遇到多人牌时停止自动前缀但保留 Safe Auto，等待玩家手动完成原生目标选择与出牌，状态变化后再 Fresh Search。此前已验证的 Beacon of Hope、Flanking、Gang Up、Knockdown、Sneaky、Lift、Rally、Mimic、Coordinate 仍保留预测语义，但不再进入自动执行。
 - `AnyAlly` 空目标问题已从目标生成层修正，并补齐相同根因的 `AnyPlayer` 分支；卡牌/药水的玩家目标枚举使用预测态目标解析，不靠部署期判空或异常兜底。`RootActionPlayers` 仍只包含本地玩家。
 - 单人搜索算法向多人本地跨回合模式的第一批迁移已落地：`SinglePlayerFullRoute` 与 `MultiplayerLocalCrossTurn` 现在共用 full-search heuristics，因此 Novelty Portfolio、成长预算、遗物目标、成长机会目标和长期收益评估不再因多人能力表中的 `CanCrossTurnSearch=false` 被关闭；`MultiplayerCurrentTurnOnly` 仍保持精简。执行权限、队友动作、共享 Shuffle RNG 边界和多人牌手动出牌规则均未放宽。
+- 问题包 `25b905c1322b41e6b9a8e10baeae5606` 复现 0 费 Anger 被遗漏：T2 手牌含 `ANGER(0)`，Solver 选择 Tremble→Dismantle→Strike→EndTurn，并在 Shuffle 边界形成 `PartialLocalCrossTurnProjection`。已修正多人未完成路线的最终排序：确定的 Enemy HP 进展现在先于 Anger copy 长期惩罚；单人和完整胜利路线保持原排序。
 
 ## 当前未完成
 

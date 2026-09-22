@@ -50,6 +50,12 @@ internal static class MultiplayerLocalCrossTurnContracts
         => policy is SearchRoutePolicy.SinglePlayerFullRoute
             or SearchRoutePolicy.MultiplayerLocalCrossTurn;
 
+    internal static bool DelayAngerCopyPreferenceUntilAfterEnemyHp(
+        SearchRoutePolicy policy,
+        bool completeVictory)
+        => policy == SearchRoutePolicy.MultiplayerLocalCrossTurn
+            && !completeVictory;
+
     internal static bool CanUsePersistentRouteCache(SearchRoutePolicy policy)
         => policy == SearchRoutePolicy.SinglePlayerFullRoute;
 
