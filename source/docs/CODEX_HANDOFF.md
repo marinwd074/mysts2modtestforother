@@ -2,6 +2,7 @@
 
 ## 当前技术状态
 
+- **2026-09-22 readable-state root 边界更新**：多人搜索 root 允许捕获本地进程已经物化的队友战斗状态，但 `RootActionPlayers` 仍严格只有本地玩家。这里的“可读取”不等于“可预测”：本地动作所有者结束当前预测回合后，队友 `PlayerCombatState` 快照立即视为过期；未来分支若再次消费队友手牌/牌堆/能量/星能/Orb 等状态，该分支以 `UnsupportedEffect` 终止，而不是把旧快照当作队友未来行为。提交 `282393c9` 增加该边界和 L1 合同。旧交接中“remote private 一律不可读 / local-player-only root”的描述属于历史实现，不再作为当前架构事实。
 - CombatSolver `0.40.2`；目标游戏 / RitsuLib `0.107.1`；兼容符号 `STS2_01071`。
 - MP-0 Core / lifecycle：PASS。
 - MP-1 Advisor：受控 Smoke PASS。

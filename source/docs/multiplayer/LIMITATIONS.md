@@ -1,5 +1,12 @@
 # Multiplayer 当前限制与验证事实（2026-09-20）
 
+## 2026-09-22 readable-state root 更新
+
+- 当前原则是 **本地进程已经物化的数据可以读取，但不能据此预测队友未来动作**。多人 root 可捕获当前可读的队友 `PlayerCombatState`；动作所有权仍由 `RootActionPlayers` 限定为本地玩家，读取权限不会升级成队友控制权。
+- 本地玩家结束当前预测回合后，队友 Hand/Draw/Discard/Exhaust、Energy、Stars、OrbQueue 等 `PlayerCombatState` 快照被视为过期。未来分支实际读取这些字段时，该分支标记为 `UnsupportedEffect`；没有读取过期字段的本地跨回合路线仍可继续。
+- continuation 的 legacy `RemotePublicFingerprint` 名称暂时保留兼容性，但内容已经覆盖本地可读队友状态；任何该 fingerprint 变化都要求 Fresh Search，不再允许 remote-public soft reuse。
+- 下方历史章节里“remote private 不可访问”“local-player-only root”的文字记录的是当时实现与 Smoke 结论。它们仍可作为历史证据，但不能再用来推断当前客户端内存中不存在队友状态。
+
 本文件只保留当前多人阶段的可审计结论和仍有效的限制。机器事实以 [Phase 0 矩阵](../evidence/phase0-matrix-2026-09-19.json) 为准：MP-0 Core 与受控生命周期 Hardening 为 `PASS`；重连后的 Advisor 远端私有药水语义仍按合同 fail-closed；MP-2A 显式一动作 Safe Execute、MP-2B 两动作正常/干扰 Smoke 与 MP-2C bounded N-action 正常/干扰 Smoke 均已通过。
 
 ## 当前状态
