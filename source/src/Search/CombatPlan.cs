@@ -128,6 +128,12 @@ internal sealed record PlanRelicEffect(
     string RelicTitle,
     string Summary);
 
+/// <summary>
+/// Forecast-only metadata for multiplayer EndTurn replay. Deployment never executes these actions.
+</summary>
+internal sealed record ShadowForecastPlan(
+    IReadOnlyList<ShadowTeammateActionCandidate> Actions);
+
 internal sealed record PlanAction(
     PlanActionKind Kind,
     int Turn,
@@ -150,7 +156,8 @@ internal sealed record PlanAction(
     int CardStateOccurrence = 0,
     bool EndsPlayerTurn = false,
     int CardUpgradeLevel = 0,
-    string CardEnchantmentId = "")
+    string CardEnchantmentId = "",
+    ShadowForecastPlan? ShadowForecast = null)
 {
     public bool IsExecutable => Kind is PlanActionKind.PlayCard or PlanActionKind.UsePotion;
     public string ActionTitle => Kind == PlanActionKind.UsePotion ? PotionTitle : CardTitle;

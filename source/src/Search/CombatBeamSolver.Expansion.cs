@@ -2123,12 +2123,31 @@ internal sealed partial class CombatBeamSolver
                 try
                 {
                     using var executionDispatch = simulator.BeginExecutionDispatch();
-                    boundary = roundCheckpoint != null
-                        ? ResumeRoundPlayerStart(simulator, simulatedCombat, turn - _startTurnNumber,
-                            processedEnemyDeaths, ref shufflesCrossed, action.TurnStartChoices, roundCheckpoint)
-                        : AdvanceRound(simulator, simulatedCombat, turn - _startTurnNumber,
-                            processedEnemyDeaths, ref shufflesCrossed, action.TurnStartChoices,
-                            roundCheckpointCapture);
+                    boundary = action.ShadowForecast != null
+                        ? ReplayJointForecastEndTurn(
+                            simulator,
+                            simulatedCombat,
+                            action.ShadowForecast,
+                            turn - _startTurnNumber,
+                            processedEnemyDeaths,
+                            ref shufflesCrossed)
+                        : roundCheckpoint != null
+                            ? ResumeRoundPlayerStart(
+                                simulator,
+                                simulatedCombat,
+                                turn - _startTurnNumber,
+                                processedEnemyDeaths,
+                                ref shufflesCrossed,
+                                action.TurnStartChoices,
+                                roundCheckpoint)
+                            : AdvanceRound(
+                                simulator,
+                                simulatedCombat,
+                                turn - _startTurnNumber,
+                                processedEnemyDeaths,
+                                ref shufflesCrossed,
+                                action.TurnStartChoices,
+                                roundCheckpointCapture);
                 }
                 finally
                 {
@@ -2316,6 +2335,78 @@ internal sealed partial class CombatBeamSolver
         try { cardChoiceCapture?.Receive(this, simulator, processedEnemyDeaths); }
         catch { snapshot.ReleaseSimulator(); throw; }
         return snapshot;
+    }
+
+    private SearchBoundaryReason ReplayJointForecastEndTurn(
+        CombatPredictionSimulator simulator,
+        SimulatedCombatState combat,
+        ShadowForecastPlan forecast,
+        int roundIndex,
+        ForkableSet<uint> processedEnemyDeaths,
+        ref int shufflesCrossed)
+    {
+        int roundHistoryEntryStart = simulator.History.Entries.Count;
+        int shadowShuffleEventsBefore = simulator.ShuffleEventCount;
+        if (!ShadowTeammatePlanner.ReplayForecastActions(
+                simulator,
+                forecast.Actions,
+                processedEnemyDeaths))
+        {
+            return SearchBoundaryReason.PendingChoice;
+        }
+        shufflesCrossed = checked(
+            shufflesCrossed
+            + simulator.ShuffleEventCount
+            - shadowShuffleEventsBefore);
+
+        TurnStartChoiceCursor roundChoices = new(null);
+        combat.BeginActionChoices(roundChoices);
+        combat.SetActionChoiceTiming(PlanChoiceTiming.PlayerTurnEnd);
+        try
+        {
+            if (simulator.IsInProgress)
+            {
+                int playerSideShuffleEvents = simulator.ShuffleEventCount;
+                if (!PlayerTurnEndLifecycle.RunForecastFullPlayerSideEnd(
+                        simulator,
+                        combat,
+                        simulator.State.RootCapturedPlayers,
+                        processedEnemyDeaths,
+                        out _))
+                {
+                    return SearchBoundaryReason.PendingChoice;
+                }
+                shufflesCrossed = checked(
+                    shufflesCrossed
+                    + simulator.ShuffleEventCount
+                    - playerSideShuffleEvents);
+            }
+            if (combat.HasPendingChoice)
+                return SearchBoundaryReason.PendingChoice;
+
+            simulator.CheckWinCondition(combat.GetPlayerTurnNumber(_player));
+            if (!simulator.IsInProgress)
+                return SearchBoundaryReason.None;
+
+            return AdvanceEnemySideAndPlayerStart(
+                simulator,
+                combat,
+                simulator.State.GetPlayerCombatState(_player),
+                roundIndex,
+                processedEnemyDeaths,
+                ref shufflesCrossed,
+                roundChoices,
+                takingExtraTurn: false,
+                hasActiveEmotionChip: false,
+                roundHistoryEntryStart,
+                turnStartChoices: null,
+                roundCheckpointCapture: null,
+                jointForecast: true);
+        }
+        finally
+        {
+            combat.EndActionChoices();
+        }
     }
 
     private SearchBoundaryReason ResolveRequestedPlayerTurnEnd(

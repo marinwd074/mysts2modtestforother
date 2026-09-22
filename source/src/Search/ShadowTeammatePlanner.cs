@@ -224,17 +224,79 @@ internal static class ShadowTeammatePlanner
             hitDepthLimit);
     }
 
-    private static bool TryPlayCandidate(
-        ShadowTeammateRoute parent,
+    internal static bool ReplayForecastActions(
+        CombatPredictionSimulator simulator,
+        IReadOnlyList<ShadowTeammateActionCandidate> actions,
+        ISet<uint> processedEnemyDeaths)
+    {
+        string? activePlayerNetId = null;
+        for (int index = 0; index < actions.Count; index++)
+        {
+            ShadowTeammateActionCandidate action = actions[index];
+            if (activePlayerNetId != null
+                && !string.Equals(activePlayerNetId, action.PlayerNetId, StringComparison.Ordinal))
+            {
+                SimulatedCombatState betweenPlayers =
+                    (SimulatedCombatState)simulator.State.CombatState;
+                _ = betweenPlayers.ConsumePlayerTurnEndRequest();
+            }
+
+            Player teammate = FindCapturedPlayer(simulator, action.PlayerNetId);
+            if (!TryPlayCandidateInPlace(
+                    simulator,
+                    teammate,
+                    action,
+                    processedEnemyDeaths))
+            {
+                return false;
+            }
+            activePlayerNetId = action.PlayerNetId;
+        }
+
+        if (activePlayerNetId != null)
+        {
+            SimulatedCombatState combat =
+                (SimulatedCombatState)simulator.State.CombatState;
+            _ = combat.ConsumePlayerTurnEndRequest();
+        }
+        return true;
+    }
+
+    private static Player FindCapturedPlayer(
+        CombatPredictionSimulator simulator,
+        string playerNetId)
+    {
+        foreach (Player player in simulator.State.RootCapturedPlayers)
+        {
+            if (string.Equals(
+                    player.NetId.ToString(),
+                    playerNetId,
+                    StringComparison.Ordinal))
+            {
+                AssertShadowPlayer(simulator, player);
+                return player;
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Shadow forecast replay cannot find captured player {playerNetId}.");
+    }
+
+    private static bool TryPlayCandidateInPlace(
+        CombatPredictionSimulator simulator,
         Player teammate,
         ShadowTeammateActionCandidate candidate,
-        out ShadowTeammateRoute? child)
+        ISet<uint> processedEnemyDeaths)
     {
-        CombatPredictionSimulator simulator = parent.Simulator.Fork();
-        SimulatedCombatState combat = (SimulatedCombatState)simulator.State.CombatState;
-        SimPlayerCombatState playerState = simulator.State.GetPlayerCombatState(teammate);
+        SimulatedCombatState combat =
+            (SimulatedCombatState)simulator.State.CombatState;
+        SimPlayerCombatState playerState =
+            simulator.State.GetPlayerCombatState(teammate);
         if ((uint)candidate.HandIndex >= (uint)playerState.Hand.Cards.Count)
-            throw new InvalidOperationException("Shadow teammate hand index changed across a prediction fork.");
+        {
+            throw new InvalidOperationException(
+                "Shadow teammate hand index changed during forecast replay.");
+        }
 
         PredictedCard card = playerState.Hand.Cards[candidate.HandIndex];
         if (!string.Equals(card.Preview.Id.Entry, candidate.CardId, StringComparison.Ordinal)
@@ -244,16 +306,22 @@ internal static class ShadowTeammatePlanner
                 candidate.SemanticKey,
                 StringComparison.Ordinal))
         {
-            throw new InvalidOperationException("Shadow teammate card identity changed across a prediction fork.");
+            throw new InvalidOperationException(
+                "Shadow teammate card identity changed during forecast replay.");
+        }
+        if (!combat.CanPlayCard(simulator, card))
+        {
+            throw new InvalidOperationException(
+                $"Shadow forecast card {candidate.CardId} is no longer playable during exact replay.");
         }
 
         Creature? target = combat.GetCreature(candidate.TargetCombatId);
-        HashSet<uint> processedEnemyDeaths = [.. parent.ProcessedEnemyDeaths];
         combat.BeginActionChoices((IReadOnlyList<PlanCardChoice>?)null);
         bool completed;
         try
         {
-            using IDisposable executionScope = combat.BeginCardExecutionScope(processedEnemyDeaths);
+            using IDisposable executionScope =
+                combat.BeginCardExecutionScope(processedEnemyDeaths);
             completed = simulator.ManualPlay(card, target, out _);
             if (completed)
             {
@@ -275,12 +343,29 @@ internal static class ShadowTeammatePlanner
         }
 
         if (!completed || simulator.HasPendingChoice)
+            return false;
+
+        simulator.CheckWinCondition(combat.GetPlayerTurnNumber(teammate));
+        return true;
+    }
+
+    private static bool TryPlayCandidate(
+        ShadowTeammateRoute parent,
+        Player teammate,
+        ShadowTeammateActionCandidate candidate,
+        out ShadowTeammateRoute? child)
+    {
+        CombatPredictionSimulator simulator = parent.Simulator.Fork();
+        HashSet<uint> processedEnemyDeaths = [.. parent.ProcessedEnemyDeaths];
+        if (!TryPlayCandidateInPlace(
+                simulator,
+                teammate,
+                candidate,
+                processedEnemyDeaths))
         {
             child = null;
             return false;
         }
-
-        simulator.CheckWinCondition(combat.GetPlayerTurnNumber(teammate));
         ShadowTeammateActionCandidate[] actions = new ShadowTeammateActionCandidate[
             parent.Actions.Count + 1];
         for (int index = 0; index < parent.Actions.Count; index++)

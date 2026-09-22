@@ -148,7 +148,11 @@ internal sealed partial class CombatBeamSolver
                 shufflesCrossed,
                 boundary,
                 processedEnemyDeaths);
-            yield return (action, snapshot);
+            PlanAction jointAction = action with
+            {
+                ShadowForecast = new ShadowForecastPlan(route.Actions.ToArray()),
+            };
+            yield return (jointAction, snapshot);
         }
     }
 
