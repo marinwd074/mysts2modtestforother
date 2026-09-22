@@ -6,9 +6,9 @@ using CombatSolver.Engine.InCombat.Simulation;
 namespace CombatSolver;
 
 /// <summary>
-/// Small fail-closed contracts for the first local-player-only multiplayer root.
-/// These checks make an unsupported public/private boundary explicit instead of
-/// allowing a search to fall back to a live teammate object.
+/// Fail-closed contracts for multiplayer roots that may read every player state already
+/// materialized in the local game process. This widens read scope only; action ownership
+/// and network capabilities remain governed by the multiplayer session/deployment policy.
 /// </summary>
 internal static class MultiplayerRootCaptureContracts
 {
@@ -18,39 +18,24 @@ internal static class MultiplayerRootCaptureContracts
         Player localPlayer)
     {
         IReadOnlyList<Player> captured = simulator.State.RootCapturedPlayers;
-        if (captured.Count != 1 || !ReferenceEquals(captured[0], localPlayer))
+        if (captured.Count != live.Players.Count
+            || live.Players.Any(player => !MultiplayerAdvisorBoundaryContracts.IsCapturedPlayer(captured, player)))
         {
             throw new InvalidOperationException(
-                "Multiplayer local-player root must capture exactly the local player.");
+                "Multiplayer readable-state root must capture the complete local combat roster.");
         }
-        _ = simulator.State.GetPlayerCombatState(localPlayer);
+        if (!MultiplayerAdvisorBoundaryContracts.IsCapturedPlayer(captured, localPlayer))
+            throw new InvalidOperationException("Multiplayer root omitted the local player.");
 
-        foreach (Player remote in live.Players.Where(player => !ReferenceEquals(player, localPlayer)))
+        foreach (Player player in live.Players)
         {
-            bool remotePrivateWasCaptured = false;
-            try
-            {
-                _ = simulator.State.GetPlayerCombatState(remote);
-                remotePrivateWasCaptured = true;
-            }
-            catch (InvalidOperationException)
-            {
-                // Expected: remote private combat state is outside the root.
-            }
+            _ = simulator.State.GetPlayerCombatState(player);
 
-            if (remotePrivateWasCaptured)
+            SimCreatureState frozen = simulator.State.GetCreature(player.Creature);
+            if (ReferenceEquals(frozen, player.Creature))
             {
                 throw new InvalidOperationException(
-                    $"Remote player {remote.NetId} private combat state escaped the root boundary.");
-            }
-
-            // Creature state is public combat context and must be materialized in the
-            // detached root even though the player's private piles are not captured.
-            SimCreatureState frozen = simulator.State.GetCreature(remote.Creature);
-            if (ReferenceEquals(frozen, remote.Creature))
-            {
-                throw new InvalidOperationException(
-                    $"Remote player {remote.NetId} creature state retained the live object.");
+                    $"Player {player.NetId} creature state retained the live object.");
             }
         }
 
@@ -65,7 +50,7 @@ internal static class MultiplayerRootCaptureContracts
             && withRemoteRelics.RootUnsupportedRemotePublicRelicListenerCount != 0)
         {
             throw new PredictionUnsupportedException(
-                "Remote public relic hooks require a targeted multiplayer semantic capture contract.");
+                "A locally readable player relic was not captured into the multiplayer root.");
         }
     }
 }
