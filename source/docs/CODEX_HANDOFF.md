@@ -2,6 +2,13 @@
 
 ## 当前技术状态
 
+### 2026-09-22 Shared Console Mod 测试路径
+
+- 为后续多人卡 fixture 增加 `source/tools/multiplayer-lab/install-shared-console-mod.ps1`：用户提供本地 JSON-only console enabler，脚本把同一文件安装到所有指定 owned Host/Client instance，并逐端校验 SHA-256。
+- 该路径的目的只是让所有端的 console-enabler Mod 集合一致，避免“仅一个 Client 启用控制台”这一已知污染因素；第三方 Mod 文件本身不进入仓库。
+- snapshot rebuild 后必须重新安装；运行中的 instance 拒绝修改。
+- 这不自动恢复旧 Console Fixture 的正式证据资格。具体 `card/energy/block/... ` 命令是否能在 0.107.1 保持同步，仍需单独实机验证；失败时继续按 diagnostic-only 处理。
+
 ### 2026-09-22 Console Fixture 联机证据边界修正
 
 - 用户实机确认：在 pinned 0.107.1 多人联机中启用/执行 console 相关 fixture 会出现“游戏数据不相同”一类一致性/不同步提示；提示里看到的 `1000` 与 Lab 默认 FastMP ClientId/NetId 一致，不能把它解释为某个游戏数值本身。

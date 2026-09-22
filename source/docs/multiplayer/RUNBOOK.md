@@ -101,6 +101,35 @@ pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
 
 然后再进行 Host/Join/Ready 和对应 Smoke。
 
+## Shared Console Mod（所有端同装）
+
+为了避免“只有 Solver Client 开控制台”造成联机 Mod/数据不一致，Lab 现在提供
+`install-shared-console-mod.ps1`。它不把第三方 Mod 文件提交进仓库；只接受用户本地已有的
+JSON-only console enabler，并把**完全相同的文件**复制到所有参与本轮测试的 owned
+Host/Client 私有实例，同时校验 SHA-256 一致。
+
+推荐使用轻量的 Dev Console Enabler 一类 Mod，只负责开启游戏自带控制台。先准备实例，再安装：
+
+~~~powershell
+$labRoot = 'D:\yingye\CombatSolver\.local\multiplayer-lab'
+pwsh -NoLogo -NoProfile -File .\install-shared-console-mod.ps1 `
+  -ConsoleModPath 'D:\path\to\DevConsoleEnabler.json' `
+  -InstanceRoot @(
+    "$labRoot\runtime-mp-host",
+    "$labRoot\runtime-mp-client-solver",
+    "$labRoot\runtime-mp-client-observer"
+  )
+~~~
+
+规则：
+
+- Host 和所有参与 Client 必须安装同一文件、同一 SHA-256。
+- 运行中的实例禁止修改。
+- `prepare-instances.ps1` 重建 game snapshot 后需要重新运行本脚本。
+- 该脚本只解决“各端 Mod 集合一致”问题；它**不证明任意 debug command 都是网络安全的**。
+- 正式 runtime evidence 仍要单独确认具体命令不会造成 desync。现有单 Client
+  Console Fixture 继续视为 diagnostic-only。
+
 ## Multiplayer Console Fixture v1 — 非正式联机证据
 
 > **2026-09-22 实机限制：不要再用 Console Fixture 构造正式 Host/Client 证据。**
