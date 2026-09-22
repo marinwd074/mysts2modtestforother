@@ -1,6 +1,6 @@
 # STS2 0.107.1 multiplayer-card coverage
 
-> **2026-09-22 boundary update:** the multiplayer prediction root may capture teammate combat state that is already materialized in the local process. `RootActionPlayers` remains local-only. Root-time readability is not future predictability: after the local action owner yields the captured turn, a later read of non-action-player `PlayerCombatState` marks that branch `UnsupportedEffect`. Older `local-player-only` / `remote private not materialized` wording below is historical policy, not a claim that the client cannot hold those values.
+> **2026-09-22 boundary update:** the multiplayer prediction root may capture teammate combat state that is already materialized in the local process. `RootActionPlayers` remains local-only. Teammate state is a frozen root snapshot for one search; teammate future actions are not generated. At a real later local turn, any changed readable-teammate fingerprint rejects the old continuation and forces a fresh search. A short-lived `282393c9` post-yield stale-read guard was reverted because prediction Fork/Attach itself rereads captured players and therefore incorrectly truncated valid T2/T3 local-cross-turn routes. Older `local-player-only` / `remote private not materialized` wording below is historical policy, not a claim that the client cannot hold those values.
 
 This is the source-audit ledger for every card marked multiplayer-only in the
 repository-pinned `v0.107.1` assembly. It exists so later work does not mix

@@ -72,18 +72,6 @@ void PlayerBoundaryContractChecks()
     Check(
         !MultiplayerAdvisorBoundaryContracts.IsCapturedPlayer(actionPlayers, remote),
         "A readable remote player is not promoted into the local action scope.");
-    Check(
-        !MultiplayerAdvisorBoundaryContracts.IsStaleNonActionPlayerStateRead(
-            captured, actionPlayers, remote, nonActionPlayerStateCurrent: true),
-        "A readable teammate state is valid during the captured local turn.");
-    Check(
-        MultiplayerAdvisorBoundaryContracts.IsStaleNonActionPlayerStateRead(
-            captured, actionPlayers, remote, nonActionPlayerStateCurrent: false),
-        "A readable teammate state becomes stale after the local action owner yields.");
-    Check(
-        !MultiplayerAdvisorBoundaryContracts.IsStaleNonActionPlayerStateRead(
-            captured, actionPlayers, local, nonActionPlayerStateCurrent: false),
-        "The local action owner's state remains valid after teammate snapshots expire.");
 
     IReadOnlyList<Player> singleplayerRoster = [local, remote];
     Check(
