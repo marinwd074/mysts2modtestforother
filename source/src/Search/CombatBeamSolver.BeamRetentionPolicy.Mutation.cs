@@ -1269,21 +1269,22 @@ internal sealed partial class CombatBeamSolver
                          item.SourceFamily,
                          item.Outcome)))
             {
-                if (!outcome.Any(item =>
-                        item.Candidate.OrderedMutationObservationRequested))
+                bool hasObservationRequest = false;
+                SearchNode? survivor = null;
+                foreach (var item in outcome)
                 {
-                    continue;
+                    SearchNode candidate = item.Candidate;
+                    hasObservationRequest |= candidate.OrderedMutationObservationRequested;
+                    if (!retainedSet.Contains(candidate))
+                        continue;
+                    if (survivor == null
+                        || IsBetterOrderedMutationRepresentative(candidate, survivor))
+                    {
+                        survivor = candidate;
+                    }
                 }
-                List<SearchNode> survivors = outcome
-                    .Select(item => item.Candidate)
-                    .Where(retainedSet.Contains)
-                    .ToList();
-                if (survivors.Count == 0)
+                if (!hasObservationRequest || survivor == null)
                     continue;
-                SearchNode survivor = survivors.Aggregate((best, candidate) =>
-                    IsBetterOrderedMutationRepresentative(candidate, best)
-                        ? candidate
-                        : best);
                 survivor.OrderedMutationContinuationBridge = true;
             }
 
@@ -1302,19 +1303,25 @@ internal sealed partial class CombatBeamSolver
                              (IEqualityComparer<SearchNode>)
                                  ReferenceEqualityComparer.Instance))
             {
-                List<SearchNode> survivors = children.ToList();
                 // Exactly one child carries the remaining window. Prefer a child which the
                 // ordinary ranker already selected; a portfolio-only backup has MaxValue rank.
-                // This transfers, rather than duplicates, the observation obligation.
-                SearchNode carrier = survivors
-                    .OrderBy(candidate => candidate.RetentionRank)
-                    .ThenBy(candidate => candidate,
-                        Comparer<SearchNode>.Create(
-                            CompareOrderedMutationRepresentatives))
-                    .First();
-                foreach (SearchNode survivor in survivors)
+                // A single pass preserves OrderBy/ThenBy's first-on-exact-tie stability without
+                // allocating a temporary list or sorter.
+                SearchNode? carrier = null;
+                foreach (SearchNode survivor in children)
+                {
                     survivor.OrderedMutationContinuationBridge = false;
-                carrier.OrderedMutationContinuationBridge = true;
+                    if (carrier == null
+                        || survivor.RetentionRank < carrier.RetentionRank
+                        || survivor.RetentionRank == carrier.RetentionRank
+                            && CompareOrderedMutationRepresentatives(survivor, carrier) < 0)
+                    {
+                        carrier = survivor;
+                    }
+                }
+                (carrier ?? throw new InvalidOperationException(
+                    "有序变异 continuation carrier 分组不能为空。"))
+                    .OrderedMutationContinuationBridge = true;
             }
         }
 
@@ -1345,11 +1352,27 @@ internal sealed partial class CombatBeamSolver
             List<T> representatives = [];
             foreach (IGrouping<TKey, T> obligation in candidates.GroupBy(obligationSelector))
             {
-                List<T> members = obligation.ToList();
-                List<T> selected = members.Where(isAlreadySelected).ToList();
-                representatives.Add((selected.Count > 0 ? selected : members)
-                    .OrderBy(candidate => candidate, comparer)
-                    .First());
+                bool hasAny = false;
+                bool hasSelected = false;
+                T bestAny = default!;
+                T bestSelected = default!;
+                foreach (T candidate in obligation)
+                {
+                    if (!hasAny || comparer.Compare(candidate, bestAny) < 0)
+                    {
+                        bestAny = candidate;
+                        hasAny = true;
+                    }
+                    if (isAlreadySelected(candidate)
+                        && (!hasSelected || comparer.Compare(candidate, bestSelected) < 0))
+                    {
+                        bestSelected = candidate;
+                        hasSelected = true;
+                    }
+                }
+                if (!hasAny)
+                    throw new InvalidOperationException("有序变异 obligation 分组不能为空。");
+                representatives.Add(hasSelected ? bestSelected : bestAny);
             }
             representatives.Sort(comparison);
             return representatives;

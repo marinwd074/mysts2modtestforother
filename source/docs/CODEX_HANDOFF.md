@@ -41,6 +41,7 @@
 - 不通过增加搜索时间、Beam、内存或 GC 预算掩盖正确性问题。
 - v0.18 起 `SearchGcPolicy` 的测试暂停/故障注入/计数接口独立到 `SearchGcPolicy.TestHooks.cs`；主文件只维护真实 GC 策略。
 - v0.19 起高频 GC 详细追踪默认关闭；`COMBATSOLVER_GC_DIAGNOSTICS=1`、performance recording 或无人测试会重新开启，GC 行为不变。
+- v0.20 将 ordered-mutation retention 中 3 处只为选最佳项而产生的 List/排序改为稳定单遍扫描；排名和 tie-break 不变。
 
 ## 验证入口
 

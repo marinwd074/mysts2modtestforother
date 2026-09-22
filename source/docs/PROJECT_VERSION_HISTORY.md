@@ -4,6 +4,14 @@
 > 基础代码仍以 CombatSolver 0.40.2 为起点；本表只描述这个 fork 从开始改造后的能力演进。  
 > 版本号按里程碑归并，不要求一版对应一个 commit。细节需要时再查对应 Git 历史。
 
+## v0.20 — Ordered Mutation 保留分配优化
+**2026-09-22**
+
+- ordered-mutation continuation 的 survivor 选择改为单遍扫描，去掉仅为 `Aggregate` 服务的临时 `List`。
+- sibling carrier 从 `ToList + OrderBy + ThenBy` 改为稳定单遍最小选择，保留原 RetentionRank / representative tie-break。
+- obligation fulfillment 不再为每组创建 members/selected 两个 List 并排序，而是一遍同时维护 overall / already-selected 最优项。
+- 所有比较器、优先级和 exact-tie 首项稳定性保持不变；只减少分配与 O(n log n) 排序。
+
 ## v0.19 — GC 热路径诊断降噪
 **2026-09-22**
 
