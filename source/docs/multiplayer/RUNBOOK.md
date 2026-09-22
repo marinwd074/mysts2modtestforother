@@ -101,7 +101,18 @@ pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
 
 然后再进行 Host/Join/Ready 和对应 Smoke。
 
-## Multiplayer Console Fixture v1
+## Multiplayer Console Fixture v1 — 非正式联机证据
+
+> **2026-09-22 实机限制：不要再用 Console Fixture 构造正式 Host/Client 证据。**
+> 已确认在目标 0.107.1 联机中，启用/执行控制台相关 fixture 会触发“游戏数据不相同”
+> 一类联机一致性/不同步提示；提示中出现的 `1000` 很可能是本地 FastMP ClientId/NetId，
+> 不是应被解释为某个卡牌/数值数据本身。无论具体内部校验点为何，该运行已经受到
+> debug state injection 干扰，因此不得用来证明 MultiplayerOnly、Tag Team、Beacon 等
+> 原生多人语义或 Safe Execute runtime 能力。
+>
+> Console Fixture 仅保留给离线/隔离诊断、命令链路开发和合成 validator。正式多人
+> differential 必须从正常游戏状态进入，或只使用不改变游戏状态的 observation patch。
+
 
 Console Fixture 只用于 owned `ClientCombatSolver` Multiplayer Lab 实例，用游戏自己的
 `DevConsole.ProcessCommand()` 执行命令。真实多人中，命令仍由游戏检查 `IsNetworked`，
@@ -119,7 +130,7 @@ pwsh -NoLogo -NoProfile -File .\validate-console-fixture.ps1 `
   -FixturePath .\fixtures\tag-team-basic.example.json
 ~~~
 
-然后把 fixture 交给 **正式重启后的 Solver Client**：
+以下启动方式仅供**隔离诊断**复现 console command 链路，不属于正式 multiplayer evidence：
 
 ~~~powershell
 pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
@@ -136,7 +147,7 @@ pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
 执行 fixture。它不会修改正常 `settings.save`，而是在 Lab 进程内部创建允许 debug
 commands 的 `DevConsole`。
 
-进入真实多人战斗并到 Solver Client 的可操作回合后，fixture 只执行一次。日志应按顺序出现
+若为了诊断仍在 owned Lab 中运行 fixture，它只执行一次；该运行即使连接成功也必须标记为 diagnostic-only。日志应按顺序出现
 `FIXTURE_ARMED`、每条命令的 `FIXTURE_COMMAND_START` / `FIXTURE_COMMAND_RESULT`，最后
 `FIXTURE_COMPLETE`。运行时链路验证：
 
