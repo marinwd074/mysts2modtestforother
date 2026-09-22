@@ -422,7 +422,9 @@ internal sealed partial class CombatBeamSolver
                     && candidate.HasCurrentTurnCardAction)
                 .ThenBy(candidate => candidate.Features.ActionCount)
                 .ToList();
-            if (emitDiagnostics && routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn)
+            if (emitDiagnostics
+                && routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
+                && selected.Count > 0)
             {
                 diagnostics.Info(
                     $"[CombatSolver/Multiplayer] MP_OBJECTIVE strategy={multiplayerCombatObjectiveStrategy} " +

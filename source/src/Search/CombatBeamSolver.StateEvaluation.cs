@@ -609,7 +609,7 @@ internal sealed partial class CombatBeamSolver
         };
     }
 
-    private static (int CumulativeHpLost, double TeamLossRatio, double WorstPlayerLossRatio, bool AllAlive)
+    private (int CumulativeHpLost, double TeamLossRatio, double WorstPlayerLossRatio, bool AllAlive)
         CaptureTeamLossMetrics(
             CombatPredictionSimulator simulator,
             SimulatedCombatState combat)
@@ -623,7 +623,7 @@ internal sealed partial class CombatBeamSolver
             Creature creature = capturedPlayer.Creature;
             int lost = Math.Max(0, combat.GetCumulativeHpLost(creature));
             cumulativeHpLost = checked(cumulativeHpLost + lost);
-            double ratio = lost / (double)Math.Max(1, creature.MaxHp);
+            double ratio = lost / (double)Math.Max(1, root.CapturedPlayerMaxHp(capturedPlayer));
             teamLossRatio += ratio;
             worstPlayerLossRatio = Math.Max(worstPlayerLossRatio, ratio);
             allAlive &= simulator.State.GetCreature(creature).IsAlive;

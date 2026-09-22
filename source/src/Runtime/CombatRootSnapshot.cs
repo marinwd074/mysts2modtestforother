@@ -72,6 +72,23 @@ internal sealed class CombatRootSnapshot
     /// remote players or creatures through this property.
     /// </summary>
     public MultiplayerCarryRankingContext CarryRankingContext { get; }
+    internal int CapturedPlayerMaxHp(Player player)
+    {
+        if (ReferenceEquals(player, PlayerIdentity))
+            return InitialPlayerMaxHp;
+
+        string netId = player.NetId.ToString();
+        for (int index = 0; index < TeammateForecastStates.Count; index++)
+        {
+            MultiplayerTeammateForecastState teammate = TeammateForecastStates[index];
+            if (string.Equals(teammate.NetId, netId, StringComparison.Ordinal))
+                return teammate.MaxHp;
+        }
+
+        throw new InvalidOperationException(
+            $"Captured multiplayer root has no max-HP baseline for player {netId}.");
+    }
+
     internal HookLayoutCacheStatistics HookLayoutCacheStatistics
         => ((SimulatedCombatState)_rootSimulator.State.CombatState).HookLayoutCacheStatistics;
     internal HookListenerSegmentStatistics HookListenerSegmentStatistics
