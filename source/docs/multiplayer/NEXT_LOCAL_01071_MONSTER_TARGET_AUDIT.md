@@ -26,6 +26,23 @@ Repository commits `7f3c0634`, `8bf42128`, `6eee0070`, `3f1fb7c2` already establ
 
 Do not change those paths unless the pinned DLL contradicts them.
 
+## Ready-made local extractor
+
+Do not hand-decompile the whole DLL first. Run the repository tool against the pinned
+`game-body` directory:
+
+```powershell
+dotnet run --project .\source\tools\Sts2LocalInspector\Sts2LocalInspector.csproj -c Release -- `
+  --game-dir .\game-body `
+  --monster-move-il-output .\.local\game-inspection\monster-moves-0.107.1.json
+```
+
+The command refuses to emit monster evidence unless `sts2.dll` matches the exact
+0.107.1 SHA-256 above. It reads PE/.NET metadata only and exports both outer `*Move*`
+methods and compiler-generated async `<XxxMove>d__*.MoveNext` bodies with resolved
+member/string tokens. Use that JSON as the first machine-readable evidence source;
+only open a decompiler for cases whose target/RNG flow is still ambiguous.
+
 ## Exact audit target
 
 Compare the pinned 0.107.1 implementation of each listed move with
