@@ -18,6 +18,8 @@
    - 只有专门验证 Steam transport 时才使用 `-AllowSteam`；普通 FastMP / Lab 不要开 Steam。
 
 2. **Modded Client 第一次启动不是测试运行。**
+   - 每次启动 Client 都必须显式传入非空的 `-MultiplayerMode`；正式 safe-execute 流程使用
+     `-MultiplayerMode safe-execute`。
    - `ClientRitsuOnly` / `ClientCombatSolver` 第一次启动会先加载 Mod，并需要重启一次游戏。
    - 完成 Mod 加载和这次重启后，再启动同一个 Client instance；**第二次启动才用于 Host/Join/Ready/Smoke**。
    - 第一次 warm-up 的日志不能作为 multiplayer runtime evidence。
@@ -85,6 +87,7 @@ pwsh -NoLogo -NoProfile -File .\start-host.ps1 `
 pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
   -InstanceRoot "$labRoot\runtime-mp-client-solver" `
   -ClientId 1000 `
+  -MultiplayerMode safe-execute `
   -ForceSteamOff
 ~~~
 

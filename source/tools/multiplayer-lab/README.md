@@ -58,7 +58,8 @@ Lobby、wire 或战斗证据。
   加入、选角色和 Ready。`-ClientId` 只用于同一台机器上同时运行多个
   `FastMpJoin` 客户端；原生默认值是 `1000`，每个客户端必须使用不同的
   非零 ID。`-FastMpMode host|join` 只在显式指定时传给当前二进制。
-  `-MultiplayerMode probe|advisor|safe-execute|safe-execute-lab` 只设置当前 Lab 进程环境；
+   `start-client.ps1` 要求显式传入非空的
+   `-MultiplayerMode probe|advisor|safe-execute|safe-execute-lab`，只设置当前 Lab 进程环境；
   `safe-execute-lab` 额外要求 `ClientCombatSolver` ownership/profile marker
   和 Lab Probe evidence 环境；`safe-execute` 是明确的正式能力 opt-in。
 - 当前 Modded Client 的固定流程是：**第一次启动只用于加载 Mod；完成 Mod 加载并
@@ -149,6 +150,7 @@ pwsh -NoLogo -NoProfile -File .\start-host.ps1 `
 pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
   -InstanceRoot "$labRoot\runtime-mp-client-solver" `
   -ClientId 1000 `
+  -MultiplayerMode safe-execute `
   -ForceSteamOff
 ~~~
 

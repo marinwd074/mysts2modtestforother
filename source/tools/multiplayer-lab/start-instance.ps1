@@ -45,12 +45,28 @@ if ($Role -eq 'Host' -and $profileName -ne 'HostVanilla') {
 if ($Role -eq 'Client' -and $profileName -eq 'HostVanilla') {
     throw 'Client launcher cannot use a HostVanilla instance.'
 }
+if ($Role -eq 'Client' -and [string]::IsNullOrWhiteSpace($MultiplayerMode)) {
+    throw 'Client launcher requires a non-empty -MultiplayerMode (probe, advisor, safe-execute, or safe-execute-lab).'
+}
 if ($Role -eq 'Host' -and $ClientId -ne 0) {
     throw 'ClientId is only valid for a Client launcher.'
 }
 
 $existingState = Get-MultiplayerOwnedProcessState $instance
 if ($existingState.state -eq 'Owned') {
+    if ($Role -eq 'Client') {
+        $existingMultiplayerMode = if ($existingState.marker.ContainsKey('multiplayerMode')) {
+            [string]$existingState.marker.multiplayerMode
+        } else {
+            ''
+        }
+        if (-not [string]::Equals(
+                $existingMultiplayerMode,
+                $MultiplayerMode,
+                [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Client is already running with multiplayerMode '$existingMultiplayerMode'; stop it before starting with '$MultiplayerMode'."
+        }
+    }
     [ordered]@{
         status = 'ALREADY_RUNNING'
         role = $Role
