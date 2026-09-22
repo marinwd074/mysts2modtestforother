@@ -2,6 +2,13 @@
 
 ## 当前技术状态
 
+### 2026-09-22 TheBookOfAges 多人测试控制台接入
+
+- 选定现成 `TheBookOfAges / GM Console` 作为多人 fixture 控制台候选。作者公开页面明确标注 Multiplayer Supported；公开源码 manifest 为 `v1.0.8`、`min_game_version=0.107.1`、依赖 `BaseLib >= 3.3.0`。
+- 新增 `source/tools/multiplayer-lab/install-the-book-of-ages.ps1`，从本机 Steam Workshop item `3747634356`（TheBookOfAges）和 `3737335127`（BaseLib）提取必须文件并安装到所有指定 owned Host/Client instance；每端 SHA-256 必须一致，运行中的实例拒绝修改。
+- 第三方仓库没有声明许可证，因此不把其 DLL/PCK/源码复制进本公开仓库；脚本只消费用户本机已经下载的 Workshop 内容。
+- 下一步优先验证“所有端同装后，用 GM Console 给指定玩家加一张测试牌”是否仍出现 game-data mismatch。只有同步稳定后才把它用于 Tag Team / MultiplayerOnly runtime fixture。
+
 ### 2026-09-22 Shared Console Mod 测试路径
 
 - 为后续多人卡 fixture 增加 `source/tools/multiplayer-lab/install-shared-console-mod.ps1`：用户提供本地 JSON-only console enabler，脚本把同一文件安装到所有指定 owned Host/Client instance，并逐端校验 SHA-256。

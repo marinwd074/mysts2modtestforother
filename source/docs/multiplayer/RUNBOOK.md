@@ -101,6 +101,39 @@ pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
 
 然后再进行 Host/Join/Ready 和对应 Smoke。
 
+## TheBookOfAges / GM Console（推荐多人测试工具）
+
+已选用现成的 **岁月史书 TheBookOfAges / GM Console** 作为下一阶段多人测试控制台。
+作者公开说明该 Mod 支持多人修改；公开源码 manifest 为 `v1.0.8`，
+`min_game_version=0.107.1`，依赖 `BaseLib >= 3.3.0`。Steam Workshop Item：
+
+- TheBookOfAges: `3747634356`
+- BaseLib: `3737335127`
+
+仓库不转载第三方 DLL/PCK。使用
+`install-the-book-of-ages.ps1` 从本机 Steam Workshop 已下载内容中提取
+`BaseLib.{json,dll,pck}` 和 `TheBookOfAges.{json,dll,pck}`，并把字节完全相同的文件
+安装到本轮所有 owned Host/Client instance。
+
+~~~powershell
+$labRoot = 'D:\yingye\CombatSolver\.local\multiplayer-lab'
+pwsh -NoLogo -NoProfile -File .\install-the-book-of-ages.ps1 `
+  -InstanceRoot @(
+    "$labRoot\runtime-mp-host",
+    "$labRoot\runtime-mp-client-solver",
+    "$labRoot\runtime-mp-client-observer"
+  )
+~~~
+
+要求：
+
+- Steam Workshop 对应 item 必须已经下载到本机；缺失时脚本直接失败，不静默换版本。
+- 所有参与端使用相同来源文件，脚本逐文件 SHA-256 校验。
+- instance 正在运行时拒绝安装。
+- game snapshot rebuild 后重新运行安装脚本。
+- 该 Mod 本身标注支持联机，但 **CombatSolver 的正式 evidence 仍需验证具体 GM 操作是否在
+  pinned 0.107.1 下保持 Host/Client 状态一致**；先从加牌/能量这种最小 fixture 开始。
+
 ## Shared Console Mod（所有端同装）
 
 为了避免“只有 Solver Client 开控制台”造成联机 Mod/数据不一致，Lab 现在提供
