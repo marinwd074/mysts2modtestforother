@@ -892,7 +892,7 @@ internal static partial class SolverController
             {
                 Entry.Logger.Info(
                     $"[CombatSolver/MultiplayerSafeExecute] MP_SAFE_AUTO_ARMED " +
-                    $"generation={generation} turn={result.StartTurnNumber} " +
+                    $"source=search_completion generation={generation} turn={result.StartTurnNumber} " +
                     $"world_version={MultiplayerWorldTracker.WorldVersion}");
             }
         }

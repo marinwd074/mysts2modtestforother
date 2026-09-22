@@ -66,6 +66,7 @@ try {
     Invoke-PowerShellContract 'MultiplayerSafeExecuteMp2BEvidenceChecks' 'tools/multiplayer-lab/test-mp2b-validator.ps1'
     Invoke-PowerShellContract 'MultiplayerSafeExecuteMp2BInterferenceChecks' 'tools/multiplayer-lab/test-mp2b-interference-validator.ps1'
     Invoke-PowerShellContract 'MultiplayerReactiveCarryEvidenceChecks' 'tools/multiplayer-lab/test-reactive-carry-validator.ps1'
+    Invoke-PowerShellContract 'MultiplayerSafeAutoEvidenceChecks' 'tools/multiplayer-lab/test-safe-auto-validator.ps1'
     Invoke-PowerShellContract 'MultiplayerCarryRankingEvidenceChecks' 'tools/multiplayer-lab/test-carry-ranking-validator.ps1'
     Invoke-PowerShellContract 'MultiplayerSnapshotChecks' 'tools/test-headless-runtime.ps1' -Arguments @('-MultiplayerSnapshot')
 

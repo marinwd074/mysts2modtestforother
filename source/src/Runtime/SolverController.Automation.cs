@@ -135,6 +135,10 @@ internal static partial class SolverController
             LiveCombatStamp current = LiveCombatStamp.Capture(state);
             if (_combat.LatestResult != null && _combat.LatestStamp == current)
             {
+                Entry.Logger.Info(
+                    $"[CombatSolver/MultiplayerSafeExecute] MP_SAFE_AUTO_ARMED " +
+                    $"source=existing_result turn={LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0} " +
+                    $"world_version={MultiplayerWorldTracker.WorldVersion}");
                 StartDeployment(host, state, _combat.LatestResult);
                 return;
             }
