@@ -104,7 +104,8 @@ $sequenceEvidence = [Collections.Generic.List[string]]::new()
 $sequenceProblems = [Collections.Generic.List[string]]::new()
 $cursor = if ($armed.Count -gt 0) { [int]$armed[0].Index } else { -1 }
 for ($index = 0; $index -lt $fixture.Commands.Count; $index++) {
-    $startPattern = '\[CombatSolver/MultiplayerFixture\] FIXTURE_COMMAND_START\b.*\bname=' + $escapedName + '\b.*\bindex=' + $index + '\b'
+    $expectedCommandJson = ([string]$fixture.Commands[$index] | ConvertTo-Json -Compress)
+    $startPattern = '\[CombatSolver/MultiplayerFixture\] FIXTURE_COMMAND_START\b.*\bname=' + $escapedName + '\b.*\bindex=' + $index + '\b.*\bcommand=' + [regex]::Escape($expectedCommandJson) + '(?:\s|$)'
     $starts = Find-FirstAfter -AfterIndex $cursor -Pattern $startPattern
     if ($starts.Count -ne 1) {
         $sequenceProblems.Add("index=$index missing FIXTURE_COMMAND_START")
