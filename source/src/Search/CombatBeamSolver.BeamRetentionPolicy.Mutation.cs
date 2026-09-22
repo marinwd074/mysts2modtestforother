@@ -2511,10 +2511,16 @@ internal sealed partial class CombatBeamSolver
                 IEnumerable<OrderedMutationContinuationPacket> packets,
                 IComparer<OrderedMutationContinuationPacket> comparer)
         {
-            List<OrderedMutationContinuationPacket> candidates = packets.ToList();
-            OrderedMutationContinuationPacket qualityLeader = candidates
-                .OrderBy(packet => packet, comparer)
-                .First();
+            List<OrderedMutationContinuationPacket> candidates = [];
+            OrderedMutationContinuationPacket? qualityLeader = null;
+            foreach (OrderedMutationContinuationPacket packet in packets)
+            {
+                candidates.Add(packet);
+                if (qualityLeader == null || comparer.Compare(packet, qualityLeader) < 0)
+                    qualityLeader = packet;
+            }
+            qualityLeader ??= throw new InvalidOperationException(
+                "有序变异 continuation packet 分组不能为空。");
             SearchNode qualityOutcome = qualityLeader.Candidates[0];
             StateFingerprint qualityOption =
                 BuildOrderedMutationContinuationOptionKey(qualityOutcome.Action!);
@@ -2670,15 +2676,61 @@ internal sealed partial class CombatBeamSolver
                          OrderedMutationAdmissionClaimSource> outcome in
                      sources.GroupBy(source => source.Key))
             {
-                List<OrderedMutationAdmissionClaimSource> members = outcome.ToList();
-                OrderedMutationAdmissionClaimSource representative = members
-                    .OrderByDescending(source => selected.Contains(source.Candidate))
-                    .ThenBy(source => source.Packet, packetComparer)
-                    .ThenBy(source => source.Reason)
-                    .First();
-                HashSet<OrderedMutationAdmissionClaimReason> reasons = members
-                    .Select(source => source.Reason)
-                    .ToHashSet();
+                bool hasRepresentative = false;
+                bool representativeSelected = false;
+                OrderedMutationAdmissionClaimSource representative = default;
+                HashSet<OrderedMutationAdmissionClaimReason> reasons = [];
+                bool handoffCrossedProofBoundary = false;
+                bool observationCrossedProofBoundary = false;
+                bool counterfactualContinuationHandoff = false;
+                bool counterfactualRequestsObservation = false;
+                bool ordinaryCrossedProofBoundary = false;
+                bool ordinaryContinuationHandoff = false;
+                bool ordinaryRequestsObservation = false;
+
+                foreach (OrderedMutationAdmissionClaimSource source in outcome)
+                {
+                    bool sourceSelected = selected.Contains(source.Candidate);
+                    if (!hasRepresentative
+                        || sourceSelected && !representativeSelected
+                        || sourceSelected == representativeSelected
+                            && packetComparer.Compare(source.Packet, representative.Packet) < 0
+                        || sourceSelected == representativeSelected
+                            && packetComparer.Compare(source.Packet, representative.Packet) == 0
+                            && source.Reason < representative.Reason)
+                    {
+                        representative = source;
+                        representativeSelected = sourceSelected;
+                        hasRepresentative = true;
+                    }
+
+                    reasons.Add(source.Reason);
+                    handoffCrossedProofBoundary |=
+                        source.Reason == OrderedMutationAdmissionClaimReason.Handoff
+                        && source.CrossedProofBoundary;
+                    observationCrossedProofBoundary |=
+                        source.Reason == OrderedMutationAdmissionClaimReason.Observation
+                        && source.CrossedProofBoundary;
+                    counterfactualContinuationHandoff |=
+                        source.Reason == OrderedMutationAdmissionClaimReason.Counterfactual
+                        && source.ContinuationHandoff;
+                    counterfactualRequestsObservation |=
+                        source.Reason == OrderedMutationAdmissionClaimReason.Counterfactual
+                        && source.RequestsObservation;
+                    ordinaryCrossedProofBoundary |=
+                        source.Reason == OrderedMutationAdmissionClaimReason.Ordinary
+                        && source.CrossedProofBoundary;
+                    ordinaryContinuationHandoff |=
+                        source.Reason == OrderedMutationAdmissionClaimReason.Ordinary
+                        && source.ContinuationHandoff;
+                    ordinaryRequestsObservation |=
+                        source.Reason == OrderedMutationAdmissionClaimReason.Ordinary
+                        && source.RequestsObservation;
+                }
+
+                if (!hasRepresentative)
+                    throw new InvalidOperationException("有序变异 admission claim 分组不能为空。");
+
                 claims.Add(new OrderedMutationAdmissionClaim(
                     outcome.Key,
                     representative.Packet with
@@ -2687,27 +2739,13 @@ internal sealed partial class CombatBeamSolver
                     },
                     representative.Candidate,
                     reasons,
-                    HandoffCrossedProofBoundary: members.Any(source =>
-                        source.Reason == OrderedMutationAdmissionClaimReason.Handoff
-                        && source.CrossedProofBoundary),
-                    ObservationCrossedProofBoundary: members.Any(source =>
-                        source.Reason == OrderedMutationAdmissionClaimReason.Observation
-                        && source.CrossedProofBoundary),
-                    CounterfactualContinuationHandoff: members.Any(source =>
-                        source.Reason == OrderedMutationAdmissionClaimReason.Counterfactual
-                        && source.ContinuationHandoff),
-                    CounterfactualRequestsObservation: members.Any(source =>
-                        source.Reason == OrderedMutationAdmissionClaimReason.Counterfactual
-                        && source.RequestsObservation),
-                    OrdinaryCrossedProofBoundary: members.Any(source =>
-                        source.Reason == OrderedMutationAdmissionClaimReason.Ordinary
-                        && source.CrossedProofBoundary),
-                    OrdinaryContinuationHandoff: members.Any(source =>
-                        source.Reason == OrderedMutationAdmissionClaimReason.Ordinary
-                        && source.ContinuationHandoff),
-                    OrdinaryRequestsObservation: members.Any(source =>
-                        source.Reason == OrderedMutationAdmissionClaimReason.Ordinary
-                        && source.RequestsObservation)));
+                    handoffCrossedProofBoundary,
+                    observationCrossedProofBoundary,
+                    counterfactualContinuationHandoff,
+                    counterfactualRequestsObservation,
+                    ordinaryCrossedProofBoundary,
+                    ordinaryContinuationHandoff,
+                    ordinaryRequestsObservation));
             }
             return claims;
         }

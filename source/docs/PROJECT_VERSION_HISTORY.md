@@ -4,6 +4,13 @@
 > 基础代码仍以 CombatSolver 0.40.2 为起点；本表只描述这个 fork 从开始改造后的能力演进。  
 > 版本号按里程碑归并，不要求一版对应一个 commit。细节需要时再查对应 Git 历史。
 
+## v0.21 — Ordered Mutation 分组扫描优化
+**2026-09-22**
+
+- continuation packet quality leader 从完整排序改为在保留 candidates 的同时单遍选最优。
+- admission claim coalesce 从 `ToList + 排序 + 多次 Any/Select` 改为单遍同时选择 representative、收集 reason 和聚合布尔标记。
+- 原 selected-first、packet comparer、reason 顺序与 exact-tie 首项稳定性保持不变。
+
 ## v0.20 — Ordered Mutation 保留分配优化
 **2026-09-22**
 
