@@ -312,6 +312,8 @@ internal static partial class SolverController
         _combat.AutomaticSearchPaused = false;
         _combat.AutomaticSearchPausedTurn = null;
         _combat.FullAutoEnabled = false;
+        _combat.MultiplayerSafeAutoEnabled = false;
+        _combat.MultiplayerSafeExecuteDeploymentRequested = false;
         if (_search is not { } search)
         {
             PlayerTurnSetupCoordinator.ApplyCurrentTurn();
@@ -343,6 +345,8 @@ internal static partial class SolverController
         }
         _combat.AutomaticSearchPaused = false;
         _combat.AutomaticSearchPausedTurn = null;
+        _combat.MultiplayerSafeAutoEnabled = false;
+        _combat.MultiplayerSafeExecuteDeploymentRequested = false;
         if (_search is not { } search)
         {
             if (TryAdoptStoppedRoute())
