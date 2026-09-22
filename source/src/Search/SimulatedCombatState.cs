@@ -265,6 +265,8 @@ internal sealed partial class SimulatedCombatState
         _rootCapturedPlayers = localPlayerOnly is null
             ? _players
             : [localPlayerOnly];
+        if (localActionPlayer != null && !_rootCapturedPlayers.Contains(localActionPlayer))
+            throw new InvalidOperationException("动作玩家必须属于已捕获的可读玩家范围。");
         _rootActionPlayers = localActionPlayer is null
             ? _rootCapturedPlayers
             : [localActionPlayer];
