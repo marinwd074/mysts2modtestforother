@@ -8,6 +8,13 @@
 
 <!-- project-versions -->
 
+## 1.64 — 执行：多人 Safe Auto
+
+2026-09-22 · 大更新 · `project-v1.64`
+
+- 新增：增加独立 Safe Auto 开关，通过已有 Safe Execute 连续运行本地回合。
+- 修复：处理显式停止、人工接管、debounce 和本地手动出牌边界。
+
 ## 1.54 — 仓库：公开仓库脱敏与 CI 权限
 
 2026-09-22 · 小更新 · `project-v1.54`

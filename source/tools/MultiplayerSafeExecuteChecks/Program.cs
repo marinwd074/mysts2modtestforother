@@ -366,4 +366,29 @@ Check(
         && repeatedRemoteReason == "session_state_Aborted",
     "Repeated remote changes never re-authorize an aborted deployment.");
 
+Check(
+    MultiplayerSafeExecutePolicy.ShouldAutoDeploy(
+        safeAutoEnabled: true,
+        explicitDeploymentRequested: false)
+        && MultiplayerSafeExecutePolicy.ShouldAutoDeploy(
+            safeAutoEnabled: false,
+            explicitDeploymentRequested: true)
+        && !MultiplayerSafeExecutePolicy.ShouldAutoDeploy(
+            safeAutoEnabled: false,
+            explicitDeploymentRequested: false),
+    "Safe Auto or one explicit request may arm deployment, but an advisor-only result cannot.");
+
+Check(
+    MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(SafeLocalActionDecision.Allow)
+        && MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(
+            new(false, MultiplayerSafeExecutePolicy.BoundedActionCeilingReason)),
+    "A completed safe prefix or bounded action ceiling keeps Safe Auto eligible for a fresh search.");
+
+Check(
+    !MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(new(false, "choice_required"))
+        && !MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(new(false, "kind_usepotion"))
+        && !MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(
+            new(false, "remote_player_or_unknown_target")),
+    "Unsupported Choice, Potion, or teammate/unknown-target boundaries stop Safe Auto instead of looping.");
+
 Console.WriteLine($"PASS: {checks} multiplayer safe-execute policy checks");

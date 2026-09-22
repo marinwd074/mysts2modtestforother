@@ -349,6 +349,15 @@ internal static class MultiplayerSafeExecutePolicy
             ? new(false, BoundedActionCeilingReason)
             : SafeLocalActionDecision.Allow;
 
+    internal static bool ShouldAutoDeploy(
+        bool safeAutoEnabled,
+        bool explicitDeploymentRequested)
+        => safeAutoEnabled || explicitDeploymentRequested;
+
+    internal static bool ShouldKeepSafeAutoAfterBoundary(SafeLocalActionDecision stop)
+        => stop.IsSafe
+           || string.Equals(stop.Reason, BoundedActionCeilingReason, StringComparison.Ordinal);
+
     internal static IReadOnlyList<T> TakeBoundedSafePrefix<T>(
         IReadOnlyList<T> actions,
         Func<T, SafeLocalActionDecision> classify,

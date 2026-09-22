@@ -90,6 +90,64 @@ internal static partial class SolverController
             RequestSearch(host, state, SearchReason.FullAuto);
     }
 
+    public static void SetMultiplayerSafeAuto(NGame host, CombatState state, bool enabled)
+    {
+        AssertMainThread();
+        SolverDispatcher.Ensure(host);
+        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
+
+        if (!enabled)
+        {
+            _combat.MultiplayerSafeAutoEnabled = false;
+            _combat.MultiplayerSafeExecuteDeploymentRequested = false;
+            Entry.Logger.Info("[CombatSolver/MultiplayerSafeExecute] MP_SAFE_AUTO enabled=false reason=user");
+            SolverOverlay.RefreshControls();
+            return;
+        }
+
+        if (capabilities.Kind != SolverSessionKind.MultiplayerSafeExecute)
+        {
+            _combat.MultiplayerSafeAutoEnabled = false;
+            _combat.MultiplayerSafeExecuteDeploymentRequested = false;
+            Entry.Logger.Info(
+                $"[CombatSolver/MultiplayerSafeExecute] MP_SAFE_AUTO_REJECT kind={capabilities.Kind}");
+            SolverOverlay.RefreshControls();
+            return;
+        }
+
+        _combat.FullAutoEnabled = false;
+        _combat.MultiplayerSafeAutoEnabled = true;
+        if (_combat.AutomaticSearchPaused)
+        {
+            _combat.AutomaticSearchPaused = false;
+            _combat.AutomaticSearchPausedTurn = null;
+        }
+        Entry.Logger.Info(
+            $"[CombatSolver/MultiplayerSafeExecute] MP_SAFE_AUTO enabled=true " +
+            $"world_version={MultiplayerWorldTracker.WorldVersion}");
+        SolverOverlay.RefreshControls();
+
+        if (_deployment != null)
+            return;
+
+        if (CanSolve(state, out _))
+        {
+            LiveCombatStamp current = LiveCombatStamp.Capture(state);
+            if (_combat.LatestResult != null && _combat.LatestStamp == current)
+            {
+                Entry.Logger.Info(
+                    $"[CombatSolver/MultiplayerSafeExecute] MP_SAFE_AUTO_ARMED " +
+                    $"source=existing_result turn={LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0} " +
+                    $"world_version={MultiplayerWorldTracker.WorldVersion}");
+                StartDeployment(host, state, _combat.LatestResult);
+                return;
+            }
+        }
+
+        if (_search == null)
+            TryScheduleMultiplayerSearch(host, state);
+    }
+
     public static bool PrepareAutomaticSearchForTurn(NGame host, CombatState state)
     {
         AssertMainThread();
@@ -178,6 +236,8 @@ internal static partial class SolverController
                 SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Canceled);
             CancelDeployment();
             _combat.FullAutoEnabled = false;
+            _combat.MultiplayerSafeAutoEnabled = false;
+            _combat.MultiplayerSafeExecuteDeploymentRequested = false;
             _combat.State = null;
             _combat.LatestResult = null;
             _combat.LatestStamp = null;
@@ -215,6 +275,8 @@ internal static partial class SolverController
         bool controllerSearchCanceled = _search != null || _deferredSearchCts != null;
         int? generation = _search?.Generation;
         _combat.FullAutoEnabled = false;
+        _combat.MultiplayerSafeAutoEnabled = false;
+        _combat.MultiplayerSafeExecuteDeploymentRequested = false;
         _combat.AutomaticSearchPaused = true;
         _combat.AutomaticSearchPausedTurn = LocalContext.GetMe(
             CombatManager.Instance.DebugOnlyGetState())?.PlayerCombatState?.TurnNumber;
@@ -254,6 +316,8 @@ internal static partial class SolverController
         _combat.AutomaticSearchPaused = false;
         _combat.AutomaticSearchPausedTurn = null;
         _combat.FullAutoEnabled = false;
+        _combat.MultiplayerSafeAutoEnabled = false;
+        _combat.MultiplayerSafeExecuteDeploymentRequested = false;
         if (_search is not { } search)
         {
             PlayerTurnSetupCoordinator.ApplyCurrentTurn();
@@ -285,6 +349,8 @@ internal static partial class SolverController
         }
         _combat.AutomaticSearchPaused = false;
         _combat.AutomaticSearchPausedTurn = null;
+        _combat.MultiplayerSafeAutoEnabled = false;
+        _combat.MultiplayerSafeExecuteDeploymentRequested = false;
         if (_search is not { } search)
         {
             if (TryAdoptStoppedRoute())

@@ -1199,6 +1199,11 @@ internal static partial class SolverOverlay
         bool canAdoptRoute = SolverController.CanAdoptCurrentRoute;
         bool canApplyCurrentTurn = SolverController.CanApplyCurrentTurn;
         bool canExecuteCurrentTurn = SolverController.CanExecuteCurrentTurn;
+        bool multiplayerSafeAutoAvailable =
+            capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute;
+        bool displayedAutoEnabled = capabilities.IsMultiplayer
+            ? SolverController.MultiplayerSafeAutoEnabled
+            : SolverController.FullAutoEnabled;
         _recalculateButton.Text = !SolverController.AutomaticCalculationEnabled
             && !SolverController.HasCalculatedThisCombat
                 ? SolverText.Get("开始计算")
@@ -1240,14 +1245,15 @@ internal static partial class SolverOverlay
             _renderedExecuteButtonStyle = executeStyle;
         }
 
-        _fullAutoButton.Text = SolverText.Get(_multiplayerSession
-            ? "全自动：不可用"
-            : SolverController.FullAutoEnabled ? "全自动：开" : "全自动：关");
+        _fullAutoButton.Text = SolverText.Get(capabilities.IsMultiplayer
+            ? multiplayerSafeAutoAvailable
+                ? displayedAutoEnabled ? "安全自动：开" : "安全自动：关"
+                : "安全自动：不可用"
+            : displayedAutoEnabled ? "全自动：开" : "全自动：关");
         SolverUiTokens.ApplyButtonStyle(_fullAutoButton,
-            _multiplayerSession || !SolverController.FullAutoEnabled
-                ? SolverButtonStyle.Secondary
-                : SolverButtonStyle.Positive);
-        _fullAutoButton.Disabled = _multiplayerSession || solverDisabled || adoptingRoute;
+            !displayedAutoEnabled ? SolverButtonStyle.Secondary : SolverButtonStyle.Positive);
+        _fullAutoButton.Disabled = solverDisabled || adoptingRoute
+            || capabilities.IsMultiplayer && !multiplayerSafeAutoAvailable;
         if (_autoEnableFullAutoSwitch != null)
         {
             _autoEnableFullAutoSwitch.Disabled = _multiplayerSession;
@@ -1276,14 +1282,15 @@ internal static partial class SolverOverlay
             ApplyContentVisibility();
         RefreshMultiplayerModeBanner(capabilities);
         // Re-apply the button state after the live session capability is captured.
-        _fullAutoButton.Text = SolverText.Get(_multiplayerSession
-            ? "全自动：不可用"
-            : SolverController.FullAutoEnabled ? "全自动：开" : "全自动：关");
-        _fullAutoButton.Disabled = _multiplayerSession || solverDisabled || adoptingRoute;
+        _fullAutoButton.Text = SolverText.Get(capabilities.IsMultiplayer
+            ? multiplayerSafeAutoAvailable
+                ? displayedAutoEnabled ? "安全自动：开" : "安全自动：关"
+                : "安全自动：不可用"
+            : displayedAutoEnabled ? "全自动：开" : "全自动：关");
+        _fullAutoButton.Disabled = solverDisabled || adoptingRoute
+            || capabilities.IsMultiplayer && !multiplayerSafeAutoAvailable;
         SolverUiTokens.ApplyButtonStyle(_fullAutoButton,
-            _multiplayerSession || !SolverController.FullAutoEnabled
-                ? SolverButtonStyle.Secondary
-                : SolverButtonStyle.Positive);
+            !displayedAutoEnabled ? SolverButtonStyle.Secondary : SolverButtonStyle.Positive);
         if (_autoEnableFullAutoSwitch != null)
         {
             _autoEnableFullAutoSwitch.Disabled = _multiplayerSession;
@@ -2071,7 +2078,7 @@ internal static partial class SolverOverlay
             SolverSessionKind.MultiplayerAdvisor
                 => "多人精简模式：仅搜索本地玩家当前回合并显示建议；不会自动执行。",
             SolverSessionKind.MultiplayerSafeExecute
-                => "多人精简模式：仅执行已分类的本地普通牌和安全结束回合；不会自动用药或处理选择。",
+                => "多人安全执行：可开启“安全自动”；每回合重新验证后仅执行本地安全普通牌和安全结束回合，不自动用药或处理选择。",
             _ => "多人精简模式：当前能力受限。",
         };
         _multiplayerModeBannerLabel.Text = SolverText.Get(banner);
@@ -2796,14 +2803,25 @@ internal static partial class SolverOverlay
         Entry.Logger.Info("[CombatSolver/Test] UI_ACTION action=full_auto_toggle");
         NGame? host = NGame.Instance;
         CombatState? state = CombatManager.Instance.DebugOnlyGetState();
-        if (_multiplayerSession || SolverSessionCapabilities.Capture(state).IsMultiplayer)
-            return;
         if (host == null || state == null || !CombatManager.Instance.IsInProgress)
         {
             if (host != null)
                 Show(host, SolverText.Get("当前没有进行中的战斗。"));
             return;
         }
+
+        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
+        if (capabilities.IsMultiplayer)
+        {
+            if (capabilities.Kind != SolverSessionKind.MultiplayerSafeExecute)
+                return;
+            SolverController.SetMultiplayerSafeAuto(
+                host,
+                state,
+                !SolverController.MultiplayerSafeAutoEnabled);
+            return;
+        }
+
         SolverController.SetFullAuto(host, state, !SolverController.FullAutoEnabled);
     }
 
