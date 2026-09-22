@@ -162,6 +162,12 @@ internal sealed partial class CombatBeamSolver
         _run.Performance.End(SearchMetricPhase.ThreatProjection, threatMeasurement);
         int cumulativePlayerHpLost = combat.GetCumulativeHpLost(_player.Creature);
         int recoveredPlayerHp = combat.GetRecoveredHp(_player.Creature);
+        (
+            int teamCumulativeHpLost,
+            double teamLossRatio,
+            double worstPlayerLossRatio,
+            bool allPlayersAlive
+        ) = CaptureTeamLossMetrics(simulator, combat);
         int deathSaveRelicHpRestored = combat.DeathSaveRelicHpRestored;
         int deathSavePotionHpRestored = combat.DeathSavePotionHpRestored;
         int deathSaveHpRestored = deathSaveRelicHpRestored + deathSavePotionHpRestored;
@@ -596,7 +602,34 @@ internal sealed partial class CombatBeamSolver
             DeathSavePotionHpRestored = deathSavePotionHpRestored,
             DeathSaveUseCount = combat.DeathSaveUseCount,
             ProjectedDeathSaveUseCount = combat.DeathSaveUseCount + threat.DeathSaveUseCount,
+            AllPlayersAlive = allPlayersAlive,
+            TeamCumulativeHpLost = teamCumulativeHpLost,
+            TeamLossRatio = teamLossRatio,
+            WorstPlayerLossRatio = worstPlayerLossRatio,
         };
+    }
+
+    private static (int CumulativeHpLost, double TeamLossRatio, double WorstPlayerLossRatio, bool AllAlive)
+        CaptureTeamLossMetrics(
+            CombatPredictionSimulator simulator,
+            SimulatedCombatState combat)
+    {
+        int cumulativeHpLost = 0;
+        double teamLossRatio = 0d;
+        double worstPlayerLossRatio = 0d;
+        bool allAlive = true;
+        foreach (Player capturedPlayer in simulator.State.RootCapturedPlayers)
+        {
+            Creature creature = capturedPlayer.Creature;
+            int lost = Math.Max(0, combat.GetCumulativeHpLost(creature));
+            cumulativeHpLost = checked(cumulativeHpLost + lost);
+            double ratio = lost / (double)Math.Max(1, creature.MaxHp);
+            teamLossRatio += ratio;
+            worstPlayerLossRatio = Math.Max(worstPlayerLossRatio, ratio);
+            allAlive &= simulator.State.GetCreature(creature).IsAlive;
+        }
+
+        return (cumulativeHpLost, teamLossRatio, worstPlayerLossRatio, allAlive);
     }
 
     private static StateFingerprint BuildCycleShapeKey(

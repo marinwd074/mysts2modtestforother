@@ -1260,6 +1260,10 @@ internal sealed class SimulationSnapshot(
     public int DeathSaveHpRestored => DeathSaveRelicHpRestored + DeathSavePotionHpRestored;
     public int DeathSaveUseCount { get; init; }
     public int ProjectedDeathSaveUseCount { get; init; }
+    public bool AllPlayersAlive { get; init; } = true;
+    public int TeamCumulativeHpLost { get; init; }
+    public double TeamLossRatio { get; init; }
+    public double WorstPlayerLossRatio { get; init; }
 
     public int LongTermResourceValue { get; } = longTermResourceValue;
     public RelicCounterEvaluation RelicCounters { get; init; }
@@ -1392,6 +1396,10 @@ internal sealed record SolverSnapshot(
     public int DeathSaveHpRestored => DeathSaveRelicHpRestored + DeathSavePotionHpRestored;
     public int DeathSaveUseCount { get; init; }
     public int ProjectedDeathSaveUseCount { get; init; }
+    public bool AllPlayersAlive { get; init; } = true;
+    public int TeamCumulativeHpLost { get; init; }
+    public double TeamLossRatio { get; init; }
+    public double WorstPlayerLossRatio { get; init; }
     public int? UnrecoveredGold { get; init; }
     public int? UnrecoveredCards { get; init; }
     public RelicCounterEvaluation RelicCounters { get; init; }

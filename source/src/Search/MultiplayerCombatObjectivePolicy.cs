@@ -37,13 +37,12 @@ internal static class MultiplayerCombatObjectivePolicy
             && enemyDurabilityRatio <= LethalDurabilityRatioThreshold;
 
     internal static double LethalTempoScore(
-        int strategicHpDeficit,
-        int playerMaxHp,
+        double teamLossRatio,
         int combatEndedTurn,
         int startTurnNumber)
     {
-        double lossRatio = Math.Max(0, strategicHpDeficit) / (double)Math.Max(1, playerMaxHp);
         int turnsToEnd = Math.Max(0, combatEndedTurn - startTurnNumber);
-        return lossRatio + turnsToEnd * ExtraLossRatioPerTurnSaved;
+        return Math.Max(0d, teamLossRatio)
+            + turnsToEnd * ExtraLossRatioPerTurnSaved;
     }
 }

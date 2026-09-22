@@ -29,13 +29,13 @@
 - 单人搜索算法向多人本地跨回合模式的第一批迁移已落地：`SinglePlayerFullRoute` 与 `MultiplayerLocalCrossTurn` 现在共用 full-search heuristics，因此 Novelty Portfolio、成长预算、遗物目标、成长机会目标和长期收益评估不再因多人能力表中的 `CanCrossTurnSearch=false` 被关闭；`MultiplayerCurrentTurnOnly` 仍保持精简。执行权限、队友动作、共享 Shuffle RNG 边界和多人牌手动出牌规则均未放宽。
 - 问题包 `25b905c1322b41e6b9a8e10baeae5606` 复现 0 费 Anger 被遗漏：T2 手牌含 `ANGER(0)`，Solver 选择 Tremble→Dismantle→Strike→EndTurn，并在 Shuffle 边界形成 `PartialLocalCrossTurnProjection`。已修正多人未完成路线的最终排序：确定的 Enemy HP 进展现在先于 Anger copy 长期惩罚；单人和完整胜利路线保持原排序。
 - 多人新基线改为“完整联合战斗预测 + 滚动重规划”：旧的 partial-route/Carry 补丁仅作为历史兼容层，不再作为目标架构。第一阶段已把预测根中现有的完整队友状态正式暴露为 `TeammateForecastStates`，包含 Hand/Draw/Discard/Exhaust/Play 的有序语义快照、Energy/Stars、HP/Block、Phase、Turn、Orbs；Root capture 同时逐玩家核对 live 与 detached prediction 的五牌堆顺序、资源和 Orb 状态。执行权限没有变化，`RootActionPlayers` 仍只有本地玩家。
-- 新增多人专用“多人路线目标”设置：`MinimizeTeamLoss` 与默认 `AdaptiveLethalTempo`。动态斩杀按当前 root 的敌方总有效耐久判断，≤35% 时启用战损/回合联合排序，每提前 1 回合可抵消 5% 战损比；>35% 时仍按最低战损优先。当前旧 final ordering 暂以本地 strategic HP deficit/max HP 作为战损比输入，Joint Search 完成后原位替换为 TeamLossRatio；单人不读取此策略。
+- 新增多人专用“多人路线目标”设置：`MinimizeTeamLoss` 与默认 `AdaptiveLethalTempo`。动态斩杀按当前 root 的敌方总有效耐久判断，≤35% 时启用战损/回合联合排序，每提前 1 回合可抵消 5% 战损比；>35% 时仍按最低战损优先。Snapshot 现在从所有 captured players 的 `GetCumulativeHpLost` 精确计算 `TeamLossRatio`、`WorstPlayerLossRatio`、`AllPlayersAlive`，分母固定使用搜索 root 的 Creature MaxHP。多人完整胜利路线已按这些团队指标排序；动态斩杀也已改用真实 TeamLossRatio。单人排序不读取这些团队键。
 
 ## 当前未完成
 
 1. `ShadowTeammatePlanner` 已从单队友 Top-K 扩为 Team Top-K：队友按 NetId 依次在同一预测世界上模拟，每处理完一个队友就按 EnemyDurability / TeamEffectiveHp / WorstPlayerEffectiveHpRatio / TeamEnergy / TeamStars / 动作数重新取 Pareto 前沿并压回全局 beam=4，因此不会形成 K^N 笛卡尔爆炸。强制结束自己出牌的 shadow 卡只结束该队友分支，切换到下一队友前会消费 prediction-only end request；所有候选仍只存在于 simulator fork，不生成 `PlanAction`。每条 Shadow route 现在还携带独立 `ProcessedEnemyDeaths`，每次卡牌分叉复制并更新，避免跨 Shadow 动作丢失敌人死亡生命周期状态；接主搜索时可直接从 parent snapshot 的集合初始化。
 2. Joint EndTurn 主接线已落地：`MultiplayerLocalCrossTurn` 的普通无选择 EndTurn 会先用 Shadow Team Top-K 生成最多 K 条队友行为世界，再对每条世界执行全队 Player-Side End → 复用怪物侧 helper → 全队 Player-Side Start，并生成真正可继续被主 Beam fork 的 `SimulationSnapshot`；Shadow 动作仍不会进入 `PlanAction`/Deployment。各世界线独立继承 RNG、Shuffle 计数和 `ForkableSet<uint> ProcessedEnemyDeaths`。Joint route 会在退出 `ActionChoices` scope 后再 settle/snapshot/yield，避免快照携带执行期 choice cursor。若所有 Joint 世界都因 Choice 无法完成则回退旧 EndTurn；任何玩家持有未熔化 Pael’s Eye 时暂时走旧路径，因为原生 Extra Turn 是玩家子集语义，尚未纳入 Joint。
-3. 完成 Joint terminal state 后，把动态斩杀策略当前的本地战损比输入替换为 TeamLossRatio / WorstPlayerLossRatio，并让真实队友行为或世界状态偏离预测后立即 Fresh Search。
+3. TeamLossRatio / WorstPlayerLossRatio 已接入 Joint terminal/final ordering；下一步把团队风险/收益进一步接进 Beam 中途保路，避免辅助队友的好路线在抵达完整终局前被本地分数剪掉，然后确认真实队友行为或世界状态偏离预测时立即 Fresh Search。
 
 ## 当前开发 / 性能规则
 
