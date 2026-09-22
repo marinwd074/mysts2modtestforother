@@ -504,6 +504,8 @@ internal sealed partial class CombatBeamSolver
         (int reachableHandValue, int zeroCostPlayableCount) =
             CalculateReachableHandPotential(simulator, combat, playerState);
         StateFingerprint potionInventoryKey = BuildPotionInventoryKey(combat);
+        if (combat.HasStaleNonActionPlayerCombatStateRead)
+            boundary = SearchBoundaryReason.UnsupportedEffect;
         StateFingerprint cycleShapeKey = BuildCycleShapeKey(
             cyclePileShapeKey,
             aliveEnemyMask,

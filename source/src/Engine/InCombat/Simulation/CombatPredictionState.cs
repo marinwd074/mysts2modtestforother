@@ -175,6 +175,9 @@ internal sealed class CombatPredictionState
 
     public SimPlayerCombatState GetPlayerCombatState(Player player)
     {
+        if (CombatState is global::CombatSolver.SimulatedCombatState simulated)
+            simulated.ObservePlayerCombatStateRead(player);
+
         if (!_playerCombatStates.TryGetValue(player, out var state))
         {
             if (CombatState is ICombatPredictionRootCaptureBoundary boundary)

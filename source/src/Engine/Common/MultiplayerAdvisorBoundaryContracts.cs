@@ -31,6 +31,20 @@ internal static class MultiplayerAdvisorBoundaryContracts
     }
 
     /// <summary>
+    /// A teammate state that was readable when the root was captured becomes stale once the
+    /// local action owner yields the captured turn. The detached snapshot may remain available
+    /// for diagnostics, but consuming it on a future branch is not a trustworthy projection.
+    /// </summary>
+    internal static bool IsStaleNonActionPlayerStateRead(
+        IReadOnlyList<Player> capturedPlayers,
+        IReadOnlyList<Player> actionPlayers,
+        Player player,
+        bool nonActionPlayerStateCurrent)
+        => !nonActionPlayerStateCurrent
+            && IsCapturedPlayer(capturedPlayers, player)
+            && !IsCapturedPlayer(actionPlayers, player);
+
+    /// <summary>
     /// EndTurn must consume the explicit action-owner list, never expand it to the readable
     /// player roster. The subset check catches malformed ownership before turn state mutates.
     /// </summary>

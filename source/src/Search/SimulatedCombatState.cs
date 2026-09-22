@@ -48,6 +48,8 @@ internal sealed partial class SimulatedCombatState
     private readonly IReadOnlyList<Player> _players;
     private readonly IReadOnlyList<Player> _rootCapturedPlayers;
     private readonly IReadOnlyList<Player> _rootActionPlayers;
+    private bool _nonActionPlayerCombatStateCurrent = true;
+    private bool _staleNonActionPlayerCombatStateRead;
     private readonly IReadOnlyList<ModifierModel> _modifiers;
     private readonly MultiplayerScalingModel? _multiplayerScalingModel;
     private readonly EncounterModel? _encounter;
@@ -484,6 +486,8 @@ internal sealed partial class SimulatedCombatState
         _players = source._players;
         _rootCapturedPlayers = source._rootCapturedPlayers;
         _rootActionPlayers = source._rootActionPlayers;
+        _nonActionPlayerCombatStateCurrent = source._nonActionPlayerCombatStateCurrent;
+        _staleNonActionPlayerCombatStateRead = source._staleNonActionPlayerCombatStateRead;
         _modifiers = source._modifiers;
         _multiplayerScalingModel = source._multiplayerScalingModel;
         _encounter = source._encounter;
@@ -1661,6 +1665,24 @@ internal sealed partial class SimulatedCombatState
         if (_rootMaterialized)
             throw new InvalidOperationException($"Root player state was not materialized for {player.NetId}.");
     }
+
+    internal void ObservePlayerCombatStateRead(Player player)
+    {
+        if (MultiplayerAdvisorBoundaryContracts.IsStaleNonActionPlayerStateRead(
+                _rootCapturedPlayers,
+                _rootActionPlayers,
+                player,
+                _nonActionPlayerCombatStateCurrent))
+        {
+            _staleNonActionPlayerCombatStateRead = true;
+        }
+    }
+
+    internal void InvalidateNonActionPlayerCombatStateAfterYield()
+        => _nonActionPlayerCombatStateCurrent = false;
+
+    internal bool HasStaleNonActionPlayerCombatStateRead
+        => _staleNonActionPlayerCombatStateRead;
 
     CombatPredictionRngSet ICombatPredictionRunSnapshot.CreatePredictionRngSet()
         => CombatPredictionRngSet.From(RunRngSet.FromSave(_runRngSnapshot));

@@ -2750,6 +2750,11 @@ internal sealed partial class CombatBeamSolver
             }
         }
 
+        // Teammate combat state may be fully readable in the live client at root capture, but
+        // teammate actions are deliberately not simulated. After the local owner yields this
+        // turn, that detached hand/resource/pile snapshot is no longer a valid future input.
+        simulatedCombat.InvalidateNonActionPlayerCombatStateAfterYield();
+
         SimCreatureState simulatedPlayer = simulator.State.GetCreature(_player.Creature);
         if (!takingExtraTurn)
         {
