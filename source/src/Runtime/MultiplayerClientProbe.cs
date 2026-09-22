@@ -1,11 +1,13 @@
 using System.Text.Json;
 using System.Runtime.CompilerServices;
+using MegaCrit.Sts2.Core.Localization.DynamicVars;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.Models.Potions;
 using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.Runs;
@@ -528,9 +530,59 @@ internal static class MultiplayerClientProbe
         {
             fingerprint.Add(card.Id.Entry);
             fingerprint.Add(card.CurrentUpgradeLevel);
-            fingerprint.Add(card.Enchantment?.Id.Entry);
+            fingerprint.Add(card.EnergyCost.CostsX);
+            fingerprint.Add(card.EnergyCost.GetWithModifiers(CostModifiers.Local));
+            fingerprint.Add(card.HasStarCostX);
+            fingerprint.Add(card.CurrentStarCost);
+            fingerprint.Add(card.BaseReplayCount);
+            fingerprint.Add(card.ExhaustOnNextPlay);
+            fingerprint.Add(card.IsSlyThisTurn);
+            fingerprint.Add(card.ShouldRetainThisTurn);
+            fingerprint.Add(card.DeckVersion != null);
+            fingerprint.Add(card.HasBeenRemovedFromState);
+            EnchantmentStateSupport.Append(ref fingerprint, card.Enchantment);
             fingerprint.Add(card.Affliction?.Id.Entry);
             fingerprint.Add(card.Affliction?.Amount ?? 0);
+
+            int semanticDynamicVarCount = 0;
+            foreach (var dynamicVar in card.DynamicVars.OrderBy(item => item.Key, StringComparer.Ordinal))
+            {
+                if (!SemanticStateFieldPolicy.IsSemantic(card, dynamicVar.Key, dynamicVar.Value))
+                    continue;
+                fingerprint.Add(dynamicVar.Key);
+                fingerprint.Add(dynamicVar.Value.BaseValue);
+                if (dynamicVar.Value is StringVar stringVar)
+                    fingerprint.Add(stringVar.StringValue);
+                semanticDynamicVarCount++;
+            }
+            fingerprint.Add(semanticDynamicVarCount);
+
+            switch (card)
+            {
+                case Claw claw:
+                    fingerprint.Add(claw.ExtraDamageFromClawPlays);
+                    break;
+                case GeneticAlgorithm geneticAlgorithm:
+                    fingerprint.Add(geneticAlgorithm.IncreasedBlock);
+                    break;
+                case Maul maul:
+                    fingerprint.Add(maul._extraDamageFromMaulPlays);
+                    break;
+                case MadScience madScience:
+                    fingerprint.Add((int)madScience.TinkerTimeType);
+                    fingerprint.Add(madScience.TinkerTimeRider);
+                    break;
+                case Rampage rampage:
+                    fingerprint.Add(rampage.ExtraDamageFromPlays);
+                    break;
+                case TheScythe scythe:
+                    fingerprint.Add(scythe.IncreasedDamage);
+                    break;
+            }
+
+            // Card objects are stable within a combat (the native NetCombatCardDb also keys
+            // mutable combat cards by instance). Keep identity so two otherwise-identical
+            // copies swapping pile positions still invalidate a continuation.
             fingerprint.Add(RuntimeHelpers.GetHashCode(card));
         }
     }
