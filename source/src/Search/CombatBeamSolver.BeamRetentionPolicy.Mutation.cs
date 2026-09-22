@@ -1325,6 +1325,25 @@ internal sealed partial class CombatBeamSolver
             }
         }
 
+        private static T SelectBestByComparison<T>(
+            IEnumerable<T> candidates,
+            IComparer<T> comparer)
+        {
+            bool hasBest = false;
+            T best = default!;
+            foreach (T candidate in candidates)
+            {
+                if (!hasBest || comparer.Compare(candidate, best) < 0)
+                {
+                    best = candidate;
+                    hasBest = true;
+                }
+            }
+            if (!hasBest)
+                throw new InvalidOperationException("有序变异 representative 分组不能为空。");
+            return best;
+        }
+
         private static int AvailableOrderedMutationLayerAdmissions(
             int admissions,
             int admissionLimit,
@@ -1566,7 +1585,7 @@ internal sealed partial class CombatBeamSolver
                     outcomeSelector(candidate),
                     anchorOutcome))
                 .GroupBy(outcomeSelector)
-                .Select(group => group.OrderBy(candidate => candidate, comparer).First())
+                .Select(group => SelectBestByComparison(group, comparer))
                 .ToList();
             if (representatives.Count == 0)
                 return [];
@@ -1645,7 +1664,7 @@ internal sealed partial class CombatBeamSolver
                     outcomeSelector(candidate),
                     anchorOutcome))
                 .GroupBy(outcomeSelector)
-                .Select(group => group.OrderBy(candidate => candidate, comparer).First())
+                .Select(group => SelectBestByComparison(group, comparer))
                 .OrderBy(candidate => candidate, comparer)
                 .ToList();
             if (distinctCandidates.Count == 0)
@@ -1687,7 +1706,7 @@ internal sealed partial class CombatBeamSolver
                     outcomeSelector(candidate),
                     anchorOutcome))
                 .GroupBy(outcomeSelector)
-                .Select(group => group.OrderBy(candidate => candidate, comparer).First())
+                .Select(group => SelectBestByComparison(group, comparer))
                 .OrderBy(candidate => candidate, comparer)
                 .ToList();
         }

@@ -4,6 +4,13 @@
 > 基础代码仍以 CombatSolver 0.40.2 为起点；本表只描述这个 fork 从开始改造后的能力演进。  
 > 版本号按里程碑归并，不要求一版对应一个 commit。细节需要时再查对应 Git 历史。
 
+## v0.22 — Ordered Mutation 组内代表选择优化
+**2026-09-22**
+
+- 新增稳定单遍 `SelectBestByComparison`，替换 3 处 `GroupBy -> OrderBy -> First`。
+- 每个 outcome group 不再为了只取一个代表而构造完整排序；比较器相等时仍保留该组首项。
+- 后续组间排序和 semantic-distance 排序保持原实现，因此对外顺序与 tie-break 不变。
+
 ## v0.21 — Ordered Mutation 分组扫描优化
 **2026-09-22**
 
