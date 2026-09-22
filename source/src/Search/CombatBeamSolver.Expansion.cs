@@ -16,7 +16,6 @@ using MegaCrit.Sts2.Core.MonsterMoves.MonsterMoveStateMachine;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.ValueProps;
 using CombatSolver.Engine.Common;
-using CombatSolver.Engine.InCombat.Extensions;
 using CombatSolver.Engine.InCombat.Mirrors;
 using CombatSolver.Engine.InCombat.Simulation;
 using BufferCard = MegaCrit.Sts2.Core.Models.Cards.Buffer;
@@ -3920,7 +3919,7 @@ internal sealed partial class CombatBeamSolver
 
         if (targetType is TargetType.AnyPlayer or TargetType.AnyAlly)
         {
-            IReadOnlyList<Creature> targets = simulator.State.CombatState.GetValidManualTargets(
+            IReadOnlyList<Creature> targets = simulator.State.GetValidManualTargets(
                 card.Preview.Owner.Creature,
                 targetType);
             for (int index = 0; index < targets.Count; index++)
@@ -3950,7 +3949,7 @@ internal sealed partial class CombatBeamSolver
 
         if (targetType is TargetType.AnyPlayer or TargetType.AnyAlly)
         {
-            IReadOnlyList<Creature> targets = simulator.State.CombatState.GetValidManualTargets(
+            IReadOnlyList<Creature> targets = simulator.State.GetValidManualTargets(
                 potion.Owner.Creature,
                 targetType);
             for (int index = 0; index < targets.Count; index++)
