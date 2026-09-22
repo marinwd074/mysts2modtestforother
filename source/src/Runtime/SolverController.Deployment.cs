@@ -135,6 +135,7 @@ internal static partial class SolverController
             if (safeActions.Count == 0 && plannedTurnActions.Count > 0 && safeEndTurnAction == null)
             {
                 _combat.MultiplayerSafeExecuteDeploymentRequested = false;
+                StopMultiplayerSafeAutoAtUnsupportedBoundary(stop, result.StartTurnNumber);
                 deployment.SafeExecutionSession?.Abort(stop.Reason);
                 Entry.Logger.Info(
                     $"[CombatSolver/MultiplayerSafeExecute] MP2B_DEPLOY_STOP " +
@@ -541,6 +542,7 @@ internal static partial class SolverController
                             actionIndex + 1,
                             endedTurn: false);
                         _combat.LastSolverDeployedTurn = turn;
+                        StopMultiplayerSafeAutoAtUnsupportedBoundary(safeStop, turn);
                         Entry.Logger.Info(
                             $"[CombatSolver/MultiplayerSafeExecute] MP2B_DEPLOY_END " +
                             $"request_id={safeSession.RequestId} turn={turn} " +
@@ -599,6 +601,7 @@ internal static partial class SolverController
                     CompleteDeployment(deployment);
                     SolverOverlay.ShowDeploymentComplete(host, turn, actions.Count, endedTurn: false);
                     _combat.LastSolverDeployedTurn = turn;
+                    StopMultiplayerSafeAutoAtUnsupportedBoundary(safeStop, turn);
                     Entry.Logger.Info(
                         $"[CombatSolver/MultiplayerSafeExecute] MP2B_DEPLOY_END " +
                         $"request_id={safeSession?.RequestId ?? 0} turn={turn} " +
@@ -829,6 +832,24 @@ internal static partial class SolverController
                 SolverOverlay.RefreshControls();
             }
         }
+    }
+
+    private static void StopMultiplayerSafeAutoAtUnsupportedBoundary(
+        SafeLocalActionDecision stop,
+        int turn)
+    {
+        if (!_combat.MultiplayerSafeAutoEnabled
+            || MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(stop))
+        {
+            return;
+        }
+
+        _combat.MultiplayerSafeAutoEnabled = false;
+        _combat.MultiplayerSafeExecuteDeploymentRequested = false;
+        SolverOverlay.RefreshControls();
+        Entry.Logger.Warn(
+            $"[CombatSolver/MultiplayerSafeExecute] MP_SAFE_AUTO_STOP " +
+            $"reason={stop.Reason} turn={turn}");
     }
 
     private static PlanAction? FindSafeEndTurnAction(

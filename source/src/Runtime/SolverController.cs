@@ -137,6 +137,7 @@ internal static partial class SolverController
         => SolverSessionCapabilities.Capture(CombatManager.Instance.DebugOnlyGetState());
 
     public static bool FullAutoEnabled => _combat.FullAutoEnabled;
+    public static bool MultiplayerSafeAutoEnabled => _combat.MultiplayerSafeAutoEnabled;
     public static bool AutomaticSearchPaused => _combat.AutomaticSearchPaused;
     public static bool AutomaticCalculationEnabled => SolverSettings.Current.AutomaticCalculationEnabled;
     public static bool HasCalculatedThisCombat => _combat.SearchesStarted > 0 || _combat.LatestResult != null;
@@ -1455,7 +1456,7 @@ internal static partial class SolverController
             || _deployment != null
             || _deferredSearchCts != null
             || PendingCombatDeferredOperations.Any(task => !task.IsCompleted)
-            || !AutomaticCalculationEnabled
+            || (!AutomaticCalculationEnabled && !_combat.MultiplayerSafeAutoEnabled)
             || !UnattendedTestRunner.AutomaticTurnSearchEnabled
             || _combat.AutomaticSearchPaused
             || !localTurnPlayable

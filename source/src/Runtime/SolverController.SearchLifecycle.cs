@@ -719,6 +719,17 @@ internal static partial class SolverController
                 _combat.FullAutoEnabled = false;
                 SolverOverlay.RefreshControls();
             }
+            if (_combat.MultiplayerSafeAutoEnabled
+                && SolverSessionCapabilities.Capture(search.State).Kind
+                    == SolverSessionKind.MultiplayerSafeExecute)
+            {
+                _combat.MultiplayerSafeAutoEnabled = false;
+                _combat.MultiplayerSafeExecuteDeploymentRequested = false;
+                SolverOverlay.RefreshControls();
+                Entry.Logger.Warn(
+                    $"[CombatSolver/MultiplayerSafeExecute] MP_SAFE_AUTO_STOP " +
+                    $"reason=search_failure generation={generation} exception={ex.GetType().Name}");
+            }
             SolverOverlay.Show(
                 host,
                 FormatSearchFailure(ex, search.MaxDegreeOfParallelism > 1));
@@ -871,11 +882,19 @@ internal static partial class SolverController
         bool deployWhenReady = currentTurnAdopted || search.DeployWhenReady;
         if (completionCapabilities.Kind == SolverSessionKind.MultiplayerSafeExecute)
         {
-            // Safe Execute is advisor-first: an automatic current-turn result must never
-            // drive a card. Only the explicit Execute button may arm this deployment.
-            deployWhenReady = _combat.MultiplayerSafeExecuteDeploymentRequested;
-            if (deployWhenReady)
+            bool explicitDeploymentRequested = _combat.MultiplayerSafeExecuteDeploymentRequested;
+            deployWhenReady = MultiplayerSafeExecutePolicy.ShouldAutoDeploy(
+                _combat.MultiplayerSafeAutoEnabled,
+                explicitDeploymentRequested);
+            if (explicitDeploymentRequested)
                 _combat.MultiplayerSafeExecuteDeploymentRequested = false;
+            if (_combat.MultiplayerSafeAutoEnabled && deployWhenReady)
+            {
+                Entry.Logger.Info(
+                    $"[CombatSolver/MultiplayerSafeExecute] MP_SAFE_AUTO_ARMED " +
+                    $"generation={generation} turn={result.StartTurnNumber} " +
+                    $"world_version={MultiplayerWorldTracker.WorldVersion}");
+            }
         }
         if (deployWhenReady)
             StartDeployment(host, searchedState, result);
