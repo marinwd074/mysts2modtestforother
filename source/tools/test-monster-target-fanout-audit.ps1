@@ -100,7 +100,7 @@ $runtimePairs = @{}
 $runtimeGroups = @(
     [pscustomobject]@{ Name = 'simple'; Pattern = '(?s)private static bool IsPinnedSimpleFanOutSafe\(.*?(?=\r?\n\s*private static bool IsPinnedSplitFanOutSafe)' },
     [pscustomobject]@{ Name = 'split'; Pattern = '(?s)private static bool IsPinnedSplitFanOutSafe\(.*?(?=\r?\n\s*private static bool IsPinnedSpecialRngFanOutSafe)' },
-    [pscustomobject]@{ Name = 'special-rng'; Pattern = '(?s)private static bool IsPinnedSpecialRngFanOutSafe\(.*?(?=\r?\n\s*public static void ApplyBeforeAttack)' }
+    [pscustomobject]@{ Name = 'special-rng'; Pattern = '(?s)private static bool IsPinnedSpecialRngFanOutSafe\(.*?(?=\r?\n\s*private enum MultiplayerTargetMode)' }
 )
 foreach ($group in $runtimeGroups) {
     $allowListMatch = [regex]::Match($runtimeText, $group.Pattern)
