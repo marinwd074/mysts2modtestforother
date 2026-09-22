@@ -13,8 +13,6 @@ param(
 
     [UInt64]$ClientId = 0,
 
-    [string]$ConsoleFixturePath = '',
-
     [switch]$ForceSteamOff,
 
     [switch]$AllowSteam
@@ -27,7 +25,6 @@ try {
         -FastMpMode $FastMpMode `
         -MultiplayerMode $MultiplayerMode `
         -ClientId $ClientId `
-        -ConsoleFixturePath $ConsoleFixturePath `
         -ForceSteamOff:$ForceSteamOff `
         -AllowSteam:$AllowSteam
     if (-not $?) { exit 1 }

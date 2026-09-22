@@ -8,7 +8,7 @@ Truth source:
 - game commit: `59260271`
 - assembly: `game-body/data_sts2_windows_x86_64/sts2.dll`
 - required SHA-256: `a1f9e653f1e28e4076558fee1e60d218619cb7e057b887c6417f62c62c6d7a52`
-- local task: [NEXT_LOCAL_01071_MONSTER_TARGET_AUDIT.md](../../multiplayer/NEXT_LOCAL_01071_MONSTER_TARGET_AUDIT.md)
+- the 64-row table in this file is the canonical move-set contract; completed task notes are not runtime/test inputs.
 
 Do not replace `PENDING_PINNED_IL` with a conclusion derived only from a current-beta
 decompilation or wiki. Run `Sts2LocalInspector --monster-move-il-output` against the
@@ -29,6 +29,14 @@ Allowed solver actions:
 `NeedsMoreModeling`, `NoChange`.
 
 Runtime status (2026-09-22): 63/64 audited moves are now `FanOutSafe`.
+
+Runtime architecture (fork v0.14/v0.16): this table is compatibility evidence, not the primary
+multiplayer dispatcher. Ordinary per-player effects now route through
+`MonsterMoveEffects.MultiplayerTargets.cs`; v0.16 classifies all 63 supported moves in one target-mode switch rather than three sequential allow-list checks; the main `MonsterMoveEffects.cs` keeps the single-target implementation. The nine mixed
+moves are explicitly split into per-player target effects and one owner effect; RNG / Choice
+special cases remain explicit instead of being forced through the generic path.
+Existing monsters use captured live HP/MaxHP directly. Only future simulated spawns/hatches
+invoke the game's native multiplayer HP scaling helper.
 52 mechanically replay the existing single-target effect in captured player-roster order,
 including Noisebot Noise and Soul Fysh Beckon, whose random pile positions advance the shared
 Shuffle RNG sequentially. 9 owner-once rows use the explicit split path. Thieving Hopper

@@ -4,6 +4,9 @@ namespace CombatSolver;
 
 internal static partial class MonsterMoveEffects
 {
+    private static readonly IReadOnlyDictionary<string, int> EmptyStaticIntValues =
+        new Dictionary<string, int>(0, StringComparer.Ordinal);
+
     private static readonly IReadOnlyDictionary<string, string[]> StaticIntMembers =
         new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
@@ -47,7 +50,7 @@ internal static partial class MonsterMoveEffects
     internal static IReadOnlyDictionary<string, int> CaptureStaticIntValues(MonsterModel monster)
     {
         if (!StaticIntMembers.TryGetValue(monster.GetType().Name, out string[]? members))
-            return new Dictionary<string, int>(0, StringComparer.Ordinal);
+            return EmptyStaticIntValues;
         Dictionary<string, int> values = new(members.Length, StringComparer.Ordinal);
         foreach (string member in members)
             values.Add(member, MonsterValueReader.ReadInt(monster, member));

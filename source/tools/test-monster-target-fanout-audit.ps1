@@ -4,29 +4,15 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $sourceRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
-$taskPath = Join-Path $sourceRoot 'docs/multiplayer/NEXT_LOCAL_01071_MONSTER_TARGET_AUDIT.md'
 $auditPath = Join-Path $sourceRoot 'docs/compat/0.107.1/MONSTER_TARGET_FANOUT_AUDIT.md'
 $runtimePath = Join-Path $sourceRoot 'src/Prediction/MonsterMoveEffects.cs'
+$runtimeTargetsPath = Join-Path $sourceRoot 'src/Prediction/MonsterMoveEffects.MultiplayerTargets.cs'
 $staticValuesPath = Join-Path $sourceRoot 'src/Prediction/MonsterMoveEffects.StaticValues.cs'
 $knowledgeChoicePath = Join-Path $sourceRoot 'src/Prediction/KnowledgeDemonChoiceSupport.cs'
 $knowledgeStatePath = Join-Path $sourceRoot 'src/Search/SimulatedCombatState.KnowledgeDemon.cs'
 $stateEvaluationPath = Join-Path $sourceRoot 'src/Search/CombatBeamSolver.StateEvaluation.cs'
 
-$taskLines = [IO.File]::ReadAllLines($taskPath)
 $auditLines = [IO.File]::ReadAllLines($auditPath)
-
-$expectedMoves = [System.Collections.Generic.List[string]]::new()
-foreach ($line in $taskLines) {
-    if ($line -match '^- `(?<move>[^`]+\.[^`]+)`$') {
-        $expectedMoves.Add($Matches.move)
-    }
-}
-if ($expectedMoves.Count -ne 64) {
-    throw "Expected 64 pinned monster target audit moves, found $($expectedMoves.Count)."
-}
-if (($expectedMoves | Select-Object -Unique).Count -ne $expectedMoves.Count) {
-    throw 'Pinned monster target audit task contains duplicate moves.'
-}
 
 $allowedNative = @(
     'PENDING_PINNED_IL',
@@ -84,19 +70,9 @@ foreach ($line in $auditLines) {
     }
 }
 
-if ($rows.Count -ne $expectedMoves.Count) {
-    throw "Expected $($expectedMoves.Count) monster target audit rows, found $($rows.Count)."
-}
-
-foreach ($move in $expectedMoves) {
-    if (-not $rows.ContainsKey($move)) {
-        throw "Missing monster target audit row: $move"
-    }
-}
-foreach ($move in $rows.Keys) {
-    if ($move -notin $expectedMoves) {
-        throw "Unexpected monster target audit row: $move"
-    }
+$expectedMoveCount = 64
+if ($rows.Count -ne $expectedMoveCount) {
+    throw "Expected $expectedMoveCount monster target audit rows, found $($rows.Count)."
 }
 
 $pending = @($rows.Values | Where-Object Native -eq 'PENDING_PINNED_IL').Count
@@ -115,25 +91,31 @@ if ($fanOutSafeMoves.Count -ne 63) {
     throw "Expected 63 pinned FanOutSafe rows, found $($fanOutSafeMoves.Count)."
 }
 
-$runtimeText = [IO.File]::ReadAllText($runtimePath)
+$runtimeMainText = [IO.File]::ReadAllText($runtimePath)
+$runtimeTargetsText = [IO.File]::ReadAllText($runtimeTargetsPath)
+# Put the dispatcher first so the allow-list regex can still terminate at ApplyBeforeAttack
+# from the main implementation without depending on one giant source file.
+$runtimeText = $runtimeTargetsText + [Environment]::NewLine + $runtimeMainText
 $runtimePairs = @{}
-$runtimeGroups = @(
-    [pscustomobject]@{ Name = 'simple'; Pattern = '(?s)private static bool IsPinnedSimpleFanOutSafe\(.*?(?=\r?\n\s*private static bool IsPinnedSplitFanOutSafe)' },
-    [pscustomobject]@{ Name = 'split'; Pattern = '(?s)private static bool IsPinnedSplitFanOutSafe\(.*?(?=\r?\n\s*private static bool IsPinnedSpecialRngFanOutSafe)' },
-    [pscustomobject]@{ Name = 'special-rng'; Pattern = '(?s)private static bool IsPinnedSpecialRngFanOutSafe\(.*?(?=\r?\n\s*public static void ApplyBeforeAttack)' }
-)
-foreach ($group in $runtimeGroups) {
-    $allowListMatch = [regex]::Match($runtimeText, $group.Pattern)
-    if (-not $allowListMatch.Success) {
-        throw "MonsterMoveEffects is missing the pinned $($group.Name) FanOutSafe runtime allow-list."
+$dispatchMatch = [regex]::Match(
+    $runtimeTargetsText,
+    '(?s)private static MultiplayerTargetMode ResolveMultiplayerTargetMode\(.*?return \(monsterType, moveId\) switch\s*\{(?<arms>.*?)_ => MultiplayerTargetMode\.SingleTarget,')
+if (-not $dispatchMatch.Success) {
+    throw 'MonsterMoveEffects multiplayer target-mode switch is missing.'
+}
+$modeGroups = @{
+    PerPlayer = 'simple'
+    PerPlayerThenOwnerOnce = 'split'
+    SpecialRng = 'special-rng'
+}
+foreach ($match in [regex]::Matches(
+    $dispatchMatch.Groups['arms'].Value,
+    '\("(?<monster>[^"]+)", "(?<move>[^"]+)"\) => MultiplayerTargetMode\.(?<mode>PerPlayer|PerPlayerThenOwnerOnce|SpecialRng),')) {
+    $key = "$($match.Groups['monster'].Value).$($match.Groups['move'].Value)"
+    if ($runtimePairs.ContainsKey($key)) {
+        throw "Duplicate runtime FanOutSafe pair: $key"
     }
-    foreach ($match in [regex]::Matches($allowListMatch.Value, '\("(?<monster>[^"]+)", "(?<move>[^"]+)"\)')) {
-        $key = "$($match.Groups['monster'].Value).$($match.Groups['move'].Value)"
-        if ($runtimePairs.ContainsKey($key)) {
-            throw "Duplicate runtime FanOutSafe pair across runtime groups: $key"
-        }
-        $runtimePairs[$key] = $group.Name
-    }
+    $runtimePairs[$key] = $modeGroups[$match.Groups['mode'].Value]
 }
 if ($runtimePairs.Count -ne $fanOutSafeMoves.Count) {
     throw "Runtime FanOutSafe allow-list count mismatch: audit=$($fanOutSafeMoves.Count) runtime=$($runtimePairs.Count)."
@@ -148,6 +130,16 @@ foreach ($move in $runtimePairs.Keys) {
         throw "Runtime fanout contains a move not classified FanOutSafe by pinned IL: $move"
     }
 }
+if (($runtimeMainText.Contains('private enum MultiplayerTargetMode')) -or
+    ($runtimeMainText.Contains('ResolveMultiplayerTargetMode('))) {
+    throw 'Multiplayer monster target routing leaked back into MonsterMoveEffects.cs.'
+}
+if ((-not $runtimeTargetsText.Contains('private enum MultiplayerTargetMode')) -or
+    (-not $runtimeTargetsText.Contains('ApplyPerPlayerTargets(')) -or
+    (-not $runtimeTargetsText.Contains('return (monsterType, moveId) switch'))) {
+    throw 'Dedicated multiplayer monster target dispatcher is incomplete.'
+}
+
 if (-not $runtimeText.Contains('foreach (Creature target in simulator.State.PlayerCreatures)')) {
     throw 'Pinned runtime fanout no longer enumerates the captured player roster.'
 }
@@ -170,8 +162,13 @@ foreach ($move in $splitExpected) {
         throw "Move requiring owner-once ordering is not in the split fanout path: $move"
     }
 }
-if (-not $runtimeText.Contains('ApplySplitFanOut(simulator, combat, move, out killedOwner)')) {
-    throw 'Pinned split fanout allow-list is no longer routed through ApplySplitFanOut.'
+if ((-not $runtimeTargetsText.Contains('MultiplayerTargetMode.PerPlayerThenOwnerOnce =>')) -or
+    (-not $runtimeMainText.Contains('private static bool ApplyPerPlayerThenOwnerOnce('))) {
+    throw 'Pinned owner-once moves are no longer routed through ApplyPerPlayerThenOwnerOnce.'
+}
+if ((-not $runtimeText.Contains('ApplyPerPlayerTargetEffect(')) -or
+    (-not $runtimeText.Contains('ApplyOwnerEffectOnce('))) {
+    throw 'Pinned owner-once path is not split into per-player target and owner-once effects.'
 }
 if (-not $runtimeText.Contains('combat.RecordThievery(simulator, move.Owner);')) {
     throw 'Gremlin Merc split fanout lost its pre-target thievery side effect.'

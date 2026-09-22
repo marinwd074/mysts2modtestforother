@@ -1,18 +1,16 @@
-# Combat Solver 0.107.1 compatibility fork
+# Slay the Spire 2 0.107.1 compatibility mod
 
-This repository contains a modified compatibility fork of
-[Torch1230/CombatSolver](https://github.com/Torch1230/CombatSolver), targeting
-*Slay the Spire 2* `0.107.1`.
+This repository contains a modified *Slay the Spire 2* mod targeting game version `0.107.1`.
 
 The active project, documentation, build files, and tests are under [`source/`](source/).
 
-This fork contains substantial modifications for 0.107.1 compatibility, search correctness,
-testing, and local development. It is not the upstream CombatSolver repository.
+The project contains substantial modifications for 0.107.1 compatibility, search correctness,
+multiplayer support, testing, and local development.
 
-## License and upstream code
+## License and third-party code
 
-CombatSolver is distributed under the MIT License. Copyright notices required by the
-upstream license are retained in [LICENSE](LICENSE).
+Portions of this project are derived from MIT-licensed upstream code. Copyright notices
+required by the applicable licenses are retained in [LICENSE](LICENSE).
 
 The combat simulation core also contains portions derived from
 [Random Foreseer](https://github.com/hotwords123/StS2.RandomForeseer).
