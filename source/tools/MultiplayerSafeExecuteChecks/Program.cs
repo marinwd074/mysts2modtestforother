@@ -26,11 +26,9 @@ SafeLocalActionDecision Resolved(
     bool hasTarget = false,
     bool targetExists = false,
     bool allowedTarget = false,
-    bool incompleteTarget = false,
-    bool promotedMultiplayerOnly = false)
+    bool incompleteTarget = false)
     => MultiplayerSafeExecutePolicy.ClassifyResolved(
-        new(localPlayer, localCard, multiplayerOnly, hasTarget, targetExists, allowedTarget, incompleteTarget,
-            promotedMultiplayerOnly));
+        new(localPlayer, localCard, multiplayerOnly, hasTarget, targetExists, allowedTarget, incompleteTarget));
 
 Check(Structural().IsSafe, "A normal local PlayCard shape passes the structural gate.");
 Check(Structural("usepotion", isPlayCard: false).Reason == "kind_usepotion", "Potion actions fail closed.");
@@ -44,17 +42,10 @@ Check(
     Resolved(multiplayerOnly: true).Reason == MultiplayerSafeExecutePolicy.ManualMultiplayerCardReason,
     "Multiplayer-only cards stop automatic execution and remain available for manual play.");
 Check(
-    Resolved(
-        multiplayerOnly: true,
-        hasTarget: true,
-        targetExists: true,
-        allowedTarget: true,
-        promotedMultiplayerOnly: true)
-        == SafeLocalActionDecision.CrossPlayerPublicBoundary,
-    "A promoted multiplayer-only card becomes an explicit cross-player replanning boundary.");
-Check(
-    Resolved(multiplayerOnly: true, promotedMultiplayerOnly: true).Reason == "target_missing",
-    "A promoted cross-player card still requires an explicit target.");
+    MultiplayerSafeExecutePolicy.ClassifyResolved(
+        new(true, true, true, false, false, false, false, true)).Reason
+        == MultiplayerSafeExecutePolicy.ManualMultiplayerCardReason,
+    "Previous multiplayer promotion does not bypass the manual-play boundary.");
 Check(
     Resolved(hasTarget: true, targetExists: true, allowedTarget: false).Reason
         == "remote_player_or_unknown_target",
@@ -84,18 +75,6 @@ IReadOnlyList<SafeLocalActionDecision> allSafe =
 IReadOnlyList<SafeLocalActionDecision> fullPrefix =
     MultiplayerSafeExecutePolicy.TakeBoundedSafePrefix(allSafe, decision => decision, out SafeLocalActionDecision fullStop);
 Check(fullPrefix.Count == 4 && fullStop.IsSafe, "An all-safe route returns its complete bounded prefix.");
-IReadOnlyList<SafeLocalActionDecision> crossPlayerThenSafe =
-    [SafeLocalActionDecision.CrossPlayerPublicBoundary, SafeLocalActionDecision.Allow];
-IReadOnlyList<SafeLocalActionDecision> crossPlayerPrefix =
-    MultiplayerSafeExecutePolicy.TakeBoundedSafePrefix(
-        crossPlayerThenSafe,
-        decision => decision,
-        out SafeLocalActionDecision crossPlayerStop);
-Check(
-    crossPlayerPrefix.Count == 1
-        && crossPlayerStop == SafeLocalActionDecision.CrossPlayerPublicBoundary,
-    "A cross-player action executes once and cuts the stale route before later actions.");
-
 IReadOnlyList<SafeLocalActionDecision> safeThenUnsafe =
     [SafeLocalActionDecision.Allow, SafeLocalActionDecision.Allow,
      new(false, "choice_required"), SafeLocalActionDecision.Allow];
@@ -227,7 +206,6 @@ MultiplayerSafeActionRevalidationFacts RevalidationFacts(bool hasNextAction = tr
         EnergyStateConsistent: true,
         TargetIdentityStable: true,
         RemotePublicStateUnchanged: true,
-        ExpectedRemotePublicMutation: false,
         EnemyStateMatchesExpectedTarget: true,
         WorldVersionAdvanced: true,
         WorldVersionStable: true,
@@ -245,16 +223,7 @@ Check(
     MultiplayerSafeExecutePolicy.RevalidateAction(
         RevalidationFacts() with { RemotePublicStateUnchanged = false })
         == MultiplayerSafeActionRevalidationDecision.RemoteOrUnknownChange,
-    "An unmodeled remote public mutation aborts before the next action.");
-Check(
-    MultiplayerSafeExecutePolicy.RevalidateAction(
-        RevalidationFacts(hasNextAction: false) with
-        {
-            RemotePublicStateUnchanged = false,
-            ExpectedRemotePublicMutation = true,
-        })
-        == MultiplayerSafeActionRevalidationDecision.ExpectedLocalChange,
-    "A modeled cross-player mutation is accepted only as a route-ending action boundary.");
+    "A remote public mutation aborts before the next action.");
 Check(
     MultiplayerSafeExecutePolicy.RevalidateAction(
         RevalidationFacts() with { LocalCardRemovedFromHand = false })
