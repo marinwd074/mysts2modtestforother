@@ -38,15 +38,14 @@ Check(Structural(replay: true).Reason == "replay_semantics", "Replay semantics f
 Check(Structural(choice: true).Reason == "choice_required", "Choice-driving cards fail closed.");
 Check(Resolved(localPlayer: false).Reason == "local_player_missing", "Missing local player fails closed.");
 Check(Resolved(localCard: false).Reason == "local_card_missing", "A card outside the local hand fails closed.");
-Check(Resolved(multiplayerOnly: true).Reason == "multiplayer_only_card", "Unpromoted multiplayer-only cards remain fail-closed.");
+Check(
+    Resolved(multiplayerOnly: true).Reason == MultiplayerSafeExecutePolicy.ManualMultiplayerCardReason,
+    "Multiplayer-only cards stop automatic execution and remain available for manual play.");
 Check(
     MultiplayerSafeExecutePolicy.ClassifyResolved(
-        new(true, true, true, false, false, false, false, true)).IsSafe,
-    "A promoted deterministic multiplayer-only card passes the resolved gate.");
-Check(
-    SafeLocalActionDecision.CrossPlayerPublicBoundary.IsSafe
-        && SafeLocalActionDecision.CrossPlayerPublicBoundary.EndsContinuation,
-    "Cross-player public effects end the current Safe Execute continuation.");
+        new(true, true, true, false, false, false, false, true)).Reason
+        == MultiplayerSafeExecutePolicy.ManualMultiplayerCardReason,
+    "Previous multiplayer promotion does not bypass the manual-play boundary.");
 Check(
     Resolved(hasTarget: true, targetExists: true, allowedTarget: false).Reason
         == "remote_player_or_unknown_target",
@@ -393,8 +392,10 @@ Check(
 Check(
     MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(SafeLocalActionDecision.Allow)
         && MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(
-            new(false, MultiplayerSafeExecutePolicy.BoundedActionCeilingReason)),
-    "A completed safe prefix or bounded action ceiling keeps Safe Auto eligible for a fresh search.");
+            new(false, MultiplayerSafeExecutePolicy.BoundedActionCeilingReason))
+        && MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(
+            new(false, MultiplayerSafeExecutePolicy.ManualMultiplayerCardReason)),
+    "A completed safe prefix, bounded action ceiling, or manual multiplayer-card boundary keeps Safe Auto eligible for a fresh search.");
 
 Check(
     !MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(new(false, "choice_required"))
