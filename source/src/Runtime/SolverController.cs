@@ -1329,9 +1329,6 @@ internal static partial class SolverController
             _multiplayerInertSessionObserved = false;
         }
 
-        if (!capabilities.CanSearch)
-            return;
-
         if (_combat.State != null && !ReferenceEquals(current, _combat.State))
         {
             BeginCombat(current);
@@ -1353,9 +1350,16 @@ internal static partial class SolverController
                 SolverOverlay.ShowSearchStopped(host);
             else if (!AutomaticCalculationEnabled || !UnattendedTestRunner.AutomaticTurnSearchEnabled)
                 SolverOverlay.ShowManualCalculationReady(host, HasCalculatedThisCombat);
+            else if (!capabilities.CanSearch)
+                SolverOverlay.Show(
+                    host,
+                    SolverText.Get("多人精简模式：当前仅记录只读状态，未启用多人搜索。"));
             else if (!capabilities.IsMultiplayer && CanSolve(current, out _))
                 RequestSearch(host, current, SearchReason.AutoTurnStart);
         }
+
+        if (!capabilities.CanSearch)
+            return;
 
         if (capabilities.IsMultiplayer)
             TryScheduleMultiplayerSearch(host: NGame.Instance, current);
