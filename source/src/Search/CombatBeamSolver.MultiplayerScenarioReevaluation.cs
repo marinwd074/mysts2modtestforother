@@ -134,7 +134,7 @@ internal sealed partial class CombatBeamSolver
             int plannerBudget = remainingBudget - scenarioCount;
             ShadowTeammatePlanResult forecast =
                 ShadowTeammatePlanner.BuildTeamTopKRoutes(
-                    (CombatSolver.Engine.InCombat.Simulation.CombatPredictionSimulator)
+                    (global::CombatSolver.Engine.InCombat.Simulation.CombatPredictionSimulator)
                         preEndSnapshot.Simulator,
                     _player,
                     preEndSnapshot.ProcessedEnemyDeaths,
