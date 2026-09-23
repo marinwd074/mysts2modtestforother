@@ -131,6 +131,21 @@ internal static class Program
                 CancellationToken.None,
                 progressCallback: null);
 
+            SearchPolicySnapshot singleMemberTimedPolicy = policy with
+            {
+                UseBeamWidthPortfolio = false,
+                BeamWidthPortfolioWidths = null,
+                Interaction = null,
+                RequestWorkTotals = null,
+            };
+            SolverResult singleMemberTimedResult = CombatSearchCoordinator.Solve(
+                root,
+                names,
+                battleDamage,
+                singleMemberTimedPolicy,
+                CancellationToken.None,
+                progressCallback: null);
+
             SolverSearchProfile fixedWorkProfile = settings.Profile with
             {
                 BeamWidth = BootstrapBeamWidth,
@@ -205,6 +220,24 @@ internal static class Program
                     choiceBranchesEvaluated = result.TotalChoiceBranchesEvaluated,
                     continuationCount = result.Continuations.Count,
                     portfolioMembers = result.PortfolioTelemetry?.Members.Count ?? 0,
+                },
+                singleMemberTimed = new
+                {
+                    pass = singleMemberTimedResult.BoundaryReason != SearchBoundaryReason.TimeLimit
+                        && singleMemberTimedResult.BestNode.Actions.Count > 0,
+                    firstAction = singleMemberTimedResult.BestNode.Actions.FirstOrDefault() is { } singleMemberFirst
+                        ? ActionToken(singleMemberFirst)
+                        : "<none>",
+                    actionCount = singleMemberTimedResult.BestNode.Actions.Count,
+                    boundary = singleMemberTimedResult.BoundaryReason.ToString(),
+                    projectedBattleHpLost = singleMemberTimedResult.ProjectedBattleHpLost,
+                    finalHp = singleMemberTimedResult.Snapshot.PlayerHp,
+                    finalEnemyHp = singleMemberTimedResult.Snapshot.EnemyHp,
+                    combatEndedTurn = singleMemberTimedResult.CombatEndedTurn,
+                    expandedNodes = singleMemberTimedResult.TotalExpandedNodes,
+                    choiceBranchesEvaluated = singleMemberTimedResult.TotalChoiceBranchesEvaluated,
+                    continuationCount = singleMemberTimedResult.Continuations.Count,
+                    portfolioMembers = singleMemberTimedResult.PortfolioTelemetry?.Members.Count ?? 0,
                 },
                 fixedWork = new
                 {
