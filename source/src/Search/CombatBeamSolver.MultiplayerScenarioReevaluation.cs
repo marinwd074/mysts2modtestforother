@@ -291,6 +291,8 @@ internal sealed partial class CombatBeamSolver
                 policy.MultiplayerEnemyDurabilityRatio,
                 completeVictory ? snapshot.CombatEndedTurn : null,
                 _startTurnNumber);
+        (double teamRemainingHpRatio, double worstPlayerRemainingHpRatio) =
+            ComputeScenarioRemainingHpRatios(snapshot);
         return new MultiplayerScenarioOutcome(
             kind,
             completeVictory,
@@ -298,6 +300,37 @@ internal sealed partial class CombatBeamSolver
             objective.LossEquivalent,
             objective.WorstPlayerLossRatio,
             objective.TeamLossRatio,
-            objective.EnemyDurabilityRatio);
+            objective.EnemyDurabilityRatio,
+            teamRemainingHpRatio,
+            worstPlayerRemainingHpRatio);
+    }
+
+    private static (double TeamRemainingHpRatio, double WorstPlayerRemainingHpRatio)
+        ComputeScenarioRemainingHpRatios(SimulationSnapshot snapshot)
+    {
+        CombatPredictionSimulator simulator =
+            (CombatPredictionSimulator)snapshot.Simulator;
+        long teamHp = 0;
+        long teamMaximumHp = 0;
+        double worstPlayerRemainingHpRatio = double.PositiveInfinity;
+        foreach (var player in simulator.State.RootCapturedPlayers)
+        {
+            var state = simulator.State.GetCreature(player.Creature);
+            int maximumHp = Math.Max(1, state.MaxHp);
+            int currentHp = Math.Max(0, state.CurrentHp);
+            teamHp = checked(teamHp + currentHp);
+            teamMaximumHp = checked(teamMaximumHp + maximumHp);
+            worstPlayerRemainingHpRatio = Math.Min(
+                worstPlayerRemainingHpRatio,
+                currentHp / (double)maximumHp);
+        }
+
+        if (teamMaximumHp == 0)
+            return (double.NaN, double.NaN);
+        if (double.IsPositiveInfinity(worstPlayerRemainingHpRatio))
+            worstPlayerRemainingHpRatio = double.NaN;
+        return (
+            teamHp / (double)teamMaximumHp,
+            worstPlayerRemainingHpRatio);
     }
 }
