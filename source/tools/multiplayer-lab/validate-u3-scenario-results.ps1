@@ -149,8 +149,13 @@ foreach ($budget in $budgets) {
     $sessionCoverages = @($coverages | Where-Object {
             $_.Index -gt $budget.Index -and $_.Index -lt $sessionEnd
         })
+    $selectionStart = if ($rerank.Count -eq 1) {
+        [int]$rerank[0].Index
+    } else {
+        [int]$budget.Index
+    }
     $selection = @($selections | Where-Object {
-            $_.Index -gt $(if ($rerank.Count -eq 1) { $rerank[0].Index } else { $budget.Index }) -and
+            $_.Index -gt $selectionStart -and
             $_.Index -lt $nextSessionStart
         } | Select-Object -First 1)
 
