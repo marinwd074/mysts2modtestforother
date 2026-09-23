@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace CombatSolver;
 
 internal sealed partial class CombatBeamSolver
@@ -92,104 +90,6 @@ internal sealed partial class CombatBeamSolver
             bool HasShadowChance,
             bool ProbabilityTrusted,
             int BaselineIndex);
-
-        private static bool TryGetCurrentTurnShadowOutcome(
-            SearchNode candidate,
-            int rootTurn,
-            out SearchNode outcomeNode,
-            out ShadowForecastPlan forecast)
-        {
-            SearchNode? current = candidate;
-            while (current?.Parent != null)
-            {
-                PlanAction? action = current.Action;
-                if (action is
-                    {
-                        Kind: PlanActionKind.EndTurn,
-                        ShadowForecast: not null
-                    }
-                    && action.Turn == rootTurn)
-                {
-                    outcomeNode = current;
-                    forecast = action.ShadowForecast!;
-                    return true;
-                }
-                current = current.Parent;
-            }
-
-            outcomeNode = null!;
-            forecast = null!;
-            return false;
-        }
-
-        private static string CurrentTurnDecisionKey(
-            SearchNode candidate,
-            int rootTurn)
-        {
-            StringBuilder key = new();
-            foreach (PlanAction action in candidate.Actions)
-            {
-                if (action.Turn != rootTurn)
-                    continue;
-                AppendDecisionAction(key, action);
-                if (action.Kind == PlanActionKind.EndTurn)
-                    break;
-            }
-            return key.ToString();
-        }
-
-        private static void AppendDecisionAction(
-            StringBuilder key,
-            PlanAction action)
-        {
-            key.Append((int)action.Kind).Append(':')
-                .Append(action.CardId).Append(':')
-                .Append(action.CardOccurrence).Append(':')
-                .Append(action.CardStateKey).Append(':')
-                .Append(action.CardStateOccurrence).Append(':')
-                .Append(action.CardUpgradeLevel).Append(':')
-                .Append(action.CardEnchantmentId).Append(':')
-                .Append(action.TargetCombatId?.ToString() ?? "-").Append(':')
-                .Append(action.PotionSlot).Append(':')
-                .Append(action.PotionId).Append(':')
-                .Append(action.EndsPlayerTurn ? '1' : '0').Append('|');
-            AppendDecisionChoice(key, action.Choice);
-            if (action.NestedChoices != null)
-            {
-                key.Append("N").Append(action.NestedChoicesBeforePrimary).Append('[');
-                foreach (PlanCardChoice choice in action.NestedChoices)
-                    AppendDecisionChoice(key, choice);
-                key.Append(']');
-            }
-            // TurnStartChoices belong to the state reached after EndTurn. They are future
-            // observations/choices, not part of the deployable current-turn decision key.
-            key.Append(';');
-        }
-
-        private static void AppendDecisionChoice(
-            StringBuilder key,
-            PlanCardChoice? choice)
-        {
-            if (choice == null)
-            {
-                key.Append('-');
-                return;
-            }
-            key.Append((int)choice.Effect).Append(':')
-                .Append((int)choice.SourcePile).Append(':')
-                .Append(choice.SourceId).Append(':')
-                .Append(choice.ContextId).Append(':')
-                .Append((int)choice.Timing).Append('[');
-            foreach (PlanCardToken card in choice.Cards)
-            {
-                key.Append(card.CardId).Append(':')
-                    .Append(card.UpgradeLevel).Append(':')
-                    .Append(card.StateKey).Append(':')
-                    .Append(card.SourceOccurrence).Append(':')
-                    .Append(card.OptionOccurrence).Append(',');
-            }
-            key.Append(']');
-        }
 
         private MultiplayerChanceOutcome BuildChanceOutcome(
             SearchNode outcomeNode,
@@ -597,14 +497,14 @@ internal sealed partial class CombatBeamSolver
 
                 List<ChanceDecisionSummary> chanceDecisions = [];
                 foreach (var decisionGroup in selected.GroupBy(candidate =>
-                             CurrentTurnDecisionKey(candidate.Node, startTurnNumber)))
+                             MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(candidate.Node, startTurnNumber)))
                 {
                     Dictionary<StateFingerprint, MultiplayerChanceOutcome> outcomes = [];
                     bool hasShadowChance = false;
                     bool probabilityTrusted = true;
                     foreach (var candidate in decisionGroup)
                     {
-                        if (TryGetCurrentTurnShadowOutcome(
+                        if (MultiplayerChanceDecisionIdentity.TryGetCurrentTurnShadowOutcome(
                                 candidate.Node,
                                 startTurnNumber,
                                 out SearchNode outcomeNode,
@@ -669,10 +569,10 @@ internal sealed partial class CombatBeamSolver
                     string winningDecisionKey = selectedChanceDecision.DecisionKey;
                     selected = selected
                         .Where(candidate =>
-                            CurrentTurnDecisionKey(candidate.Node, startTurnNumber)
+                            MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(candidate.Node, startTurnNumber)
                                 == winningDecisionKey)
                         .OrderByDescending(candidate =>
-                            TryGetCurrentTurnShadowOutcome(
+                            MultiplayerChanceDecisionIdentity.TryGetCurrentTurnShadowOutcome(
                                 candidate.Node,
                                 startTurnNumber,
                                 out _,
@@ -681,7 +581,7 @@ internal sealed partial class CombatBeamSolver
                                 : 1d)
                         .ThenBy(candidate => baselineIndex[candidate.Node])
                         .Concat(selected.Where(candidate =>
-                            CurrentTurnDecisionKey(candidate.Node, startTurnNumber)
+                            MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(candidate.Node, startTurnNumber)
                                 != winningDecisionKey))
                         .ToList();
                 }

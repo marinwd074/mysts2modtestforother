@@ -108,6 +108,7 @@ internal sealed partial class CombatBeamSolver
 
         private const int PersistentRoutingContextRounds = 8;
         private const int RoutingChoiceLimit = 96;
+        private const int FinalChanceCoverageLimit = 16;
         private const int AmbiguousCompressedChoiceLimit = 48;
         private sealed record OrderedPileCohort(IReadOnlyList<SearchNode> PrefixVariants);
         private readonly record struct PocketwatchCadenceSignature(
@@ -187,6 +188,20 @@ internal sealed partial class CombatBeamSolver
             }
             if (potionFreeBaseline != null && !ContainsReference(ranked, potionFreeBaseline))
                 ranked.Add(potionFreeBaseline);
+
+            // P2 chance aggregation happens after RankFinal. If ordinary final-quality trimming
+            // keeps only a lucky low-probability Shadow outcome, the chance node becomes biased
+            // before it is evaluated. P3A therefore adds a tiny final-only coverage portfolio:
+            // only decisions already represented in the ordinary ranked set are eligible, and
+            // at most FinalChanceCoverageLimit extra nodes are admitted. Main Beam width,
+            // expansion count and time budget are unchanged.
+            if (_routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn)
+            {
+                AddFinalChanceCoverageRepresentatives(
+                    candidates,
+                    ranked,
+                    FinalChanceCoverageLimit);
+            }
             ranked.Sort((left, right) =>
             {
                 int comparison = CompareFinalCandidates(left, right);
@@ -198,6 +213,132 @@ internal sealed partial class CombatBeamSolver
             });
             AssignRetentionRanks(ranked, []);
             return ranked;
+        }
+
+        private void AddFinalChanceCoverageRepresentatives(
+            IReadOnlyList<SearchNode> candidates,
+            List<SearchNode> ranked,
+            int extraLimit)
+        {
+            if (extraLimit <= 0 || candidates.Count == 0 || ranked.Count == 0)
+                return;
+
+            List<string> representedDecisionKeys = [];
+            HashSet<string> representedDecisionSet = new(StringComparer.Ordinal);
+            foreach (SearchNode node in ranked)
+            {
+                if (!MultiplayerChanceDecisionIdentity.TryGetCurrentTurnShadowOutcome(
+                        node,
+                        _startTurnNumber,
+                        out _,
+                        out ShadowForecastPlan forecast)
+                    || !forecast.ScenarioProbabilityTrusted)
+                {
+                    continue;
+                }
+
+                string decisionKey =
+                    MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(
+                        node,
+                        _startTurnNumber);
+                if (representedDecisionSet.Add(decisionKey))
+                    representedDecisionKeys.Add(decisionKey);
+            }
+            if (representedDecisionKeys.Count == 0)
+                return;
+
+            Dictionary<string, Dictionary<StateFingerprint, SearchNode>> leadersByDecision =
+                new(StringComparer.Ordinal);
+            Dictionary<SearchNode, double> probabilityByLeader =
+                new(ReferenceEqualityComparer.Instance);
+
+            foreach (SearchNode candidate in candidates)
+            {
+                if (!MultiplayerChanceDecisionIdentity.TryGetCurrentTurnShadowOutcome(
+                        candidate,
+                        _startTurnNumber,
+                        out _,
+                        out ShadowForecastPlan forecast)
+                    || !forecast.ScenarioProbabilityTrusted)
+                {
+                    continue;
+                }
+
+                string decisionKey =
+                    MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(
+                        candidate,
+                        _startTurnNumber);
+                if (!representedDecisionSet.Contains(decisionKey))
+                    continue;
+
+                if (!leadersByDecision.TryGetValue(
+                        decisionKey,
+                        out Dictionary<StateFingerprint, SearchNode>? scenarioLeaders))
+                {
+                    scenarioLeaders = [];
+                    leadersByDecision.Add(decisionKey, scenarioLeaders);
+                }
+
+                if (!scenarioLeaders.TryGetValue(
+                        forecast.ScenarioFingerprint,
+                        out SearchNode? current)
+                    || CompareFinalCandidates(candidate, current) < 0)
+                {
+                    scenarioLeaders[forecast.ScenarioFingerprint] = candidate;
+                }
+            }
+
+            List<IReadOnlyList<SearchNode>> orderedScenariosByDecision = [];
+            foreach (string decisionKey in representedDecisionKeys)
+            {
+                if (!leadersByDecision.TryGetValue(
+                        decisionKey,
+                        out Dictionary<StateFingerprint, SearchNode>? scenarioLeaders))
+                {
+                    continue;
+                }
+
+                List<SearchNode> ordered = [.. scenarioLeaders.Values];
+                foreach (SearchNode node in ordered)
+                {
+                    _ = MultiplayerChanceDecisionIdentity.TryGetCurrentTurnShadowOutcome(
+                        node,
+                        _startTurnNumber,
+                        out _,
+                        out ShadowForecastPlan forecast);
+                    probabilityByLeader[node] = forecast.ScenarioProbabilityMass;
+                }
+                ordered.Sort((left, right) =>
+                {
+                    int comparison = probabilityByLeader[right].CompareTo(
+                        probabilityByLeader[left]);
+                    if (comparison != 0)
+                        return comparison;
+                    return CompareFinalCandidates(left, right);
+                });
+                orderedScenariosByDecision.Add(ordered);
+            }
+
+            int added = 0;
+            int round = 0;
+            while (added < extraLimit
+                   && orderedScenariosByDecision.Any(group => round < group.Count))
+            {
+                foreach (IReadOnlyList<SearchNode> scenarios in orderedScenariosByDecision)
+                {
+                    if (round >= scenarios.Count)
+                        continue;
+                    SearchNode candidate = scenarios[round];
+                    if (!ContainsReference(ranked, candidate))
+                    {
+                        ranked.Add(candidate);
+                        added++;
+                        if (added == extraLimit)
+                            break;
+                    }
+                }
+                round++;
+            }
         }
 
         public static (int Value, int Count) GetLongTermResourceMaximum(

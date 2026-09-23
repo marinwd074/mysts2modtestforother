@@ -40,3 +40,18 @@ P2 的目标不是给 Shadow 路线再加一个启发式分数，而是阻止主
 如果本次 Shadow 遇到 pending Choice 或动作深度上限，`ScenarioProbabilityTrusted=false`，整个概率聚合 fail closed，回退到 P1 排序。
 
 实际部署权限没有变化：Shadow 仍只存在于 detached simulator，`RootActionPlayers` 仍只允许本地玩家。
+
+## P3A：最终候选 Chance Coverage
+
+P2 的 chance 聚合发生在 `RankFinal` 之后，因此还需要防止最终候选预筛只留下“某个本地决策下最幸运的一条 Shadow 场景”。
+
+P3A 不扩大主 Beam，也不增加搜索深度或时间预算。它只在最终候选阶段增加最多 **16 条** coverage representative：
+
+- 只有已经在普通 `RankFinal` 结果中出现的当前本地决策才有资格补场景，不会把被主搜索淘汰的整个动作决策重新救活；
+- 对每个有资格的本地决策，按 `ScenarioFingerprint` 合并后选择一个最终质量最好的代表；
+- 场景先按原始 `ScenarioProbabilityMass` 从高到低；
+- 多个本地决策之间 round-robin 补入，避免一个决策独占全部 coverage 槽位；
+- 只保护 `ScenarioProbabilityTrusted=true` 的场景；
+- 额外候选总数硬上限为 16，且它们只进入最终选择，不重新扩展。
+
+这样 P2 的 expected/chance 排序至少能看到各个主候选决策的高概率场景，同时不会把“概率覆盖”变成新的 Beam 膨胀机制。
