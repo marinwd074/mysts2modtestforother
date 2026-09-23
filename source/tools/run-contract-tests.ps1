@@ -72,6 +72,7 @@ try {
     Invoke-PowerShellContract 'MultiplayerJointContinuationEvidenceChecks' 'tools/multiplayer-lab/test-joint-continuation-validator.ps1'
     Invoke-PowerShellContract 'P0BaselineClassifierChecks' 'tools/test-p0-baseline-classifier.ps1'
     Invoke-PowerShellContract 'P0BaselineManifestChecks' 'tools/test-p0-baseline-manifest.ps1'
+    Invoke-PowerShellContract 'U0BaselineChecks' 'tools/test-u0-baseline.ps1'
     Invoke-PowerShellContract 'MultiplayerContinuationLifecycleChecks' 'tools/test-multiplayer-continuation-lifecycle.ps1'
     Invoke-PowerShellContract 'MultiplayerSnapshotChecks' 'tools/test-headless-runtime.ps1' -Arguments @('-MultiplayerSnapshot')
 
