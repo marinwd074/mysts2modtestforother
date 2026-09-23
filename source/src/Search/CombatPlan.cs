@@ -132,7 +132,15 @@ internal sealed record PlanRelicEffect(
 /// Forecast-only metadata for multiplayer EndTurn replay. Deployment never executes these actions.
 /// </summary>
 internal sealed record ShadowForecastPlan(
-    IReadOnlyList<ShadowTeammateActionCandidate> Actions);
+    IReadOnlyList<ShadowTeammateActionCandidate> Actions,
+    double BehaviorLogProbability = 0d,
+    int BehaviorDecisionCount = 0)
+{
+    public double BehaviorMeanLogProbability =>
+        ShadowTeammateBehaviorModel.MeanLogProbability(
+            BehaviorLogProbability,
+            BehaviorDecisionCount);
+}
 
 internal sealed record PlanAction(
     PlanActionKind Kind,

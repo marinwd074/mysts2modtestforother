@@ -245,3 +245,172 @@ Check(
     "Local cross-turn tie-breaking prefers a current-turn card over an EndTurn-only route without changing single-player or current-turn-only policies.");
 
 Console.WriteLine($"PASS: {checks} multiplayer local-cross-turn contract checks");
+
+
+ShadowBehaviorActionObservation[] behaviorActions =
+[
+    new(
+        CompleteVictory: false,
+        EnemyDurabilityReduction: 18,
+        TeamEffectiveHpGain: 0,
+        EnergyCost: 1,
+        StarCost: 0,
+        IsPowerCard: false),
+    new(
+        CompleteVictory: false,
+        EnemyDurabilityReduction: 0,
+        TeamEffectiveHpGain: 0,
+        EnergyCost: 1,
+        StarCost: 0,
+        IsPowerCard: false),
+    new(
+        CompleteVictory: true,
+        EnemyDurabilityReduction: 5,
+        TeamEffectiveHpGain: 0,
+        EnergyCost: 1,
+        StarCost: 0,
+        IsPowerCard: false),
+];
+double[] behaviorLogProbabilities =
+    ShadowTeammateBehaviorModel.DecisionLogProbabilities(behaviorActions);
+double behaviorProbabilitySum = behaviorLogProbabilities.Sum(Math.Exp);
+Check(
+    Math.Abs(behaviorProbabilitySum - 1d) < 1e-9
+        && behaviorLogProbabilities.Length == behaviorActions.Length + 1,
+    "Shadow behavior decisions normalize legal actions plus stop into one probability distribution.");
+
+Check(
+    behaviorLogProbabilities[2] > behaviorLogProbabilities[0]
+        && behaviorLogProbabilities[0] > behaviorLogProbabilities[1],
+    "Shadow behavior prior prefers lethal over ordinary progress and ordinary progress over visible no-op play.");
+
+Check(
+    ShadowTeammateBehaviorModel.MeanLogProbability(-2d, 2) == -1d
+        && ShadowTeammateBehaviorModel.MeanLogProbability(-2d, 0) == 0d,
+    "Shadow route plausibility keeps cumulative and per-decision likelihood as separate values.");
+
+
+double urgencyAboveOldThreshold =
+    MultiplayerCombatObjectiveMath.ComputeLethalUrgency(0.350001d);
+double urgencyAtOldThreshold =
+    MultiplayerCombatObjectiveMath.ComputeLethalUrgency(0.35d);
+double urgencyBelowOldThreshold =
+    MultiplayerCombatObjectiveMath.ComputeLethalUrgency(0.349999d);
+Check(
+    urgencyBelowOldThreshold > urgencyAtOldThreshold
+        && urgencyAtOldThreshold > urgencyAboveOldThreshold
+        && Math.Abs(urgencyBelowOldThreshold - urgencyAboveOldThreshold) < 0.00001d,
+    "Adaptive lethal urgency is continuous through the old 35% durability boundary.");
+
+Check(
+    MultiplayerCombatObjectiveMath.ComputeLethalUrgency(1d) == 0d
+        && MultiplayerCombatObjectiveMath.ComputeLethalUrgency(0d) == 1d
+        && MultiplayerCombatObjectiveMath.ComputeLethalUrgency(0.25d)
+            > MultiplayerCombatObjectiveMath.ComputeLethalUrgency(0.75d),
+    "Adaptive lethal urgency rises smoothly as enemy effective durability falls.");
+
+double healthyTempoRate =
+    MultiplayerCombatObjectiveMath.LossRatioPerTurn(
+        enemyDurabilityRatio: 0.1d,
+        worstPlayerLossRatio: 0d);
+double fragileTempoRate =
+    MultiplayerCombatObjectiveMath.LossRatioPerTurn(
+        enemyDurabilityRatio: 0.1d,
+        worstPlayerLossRatio: 0.8d);
+Check(
+    fragileTempoRate > healthyTempoRate
+        && fragileTempoRate <= MultiplayerCombatObjectiveMath.MaximumExtraLossRatioPerTurn
+        && healthyTempoRate > 0d,
+    "Tempo pressure remains bounded and rises continuously as accumulated team risk increases.");
+
+double healthyFastScore =
+    MultiplayerCombatObjectiveMath.ContinuousTempoScore(
+        teamLossRatio: 0.12d,
+        worstPlayerLossRatio: 0.10d,
+        enemyDurabilityRatio: 0.08d,
+        combatEndedTurn: 3,
+        startTurnNumber: 1);
+double healthySlowScore =
+    MultiplayerCombatObjectiveMath.ContinuousTempoScore(
+        teamLossRatio: 0.08d,
+        worstPlayerLossRatio: 0.10d,
+        enemyDurabilityRatio: 0.08d,
+        combatEndedTurn: 5,
+        startTurnNumber: 1);
+Check(
+    healthyFastScore < healthySlowScore,
+    "Near lethal, a healthy team may rationally accept modest extra loss to finish multiple turns earlier.");
+
+double fullDurabilityFastScore =
+    MultiplayerCombatObjectiveMath.ContinuousTempoScore(
+        teamLossRatio: 0.12d,
+        worstPlayerLossRatio: 0d,
+        enemyDurabilityRatio: 1d,
+        combatEndedTurn: 3,
+        startTurnNumber: 1);
+double fullDurabilitySlowScore =
+    MultiplayerCombatObjectiveMath.ContinuousTempoScore(
+        teamLossRatio: 0.08d,
+        worstPlayerLossRatio: 0d,
+        enemyDurabilityRatio: 1d,
+        combatEndedTurn: 5,
+        startTurnNumber: 1);
+Check(
+    fullDurabilitySlowScore < fullDurabilityFastScore,
+    "At full enemy durability the continuous tempo term is zero, so lower team loss remains primary.");
+
+
+Check(
+    !ShadowRoutePruningPolicy.MayUseApproximateBeamPruning(
+        exactSurvivorCount: 4,
+        beamLimit: 4)
+        && ShadowRoutePruningPolicy.MayUseApproximateBeamPruning(
+            exactSurvivorCount: 5,
+            beamLimit: 4),
+    "Shadow heuristic quality pruning is forbidden until exact survivors exceed the beam limit.");
+
+ShadowApproximateQuality approximateBetter = new(
+    CompleteVictory: false,
+    AllPlayersAlive: true,
+    EnemyDurability: 20,
+    TeamEffectiveHp: 100,
+    WorstPlayerEffectiveHpRatio: 0.80d,
+    TeamEnergy: 3,
+    TeamStars: 1,
+    ActionCount: 2);
+ShadowApproximateQuality approximateWorse = new(
+    CompleteVictory: false,
+    AllPlayersAlive: true,
+    EnemyDurability: 30,
+    TeamEffectiveHp: 90,
+    WorstPlayerEffectiveHpRatio: 0.70d,
+    TeamEnergy: 2,
+    TeamStars: 1,
+    ActionCount: 3);
+Check(
+    ShadowRoutePruningPolicy.HeuristicQualityDominates(
+        approximateBetter,
+        approximateWorse)
+        && !ShadowRoutePruningPolicy.HeuristicQualityDominates(
+            approximateWorse,
+            approximateBetter),
+    "Shadow summary-quality dominance remains available only as an explicitly heuristic beam relation.");
+
+ShadowApproximateQuality incomparableDeckProxyA = approximateBetter with
+{
+    EnemyDurability = 15,
+    TeamEnergy = 1,
+};
+ShadowApproximateQuality incomparableDeckProxyB = approximateBetter with
+{
+    EnemyDurability = 25,
+    TeamEnergy = 4,
+};
+Check(
+    !ShadowRoutePruningPolicy.HeuristicQualityDominates(
+        incomparableDeckProxyA,
+        incomparableDeckProxyB)
+        && !ShadowRoutePruningPolicy.HeuristicQualityDominates(
+            incomparableDeckProxyB,
+            incomparableDeckProxyA),
+    "Conflicting summary advantages remain incomparable instead of being mislabeled exact dominance.");

@@ -152,7 +152,10 @@ internal sealed partial class CombatBeamSolver
                 processedEnemyDeaths);
             PlanAction jointAction = action with
             {
-                ShadowForecast = new ShadowForecastPlan(route.Actions.ToArray()),
+                ShadowForecast = new ShadowForecastPlan(
+                    route.Actions.ToArray(),
+                    route.BehaviorLogProbability,
+                    route.BehaviorDecisionCount),
             };
             yield return (jointAction, snapshot);
         }

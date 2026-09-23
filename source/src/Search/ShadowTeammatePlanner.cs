@@ -16,7 +16,8 @@ internal readonly record struct ShadowTeammateActionCandidate(
     string SemanticKey,
     int EnergyCost,
     int StarCost,
-    uint? TargetCombatId);
+    uint? TargetCombatId,
+    bool IsPowerCard = false);
 
 internal sealed record ShadowTeammateRoute(
     CombatPredictionSimulator Simulator,
@@ -32,6 +33,18 @@ internal sealed record ShadowTeammateRoute(
     int TeamStars)
 {
     internal bool IsTerminal => CompleteVictory || !AllPlayersAlive || TurnEndRequested;
+
+    internal IReadOnlySet<string> TurnEndedPlayerNetIds { get; init; } =
+        new HashSet<string>(StringComparer.Ordinal);
+
+    internal double BehaviorLogProbability { get; init; }
+
+    internal int BehaviorDecisionCount { get; init; }
+
+    internal double BehaviorMeanLogProbability =>
+        ShadowTeammateBehaviorModel.MeanLogProbability(
+            BehaviorLogProbability,
+            BehaviorDecisionCount);
 }
 
 internal readonly record struct ShadowTeammatePlanResult(
@@ -77,7 +90,8 @@ internal static class ShadowTeammatePlanner
                     semanticKey,
                     energyCost,
                     starCost,
-                    target?.CombatId));
+                    target?.CombatId,
+                    card.Preview.Type == CardType.Power));
             }
         }
 
@@ -102,65 +116,153 @@ internal static class ShadowTeammatePlanner
             .Where(player => !ReferenceEquals(player, localPlayer))
             .OrderBy(player => player.NetId)
             .ToArray();
-        List<ShadowTeammateRoute> worlds =
-            [CaptureRoute(
-                source.Fork(),
-                Array.Empty<ShadowTeammateActionCandidate>(),
-                CaptureProcessedEnemyDeaths(source, processedEnemyDeaths))];
+        ShadowTeammateRoute seed = CaptureRoute(
+            source.Fork(),
+            Array.Empty<ShadowTeammateActionCandidate>(),
+            CaptureProcessedEnemyDeaths(source, processedEnemyDeaths));
+        if (teammates.Length == 0)
+        {
+            return new ShadowTeammatePlanResult(
+                [seed],
+                ExpandedBranches: 0,
+                PendingChoiceBranches: 0,
+                HitActionDepthLimit: false);
+        }
+
+        // Team search is action-interleaved: each search layer plays exactly one card from
+        // any teammate that can still act. NetId is used only for deterministic enumeration,
+        // never to grant one teammate an entire route before another teammate is considered.
+        List<ShadowTeammateRoute> frontier = [seed];
+        List<ShadowTeammateRoute> completed = [];
         int expandedBranches = 0;
         int pendingChoiceBranches = 0;
         bool hitActionDepthLimit = false;
+        int maxTeamActions = checked(maxActionsPerPlayer * teammates.Length);
 
-        for (int teammateIndex = 0; teammateIndex < teammates.Length; teammateIndex++)
+        for (int depth = 0; depth < maxTeamActions && frontier.Count > 0; depth++)
         {
-            Player teammate = teammates[teammateIndex];
-            List<ShadowTeammateRoute> nextWorlds = [];
-            foreach (ShadowTeammateRoute world in worlds)
+            List<ShadowTeammateRoute> next = [];
+            foreach (ShadowTeammateRoute route in frontier)
             {
-                if (world.CompleteVictory
-                    || !world.Simulator.State.GetCreature(teammate.Creature).IsAlive)
+                if (route.CompleteVictory || !route.AllPlayersAlive)
                 {
-                    nextWorlds.Add(world);
+                    completed.Add(route);
                     continue;
                 }
 
-                ShadowTeammatePlanResult forecast = BuildTopKRoutes(
-                    world.Simulator,
-                    teammate,
-                    world.ProcessedEnemyDeaths,
-                    beamWidth,
-                    maxActionsPerPlayer);
-                expandedBranches = checked(expandedBranches + forecast.ExpandedBranches);
-                pendingChoiceBranches = checked(
-                    pendingChoiceBranches + forecast.PendingChoiceBranches);
-                hitActionDepthLimit |= forecast.HitActionDepthLimit;
-
-                foreach (ShadowTeammateRoute teammateRoute in forecast.Routes)
+                List<(ShadowTeammateRoute Route, ShadowBehaviorActionObservation Observation)>
+                    behaviorChoices = [];
+                foreach (Player teammate in teammates)
                 {
-                    SimulatedCombatState combat =
-                        (SimulatedCombatState)teammateRoute.Simulator.State.CombatState;
-                    _ = combat.ConsumePlayerTurnEndRequest();
+                    string playerNetId = teammate.NetId.ToString();
+                    if (route.TurnEndedPlayerNetIds.Contains(playerNetId)
+                        || !route.Simulator.State.GetCreature(teammate.Creature).IsAlive)
+                    {
+                        continue;
+                    }
 
-                    ShadowTeammateActionCandidate[] combined =
-                        new ShadowTeammateActionCandidate[
-                            world.Actions.Count + teammateRoute.Actions.Count];
-                    for (int index = 0; index < world.Actions.Count; index++)
-                        combined[index] = world.Actions[index];
-                    for (int index = 0; index < teammateRoute.Actions.Count; index++)
-                        combined[world.Actions.Count + index] = teammateRoute.Actions[index];
+                    int playerActionCount = 0;
+                    for (int actionIndex = 0; actionIndex < route.Actions.Count; actionIndex++)
+                    {
+                        if (string.Equals(
+                                route.Actions[actionIndex].PlayerNetId,
+                                playerNetId,
+                                StringComparison.Ordinal))
+                        {
+                            playerActionCount++;
+                        }
+                    }
+                    if (playerActionCount >= maxActionsPerPlayer)
+                        continue;
 
-                    nextWorlds.Add(CaptureRoute(
-                        teammateRoute.Simulator,
-                        combined,
-                        teammateRoute.ProcessedEnemyDeaths));
+                    IReadOnlyList<ShadowTeammateActionCandidate> candidates =
+                        EnumerateLegalActions(route.Simulator, teammate);
+                    foreach (ShadowTeammateActionCandidate candidate in candidates)
+                    {
+                        expandedBranches++;
+                        if (!TryPlayCandidate(
+                                route,
+                                teammate,
+                                candidate,
+                                out ShadowTeammateRoute? child))
+                        {
+                            pendingChoiceBranches++;
+                            continue;
+                        }
+
+                        HashSet<string> turnEndedPlayers =
+                            new(route.TurnEndedPlayerNetIds, StringComparer.Ordinal);
+                        if (child.TurnEndRequested)
+                        {
+                            // A force-end card ends only the acting teammate's shadow turn.
+                            // Consume the prediction-only request immediately so other teammates
+                            // can still interleave actions in subsequent layers.
+                            SimulatedCombatState childCombat =
+                                (SimulatedCombatState)child.Simulator.State.CombatState;
+                            _ = childCombat.ConsumePlayerTurnEndRequest();
+                            turnEndedPlayers.Add(playerNetId);
+                            child = CaptureRoute(
+                                child.Simulator,
+                                child.Actions,
+                                child.ProcessedEnemyDeaths);
+                        }
+
+                        child = child with
+                        {
+                            TurnEndedPlayerNetIds = turnEndedPlayers,
+                        };
+                        behaviorChoices.Add((
+                            child,
+                            new ShadowBehaviorActionObservation(
+                                child.CompleteVictory,
+                                Math.Max(0, route.EnemyDurability - child.EnemyDurability),
+                                Math.Max(0, child.TeamEffectiveHp - route.TeamEffectiveHp),
+                                candidate.EnergyCost,
+                                candidate.StarCost,
+                                candidate.IsPowerCard)));
+                    }
+                }
+
+                if (behaviorChoices.Count == 0)
+                {
+                    completed.Add(route);
+                    continue;
+                }
+
+                ShadowBehaviorActionObservation[] observations =
+                    behaviorChoices.Select(choice => choice.Observation).ToArray();
+                double[] decisionLogProbabilities =
+                    ShadowTeammateBehaviorModel.DecisionLogProbabilities(observations);
+
+                // Stopping is modeled as an explicit alternative whenever at least one legal
+                // remote action exists. It is a behavior decision, not a quality judgment.
+                completed.Add(route with
+                {
+                    BehaviorLogProbability =
+                        route.BehaviorLogProbability + decisionLogProbabilities[^1],
+                    BehaviorDecisionCount = route.BehaviorDecisionCount + 1,
+                });
+
+                for (int choiceIndex = 0; choiceIndex < behaviorChoices.Count; choiceIndex++)
+                {
+                    ShadowTeammateRoute child = behaviorChoices[choiceIndex].Route with
+                    {
+                        BehaviorLogProbability =
+                            route.BehaviorLogProbability + decisionLogProbabilities[choiceIndex],
+                        BehaviorDecisionCount = route.BehaviorDecisionCount + 1,
+                    };
+                    next.Add(child);
                 }
             }
 
-            worlds = RetainParetoSpectrum(nextWorlds, beamWidth);
+            frontier = RetainBehaviorAwareSpectrum(next, beamWidth);
+            if (depth == maxTeamActions - 1 && frontier.Count > 0)
+                hitActionDepthLimit = true;
         }
 
+        completed.AddRange(frontier);
         return new ShadowTeammatePlanResult(
-            worlds,
+            RetainBehaviorAwareSpectrum(completed, beamWidth),
             expandedBranches,
             pendingChoiceBranches,
             hitActionDepthLimit);
@@ -215,14 +317,14 @@ internal static class ShadowTeammatePlanner
                 }
             }
 
-            frontier = RetainParetoSpectrum(next, beamWidth);
+            frontier = RetainQualitySpectrum(next, beamWidth);
             if (depth == maxActions - 1 && frontier.Any(route => !route.IsTerminal))
                 hitDepthLimit = true;
         }
 
         completed.AddRange(frontier);
         return new ShadowTeammatePlanResult(
-            RetainParetoSpectrum(completed, beamWidth),
+            RetainQualitySpectrum(completed, beamWidth),
             expandedBranches,
             pendingChoiceBranches,
             hitDepthLimit);
@@ -233,17 +335,12 @@ internal static class ShadowTeammatePlanner
         IReadOnlyList<ShadowTeammateActionCandidate> actions,
         ISet<uint> processedEnemyDeaths)
     {
-        string? activePlayerNetId = null;
+        HashSet<string> turnEndedPlayers = new(StringComparer.Ordinal);
         for (int index = 0; index < actions.Count; index++)
         {
             ShadowTeammateActionCandidate action = actions[index];
-            if (activePlayerNetId != null
-                && !string.Equals(activePlayerNetId, action.PlayerNetId, StringComparison.Ordinal))
-            {
-                SimulatedCombatState betweenPlayers =
-                    (SimulatedCombatState)simulator.State.CombatState;
-                _ = betweenPlayers.ConsumePlayerTurnEndRequest();
-            }
+            if (turnEndedPlayers.Contains(action.PlayerNetId))
+                return false;
 
             Player teammate = FindCapturedPlayer(simulator, action.PlayerNetId);
             if (!TryPlayCandidateInPlace(
@@ -254,14 +351,14 @@ internal static class ShadowTeammatePlanner
             {
                 return false;
             }
-            activePlayerNetId = action.PlayerNetId;
-        }
 
-        if (activePlayerNetId != null)
-        {
             SimulatedCombatState combat =
                 (SimulatedCombatState)simulator.State.CombatState;
-            _ = combat.ConsumePlayerTurnEndRequest();
+            if (combat.PlayerTurnEndRequested)
+            {
+                _ = combat.ConsumePlayerTurnEndRequest();
+                turnEndedPlayers.Add(action.PlayerNetId);
+            }
         }
         return true;
     }
@@ -429,40 +526,154 @@ internal static class ShadowTeammatePlanner
             teamStars);
     }
 
-    private static List<ShadowTeammateRoute> RetainParetoSpectrum(
+    private static List<ShadowTeammateRoute> RetainBehaviorAwareSpectrum(
         IReadOnlyList<ShadowTeammateRoute> candidates,
         int limit)
+    {
+        List<ShadowTeammateRoute> exactSurvivors = ApplyExactDominance(candidates);
+        if (!ShadowRoutePruningPolicy.MayUseApproximateBeamPruning(
+                exactSurvivors.Count,
+                limit))
+        {
+            exactSurvivors.Sort(CompareRoutesForBehavior);
+            return exactSurvivors;
+        }
+
+        // Only an actual beam overflow may invoke approximate quality pruning. Behavior and
+        // outcome quality remain separate axes: half of the beam protects plausible behavior,
+        // while the other half draws from the explicitly heuristic quality frontier.
+        int behaviorSlots = Math.Max(1, (limit + 1) / 2);
+        List<ShadowTeammateRoute> behaviorRanked = [.. exactSurvivors];
+        behaviorRanked.Sort(CompareRoutesForBehavior);
+
+        List<ShadowTeammateRoute> selected = new(limit);
+        for (int index = 0; index < behaviorRanked.Count
+             && selected.Count < behaviorSlots; index++)
+        {
+            selected.Add(behaviorRanked[index]);
+        }
+
+        foreach (ShadowTeammateRoute route in
+                 SelectApproximateQualityBeam(exactSurvivors, limit))
+        {
+            if (selected.Any(existing => ReferenceEquals(existing, route)))
+                continue;
+            selected.Add(route);
+            if (selected.Count == limit)
+                break;
+        }
+
+        for (int index = 0; index < behaviorRanked.Count && selected.Count < limit; index++)
+        {
+            ShadowTeammateRoute route = behaviorRanked[index];
+            if (!selected.Any(existing => ReferenceEquals(existing, route)))
+                selected.Add(route);
+        }
+
+        selected.Sort(CompareRoutesForBehavior);
+        return selected;
+    }
+
+    private static List<ShadowTeammateRoute> RetainQualitySpectrum(
+        IReadOnlyList<ShadowTeammateRoute> candidates,
+        int limit)
+    {
+        List<ShadowTeammateRoute> exactSurvivors = ApplyExactDominance(candidates);
+        if (!ShadowRoutePruningPolicy.MayUseApproximateBeamPruning(
+                exactSurvivors.Count,
+                limit))
+        {
+            exactSurvivors.Sort(CompareRoutesForSpectrum);
+            return exactSurvivors;
+        }
+        return SelectApproximateQualityBeam(exactSurvivors, limit);
+    }
+
+    private static List<ShadowTeammateRoute> ApplyExactDominance(
+        IReadOnlyList<ShadowTeammateRoute> candidates)
     {
         if (candidates.Count <= 1)
             return [.. candidates];
 
-        List<ShadowTeammateRoute> frontier = [];
+        Dictionary<StateFingerprint, ShadowTeammateRoute> winners = [];
         for (int index = 0; index < candidates.Count; index++)
         {
             ShadowTeammateRoute candidate = candidates[index];
-            bool dominated = false;
+            StateFingerprint futureState = ShadowFutureStateFingerprint.Capture(
+                candidate.Simulator,
+                candidate.ProcessedEnemyDeaths,
+                candidate.TurnEndedPlayerNetIds,
+                candidate.Actions);
+
+            if (!winners.TryGetValue(futureState, out ShadowTeammateRoute? current))
+            {
+                winners.Add(futureState, candidate);
+                continue;
+            }
+
+            // Equal future-state fingerprints include all captured player/enemy mutable state,
+            // ordered piles, RNG streams, modeled combat state, action-budget usage and ended
+            // teammates. The branch with the stronger behavior evidence is therefore the better
+            // representation of the same modeled continuation, not a guessed gameplay dominance.
+            if (CompareRoutesForBehavior(candidate, current) < 0)
+                winners[futureState] = candidate;
+        }
+
+        return [.. winners.Values];
+    }
+
+    private static int CompareRoutesForBehavior(
+        ShadowTeammateRoute left,
+        ShadowTeammateRoute right)
+    {
+        int comparison = right.BehaviorMeanLogProbability.CompareTo(
+            left.BehaviorMeanLogProbability);
+        if (comparison != 0)
+            return comparison;
+        comparison = right.BehaviorLogProbability.CompareTo(left.BehaviorLogProbability);
+        if (comparison != 0)
+            return comparison;
+        return CompareRoutesForSpectrum(left, right);
+    }
+
+    private static List<ShadowTeammateRoute> SelectApproximateQualityBeam(
+        IReadOnlyList<ShadowTeammateRoute> candidates,
+        int limit)
+    {
+        if (candidates.Count <= limit)
+        {
+            List<ShadowTeammateRoute> all = [.. candidates];
+            all.Sort(CompareRoutesForSpectrum);
+            return all;
+        }
+
+        List<ShadowTeammateRoute> heuristicFrontier = [];
+        for (int index = 0; index < candidates.Count; index++)
+        {
+            ShadowTeammateRoute candidate = candidates[index];
+            bool heuristicallyDominated = false;
             for (int otherIndex = 0; otherIndex < candidates.Count; otherIndex++)
             {
                 if (index == otherIndex)
                     continue;
-                if (Dominates(candidates[otherIndex], candidate))
+                if (HeuristicQualityDominates(candidates[otherIndex], candidate))
                 {
-                    dominated = true;
+                    heuristicallyDominated = true;
                     break;
                 }
             }
-            if (!dominated)
-                frontier.Add(candidate);
+            if (!heuristicallyDominated)
+                heuristicFrontier.Add(candidate);
         }
 
-        frontier.Sort(CompareRoutesForSpectrum);
-        if (frontier.Count <= limit)
-            return frontier;
+        heuristicFrontier.Sort(CompareRoutesForSpectrum);
+        if (heuristicFrontier.Count <= limit)
+            return heuristicFrontier;
 
         List<ShadowTeammateRoute> sampled = new(limit);
         if (limit == 1)
         {
-            sampled.Add(frontier[0]);
+            sampled.Add(heuristicFrontier[0]);
             return sampled;
         }
 
@@ -470,38 +681,34 @@ internal static class ShadowTeammatePlanner
         for (int slot = 0; slot < limit; slot++)
         {
             int index = (int)Math.Round(
-                slot * (frontier.Count - 1d) / (limit - 1d),
+                slot * (heuristicFrontier.Count - 1d) / (limit - 1d),
                 MidpointRounding.AwayFromZero);
             if (index == previous)
                 continue;
-            sampled.Add(frontier[index]);
+            sampled.Add(heuristicFrontier[index]);
             previous = index;
         }
         return sampled;
     }
 
-    private static bool Dominates(ShadowTeammateRoute left, ShadowTeammateRoute right)
-    {
-        bool noWorse = (left.CompleteVictory || !right.CompleteVictory)
-            && (left.AllPlayersAlive || !right.AllPlayersAlive)
-            && left.EnemyDurability <= right.EnemyDurability
-            && left.TeamEffectiveHp >= right.TeamEffectiveHp
-            && left.WorstPlayerEffectiveHpRatio >= right.WorstPlayerEffectiveHpRatio
-            && left.TeamEnergy >= right.TeamEnergy
-            && left.TeamStars >= right.TeamStars
-            && left.Actions.Count <= right.Actions.Count;
-        if (!noWorse)
-            return false;
+    private static bool HeuristicQualityDominates(
+        ShadowTeammateRoute left,
+        ShadowTeammateRoute right)
+        => ShadowRoutePruningPolicy.HeuristicQualityDominates(
+            DescribeApproximateQuality(left),
+            DescribeApproximateQuality(right));
 
-        return left.CompleteVictory != right.CompleteVictory
-            || left.AllPlayersAlive != right.AllPlayersAlive
-            || left.EnemyDurability != right.EnemyDurability
-            || left.TeamEffectiveHp != right.TeamEffectiveHp
-            || !left.WorstPlayerEffectiveHpRatio.Equals(right.WorstPlayerEffectiveHpRatio)
-            || left.TeamEnergy != right.TeamEnergy
-            || left.TeamStars != right.TeamStars
-            || left.Actions.Count != right.Actions.Count;
-    }
+    private static ShadowApproximateQuality DescribeApproximateQuality(
+        ShadowTeammateRoute route)
+        => new(
+            route.CompleteVictory,
+            route.AllPlayersAlive,
+            route.EnemyDurability,
+            route.TeamEffectiveHp,
+            route.WorstPlayerEffectiveHpRatio,
+            route.TeamEnergy,
+            route.TeamStars,
+            route.Actions.Count);
 
     private static int CompareRoutesForSpectrum(
         ShadowTeammateRoute left,
