@@ -475,6 +475,71 @@ Check(
     "U3 current-decision identity excludes future teammate scenario and TurnStart observations, preventing clairvoyant current-action splitting.");
 
 
+MultiplayerScenarioOutcome[] u3ClairvoyantTrap =
+[
+    new(
+        ShadowTeammateScenarioKind.Aggressive,
+        CompleteVictory: true,
+        AllPlayersAlive: true,
+        LossEquivalent: 0.01d,
+        WorstPlayerLossRatio: 0.01d,
+        TeamLossRatio: 0.01d,
+        EnemyDurabilityRatio: 0d),
+    new(
+        ShadowTeammateScenarioKind.Defensive,
+        CompleteVictory: false,
+        AllPlayersAlive: true,
+        LossEquivalent: 0.80d,
+        WorstPlayerLossRatio: 0.70d,
+        TeamLossRatio: 0.75d,
+        EnemyDurabilityRatio: 0.90d),
+    new(
+        ShadowTeammateScenarioKind.Conserve,
+        CompleteVictory: false,
+        AllPlayersAlive: true,
+        LossEquivalent: 0.70d,
+        WorstPlayerLossRatio: 0.60d,
+        TeamLossRatio: 0.65d,
+        EnemyDurabilityRatio: 0.80d),
+    new(
+        ShadowTeammateScenarioKind.NoAction,
+        CompleteVictory: false,
+        AllPlayersAlive: true,
+        LossEquivalent: 0.90d,
+        WorstPlayerLossRatio: 0.80d,
+        TeamLossRatio: 0.85d,
+        EnemyDurabilityRatio: 0.95d),
+];
+MultiplayerScenarioOutcome[] u3StableDecision =
+    MultiplayerScenarioReevaluationPolicy.ScenarioSpecs
+        .Select((spec, index) => new MultiplayerScenarioOutcome(
+            spec.Kind,
+            CompleteVictory: false,
+            AllPlayersAlive: true,
+            LossEquivalent: 0.15d + index * 0.01d,
+            WorstPlayerLossRatio: 0.12d + index * 0.01d,
+            TeamLossRatio: 0.11d + index * 0.01d,
+            EnemyDurabilityRatio: 0.30d + index * 0.02d))
+        .ToArray();
+MultiplayerScenarioDecisionRank u3TrapRank =
+    MultiplayerScenarioReevaluationPolicy.Aggregate(u3ClairvoyantTrap);
+MultiplayerScenarioDecisionRank u3TrapReversedRank =
+    MultiplayerScenarioReevaluationPolicy.Aggregate(
+        u3ClairvoyantTrap.Reverse().ToArray());
+MultiplayerScenarioDecisionRank u3StableRank =
+    MultiplayerScenarioReevaluationPolicy.Aggregate(u3StableDecision);
+Check(
+    MultiplayerScenarioReevaluationPolicy.Compare(
+        u3TrapRank,
+        u3TrapReversedRank) == 0,
+    "U3 robust scenario rank is invariant to scenario enumeration order.");
+Check(
+    MultiplayerScenarioReevaluationPolicy.Compare(
+        u3StableRank,
+        u3TrapRank) < 0,
+    "U3 rejects the clairvoyance trap: a decision that is excellent only if the future teammate lane is known cannot beat a decision with uniformly safer outcomes across the same ScenarioSpec set.");
+
+
 MultiplayerScenarioEvaluation[] u3CompletedMatrix =
     MultiplayerScenarioReevaluationPolicy.ScenarioSpecs
         .Select((spec, index) => new MultiplayerScenarioEvaluation(
