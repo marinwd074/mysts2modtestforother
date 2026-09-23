@@ -16,17 +16,7 @@ internal static class MultiplayerSafeLocalActionClassifier
 {
     public static SafeLocalActionDecision Classify(CombatState state, PlanAction action)
     {
-        SafeLocalActionDecision structural = MultiplayerSafeExecutePolicy.ClassifyStructural(
-            new(
-                KindToken: action.Kind.ToString().ToLowerInvariant(),
-                IsPlayCard: action.Kind == PlanActionKind.PlayCard,
-                HasCardIdentity: !string.IsNullOrWhiteSpace(action.CardId),
-                EndsPlayerTurn: action.EndsPlayerTurn,
-                HasReplaySemantics: action.ReplayCount != 0,
-                RequiresChoice: action.Choice != null
-                    || action.NestedChoices is { Count: > 0 }
-                    || action.NestedChoicesBeforePrimary != 0
-                    || action.TurnStartChoices is { Count: > 0 }));
+        SafeLocalActionDecision structural = ClassifyStructural(action);
         if (!structural.IsSafe)
             return structural;
 
@@ -68,6 +58,19 @@ internal static class MultiplayerSafeLocalActionClassifier
                     && (action.TargetIndex != -1 || !string.IsNullOrEmpty(action.TargetName))));
     }
 
+    internal static SafeLocalActionDecision ClassifyStructural(PlanAction action)
+        => MultiplayerSafeExecutePolicy.ClassifyStructural(
+            new(
+                KindToken: action.Kind.ToString().ToLowerInvariant(),
+                IsPlayCard: action.Kind == PlanActionKind.PlayCard,
+                HasCardIdentity: !string.IsNullOrWhiteSpace(action.CardId),
+                EndsPlayerTurn: action.EndsPlayerTurn,
+                HasReplaySemantics: action.ReplayCount != 0,
+                RequiresChoice: action.Choice != null
+                    || action.NestedChoices is { Count: > 0 }
+                    || action.NestedChoicesBeforePrimary != 0
+                    || action.TurnStartChoices is { Count: > 0 }));
+
     public static IReadOnlyList<PlanAction> TakeSafePrefix(
         CombatState state,
         IReadOnlyList<PlanAction> actions,
@@ -97,10 +100,17 @@ internal static class MultiplayerSafeLocalActionClassifier
         CombatState state,
         IReadOnlyList<PlanAction> actions,
         out SafeLocalActionDecision stop)
-        => MultiplayerSafeExecutePolicy.TakeBoundedSafePrefix(
+    {
+        _ = state;
+        // Preflight only the immutable/plan-level safety boundary here. A later action may
+        // legitimately enter the hand after an earlier draw/generation effect. The deployment
+        // loop calls Classify(state, action) again immediately before every native action, so
+        // live card presence, multiplayer-only identity and target validity remain fail-closed.
+        return MultiplayerSafeExecutePolicy.TakeBoundedSafePrefix(
             actions,
-            action => Classify(state, action),
+            ClassifyStructural,
             out stop);
+    }
 
     /// <summary>
     /// Retained for the MP-2A validator's historical contract. New runtime deployments
