@@ -18,7 +18,7 @@ P0 后续提交与这个源码基线比较。基线 commit 不是“最终正确
 
 **2026-09-23：pinned 0.107.1 runtime 已补做。** Release Build、P0 contracts 与 Joint continuation gate 已通过；Joint exact reuse 与 remote fingerprint mismatch 均由生产 continuation 代码验证。SP-REGRESSION 的原始 Medium / Smart / fixed 5000 ms / DOP1 门仍不能计 PASS：历史 P0 基线 `380b0801` 与当前版本在同一 pinned runner 上都命中 `TimeLimit`，因此正式分类保持 `INCONCLUSIVE_TIME_BOUNDARY`。
 
-为区分 wall-clock 波动与搜索语义回归，增加了**补充诊断**，但不替代原 5000 ms 性能门：同一 root、Beam 60、DOP1、单成员、固定 1200 expanded nodes、关闭 wall-clock 截断时，历史与当前结果完全一致——首动作 `PROWESS`、累计战损 0、final HP 66、enemy HP 4、1200 expanded，分类 `OBSERVED_EQUIVALENT`。因此目前没有 P0 核心搜索质量回归证据；未封口项只剩原 5000 ms SP 性能/完成性门。
+为区分 wall-clock 波动与搜索语义回归，增加了**补充诊断**，但不替代原 5000 ms 性能门。第一层为同一 root、Beam 60、DOP1、单成员、固定 1200 expanded nodes、关闭 wall-clock 截断：历史与当前结果完全一致——首动作 `PROWESS`、累计战损 0、final HP 66、enemy HP 4、1200 expanded，分类 `OBSERVED_EQUIVALENT`。第二层继续保持 Medium / Smart / 5000 ms / DOP1 与完整 `CombatSearchCoordinator`，只关闭 BeamWidthPortfolio：历史与当前仍都命中 `TimeLimit`，且都已找到 enemy HP 0 的路线，分类 `BOTH_TIME_BOUNDARY`。因此 BeamWidthPortfolio 不是该 5 秒边界的根因，目前也没有 P0 核心搜索质量回归证据；未封口项只剩这个固定场景的原 5000 ms SP 性能/完成性门。
 
 ## 固定 workload
 
