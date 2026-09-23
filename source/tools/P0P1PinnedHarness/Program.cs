@@ -32,7 +32,7 @@ internal static class Program
         "GRAVE_WARDEN",
         "REAVE",
         "DEVOUR_LIFE",
-        "SOULBOUND",
+        "DEATH_MARCH",
         "PULL_FROM_BELOW",
         "SIC_EM",
         "PROWESS",
