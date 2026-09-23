@@ -399,12 +399,14 @@ internal sealed partial class CombatBeamSolver
             simulator,
             combat,
             playerState,
-            _player.Creature)
+            _player.Creature,
+            _routePolicy)
             + VoidFormOpportunityValue(
                 simulator,
                 combat,
                 playerState,
-                _player.Creature);
+                _player.Creature,
+                _routePolicy);
         int summonNextTurn = combat.GetAmount<SummonNextTurnPower>(_player.Creature);
         int summonNextTurnValue = summonNextTurn == 0
             ? 0
@@ -510,7 +512,7 @@ internal sealed partial class CombatBeamSolver
         int potionStrategicCost = combat.PotionUses.Sum(use => use.StrategicHpCost);
         int automaticPotionUseCount = combat.PotionUses.Count(use => use.Automatic);
         (int reachableHandValue, int zeroCostPlayableCount) =
-            CalculateReachableHandPotential(simulator, combat, playerState);
+            CalculateReachableHandPotential(simulator, combat, playerState, _routePolicy);
         StateFingerprint potionInventoryKey = BuildPotionInventoryKey(combat);
         StateFingerprint cycleShapeKey = BuildCycleShapeKey(
             cyclePileShapeKey,
@@ -705,7 +707,8 @@ internal sealed partial class CombatBeamSolver
     private static (int Value, int ZeroCostPlayableCount) CalculateReachableHandPotential(
         CombatPredictionSimulator simulator,
         SimulatedCombatState combat,
-        SimPlayerCombatState playerState)
+        SimPlayerCombatState playerState,
+        SearchRoutePolicy routePolicy)
     {
         int handCount = playerState.Hand.Cards.Count;
         Span<(int Energy, int Stars, int Value)> playable = handCount <= 64
@@ -715,8 +718,11 @@ internal sealed partial class CombatBeamSolver
         int zeroCostPlayableCount = 0;
         foreach (PredictedCard card in playerState.Hand)
         {
-            if (!combat.CanPlayCard(simulator, card, out int energyCost, out int starCost))
+            if (!CanConsiderCardAction(routePolicy, card)
+                || !combat.CanPlayCard(simulator, card, out int energyCost, out int starCost))
+            {
                 continue;
+            }
             energyCost = Math.Max(0, energyCost);
             starCost = Math.Max(0, starCost);
             int value = Math.Max(1, (int)Math.Ceiling(CardChoiceSupport.CardValue(card.Preview)));
@@ -753,7 +759,8 @@ internal sealed partial class CombatBeamSolver
         CombatPredictionSimulator simulator,
         SimulatedCombatState combat,
         SimPlayerCombatState playerState,
-        Creature owner)
+        Creature owner,
+        SearchRoutePolicy routePolicy)
     {
         if (combat.GetPower<VoidFormPower>(owner) is not { } power)
             return 0;
@@ -764,7 +771,8 @@ internal sealed partial class CombatBeamSolver
             return 0;
 
         return playerState.Hand.Cards
-            .Where(card => !card.Preview.EnergyCost.CostsX
+            .Where(card => CanConsiderCardAction(routePolicy, card)
+                && !card.Preview.EnergyCost.CostsX
                 && !card.Preview.HasStarCostX
                 && combat.CanPlayCard(simulator, card))
             .Select(card =>
@@ -789,44 +797,55 @@ internal sealed partial class CombatBeamSolver
         SimulatedCombatState combat,
         SimPlayerCombatState playerState,
         Creature owner)
-        => VoidFormOpportunityValue(simulator, combat, playerState, owner);
+        => VoidFormOpportunityValue(
+            simulator,
+            combat,
+            playerState,
+            owner,
+            SearchRoutePolicy.SinglePlayerFullRoute);
 
     private static int FreeCardOpportunityValue(
         CombatPredictionSimulator simulator,
         SimulatedCombatState combat,
         SimPlayerCombatState playerState,
-        Creature owner)
+        Creature owner,
+        SearchRoutePolicy routePolicy)
         => FreeCardOpportunityValue(
                 simulator,
                 combat,
                 playerState,
                 CardType.Attack,
-                combat.GetAmount<FreeAttackPower>(owner))
+                combat.GetAmount<FreeAttackPower>(owner),
+                routePolicy)
             + FreeCardOpportunityValue(
                 simulator,
                 combat,
                 playerState,
                 CardType.Skill,
-                combat.GetAmount<FreeSkillPower>(owner))
+                combat.GetAmount<FreeSkillPower>(owner),
+                routePolicy)
             + FreeCardOpportunityValue(
                 simulator,
                 combat,
                 playerState,
                 CardType.Power,
-                combat.GetAmount<FreePowerPower>(owner));
+                combat.GetAmount<FreePowerPower>(owner),
+                routePolicy);
 
     private static int FreeCardOpportunityValue(
         CombatPredictionSimulator simulator,
         SimulatedCombatState combat,
         SimPlayerCombatState playerState,
         CardType cardType,
-        int freeUses)
+        int freeUses,
+        SearchRoutePolicy routePolicy)
     {
         if (freeUses <= 0)
             return 0;
 
         return playerState.Hand.Cards
             .Where(card => card.Preview.Type == cardType
+                && CanConsiderCardAction(routePolicy, card)
                 && !card.Preview.EnergyCost.CostsX
                 && combat.CanPlayCard(simulator, card))
             .Select(card =>

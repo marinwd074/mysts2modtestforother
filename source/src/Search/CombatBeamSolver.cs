@@ -129,8 +129,13 @@ internal sealed partial class CombatBeamSolver(
         _run.PotionStrategicCosts);
 
     private bool CanConsiderCardAction(PredictedCard card)
+        => CanConsiderCardAction(_routePolicy, card);
+
+    private static bool CanConsiderCardAction(
+        SearchRoutePolicy routePolicy,
+        PredictedCard card)
         => !MultiplayerLocalCrossTurnContracts.ShouldExcludeMultiplayerOnlyCard(
-            _routePolicy,
+            routePolicy,
             card.Preview.MultiplayerConstraint == CardMultiplayerConstraint.MultiplayerOnly);
 
     private bool AllowsPotionUse(int slot, string potionId)
