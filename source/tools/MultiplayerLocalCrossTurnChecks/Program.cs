@@ -38,9 +38,18 @@ Check(
         && MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(SearchRoutePolicy.SinglePlayerFullRoute)
         && !MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(SearchRoutePolicy.MultiplayerCurrentTurnOnly)
         && MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(SearchRoutePolicy.MultiplayerLocalCrossTurn)
+        && !MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(
+            SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            playerCount: 1)
+        && MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(
+            SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            playerCount: 2)
+        && !MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(
+            SearchRoutePolicy.SinglePlayerFullRoute,
+            playerCount: 2)
         && MultiplayerLocalCrossTurnContracts.CanUsePersistentRouteCache(SearchRoutePolicy.SinglePlayerFullRoute)
         && !MultiplayerLocalCrossTurnContracts.CanUsePersistentRouteCache(SearchRoutePolicy.MultiplayerLocalCrossTurn),
-    "Singleplayer and multiplayer local-cross-turn share full search heuristics while current-turn-only remains reduced; persistent route cache stays singleplayer-only.");
+    "Full-search route policy alone does not activate multiplayer-only ranking/RNG semantics; those require an actual multiplayer root.");
 
 Check(
     !MultiplayerLocalCrossTurnContracts.ShouldExcludeMultiplayerOnlyCard(
@@ -59,44 +68,44 @@ Check(
 
 Check(
     !MultiplayerLocalCrossTurnContracts.DelayAngerCopyPreferenceUntilAfterEnemyHp(
-        SearchRoutePolicy.SinglePlayerFullRoute,
+        multiplayerRouteSemanticsActive: false,
         completeVictory: false)
         && !MultiplayerLocalCrossTurnContracts.DelayAngerCopyPreferenceUntilAfterEnemyHp(
-            SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            multiplayerRouteSemanticsActive: true,
             completeVictory: true)
         && MultiplayerLocalCrossTurnContracts.DelayAngerCopyPreferenceUntilAfterEnemyHp(
-            SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            multiplayerRouteSemanticsActive: true,
             completeVictory: false),
-    "Incomplete multiplayer local-cross-turn routes rank deterministic enemy HP before Anger copy count, while singleplayer and complete victories keep the original long-term ordering.");
+    "The Anger ordering exception activates only for an actual multiplayer route and only on incomplete outcomes.");
 
 Check(
     MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
-        SearchRoutePolicy.MultiplayerLocalCrossTurn,
+        multiplayerRouteSemanticsActive: true,
         rootSetup: false,
         sharedShuffleForecastTrusted: false,
         willShuffle: true)
         && !MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
-            SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            multiplayerRouteSemanticsActive: true,
             rootSetup: false,
             sharedShuffleForecastTrusted: true,
             willShuffle: true)
         && !MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
-            SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            multiplayerRouteSemanticsActive: true,
             rootSetup: true,
             sharedShuffleForecastTrusted: false,
             willShuffle: true)
         && !MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
-            SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            multiplayerRouteSemanticsActive: true,
             rootSetup: false,
             sharedShuffleForecastTrusted: false,
             willShuffle: false)
         && !MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
-            SearchRoutePolicy.SinglePlayerFullRoute,
+            multiplayerRouteSemanticsActive: false,
             rootSetup: false,
             sharedShuffleForecastTrusted: false,
             willShuffle: true)
         && !MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
-            SearchRoutePolicy.MultiplayerCurrentTurnOnly,
+            multiplayerRouteSemanticsActive: false,
             rootSetup: false,
             sharedShuffleForecastTrusted: false,
             willShuffle: true),
@@ -227,22 +236,18 @@ Check(
 
 Check(
     MultiplayerLocalCrossTurnContracts.PreferCurrentTurnPlayableRoute(
-        SearchRoutePolicy.MultiplayerLocalCrossTurn,
+        multiplayerRouteSemanticsActive: true,
         candidateHasCurrentTurnCard: true,
         currentHasCurrentTurnCard: false)
         && !MultiplayerLocalCrossTurnContracts.PreferCurrentTurnPlayableRoute(
-            SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            multiplayerRouteSemanticsActive: true,
             candidateHasCurrentTurnCard: false,
             currentHasCurrentTurnCard: true)
         && !MultiplayerLocalCrossTurnContracts.PreferCurrentTurnPlayableRoute(
-            SearchRoutePolicy.SinglePlayerFullRoute,
-            candidateHasCurrentTurnCard: true,
-            currentHasCurrentTurnCard: false)
-        && !MultiplayerLocalCrossTurnContracts.PreferCurrentTurnPlayableRoute(
-            SearchRoutePolicy.MultiplayerCurrentTurnOnly,
+            multiplayerRouteSemanticsActive: false,
             candidateHasCurrentTurnCard: true,
             currentHasCurrentTurnCard: false),
-    "Local cross-turn tie-breaking prefers a current-turn card over an EndTurn-only route without changing single-player or current-turn-only policies.");
+    "Current-turn-card preference is a real multiplayer deployment tie-break and stays inactive in the U2 single-player degenerate fixture.");
 
 
 MultiplayerRetentionObservation[] diversityObservations =
