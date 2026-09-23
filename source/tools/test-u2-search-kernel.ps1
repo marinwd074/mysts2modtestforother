@@ -39,6 +39,7 @@ $retention = Read-RepoFile 'src/Search/CombatBeamSolver.BeamRetentionPolicy.cs'
 $coordinator = Read-RepoFile 'src/Search/CombatSearchCoordinator.cs'
 $endTurn = Read-RepoFile 'src/Search/CombatBeamSolver.EndTurnExpansion.cs'
 $ordering = Read-RepoFile 'src/Search/CombatBeamSolver.FinalPlanOrdering.cs'
+$turnStart = Read-RepoFile 'src/Search/CombatBeamSolver.TurnExecutionContinuation.cs'
 $fixture = Read-RepoFile 'tools/OfflineSearchHarness/U0BaselineFixture.cs'
 
 # Shared full-search kernel: route horizon chooses planning capability.
@@ -64,6 +65,7 @@ Assert-Contains $controller 'IgnoreLongTermRewards = settings.IgnoreLongTermRewa
 # Same solver/profile path for both full-route modes.
 Assert-Contains $solver 'private readonly SolverSearchProfile _profile = searchProfile ?? SolverSearchProfile.Default;' 'shared solver profile'
 Assert-Contains $solver 'private readonly SearchRoutePolicy _routePolicy = policy.RoutePolicy;' 'route semantics stay explicit'
+Assert-Contains $solver 'HasActiveMultiplayerRouteSemantics(' 'actual player count gates multiplayer route-only behavior'
 Assert-Contains $coordinator 'new CombatBeamSolver(' 'single shared beam solver construction'
 Assert-Contains $contracts 'SearchRoutePolicy.SinglePlayerFullRoute' 'singleplayer full route contract'
 Assert-Contains $contracts 'SearchRoutePolicy.MultiplayerLocalCrossTurn' 'multiplayer local-cross-turn contract'
@@ -73,7 +75,10 @@ Assert-Contains $contracts 'ShouldExcludeMultiplayerOnlyCard(' 'MultiplayerOnly 
 Assert-Contains $solver 'MultiplayerLocalCrossTurnContracts.ShouldExcludeMultiplayerOnlyCard(' 'candidate generator keeps MultiplayerOnly boundary'
 Assert-Contains $endTurn 'policy.RoutePolicy != SearchRoutePolicy.MultiplayerLocalCrossTurn' 'Joint forecast remains multiplayer-only'
 Assert-Contains $endTurn 'simulator.State.RootCapturedPlayers.Count <= 1' 'no-teammate/single-captured-player path falls back to shared end-turn simulation'
-Assert-Contains $ordering 'routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn' 'team/scenario objective remains explicit multiplayer semantics'
+Assert-Contains $ordering 'bool useMultiplayerRouteSemantics' 'historical multiplayer tie-breaks receive an explicit active-semantics flag'
+Assert-Contains $ordering 'useMultiplayerRouteSemantics' 'final tie-breaks do not infer multiplayer behavior from route identity alone'
+Assert-Contains $contracts 'HasActiveMultiplayerRouteSemantics(' 'route-only behavior requires an actual multiplayer root'
+Assert-Contains $turnStart 'progress.MultiplayerRouteSemanticsActive' 'future shuffle boundary uses active semantics rather than route name'
 Assert-Contains $contracts 'ShouldStopBeforeSharedRngShuffle(' 'shared-RNG trust boundary remains'
 Assert-Contains $fixture 'NoTeammateEvents' 'deterministic no-teammate fixture remains'
 Assert-Contains $fixture 'ShadowTeammatePlanner.ReplayForecastActions(' 'teammate fixture reuses production simulation'
