@@ -74,6 +74,7 @@ internal sealed partial class CombatBeamSolver
     private sealed partial class BeamRetentionPolicy(
         SolverSearchProfile _profile,
         SearchRoutePolicy _routePolicy,
+        bool _useMultiplayerTeamObjective,
         MultiplayerCombatObjectiveStrategy _multiplayerCombatObjectiveStrategy,
         double _multiplayerEnemyDurabilityRatio,
         int _multiplayerEnemyMaximumHp,
@@ -198,7 +199,7 @@ internal sealed partial class CombatBeamSolver
             // only decisions already represented in the ordinary ranked set are eligible, and
             // at most FinalChanceCoverageLimit extra nodes are admitted. Main Beam width,
             // expansion count and time budget are unchanged.
-            if (_routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn)
+            if (_useMultiplayerTeamObjective)
             {
                 AddFinalScenarioCoverageRepresentatives(
                     candidates,
@@ -560,7 +561,7 @@ internal sealed partial class CombatBeamSolver
         }
 
         private int CompareMultiplayerObjective(SearchNode left, SearchNode right)
-            => _routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
+            => _useMultiplayerTeamObjective
                 ? MultiplayerCombatObjectiveMath.Compare(
                     BuildMultiplayerObjectiveRank(left),
                     BuildMultiplayerObjectiveRank(right))
@@ -568,7 +569,7 @@ internal sealed partial class CombatBeamSolver
 
         private void SortByBeamRank(List<SearchNode> ranked)
         {
-            if (_routePolicy != SearchRoutePolicy.MultiplayerLocalCrossTurn)
+            if (!_useMultiplayerTeamObjective)
             {
                 SortByLegacyBeamRank(ranked);
                 return;
@@ -1090,7 +1091,7 @@ internal sealed partial class CombatBeamSolver
             }
 
             List<SearchNode> required = [];
-            if (_routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn)
+            if (_useMultiplayerTeamObjective)
             {
                 foreach (SearchNode teamCandidate in
                          BuildMultiplayerDiversityPortfolio(ranked, limit))
@@ -2362,7 +2363,7 @@ internal sealed partial class CombatBeamSolver
                 return false;
             }
             bool useTeamSafety =
-                _routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn;
+                _useMultiplayerTeamObjective;
             bool noWorse = left.Snapshot.ProjectedPlayerHp >= right.Snapshot.ProjectedPlayerHp
                 && left.Snapshot.PlayerMaxHp >= right.Snapshot.PlayerMaxHp
                 && left.Snapshot.CumulativePlayerHpLost <= right.Snapshot.CumulativePlayerHpLost
