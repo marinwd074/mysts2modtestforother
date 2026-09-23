@@ -58,7 +58,7 @@ jobs:
         shell: pwsh
         run: |
           $gameData = (Resolve-Path '.\game-body\data_sts2_windows_x86_64').Path
-          dotnet build '.\source\CombatSolver.csproj' -c Release -p:CopyModOnBuild=false -p:Sts2DataDir="$gameData" -p:RitsuLibReferencesProps="$env:RITSU_PROPS" -p:RitsuLibReferenceTarget='0.107.1' --nologo
+          dotnet build '.\source\CombatSolver.csproj' -c Release -p:CopyModOnBuild=false -p:Sts2DataDir="$gameData" -p:RitsuLibReferencesProps="$env:RITSU_PROPS" -p:RitsuLibReferenceTarget='0.107.1' -p:TreatWarningsAsErrors=true --nologo
 
       - name: Build U2 degenerate harness
         shell: pwsh
