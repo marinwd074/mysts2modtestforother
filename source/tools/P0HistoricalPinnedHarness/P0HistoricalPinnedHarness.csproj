@@ -1,0 +1,67 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>13.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Frozen 380b0801 grants InternalsVisibleTo only to OfflineSearchHarness. -->
+    <AssemblyName>OfflineSearchHarness</AssemblyName>
+    <RootNamespace>P0HistoricalPinnedHarness</RootNamespace>
+    <NoWarn>$(NoWarn);CS0436</NoWarn>
+    <RepoRoot>$(MSBuildProjectDirectory)/../..</RepoRoot>
+  </PropertyGroup>
+
+  <Import Project="$(RepoRoot)/local.props" Condition="Exists('$(RepoRoot)/local.props')" />
+
+  <PropertyGroup>
+    <SteamRoot Condition="'$(SteamRoot)' == '' and '$(OS)' == 'Windows_NT' and Exists('D:/Steam')">D:/Steam</SteamRoot>
+    <SteamRoot Condition="'$(SteamRoot)' == '' and '$(OS)' == 'Windows_NT'">$(MSBuildProgramFiles32)/Steam</SteamRoot>
+    <SteamRoot Condition="'$(SteamRoot)' == ''">$(HOME)/.local/share/Steam</SteamRoot>
+    <Sts2Dir Condition="'$(Sts2Dir)' == ''">$(SteamRoot)/steamapps/common/Slay the Spire 2</Sts2Dir>
+    <Sts2DataDir Condition="'$(Sts2DataDir)' == '' and '$(OS)' == 'Windows_NT'">$(Sts2Dir)/data_sts2_windows_x86_64</Sts2DataDir>
+    <Sts2DataDir Condition="'$(Sts2DataDir)' == ''">$(Sts2Dir)/data_sts2_linuxbsd_x86_64</Sts2DataDir>
+    <RitsuWorkshopRoot Condition="'$(RitsuWorkshopRoot)' == ''">$(SteamRoot)/steamapps/workshop/content/2868840/3747602295</RitsuWorkshopRoot>
+    <RitsuLibDir Condition="'$(RitsuLibDir)' == ''">$(RitsuWorkshopRoot)/compat/$(CombatSolverTargetRitsuLibVersion)</RitsuLibDir>
+    <RitsuLibReferencesProps Condition="'$(RitsuLibReferencesProps)' == ''">$(RitsuWorkshopRoot)/RitsuLib.References.props</RitsuLibReferencesProps>
+  </PropertyGroup>
+
+  <Import Project="$(RitsuLibReferencesProps)" Condition="Exists('$(RitsuLibReferencesProps)')" />
+
+  <ItemGroup>
+    <PackageReference Include="Krafs.Publicizer" Version="2.3.0" PrivateAssets="all" />
+    <Publicize Include="sts2" IncludeVirtualMembers="false" IncludeCompilerGeneratedMembers="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="sts2" HintPath="$(Sts2DataDir)/sts2.dll" Private="true" />
+    <Reference Include="GodotSharp" HintPath="$(Sts2DataDir)/GodotSharp.dll" Private="true" />
+    <Reference Include="0Harmony" HintPath="$(Sts2DataDir)/0Harmony.dll" Private="true" />
+    <Reference Include="STS2-RitsuLib" HintPath="$(RitsuLibDir)/STS2-RitsuLib.dll" Private="true"
+               Condition="!Exists('$(RitsuLibReferencesProps)')" />
+    <Reference Include="CombatSolver" HintPath="$(CombatSolverDll)" Private="true" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="../OfflineSearchHarness/AssemblyBootstrap.cs" Link="Shared/AssemblyBootstrap.cs" />
+    <Compile Include="../OfflineSearchHarness/GameBootstrap.cs" Link="Shared/GameBootstrap.cs" />
+    <Compile Include="../OfflineSearchHarness/MainLoopContext.cs" Link="Shared/MainLoopContext.cs" />
+    <Compile Include="../OfflineSearchHarness/MemorySaveStore.cs" Link="Shared/MemorySaveStore.cs" />
+    <Compile Include="../OfflineSearchHarness/OfflineLocalization.cs" Link="Shared/OfflineLocalization.cs" />
+    <Compile Include="../OfflineSearchHarness/OfflineCombat.cs" Link="Shared/OfflineCombat.cs" />
+    <Compile Include="../U2DegenerateHarness/U2Runtime.cs" Link="Shared/U2Runtime.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="Sts2DataDir" Value="$(Sts2DataDir)" />
+    <RuntimeHostConfigurationOption Include="RitsuLibDir" Value="$(RitsuLibDir)" />
+    <RuntimeHostConfigurationOption Include="RitsuLibCompatDir" Value="$(RitsuWorkshopRoot)/compat/$(RitsuLibReferenceTarget)" />
+    <RuntimeHostConfigurationOption Include="RitsuLibSharedDir" Value="$(RitsuWorkshopRoot)/shared" />
+    <RuntimeHostConfigurationOption Include="CombatSolverDll" Value="$(CombatSolverDll)" />
+  </ItemGroup>
+
+  <Target Name="ValidateP0HistoricalInputs" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="'$(CombatSolverDll)' == '' or !Exists('$(CombatSolverDll)')" Text="Pass -p:CombatSolverDll=&lt;frozen CombatSolver.dll&gt;." />
+    <Error Condition="!Exists('$(Sts2DataDir)/sts2.dll')" Text="Missing pinned sts2.dll." />
+  </Target>
+</Project>
