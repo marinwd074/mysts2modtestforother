@@ -260,7 +260,11 @@ internal sealed partial class CombatBeamSolver
                             bossHpRelief,
                             postCombatRelicHeal,
                             theftPolicy,
-                            routePolicy) >= 0)
+                            routePolicy,
+                            multiplayerCombatObjectiveStrategy,
+                            multiplayerEnemyDurabilityRatio,
+                            multiplayerEnemyMaximumHp,
+                            startTurnNumber) >= 0)
                 {
                     continue;
                 }
@@ -569,7 +573,11 @@ internal sealed partial class CombatBeamSolver
         BossHpRelief bossHpRelief,
         PostCombatRelicHealProfile postCombatRelicHeal,
         SolverTheftPolicy? theftPolicy,
-        SearchRoutePolicy routePolicy)
+        SearchRoutePolicy routePolicy,
+        MultiplayerCombatObjectiveStrategy multiplayerCombatObjectiveStrategy,
+        double multiplayerEnemyDurabilityRatio,
+        int multiplayerEnemyMaximumHp,
+        int startTurnNumber)
     {
         SimulationSnapshot leftSnapshot = left.Snapshot;
         SimulationSnapshot rightSnapshot = right.Snapshot;
@@ -583,7 +591,46 @@ internal sealed partial class CombatBeamSolver
             rightSnapshot.AllEnemiesDead,
             rightSnapshot.PlayerDead,
             rightSnapshot.ProjectedPlayerHp);
-        int comparison = rightWon.CompareTo(leftWon);
+        int comparison;
+        if (routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn)
+        {
+            double leftEnemyDurabilityRatio =
+                MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(
+                    leftSnapshot.EnemyDurabilityByCombatId,
+                    multiplayerEnemyMaximumHp);
+            double rightEnemyDurabilityRatio =
+                MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(
+                    rightSnapshot.EnemyDurabilityByCombatId,
+                    multiplayerEnemyMaximumHp);
+            MultiplayerCombatObjectiveRank leftObjective =
+                MultiplayerCombatObjectiveMath.BuildRank(
+                    multiplayerCombatObjectiveStrategy,
+                    leftWon,
+                    leftSnapshot.AllPlayersAlive,
+                    leftSnapshot.TeamLossRatio,
+                    leftSnapshot.WorstPlayerLossRatio,
+                    leftEnemyDurabilityRatio,
+                    multiplayerEnemyDurabilityRatio,
+                    leftWon ? leftSnapshot.CombatEndedTurn : null,
+                    startTurnNumber);
+            MultiplayerCombatObjectiveRank rightObjective =
+                MultiplayerCombatObjectiveMath.BuildRank(
+                    multiplayerCombatObjectiveStrategy,
+                    rightWon,
+                    rightSnapshot.AllPlayersAlive,
+                    rightSnapshot.TeamLossRatio,
+                    rightSnapshot.WorstPlayerLossRatio,
+                    rightEnemyDurabilityRatio,
+                    multiplayerEnemyDurabilityRatio,
+                    rightWon ? rightSnapshot.CombatEndedTurn : null,
+                    startTurnNumber);
+            comparison = MultiplayerCombatObjectiveMath.Compare(
+                leftObjective,
+                rightObjective);
+            if (comparison != 0)
+                return comparison;
+        }
+        comparison = rightWon.CompareTo(leftWon);
         if (comparison != 0)
             return comparison;
         if (!leftWon && !rightWon)
