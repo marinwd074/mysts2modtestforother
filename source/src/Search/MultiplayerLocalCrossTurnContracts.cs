@@ -59,6 +59,12 @@ internal static class MultiplayerLocalCrossTurnContracts
     internal static bool CanUsePersistentRouteCache(SearchRoutePolicy policy)
         => policy == SearchRoutePolicy.SinglePlayerFullRoute;
 
+    internal static bool ShouldExcludeMultiplayerOnlyCard(
+        SearchRoutePolicy policy,
+        bool isMultiplayerOnly)
+        => policy != SearchRoutePolicy.SinglePlayerFullRoute
+            && isMultiplayerOnly;
+
     internal static bool CanPreserveFutureRoute(
         bool canReuse,
         bool awaitingContinuation,

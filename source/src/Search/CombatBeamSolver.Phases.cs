@@ -2232,7 +2232,9 @@ internal sealed partial class CombatBeamSolver
 
         SimPlayerCombatState player = simulator.State.GetPlayerCombatState(_player);
         PredictedCard? card = FindCardForReplay(player.Hand.Cards, action);
-        return card != null && combat.CanPlayCard(simulator, card);
+        return card != null
+            && CanConsiderCardAction(card)
+            && combat.CanPlayCard(simulator, card);
     }
 
     private PlanAction WithDisplayNames(PlanAction action)

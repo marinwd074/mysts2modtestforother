@@ -45,6 +45,7 @@ internal sealed partial class CombatBeamSolver(
         policy.MeasurePhasePerformance,
         policy.FramePressureSignal);
     private readonly bool _includeTurnSetup = policy.IncludeTurnSetup;
+    private readonly SearchRoutePolicy _routePolicy = policy.RoutePolicy;
     private readonly Player _player = root.PlayerIdentity;
     private readonly IntentForecast _forecast = root.Forecast;
     private readonly int _startTurnNumber = root.StartTurnNumber;
@@ -126,6 +127,11 @@ internal sealed partial class CombatBeamSolver(
         root.CarryRankingContext,
         battleDamage,
         _run.PotionStrategicCosts);
+
+    private bool CanConsiderCardAction(PredictedCard card)
+        => !MultiplayerLocalCrossTurnContracts.ShouldExcludeMultiplayerOnlyCard(
+            _routePolicy,
+            card.Preview.MultiplayerConstraint == CardMultiplayerConstraint.MultiplayerOnly);
 
     private bool AllowsPotionUse(int slot, string potionId)
         => _potionStrategy.AllowsExplicitUse(

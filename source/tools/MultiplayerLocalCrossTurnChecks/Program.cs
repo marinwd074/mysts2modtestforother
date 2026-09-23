@@ -43,6 +43,21 @@ Check(
     "Singleplayer and multiplayer local-cross-turn share full search heuristics while current-turn-only remains reduced; persistent route cache stays singleplayer-only.");
 
 Check(
+    !MultiplayerLocalCrossTurnContracts.ShouldExcludeMultiplayerOnlyCard(
+        SearchRoutePolicy.SinglePlayerFullRoute,
+        isMultiplayerOnly: true)
+        && MultiplayerLocalCrossTurnContracts.ShouldExcludeMultiplayerOnlyCard(
+            SearchRoutePolicy.MultiplayerCurrentTurnOnly,
+            isMultiplayerOnly: true)
+        && MultiplayerLocalCrossTurnContracts.ShouldExcludeMultiplayerOnlyCard(
+            SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            isMultiplayerOnly: true)
+        && !MultiplayerLocalCrossTurnContracts.ShouldExcludeMultiplayerOnlyCard(
+            SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            isMultiplayerOnly: false),
+    "Multiplayer-only cards remain in card state but never become multiplayer search actions; singleplayer policy is unchanged.");
+
+Check(
     !MultiplayerLocalCrossTurnContracts.DelayAngerCopyPreferenceUntilAfterEnemyHp(
         SearchRoutePolicy.SinglePlayerFullRoute,
         completeVictory: false)
