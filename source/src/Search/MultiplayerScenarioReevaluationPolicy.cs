@@ -1,5 +1,16 @@
 namespace CombatSolver;
 
+internal enum MultiplayerScenarioEvaluationStatus
+{
+    Unknown = 0,
+    Completed = 1,
+    Terminal = 2,
+}
+
+internal readonly record struct MultiplayerScenarioSpec(
+    string Id,
+    ShadowTeammateScenarioKind Kind);
+
 internal readonly record struct MultiplayerScenarioOutcome(
     ShadowTeammateScenarioKind Kind,
     bool CompleteVictory,
@@ -8,6 +19,12 @@ internal readonly record struct MultiplayerScenarioOutcome(
     double WorstPlayerLossRatio,
     double TeamLossRatio,
     double EnemyDurabilityRatio);
+
+internal readonly record struct MultiplayerScenarioEvaluation(
+    MultiplayerScenarioSpec Spec,
+    MultiplayerScenarioEvaluationStatus Status,
+    MultiplayerScenarioOutcome? Outcome,
+    int? ExpandedBranches);
 
 internal readonly record struct MultiplayerScenarioDecisionRank(
     int ScenarioCount,
@@ -20,15 +37,75 @@ internal readonly record struct MultiplayerScenarioDecisionRank(
     double WorstEnemyDurabilityRatio);
 
 /// <summary>
-/// Robust P3 reranking. Scenario kinds are stress cases, not calibrated probabilities:
-/// worst-case safety/loss is primary and the unweighted mean is only a secondary tie-break.
+/// Robust multiplayer scenario reranking. Scenario specs are stress-behavior rules, not
+/// calibrated probabilities or concrete teammate card strings. Every compared current decision
+/// must be evaluated against the same spec set; missing work is Unknown and forces the shared
+/// fallback rather than being interpreted as a favorable outcome.
 /// </summary>
 internal static class MultiplayerScenarioReevaluationPolicy
 {
     internal const int MaximumCurrentDecisions = 4;
-    internal const int MaximumScenariosPerDecision = 4;
-    internal const int MaximumCoverageCandidates =
+
+    private static readonly MultiplayerScenarioSpec[] ScenarioSpecsValue =
+    [
+        new("aggressive", ShadowTeammateScenarioKind.Aggressive),
+        new("defensive", ShadowTeammateScenarioKind.Defensive),
+        new("conserve", ShadowTeammateScenarioKind.Conserve),
+        new("no_action", ShadowTeammateScenarioKind.NoAction),
+    ];
+
+    internal static IReadOnlyList<MultiplayerScenarioSpec> ScenarioSpecs =>
+        ScenarioSpecsValue;
+
+    internal static int MaximumScenariosPerDecision => ScenarioSpecsValue.Length;
+
+    internal static int MaximumCoverageCandidates =>
         MaximumCurrentDecisions * MaximumScenariosPerDecision;
+
+    internal static bool IsRequiredScenario(ShadowTeammateScenarioKind kind)
+    {
+        for (int index = 0; index < ScenarioSpecsValue.Length; index++)
+        {
+            if (ScenarioSpecsValue[index].Kind == kind)
+                return true;
+        }
+        return false;
+    }
+
+    internal static bool HasCompleteCoverage(
+        IEnumerable<ShadowTeammateScenarioKind> completedKinds)
+    {
+        HashSet<ShadowTeammateScenarioKind> completed = [];
+        foreach (ShadowTeammateScenarioKind kind in completedKinds)
+        {
+            if (IsRequiredScenario(kind))
+                completed.Add(kind);
+        }
+
+        if (completed.Count != ScenarioSpecsValue.Length)
+            return false;
+
+        for (int index = 0; index < ScenarioSpecsValue.Length; index++)
+        {
+            if (!completed.Contains(ScenarioSpecsValue[index].Kind))
+                return false;
+        }
+        return true;
+    }
+
+    internal static bool CanRerank(
+        IReadOnlyList<bool> decisionCoverageComplete)
+    {
+        if (decisionCoverageComplete.Count < 2)
+            return false;
+
+        for (int index = 0; index < decisionCoverageComplete.Count; index++)
+        {
+            if (!decisionCoverageComplete[index])
+                return false;
+        }
+        return true;
+    }
 
     internal static MultiplayerScenarioDecisionRank Aggregate(
         IReadOnlyList<MultiplayerScenarioOutcome> outcomes)
