@@ -188,6 +188,7 @@ U0 时的 post-action gate 主要依赖：
 - 纯 policy 行为合同和 U1 结构门禁已加入总 contract suite。
 - 新增 `source/tools/U0U1PinnedHarness` 的 U1 production replay + fault-injection 层。GitHub Actions run `35857680737` 在 commit `3ee2a7a54b875a45c145f6fe8a187d5b34fbaad6` 已 PASS：同一真实 0.107.1 root 的首动作 BASH 连续两次走 `ReplayDiagnosticPrefix([action])` 得到相同 continuation / remote fingerprint；legacy heuristics 故意全部冲突时 semantic match 仍为 `SafeToContinue`；remote semantic mismatch → `RemoteOrUnknownChange`；continuation mismatch → `ActionMismatch`；pre-action WorldVersion 插入被 `world_version_not_accepted` 拒绝；abort 后迟到重试被 `session_state_Aborted` 拒绝。
 - 同 run 的主项目 Release、U0/U1 structural contracts、U2、P0/P1 全部 SUCCESS；compatibility run `35857680764` 也 SUCCESS。
+- **U1-D cancellation / late callback 实机时序已 PASS（2026-09-23）**：commit `50f519f9868bcd7018b28b08195c3cdfb4740a3f` 的多人问题包 `CombatSolver-0.40.2-RUBY_RAIDERS_NORMAL-d91c89658d8f4620abb01e058b340fb1.zip` 中，Safe Execute request 10 在 `13:45:52.534` 捕获 OFFERING 的 `NATIVE_ACTION_CAPTURED`；`13:45:52.655` 记录 `SOLVER_DISABLED`（native submit 后 121 ms）。关闭后仍观察到本地 world/state 变化（`13:45:52.703`、`13:45:52.963`、`13:45:53.065`），随后 `13:45:53.193` 才记录 `DEPLOY_CANCELED`。该 request 此后没有 `U1_POST_STATE_COMPARE`、`MP2B_ACTION_RECONCILED`、第二次 `DEPLOY_ACTION` / `NATIVE_ACTION_CAPTURED`，也没有旧 action 新授权。源码路径与此一致：关闭 Solver 调用 `CancelDeployment()`；deployment 在 native submit 后先等待已提交 action/choice producer 完成，再进入 cancellation-aware 的 queue-idle wait。因此该证据覆盖“取消期间在途 native 动作继续结算，但旧 Safe Execute session 不再提交后缀动作”。问题包没有单独记录 native completion 精确时间戳，所以 PASS 只声明到这一生命周期边界，不声称获得独立的 completion timestamp。
 
 ### 仍为 UNVERIFIED
 
@@ -196,7 +197,6 @@ U0 时的 post-action gate 主要依赖：
 - 真实多人“重锤 + Choice/烙印 + 后续牌”；
 - 真实多人连续祭品抽牌链；
 - 真实 Host/Client 在两张本地动作间插入队友动作；
-- cancellation / network late callback 的真实双端 timing；
 - U1 单动作 replay 的实际每张牌耗时和帧影响。
 
 真实测试时必须保存同一 request 的：
