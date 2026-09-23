@@ -67,9 +67,17 @@ Pinned 0.107.1 workflow：
 
 其中 CombatSolver Release、U0/U1 production replay、U2 degenerate equivalence、P0/P1 pinned runtime 与历史 P0 A/B 分类均通过。U2 退化测试继续证明无真实队友时不会因 U3 reserve 改变单人搜索预算/结果。
 
+## 真实双玩家运行证据
+
+**U3 Matrix real double-player runtime：PASS（2026-09-23）。**
+
+真实 Host/Client 双玩家 `RUBY_RAIDERS_NORMAL` 问题包已提供。Host/Client 均进入同一 `Players: 1,1000` 战斗，Solver 位于 Client 1000。CombatSolver 问题包中的生产诊断共观察到 5 轮 U3 Matrix；每轮均为 4 个不同当前决策 × 4 个固定 ScenarioSpec，`main_node_budget + reserved == total_node_budget`，coverage 的 `replay_expanded` 与 `MP_SCENARIO_BUDGET` 对账一致，且完整覆盖时 `MP_SCENARIO_RERANK enabled=true` 与 `FINAL_SELECTION scenario_rerank=true` 一致。首轮记录 `replay_expanded=163`、`replay_transitions=199`；其余四轮分别为 69/75、40/40、104/122、40/40。Completed 与 Terminal 均按完整覆盖处理，未观察到 Unknown。
+
+因此不再把 pinned 单玩家 fixture 冒充 U3 证据；Matrix PASS 来自真实双玩家运行。
+
 ## 仍未验证
 
-**真实双玩家 U3 runtime 仍为 UNVERIFIED。**
+**U3 Timeout fail-closed real double-player runtime 仍为 UNVERIFIED。**
 
 P0/P1 pinned fixture 实际是单玩家 root；即使把 route policy 设为 `MultiplayerLocalCrossTurn`，`HasActiveMultiplayerRouteSemantics` 仍为 false，因此不能拿该结果冒充 U3 双玩家运行证据。
 
@@ -86,7 +94,7 @@ P0/P1 pinned fixture 实际是单玩家 root；即使把 route policy 设为 `Mu
 7. 构造或观察队友不同后续行为时，确认相同当前本地动作仍只有一个 `CurrentTurnDecisionKey`。
 8. 若主搜索命中 TimeLimit，确认 `MP_SCENARIO_RERANK ... reason=reevaluation_budget_unavailable`，且没有超时后的 U3 replay 扩展。
 
-真实双玩家 smoke 通过后，U3 runtime 才可记 PASS；此前不要推进 U4 的默认策略迁移。
+Matrix smoke 已通过；U3 整体 runtime 尚需一次真实双玩家 TimeLimit fail-closed smoke 才可完整记 PASS。在该路径验证前不要推进 U4 的默认策略迁移。
 
 ## 日志判定器
 
