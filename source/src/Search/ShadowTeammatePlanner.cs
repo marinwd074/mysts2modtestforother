@@ -86,7 +86,8 @@ internal readonly record struct ShadowTeammatePlanResult(
 /// </summary>
 internal static class ShadowTeammatePlanner
 {
-    internal const int DefaultBeamWidth = 4;
+    internal const int DefaultBeamWidth =
+        ShadowTeammateScenarioPolicy.DefaultScenarioCount;
     internal const int DefaultMaxActions = 12;
 
     internal static IReadOnlyList<ShadowTeammateActionCandidate> EnumerateLegalActions(

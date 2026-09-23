@@ -422,9 +422,9 @@ Check(
 
 
 Check(
-    ShadowTeammatePlanner.DefaultBeamWidth
+    ShadowTeammateScenarioPolicy.DefaultScenarioCount
         == MultiplayerScenarioReevaluationPolicy.MaximumScenariosPerDecision,
-    "P3 production Shadow beam exactly fits the four stress-scenario lanes; no hidden fifth production slot is required.");
+    "P3 shared production scenario count exactly fits the four stress-scenario lanes; ShadowTeammatePlanner consumes the same constant.");
 
 Check(
     teammateScenarioChoices
