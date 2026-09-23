@@ -475,6 +475,44 @@ Check(
         StringComparison.Ordinal),
     "U3 current-decision identity excludes future teammate scenario and TurnStart observations, preventing clairvoyant current-action splitting.");
 
+
+MultiplayerScenarioEvaluation[] u3CompletedMatrix =
+    MultiplayerScenarioReevaluationPolicy.ScenarioSpecs
+        .Select((spec, index) => new MultiplayerScenarioEvaluation(
+            spec,
+            index == 0
+                ? MultiplayerScenarioEvaluationStatus.Terminal
+                : MultiplayerScenarioEvaluationStatus.Completed,
+            new MultiplayerScenarioOutcome(
+                spec.Kind,
+                CompleteVictory: index == 0,
+                AllPlayersAlive: true,
+                LossEquivalent: 0.10d + index * 0.01d,
+                WorstPlayerLossRatio: 0.05d,
+                TeamLossRatio: 0.04d,
+                EnemyDurabilityRatio: 0.20d),
+            ExpandedBranches: index + 1))
+        .ToArray();
+MultiplayerScenarioDecisionEvaluation u3CompleteDecision =
+    new("same-current-decision", u3CompletedMatrix);
+MultiplayerScenarioEvaluation[] u3InterruptedMatrix =
+    u3CompletedMatrix
+        .Select((evaluation, index) => index == 2
+            ? evaluation with
+            {
+                Status = MultiplayerScenarioEvaluationStatus.Unknown,
+                Outcome = null,
+            }
+            : evaluation)
+        .ToArray();
+MultiplayerScenarioDecisionEvaluation u3InterruptedDecision =
+    new("same-current-decision", u3InterruptedMatrix);
+Check(
+    u3CompleteDecision.CompleteCoverage
+        && u3CompleteDecision.ExpandedBranches == 10
+        && !u3InterruptedDecision.CompleteCoverage,
+    "U3 matrix records Completed/Terminal cells as complete, sums real expanded work, and an Unknown budget-interrupted cell cannot masquerade as full scenario coverage.");
+
 IReadOnlyList<ShadowTeammateScenarioChoice> orderDiversityChoices =
     ShadowTeammateScenarioPolicy.SelectProtected(
         teammateScenarioObservations,
