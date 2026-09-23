@@ -80,6 +80,18 @@ internal static class Program
                 BudgetMilliseconds);
             Console.WriteLine($"search_patches={patchCount}");
 
+            // P0 must reproduce the unattended launcher's real settings semantics:
+            // Medium preset first, then only the explicit P0 test overrides.
+            SolverSettingsData p0Settings = SolverSettings.ApplyPerformancePreset(
+                new SolverSettingsData
+                {
+                    PerformanceMigrationVersion = SolverSettings.CurrentPerformanceMigrationVersion,
+                    PotionPolicy = SolverPotionPolicy.Smart,
+                    SearchMaxDegreeOfParallelism = 1,
+                },
+                SolverPerformancePreset.Medium);
+            SolverSettings.ApplyForTesting(p0Settings);
+
             Task enter = EnterP0CombatAsync();
             loop.RunUntilCompleted(enter, TimeSpan.FromSeconds(180), "P0 fixed scenario enter combat");
             CombatState combat = OfflineCombat.WaitForPlayableCombat(loop);
@@ -100,12 +112,6 @@ internal static class Program
                 theftPolicy: null);
             SearchPolicySnapshot p0Policy = captured with
             {
-                Profile = settings.Profile with
-                {
-                    BeamWidth = BeamWidth,
-                    MaxExpandedNodes = MaxExpandedNodes,
-                    SoftTimeBudgetMilliseconds = BudgetMilliseconds,
-                },
                 RoutePolicy = SearchRoutePolicy.SinglePlayerFullRoute,
                 CurrentTurnOnly = false,
                 UseMultiplayerTeamObjective = false,
@@ -174,6 +180,19 @@ internal static class Program
             {
                 status = overallPass ? "PASS" : "FAIL",
                 pinnedTarget = "0.107.1",
+                settings = new
+                {
+                    preset = SolverSettings.ResolvePerformancePreset(SolverSettings.Current).ToString(),
+                    profileBeamWidth = settings.Profile.BeamWidth,
+                    profileMaxExpandedNodes = settings.Profile.MaxExpandedNodes,
+                    profileSoftTimeBudgetMilliseconds = settings.Profile.SoftTimeBudgetMilliseconds,
+                    requestBudgetMilliseconds = p0Policy.BudgetOverrideMilliseconds,
+                    p0Policy.MaxDegreeOfParallelism,
+                    p0Policy.UseBeamWidthPortfolio,
+                    p0Policy.UseNoveltyPortfolio,
+                    p0Policy.StopAtAcceptableBattleHpLoss,
+                    potionPolicy = p0Policy.PotionPolicy.ToString(),
+                },
                 fixture,
                 p0 = new
                 {
