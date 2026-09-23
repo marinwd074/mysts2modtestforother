@@ -200,6 +200,8 @@ MultiplayerSafeActionRevalidationFacts RevalidationFacts(bool hasNextAction = tr
     => new(
         NativePlayCardCaptured: true,
         ActionQueueIdle: true,
+        ExpectedContinuationStateMatched: true,
+        ExpectedRemoteStateMatched: true,
         LocalCardRemovedFromHand: true,
         LocalPlayerIdentityStable: true,
         EnergyStateConsistent: true,
@@ -220,24 +222,30 @@ Check(
     "A fully matched final action is recorded as an expected local change.");
 Check(
     MultiplayerSafeExecutePolicy.RevalidateAction(
-        RevalidationFacts() with { RemotePublicStateUnchanged = false })
-        == MultiplayerSafeActionRevalidationDecision.RemoteOrUnknownChange,
-    "An unmodeled remote public mutation aborts before the next action.");
+        RevalidationFacts() with
+        {
+            LocalCardRemovedFromHand = false,
+            EnergyStateConsistent = false,
+            RemotePublicStateUnchanged = false,
+            EnemyStateMatchesExpectedTarget = false,
+        })
+        == MultiplayerSafeActionRevalidationDecision.SafeToContinue,
+    "Modeled draw/generation/Choice or multi-target chains continue even when legacy heuristics disagree.");
 Check(
     MultiplayerSafeExecutePolicy.RevalidateAction(
-        RevalidationFacts() with { LocalCardRemovedFromHand = false })
+        RevalidationFacts() with { ExpectedRemoteStateMatched = false })
+        == MultiplayerSafeActionRevalidationDecision.RemoteOrUnknownChange,
+    "A teammate state that differs from the one-action prediction invalidates the old suffix.");
+Check(
+    MultiplayerSafeExecutePolicy.RevalidateAction(
+        RevalidationFacts() with { ExpectedContinuationStateMatched = false })
         == MultiplayerSafeActionRevalidationDecision.ActionMismatch,
-    "A card that did not leave the local hand fails closed.");
+    "A settled local/enemy/RNG state that differs from production replay fails closed.");
 Check(
     MultiplayerSafeExecutePolicy.RevalidateAction(
         RevalidationFacts() with { NativePlayCardCaptured = false })
         == MultiplayerSafeActionRevalidationDecision.ActionMismatch,
     "A missing native PlayCardAction attribution fails closed.");
-Check(
-    MultiplayerSafeExecutePolicy.RevalidateAction(
-        RevalidationFacts() with { EnemyStateMatchesExpectedTarget = false })
-        == MultiplayerSafeActionRevalidationDecision.RemoteOrUnknownChange,
-    "An enemy mutation outside the expected target is treated as remote or unknown.");
 
 string[] oneEnemyBefore = ["7:VINE:54/100/0:MOVE_A:powers=-"];
 string[] oneEnemyAfter = ["7:VINE:29/100/0:MOVE_A:powers=VULNERABLE:1"];
