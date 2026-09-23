@@ -14,6 +14,7 @@
 
 ## 当前已确认
 
+- **U0 已完成结构性收口（2026-09-23）**：`docs/U0_BASELINE.md` 冻结当前单人/多人差异、已失效兼容规则与五类故障分诊；`SearchPathObserver/PATH_TRACE_EVENT`、`[CombatSolver/U0] FINAL_CANDIDATE`、`FINAL_SELECTION`、`DEPLOY_ACTION/NATIVE_ACTION_CAPTURED/MP2B_ACTION_STATE_DIFF` 分别覆盖模型转移、候选、最终选择和实际执行四层。`tools/OfflineSearchHarness/U0BaselineFixture.cs` 提供空队友事件与固定 Shadow 动作脚本，固定脚本复用生产 `ReplayForecastActions`，没有第二套卡牌效果。`tools/test-u0-baseline.ps1` 已接入合同测试。Release/SP/真实 Host+Client 与重锤/祭品复现仍为 `UNVERIFIED`，没有被静态门禁写成 PASS。
 - 单人 0.107.1 卡牌/怪物兼容审计已完成主要收口；Axebot `AXEBOTS_NORMAL` 旧 `RespawnCount` 崩溃已由用户实机确认解决。
 - pinned monster target fanout：63 个可确定 move 已建模；Knowledge Demon 的远端 Choice 继续 fail closed。
 - v0.14 已把多人怪物目标 dispatcher 从 64KB 主文件拆到独立 `MonsterMoveEffects.MultiplayerTargets.cs`；普通效果统一 per-player，9 个 mixed move 已明确拆成 target-effect × players + owner-effect × 1，2 个 RNG 特例保持显式实现。已有怪物 HP 直接使用 root snapshot，不做二次人数缩放。
@@ -36,6 +37,8 @@
 - 新增多人专用“多人路线目标”设置：`MinimizeTeamLoss` 与默认 `AdaptiveLethalTempo`。第三阶段已移除旧的“敌方有效耐久 ≤35% 才启用、固定 5% 战损/回合”的硬切换；`AdaptiveLethalTempo` 现在始终使用连续目标。敌方剩余有效耐久通过 smoothstep 映射为 0～1 的斩杀紧迫度，最脆弱队友的 `WorstPlayerLossRatio` 再连续提高“避免再多吃一个敌方回合”的风险系数；`TeamLossRatio` 本身仍直接惩罚已经付出的 HP，因此更高战损不会因风险系数而变便宜。5% 只保留为理论上限，实际每回合 tempo 权重连续落在 0～5% 之间。敌人满耐久时 tempo 项严格为 0，因此回到最低团队战损；敌人越接近死亡、团队累计受损越重，提前结束战斗的价值越高。Snapshot 继续从所有 captured players 的 `GetCumulativeHpLost` 精确计算 `TeamLossRatio`、`WorstPlayerLossRatio`、`AllPlayersAlive`；分母通过 `CombatRootSnapshot.CapturedPlayerMaxHp` 只读取 root 冻结值。单人排序不读取这些团队键。
 
 ## 当前未完成
+
+- **当前下一张执行卡：U1 — 动作后态校验。** 用 U0 四层证据优先复现重锤+Choice、连续祭品抽牌链和真实远端插入；先记录共同模拟语义的预期后态与稳定 live 后态，再最小修改 Safe Execute revalidation。不要先扩大 Beam/预算或重写搜索器。
 
 - **P3 多情景复评已完成代码接线（2026-09-23）**。P3 使用 Aggressive / Defensive / Conserve / NoAction 四类压力情景，不把通用行为 prior 当真实概率；生产 Shadow beam=4 正好对应四类压力情景，并通过 action-interleaved simulator 保留关键出牌顺序语义。只对 P1/P2 前 4 个不同当前动作组做 final-only 复评，每组最多 4 个情景代表；至少 2 个完整动作组时启用 robust rerank，不完整动作组不参与 P3 胜出竞争但仍留在 P1/P2 fallback 列表。跨情景以同一 `CurrentTurnDecisionKey` 聚合，先看全员存活，再看全情景斩杀、最坏战损、最差队员和平均战损。通用行为 prior 明确保持 `ScenarioProbabilityTrusted=false`，概率加权 chance 代码继续关闭。
 
