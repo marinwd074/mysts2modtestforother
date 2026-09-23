@@ -64,8 +64,8 @@ $multiDegenerate = Invoke-U2Run -Label 'multi-degenerate' -RoutePolicy 'Multipla
 
 $singlePolicy = $single.searchPolicy
 $multiPolicy = $multiDegenerate.searchPolicy
-if ($singlePolicy.useMultiplayerTeamObjective -ne $false -or
-    $multiPolicy.useMultiplayerTeamObjective -ne $false) {
+if ($singlePolicy.UseMultiplayerTeamObjective -ne $false -or
+    $multiPolicy.UseMultiplayerTeamObjective -ne $false) {
     throw 'U2 fixture must compare both route policies under the same single-player objective.'
 }
 
