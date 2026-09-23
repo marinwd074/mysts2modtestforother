@@ -16,9 +16,13 @@ P0 后续提交与这个源码基线比较。基线 commit 不是“最终正确
 
 ## 当前状态
 
-**2026-09-23：pinned 0.107.1 runtime 已补做。** Release Build、P0 contracts 与 Joint continuation gate 已通过；Joint exact reuse 与 remote fingerprint mismatch 均由生产 continuation 代码验证。SP-REGRESSION 的原始 Medium / Smart / fixed 5000 ms / DOP1 门仍不能计 PASS：历史 P0 基线 `380b0801` 与当前版本在同一 pinned runner 上都命中 `TimeLimit`，因此正式分类保持 `INCONCLUSIVE_TIME_BOUNDARY`。
+**2026-09-23：P0 pinned 正确性基线已封口；5000 ms 只保留为性能遥测。** Release Build、P0 contracts 与 Joint continuation gate 均通过；Joint exact reuse 与 remote fingerprint mismatch 均由生产 continuation 代码验证。
 
-为区分 wall-clock 波动与搜索语义回归，增加了**补充诊断**，但不替代原 5000 ms 性能门。第一层为同一 root、Beam 60、DOP1、单成员、固定 1200 expanded nodes、关闭 wall-clock 截断：历史与当前结果完全一致——首动作 `PROWESS`、累计战损 0、final HP 66、enemy HP 4、1200 expanded，分类 `OBSERVED_EQUIVALENT`。第二层继续保持 Medium / Smart / 5000 ms / DOP1 与完整 `CombatSearchCoordinator`，只关闭 BeamWidthPortfolio：历史与当前仍都命中 `TimeLimit`，且都已找到 enemy HP 0 的路线，分类 `BOTH_TIME_BOUNDARY`。因此 BeamWidthPortfolio 不是该 5 秒边界的根因，目前也没有 P0 核心搜索质量回归证据；未封口项只剩这个固定场景的原 5000 ms SP 性能/完成性门。
+原始 Medium / Smart / fixed 5000 ms / DOP1 SP 门不再作为正确性 PASS 条件。原因不是放宽当前版本，而是历史 P0 基线 `380b0801` 在完全相同的 pinned runner 和预算下同样命中 `TimeLimit`，因此它无法提供一个“历史版本能过、当前版本必须过”的有效回归基线。进一步只关闭 BeamWidthPortfolio、仍保持 5000 ms / Medium / Smart / DOP1 / 完整 `CombatSearchCoordinator` 时，历史与当前仍都 `TimeLimit`，且都已找到 enemy HP 0 的路线，分类 `P0_SINGLE_MEMBER_TIMED BOTH_TIME_BOUNDARY`。因此该现象不是 portfolio 特有，也没有当前版本独有的 5 秒回归证据。
+
+P0 的搜索语义回归门改为确定性的**固定工作量历史 A/B**：同一 root、Beam 60、DOP1、单成员、关闭 wall-clock 截断、双方各精确 1200 expanded nodes。历史与当前结果完全一致——首动作 `PROWESS`、累计战损 0、final HP 66、enemy HP 4、1200 expanded，分类 `P0_FIXED_WORK OBSERVED_EQUIVALENT`。这不增加任何一方的相对预算，并消除了 runner 速度造成的 wall-clock 噪声。
+
+因此 P0 正确性层不再重复扩测；原 5000 ms 结果只用于性能监控。如果未来优化搜索性能，应在不扩大正式预算的前提下比较耗时/吞吐，不得把延长时间当作正确性修复。
 
 ## 固定 workload
 
@@ -36,9 +40,9 @@ Windows 本地执行：
 python .\source\tools\GeneratedCombatScenarios\run.py --config .\source\tools\GeneratedCombatScenarios\regression-necrobinder-elite.json --count 1 --mode Search --output .\.local\p0-sp-regression -- -PerformancePresetForTest Medium -FixedSearchBudget -SearchBudgetOverrideMilliseconds 5000 -SearchMaxDegreeOfParallelismForTest 1 -PotionPolicyForTest Smart
 ~~~
 
-只接受 `.local\p0-sp-regression\0000\result.json` 中 `status=Passed` 且没有时间边界的样本。P0 首次有效运行记录实际 root fingerprint、路线、搜索预算和结果；后续 A/B 必须复用该次生成的 resolved scenario、相同输入和相同总预算。
+该 5000 ms 运行现在是**性能遥测**，不再单独决定 P0 搜索语义是否 PASS。时间边界命中时仍不得把“更快超时”当改进，也不得通过延长时间掩盖；应结合历史版本同环境结果判断是否为当前版本独有性能退化。
 
-时间边界命中则该根无效，不能把“更快超时”当改进。
+搜索语义的正式回归门使用 pinned harness 的固定工作量历史 A/B：同一 resolved root、Beam 60、DOP1、单成员、双方各 1200 expanded nodes，并关闭 wall-clock 截断。只有当前版本在相同工作量下出现更差的确定性结果，才进入搜索质量回归调查。
 
 ### MP-JOINT-REUSE
 
@@ -113,10 +117,13 @@ P0 封口条件：
 
 1. Release build 0 error；
 2. contract tests 包含 P0 classifier 并通过；
-3. SP-REGRESSION 已捕获有效基线；
-4. Joint Reuse PASS；
-5. Joint Mismatch PASS；
-6. 两个多人 smoke 能被分类器正确区分；
-7. 当前多人文档不再把 Reactive Carry/current-turn-only 描述为目标架构。
+3. SP 固定工作量历史 A/B 在相同 root / Beam / DOP / expanded-node 预算下无当前版本回归；
+4. 5000 ms 历史/当前诊断不得出现“仅当前版本 TimeLimit”的证据；
+5. Joint Reuse PASS；
+6. Joint Mismatch PASS；
+7. classifier 能正确区分 continuation exact reuse、remote public mismatch 与其他 P0 故障类别；
+8. 当前多人文档不再把 Reactive Carry/current-turn-only 描述为目标架构。
+
+截至 2026-09-23，上述 pinned 正确性条件已满足：`P0_FIXED_WORK OBSERVED_EQUIVALENT`、`P0_SINGLE_MEMBER_TIMED BOTH_TIME_BOUNDARY`、`P0_JOINT PASS`。后续真实 Host/Client Safe Execute 行为属于 U1 runtime smoke，不再阻塞 P0 搜索基线。
 
 完成后进入 P1：统一目标。
