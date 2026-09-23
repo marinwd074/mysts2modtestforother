@@ -102,6 +102,9 @@ internal sealed partial class CombatBeamSolver
                     TurnEndedPlayerNetIds:
                         route.TurnEndedPlayerNetIds.OrderBy(id => id, StringComparer.Ordinal).ToArray()));
 
+            MultiplayerInterleaveOrderRelation orderRelation =
+                ProbeReverseInterleaveOrder(node, route);
+
             bool terminal = snapshot.PlayerDead
                 || snapshot.AllEnemiesDead
                 || snapshot.BoundaryReason != SearchBoundaryReason.None;
@@ -132,6 +135,8 @@ internal sealed partial class CombatBeamSolver
                     $"turn={node.Turn} order=local_then_teammate " +
                     $"local={node.Action.CardId} remote_player={remoteAction.PlayerNetId} " +
                     $"remote={remoteAction.CardId} target={remoteAction.TargetCombatId?.ToString() ?? "-"} " +
+                    $"reverse_order={orderRelation} " +
+                    $"order_collapsible={MultiplayerInterleaveOrderPolicy.CanCollapseOrder(orderRelation).ToString().ToLowerInvariant()} " +
                     $"expanded={forecast.ExpandedBranches} " +
                     $"approximate_pruning={(forecast.ExpandedBranches > forecast.Routes.Count).ToString().ToLowerInvariant()} " +
                     "deployable=false proactive_wait=false");
@@ -141,6 +146,112 @@ internal sealed partial class CombatBeamSolver
                 yield return child;
             else
                 snapshot.ReleaseSimulator();
+        }
+    }
+
+    /// <summary>
+    /// Replays the same local/teammate pair in reverse order on a detached fork. This is a
+    /// diagnostic/equivalence probe only: a teammate-first result never becomes a deployable
+    /// "wait for teammate" action. If the local action becomes illegal after the teammate action,
+    /// the reverse ordering is explicitly unavailable.
+    /// </summary>
+    private MultiplayerInterleaveOrderRelation ProbeReverseInterleaveOrder(
+        SearchNode afterLocal,
+        ShadowTeammateRoute localThenRemote)
+    {
+        if (afterLocal.Parent is not { } beforeLocal
+            || afterLocal.Action is not
+            {
+                Kind: PlanActionKind.PlayCard,
+                EndsPlayerTurn: false,
+            } localAction
+            || localThenRemote.Actions.Count != 1)
+        {
+            return MultiplayerInterleaveOrderRelation.ReverseUnavailable;
+        }
+
+        CombatPredictionSimulator forwardSimulator = localThenRemote.Simulator;
+        CombatPredictionSimulator reverseSimulator =
+            ((CombatPredictionSimulator)beforeLocal.Snapshot.Simulator).Fork();
+        ForkableSet<uint> reverseDeaths =
+            ((ForkableSet<uint>)beforeLocal.Snapshot.ProcessedEnemyDeaths).Fork();
+        int reverseShuffleEventsBefore = reverseSimulator.ShuffleEventCount;
+        if (!ShadowTeammatePlanner.TryReplayForecastActionsForOrderProbe(
+                reverseSimulator,
+                localThenRemote.Actions,
+                reverseDeaths))
+        {
+            return MultiplayerInterleaveOrderRelation.ReverseUnavailable;
+        }
+
+        SimulatedCombatState reverseCombat =
+            (SimulatedCombatState)reverseSimulator.State.CombatState;
+        var reversePlayerState =
+            reverseSimulator.State.GetPlayerCombatState(_player);
+        var localCard = FindCardForReplay(reversePlayerState.Hand.Cards, localAction);
+        if (localCard == null
+            || !CanConsiderCardAction(localCard)
+            || !reverseCombat.CanPlayCard(reverseSimulator, localCard))
+        {
+            return MultiplayerInterleaveOrderRelation.ReverseUnavailable;
+        }
+        if (localAction.TargetCombatId is { } targetId
+            && reverseCombat.GetCreature(targetId) == null)
+        {
+            return MultiplayerInterleaveOrderRelation.ReverseUnavailable;
+        }
+
+        int reverseShufflesCrossed = checked(
+            beforeLocal.Snapshot.ShufflesCrossed
+            + reverseSimulator.ShuffleEventCount
+            - reverseShuffleEventsBefore);
+        SimulationSnapshot reverseParent = Snapshot(
+            reverseSimulator,
+            beforeLocal.Turn,
+            beforeLocal.ActionCount + 1,
+            reverseShufflesCrossed,
+            SearchBoundaryReason.None,
+            reverseDeaths);
+        SimulationSnapshot reverseOutcome;
+        try
+        {
+            reverseOutcome = Replay(
+                [localAction],
+                reverseParent,
+                startingTurn: beforeLocal.Turn,
+                priorActionCount: beforeLocal.ActionCount + 1,
+                countTransition: false,
+                allowExecutionCapture: false);
+        }
+        finally
+        {
+            reverseParent.ReleaseSimulator();
+        }
+
+        try
+        {
+            if (reverseOutcome.BoundaryReason != SearchBoundaryReason.None)
+                return MultiplayerInterleaveOrderRelation.ReverseUnavailable;
+
+            IReadOnlySet<string> ended =
+                localThenRemote.TurnEndedPlayerNetIds;
+            StateFingerprint forwardKey = ShadowFutureStateFingerprint.Capture(
+                forwardSimulator,
+                localThenRemote.ProcessedEnemyDeaths,
+                ended,
+                localThenRemote.Actions);
+            StateFingerprint reverseKey = ShadowFutureStateFingerprint.Capture(
+                (CombatPredictionSimulator)reverseOutcome.Simulator,
+                reverseOutcome.ProcessedEnemyDeaths,
+                ended,
+                localThenRemote.Actions);
+            return forwardKey == reverseKey
+                ? MultiplayerInterleaveOrderRelation.ExactEquivalent
+                : MultiplayerInterleaveOrderRelation.OrderSensitive;
+        }
+        finally
+        {
+            reverseOutcome.ReleaseSimulator();
         }
     }
 
