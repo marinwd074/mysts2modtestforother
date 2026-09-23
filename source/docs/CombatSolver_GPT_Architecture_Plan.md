@@ -155,7 +155,7 @@ F 必须执行每张牌与触发器，而不是先合并成“队友本回合打
 
 ### U1 — 先修动作后态校验
 
-**状态（2026-09-23）：代码/合同接线完成，真实多人验收仍 `UNVERIFIED`。** 当前实现见 [`U1_ACTION_POSTSTATE.md`](U1_ACTION_POSTSTATE.md)：每张动作前 fresh probe；每张动作提交前由生产 `CombatBeamSolver.ReplayDiagnosticPrefix` 冻结 predicted `ContinuationStamp + remote fingerprint`；原生队列稳定后与 live 精确比较。旧 `local_card_removed/energy/enemy_target/remote_unchanged` 只保留旁路诊断。重锤+Choice、连续祭品、真实队友插入和 cancellation 双端 timing 未经新代码实机复测前，不进入 U2。
+**状态（2026-09-23）：代码/合同/Release 构建已完成，真实多人验收仍 `UNVERIFIED`。** 当前实现见 [`U1_ACTION_POSTSTATE.md`](U1_ACTION_POSTSTATE.md)：每张动作前 fresh probe；每张动作提交前由生产 `CombatBeamSolver.ReplayDiagnosticPrefix` 冻结 predicted `ContinuationStamp + remote fingerprint`；原生队列稳定后与 live 精确比较。旧 `local_card_removed/energy/enemy_target/remote_unchanged` 只保留旁路诊断。兼容合同为 `PASS: 30 / FAIL: 0 / SKIP: 0`，pinned 0.107.1 Release 构建为 `0 warnings / 0 errors`。重锤+Choice、连续祭品、真实队友插入和 cancellation 双端 timing 未经新代码实机复测前，不进入 U2。
 
 入口：MultiplayerSafeExecutePolicy、MultiplayerSafeLocalActionClassifier、SolverController.Deployment、现有native action/Choice与快照实现。
 
