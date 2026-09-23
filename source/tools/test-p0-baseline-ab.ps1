@@ -90,7 +90,9 @@ try {
     if (-not $projectText.Contains($testingExclude, [StringComparison]::Ordinal)) {
         throw 'Historical CombatSolver test-source exclusion was not found.'
     }
-    $projectText = $projectText.Replace($testingExclude, '')
+    $projectText = $projectText.Replace(
+        $testingExclude,
+        '    <Compile Remove="src/Runtime/UnattendedTestRunner.Compatibility.cs" />')
     Set-Content -LiteralPath $baselineProject -Value $projectText -Encoding utf8
 
     $requestPath = Join-Path $Workspace 'baseline-request.json'
