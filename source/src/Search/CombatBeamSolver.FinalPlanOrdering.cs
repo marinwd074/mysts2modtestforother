@@ -660,11 +660,12 @@ internal sealed partial class CombatBeamSolver
                 if (chanceAggregationEnabled)
                 {
                     selectedChanceDecision = chanceDecisions
-                        .OrderBy(decision => decision.Rank.ConservativeFailureProbability)
+                        .OrderByDescending(decision => decision.Rank.GuaranteedVictory)
                         .ThenBy(decision => decision.Rank.ConservativeTeamDeathProbability)
                         .ThenBy(decision => decision.Rank.ExpectedLossEquivalentUpper)
                         .ThenBy(decision => decision.Rank.ExpectedWorstPlayerLossRatioUpper)
                         .ThenBy(decision => decision.Rank.ExpectedTeamLossRatioUpper)
+                        .ThenByDescending(decision => decision.Rank.VictoryProbabilityLower)
                         .ThenBy(decision => decision.Rank.ExpectedEnemyDurabilityRatioUpper)
                         .ThenByDescending(decision => decision.Rank.RetainedProbabilityMass)
                         .ThenBy(decision => decision.BaselineIndex)
@@ -703,7 +704,8 @@ internal sealed partial class CombatBeamSolver
                         $"enabled={chanceAggregationEnabled.ToString().ToLowerInvariant()} " +
                         $"trusted={selectedChanceDecision.ProbabilityTrusted.ToString().ToLowerInvariant()} " +
                         $"retained_probability_mass={chanceRank.RetainedProbabilityMass:0.0000} " +
-                        $"failure_upper={chanceRank.ConservativeFailureProbability:0.0000} " +
+                        $"guaranteed_victory={chanceRank.GuaranteedVictory.ToString().ToLowerInvariant()} " +
+                        $"victory_probability_lower={chanceRank.VictoryProbabilityLower:0.0000} " +
                         $"team_death_upper={chanceRank.ConservativeTeamDeathProbability:0.0000} " +
                         $"expected_loss_upper={chanceRank.ExpectedLossEquivalentUpper:0.0000} " +
                         $"expected_enemy_durability_upper={chanceRank.ExpectedEnemyDurabilityRatioUpper:0.0000}");
