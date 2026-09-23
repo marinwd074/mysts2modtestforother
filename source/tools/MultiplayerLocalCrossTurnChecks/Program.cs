@@ -415,6 +415,29 @@ Check(
         && !MultiplayerScenarioReevaluationPolicy.CanRerank([true, true, false]),
     "U3 reranking requires the same complete ScenarioSpec coverage for every compared decision; an Unknown/budget-interrupted decision forces the shared baseline fallback.");
 
+
+int u3ReservedBudget =
+    MultiplayerScenarioReevaluationPolicy.ReserveExpandedBranchBudget(
+        totalExpandedNodeBudget: 5_000,
+        enabled: true);
+int u3PerDecisionBudget =
+    MultiplayerScenarioReevaluationPolicy.ExpandedBranchBudgetPerDecision(
+        u3ReservedBudget,
+        comparedDecisionCount: 4);
+Check(
+    MultiplayerScenarioReevaluationPolicy.ReserveExpandedBranchBudget(
+        totalExpandedNodeBudget: 5_000,
+        enabled: false) == 0
+        && MultiplayerScenarioReevaluationPolicy.ReserveExpandedBranchBudget(
+            totalExpandedNodeBudget: 1_200,
+            enabled: true) == 75
+        && u3ReservedBudget
+            == MultiplayerScenarioReevaluationPolicy.MaximumReservedExpandedBranches
+        && u3PerDecisionBudget
+            == MultiplayerScenarioReevaluationPolicy.MaximumExpandedBranchesPerDecision
+        && u3PerDecisionBudget * 4 <= u3ReservedBudget,
+    "U3 reevaluation uses a deterministic bounded reserve carved from the existing work budget and splits it equally across compared decisions.");
+
 PlanAction u3AggressiveFuture = new(
     PlanActionKind.EndTurn,
     Turn: 7,
