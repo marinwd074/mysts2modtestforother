@@ -179,6 +179,7 @@ U0 时的 post-action gate 主要依赖：
 ### 已完成
 
 - GitHub `0.107.1 compatibility consistency`（代码基线 `2e403c46a22470fb62e1266fdb9ecb500816542a`）已通过：`static-consistency` SUCCESS；`MultiplayerSafeExecuteChecks` 59 PASS；`U1ActionPostStateChecks` PASS；总合同 `PASS: 30 / FAIL: 0 / SKIP: 0`。
+- pinned Release build 已通过：工作流 `Pinned 0.107.1 Release build` 在 `3ba64352d602d043a3edc389d46a0d6ce0a8c718` 使用仓库 pinned `sts2.dll / 0Harmony.dll / GodotSharp.dll` 与官方 RitsuLib `0.107.1 / 0.6.2` 兼容包构建 `CombatSolver.csproj -c Release`，结果 `0 Warning(s) / 0 Error(s)`。工作流只在自身修改或手动 `workflow_dispatch` 时运行，不增加普通 push 的持续 CI 开销。
 - U1 生产代码已接线；
 - 新 gate 已切到 production semantic replay；
 - pre-action remote race 已补 fresh probe；
@@ -190,7 +191,6 @@ U0 时的 post-action gate 主要依赖：
 
 以下不能由 CI 的纯合同/字符串门禁替代：
 
-- 本地 Release build 0 error；
 - 真实多人“重锤 + Choice/烙印 + 后续牌”；
 - 真实多人连续祭品抽牌链；
 - 真实 Host/Client 在两张本地动作间插入队友动作；
