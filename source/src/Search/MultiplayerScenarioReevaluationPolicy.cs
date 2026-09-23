@@ -253,10 +253,11 @@ internal static class MultiplayerScenarioReevaluationPolicy
         MultiplayerScenarioOutcome[] cooperative = outcomes
             .Where(outcome => outcome.Kind != ShadowTeammateScenarioKind.NoAction)
             .ToArray();
-        MultiplayerScenarioOutcome? noAction = outcomes
-            .Where(outcome => outcome.Kind == ShadowTeammateScenarioKind.NoAction)
-            .Cast<MultiplayerScenarioOutcome?>()
-            .FirstOrDefault();
+        bool hasNoAction = outcomes.Any(
+            outcome => outcome.Kind == ShadowTeammateScenarioKind.NoAction);
+        MultiplayerScenarioOutcome noAction = hasNoAction
+            ? outcomes.First(outcome => outcome.Kind == ShadowTeammateScenarioKind.NoAction)
+            : default;
 
         double nominalReferenceLoss = outcomes.Average(outcome => outcome.LossEquivalent);
         double robustLoss = outcomes.Max(outcome => outcome.LossEquivalent);
@@ -270,10 +271,12 @@ internal static class MultiplayerScenarioReevaluationPolicy
             ? cooperative.Average(outcome => outcome.EnemyDurabilityRatio)
             : outcomes.Average(outcome => outcome.EnemyDurabilityRatio);
 
-        double noActionTeamLoss = noAction?.TeamLossRatio ?? meanTeamLoss;
-        double noActionEnemyDurability =
-            noAction?.EnemyDurabilityRatio
-            ?? outcomes.Average(outcome => outcome.EnemyDurabilityRatio);
+        double noActionTeamLoss = hasNoAction
+            ? noAction.TeamLossRatio
+            : meanTeamLoss;
+        double noActionEnemyDurability = hasNoAction
+            ? noAction.EnemyDurabilityRatio
+            : outcomes.Average(outcome => outcome.EnemyDurabilityRatio);
 
         return new MultiplayerScenarioRiskMetrics(
             outcomes.Count,
