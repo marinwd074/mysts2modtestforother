@@ -25,7 +25,9 @@ internal readonly record struct MultiplayerScenarioOutcome(
     double LossEquivalent,
     double WorstPlayerLossRatio,
     double TeamLossRatio,
-    double EnemyDurabilityRatio);
+    double EnemyDurabilityRatio,
+    double TeamRemainingHpRatio = double.NaN,
+    double WorstPlayerRemainingHpRatio = double.NaN);
 
 internal readonly record struct MultiplayerScenarioEvaluation(
     MultiplayerScenarioSpec Spec,
@@ -70,6 +72,10 @@ internal readonly record struct MultiplayerScenarioRiskMetrics(
     double ConservatismGap,
     double MeanTeamLossRatio,
     double WorstTeamLossRatio,
+    double MeanTeamRemainingHpRatio,
+    double WorstTeamRemainingHpRatio,
+    double MeanWorstPlayerRemainingHpRatio,
+    double WorstPlayerRemainingHpRatio,
     double CooperativeMeanTeamLossRatio,
     double NoActionTeamLossRatio,
     double CooperationTeamLossBenefit,
@@ -87,12 +93,15 @@ internal static class MultiplayerScenarioReevaluationPolicy
 {
     internal const int MaximumCurrentDecisions = 4;
     internal const double BoundedRiskWorstGapWeight = 0.5d;
+    internal const string NoActionScopeDiagnosticValue = "current_joint_forecast_only";
 
     private static readonly MultiplayerScenarioSpec[] ScenarioSpecsValue =
     [
         new("aggressive", ShadowTeammateScenarioKind.Aggressive),
         new("defensive", ShadowTeammateScenarioKind.Defensive),
         new("conserve", ShadowTeammateScenarioKind.Conserve),
+        // NoAction means no teammate action in this one Joint forecast window only.
+        // It never means the teammate is assumed idle for the remainder of combat.
         new("no_action", ShadowTeammateScenarioKind.NoAction),
     ];
 
@@ -271,6 +280,14 @@ internal static class MultiplayerScenarioReevaluationPolicy
         double robustLoss = outcomes.Max(outcome => outcome.LossEquivalent);
         double meanTeamLoss = outcomes.Average(outcome => outcome.TeamLossRatio);
         double worstTeamLoss = outcomes.Max(outcome => outcome.TeamLossRatio);
+        double meanTeamRemainingHp = AverageFinite(
+            outcomes.Select(outcome => outcome.TeamRemainingHpRatio));
+        double worstTeamRemainingHp = MinimumFinite(
+            outcomes.Select(outcome => outcome.TeamRemainingHpRatio));
+        double meanWorstPlayerRemainingHp = AverageFinite(
+            outcomes.Select(outcome => outcome.WorstPlayerRemainingHpRatio));
+        double worstPlayerRemainingHp = MinimumFinite(
+            outcomes.Select(outcome => outcome.WorstPlayerRemainingHpRatio));
 
         double cooperativeMeanTeamLoss = cooperative.Length > 0
             ? cooperative.Average(outcome => outcome.TeamLossRatio)
@@ -293,6 +310,10 @@ internal static class MultiplayerScenarioReevaluationPolicy
             Math.Max(0d, robustLoss - nominalReferenceLoss),
             meanTeamLoss,
             worstTeamLoss,
+            meanTeamRemainingHp,
+            worstTeamRemainingHp,
+            meanWorstPlayerRemainingHp,
+            worstPlayerRemainingHp,
             cooperativeMeanTeamLoss,
             noActionTeamLoss,
             noActionTeamLoss - cooperativeMeanTeamLoss,
@@ -306,6 +327,92 @@ internal static class MultiplayerScenarioReevaluationPolicy
         => rank.MeanLossEquivalent
             + BoundedRiskWorstGapWeight
             * Math.Max(0d, rank.WorstLossEquivalent - rank.MeanLossEquivalent);
+
+    internal static int SelectPreferredIndex(
+        MultiplayerScenarioRiskStrategy strategy,
+        IReadOnlyList<MultiplayerScenarioDecisionRank> ranks)
+    {
+        if (ranks.Count == 0)
+            return -1;
+
+        int bestIndex = 0;
+        for (int index = 1; index < ranks.Count; index++)
+        {
+            if (CompareByRiskStrategy(strategy, ranks[index], ranks[bestIndex]) < 0)
+                bestIndex = index;
+        }
+        return bestIndex;
+    }
+
+    /// <summary>
+    /// Independent U4 tolerance experiment. It is intentionally not composed with BoundedRisk:
+    /// first keep the best hard safety/terminal class, then admit candidates within a caller-owned
+    /// nominal-loss tolerance and choose the lower worst-case loss inside that admitted set.
+    /// Production does not call this helper and U4 does not choose a default tolerance.
+    /// </summary>
+    internal static int SelectNominalToleranceExperimentIndex(
+        IReadOnlyList<MultiplayerScenarioDecisionRank> ranks,
+        double nominalLossTolerance)
+    {
+        if (ranks.Count == 0)
+            return -1;
+        if (double.IsNaN(nominalLossTolerance)
+            || double.IsInfinity(nominalLossTolerance)
+            || nominalLossTolerance < 0d)
+        {
+            throw new ArgumentOutOfRangeException(nameof(nominalLossTolerance));
+        }
+
+        bool requireAllAlive = ranks.Any(rank => rank.AllScenariosAlive);
+        bool requireGuaranteedVictory = ranks
+            .Where(rank => !requireAllAlive || rank.AllScenariosAlive)
+            .Any(rank => rank.GuaranteedVictory);
+        int[] eligible = Enumerable.Range(0, ranks.Count)
+            .Where(index =>
+                (!requireAllAlive || ranks[index].AllScenariosAlive)
+                && (!requireGuaranteedVictory || ranks[index].GuaranteedVictory))
+            .ToArray();
+        double bestNominal = eligible.Min(index => ranks[index].MeanLossEquivalent);
+        int bestIndex = -1;
+        foreach (int index in eligible)
+        {
+            if (ranks[index].MeanLossEquivalent > bestNominal + nominalLossTolerance)
+                continue;
+            if (bestIndex < 0
+                || ranks[index].WorstLossEquivalent < ranks[bestIndex].WorstLossEquivalent
+                || ranks[index].WorstLossEquivalent == ranks[bestIndex].WorstLossEquivalent
+                    && ranks[index].MeanLossEquivalent < ranks[bestIndex].MeanLossEquivalent)
+            {
+                bestIndex = index;
+            }
+        }
+        return bestIndex;
+    }
+
+    private static double AverageFinite(IEnumerable<double> values)
+    {
+        double sum = 0d;
+        int count = 0;
+        foreach (double value in values)
+        {
+            if (!double.IsFinite(value))
+                continue;
+            sum += value;
+            count++;
+        }
+        return count == 0 ? double.NaN : sum / count;
+    }
+
+    private static double MinimumFinite(IEnumerable<double> values)
+    {
+        double minimum = double.PositiveInfinity;
+        foreach (double value in values)
+        {
+            if (double.IsFinite(value))
+                minimum = Math.Min(minimum, value);
+        }
+        return double.IsPositiveInfinity(minimum) ? double.NaN : minimum;
+    }
 
     /// <summary>
     /// U4 experiment-only risk ordering. Robust exactly preserves the current production
