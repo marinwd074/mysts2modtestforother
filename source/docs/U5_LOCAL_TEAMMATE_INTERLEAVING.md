@@ -83,8 +83,7 @@ GitHub Actions run `35890994702`：**SUCCESS**。
 `pinned_offline_production_replay`，明确记录
 `RealMultiplayerOwnershipVerified=false`：它验证模拟/顺序语义，不冒充真实远端玩家所有权或网络时序。
 
-对应 pinned run `35892680392`：**SUCCESS**，并继续通过 U0/U1、U2、P0/P1
-runtime 和历史 P0 A/B 分类。
+对应 compatibility run `35892680315`：**SUCCESS**；pinned run `35892680392`：**SUCCESS**，并继续通过 Release、U0/U1、U2、P0/P1 runtime 和历史 P0 A/B 分类。
 
 ### Pinned 0.107.1
 
@@ -100,19 +99,6 @@ GitHub Actions run `35890656903`：**SUCCESS**。
 - historical P0 A/B classification。
 
 没有扩大 Beam、节点预算或时间预算来换取通过。
-
-### U5 非实机顺序语义 pinned replay
-
-GitHub Actions run `35892680392`：**SUCCESS**；compatibility run `35892680315`：**SUCCESS**。
-
-在固定 0.107.1 Ironclad / Fuzzy Wurm Crawler 场景中，新增 harness 直接通过生产 `CombatBeamSolver.ReplayDiagnosticPrefix` 分别推进：
-
-- `BASH → STRIKE_IRONCLAD`：enemy HP = 39，future fingerprint = `7D7857814B038E3D:4A6951B304DF0382`；
-- `STRIKE_IRONCLAD → BASH`：enemy HP = 42，future fingerprint = `93D0F278205774EB:8DB470E2DA385E5E`。
-
-因此已由真实 pinned 游戏 DLL + 生产模拟器确认：Vulnerable/attack 换序会产生不同完整未来状态，且 `OrderSensitive` 不允许 exact collapse。该 run 同时完整通过 Release、U0/U1、U2、P0/P1 与历史 P0 A/B 回归。
-
-此测试仍是单进程 detached simulation。它验证生产状态转移和顺序敏感性，不验证真实双玩家 ownership、网络同步、远端 WorldVersion 到达时序；证据中显式记录 `RealMultiplayerOwnershipVerified=false`。
 
 ## 仍未验证
 
