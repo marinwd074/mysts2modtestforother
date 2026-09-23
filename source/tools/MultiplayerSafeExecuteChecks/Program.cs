@@ -35,7 +35,7 @@ Check(Structural("usepotion", isPlayCard: false).Reason == "kind_usepotion", "Po
 Check(Structural(hasCardIdentity: false).Reason == "card_identity_missing", "Missing card identity fails closed.");
 Check(Structural(endsTurn: true).Reason == "ends_player_turn", "Cards that end the player turn fail closed.");
 Check(Structural(replay: true).Reason == "replay_semantics", "Replay semantics fail closed.");
-Check(Structural(choice: true).Reason == "choice_required", "Choice-driving cards fail closed.");
+Check(Structural(choice: true).Reason == "choice_required", "Unsupported or cross-turn choice-driving actions fail closed.");
 Check(Resolved(localPlayer: false).Reason == "local_player_missing", "Missing local player fails closed.");
 Check(Resolved(localCard: false).Reason == "local_card_missing", "A card outside the local hand fails closed.");
 Check(
@@ -59,15 +59,15 @@ Check(
 Check(Resolved(incompleteTarget: true).Reason == "target_identity_incomplete", "Incomplete target identity fails closed.");
 Check(Resolved().IsSafe, "A targetless resolved local card is allowed.");
 Check(
-    MultiplayerSafeExecutePolicy.MaxActionsPerDeployment == 6,
-    "MP-2C uses one finite six-action Safe Execute ceiling.");
+    MultiplayerSafeExecutePolicy.MaxActionsPerDeployment == 32,
+    "Safe Execute keeps a finite 32-action hard ceiling while allowing complete normal current-turn routes.");
 Check(
-    MultiplayerSafeExecutePolicy.DeploymentStopAfter(6, 7).Reason
+    MultiplayerSafeExecutePolicy.DeploymentStopAfter(32, 33).Reason
         == MultiplayerSafeExecutePolicy.BoundedActionCeilingReason,
-    "A seventh planned action stops at the bounded MP-2C ceiling.");
+    "A thirty-third planned action stops at the finite Safe Execute ceiling.");
 Check(
-    MultiplayerSafeExecutePolicy.DeploymentStopAfter(5, 6).IsSafe,
-    "A sixth planned action remains admissible before the MP-2C ceiling is reached.");
+    MultiplayerSafeExecutePolicy.DeploymentStopAfter(7, 8).IsSafe,
+    "An eight-action lethal route is no longer truncated by the old six-action ceiling.");
 IReadOnlyList<SafeLocalActionDecision> allSafe =
     [SafeLocalActionDecision.Allow, SafeLocalActionDecision.Allow,
      SafeLocalActionDecision.Allow, SafeLocalActionDecision.Allow];
@@ -94,14 +94,17 @@ IReadOnlyList<SafeLocalActionDecision> emptyPrefix =
         out SafeLocalActionDecision emptyStop);
 Check(emptyPrefix.Count == 0 && emptyStop.Reason == "ends_player_turn", "An unsafe first route action returns an empty prefix.");
 IReadOnlyList<SafeLocalActionDecision> overCeiling =
-    Enumerable.Repeat(SafeLocalActionDecision.Allow, 7).ToArray();
+    Enumerable.Repeat(
+        SafeLocalActionDecision.Allow,
+        MultiplayerSafeExecutePolicy.MaxActionsPerDeployment + 1).ToArray();
 IReadOnlyList<SafeLocalActionDecision> cappedPrefix =
     MultiplayerSafeExecutePolicy.TakeBoundedSafePrefix(
         overCeiling,
         decision => decision,
         out SafeLocalActionDecision ceilingStop);
 Check(
-    cappedPrefix.Count == 6 && ceilingStop.Reason == MultiplayerSafeExecutePolicy.BoundedActionCeilingReason,
+    cappedPrefix.Count == MultiplayerSafeExecutePolicy.MaxActionsPerDeployment
+        && ceilingStop.Reason == MultiplayerSafeExecutePolicy.BoundedActionCeilingReason,
     "A route longer than the hard ceiling is truncated without becoming unbounded.");
 Check(
     MultiplayerSafeExecutePolicy.CanGrantLabCapability(
@@ -238,6 +241,27 @@ Check(
         RevalidationFacts() with { EnemyStateMatchesExpectedTarget = false })
         == MultiplayerSafeActionRevalidationDecision.RemoteOrUnknownChange,
     "An enemy mutation outside the expected target is treated as remote or unknown.");
+
+string[] oneEnemyBefore = ["7:VINE:54/100/0:MOVE_A:powers=-"];
+string[] oneEnemyAfter = ["7:VINE:29/100/0:MOVE_A:powers=VULNERABLE:1"];
+Check(
+    MultiplayerSafeExecutePolicy.EnemyStateMatchesExpectedLocalAction(
+        oneEnemyBefore,
+        oneEnemyAfter,
+        targetCombatId: null),
+    "A targetless local card may legitimately mutate existing enemy state without being mistaken for a remote delta.");
+Check(
+    !MultiplayerSafeExecutePolicy.EnemyStateMatchesExpectedLocalAction(
+        oneEnemyBefore,
+        [.. oneEnemyAfter, "8:SPAWN:10/10/0:MOVE:powers=-"],
+        targetCombatId: null),
+    "A targetless local card still fails closed if the enemy identity set changes unexpectedly.");
+Check(
+    !MultiplayerSafeExecutePolicy.EnemyStateMatchesExpectedLocalAction(
+        ["7:A:50/50/0:M:powers=-", "8:B:50/50/0:M:powers=-"],
+        ["7:A:40/50/0:M:powers=-", "8:B:40/50/0:M:powers=-"],
+        targetCombatId: 7),
+    "A targeted action still rejects mutation of a different enemy.");
 Check(
     MultiplayerSafeExecutePolicy.RevalidateAction(
         RevalidationFacts() with { WorldVersionStable = false })

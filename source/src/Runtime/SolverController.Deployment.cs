@@ -323,15 +323,21 @@ internal static partial class SolverController
                             $"{choice.Effect}:{string.Join(',', choice.Cards.Select(card =>
                                 $"{card.CardId}+{card.UpgradeLevel}#src{card.SourceOccurrence}/opt{card.OptionOccurrence}"))}"))}");
                 }
-                // Safe Execute only admits no-choice local actions. Creating a native choice
-                // driver for those actions is both unnecessary and forbidden in multiplayer.
+                // Safe Execute may drive only immediate choices already fixed in this
+                // authorized local PlanAction. Turn-start/cross-turn choices are rejected by the
+                // structural gate before deployment begins.
                 using NativeChoiceSession? choiceSession =
-                    safeExecute && actionChoices.Count == 0
+                    actionChoices.Count == 0
                         ? null
-                        : NativeChoiceRuntime.Begin(
-                            state,
-                            player,
-                            $"deployment:{turn}:{actionIndex}:{action.CardId ?? action.PotionId}");
+                        : safeExecute
+                            ? NativeChoiceRuntime.BeginSafeExecuteLocalAction(
+                                state,
+                                player,
+                                $"safe-deployment:{turn}:{actionIndex}:{action.CardId ?? action.PotionId}")
+                            : NativeChoiceRuntime.Begin(
+                                state,
+                                player,
+                                $"deployment:{turn}:{actionIndex}:{action.CardId ?? action.PotionId}");
                 choiceSession?.SetPlanAndStartDriving(host, actionChoices, token);
                 long actionStartedAt = measureDeploymentTiming
                     ? Stopwatch.GetTimestamp()
@@ -1081,64 +1087,15 @@ internal static partial class SolverController
             EnergyStateConsistent: energyConsistent && starsConsistent,
             TargetIdentityStable: targetStable,
             RemotePublicStateUnchanged: before.RemotePublicFingerprint == after.RemotePublicFingerprint,
-            EnemyStateMatchesExpectedTarget: EnemyStateMatchesExpectedTarget(
-                before.Enemies,
-                after.Enemies,
-                action.TargetCombatId),
+            EnemyStateMatchesExpectedTarget:
+                MultiplayerSafeExecutePolicy.EnemyStateMatchesExpectedLocalAction(
+                    before.Enemies,
+                    after.Enemies,
+                    action.TargetCombatId),
             WorldVersionAdvanced: after.WorldVersion > before.WorldVersion,
             WorldVersionStable: MultiplayerWorldTracker.TryReadStable(out long stableVersion)
                 && stableVersion == after.WorldVersion,
             HasNextAction: hasNextAction);
-    }
-
-    private static bool EnemyStateMatchesExpectedTarget(
-        IReadOnlyList<string> before,
-        IReadOnlyList<string> after,
-        uint? targetCombatId)
-    {
-        if (targetCombatId is null)
-            return before.SequenceEqual(after, StringComparer.Ordinal);
-
-        if (!TryBuildEnemyTokensById(before, out Dictionary<string, string> beforeById)
-            || !TryBuildEnemyTokensById(after, out Dictionary<string, string> afterById))
-        {
-            return false;
-        }
-        if (!beforeById.Keys.OrderBy(key => key, StringComparer.Ordinal)
-                .SequenceEqual(
-                    afterById.Keys.OrderBy(key => key, StringComparer.Ordinal),
-                    StringComparer.Ordinal))
-        {
-            return false;
-        }
-
-        string targetId = targetCombatId.Value.ToString();
-        foreach ((string id, string token) in beforeById)
-        {
-            if (string.Equals(id, targetId, StringComparison.Ordinal))
-                continue;
-            if (!string.Equals(afterById[id], token, StringComparison.Ordinal))
-                return false;
-        }
-        return true;
-    }
-
-    private static bool TryBuildEnemyTokensById(
-        IEnumerable<string> tokens,
-        out Dictionary<string, string> byId)
-    {
-        byId = new(StringComparer.Ordinal);
-        foreach (string token in tokens)
-        {
-            int separator = token.IndexOf(':');
-            if (separator <= 0
-                || !byId.TryAdd(token[..separator], token))
-            {
-                byId.Clear();
-                return false;
-            }
-        }
-        return true;
     }
 
     private static string DescribeSafeExecutionAction(PlanAction action)

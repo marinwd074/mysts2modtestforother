@@ -296,9 +296,10 @@ internal sealed class MultiplayerSafeExecutionSession
 /// </summary>
 internal static class MultiplayerSafeExecutePolicy
 {
-    // MP-2C deliberately uses one finite ceiling for every Safe Execute deployment.
-    // The live safe prefix may be shorter; no route can make this bound unbounded.
-    internal const int MaxActionsPerDeployment = 6;
+    // Keep one finite ceiling for every Safe Execute deployment, but make it large enough
+    // to cover a normal complete current-turn route. Per-action live revalidation remains the
+    // actual safety boundary; this cap only prevents unbounded automation.
+    internal const int MaxActionsPerDeployment = 32;
     internal const string SingleActionLimitReason = "mp2a_single_action_limit";
     internal const string BoundedActionCeilingReason = "mp2c_action_ceiling";
     internal const string TwoActionLimitReason = BoundedActionCeilingReason;
@@ -395,6 +396,55 @@ internal static class MultiplayerSafeExecutePolicy
 
         stop = DeploymentStopAfter(safe.Count, actions.Count);
         return safe;
+    }
+
+    internal static bool EnemyStateMatchesExpectedLocalAction(
+        IReadOnlyList<string> before,
+        IReadOnlyList<string> after,
+        uint? targetCombatId)
+    {
+        if (!TryBuildEnemyTokensById(before, out Dictionary<string, string> beforeById)
+            || !TryBuildEnemyTokensById(after, out Dictionary<string, string> afterById))
+        {
+            return false;
+        }
+
+        string[] beforeIds = [.. beforeById.Keys.OrderBy(key => key, StringComparer.Ordinal)];
+        string[] afterIds = [.. afterById.Keys.OrderBy(key => key, StringComparer.Ordinal)];
+        if (!beforeIds.SequenceEqual(afterIds, StringComparer.Ordinal))
+            return false;
+
+        // A targetless local card may legitimately damage/apply powers to one or many enemies.
+        // Remote teammate mutations are guarded independently by RemotePublicStateUnchanged.
+        if (targetCombatId is null)
+            return true;
+
+        string targetId = targetCombatId.Value.ToString();
+        foreach ((string id, string token) in beforeById)
+        {
+            if (string.Equals(id, targetId, StringComparison.Ordinal))
+                continue;
+            if (!string.Equals(afterById[id], token, StringComparison.Ordinal))
+                return false;
+        }
+        return true;
+    }
+
+    private static bool TryBuildEnemyTokensById(
+        IEnumerable<string> tokens,
+        out Dictionary<string, string> byId)
+    {
+        byId = new(StringComparer.Ordinal);
+        foreach (string token in tokens)
+        {
+            int separator = token.IndexOf(':');
+            if (separator <= 0 || !byId.TryAdd(token[..separator], token))
+            {
+                byId.Clear();
+                return false;
+            }
+        }
+        return true;
     }
 
     internal static MultiplayerSafeActionRevalidationDecision RevalidateAction(

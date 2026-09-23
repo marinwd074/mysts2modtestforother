@@ -66,10 +66,10 @@ internal static class MultiplayerSafeLocalActionClassifier
                 HasCardIdentity: !string.IsNullOrWhiteSpace(action.CardId),
                 EndsPlayerTurn: action.EndsPlayerTurn,
                 HasReplaySemantics: action.ReplayCount != 0,
-                RequiresChoice: action.Choice != null
-                    || action.NestedChoices is { Count: > 0 }
-                    || action.NestedChoicesBeforePrimary != 0
-                    || action.TurnStartChoices is { Count: > 0 }));
+                // Immediate local card choices are already fully specified by PlanAction and
+                // can be driven by the native choice session. Cross-turn choices still fail
+                // closed because they cross an enemy/remote observation boundary.
+                RequiresChoice: action.TurnStartChoices is { Count: > 0 }));
 
     public static IReadOnlyList<PlanAction> TakeSafePrefix(
         CombatState state,
