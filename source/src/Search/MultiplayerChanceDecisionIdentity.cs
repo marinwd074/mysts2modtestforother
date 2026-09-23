@@ -41,9 +41,14 @@ internal static class MultiplayerChanceDecisionIdentity
     internal static string CurrentTurnDecisionKey(
         SearchNode candidate,
         int rootTurn)
+        => CurrentTurnDecisionKey(candidate.Actions, rootTurn);
+
+    internal static string CurrentTurnDecisionKey(
+        IReadOnlyList<PlanAction> actions,
+        int rootTurn)
     {
         StringBuilder key = new();
-        foreach (PlanAction action in candidate.Actions)
+        foreach (PlanAction action in actions)
         {
             if (action.Turn != rootTurn)
                 continue;

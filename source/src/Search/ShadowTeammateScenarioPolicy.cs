@@ -31,7 +31,8 @@ internal readonly record struct ShadowTeammateScenarioChoice(
 /// </summary>
 internal static class ShadowTeammateScenarioPolicy
 {
-    internal const int DefaultScenarioCount = 4;
+    internal const int DefaultScenarioCount =
+        MultiplayerScenarioReevaluationPolicy.MaximumScenariosPerDecision;
 
     internal static IReadOnlyList<ShadowTeammateScenarioChoice> SelectProtected(
         IReadOnlyList<ShadowTeammateScenarioObservation> observations,

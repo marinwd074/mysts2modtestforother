@@ -38,9 +38,31 @@ internal sealed partial class CombatBeamSolver(
     int? maximumPotionUses = null,
     IReadOnlyList<PlanAction>? fixedPrefixActions = null,
     int? minimumPotionUses = null,
-    PrimarySearchIncumbent? primaryIncumbent = null)
+    PrimarySearchIncumbent? primaryIncumbent = null,
+    bool reserveScenarioReevaluationBudget = true)
 {
-    private readonly SolverSearchProfile _profile = searchProfile ?? SolverSearchProfile.Default;
+    private readonly int _totalExpandedNodeBudget =
+        (searchProfile ?? SolverSearchProfile.Default).MaxExpandedNodes;
+    private readonly int _scenarioReevaluationReservedBranches =
+        MultiplayerScenarioReevaluationPolicy.ReserveExpandedBranchBudget(
+            (searchProfile ?? SolverSearchProfile.Default).MaxExpandedNodes,
+            reserveScenarioReevaluationBudget
+            && MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(
+                policy.RoutePolicy,
+                root.PlayerCount)
+            && policy.UseMultiplayerTeamObjective);
+    private readonly SolverSearchProfile _profile =
+        (searchProfile ?? SolverSearchProfile.Default) with
+        {
+            MaxExpandedNodes =
+                MultiplayerScenarioReevaluationPolicy.MainSearchExpandedNodeBudget(
+                    (searchProfile ?? SolverSearchProfile.Default).MaxExpandedNodes,
+                    reserveScenarioReevaluationBudget
+                    && MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(
+                        policy.RoutePolicy,
+                        root.PlayerCount)
+                    && policy.UseMultiplayerTeamObjective),
+        };
     private readonly SearchRunContext _run = new(
         policy.MeasurePhasePerformance,
         policy.FramePressureSignal);
@@ -140,6 +162,7 @@ internal sealed partial class CombatBeamSolver(
         _startTurnNumber,
         root.CarryRankingContext,
         battleDamage,
+        ReevaluateCurrentDecisionsAcrossScenarios,
         _run.PotionStrategicCosts);
 
     private bool CanConsiderCardAction(PredictedCard card)

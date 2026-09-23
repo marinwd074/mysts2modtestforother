@@ -369,6 +369,214 @@ Check(
             && choice.Index == 3),
     $"P3 Shadow Top-K protects aggressive, defensive, conserve-resource and no-action teammate stress scenarios. actual={teammateScenarioSelection}");
 
+
+IReadOnlyList<MultiplayerScenarioSpec> u3ScenarioSpecs =
+    MultiplayerScenarioReevaluationPolicy.ScenarioSpecs;
+Check(
+    u3ScenarioSpecs.Count
+        == MultiplayerScenarioReevaluationPolicy.MaximumScenariosPerDecision
+        && u3ScenarioSpecs.Select(spec => spec.Id).SequenceEqual(
+        [
+            "aggressive",
+            "defensive",
+            "conserve",
+            "no_action",
+        ])
+        && u3ScenarioSpecs.Select(spec => spec.Kind).SequenceEqual(
+        [
+            ShadowTeammateScenarioKind.Aggressive,
+            ShadowTeammateScenarioKind.Defensive,
+            ShadowTeammateScenarioKind.Conserve,
+            ShadowTeammateScenarioKind.NoAction,
+        ]),
+    "U3 uses one fixed ScenarioSpec portfolio for every compared current decision.");
+
+ShadowTeammateScenarioKind[] u3CompleteCoverage =
+[
+    ShadowTeammateScenarioKind.NoAction,
+    ShadowTeammateScenarioKind.Conserve,
+    ShadowTeammateScenarioKind.Aggressive,
+    ShadowTeammateScenarioKind.Defensive,
+];
+Check(
+    MultiplayerScenarioReevaluationPolicy.HasCompleteCoverage(u3CompleteCoverage)
+        && MultiplayerScenarioReevaluationPolicy.HasCompleteCoverage(
+            u3CompleteCoverage.Reverse())
+        && !MultiplayerScenarioReevaluationPolicy.HasCompleteCoverage(
+            u3CompleteCoverage.Where(kind =>
+                kind != ShadowTeammateScenarioKind.Defensive)),
+    "U3 fair coverage is independent of candidate/scenario enumeration order and missing one required scenario remains incomplete.");
+
+Check(
+    MultiplayerScenarioReevaluationPolicy.CanRerank([true, true])
+        && MultiplayerScenarioReevaluationPolicy.CanRerank([true, true, true, true])
+        && !MultiplayerScenarioReevaluationPolicy.CanRerank([true])
+        && !MultiplayerScenarioReevaluationPolicy.CanRerank([true, false])
+        && !MultiplayerScenarioReevaluationPolicy.CanRerank([true, true, false]),
+    "U3 reranking requires the same complete ScenarioSpec coverage for every compared decision; an Unknown/budget-interrupted decision forces the shared baseline fallback.");
+
+
+int u3ReservedBudget =
+    MultiplayerScenarioReevaluationPolicy.ReserveExpandedBranchBudget(
+        totalExpandedNodeBudget: 5_000,
+        enabled: true);
+int u3PerDecisionBudget =
+    MultiplayerScenarioReevaluationPolicy.ExpandedBranchBudgetPerDecision(
+        u3ReservedBudget,
+        comparedDecisionCount: 4);
+Check(
+    MultiplayerScenarioReevaluationPolicy.ReserveExpandedBranchBudget(
+        totalExpandedNodeBudget: 5_000,
+        enabled: false) == 0
+        && MultiplayerScenarioReevaluationPolicy.ReserveExpandedBranchBudget(
+            totalExpandedNodeBudget: 1_200,
+            enabled: true) == 150
+        && u3ReservedBudget
+            == MultiplayerScenarioReevaluationPolicy.MaximumReservedExpandedBranches
+        && u3PerDecisionBudget
+            == MultiplayerScenarioReevaluationPolicy.MaximumExpandedBranchesPerDecision
+        && u3PerDecisionBudget
+            * MultiplayerScenarioReevaluationPolicy.MaximumCurrentDecisions
+            <= u3ReservedBudget
+        && MultiplayerScenarioReevaluationPolicy.MainSearchExpandedNodeBudget(
+            totalExpandedNodeBudget: 5_000,
+            enabled: true) + u3ReservedBudget == 5_000
+        && MultiplayerScenarioReevaluationPolicy.MainSearchExpandedNodeBudget(
+            totalExpandedNodeBudget: 5_000,
+            enabled: false) == 5_000,
+    "U3 reevaluation uses a deterministic bounded reserve carved from the existing work budget and splits it equally across current decisions.");
+
+PlanAction u3AggressiveFuture = new(
+    PlanActionKind.EndTurn,
+    Turn: 7,
+    ShadowForecast: new ShadowForecastPlan(
+        [],
+        ScenarioKind: ShadowTeammateScenarioKind.Aggressive));
+PlanAction u3NoActionFuture = u3AggressiveFuture with
+{
+    TurnStartChoices = [],
+    ShadowForecast = new ShadowForecastPlan(
+        [],
+        ScenarioKind: ShadowTeammateScenarioKind.NoAction),
+};
+string u3AggressiveDecisionKey =
+    MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(
+        [u3AggressiveFuture],
+        rootTurn: 7);
+string u3NoActionDecisionKey =
+    MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(
+        [u3NoActionFuture],
+        rootTurn: 7);
+Check(
+    string.Equals(
+        u3AggressiveDecisionKey,
+        u3NoActionDecisionKey,
+        StringComparison.Ordinal),
+    "U3 current-decision identity excludes future teammate scenario and TurnStart observations, preventing clairvoyant current-action splitting.");
+
+
+MultiplayerScenarioOutcome[] u3ClairvoyantTrap =
+[
+    new(
+        ShadowTeammateScenarioKind.Aggressive,
+        CompleteVictory: true,
+        AllPlayersAlive: true,
+        LossEquivalent: 0.01d,
+        WorstPlayerLossRatio: 0.01d,
+        TeamLossRatio: 0.01d,
+        EnemyDurabilityRatio: 0d),
+    new(
+        ShadowTeammateScenarioKind.Defensive,
+        CompleteVictory: false,
+        AllPlayersAlive: true,
+        LossEquivalent: 0.80d,
+        WorstPlayerLossRatio: 0.70d,
+        TeamLossRatio: 0.75d,
+        EnemyDurabilityRatio: 0.90d),
+    new(
+        ShadowTeammateScenarioKind.Conserve,
+        CompleteVictory: false,
+        AllPlayersAlive: true,
+        LossEquivalent: 0.70d,
+        WorstPlayerLossRatio: 0.60d,
+        TeamLossRatio: 0.65d,
+        EnemyDurabilityRatio: 0.80d),
+    new(
+        ShadowTeammateScenarioKind.NoAction,
+        CompleteVictory: false,
+        AllPlayersAlive: true,
+        LossEquivalent: 0.90d,
+        WorstPlayerLossRatio: 0.80d,
+        TeamLossRatio: 0.85d,
+        EnemyDurabilityRatio: 0.95d),
+];
+MultiplayerScenarioOutcome[] u3StableDecision =
+    MultiplayerScenarioReevaluationPolicy.ScenarioSpecs
+        .Select((spec, index) => new MultiplayerScenarioOutcome(
+            spec.Kind,
+            CompleteVictory: false,
+            AllPlayersAlive: true,
+            LossEquivalent: 0.15d + index * 0.01d,
+            WorstPlayerLossRatio: 0.12d + index * 0.01d,
+            TeamLossRatio: 0.11d + index * 0.01d,
+            EnemyDurabilityRatio: 0.30d + index * 0.02d))
+        .ToArray();
+MultiplayerScenarioDecisionRank u3TrapRank =
+    MultiplayerScenarioReevaluationPolicy.Aggregate(u3ClairvoyantTrap);
+MultiplayerScenarioDecisionRank u3TrapReversedRank =
+    MultiplayerScenarioReevaluationPolicy.Aggregate(
+        u3ClairvoyantTrap.Reverse().ToArray());
+MultiplayerScenarioDecisionRank u3StableRank =
+    MultiplayerScenarioReevaluationPolicy.Aggregate(u3StableDecision);
+Check(
+    MultiplayerScenarioReevaluationPolicy.Compare(
+        u3TrapRank,
+        u3TrapReversedRank) == 0,
+    "U3 robust scenario rank is invariant to scenario enumeration order.");
+Check(
+    MultiplayerScenarioReevaluationPolicy.Compare(
+        u3StableRank,
+        u3TrapRank) < 0,
+    "U3 rejects the clairvoyance trap: a decision that is excellent only if the future teammate lane is known cannot beat a decision with uniformly safer outcomes across the same ScenarioSpec set.");
+
+
+MultiplayerScenarioEvaluation[] u3CompletedMatrix =
+    MultiplayerScenarioReevaluationPolicy.ScenarioSpecs
+        .Select((spec, index) => new MultiplayerScenarioEvaluation(
+            spec,
+            index == 0
+                ? MultiplayerScenarioEvaluationStatus.Terminal
+                : MultiplayerScenarioEvaluationStatus.Completed,
+            new MultiplayerScenarioOutcome(
+                spec.Kind,
+                CompleteVictory: index == 0,
+                AllPlayersAlive: true,
+                LossEquivalent: 0.10d + index * 0.01d,
+                WorstPlayerLossRatio: 0.05d,
+                TeamLossRatio: 0.04d,
+                EnemyDurabilityRatio: 0.20d),
+            ExpandedBranches: index + 1))
+        .ToArray();
+MultiplayerScenarioDecisionEvaluation u3CompleteDecision =
+    new("same-current-decision", u3CompletedMatrix, SharedExpandedBranches: 7);
+MultiplayerScenarioEvaluation[] u3InterruptedMatrix =
+    u3CompletedMatrix
+        .Select((evaluation, index) => index == 2
+            ? evaluation with
+            {
+                Status = MultiplayerScenarioEvaluationStatus.Unknown,
+                Outcome = null,
+            }
+            : evaluation)
+        .ToArray();
+MultiplayerScenarioDecisionEvaluation u3InterruptedDecision =
+    new("same-current-decision", u3InterruptedMatrix, SharedExpandedBranches: 7);
+Check(
+    u3CompleteDecision.CompleteCoverage
+        && u3CompleteDecision.ExpandedBranches == 17
+        && !u3InterruptedDecision.CompleteCoverage,
+    "U3 matrix records Completed/Terminal cells as complete, counts shared planner work once plus scenario-specific replay work, and an Unknown budget-interrupted cell cannot masquerade as full scenario coverage.");
+
 IReadOnlyList<ShadowTeammateScenarioChoice> orderDiversityChoices =
     ShadowTeammateScenarioPolicy.SelectProtected(
         teammateScenarioObservations,

@@ -78,7 +78,8 @@ internal readonly record struct ShadowTeammatePlanResult(
     int PendingChoiceBranches,
     bool HitActionDepthLimit,
     double RetainedProbabilityMass = 1d,
-    bool ProbabilityModelTrusted = true);
+    bool ProbabilityModelTrusted = true,
+    bool HitExpansionBudgetLimit = false);
 
 /// <summary>
 /// Predicts teammate actions only inside detached simulation forks. Shadow routes never create
@@ -131,12 +132,15 @@ internal static class ShadowTeammatePlanner
         Player localPlayer,
         IReadOnlySet<uint>? processedEnemyDeaths = null,
         int beamWidth = DefaultBeamWidth,
-        int maxActionsPerPlayer = DefaultMaxActions)
+        int maxActionsPerPlayer = DefaultMaxActions,
+        int maxExpandedBranches = int.MaxValue)
     {
         if (beamWidth < 1)
             throw new ArgumentOutOfRangeException(nameof(beamWidth));
         if (maxActionsPerPlayer < 1)
             throw new ArgumentOutOfRangeException(nameof(maxActionsPerPlayer));
+        if (maxExpandedBranches < 0)
+            throw new ArgumentOutOfRangeException(nameof(maxExpandedBranches));
         if (!source.State.RootActionPlayers.Any(player => ReferenceEquals(player, localPlayer)))
             throw new InvalidOperationException("Joint shadow forecast local player is outside RootActionPlayers.");
 
@@ -169,6 +173,7 @@ internal static class ShadowTeammatePlanner
         int expandedBranches = 0;
         int pendingChoiceBranches = 0;
         bool hitActionDepthLimit = false;
+        bool hitExpansionBudgetLimit = maxExpandedBranches == 0;
         int maxTeamActions = checked(maxActionsPerPlayer * teammates.Length);
 
         for (int depth = 0; depth < maxTeamActions && frontier.Count > 0; depth++)
@@ -177,6 +182,11 @@ internal static class ShadowTeammatePlanner
             foreach (ShadowTeammateRoute route in frontier)
             {
                 if (route.CompleteVictory || !route.AllPlayersAlive)
+                {
+                    completed.Add(route);
+                    continue;
+                }
+                if (hitExpansionBudgetLimit)
                 {
                     completed.Add(route);
                     continue;
@@ -211,6 +221,11 @@ internal static class ShadowTeammatePlanner
                         EnumerateLegalActions(route.Simulator, teammate);
                     foreach (ShadowTeammateActionCandidate candidate in candidates)
                     {
+                        if (expandedBranches >= maxExpandedBranches)
+                        {
+                            hitExpansionBudgetLimit = true;
+                            break;
+                        }
                         expandedBranches++;
                         if (!TryPlayCandidate(
                                 route,
@@ -299,7 +314,9 @@ internal static class ShadowTeammatePlanner
         completed.AddRange(frontier);
         List<ShadowTeammateRoute> retained =
             RetainBehaviorAwareSpectrum(completed, beamWidth, labelScenarios: true);
-        bool scenarioSetComplete = pendingChoiceBranches == 0 && !hitActionDepthLimit;
+        bool scenarioSetComplete = pendingChoiceBranches == 0
+            && !hitActionDepthLimit
+            && !hitExpansionBudgetLimit;
         IReadOnlyList<ShadowTeammateRoute> finalized =
             FinalizeBehaviorScenarioProbabilities(retained, scenarioSetComplete);
         double retainedProbabilityMass = finalized.Count == 0
@@ -311,7 +328,8 @@ internal static class ShadowTeammatePlanner
             pendingChoiceBranches,
             hitActionDepthLimit,
             retainedProbabilityMass,
-            ProbabilityModelTrusted: false);
+            ProbabilityModelTrusted: false,
+            HitExpansionBudgetLimit: hitExpansionBudgetLimit);
     }
 
     internal static ShadowTeammatePlanResult BuildTopKRoutes(

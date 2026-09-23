@@ -1266,6 +1266,7 @@ $expectedBeamFiles = @(
     "CombatBeamSolver.Expansion.cs",
     "CombatBeamSolver.FinalPlanOrdering.cs",
     "CombatBeamSolver.Models.cs",
+    "CombatBeamSolver.MultiplayerScenarioReevaluation.cs",
     "CombatBeamSolver.NoveltySearch.cs",
     "CombatBeamSolver.OpeningExpansion.cs",
     "CombatBeamSolver.Transpositions.cs",
