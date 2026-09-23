@@ -420,8 +420,8 @@ int u3ReservedBudget =
     MultiplayerScenarioReevaluationPolicy.ReserveExpandedBranchBudget(
         totalExpandedNodeBudget: 5_000,
         enabled: true);
-int u3PerDecisionBudget =
-    MultiplayerScenarioReevaluationPolicy.ExpandedBranchBudgetPerDecision(
+int u3PerScenarioBudget =
+    MultiplayerScenarioReevaluationPolicy.ExpandedBranchBudgetPerScenario(
         u3ReservedBudget,
         comparedDecisionCount: 4);
 Check(
@@ -430,13 +430,16 @@ Check(
         enabled: false) == 0
         && MultiplayerScenarioReevaluationPolicy.ReserveExpandedBranchBudget(
             totalExpandedNodeBudget: 1_200,
-            enabled: true) == 75
+            enabled: true) == 150
         && u3ReservedBudget
             == MultiplayerScenarioReevaluationPolicy.MaximumReservedExpandedBranches
-        && u3PerDecisionBudget
-            == MultiplayerScenarioReevaluationPolicy.MaximumExpandedBranchesPerDecision
-        && u3PerDecisionBudget * 4 <= u3ReservedBudget,
-    "U3 reevaluation uses a deterministic bounded reserve carved from the existing work budget and splits it equally across compared decisions.");
+        && u3PerScenarioBudget
+            == MultiplayerScenarioReevaluationPolicy.MaximumExpandedBranchesPerScenario
+        && u3PerScenarioBudget
+            * MultiplayerScenarioReevaluationPolicy.MaximumScenariosPerDecision
+            * MultiplayerScenarioReevaluationPolicy.MaximumCurrentDecisions
+            <= u3ReservedBudget,
+    "U3 reevaluation uses a deterministic bounded reserve carved from the existing work budget and splits it equally across candidate-scenario cells.");
 
 PlanAction u3AggressiveFuture = new(
     PlanActionKind.EndTurn,
