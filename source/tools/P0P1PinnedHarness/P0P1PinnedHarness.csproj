@@ -35,12 +35,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="sts2" HintPath="$(Sts2DataDir)/sts2.dll" Private="false" />
-    <Reference Include="GodotSharp" HintPath="$(Sts2DataDir)/GodotSharp.dll" Private="false" />
-    <Reference Include="0Harmony" HintPath="$(Sts2DataDir)/0Harmony.dll" Private="false" />
-    <Reference Include="STS2-RitsuLib" HintPath="$(RitsuLibDir)/STS2-RitsuLib.dll" Private="false"
+    <Reference Include="sts2" HintPath="$(Sts2DataDir)/sts2.dll" Private="true" />
+    <Reference Include="GodotSharp" HintPath="$(Sts2DataDir)/GodotSharp.dll" Private="true" />
+    <Reference Include="0Harmony" HintPath="$(Sts2DataDir)/0Harmony.dll" Private="true" />
+    <Reference Include="STS2-RitsuLib" HintPath="$(RitsuLibDir)/STS2-RitsuLib.dll" Private="true"
                Condition="!Exists('$(RitsuLibReferencesProps)')" />
-    <Reference Include="CombatSolver" HintPath="$(CombatSolverDll)" Private="false" />
+    <Reference Include="CombatSolver" HintPath="$(CombatSolverDll)" Private="true" />
   </ItemGroup>
 
   <ItemGroup>
