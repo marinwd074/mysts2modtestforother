@@ -291,6 +291,18 @@ internal static partial class SolverController
 
                 Player player = LocalContext.GetMe(state)!;
                 Creature? target = state.GetCreature(action.TargetCombatId);
+                if (safeExecute)
+                {
+                    bool preActionChanged = MultiplayerClientProbe.ObserveActionBoundary(
+                        state,
+                        "safe_execute_pre_action");
+                    Entry.Logger.Info(
+                        $"[CombatSolver/MultiplayerSafeExecute] U1_PRE_ACTION_PROBE " +
+                        $"request_id={safeSession!.RequestId} turn={turn} action_index={actionIndex} " +
+                        $"changed={preActionChanged.ToString().ToLowerInvariant()} " +
+                        $"world_version={MultiplayerWorldTracker.WorldVersion} " +
+                        $"last_accepted_world_version={safeSession.LastAcceptedWorldVersion}");
+                }
                 MultiplayerSafeExecutionBoundary? beforeBoundary = safeExecute
                     ? MultiplayerClientProbe.CaptureSafeExecutionBoundary(state)
                     : null;
@@ -327,6 +339,42 @@ internal static partial class SolverController
                     AbortSafeExecution(host, deployment, turn, actionIndex, sessionStartReason);
                     return;
                 }
+
+                SafeExecutionExpectedPostAction? expectedPostAction = null;
+                if (safeExecute)
+                {
+                    try
+                    {
+                        expectedPostAction =
+                            await CaptureExpectedSafeExecutionPostActionAsync(
+                                state,
+                                deployment,
+                                action,
+                                token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        Entry.Logger.Warn(
+                            $"[CombatSolver/MultiplayerSafeExecute] U1_EXPECTED_POST_STATE_UNAVAILABLE " +
+                            $"request_id={safeSession!.RequestId} turn={turn} action_index={actionIndex} " +
+                            $"card={action.CardId ?? "-"} exception={ex.GetType().Name} message={ex.Message}");
+                        StopMultiplayerSafeAutoAtUnsupportedBoundary(
+                            new SafeLocalActionDecision(false, "expected_post_state_unavailable"),
+                            turn);
+                        AbortSafeExecution(
+                            host,
+                            deployment,
+                            turn,
+                            actionIndex,
+                            "expected_post_state_unavailable");
+                        return;
+                    }
+                }
+
                 string actionTitle = action.Kind == PlanActionKind.UsePotion
                     ? SolverUiModelNames.Potion(action.PotionId, action.PotionTitle)
                     : SolverUiModelNames.Card(action.CardId, action.CardUpgradeLevel, action.CardTitle);
