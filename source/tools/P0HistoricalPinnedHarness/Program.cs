@@ -210,8 +210,8 @@ internal static class Program
                 {
                     pass = fixedWorkPass,
                     nodeBudget = FixedWorkNodeBudget,
-                    firstAction = fixedWorkResult.BestNode.Actions.FirstOrDefault() is { } first
-                        ? ActionToken(first)
+                    firstAction = fixedWorkResult.BestNode.Actions.FirstOrDefault() is { } fixedWorkFirst
+                        ? ActionToken(fixedWorkFirst)
                         : "<none>",
                     actionCount = fixedWorkResult.BestNode.Actions.Count,
                     boundary = fixedWorkResult.BoundaryReason.ToString(),
