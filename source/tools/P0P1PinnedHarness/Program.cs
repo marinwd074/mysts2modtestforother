@@ -131,6 +131,11 @@ internal static class Program
                 CancellationToken.None,
                 progressCallback: null);
             P0SearchEvidence p0Search = CaptureSearch(p0Result);
+            P0SearchEvidence p0SingleMemberTimed = RunP0SingleMemberTimedProbe(
+                p0Root,
+                names,
+                battleDamage,
+                p0Policy);
             P0SearchEvidence p0FixedWork = RunP0FixedWorkProbe(
                 p0Root,
                 names,
@@ -210,6 +215,7 @@ internal static class Program
                 p0 = new
                 {
                     spRegression = p0Search,
+                    singleMemberTimed = p0SingleMemberTimed,
                     fixedWork = p0FixedWork,
                     joint,
                     classifier = "covered_by_contract_suite",
@@ -413,6 +419,29 @@ internal static class Program
             MismatchReason: mismatchReason,
             LocalStateExact: true,
             Error: null);
+    }
+
+    private static P0SearchEvidence RunP0SingleMemberTimedProbe(
+        CombatRootSnapshot root,
+        SolverDisplayNames names,
+        BattleDamageSnapshot battleDamage,
+        SearchPolicySnapshot p0Policy)
+    {
+        SearchPolicySnapshot policy = p0Policy with
+        {
+            UseBeamWidthPortfolio = false,
+            BeamWidthPortfolioWidths = null,
+            Interaction = null,
+            RequestWorkTotals = null,
+        };
+        SolverResult result = CombatSearchCoordinator.Solve(
+            root,
+            names,
+            battleDamage,
+            policy,
+            CancellationToken.None,
+            progressCallback: null);
+        return CaptureSearch(result);
     }
 
     private static P0SearchEvidence RunP0FixedWorkProbe(
