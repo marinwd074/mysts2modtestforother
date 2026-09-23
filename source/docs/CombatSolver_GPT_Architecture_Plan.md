@@ -155,6 +155,8 @@ F 必须执行每张牌与触发器，而不是先合并成“队友本回合打
 
 ### U1 — 先修动作后态校验
 
+**状态（2026-09-23）：代码/合同接线完成，真实多人验收仍 `UNVERIFIED`。** 当前实现见 [`U1_ACTION_POSTSTATE.md`](U1_ACTION_POSTSTATE.md)：每张动作前 fresh probe；每张动作提交前由生产 `CombatBeamSolver.ReplayDiagnosticPrefix` 冻结 predicted `ContinuationStamp + remote fingerprint`；原生队列稳定后与 live 精确比较。旧 `local_card_removed/energy/enemy_target/remote_unchanged` 只保留旁路诊断。重锤+Choice、连续祭品、真实队友插入和 cancellation 双端 timing 未经新代码实机复测前，不进入 U2。
+
 入口：MultiplayerSafeExecutePolicy、MultiplayerSafeLocalActionClassifier、SolverController.Deployment、现有native action/Choice与快照实现。
 
 先加旁路的预期后态/实态差异记录，保留旧gate做对照；对复现的合法本地连锁误判写一个行为测试，再用共同模拟语义替换经验归因。沿用现有字段编码，禁止第二套手写卡牌效果。验证调用者的队列稳定等待，不把函数中的 ActionQueueIdle=true 单独当已证实缺陷。
