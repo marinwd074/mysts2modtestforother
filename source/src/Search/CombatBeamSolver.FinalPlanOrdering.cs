@@ -549,6 +549,17 @@ internal sealed partial class CombatBeamSolver
                 HashSet<string> decisionSet = new(StringComparer.Ordinal);
                 foreach (var candidate in selected)
                 {
+                    if (!MultiplayerChanceDecisionIdentity.TryGetCurrentTurnShadowOutcome(
+                            candidate.Node,
+                            startTurnNumber,
+                            out _,
+                            out ShadowForecastPlan forecast)
+                        || !forecast.ScenarioSetComplete
+                        || forecast.ScenarioKind == ShadowTeammateScenarioKind.Unspecified)
+                    {
+                        continue;
+                    }
+
                     string key =
                         MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(
                             candidate.Node,
@@ -586,7 +597,9 @@ internal sealed partial class CombatBeamSolver
                                 out SearchNode outcomeNode,
                                 out ShadowForecastPlan forecast))
                         {
-                            complete = false;
+                            // A baseline/final-policy representative can share the same deployable
+                            // current action without carrying a Shadow outcome. It is not evidence
+                            // that the scenario set itself is incomplete.
                             continue;
                         }
                         if (!forecast.ScenarioSetComplete)
