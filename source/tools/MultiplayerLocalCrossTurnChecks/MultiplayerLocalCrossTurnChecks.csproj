@@ -10,5 +10,6 @@
     <Compile Include="../../src/Search/StateFingerprint.cs" Link="StateFingerprint.cs" />
     <Compile Include="../../src/Search/MultiplayerLocalCrossTurnContracts.cs" Link="MultiplayerLocalCrossTurnContracts.cs" />
     <Compile Include="../../src/Search/ShadowTeammateBehaviorModel.cs" Link="ShadowTeammateBehaviorModel.cs" />
+    <Compile Include="../../src/Search/MultiplayerCombatObjectiveMath.cs" Link="MultiplayerCombatObjectiveMath.cs" />
   </ItemGroup>
 </Project>
