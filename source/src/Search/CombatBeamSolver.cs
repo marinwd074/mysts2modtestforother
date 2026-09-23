@@ -131,6 +131,7 @@ internal sealed partial class CombatBeamSolver(
         _minimumPotionUses,
         policy.Diagnostics,
         _detailedDiagnostics,
+        policy.RoutePolicy,
         _useMultiplayerRouteSemantics,
         policy.UseMultiplayerTeamObjective,
         policy.MultiplayerCombatObjectiveStrategy,
