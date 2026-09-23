@@ -348,18 +348,19 @@ internal sealed partial class CombatBeamSolver
                 .ToList();
             bool useTeamObjective =
                 routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn;
-            bool useLethalTempoTradeoff =
-                MultiplayerCombatObjectivePolicy.UsesLethalTempoTradeoff(
+            bool useAdaptiveLethalTempo =
+                MultiplayerCombatObjectivePolicy.UsesAdaptiveLethalTempo(
                     routePolicy,
-                    multiplayerCombatObjectiveStrategy,
-                    multiplayerEnemyDurabilityRatio);
+                    multiplayerCombatObjectiveStrategy);
             var selected = policyEligibleCandidates
                 .OrderByDescending(candidate => candidate.CompleteVictory)
                 .ThenBy(candidate => useTeamObjective && !candidate.Snapshot.AllPlayersAlive ? 1 : 0)
                 .ThenBy(candidate => useTeamObjective && candidate.CompleteVictory
-                    ? useLethalTempoTradeoff
-                        ? MultiplayerCombatObjectivePolicy.LethalTempoScore(
+                    ? useAdaptiveLethalTempo
+                        ? MultiplayerCombatObjectiveMath.ContinuousTempoScore(
                             candidate.Snapshot.TeamLossRatio,
+                            candidate.Snapshot.WorstPlayerLossRatio,
+                            multiplayerEnemyDurabilityRatio,
                             candidate.CombatEndedTurn ?? int.MaxValue,
                             startTurnNumber)
                         : candidate.Snapshot.TeamLossRatio
@@ -432,9 +433,11 @@ internal sealed partial class CombatBeamSolver
                     $"team_loss_ratio={selected[0].Snapshot.TeamLossRatio:0.0000} " +
                     $"worst_player_loss_ratio={selected[0].Snapshot.WorstPlayerLossRatio:0.0000} " +
                     $"all_players_alive={selected[0].Snapshot.AllPlayersAlive.ToString().ToLowerInvariant()} " +
-                    $"lethal_tradeoff={useLethalTempoTradeoff.ToString().ToLowerInvariant()} " +
-                    $"lethal_threshold={MultiplayerCombatObjectivePolicy.LethalDurabilityRatioThreshold:0.00} " +
-                    $"loss_ratio_per_turn={MultiplayerCombatObjectivePolicy.ExtraLossRatioPerTurnSaved:0.00}");
+                    $"adaptive_tempo={useAdaptiveLethalTempo.ToString().ToLowerInvariant()} " +
+                    $"tempo_urgency={MultiplayerCombatObjectiveMath.ComputeLethalUrgency(multiplayerEnemyDurabilityRatio):0.0000} " +
+                    $"team_safety_factor={MultiplayerCombatObjectiveMath.ComputeTeamSafetyFactor(selected[0].Snapshot.WorstPlayerLossRatio):0.0000} " +
+                    $"loss_ratio_per_turn={MultiplayerCombatObjectiveMath.LossRatioPerTurn(multiplayerEnemyDurabilityRatio, selected[0].Snapshot.WorstPlayerLossRatio):0.0000} " +
+                    $"max_loss_ratio_per_turn={MultiplayerCombatObjectiveMath.MaximumExtraLossRatioPerTurn:0.0000}");
             }
             if (selected.Count == 0)
             {
