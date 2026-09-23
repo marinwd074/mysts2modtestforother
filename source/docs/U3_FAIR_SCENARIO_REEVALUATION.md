@@ -106,7 +106,7 @@ P0/P1 pinned fixture 实际是单玩家 root；即使把 route policy 设为 `Mu
 7. 构造或观察队友不同后续行为时，确认相同当前本地动作仍只有一个 `CurrentTurnDecisionKey`。
 8. 若主搜索命中 TimeLimit，确认 `MP_SCENARIO_RERANK ... reason=reevaluation_budget_unavailable`，且没有超时后的 U3 replay 扩展。
 
-Matrix 与 TimeLimit fail-closed 两类真实双玩家 smoke 均已通过；U3 整体记 COMPLETE。下一阶段可进入 U4 风险与目标 A/B。
+Matrix 与 TimeLimit fail-closed 两类真实双玩家 smoke 均已通过；U3 整体记 COMPLETE。U4 风险与目标 A/B 已在后续阶段完成，当前下一阶段为 U5。
 
 ## 日志判定器
 
