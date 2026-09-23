@@ -1,0 +1,514 @@
+using System.Collections.Concurrent;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using CombatSolver;
+using CombatSolver.Engine.Common;
+using CombatSolver.Engine.InCombat.Simulation;
+using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.Context;
+using OfflineSearchHarness;
+using U2DegenerateHarness;
+
+namespace U0U1PinnedHarness;
+
+internal static class Program
+{
+    private const int BeamWidth = 24;
+    private const int MaxExpandedNodes = 2_000;
+    private const int BudgetMilliseconds = 600_000;
+
+    private static readonly JsonSerializerOptions Json = new()
+    {
+        WriteIndented = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
+
+    private static int Main(string[] args)
+    {
+        string outputDirectory = ParseOutput(args);
+        Directory.CreateDirectory(outputDirectory);
+
+        try
+        {
+            HarnessLog.Language = "eng";
+            MainLoopContext loop = new();
+            SynchronizationContext.SetSynchronizationContext(loop);
+
+            GameBootstrap.ApplyGodotBypasses();
+            GameBootstrap.SkipGodotNodeStaticConstructors();
+            Console.WriteLine(GameBootstrap.InitializeStaticState());
+            int patchCount = U2Runtime.Initialize(
+                Path.Combine(outputDirectory, "logs"),
+                BeamWidth,
+                MaxExpandedNodes,
+                BudgetMilliseconds);
+            Console.WriteLine($"search_patches={patchCount}");
+
+            HarnessScenario scenario = new(
+                "IRONCLAD",
+                "FUZZY_WURM_CRAWLER_WEAK",
+                "U0U1PINNED1",
+                Ascension: 0,
+                ActIndexForTest: 0);
+            Task enter = OfflineCombat.EnterCombatRoomAsync(scenario);
+            loop.RunUntilCompleted(enter, TimeSpan.FromSeconds(180), "U0/U1 enter combat");
+            CombatState combat = OfflineCombat.WaitForPlayableCombat(loop);
+            Console.WriteLine(OfflineCombat.DescribeRoot(combat));
+
+            SolverSettingsSnapshot settings = SolverSettings.Capture();
+            SolverSearchProfile profile = settings.Profile with
+            {
+                BeamWidth = BeamWidth,
+                MaxExpandedNodes = MaxExpandedNodes,
+                SoftTimeBudgetMilliseconds = BudgetMilliseconds,
+            };
+            SolverDisplayNames names = SolverDisplayNames.Capture(combat);
+            BattleDamageSnapshot damage = BattleDamageTracker.Observe(combat);
+            SearchPolicySnapshot captured = SolverController.CaptureSearchPolicy(
+                settings,
+                combat,
+                includeTurnSetup: false,
+                theftPolicy: null);
+
+            U0Evidence u0 = RunU0(combat, names, damage, captured, profile);
+            U1Evidence u1 = RunU1(combat, names, damage, captured, profile, u0.FirstAction);
+
+            var evidence = new
+            {
+                automatedStatus = "PASS",
+                pinnedTarget = "0.107.1",
+                scenario = new
+                {
+                    character = "IRONCLAD",
+                    encounter = "FUZZY_WURM_CRAWLER_WEAK",
+                    seed = "U0U1PINNED1",
+                },
+                budget = new
+                {
+                    beamWidth = BeamWidth,
+                    maxExpandedNodes = MaxExpandedNodes,
+                    budgetMilliseconds = BudgetMilliseconds,
+                    maxDegreeOfParallelism = 1,
+                },
+                u0,
+                u1,
+                remainingRuntimeSmoke = new[]
+                {
+                    "real multiplayer Heavy Blade + native Choice/Brand + following card",
+                    "real multiplayer consecutive Offering draws + following-card execution",
+                    "real Host/Client remote action inserted between local actions",
+                    "real cancellation/network-late-callback timing",
+                },
+            };
+
+            string evidencePath = Path.Combine(
+                outputDirectory,
+                "u0-u1-pinned-evidence.json");
+            File.WriteAllText(evidencePath, JsonSerializer.Serialize(evidence, Json));
+            Console.WriteLine("U0U1PinnedHarness PASS");
+            Console.WriteLine($"evidence={evidencePath}");
+            return 0;
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine(
+                $"U0U1PinnedHarness FAIL: {error.GetType().Name}: {error.Message}");
+            Console.Error.WriteLine(error.StackTrace);
+            return 1;
+        }
+    }
+
+    private static U0Evidence RunU0(
+        CombatState combat,
+        SolverDisplayNames names,
+        BattleDamageSnapshot damage,
+        SearchPolicySnapshot captured,
+        SolverSearchProfile profile)
+    {
+        ConcurrentDictionary<SearchPathObservationStage, int> stageCounts = new();
+        ConcurrentQueue<string> infoLines = new();
+        SearchPathObserver observer = new(
+            wantsState: _ => true,
+            observe: observation =>
+                stageCounts.AddOrUpdate(observation.Stage, 1, (_, count) => count + 1));
+        SearchDiagnosticsSink diagnostics = new(
+            info: message => infoLines.Enqueue(message),
+            debug: _ => { },
+            pathObserver: observer);
+        SearchRequestWorkTotals totals = new();
+
+        SearchPolicySnapshot policy = captured with
+        {
+            Profile = profile,
+            RoutePolicy = SearchRoutePolicy.SinglePlayerFullRoute,
+            CurrentTurnOnly = false,
+            UseMultiplayerTeamObjective = false,
+            DetailedDiagnostics = true,
+            VerifyIncrementalSearch = true,
+            FixedBudget = true,
+            MaxDegreeOfParallelism = 1,
+            BudgetOverrideMilliseconds = null,
+            UseNoveltyPortfolio = false,
+            NoveltySearch = null,
+            UseBeamWidthPortfolio = false,
+            BeamWidthPortfolioWidths = null,
+            Interaction = null,
+            Diagnostics = diagnostics,
+            RequestWorkTotals = totals,
+        };
+
+        CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
+        CombatBeamSolver solver = new(
+            root,
+            names,
+            damage,
+            policy,
+            searchProfile: profile);
+        SolverResult result = solver.Solve();
+        SearchRequestWorkSnapshot work = totals.Snapshot();
+        Require(result.BestNode.Actions.Count > 0, "U0 search produced no actions.");
+        Require(
+            result.BoundaryReason != SearchBoundaryReason.TimeLimit,
+            "U0 pinned search unexpectedly hit TimeLimit.");
+
+        foreach (SearchPathObservationStage required in new[]
+        {
+            SearchPathObservationStage.Root,
+            SearchPathObservationStage.Generated,
+            SearchPathObservationStage.Expanded,
+            SearchPathObservationStage.ActionAdmitted,
+        })
+        {
+            Require(
+                stageCounts.TryGetValue(required, out int count) && count > 0,
+                $"U0 path observer never saw {required}.");
+        }
+
+        int candidateLines = infoLines.Count(line =>
+            line.Contains("[CombatSolver/U0] FINAL_CANDIDATE ", StringComparison.Ordinal));
+        int selectionLines = infoLines.Count(line =>
+            line.Contains("[CombatSolver/U0] FINAL_SELECTION ", StringComparison.Ordinal));
+        Require(candidateLines > 0, "U0 emitted no FINAL_CANDIDATE diagnostics.");
+        Require(selectionLines == 1, $"U0 expected one FINAL_SELECTION, got {selectionLines}.");
+
+        CombatRootSnapshot noEventRoot = CombatRootSnapshot.Capture(combat);
+        CombatBeamSolver noEventSolver = new(
+            noEventRoot,
+            names,
+            damage,
+            policy,
+            searchProfile: profile);
+        SimulationSnapshot noEventSnapshot = noEventSolver.ReplayDiagnosticPrefix([]);
+        StateFingerprint noEventFingerprint;
+        try
+        {
+            noEventFingerprint = U0BaselineFixture.ReplayNoTeammateEvents(
+                noEventSnapshot.Simulator,
+                new HashSet<uint>());
+        }
+        finally
+        {
+            noEventSnapshot.ReleaseSimulator();
+        }
+
+        PlanAction first = result.BestNode.Actions[0];
+        Require(
+            first.Kind == PlanActionKind.PlayCard,
+            $"U1 fixture requires the first selected action to be PlayCard, got {first.Kind}.");
+
+        return new U0Evidence(
+            Status: "PASS",
+            EvidenceLevel: "pinned_offline_production_search",
+            FirstAction: ActionToken(first),
+            Actions: result.BestNode.Actions.Select(ActionToken).ToArray(),
+            Boundary: result.BoundaryReason.ToString(),
+            ExpandedNodes: work.ExpandedNodes,
+            TransitionCount: work.TransitionCount,
+            CandidateDiagnosticLines: candidateLines,
+            SelectionDiagnosticLines: selectionLines,
+            PathStages: stageCounts
+                .OrderBy(pair => pair.Key.ToString(), StringComparer.Ordinal)
+                .ToDictionary(pair => pair.Key.ToString(), pair => pair.Value),
+            NoTeammateReplayFingerprint: Format(noEventFingerprint));
+    }
+
+    private static U1Evidence RunU1(
+        CombatState combat,
+        SolverDisplayNames names,
+        BattleDamageSnapshot damage,
+        SearchPolicySnapshot captured,
+        SolverSearchProfile profile,
+        string expectedFirstActionToken)
+    {
+        SearchPolicySnapshot replayPolicy = captured with
+        {
+            Profile = profile,
+            RoutePolicy = SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            CurrentTurnOnly = false,
+            UseMultiplayerTeamObjective = false,
+            DetailedDiagnostics = false,
+            VerifyIncrementalSearch = true,
+            FixedBudget = true,
+            MaxDegreeOfParallelism = 1,
+            BudgetOverrideMilliseconds = null,
+            UseNoveltyPortfolio = false,
+            NoveltySearch = null,
+            UseBeamWidthPortfolio = false,
+            BeamWidthPortfolioWidths = null,
+            Interaction = null,
+            RequestWorkTotals = new SearchRequestWorkTotals(),
+        };
+
+        PlanAction action = FindFirstAction(combat, names, damage, replayPolicy, profile);
+        Require(
+            ActionToken(action) == expectedFirstActionToken,
+            "U1 replay fixture did not resolve the same first action as U0.");
+
+        ReplayEvidence replayA = ReplayOneAction(
+            combat, names, damage, replayPolicy, profile, action);
+        ReplayEvidence replayB = ReplayOneAction(
+            combat, names, damage, replayPolicy, profile, action);
+        Require(
+            replayA.ContinuationStateText == replayB.ContinuationStateText,
+            "U1 production one-action replay is not deterministic.");
+        Require(
+            replayA.RemoteFingerprint == replayB.RemoteFingerprint,
+            "U1 production remote fingerprint is not deterministic.");
+
+        MultiplayerSafeActionRevalidationFacts matchedWithLegacyDisagreement =
+            RevalidationFacts() with
+            {
+                LocalCardRemovedFromHand = false,
+                EnergyStateConsistent = false,
+                TargetIdentityStable = false,
+                RemotePublicStateUnchanged = false,
+                EnemyStateMatchesExpectedTarget = false,
+            };
+        MultiplayerSafeActionRevalidationDecision matchedDecision =
+            MultiplayerSafeExecutePolicy.RevalidateAction(matchedWithLegacyDisagreement);
+        MultiplayerSafeActionRevalidationDecision remoteMismatchDecision =
+            MultiplayerSafeExecutePolicy.RevalidateAction(
+                RevalidationFacts() with { ExpectedRemoteStateMatched = false });
+        MultiplayerSafeActionRevalidationDecision semanticMismatchDecision =
+            MultiplayerSafeExecutePolicy.RevalidateAction(
+                RevalidationFacts() with { ExpectedContinuationStateMatched = false });
+
+        Require(
+            matchedDecision == MultiplayerSafeActionRevalidationDecision.SafeToContinue,
+            $"U1 legal modeled chain was rejected: {matchedDecision}.");
+        Require(
+            remoteMismatchDecision == MultiplayerSafeActionRevalidationDecision.RemoteOrUnknownChange,
+            $"U1 remote mismatch decision changed: {remoteMismatchDecision}.");
+        Require(
+            semanticMismatchDecision == MultiplayerSafeActionRevalidationDecision.ActionMismatch,
+            $"U1 semantic mismatch decision changed: {semanticMismatchDecision}.");
+
+        int turn = LocalContext.GetMe(combat)?.PlayerCombatState?.TurnNumber
+            ?? throw new InvalidOperationException("U1 fixture has no local turn.");
+        const int generation = 77;
+        const long version0 = 100;
+
+        MultiplayerSafeExecutionSession normal = new(turn, generation, version0, maxActions: 2);
+        Require(
+            normal.TryBeginAction(0, ActionToken(action), turn, generation, version0, out _)
+            && normal.MarkAwaitingWorldUpdate()
+            && normal.BeginRevalidation()
+            && normal.AcceptAction(version0 + 1, hasNextAction: true)
+            && normal.TryBeginAction(
+                1, ActionToken(action), turn, generation, version0 + 1, out _),
+            "U1 unchanged world did not authorize the next action.");
+
+        MultiplayerSafeExecutionSession remoteInserted = new(
+            turn, generation, version0, maxActions: 2);
+        Require(
+            remoteInserted.TryBeginAction(
+                0, ActionToken(action), turn, generation, version0, out _)
+            && remoteInserted.MarkAwaitingWorldUpdate()
+            && remoteInserted.BeginRevalidation()
+            && remoteInserted.AcceptAction(version0 + 1, hasNextAction: true),
+            "U1 remote-insertion setup failed.");
+        bool staleAccepted = remoteInserted.TryBeginAction(
+            1,
+            ActionToken(action),
+            turn,
+            generation,
+            version0 + 2,
+            out string remoteInsertionReason);
+        Require(
+            !staleAccepted && remoteInsertionReason == "world_version_not_accepted",
+            $"U1 pre-action remote insertion was not rejected: {remoteInsertionReason}.");
+
+        MultiplayerSafeExecutionSession cancelled = new(
+            turn, generation + 1, version0, maxActions: 1);
+        Require(
+            cancelled.TryBeginAction(
+                0, ActionToken(action), turn, generation + 1, version0, out _),
+            "U1 cancellation setup failed.");
+        cancelled.Abort("pinned_cancel");
+        bool staleRetry = cancelled.TryBeginAction(
+            0,
+            ActionToken(action),
+            turn,
+            generation + 1,
+            version0,
+            out string cancelReason);
+        Require(
+            !staleRetry && cancelReason == "session_state_Aborted",
+            $"U1 cancelled session reauthorized a stale callback: {cancelReason}.");
+
+        return new U1Evidence(
+            Status: "PASS",
+            EvidenceLevel: "pinned_production_one_action_replay_plus_fault_injection",
+            FirstAction: ActionToken(action),
+            ReplayDeterministic: true,
+            ContinuationFingerprint: replayA.ContinuationFingerprint,
+            RemoteFingerprint: replayA.RemoteFingerprint,
+            MatchedLegacyDisagreementDecision: matchedDecision.ToString(),
+            RemoteMismatchDecision: remoteMismatchDecision.ToString(),
+            SemanticMismatchDecision: semanticMismatchDecision.ToString(),
+            NormalNextActionAuthorized: true,
+            RemoteInsertionRejectedReason: remoteInsertionReason,
+            CancelledRetryRejectedReason: cancelReason);
+    }
+
+    private static PlanAction FindFirstAction(
+        CombatState combat,
+        SolverDisplayNames names,
+        BattleDamageSnapshot damage,
+        SearchPolicySnapshot policy,
+        SolverSearchProfile profile)
+    {
+        CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
+        CombatBeamSolver solver = new(
+            root,
+            names,
+            damage,
+            policy,
+            searchProfile: profile);
+        SolverResult result = solver.Solve();
+        Require(result.BestNode.Actions.Count > 0, "U1 search produced no actions.");
+        PlanAction first = result.BestNode.Actions[0];
+        Require(
+            first.Kind == PlanActionKind.PlayCard,
+            $"U1 first action is {first.Kind}, not PlayCard.");
+        return first;
+    }
+
+    private static ReplayEvidence ReplayOneAction(
+        CombatState combat,
+        SolverDisplayNames names,
+        BattleDamageSnapshot damage,
+        SearchPolicySnapshot policy,
+        SolverSearchProfile profile,
+        PlanAction action)
+    {
+        CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
+        CombatBeamSolver replay = new(
+            root,
+            names,
+            damage,
+            policy,
+            searchProfile: profile);
+        SimulationSnapshot snapshot = replay.ReplayDiagnosticPrefix([action]);
+        try
+        {
+            Require(
+                snapshot.BoundaryReason == SearchBoundaryReason.None,
+                $"U1 one-action replay reached {snapshot.BoundaryReason}.");
+            ContinuationStamp continuation = replay.CaptureDiagnosticContinuation(snapshot);
+            StateFingerprint remote =
+                MultiplayerContinuationRemoteFingerprint.CapturePredicted(
+                    snapshot.Simulator,
+                    root.PlayerIdentity);
+            StateFingerprintBuilder builder = new();
+            builder.Add(continuation.StateText);
+            StateFingerprint continuationFingerprint = builder.Finish();
+            return new ReplayEvidence(
+                continuation.StateText,
+                Format(continuationFingerprint),
+                Format(remote));
+        }
+        finally
+        {
+            snapshot.ReleaseSimulator();
+        }
+    }
+
+    private static MultiplayerSafeActionRevalidationFacts RevalidationFacts()
+        => new(
+            NativePlayCardCaptured: true,
+            ActionQueueIdle: true,
+            ExpectedContinuationStateMatched: true,
+            ExpectedRemoteStateMatched: true,
+            LocalCardRemovedFromHand: true,
+            LocalPlayerIdentityStable: true,
+            EnergyStateConsistent: true,
+            TargetIdentityStable: true,
+            RemotePublicStateUnchanged: true,
+            EnemyStateMatchesExpectedTarget: true,
+            WorldVersionAdvanced: true,
+            WorldVersionStable: true,
+            HasNextAction: true);
+
+    private static string ActionToken(PlanAction action)
+        => $"{action.Turn}:{action.Kind}:{action.CardId ?? action.PotionId ?? "-"}"
+            + $":target={action.TargetCombatId?.ToString() ?? "-"}"
+            + $":key={action.CardStateKey}";
+
+    private static string Format(StateFingerprint value)
+        => $"{value.First:X16}:{value.Second:X16}";
+
+    private static void Require(bool condition, string message)
+    {
+        if (!condition)
+            throw new InvalidOperationException(message);
+    }
+
+    private static string ParseOutput(string[] args)
+    {
+        string output = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "../../../../../.local/u0-u1-pinned"));
+        for (int index = 0; index < args.Length; index++)
+        {
+            if (args[index] != "--out")
+                throw new ArgumentException($"Unknown option {args[index]}.");
+            if (++index >= args.Length)
+                throw new ArgumentException("Missing value for --out.");
+            output = Path.GetFullPath(args[index]);
+        }
+        return output;
+    }
+
+    internal sealed record U0Evidence(
+        string Status,
+        string EvidenceLevel,
+        string FirstAction,
+        string[] Actions,
+        string Boundary,
+        long ExpandedNodes,
+        long TransitionCount,
+        int CandidateDiagnosticLines,
+        int SelectionDiagnosticLines,
+        IReadOnlyDictionary<string, int> PathStages,
+        string NoTeammateReplayFingerprint);
+
+    internal sealed record U1Evidence(
+        string Status,
+        string EvidenceLevel,
+        string FirstAction,
+        bool ReplayDeterministic,
+        string ContinuationFingerprint,
+        string RemoteFingerprint,
+        string MatchedLegacyDisagreementDecision,
+        string RemoteMismatchDecision,
+        string SemanticMismatchDecision,
+        bool NormalNextActionAuthorized,
+        string RemoteInsertionRejectedReason,
+        string CancelledRetryRejectedReason);
+
+    private sealed record ReplayEvidence(
+        string ContinuationStateText,
+        string ContinuationFingerprint,
+        string RemoteFingerprint);
+}

@@ -18,9 +18,11 @@ internal static class U0BaselineFixture
         ISet<uint> processedEnemyDeaths)
     {
         HashSet<string> endedPlayers = new(StringComparer.Ordinal);
+        IReadOnlySet<uint> observedProcessedEnemyDeaths =
+            processedEnemyDeaths as IReadOnlySet<uint> ?? processedEnemyDeaths.ToHashSet();
         StateFingerprint before = ShadowFutureStateFingerprint.Capture(
             simulator,
-            processedEnemyDeaths,
+            observedProcessedEnemyDeaths,
             endedPlayers,
             NoTeammateEvents);
 
@@ -35,7 +37,7 @@ internal static class U0BaselineFixture
 
         StateFingerprint after = ShadowFutureStateFingerprint.Capture(
             simulator,
-            processedEnemyDeaths,
+            observedProcessedEnemyDeaths,
             endedPlayers,
             NoTeammateEvents);
         if (after != before)
