@@ -118,8 +118,7 @@ U2 才负责在相同抽象 root、动作集、目标和固定预算下断言首
 - `source/tools/run-contract-tests.ps1` 已接入 `U0BaselineChecks`。
 - 新增 `source/tools/U0U1PinnedHarness`，直接使用 pinned STS2 `0.107.1` DLL、生产 `CombatBeamSolver`、`SearchPathObserver` 与生产 Shadow replay。GitHub Actions run `35857680737` 在 commit `3ee2a7a54b875a45c145f6fe8a187d5b34fbaad6` 已 PASS：固定 IRONCLAD / FUZZY_WURM_CRAWLER_WEAK / U0U1PINNED1 root 上首动作 BASH，220 expanded / 579 transitions；观察到 Root / Generated / Expanded / ActionAdmitted，输出 3 条 FINAL_CANDIDATE + 1 条 FINAL_SELECTION；空队友事件生产 replay 前后 modeled state 指纹保持一致（`BC42282DEF196DB7:1D1E115B9588656D`）。
 - 同一提交的 compatibility run `35857680764` SUCCESS；完整 pinned workflow 中 U2、P0 baseline、P0/P1 harness 也继续 SUCCESS。因此这次 U0 pinned 接线没有破坏既有回归链。
-
-### 仍为 UNVERIFIED
+- **U0 real diagnostic correlation 已 PASS（2026-09-23）**：真实多人问题包 `CombatSolver-0.40.2-RUBY_RAIDERS_NORMAL-d91c89658d8f4620abb01e058b340fb1.zip` 中，Beam portfolio 最终选择 `selected_index=3`；该成员的 `FINAL_CANDIDATE rank=1` 与 `FINAL_SELECTION` 都是同一 9-action 路线：`OFFERING → BRAND[BLUDGEON] → BLUDGEON → STRIKE → STRIKE → OFFERING → OFFERING → BLUDGEON → STRIKE`。随后 `SEARCH_RESULT_ROUTE_CAPTURE generation=15` 固定 `route_identity=1a7fa2e287b648ea8188d8fbd8d76cb9`；Safe Execute `request_id=8` 以同一 route identity 启动，第一张 `OFFERING` 产生 `DEPLOY_ACTION` 与 `NATIVE_ACTION_CAPTURED action_index=0`，结算后 `U1_POST_STATE_COMPARE continuation_match=true remote_match=true`，并 `MP2B_ACTION_RECONCILED decision=SafeToContinue`。因此真实运行中已能从最终候选/最终选择关联到固定 route、native submit、live/predicted compare 与 reconcile。这里不要求 `PATH_TRACE_EVENT` 作为 PASS 前提；它仍用于更深的“路线在哪个搜索阶段丢失”诊断。
 
 本轮没有把以下项目写成 PASS：
 
@@ -133,6 +132,6 @@ Pinned DLL 下的 production Search / replay 已有运行证据；剩余项目�
 
 ## 8. U0 结论与停止条件
 
-U0 的结构性目标已完成：当前差异、已失效兼容规则、五类分诊、两个固定输入夹具和四层独立记录均有明确入口。
+U0 已完成：结构性诊断、pinned production Search/replay，以及真实多人 end-to-end diagnostic correlation 均已有 PASS 证据。
 
-因此本轮停止扩大搜索/排序修改。下一张执行卡是 **U1 — 动作后态校验**：用上述四层证据复现“合法本地动作后被错误停止/重搜”的问题，再最小修改 Safe Execute 后态判定。
+因此停止扩大 U0 测试。后续问题直接沿 `FINAL_CANDIDATE → FINAL_SELECTION → route_identity → DEPLOY_ACTION → NATIVE_ACTION_CAPTURED → U1_POST_STATE_COMPARE → RECONCILED/ABORT` 定位第一处断点；更深的搜索丢路问题再启用 `PATH_TRACE_EVENT`。
