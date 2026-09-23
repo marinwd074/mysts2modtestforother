@@ -62,8 +62,13 @@ Assert-Contains $controller 'RelicTargets = useFullSearchKernel' 'relic target p
 Assert-Contains $controller 'GrowthOpportunityTargets = useFullSearchKernel' 'growth opportunity parity'
 Assert-Contains $controller 'IgnoreLongTermRewards = settings.IgnoreLongTermRewards || !useFullSearchKernel' 'long-term reward parity'
 
-# Same solver/profile path for both full-route modes.
-Assert-Contains $solver 'private readonly SolverSearchProfile _profile = searchProfile ?? SolverSearchProfile.Default;' 'shared solver profile'
+# Same solver/profile path for both full-route modes. U3 may reserve work only when
+# actual multiplayer semantics and the team objective are active; the configured total budget
+# remains the same input and singleplayer/degenerate U2 keeps the full main-search budget.
+Assert-Contains $solver 'private readonly int _totalExpandedNodeBudget =' 'shared configured total node budget'
+Assert-Contains $solver 'MultiplayerScenarioReevaluationPolicy.MainSearchExpandedNodeBudget(' 'U3 main-search budget split is explicit'
+Assert-Contains $solver 'reserveScenarioReevaluationBudget' 'internal workers can opt out of a second U3 reserve'
+Assert-Contains $solver '&& MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(' 'U3 reserve requires actual multiplayer semantics'
 Assert-Contains $solver 'private readonly SearchRoutePolicy _routePolicy = policy.RoutePolicy;' 'route semantics stay explicit'
 Assert-Contains $solver 'HasActiveMultiplayerRouteSemantics(' 'actual player count gates multiplayer route-only behavior'
 Assert-Contains $coordinator 'new CombatBeamSolver(' 'single shared beam solver construction'
