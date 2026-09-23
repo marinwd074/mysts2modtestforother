@@ -100,6 +100,19 @@ GitHub Actions run `35890656903`：**SUCCESS**。
 
 没有扩大 Beam、节点预算或时间预算来换取通过。
 
+### U5 非实机终局顺序 pinned replay
+
+GitHub Actions pinned run `35893825974`：**SUCCESS**；compatibility run `35893826085`：**SUCCESS**。
+
+同一固定 0.107.1 场景把敌人生命设为 7，再复用同一组生产 `PlanAction`：
+
+- `BASH → STRIKE_IRONCLAD`：Bash 先结束战斗，生产 replay 在第二动作前按“终局后动作”边界拒绝旧后缀，`TerminalForwardRejected=true`；
+- `STRIKE_IRONCLAD → BASH`：两动作均合法，最终 enemy HP = 0、energy = 0，`TerminalReverseCompleted=true`。
+
+这证明“一个顺序提前终局，另一个顺序仍需继续动作”的合法性不对称会被生产 replay 保留，不能把两种顺序当成可交换路线。该测试仍为 detached 单进程 pinned simulation；它不证明真实远端玩家触发死亡、网络同步或 `WorldVersion` 到达时序。
+
+同一 pinned run 继续完整通过 Release、U0/U1、U2、P0/P1 runtime 与历史 P0 A/B 分类，且未扩大任何搜索预算。
+
 ## 仍未验证
 
 真实双端 Host/Client 的 U5 专项 smoke 尚未执行，因此不能声称网络实机已经观察到 forecast boundary。

@@ -454,6 +454,14 @@ internal static class Program
                     MultiplayerInterleaveOrderRelation.ExactEquivalent),
             "U5 exact-collapse policy changed.");
 
+        U5TerminalOrderEvidence terminalOrder = RunU5TerminalOrder(
+            combat,
+            names,
+            replayPolicy,
+            profile,
+            bash,
+            strike);
+
         return new U5Evidence(
             Status: "PASS",
             EvidenceLevel: "pinned_offline_production_replay",
@@ -465,7 +473,97 @@ internal static class Program
             ReverseEnemyHp: strikeThenBash.EnemyHp,
             OrderSensitive: true,
             ExactCollapseRejected: true,
+            TerminalForwardRejected: terminalOrder.ForwardRejected,
+            TerminalReverseCompleted: terminalOrder.ReverseCompleted,
+            TerminalReverseEnemyHp: terminalOrder.ReverseEnemyHp,
+            TerminalReverseEnergy: terminalOrder.ReverseEnergy,
             RealMultiplayerOwnershipVerified: false);
+    }
+
+    private static U5TerminalOrderEvidence RunU5TerminalOrder(
+        CombatState combat,
+        SolverDisplayNames names,
+        SearchPolicySnapshot policy,
+        SolverSearchProfile profile,
+        PlanAction bash,
+        PlanAction strike)
+    {
+        if (combat.Enemies.Count != 1)
+            throw new InvalidOperationException(
+                $"U5 terminal fixture requires one enemy, got {combat.Enemies.Count}.");
+
+        var enemy = combat.Enemies[0];
+        int originalHp = enemy.CurrentHp;
+        const int lethalFixtureHp = 7;
+        if (enemy.MaxHp < lethalFixtureHp)
+            throw new InvalidOperationException(
+                $"U5 terminal fixture enemy max HP is only {enemy.MaxHp}.");
+
+        try
+        {
+            enemy.SetCurrentHpInternal(lethalFixtureHp);
+            BattleDamageSnapshot damage = BattleDamageTracker.Observe(combat);
+
+            bool forwardRejected = false;
+            string forwardReason = "-";
+            try
+            {
+                CombatRootSnapshot forwardRoot = CombatRootSnapshot.Capture(combat);
+                CombatBeamSolver forwardReplay = new(
+                    forwardRoot,
+                    names,
+                    damage,
+                    policy,
+                    searchProfile: profile);
+                SimulationSnapshot unexpected = forwardReplay.ReplayDiagnosticPrefix([bash, strike]);
+                unexpected.ReleaseSimulator();
+            }
+            catch (InvalidOperationException ex)
+                when (ex.Message.Contains(
+                    "回放包含已锁定战斗终局之后的动作",
+                    StringComparison.Ordinal))
+            {
+                forwardRejected = true;
+                forwardReason = ex.Message;
+            }
+
+            Require(
+                forwardRejected,
+                "U5 terminal fixture did not reject Bash->Strike after Bash ended combat.");
+
+            CombatRootSnapshot reverseRoot = CombatRootSnapshot.Capture(combat);
+            CombatBeamSolver reverseReplay = new(
+                reverseRoot,
+                names,
+                damage,
+                policy,
+                searchProfile: profile);
+            SimulationSnapshot reverse = reverseReplay.ReplayDiagnosticPrefix([strike, bash]);
+            try
+            {
+                Require(
+                    reverse.AllEnemiesDead,
+                    "U5 terminal reverse order Strike->Bash did not end combat.");
+                Require(
+                    reverse.Energy == 0,
+                    $"U5 terminal reverse order should consume all 3 energy, got {reverse.Energy}.");
+
+                return new U5TerminalOrderEvidence(
+                    ForwardRejected: true,
+                    ForwardReason: forwardReason,
+                    ReverseCompleted: true,
+                    ReverseEnemyHp: reverse.EnemyHp,
+                    ReverseEnergy: reverse.Energy);
+            }
+            finally
+            {
+                reverse.ReleaseSimulator();
+            }
+        }
+        finally
+        {
+            enemy.SetCurrentHpInternal(originalHp);
+        }
     }
 
     private static U5OrderReplay ReplayU5Order(
@@ -642,7 +740,18 @@ internal static class Program
         int ReverseEnemyHp,
         bool OrderSensitive,
         bool ExactCollapseRejected,
+        bool TerminalForwardRejected,
+        bool TerminalReverseCompleted,
+        int TerminalReverseEnemyHp,
+        int TerminalReverseEnergy,
         bool RealMultiplayerOwnershipVerified);
+
+    private sealed record U5TerminalOrderEvidence(
+        bool ForwardRejected,
+        string ForwardReason,
+        bool ReverseCompleted,
+        int ReverseEnemyHp,
+        int ReverseEnergy);
 
     private sealed record U5OrderReplay(
         StateFingerprint FutureFingerprint,
