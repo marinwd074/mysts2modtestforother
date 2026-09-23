@@ -123,27 +123,56 @@ internal static class Program
                 CancellationToken.None,
                 progressCallback: null);
             P0SearchEvidence p0Search = CaptureSearch(p0Result);
-            if (p0Result.BoundaryReason == SearchBoundaryReason.TimeLimit)
-                throw new InvalidOperationException("P0 SP regression ended at TimeLimit.");
-            if (p0Result.BestNode.Actions.Count == 0)
-                throw new InvalidOperationException("P0 SP regression produced an empty route.");
 
-            P0JointEvidence joint = VerifyContinuationAdmission(
-                p0Result,
-                combat,
-                p0Root,
-                battleDamage);
+            P0JointEvidence joint;
+            try
+            {
+                joint = VerifyContinuationAdmission(
+                    p0Result,
+                    combat,
+                    p0Root,
+                    battleDamage);
+            }
+            catch (Exception error)
+            {
+                joint = new(
+                    Pass: false,
+                    ContinuationTurn: null,
+                    ExactReuse: false,
+                    ExactReason: "not_run",
+                    ReusedFromTurn: null,
+                    MismatchRejected: false,
+                    MismatchReason: "not_run",
+                    LocalStateExact: false,
+                    Error: $"{error.GetType().Name}: {error.Message}");
+            }
 
-            P1Evidence p1 = VerifyP1ObjectiveRuntime(
-                combat,
-                settings,
-                names,
-                battleDamage,
-                captured);
+            P1Evidence p1;
+            try
+            {
+                p1 = VerifyP1ObjectiveRuntime(
+                    combat,
+                    settings,
+                    names,
+                    battleDamage,
+                    captured);
+            }
+            catch (Exception error)
+            {
+                p1 = new(
+                    Pass: false,
+                    Adaptive: null,
+                    MinimizeTeamLoss: null,
+                    AdaptiveFastBeatsSlowContract: false,
+                    AllPlayersAliveHardBoundaryContract: false,
+                    SelectedRoutesDiffer: false,
+                    Error: $"{error.GetType().Name}: {error.Message}");
+            }
 
+            bool overallPass = p0Search.Pass && joint.Pass && p1.Pass;
             var evidence = new
             {
-                status = "PASS",
+                status = overallPass ? "PASS" : "FAIL",
                 pinnedTarget = "0.107.1",
                 fixture,
                 p0 = new
@@ -157,9 +186,9 @@ internal static class Program
             string evidencePath = Path.Combine(outputDirectory, "p0-p1-pinned-evidence.json");
             File.WriteAllText(evidencePath, JsonSerializer.Serialize(evidence, Json));
 
-            Console.WriteLine("P0P1PinnedHarness PASS");
+            Console.WriteLine($"P0P1PinnedHarness {(overallPass ? "PASS" : "FAIL")}");
             Console.WriteLine($"evidence={evidencePath}");
-            return 0;
+            return overallPass ? 0 : 1;
         }
         catch (Exception error)
         {
@@ -342,13 +371,15 @@ internal static class Program
             $"P0 Joint mismatch reason changed: {mismatchReason}.");
 
         return new(
+            Pass: true,
             ContinuationTurn: cached.StartTurnNumber,
             ExactReuse: reused,
             ExactReason: exactReason,
             ReusedFromTurn: continuation?.ReusedFromTurn,
             MismatchRejected: !mismatchedReuse,
             MismatchReason: mismatchReason,
-            LocalStateExact: true);
+            LocalStateExact: true,
+            Error: null);
     }
 
     private static P1Evidence VerifyP1ObjectiveRuntime(
@@ -428,14 +459,20 @@ internal static class Program
             MultiplayerCombatObjectiveMath.Compare(alive, dead) < 0,
             "P1 all-player survival hard boundary regressed.");
 
+        bool routesDiffer = !adaptive.Actions.SequenceEqual(
+            minimize.Actions,
+            StringComparer.Ordinal);
         return new(
+            Pass: adaptive.Pass
+                && minimize.Pass
+                && MultiplayerCombatObjectiveMath.Compare(fast, slow) < 0
+                && MultiplayerCombatObjectiveMath.Compare(alive, dead) < 0,
             Adaptive: adaptive,
             MinimizeTeamLoss: minimize,
             AdaptiveFastBeatsSlowContract: true,
             AllPlayersAliveHardBoundaryContract: true,
-            SelectedRoutesDiffer: !adaptive.Actions.SequenceEqual(
-                minimize.Actions,
-                StringComparer.Ordinal));
+            SelectedRoutesDiffer: routesDiffer,
+            Error: null);
     }
 
     private static P1SearchEvidence RunP1(
@@ -466,10 +503,11 @@ internal static class Program
         };
         CombatBeamSolver solver = new(root, names, battleDamage, policy, searchProfile: profile);
         SolverResult result = solver.Solve();
-        if (result.BoundaryReason == SearchBoundaryReason.TimeLimit)
-            throw new InvalidOperationException($"P1 {strategy} search ended at TimeLimit.");
         SearchRequestWorkSnapshot work = totals.Snapshot();
+        bool pass = result.BoundaryReason != SearchBoundaryReason.TimeLimit
+            && result.BestNode.Actions.Count > 0;
         return new(
+            Pass: pass,
             Strategy: strategy.ToString(),
             FirstAction: result.BestNode.Actions.FirstOrDefault() is { } first
                 ? ActionToken(first)
@@ -489,6 +527,8 @@ internal static class Program
 
     private static P0SearchEvidence CaptureSearch(SolverResult result)
         => new(
+            Pass: result.BoundaryReason != SearchBoundaryReason.TimeLimit
+                && result.BestNode.Actions.Count > 0,
             FirstAction: result.BestNode.Actions.FirstOrDefault() is { } first
                 ? ActionToken(first)
                 : "<none>",
@@ -570,6 +610,7 @@ internal static class Program
         string[] PotionIds);
 
     internal sealed record P0SearchEvidence(
+        bool Pass,
         string FirstAction,
         int ActionCount,
         string Boundary,
@@ -583,15 +624,18 @@ internal static class Program
         int PortfolioMembers);
 
     internal sealed record P0JointEvidence(
-        int ContinuationTurn,
+        bool Pass,
+        int? ContinuationTurn,
         bool ExactReuse,
         string ExactReason,
         int? ReusedFromTurn,
         bool MismatchRejected,
         string MismatchReason,
-        bool LocalStateExact);
+        bool LocalStateExact,
+        string? Error);
 
     internal sealed record P1SearchEvidence(
+        bool Pass,
         string Strategy,
         string FirstAction,
         string[] Actions,
@@ -607,9 +651,11 @@ internal static class Program
         long TransitionCount);
 
     internal sealed record P1Evidence(
-        P1SearchEvidence Adaptive,
-        P1SearchEvidence MinimizeTeamLoss,
+        bool Pass,
+        P1SearchEvidence? Adaptive,
+        P1SearchEvidence? MinimizeTeamLoss,
         bool AdaptiveFastBeatsSlowContract,
         bool AllPlayersAliveHardBoundaryContract,
-        bool SelectedRoutesDiffer);
+        bool SelectedRoutesDiffer,
+        string? Error);
 }
