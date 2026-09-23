@@ -183,7 +183,8 @@ internal sealed partial class CombatBeamSolver
             IReadOnlyList<(SearchNode Node, SimulationSnapshot Snapshot)> evaluated,
             int initialHp,
             bool emitDiagnostics,
-            bool reevaluateScenarios = false)
+            bool reevaluateScenarios = false,
+            bool allowScenarioRerank = true)
         {
             var policyCandidates = evaluated
                 .Select(candidate =>
@@ -544,6 +545,7 @@ internal sealed partial class CombatBeamSolver
             List<ScenarioDecisionSummary> scenarioSummaries = [];
             bool scenarioReevaluationEnabled = false;
             if (EnableMultiplayerScenarioReevaluation
+                && allowScenarioRerank
                 && useTeamObjective
                 && selected.Count > 0)
             {
@@ -896,7 +898,9 @@ internal sealed partial class CombatBeamSolver
                 {
                     diagnostics.Info(
                         $"[CombatSolver/Multiplayer] MP_SCENARIO_RERANK " +
-                        $"enabled=false reason=shared_scenario_coverage_incomplete_or_single_current_decision");
+                        $"enabled=false reason={(allowScenarioRerank
+                            ? "shared_scenario_coverage_incomplete_or_single_current_decision"
+                            : "reevaluation_budget_unavailable")}");
                 }
 
                 if (selectedChanceDecision != null)
