@@ -111,7 +111,7 @@ internal sealed partial class CombatBeamSolver
                     && action.Turn == rootTurn)
                 {
                     outcomeNode = current;
-                    forecast = action.ShadowForecast;
+                    forecast = action.ShadowForecast!;
                     return true;
                 }
                 current = current.Parent;
@@ -161,13 +161,8 @@ internal sealed partial class CombatBeamSolver
                     AppendDecisionChoice(key, choice);
                 key.Append(']');
             }
-            if (action.TurnStartChoices != null)
-            {
-                key.Append("T[");
-                foreach (PlanCardChoice choice in action.TurnStartChoices)
-                    AppendDecisionChoice(key, choice);
-                key.Append(']');
-            }
+            // TurnStartChoices belong to the state reached after EndTurn. They are future
+            // observations/choices, not part of the deployable current-turn decision key.
             key.Append(';');
         }
 
