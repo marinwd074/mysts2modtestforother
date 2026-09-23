@@ -17,12 +17,13 @@ internal static class MultiplayerCombatObjectiveMath
         return progress * progress * (3d - 2d * progress);
     }
 
-    internal static double ComputeTeamSafetyFactor(double worstPlayerLossRatio)
+    internal static double ComputeTeamRiskFactor(double worstPlayerLossRatio)
     {
-        double fragility = Math.Clamp(worstPlayerLossRatio, 0d, 1d);
-        // A damaged team should be less willing to buy tempo with additional HP.
-        // This stays continuous and parameter-free: healthy=1, fully depleted=0.5.
-        return 1d / (1d + fragility);
+        double accumulatedRisk = Math.Clamp(worstPlayerLossRatio, 0d, 1d);
+        // Team loss itself is already charged directly by the objective. This factor only
+        // prices the danger of allowing another enemy turn: healthy=0.5, heavily damaged=1.
+        // Increasing risk must never make the same route look cheaper.
+        return 0.5d * (1d + accumulatedRisk);
     }
 
     internal static double LossRatioPerTurn(
@@ -30,7 +31,7 @@ internal static class MultiplayerCombatObjectiveMath
         double worstPlayerLossRatio)
         => MaximumExtraLossRatioPerTurn
             * ComputeLethalUrgency(enemyDurabilityRatio)
-            * ComputeTeamSafetyFactor(worstPlayerLossRatio);
+            * ComputeTeamRiskFactor(worstPlayerLossRatio);
 
     internal static double ContinuousTempoScore(
         double teamLossRatio,
