@@ -163,8 +163,8 @@ internal static class Program
                 && fixedWorkResult.BestNode.Actions.Count > 0;
             Require(fixedWorkPass, "Historical P0 fixed-work probe produced no comparable route.");
             Require(
-                fixedWorkResult.TotalExpandedNodes <= FixedWorkNodeBudget,
-                $"Historical P0 fixed-work probe exceeded node budget: {fixedWorkResult.TotalExpandedNodes}/{FixedWorkNodeBudget}.");
+                fixedWorkResult.ExpandedNodes <= FixedWorkNodeBudget,
+                $"Historical P0 fixed-work probe exceeded node budget: {fixedWorkResult.ExpandedNodes}/{FixedWorkNodeBudget}.");
 
             bool pass = result.BoundaryReason != SearchBoundaryReason.TimeLimit
                 && result.BestNode.Actions.Count > 0;
@@ -218,8 +218,8 @@ internal static class Program
                     finalHp = fixedWorkResult.Snapshot.PlayerHp,
                     finalEnemyHp = fixedWorkResult.Snapshot.EnemyHp,
                     combatEndedTurn = fixedWorkResult.CombatEndedTurn,
-                    expandedNodes = fixedWorkResult.TotalExpandedNodes,
-                    choiceBranchesEvaluated = fixedWorkResult.TotalChoiceBranchesEvaluated,
+                    expandedNodes = fixedWorkResult.ExpandedNodes,
+                    choiceBranchesEvaluated = fixedWorkResult.ChoiceBranchesEvaluated,
                     continuationCount = fixedWorkResult.Continuations.Count,
                 },
             };
