@@ -56,6 +56,20 @@ internal readonly record struct MultiplayerScenarioDecisionRank(
     double WorstTeamLossRatio,
     double WorstEnemyDurabilityRatio);
 
+internal readonly record struct MultiplayerScenarioRiskMetrics(
+    int ScenarioCount,
+    double NominalReferenceLossEquivalent,
+    double RobustLossEquivalent,
+    double ConservatismGap,
+    double MeanTeamLossRatio,
+    double WorstTeamLossRatio,
+    double CooperativeMeanTeamLossRatio,
+    double NoActionTeamLossRatio,
+    double CooperationTeamLossBenefit,
+    double CooperativeMeanEnemyDurabilityRatio,
+    double NoActionEnemyDurabilityRatio,
+    double CooperationProgressBenefit);
+
 /// <summary>
 /// Robust multiplayer scenario reranking. Scenario specs are stress-behavior rules, not
 /// calibrated probabilities or concrete teammate card strings. Every compared current decision
@@ -222,6 +236,58 @@ internal static class MultiplayerScenarioReevaluationPolicy
             worstPlayerLoss,
             worstTeamLoss,
             worstEnemyDurability);
+    }
+
+    /// <summary>
+    /// U4 diagnostic-only A/B measurements over the fixed U3 stress lanes.
+    /// The nominal reference is an equal-lane mean, not an expected value: teammate
+    /// scenario probabilities are still uncalibrated. Positive cooperation benefits mean
+    /// cooperative lanes improve the corresponding quantity versus NoAction.
+    /// </summary>
+    internal static MultiplayerScenarioRiskMetrics MeasureRisk(
+        IReadOnlyList<MultiplayerScenarioOutcome> outcomes)
+    {
+        if (outcomes.Count == 0)
+            throw new ArgumentException("Risk measurement requires at least one scenario.", nameof(outcomes));
+
+        MultiplayerScenarioOutcome[] cooperative = outcomes
+            .Where(outcome => outcome.Kind != ShadowTeammateScenarioKind.NoAction)
+            .ToArray();
+        MultiplayerScenarioOutcome? noAction = outcomes
+            .Where(outcome => outcome.Kind == ShadowTeammateScenarioKind.NoAction)
+            .Cast<MultiplayerScenarioOutcome?>()
+            .FirstOrDefault();
+
+        double nominalReferenceLoss = outcomes.Average(outcome => outcome.LossEquivalent);
+        double robustLoss = outcomes.Max(outcome => outcome.LossEquivalent);
+        double meanTeamLoss = outcomes.Average(outcome => outcome.TeamLossRatio);
+        double worstTeamLoss = outcomes.Max(outcome => outcome.TeamLossRatio);
+
+        double cooperativeMeanTeamLoss = cooperative.Length > 0
+            ? cooperative.Average(outcome => outcome.TeamLossRatio)
+            : meanTeamLoss;
+        double cooperativeMeanEnemyDurability = cooperative.Length > 0
+            ? cooperative.Average(outcome => outcome.EnemyDurabilityRatio)
+            : outcomes.Average(outcome => outcome.EnemyDurabilityRatio);
+
+        double noActionTeamLoss = noAction?.TeamLossRatio ?? meanTeamLoss;
+        double noActionEnemyDurability =
+            noAction?.EnemyDurabilityRatio
+            ?? outcomes.Average(outcome => outcome.EnemyDurabilityRatio);
+
+        return new MultiplayerScenarioRiskMetrics(
+            outcomes.Count,
+            nominalReferenceLoss,
+            robustLoss,
+            Math.Max(0d, robustLoss - nominalReferenceLoss),
+            meanTeamLoss,
+            worstTeamLoss,
+            cooperativeMeanTeamLoss,
+            noActionTeamLoss,
+            noActionTeamLoss - cooperativeMeanTeamLoss,
+            cooperativeMeanEnemyDurability,
+            noActionEnemyDurability,
+            noActionEnemyDurability - cooperativeMeanEnemyDurability);
     }
 
     /// <summary>Negative means left is preferred.</summary>
