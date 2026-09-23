@@ -96,6 +96,7 @@ internal sealed partial class CombatBeamSolver
         private sealed record ScenarioDecisionSummary(
             string DecisionKey,
             MultiplayerScenarioDecisionRank Rank,
+            MultiplayerScenarioRiskMetrics? RiskMetrics,
             bool ScenarioSetComplete,
             int BaselineIndex,
             int ConservativeRepresentativeIndex,
@@ -684,9 +685,13 @@ internal sealed partial class CombatBeamSolver
                     bool complete = plannerReportedComplete
                         && MultiplayerScenarioReevaluationPolicy.HasCompleteCoverage(
                             outcomes.Keys);
+                    MultiplayerScenarioOutcome[] measuredOutcomes =
+                        outcomes.Values.Select(value => value.Outcome).ToArray();
                     MultiplayerScenarioDecisionRank rank =
-                        MultiplayerScenarioReevaluationPolicy.Aggregate(
-                            outcomes.Values.Select(value => value.Outcome).ToArray());
+                        MultiplayerScenarioReevaluationPolicy.Aggregate(measuredOutcomes);
+                    MultiplayerScenarioRiskMetrics? riskMetrics = complete
+                        ? MultiplayerScenarioReevaluationPolicy.MeasureRisk(measuredOutcomes)
+                        : null;
                     int conservativeRepresentativeIndex = usedFinalReplay
                         || outcomes.Count == 0
                             ? baselineRepresentativeIndex
@@ -713,6 +718,7 @@ internal sealed partial class CombatBeamSolver
                     scenarioSummaries.Add(new ScenarioDecisionSummary(
                         decisionKey,
                         rank,
+                        riskMetrics,
                         complete,
                         baselineRepresentativeIndex,
                         conservativeRepresentativeIndex,
@@ -875,6 +881,25 @@ internal sealed partial class CombatBeamSolver
                         $"statuses={summary.ScenarioStatuses} " +
                         $"scenario_count={summary.Rank.ScenarioCount} " +
                         $"replay_expanded={summary.ReplayExpandedBranches}");
+
+                    if (summary.RiskMetrics is { } risk)
+                    {
+                        diagnostics.Info(
+                            $"[CombatSolver/Multiplayer] MP_U4_RISK_AB " +
+                            $"baseline_rank={summary.BaselineIndex + 1} " +
+                            $"scenario_count={risk.ScenarioCount} " +
+                            $"nominal_ref_loss={risk.NominalReferenceLossEquivalent:0.0000} " +
+                            $"robust_loss={risk.RobustLossEquivalent:0.0000} " +
+                            $"conservatism_gap={risk.ConservatismGap:0.0000} " +
+                            $"mean_team_loss={risk.MeanTeamLossRatio:0.0000} " +
+                            $"worst_team_loss={risk.WorstTeamLossRatio:0.0000} " +
+                            $"coop_mean_team_loss={risk.CooperativeMeanTeamLossRatio:0.0000} " +
+                            $"no_action_team_loss={risk.NoActionTeamLossRatio:0.0000} " +
+                            $"coop_team_loss_benefit={risk.CooperationTeamLossBenefit:0.0000} " +
+                            $"coop_mean_enemy_durability={risk.CooperativeMeanEnemyDurabilityRatio:0.0000} " +
+                            $"no_action_enemy_durability={risk.NoActionEnemyDurabilityRatio:0.0000} " +
+                            $"coop_progress_benefit={risk.CooperationProgressBenefit:0.0000}");
+                    }
                 }
 
                 if (selectedScenarioDecision != null)
