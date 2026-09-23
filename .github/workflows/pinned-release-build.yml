@@ -79,7 +79,7 @@ jobs:
           pwsh -NoLogo -NoProfile -File '.\source\tools\test-p0-baseline-manifest.ps1'
           pwsh -NoLogo -NoProfile -File '.\source\tools\test-p0-baseline-classifier.ps1'
 
-      - name: Build P0 P1 pinned harness (0.107.1)
+      - name: Build P0 P1 pinned harness (0.107.1 self-contained)
         shell: pwsh
         run: |
           $gameData = (Resolve-Path '.\game-body\data_sts2_windows_x86_64').Path
