@@ -7,6 +7,13 @@ internal enum MultiplayerScenarioEvaluationStatus
     Terminal = 2,
 }
 
+internal enum MultiplayerScenarioRiskStrategy
+{
+    Robust = 0,
+    NominalReference = 1,
+    BoundedRisk = 2,
+}
+
 internal readonly record struct MultiplayerScenarioSpec(
     string Id,
     ShadowTeammateScenarioKind Kind);
@@ -79,6 +86,7 @@ internal readonly record struct MultiplayerScenarioRiskMetrics(
 internal static class MultiplayerScenarioReevaluationPolicy
 {
     internal const int MaximumCurrentDecisions = 4;
+    internal const double BoundedRiskWorstGapWeight = 0.5d;
 
     private static readonly MultiplayerScenarioSpec[] ScenarioSpecsValue =
     [
@@ -291,6 +299,66 @@ internal static class MultiplayerScenarioReevaluationPolicy
             cooperativeMeanEnemyDurability,
             noActionEnemyDurability,
             noActionEnemyDurability - cooperativeMeanEnemyDurability);
+    }
+
+    internal static double BoundedRiskLossEquivalent(
+        MultiplayerScenarioDecisionRank rank)
+        => rank.MeanLossEquivalent
+            + BoundedRiskWorstGapWeight
+            * Math.Max(0d, rank.WorstLossEquivalent - rank.MeanLossEquivalent);
+
+    /// <summary>
+    /// U4 experiment-only risk ordering. Robust exactly preserves the current production
+    /// comparator. NominalReference is an equal-stress-lane mean, not a calibrated expectation.
+    /// BoundedRisk prices half of the mean-to-worst gap while retaining the same survival
+    /// and guaranteed-victory hard boundaries. No caller in production selection uses this yet.
+    /// </summary>
+    internal static int CompareByRiskStrategy(
+        MultiplayerScenarioRiskStrategy strategy,
+        MultiplayerScenarioDecisionRank left,
+        MultiplayerScenarioDecisionRank right)
+    {
+        if (strategy == MultiplayerScenarioRiskStrategy.Robust)
+            return Compare(left, right);
+
+        int comparison = right.AllScenariosAlive.CompareTo(left.AllScenariosAlive);
+        if (comparison != 0)
+            return comparison;
+        comparison = right.GuaranteedVictory.CompareTo(left.GuaranteedVictory);
+        if (comparison != 0)
+            return comparison;
+
+        if (strategy == MultiplayerScenarioRiskStrategy.NominalReference)
+        {
+            comparison = left.MeanLossEquivalent.CompareTo(right.MeanLossEquivalent);
+            if (comparison != 0)
+                return comparison;
+        }
+        else
+        {
+            comparison = BoundedRiskLossEquivalent(left)
+                .CompareTo(BoundedRiskLossEquivalent(right));
+            if (comparison != 0)
+                return comparison;
+        }
+
+        comparison = left.WorstPlayerLossRatio.CompareTo(right.WorstPlayerLossRatio);
+        if (comparison != 0)
+            return comparison;
+        comparison = left.WorstLossEquivalent.CompareTo(right.WorstLossEquivalent);
+        if (comparison != 0)
+            return comparison;
+        comparison = left.MeanLossEquivalent.CompareTo(right.MeanLossEquivalent);
+        if (comparison != 0)
+            return comparison;
+        comparison = left.WorstTeamLossRatio.CompareTo(right.WorstTeamLossRatio);
+        if (comparison != 0)
+            return comparison;
+        comparison = left.WorstEnemyDurabilityRatio.CompareTo(
+            right.WorstEnemyDurabilityRatio);
+        if (comparison != 0)
+            return comparison;
+        return right.ScenarioCount.CompareTo(left.ScenarioCount);
     }
 
     /// <summary>Negative means left is preferred.</summary>
