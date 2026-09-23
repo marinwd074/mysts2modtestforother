@@ -73,7 +73,7 @@ internal sealed partial class CombatBeamSolver
 
     private sealed partial class BeamRetentionPolicy(
         SolverSearchProfile _profile,
-        SearchRoutePolicy _routePolicy,
+        bool _useMultiplayerRouteSemantics,
         bool _useMultiplayerTeamObjective,
         MultiplayerCombatObjectiveStrategy _multiplayerCombatObjectiveStrategy,
         double _multiplayerEnemyDurabilityRatio,
@@ -156,7 +156,7 @@ internal sealed partial class CombatBeamSolver
                             _bossHpRelief,
                             _postCombatRelicHeal,
                             _theftPolicy,
-                            _routePolicy,
+                            _useMultiplayerRouteSemantics,
                             _useMultiplayerTeamObjective,
                             _multiplayerCombatObjectiveStrategy,
                             _multiplayerEnemyDurabilityRatio,
