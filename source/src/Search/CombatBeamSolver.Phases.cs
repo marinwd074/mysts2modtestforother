@@ -986,7 +986,7 @@ internal sealed partial class CombatBeamSolver
                 playDepth,
                 _run.Expanded,
                 _run.Expanded,
-                _profile.MaxExpandedNodes,
+                _totalExpandedNodeBudget,
                 frontierNodes,
                 endedNodes,
                 elapsedMs,
