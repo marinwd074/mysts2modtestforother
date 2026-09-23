@@ -61,6 +61,45 @@ internal static class MultiplayerScenarioReevaluationPolicy
     internal const int MaximumCoverageCandidates =
         MaximumCurrentDecisions * MaximumScenariosPerDecision;
 
+    // U3 final reevaluation never receives an unbounded hidden work allowance. The reserve is
+    // carved from the caller's existing node budget in a later integration step; these helpers
+    // only define the deterministic split and are intentionally independent of candidate order.
+    internal const int MaximumExpandedBranchesPerDecision = 64;
+    internal const int MaximumReservedExpandedBranches =
+        MaximumCurrentDecisions * MaximumExpandedBranchesPerDecision;
+    private const int MinimumTotalBudgetForReevaluation = 64;
+    private const int ReevaluationBudgetDivisor = 16;
+
+    internal static int ReserveExpandedBranchBudget(
+        int totalExpandedNodeBudget,
+        bool enabled)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(totalExpandedNodeBudget);
+        if (!enabled || totalExpandedNodeBudget < MinimumTotalBudgetForReevaluation)
+            return 0;
+
+        int proportional = Math.Max(
+            MaximumCurrentDecisions,
+            totalExpandedNodeBudget / ReevaluationBudgetDivisor);
+        return Math.Min(MaximumReservedExpandedBranches, proportional);
+    }
+
+    internal static int ExpandedBranchBudgetPerDecision(
+        int reservedExpandedBranches,
+        int comparedDecisionCount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(reservedExpandedBranches);
+        if (comparedDecisionCount < 1
+            || comparedDecisionCount > MaximumCurrentDecisions)
+        {
+            throw new ArgumentOutOfRangeException(nameof(comparedDecisionCount));
+        }
+
+        return Math.Min(
+            MaximumExpandedBranchesPerDecision,
+            reservedExpandedBranches / comparedDecisionCount);
+    }
+
     internal static bool IsRequiredScenario(ShadowTeammateScenarioKind kind)
     {
         for (int index = 0; index < ScenarioSpecsValue.Length; index++)
