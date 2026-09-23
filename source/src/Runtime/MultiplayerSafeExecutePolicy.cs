@@ -52,6 +52,11 @@ internal enum MultiplayerSafeActionRevalidationDecision
 internal readonly record struct MultiplayerSafeActionRevalidationFacts(
     bool NativePlayCardCaptured,
     bool ActionQueueIdle,
+    bool ExpectedContinuationStateMatched,
+    bool ExpectedRemoteStateMatched,
+    // U1 keeps the historical heuristic checks only as side-by-side diagnostics.
+    // They no longer authorize or reject a completed action because the production
+    // simulator's predicted semantic post-state is the stronger source of truth.
     bool LocalCardRemovedFromHand,
     bool LocalPlayerIdentityStable,
     bool EnergyStateConsistent,
@@ -454,15 +459,15 @@ internal static class MultiplayerSafeExecutePolicy
             return MultiplayerSafeActionRevalidationDecision.ActionMismatch;
         if (!facts.WorldVersionAdvanced || !facts.WorldVersionStable)
             return MultiplayerSafeActionRevalidationDecision.WorldUnstable;
-        if (!facts.LocalCardRemovedFromHand
-            || !facts.LocalPlayerIdentityStable
-            || !facts.EnergyStateConsistent
-            || !facts.TargetIdentityStable)
-        {
-            return MultiplayerSafeActionRevalidationDecision.ActionMismatch;
-        }
-        if (!facts.RemotePublicStateUnchanged || !facts.EnemyStateMatchesExpectedTarget)
+
+        // U1: validate the settled native state against the exact one-action replay from
+        // the same live pre-action root. This admits legitimate draw/generation/Choice,
+        // AoE and power-trigger chains while still rejecting any unmodeled teammate delta.
+        if (!facts.ExpectedRemoteStateMatched)
             return MultiplayerSafeActionRevalidationDecision.RemoteOrUnknownChange;
+        if (!facts.ExpectedContinuationStateMatched)
+            return MultiplayerSafeActionRevalidationDecision.ActionMismatch;
+
         return facts.HasNextAction
             ? MultiplayerSafeActionRevalidationDecision.SafeToContinue
             : MultiplayerSafeActionRevalidationDecision.ExpectedLocalChange;
