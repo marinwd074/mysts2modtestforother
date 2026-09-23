@@ -99,7 +99,7 @@ jobs:
           "P0P1_CURRENT_EXIT=$runtimeExit" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           exit 0
 
-      - name: Compare P0 baseline commit on same pinned runner (frozen runner no compat stubs)
+      - name: Compare P0 baseline commit on same pinned runner (parser-fixed frozen runner)
         shell: pwsh
         run: |
           $gameData = (Resolve-Path '.\game-body\data_sts2_windows_x86_64').Path
