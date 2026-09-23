@@ -159,6 +159,7 @@ internal sealed partial class CombatBeamSolver(
         _startTurnNumber,
         root.CarryRankingContext,
         battleDamage,
+        ReevaluateCurrentDecisionsAcrossScenarios,
         _run.PotionStrategicCosts);
 
     private bool CanConsiderCardAction(PredictedCard card)
