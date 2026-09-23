@@ -39,6 +39,12 @@ internal static class ShadowScenarioChanceMath
             totalLogMass = LogAddExp(totalLogMass, logMass);
         }
 
+        if (totalLogMass > 1e-9d)
+        {
+            throw new InvalidOperationException(
+                "Mutually exclusive retained Shadow scenarios carry probability mass greater than one.");
+        }
+
         double retainedMass = double.IsNegativeInfinity(totalLogMass)
             ? 0d
             : Math.Clamp(Math.Exp(Math.Min(0d, totalLogMass)), 0d, 1d);
