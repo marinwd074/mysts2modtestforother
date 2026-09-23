@@ -131,17 +131,19 @@ internal static class MultiplayerLocalCrossTurnContracts
     }
 
     /// <summary>
-    /// A future local hand must not be projected through the shared Shuffle RNG after
-    /// yielding the local turn. Teammate actions are intentionally not simulated and may
-    /// advance that RNG, so the post-shuffle order is not locally knowable. Root setup is
-    /// exempt because it starts from the freshly captured live state.
+    /// Multiplayer local-cross-turn prediction may cross one future shared Shuffle RNG
+    /// boundary. This deliberately extends the horizon beyond the first reshuffle while
+    /// still bounding compounded RNG uncertainty: a second projected shuffle stops the
+    /// route. Root setup remains exempt because it starts from freshly captured live state.
     /// </summary>
     internal static bool ShouldStopBeforeSharedRngShuffle(
         SearchRoutePolicy routePolicy,
         bool rootSetup,
+        int shufflesCrossed,
         bool willShuffle)
         => routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
             && !rootSetup
+            && shufflesCrossed >= 1
             && willShuffle;
 
     internal static bool IsExactContinuation(MultiplayerContinuationMatchInput input)

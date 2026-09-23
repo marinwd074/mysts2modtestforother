@@ -70,27 +70,42 @@ Check(
     "Incomplete multiplayer local-cross-turn routes rank deterministic enemy HP before Anger copy count, while singleplayer and complete victories keep the original long-term ordering.");
 
 Check(
-    MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
+    !MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
         SearchRoutePolicy.MultiplayerLocalCrossTurn,
         rootSetup: false,
+        shufflesCrossed: 0,
         willShuffle: true)
+        && MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
+            SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            rootSetup: false,
+            shufflesCrossed: 1,
+            willShuffle: true)
+        && MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
+            SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            rootSetup: false,
+            shufflesCrossed: 2,
+            willShuffle: true)
         && !MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
             SearchRoutePolicy.MultiplayerLocalCrossTurn,
             rootSetup: true,
+            shufflesCrossed: 1,
             willShuffle: true)
         && !MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
             SearchRoutePolicy.MultiplayerLocalCrossTurn,
             rootSetup: false,
+            shufflesCrossed: 1,
             willShuffle: false)
         && !MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
             SearchRoutePolicy.SinglePlayerFullRoute,
             rootSetup: false,
+            shufflesCrossed: 1,
             willShuffle: true)
         && !MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
             SearchRoutePolicy.MultiplayerCurrentTurnOnly,
             rootSetup: false,
+            shufflesCrossed: 1,
             willShuffle: true),
-    "Only a future multiplayer local-cross-turn hand stops before consuming the shared Shuffle RNG.");
+    "Multiplayer local-cross-turn may cross one future shared shuffle, then stops before the second; root setup and other route policies are unchanged.");
 
 Check(
     MultiplayerLocalCrossTurnContracts.ValidateLocalOnlyProjection(

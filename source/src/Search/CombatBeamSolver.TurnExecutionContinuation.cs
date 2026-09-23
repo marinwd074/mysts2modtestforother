@@ -110,6 +110,7 @@ internal sealed partial class CombatBeamSolver
                 && MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
                     progress.RoutePolicy,
                     progress.RootSetup,
+                    progress.ShufflesCrossed,
                     progress.WillShuffle))
             {
                 return SearchBoundaryReason.Shuffle;
