@@ -2151,7 +2151,8 @@ internal sealed partial class CombatBeamSolver
             evaluated,
             initialHp,
             emitDiagnostics: true,
-            reevaluateScenarios: true);
+            reevaluateScenarios: !timeBudgetReached,
+            allowScenarioRerank: !timeBudgetReached);
         if (_run.Expanded > _totalExpandedNodeBudget)
         {
             throw new InvalidOperationException(
