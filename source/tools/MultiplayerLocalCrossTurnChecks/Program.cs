@@ -458,7 +458,8 @@ MultiplayerChanceDecisionRank partiallyCoveredVictory =
     ]);
 Check(
     Math.Abs(partiallyCoveredVictory.RetainedProbabilityMass - 0.60d) < 1e-12d
-        && Math.Abs(partiallyCoveredVictory.ConservativeFailureProbability - 0.40d) < 1e-12d
+        && !partiallyCoveredVictory.GuaranteedVictory
+        && Math.Abs(partiallyCoveredVictory.VictoryProbabilityLower - 0.60d) < 1e-12d
         && Math.Abs(partiallyCoveredVictory.ConservativeTeamDeathProbability - 0.40d) < 1e-12d,
     "Uncovered Shadow probability mass is treated conservatively rather than silently renormalized into guaranteed success.");
 
