@@ -319,8 +319,9 @@ internal static class MultiplayerSafeExecutePolicy
             return new(false, "ends_player_turn");
         if (facts.HasReplaySemantics)
             return new(false, "replay_semantics");
-        if (facts.RequiresChoice)
-            return new(false, "choice_required");
+        // Local Choice/NestedChoices/TurnStartChoices use the same native plan driver
+        // as singleplayer. Multiplayer safety is enforced by ownership/target admission
+        // and post-action state revalidation rather than by rejecting planned choices.
         return SafeLocalActionDecision.Allow;
     }
 

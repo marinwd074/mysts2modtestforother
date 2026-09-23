@@ -335,21 +335,17 @@ internal static partial class SolverController
                             $"{choice.Effect}:{string.Join(',', choice.Cards.Select(card =>
                                 $"{card.CardId}+{card.UpgradeLevel}#src{card.SourceOccurrence}/opt{card.OptionOccurrence}"))}"))}");
                 }
-                // Safe Execute may drive only immediate choices already fixed in this
-                // authorized local PlanAction. Turn-start/cross-turn choices are rejected by the
-                // structural gate before deployment begins.
+                // Local choices are deployed through the same native choice driver
+                // in singleplayer and Multiplayer Safe Execute. Multiplayer-specific safety is
+                // enforced by local ownership/target checks and post-action revalidation, not by
+                // rejecting already planned local choices.
                 using NativeChoiceSession? choiceSession =
                     actionChoices.Count == 0
                         ? null
-                        : safeExecute
-                            ? NativeChoiceRuntime.BeginSafeExecuteLocalAction(
-                                state,
-                                player,
-                                $"safe-deployment:{turn}:{actionIndex}:{action.CardId ?? action.PotionId}")
-                            : NativeChoiceRuntime.Begin(
-                                state,
-                                player,
-                                $"deployment:{turn}:{actionIndex}:{action.CardId ?? action.PotionId}");
+                        : NativeChoiceRuntime.Begin(
+                            state,
+                            player,
+                            $"deployment:{turn}:{actionIndex}:{action.CardId ?? action.PotionId}");
                 choiceSession?.SetPlanAndStartDriving(host, actionChoices, token);
                 long actionStartedAt = measureDeploymentTiming
                     ? Stopwatch.GetTimestamp()

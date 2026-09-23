@@ -125,21 +125,7 @@ internal static class NativeChoiceRuntime
         if (!SolverSessionCapabilities.Capture(combat).CanDriveChoices)
         {
             throw new InvalidOperationException(
-                "当前会话不允许 CombatSolver 驱动原生选牌。多人模式必须由玩家手动完成选择。");
-        }
-        return CreateSession(combat, player, owner);
-    }
-
-    public static NativeChoiceSession BeginSafeExecuteLocalAction(
-        CombatState combat,
-        Player player,
-        string owner)
-    {
-        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(combat);
-        if (capabilities.Kind != SolverSessionKind.MultiplayerSafeExecute)
-        {
-            throw new InvalidOperationException(
-                "仅 Multiplayer Safe Execute 可为当前已授权本地动作驱动已规划的原生选牌。");
+                "当前会话不允许 CombatSolver 驱动原生选牌。");
         }
         return CreateSession(combat, player, owner);
     }

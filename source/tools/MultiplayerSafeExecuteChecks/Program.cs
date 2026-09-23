@@ -35,7 +35,7 @@ Check(Structural("usepotion", isPlayCard: false).Reason == "kind_usepotion", "Po
 Check(Structural(hasCardIdentity: false).Reason == "card_identity_missing", "Missing card identity fails closed.");
 Check(Structural(endsTurn: true).Reason == "ends_player_turn", "Cards that end the player turn fail closed.");
 Check(Structural(replay: true).Reason == "replay_semantics", "Replay semantics fail closed.");
-Check(Structural(choice: true).Reason == "choice_required", "Unsupported or cross-turn choice-driving actions fail closed.");
+Check(Structural(choice: true).IsSafe, "Planned local choices use the same native choice driver as singleplayer.");
 Check(Resolved(localPlayer: false).Reason == "local_player_missing", "Missing local player fails closed.");
 Check(Resolved(localCard: false).Reason == "local_card_missing", "A card outside the local hand fails closed.");
 Check(
@@ -76,14 +76,14 @@ IReadOnlyList<SafeLocalActionDecision> fullPrefix =
 Check(fullPrefix.Count == 4 && fullStop.IsSafe, "An all-safe route returns its complete bounded prefix.");
 IReadOnlyList<SafeLocalActionDecision> safeThenUnsafe =
     [SafeLocalActionDecision.Allow, SafeLocalActionDecision.Allow,
-     new(false, "choice_required"), SafeLocalActionDecision.Allow];
+     new(false, "replay_semantics"), SafeLocalActionDecision.Allow];
 IReadOnlyList<SafeLocalActionDecision> truncatedPrefix =
     MultiplayerSafeExecutePolicy.TakeBoundedSafePrefix(
         safeThenUnsafe,
         decision => decision,
         out SafeLocalActionDecision truncatedStop);
 Check(
-    truncatedPrefix.Count == 2 && truncatedStop.Reason == "choice_required",
+    truncatedPrefix.Count == 2 && truncatedStop.Reason == "replay_semantics",
     "The first unsafe route action is a hard boundary; later safe actions are not skipped to.");
 IReadOnlyList<SafeLocalActionDecision> unsafeFirst =
     [new(false, "ends_player_turn"), SafeLocalActionDecision.Allow];
@@ -416,10 +416,10 @@ Check(
     "A completed safe prefix or manual multiplayer-card boundary keeps Safe Auto eligible for a fresh search.");
 
 Check(
-    !MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(new(false, "choice_required"))
+    !MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(new(false, "replay_semantics"))
         && !MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(new(false, "kind_usepotion"))
         && !MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(
             new(false, "remote_player_or_unknown_target")),
-    "Unsupported Choice, Potion, or teammate/unknown-target boundaries stop Safe Auto instead of looping.");
+    "Replay, Potion, or teammate/unknown-target boundaries stop Safe Auto instead of looping.");
 
 Console.WriteLine($"PASS: {checks} multiplayer safe-execute policy checks");
