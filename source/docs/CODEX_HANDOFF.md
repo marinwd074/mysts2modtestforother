@@ -2,6 +2,8 @@
 
 > 只记录当前状态。历史批次、旧提交和旧测试流水账从 Git history 查，不在本文件累积。
 
+> 长期架构/执行计划：[`CombatSolver_GPT_Architecture_Plan.md`](CombatSolver_GPT_Architecture_Plan.md)。每轮先按当前 HEAD 核对计划；计划描述目标与执行卡，不代表对应阶段已经实现。
+
 ## 基线
 
 - CombatSolver: `0.40.2`
