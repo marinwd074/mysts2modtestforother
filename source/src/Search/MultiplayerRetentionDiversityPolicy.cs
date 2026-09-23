@@ -61,17 +61,28 @@ internal static class MultiplayerRetentionDiversityPolicy
             if (selected.Count >= limit)
                 return;
 
-            int best = eligible[0];
-            for (int offset = 1; offset < eligible.Length; offset++)
+            int best = -1;
+            for (int offset = 0; offset < eligible.Length; offset++)
             {
                 int candidate = eligible[offset];
+                if (selectedIndices.Contains(candidate))
+                    continue;
+                if (best < 0)
+                {
+                    best = candidate;
+                    continue;
+                }
+
                 int comparison = compare(observations[candidate], observations[best]);
                 if (comparison < 0 || comparison == 0 && candidate < best)
                     best = candidate;
             }
 
-            if (selectedIndices.Add(best))
+            if (best >= 0)
+            {
+                selectedIndices.Add(best);
                 selected.Add(new MultiplayerRetentionChoice(best, lane));
+            }
         }
     }
 
