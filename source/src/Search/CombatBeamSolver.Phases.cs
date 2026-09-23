@@ -495,7 +495,8 @@ internal sealed partial class CombatBeamSolver
             {
                 if (boundary == SearchBoundaryReason.None && candidateTimeBudgetReached)
                     boundary = SearchBoundaryReason.TimeLimit;
-                else if (boundary == SearchBoundaryReason.None && _run.Expanded >= _profile.MaxExpandedNodes)
+                else if (boundary == SearchBoundaryReason.None
+                         && _run.Expanded >= _totalExpandedNodeBudget)
                     boundary = SearchBoundaryReason.NodeLimit;
                 else if (boundary == SearchBoundaryReason.None
                          && policy.VerifyIncrementalSearch
