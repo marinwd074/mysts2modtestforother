@@ -438,7 +438,13 @@ Check(
         && u3PerScenarioBudget
             * MultiplayerScenarioReevaluationPolicy.MaximumScenariosPerDecision
             * MultiplayerScenarioReevaluationPolicy.MaximumCurrentDecisions
-            <= u3ReservedBudget,
+            <= u3ReservedBudget
+        && MultiplayerScenarioReevaluationPolicy.MainSearchExpandedNodeBudget(
+            totalExpandedNodeBudget: 5_000,
+            enabled: true) + u3ReservedBudget == 5_000
+        && MultiplayerScenarioReevaluationPolicy.MainSearchExpandedNodeBudget(
+            totalExpandedNodeBudget: 5_000,
+            enabled: false) == 5_000,
     "U3 reevaluation uses a deterministic bounded reserve carved from the existing work budget and splits it equally across candidate-scenario cells.");
 
 PlanAction u3AggressiveFuture = new(
