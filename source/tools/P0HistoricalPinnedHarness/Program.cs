@@ -24,6 +24,7 @@ internal static class Program
     private const int BootstrapBeamWidth = 60;
     private const int BootstrapMaxExpandedNodes = 120_000;
     private const int BudgetMilliseconds = 5_000;
+    private const int FixedWorkNodeBudget = 1_200;
 
     private static readonly string[] AddedCards =
     [
@@ -130,6 +131,41 @@ internal static class Program
                 CancellationToken.None,
                 progressCallback: null);
 
+            SolverSearchProfile fixedWorkProfile = settings.Profile with
+            {
+                BeamWidth = BootstrapBeamWidth,
+                MaxExpandedNodes = FixedWorkNodeBudget,
+                SoftTimeBudgetMilliseconds = BudgetMilliseconds,
+            };
+            SearchPolicySnapshot fixedWorkPolicy = captured with
+            {
+                Profile = fixedWorkProfile,
+                RoutePolicy = SearchRoutePolicy.SinglePlayerFullRoute,
+                CurrentTurnOnly = false,
+                VerifyIncrementalSearch = true,
+                FixedBudget = true,
+                MaxDegreeOfParallelism = 1,
+                BudgetOverrideMilliseconds = null,
+                UseNoveltyPortfolio = false,
+                NoveltySearch = null,
+                UseBeamWidthPortfolio = false,
+                BeamWidthPortfolioWidths = null,
+                Interaction = null,
+                RequestWorkTotals = new SearchRequestWorkTotals(),
+            };
+            SolverResult fixedWorkResult = new CombatBeamSolver(
+                root,
+                names,
+                battleDamage,
+                fixedWorkPolicy,
+                searchProfile: fixedWorkProfile).Solve();
+            bool fixedWorkPass = fixedWorkResult.BoundaryReason != SearchBoundaryReason.TimeLimit
+                && fixedWorkResult.BestNode.Actions.Count > 0;
+            Require(fixedWorkPass, "Historical P0 fixed-work probe produced no comparable route.");
+            Require(
+                fixedWorkResult.TotalExpandedNodes <= FixedWorkNodeBudget,
+                $"Historical P0 fixed-work probe exceeded node budget: {fixedWorkResult.TotalExpandedNodes}/{FixedWorkNodeBudget}.");
+
             bool pass = result.BoundaryReason != SearchBoundaryReason.TimeLimit
                 && result.BestNode.Actions.Count > 0;
 
@@ -168,6 +204,23 @@ internal static class Program
                     choiceBranchesEvaluated = result.TotalChoiceBranchesEvaluated,
                     continuationCount = result.Continuations.Count,
                     portfolioMembers = result.PortfolioTelemetry?.Members.Count ?? 0,
+                },
+                fixedWork = new
+                {
+                    pass = fixedWorkPass,
+                    nodeBudget = FixedWorkNodeBudget,
+                    firstAction = fixedWorkResult.BestNode.Actions.FirstOrDefault() is { } first
+                        ? ActionToken(first)
+                        : "<none>",
+                    actionCount = fixedWorkResult.BestNode.Actions.Count,
+                    boundary = fixedWorkResult.BoundaryReason.ToString(),
+                    projectedBattleHpLost = fixedWorkResult.ProjectedBattleHpLost,
+                    finalHp = fixedWorkResult.Snapshot.PlayerHp,
+                    finalEnemyHp = fixedWorkResult.Snapshot.EnemyHp,
+                    combatEndedTurn = fixedWorkResult.CombatEndedTurn,
+                    expandedNodes = fixedWorkResult.TotalExpandedNodes,
+                    choiceBranchesEvaluated = fixedWorkResult.TotalChoiceBranchesEvaluated,
+                    continuationCount = fixedWorkResult.Continuations.Count,
                 },
             };
 
