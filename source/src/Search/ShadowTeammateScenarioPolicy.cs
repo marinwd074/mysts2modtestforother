@@ -50,11 +50,11 @@ internal static class ShadowTeammateScenarioPolicy
             CompareAggressive);
         AddBest(
             ShadowTeammateScenarioKind.Defensive,
-            observation => observation.ActionCount > 0,
+            observation => observation.ActionCount > 0 && observation.AllPlayersAlive,
             CompareDefensive);
         AddBest(
             ShadowTeammateScenarioKind.Conserve,
-            observation => observation.ActionCount > 0,
+            observation => observation.ActionCount > 0 && observation.AllPlayersAlive,
             CompareConserve);
         AddBest(
             ShadowTeammateScenarioKind.NoAction,
