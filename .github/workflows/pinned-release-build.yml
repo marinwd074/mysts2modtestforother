@@ -64,9 +64,11 @@ jobs:
         shell: pwsh
         run: |
           $gameData = (Resolve-Path '.\game-body\data_sts2_windows_x86_64').Path
-          dotnet build '.\source\tools\U2DegenerateHarness\U2DegenerateHarness.csproj' -c Release -p:Sts2DataDir="$gameData" -p:RitsuLibReferencesProps="$env:RITSU_PROPS" -p:RitsuWorkshopRoot="$env:RITSU_ROOT" -p:RitsuLibReferenceTarget='0.107.1' --nologo
+          dotnet build '.\source\tools\U2DegenerateHarness\U2DegenerateHarness.csproj' -c Release -p:Sts2DataDir="$gameData" -p:RitsuLibReferencesProps="$env:RITSU_PROPS" -p:RitsuWorkshopRoot="$env:RITSU_ROOT" -p:RitsuLibReferenceTarget='0.107.1' -p:TreatWarningsAsErrors=true --nologo
 
       - name: Run U2 degenerate equivalence
         shell: pwsh
         run: |
-          pwsh -NoLogo -NoProfile -File '.\source\tools\test-u2-degenerate-equivalence.ps1' -Workspace (Join-Path $env:RUNNER_TEMP 'u2-degenerate-equivalence')
+          $workspace = Join-Path $env:RUNNER_TEMP 'u2-degenerate-equivalence'
+          pwsh -NoLogo -NoProfile -File '.\source\tools\test-u2-degenerate-equivalence.ps1' -Workspace $workspace
+          Get-Content -LiteralPath (Join-Path $workspace 'u2-degenerate-equivalence.json')
