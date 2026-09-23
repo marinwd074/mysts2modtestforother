@@ -126,6 +126,44 @@ try {
 
     $baselineBoundary = [string]$baseline.search.boundary
     $currentBoundary = [string]$current.p0.spRegression.Boundary
+    $baselineFixedWork = $baseline.fixedWork
+    $currentFixedWork = $current.p0.fixedWork
+    if ($null -eq $baselineFixedWork -or $null -eq $currentFixedWork) {
+        throw 'P0 fixed-work evidence is missing from baseline or current run.'
+    }
+    if ([int]$baseline.settings.fixedWorkNodeBudget -ne [int]$current.settings.p0FixedWorkNodeBudget) {
+        throw "P0 fixed-work node budget mismatch: baseline=$($baseline.settings.fixedWorkNodeBudget) current=$($current.settings.p0FixedWorkNodeBudget)"
+    }
+    if (-not [bool]$baselineFixedWork.pass -or -not [bool]$currentFixedWork.Pass) {
+        throw 'P0 fixed-work probe did not produce comparable routes.'
+    }
+    if ([string]$baselineFixedWork.boundary -eq 'TimeLimit' -or [string]$currentFixedWork.Boundary -eq 'TimeLimit') {
+        throw 'P0 fixed-work probe unexpectedly hit a wall-clock TimeLimit.'
+    }
+
+    $sameFixedWorkObservedKeys =
+        [int]$baselineFixedWork.projectedBattleHpLost -eq [int]$currentFixedWork.ProjectedBattleHpLost -and
+        [int]$baselineFixedWork.finalHp -eq [int]$currentFixedWork.FinalHp -and
+        [int]$baselineFixedWork.finalEnemyHp -eq [int]$currentFixedWork.FinalEnemyHp
+    $baselineObservedDominance =
+        [int]$baselineFixedWork.projectedBattleHpLost -le [int]$currentFixedWork.ProjectedBattleHpLost -and
+        [int]$baselineFixedWork.finalHp -ge [int]$currentFixedWork.FinalHp -and
+        [int]$baselineFixedWork.finalEnemyHp -le [int]$currentFixedWork.FinalEnemyHp -and
+        -not $sameFixedWorkObservedKeys
+    $currentObservedDominance =
+        [int]$currentFixedWork.ProjectedBattleHpLost -le [int]$baselineFixedWork.projectedBattleHpLost -and
+        [int]$currentFixedWork.FinalHp -ge [int]$baselineFixedWork.finalHp -and
+        [int]$currentFixedWork.FinalEnemyHp -le [int]$baselineFixedWork.finalEnemyHp -and
+        -not $sameFixedWorkObservedKeys
+    $p0FixedWorkClassification = if ($sameFixedWorkObservedKeys) {
+        'OBSERVED_EQUIVALENT'
+    } elseif ($baselineObservedDominance) {
+        'BASELINE_OBSERVED_DOMINANCE'
+    } elseif ($currentObservedDominance) {
+        'CURRENT_OBSERVED_DOMINANCE'
+    } else {
+        'MIXED_OBSERVED_KEYS'
+    }
     $baselineTimeBoundary = $baselineBoundary -eq 'TimeLimit'
     $currentTimeBoundary = $currentBoundary -eq 'TimeLimit'
     $baselineValid = [bool]$baseline.search.pass -and -not $baselineTimeBoundary
@@ -154,31 +192,48 @@ try {
 
     $adaptiveProperty = $current.p1.PSObject.Properties['Adaptive']
     $minimizeProperty = $current.p1.PSObject.Properties['MinimizeTeamLoss']
-    if ($null -eq $adaptiveProperty -or $null -eq $minimizeProperty) {
-        throw 'P1 runtime evidence is missing one or both strategy results.'
+    $adaptiveFixedWorkProperty = $current.p1.PSObject.Properties['AdaptiveFixedWork']
+    $minimizeFixedWorkProperty = $current.p1.PSObject.Properties['MinimizeTeamLossFixedWork']
+    if ($null -eq $adaptiveProperty -or $null -eq $minimizeProperty -or
+        $null -eq $adaptiveFixedWorkProperty -or $null -eq $minimizeFixedWorkProperty) {
+        throw 'P1 runtime evidence is missing one or more timed/fixed-work strategy results.'
     }
     $adaptive = $adaptiveProperty.Value
     $minimize = $minimizeProperty.Value
+    $adaptiveFixedWork = $adaptiveFixedWorkProperty.Value
+    $minimizeFixedWork = $minimizeFixedWorkProperty.Value
     $adaptiveBoundary = [string]$adaptive.Boundary
     $minimizeBoundary = [string]$minimize.Boundary
 
+    $adaptiveTimeLimitedVictory =
+        $adaptiveBoundary -eq 'TimeLimit' -and
+        @($adaptive.Actions).Count -gt 0 -and
+        [bool]$adaptive.AllPlayersAlive -and
+        [int]$adaptive.FinalEnemyHp -eq 0
+    $minimizeTimeLimitedVictory =
+        $minimizeBoundary -eq 'TimeLimit' -and
+        @($minimize.Actions).Count -gt 0 -and
+        [bool]$minimize.AllPlayersAlive -and
+        [int]$minimize.FinalEnemyHp -eq 0
+    $p1FixedWorkPass =
+        [bool]$current.p1.FixedWorkSemanticPass -and
+        [bool]$adaptiveFixedWork.Pass -and
+        [bool]$minimizeFixedWork.Pass -and
+        [string]$adaptiveFixedWork.Boundary -ne 'TimeLimit' -and
+        [string]$minimizeFixedWork.Boundary -ne 'TimeLimit' -and
+        [bool]$adaptiveFixedWork.AllPlayersAlive -and
+        [bool]$minimizeFixedWork.AllPlayersAlive -and
+        [int]$adaptiveFixedWork.FinalEnemyHp -eq 0 -and
+        [int]$minimizeFixedWork.FinalEnemyHp -eq 0
+
     $p1RuntimeClassification = if ([bool]$current.p1.Pass) {
         'PASS'
-    } else {
-        $adaptiveTimeLimitedVictory =
-            $adaptiveBoundary -eq 'TimeLimit' -and
-            @($adaptive.Actions).Count -gt 0 -and
-            [bool]$adaptive.AllPlayersAlive -and
-            [int]$adaptive.FinalEnemyHp -eq 0
-        $minimizeTimeLimitedVictory =
-            $minimizeBoundary -eq 'TimeLimit' -and
-            @($minimize.Actions).Count -gt 0 -and
-            [bool]$minimize.AllPlayersAlive -and
-            [int]$minimize.FinalEnemyHp -eq 0
-        if (-not $adaptiveTimeLimitedVictory -or -not $minimizeTimeLimitedVictory) {
-            throw "P1 runtime failure is not a pure valid-victory TimeLimit boundary. adaptive=$adaptiveBoundary minimize=$minimizeBoundary"
-        }
+    } elseif ($adaptiveTimeLimitedVictory -and $minimizeTimeLimitedVictory -and $p1FixedWorkPass) {
+        'FIXED_WORK_PASS_TIME_BOUNDARY'
+    } elseif ($adaptiveTimeLimitedVictory -and $minimizeTimeLimitedVictory) {
         'INCONCLUSIVE_TIME_BOUNDARY'
+    } else {
+        throw "P1 runtime failure is not a pure valid-victory TimeLimit boundary. adaptive=$adaptiveBoundary minimize=$minimizeBoundary"
     }
 
     $summary = [ordered]@{
@@ -186,6 +241,22 @@ try {
         classification = $classification
         pinnedTarget = '0.107.1'
         baselineCommit = $BaselineCommit
+        p0FixedWork = [ordered]@{
+            classification = $p0FixedWorkClassification
+            nodeBudget = [int]$current.settings.p0FixedWorkNodeBudget
+            baselineBoundary = [string]$baselineFixedWork.boundary
+            baselineFirstAction = [string]$baselineFixedWork.firstAction
+            baselineProjectedBattleHpLost = [int]$baselineFixedWork.projectedBattleHpLost
+            baselineFinalHp = [int]$baselineFixedWork.finalHp
+            baselineFinalEnemyHp = [int]$baselineFixedWork.finalEnemyHp
+            baselineExpandedNodes = [long]$baselineFixedWork.expandedNodes
+            currentBoundary = [string]$currentFixedWork.Boundary
+            currentFirstAction = [string]$currentFixedWork.FirstAction
+            currentProjectedBattleHpLost = [int]$currentFixedWork.ProjectedBattleHpLost
+            currentFinalHp = [int]$currentFixedWork.FinalHp
+            currentFinalEnemyHp = [int]$currentFixedWork.FinalEnemyHp
+            currentExpandedNodes = [long]$currentFixedWork.ExpandedNodes
+        }
         p0Joint = [ordered]@{
             status = 'PASS'
             exactReuse = [bool]$current.p0.joint.ExactReuse
@@ -202,6 +273,14 @@ try {
             minimizeBoundary = $minimizeBoundary
             minimizeFinalEnemyHp = [int]$minimize.FinalEnemyHp
             minimizeAllPlayersAlive = [bool]$minimize.AllPlayersAlive
+            fixedWorkSemanticPass = $p1FixedWorkPass
+            fixedWorkNodeBudget = [int]$current.settings.p1FixedWorkNodeBudget
+            adaptiveFixedWorkBoundary = [string]$adaptiveFixedWork.Boundary
+            adaptiveFixedWorkFinalEnemyHp = [int]$adaptiveFixedWork.FinalEnemyHp
+            adaptiveFixedWorkExpandedNodes = [long]$adaptiveFixedWork.ExpandedNodes
+            minimizeFixedWorkBoundary = [string]$minimizeFixedWork.Boundary
+            minimizeFixedWorkFinalEnemyHp = [int]$minimizeFixedWork.FinalEnemyHp
+            minimizeFixedWorkExpandedNodes = [long]$minimizeFixedWork.ExpandedNodes
         }
         baseline = [ordered]@{
             boundary = $baselineBoundary
@@ -235,6 +314,7 @@ try {
         throw "P0 baseline A/B failed: $classification"
     }
     Write-Output "P0_BASELINE_AB $classification"
+    Write-Output "P0_FIXED_WORK $p0FixedWorkClassification"
     Write-Output "P0_JOINT PASS"
     Write-Output "P1_OBJECTIVE_CONTRACTS PASS"
     Write-Output "P1_RUNTIME $p1RuntimeClassification"
