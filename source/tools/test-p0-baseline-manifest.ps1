@@ -54,7 +54,8 @@ Check ($sp[0].profile -eq 'Medium' -and
 Check ($sp[0].launcherArgs.PerformancePresetForTest -eq 'Medium' -and
        $sp[0].launcherArgs.FixedSearchBudget -eq $true -and
        [int]$sp[0].launcherArgs.SearchBudgetOverrideMilliseconds -eq 5000 -and
-       [int]$sp[0].launcherArgs.SearchMaxDegreeOfParallelismForTest -eq 1) 'Machine-readable launcher arguments match the P0 search budget.'
+       [int]$sp[0].launcherArgs.SearchMaxDegreeOfParallelismForTest -eq 1 -and
+       $sp[0].launcherArgs.PotionPolicyForTest -eq 'Smart') 'Machine-readable launcher arguments match the P0 search budget and potion policy.'
 
 $reuse = @($manifest.workloads | Where-Object id -eq 'MP-JOINT-REUSE')
 $mismatch = @($manifest.workloads | Where-Object id -eq 'MP-JOINT-MISMATCH')

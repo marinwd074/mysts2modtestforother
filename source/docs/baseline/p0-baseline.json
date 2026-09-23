@@ -36,7 +36,8 @@
         "PerformancePresetForTest": "Medium",
         "FixedSearchBudget": true,
         "SearchBudgetOverrideMilliseconds": 5000,
-        "SearchMaxDegreeOfParallelismForTest": 1
+        "SearchMaxDegreeOfParallelismForTest": 1,
+        "PotionPolicyForTest": "Smart"
       }
     },
     {

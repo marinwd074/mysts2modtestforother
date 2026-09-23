@@ -90,7 +90,7 @@ foreach ($record in $records) {
         $reason = Get-Token $text 'reason'
         $localExact = Get-Token $text 'local_state_exact'
         if ($reason -eq 'remote_public_mismatch' -and $localExact -eq 'true') {
-            Add-Finding teammate_prediction_deviation $record 'Local continuation state matched, but readable teammate state diverged from the selected Shadow/Joint worldline.'
+            Add-Finding teammate_prediction_deviation $record 'Local continuation state matched, but readable teammate state diverged from the selected Shadow/Joint worldline; expected_remote_fp and actual_remote_fp identify the compared worlds when present.'
         } else {
             Add-Finding runtime_state_mismatch $record ("Continuation rejected at runtime: reason=" + ($reason ?? 'unknown') + " local_state_exact=" + ($localExact ?? 'unknown'))
         }
@@ -131,7 +131,7 @@ $result = [ordered]@{
     findings = @($findings)
     notes = @(
         'search_miss_evidence is not a proof of search incompleteness until the better route is reproduced from the same root under the same total budget.',
-        'teammate_prediction_deviation means the selected Shadow/Joint forecast did not match the observed teammate state; it is not a simulator error by itself.',
+        'teammate_prediction_deviation means the selected Shadow/Joint forecast did not match the observed teammate state; expected/actual fingerprints identify the worlds but do not measure semantic distance.',
         'runtime_state_mismatch covers continuation admission failures that are not isolated teammate forecast drift.'
     )
 }
