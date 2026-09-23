@@ -7,6 +7,7 @@ on:
       - '.github/workflows/pinned-release-build.yml'
       - 'source/tools/P0P1PinnedHarness/**'
       - 'source/tools/U0U1PinnedHarness/**'
+      - 'source/tools/OfflineSearchHarness/U0BaselineFixture.cs'
       - 'source/tools/test-u0-baseline.ps1'
       - 'source/tools/test-u1-action-poststate.ps1'
       - 'source/tools/P0HistoricalPinnedHarness/**'
