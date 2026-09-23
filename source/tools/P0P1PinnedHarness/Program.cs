@@ -198,6 +198,8 @@ internal static class Program
                     profileMaxExpandedNodes = settings.Profile.MaxExpandedNodes,
                     profileSoftTimeBudgetMilliseconds = settings.Profile.SoftTimeBudgetMilliseconds,
                     requestBudgetMilliseconds = p0Policy.BudgetOverrideMilliseconds,
+                    p0FixedWorkNodeBudget = P0FixedWorkNodeBudget,
+                    p1FixedWorkNodeBudget = P1FixedWorkNodeBudget,
                     p0Policy.MaxDegreeOfParallelism,
                     p0Policy.UseBeamWidthPortfolio,
                     p0Policy.UseNoveltyPortfolio,
