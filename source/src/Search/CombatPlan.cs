@@ -134,7 +134,12 @@ internal sealed record PlanRelicEffect(
 internal sealed record ShadowForecastPlan(
     IReadOnlyList<ShadowTeammateActionCandidate> Actions,
     double BehaviorLogProbability = 0d,
-    int BehaviorDecisionCount = 0)
+    int BehaviorDecisionCount = 0,
+    double ScenarioProbabilityMass = 1d,
+    double ScenarioConditionalProbability = 1d,
+    double RetainedScenarioProbabilityMass = 1d,
+    bool ScenarioProbabilityTrusted = true,
+    StateFingerprint ScenarioFingerprint = default)
 {
     public double BehaviorMeanLogProbability =>
         ShadowTeammateBehaviorModel.MeanLogProbability(

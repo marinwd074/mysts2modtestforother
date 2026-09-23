@@ -39,7 +39,23 @@ internal sealed record ShadowTeammateRoute(
 
     internal double BehaviorLogProbability { get; init; }
 
+    /// <summary>
+    /// Log probability mass represented by this exact future state. This equals
+    /// BehaviorLogProbability until exact-equivalent action histories are merged.
+    /// </summary>
+    internal double BehaviorLogMass { get; init; }
+
     internal int BehaviorDecisionCount { get; init; }
+
+    internal double ScenarioProbabilityMass { get; init; } = 1d;
+
+    internal double ScenarioConditionalProbability { get; init; } = 1d;
+
+    internal double RetainedScenarioProbabilityMass { get; init; } = 1d;
+
+    internal bool ScenarioProbabilityTrusted { get; init; } = true;
+
+    internal StateFingerprint ScenarioFingerprint { get; init; }
 
     internal double BehaviorMeanLogProbability =>
         ShadowTeammateBehaviorModel.MeanLogProbability(
@@ -51,7 +67,9 @@ internal readonly record struct ShadowTeammatePlanResult(
     IReadOnlyList<ShadowTeammateRoute> Routes,
     int ExpandedBranches,
     int PendingChoiceBranches,
-    bool HitActionDepthLimit);
+    bool HitActionDepthLimit,
+    double RetainedProbabilityMass = 1d,
+    bool ProbabilityModelTrusted = true);
 
 /// <summary>
 /// Predicts teammate actions only inside detached simulation forks. Shadow routes never create
@@ -122,11 +140,15 @@ internal static class ShadowTeammatePlanner
             CaptureProcessedEnemyDeaths(source, processedEnemyDeaths));
         if (teammates.Length == 0)
         {
+            IReadOnlyList<ShadowTeammateRoute> finalized =
+                FinalizeBehaviorScenarioProbabilities([seed], probabilityTrusted: true);
             return new ShadowTeammatePlanResult(
-                [seed],
+                finalized,
                 ExpandedBranches: 0,
                 PendingChoiceBranches: 0,
-                HitActionDepthLimit: false);
+                HitActionDepthLimit: false,
+                RetainedProbabilityMass: 1d,
+                ProbabilityModelTrusted: true);
         }
 
         // Team search is action-interleaved: each search layer plays exactly one card from
@@ -240,6 +262,8 @@ internal static class ShadowTeammatePlanner
                 {
                     BehaviorLogProbability =
                         route.BehaviorLogProbability + decisionLogProbabilities[^1],
+                    BehaviorLogMass =
+                        route.BehaviorLogMass + decisionLogProbabilities[^1],
                     BehaviorDecisionCount = route.BehaviorDecisionCount + 1,
                 });
 
@@ -249,6 +273,8 @@ internal static class ShadowTeammatePlanner
                     {
                         BehaviorLogProbability =
                             route.BehaviorLogProbability + decisionLogProbabilities[choiceIndex],
+                        BehaviorLogMass =
+                            route.BehaviorLogMass + decisionLogProbabilities[choiceIndex],
                         BehaviorDecisionCount = route.BehaviorDecisionCount + 1,
                     };
                     next.Add(child);
@@ -261,11 +287,21 @@ internal static class ShadowTeammatePlanner
         }
 
         completed.AddRange(frontier);
+        List<ShadowTeammateRoute> retained =
+            RetainBehaviorAwareSpectrum(completed, beamWidth);
+        bool probabilityTrusted = pendingChoiceBranches == 0 && !hitActionDepthLimit;
+        IReadOnlyList<ShadowTeammateRoute> finalized =
+            FinalizeBehaviorScenarioProbabilities(retained, probabilityTrusted);
+        double retainedProbabilityMass = finalized.Count == 0
+            ? 0d
+            : finalized[0].RetainedScenarioProbabilityMass;
         return new ShadowTeammatePlanResult(
-            RetainBehaviorAwareSpectrum(completed, beamWidth),
+            finalized,
             expandedBranches,
             pendingChoiceBranches,
-            hitActionDepthLimit);
+            hitActionDepthLimit,
+            retainedProbabilityMass,
+            probabilityTrusted);
     }
 
     internal static ShadowTeammatePlanResult BuildTopKRoutes(
@@ -574,6 +610,41 @@ internal static class ShadowTeammatePlanner
         return selected;
     }
 
+    private static IReadOnlyList<ShadowTeammateRoute>
+        FinalizeBehaviorScenarioProbabilities(
+            IReadOnlyList<ShadowTeammateRoute> routes,
+            bool probabilityTrusted)
+    {
+        if (routes.Count == 0)
+            return Array.Empty<ShadowTeammateRoute>();
+
+        double[] logMasses = routes.Select(route => route.BehaviorLogMass).ToArray();
+        ShadowScenarioProbabilitySet probabilitySet =
+            ShadowScenarioChanceMath.NormalizeRetainedLogMasses(logMasses);
+        ShadowTeammateRoute[] finalized = new ShadowTeammateRoute[routes.Count];
+        for (int index = 0; index < routes.Count; index++)
+        {
+            ShadowTeammateRoute route = routes[index];
+            StateFingerprint scenarioFingerprint = ShadowFutureStateFingerprint.Capture(
+                route.Simulator,
+                route.ProcessedEnemyDeaths,
+                route.TurnEndedPlayerNetIds,
+                route.Actions);
+            double rawMass = Math.Clamp(Math.Exp(Math.Min(0d, route.BehaviorLogMass)), 0d, 1d);
+            finalized[index] = route with
+            {
+                ScenarioProbabilityMass = rawMass,
+                ScenarioConditionalProbability =
+                    probabilitySet.ConditionalProbabilities[index],
+                RetainedScenarioProbabilityMass =
+                    probabilitySet.RetainedProbabilityMass,
+                ScenarioProbabilityTrusted = probabilityTrusted,
+                ScenarioFingerprint = scenarioFingerprint,
+            };
+        }
+        return finalized;
+    }
+
     private static List<ShadowTeammateRoute> RetainQualitySpectrum(
         IReadOnlyList<ShadowTeammateRoute> candidates,
         int limit)
@@ -613,10 +684,19 @@ internal static class ShadowTeammatePlanner
 
             // Equal future-state fingerprints include all captured player/enemy mutable state,
             // ordered piles, RNG streams, modeled combat state, action-budget usage and ended
-            // teammates. The branch with the stronger behavior evidence is therefore the better
-            // representation of the same modeled continuation, not a guessed gameplay dominance.
-            if (CompareRoutesForBehavior(candidate, current) < 0)
-                winners[futureState] = candidate;
+            // teammates. Preserve one representative action history, but probability mass from
+            // every exact-equivalent history belongs to the same future scenario and must add.
+            double mergedLogMass = ShadowScenarioChanceMath.LogAddExp(
+                current.BehaviorLogMass,
+                candidate.BehaviorLogMass);
+            ShadowTeammateRoute representative =
+                CompareRoutesForBehavior(candidate, current) < 0
+                    ? candidate
+                    : current;
+            winners[futureState] = representative with
+            {
+                BehaviorLogMass = mergedLogMass,
+            };
         }
 
         return [.. winners.Values];
@@ -626,7 +706,10 @@ internal static class ShadowTeammatePlanner
         ShadowTeammateRoute left,
         ShadowTeammateRoute right)
     {
-        int comparison = right.BehaviorMeanLogProbability.CompareTo(
+        int comparison = right.BehaviorLogMass.CompareTo(left.BehaviorLogMass);
+        if (comparison != 0)
+            return comparison;
+        comparison = right.BehaviorMeanLogProbability.CompareTo(
             left.BehaviorMeanLogProbability);
         if (comparison != 0)
             return comparison;

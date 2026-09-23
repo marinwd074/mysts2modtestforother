@@ -155,7 +155,12 @@ internal sealed partial class CombatBeamSolver
                 ShadowForecast = new ShadowForecastPlan(
                     route.Actions.ToArray(),
                     route.BehaviorLogProbability,
-                    route.BehaviorDecisionCount),
+                    route.BehaviorDecisionCount,
+                    route.ScenarioProbabilityMass,
+                    route.ScenarioConditionalProbability,
+                    route.RetainedScenarioProbabilityMass,
+                    route.ScenarioProbabilityTrusted,
+                    route.ScenarioFingerprint),
             };
             yield return (jointAction, snapshot);
         }

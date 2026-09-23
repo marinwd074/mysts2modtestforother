@@ -410,6 +410,22 @@ Check(
             minimizeHighDurability) < 0,
     "MinimizeTeamLoss keeps loss primary while enemy durability remains a deterministic tie-break.");
 
+double mergedScenarioLogMass = ShadowScenarioChanceMath.LogAddExp(
+    Math.Log(0.20d),
+    Math.Log(0.30d));
+Check(
+    Math.Abs(Math.Exp(mergedScenarioLogMass) - 0.50d) < 1e-12d,
+    "Exact-equivalent Shadow histories add probability mass instead of keeping only the most likely representative.");
+
+ShadowScenarioProbabilitySet retainedScenarioProbabilities =
+    ShadowScenarioChanceMath.NormalizeRetainedLogMasses(
+        [Math.Log(0.20d), Math.Log(0.30d)]);
+Check(
+    Math.Abs(retainedScenarioProbabilities.RetainedProbabilityMass - 0.50d) < 1e-12d
+        && Math.Abs(retainedScenarioProbabilities.ConditionalProbabilities[0] - 0.40d) < 1e-12d
+        && Math.Abs(retainedScenarioProbabilities.ConditionalProbabilities[1] - 0.60d) < 1e-12d,
+    "Retained Shadow scenarios expose both raw behavior-mass coverage and normalized conditional scenario weights.");
+
 double healthyTempoRate =
     MultiplayerCombatObjectiveMath.LossRatioPerTurn(
         enemyDurabilityRatio: 0.1d,
