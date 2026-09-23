@@ -110,6 +110,21 @@ internal static partial class SolverController
                 plannedTurnActions,
                 out _).Count
             : 0;
+        SolverSettingsSnapshot deploymentSettings = SolverSettings.Capture();
+        SearchPolicySnapshot? safeReplayPolicy =
+            capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute
+                ? CaptureSearchPolicy(
+                    deploymentSettings,
+                    state,
+                    includeTurnSetup: false,
+                    theftPolicy: _combat.TheftPolicy) with
+                {
+                    Interaction = null,
+                    Diagnostics = new SearchDiagnosticsSink(
+                        static _ => { },
+                        static _ => { }),
+                }
+                : null;
         SolverDeploymentSession deployment = new()
         {
             State = state,
@@ -126,6 +141,7 @@ internal static partial class SolverController
                      capabilities.IsMultiplayer ? MultiplayerWorldTracker.WorldVersion : 0,
                      safeSessionActionCapacity)
                 : null,
+            SafeReplayPolicy = safeReplayPolicy,
         };
         _deployment = deployment;
         int actionCount;
@@ -157,7 +173,6 @@ internal static partial class SolverController
             actionCount = plannedTurnActions.Count(action => action.IsExecutable);
         }
         deployment.SafeEndTurnAction = safeEndTurnAction;
-        SolverSettingsSnapshot deploymentSettings = SolverSettings.Capture();
         SolverOverlay.ShowDeploying(
             host,
             result.StartTurnNumber,
