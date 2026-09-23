@@ -5,6 +5,9 @@ on:
   push:
     paths:
       - '.github/workflows/pinned-release-build.yml'
+      - 'source/tools/P0P1PinnedHarness/**'
+      - 'source/tools/P0HistoricalPinnedHarness/**'
+      - 'source/tools/test-p0-baseline-ab.ps1'
 
 permissions:
   contents: read
