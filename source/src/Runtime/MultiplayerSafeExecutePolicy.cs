@@ -310,8 +310,7 @@ internal static class MultiplayerSafeExecutePolicy
     internal const string BoundedActionCeilingReason = "mp2c_action_ceiling";
     internal const string TwoActionLimitReason = BoundedActionCeilingReason;
     internal const string ManualMultiplayerCardReason = "multiplayer_only_manual_play";
-    internal const string TeammateForecastBoundaryReason =
-        MultiplayerInterleaveOrderPolicy.ForecastBoundaryReason;
+    internal const string TeammateForecastBoundaryReason = "kind_teammateforecast";
     internal const string FormalModeToken = "safe-execute";
     internal const string LabModeToken = "safe-execute-lab";
 
@@ -373,7 +372,10 @@ internal static class MultiplayerSafeExecutePolicy
         => stop.IsSafe
            || string.Equals(stop.Reason, BoundedActionCeilingReason, StringComparison.Ordinal)
            || string.Equals(stop.Reason, ManualMultiplayerCardReason, StringComparison.Ordinal)
-           || MultiplayerInterleaveOrderPolicy.IsForecastBoundaryReason(stop.Reason);
+           || string.Equals(
+               stop.Reason,
+               TeammateForecastBoundaryReason,
+               StringComparison.Ordinal);
 
     internal static IReadOnlyList<T> TakeBoundedSafePrefix<T>(
         IReadOnlyList<T> actions,
