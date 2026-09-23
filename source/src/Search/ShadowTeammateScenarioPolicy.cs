@@ -83,17 +83,20 @@ internal static class ShadowTeammateScenarioPolicy
             }
         }
 
-        foreach (int index in Enumerable.Range(0, observations.Count)
-                     .Where(index => !selectedIndices.Contains(index))
-                     .OrderByDescending(index => observations[index].BehaviorLogMass)
-                     .ThenBy(index => observations[index].ActionCount)
-                     .ThenBy(index => index))
+        if (selected.Count < limit)
         {
-            selected.Add(new ShadowTeammateScenarioChoice(
-                index,
-                ShadowTeammateScenarioKind.Unspecified));
-            if (selected.Count == limit)
-                break;
+            foreach (int index in Enumerable.Range(0, observations.Count)
+                         .Where(index => !selectedIndices.Contains(index))
+                         .OrderByDescending(index => observations[index].BehaviorLogMass)
+                         .ThenBy(index => observations[index].ActionCount)
+                         .ThenBy(index => index))
+            {
+                selected.Add(new ShadowTeammateScenarioChoice(
+                    index,
+                    ShadowTeammateScenarioKind.Unspecified));
+                if (selected.Count == limit)
+                    break;
+            }
         }
         return selected;
 
