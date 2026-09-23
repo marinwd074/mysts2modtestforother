@@ -420,8 +420,10 @@ Check(
 Check(
     MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(SafeLocalActionDecision.Allow)
         && MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(
-            new(false, MultiplayerSafeExecutePolicy.ManualMultiplayerCardReason)),
-    "A completed safe prefix or manual multiplayer-card boundary keeps Safe Auto eligible for a fresh search.");
+            new(false, MultiplayerSafeExecutePolicy.ManualMultiplayerCardReason))
+        && MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(
+            new(false, MultiplayerSafeExecutePolicy.TeammateForecastBoundaryReason)),
+    "A completed safe prefix, manual multiplayer-card boundary, or U5 teammate forecast observation keeps Safe Auto eligible for a fresh search.");
 
 Check(
     !MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(new(false, "replay_semantics"))
