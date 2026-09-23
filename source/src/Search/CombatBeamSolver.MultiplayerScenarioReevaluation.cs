@@ -209,7 +209,8 @@ internal sealed partial class CombatBeamSolver
                     countTransition: false,
                     allowExecutionCapture: false);
                 _run.Expanded++;
-                _run.TransitionCount++;
+                _run.TransitionCount = checked(
+                    _run.TransitionCount + route.Actions.Count + 1);
                 scenarioReplayWork++;
                 try
                 {
