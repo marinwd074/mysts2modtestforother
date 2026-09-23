@@ -543,6 +543,9 @@ internal sealed partial class CombatBeamSolver
                 .ToList();
 
             ScenarioDecisionSummary? selectedScenarioDecision = null;
+            ScenarioDecisionSummary? u4RobustDecision = null;
+            ScenarioDecisionSummary? u4NominalDecision = null;
+            ScenarioDecisionSummary? u4BoundedRiskDecision = null;
             List<ScenarioDecisionSummary> scenarioSummaries = [];
             bool scenarioReevaluationEnabled = false;
             if (EnableMultiplayerScenarioReevaluation
@@ -734,17 +737,32 @@ internal sealed partial class CombatBeamSolver
                             .ToArray());
                 if (scenarioReevaluationEnabled)
                 {
-                    selectedScenarioDecision = scenarioSummaries
-                        .OrderByDescending(summary => summary.Rank.AllScenariosAlive)
-                        .ThenByDescending(summary => summary.Rank.GuaranteedVictory)
-                        .ThenBy(summary => summary.Rank.WorstLossEquivalent)
-                        .ThenBy(summary => summary.Rank.WorstPlayerLossRatio)
-                        .ThenBy(summary => summary.Rank.MeanLossEquivalent)
-                        .ThenBy(summary => summary.Rank.WorstTeamLossRatio)
-                        .ThenBy(summary => summary.Rank.WorstEnemyDurabilityRatio)
-                        .ThenByDescending(summary => summary.Rank.ScenarioCount)
-                        .ThenBy(summary => summary.BaselineIndex)
-                        .First();
+                    ScenarioDecisionSummary[] comparable = scenarioSummaries
+                        .OrderBy(summary => summary.BaselineIndex)
+                        .ToArray();
+                    MultiplayerScenarioDecisionRank[] comparableRanks = comparable
+                        .Select(summary => summary.Rank)
+                        .ToArray();
+                    int robustIndex =
+                        MultiplayerScenarioReevaluationPolicy.SelectPreferredIndex(
+                            MultiplayerScenarioRiskStrategy.Robust,
+                            comparableRanks);
+                    int nominalIndex =
+                        MultiplayerScenarioReevaluationPolicy.SelectPreferredIndex(
+                            MultiplayerScenarioRiskStrategy.NominalReference,
+                            comparableRanks);
+                    int boundedRiskIndex =
+                        MultiplayerScenarioReevaluationPolicy.SelectPreferredIndex(
+                            MultiplayerScenarioRiskStrategy.BoundedRisk,
+                            comparableRanks);
+                    u4RobustDecision = comparable[robustIndex];
+                    u4NominalDecision = comparable[nominalIndex];
+                    u4BoundedRiskDecision = comparable[boundedRiskIndex];
+
+                    // U4 A/B is zero-extra-work: all three policies consume the exact same U3
+                    // scenario matrix. Production remains the pre-U4 Robust selector until
+                    // runtime quality evidence justifies an explicit migration.
+                    selectedScenarioDecision = u4RobustDecision;
 
                     string winningDecisionKey = selectedScenarioDecision.DecisionKey;
                     int conservativeIndex =
@@ -896,10 +914,65 @@ internal sealed partial class CombatBeamSolver
                             $"coop_mean_team_loss={risk.CooperativeMeanTeamLossRatio:0.0000} " +
                             $"no_action_team_loss={risk.NoActionTeamLossRatio:0.0000} " +
                             $"coop_team_loss_benefit={risk.CooperationTeamLossBenefit:0.0000} " +
+                            $"mean_team_final_hp_ratio={risk.MeanTeamRemainingHpRatio:0.0000} " +
+                            $"worst_team_final_hp_ratio={risk.WorstTeamRemainingHpRatio:0.0000} " +
+                            $"mean_worst_player_final_hp_ratio={risk.MeanWorstPlayerRemainingHpRatio:0.0000} " +
+                            $"worst_player_final_hp_ratio={risk.WorstPlayerRemainingHpRatio:0.0000} " +
                             $"coop_mean_enemy_durability={risk.CooperativeMeanEnemyDurabilityRatio:0.0000} " +
                             $"no_action_enemy_durability={risk.NoActionEnemyDurabilityRatio:0.0000} " +
+                            $"coop_progress_benefit={risk.CooperationProgressBenefit:0.0000} " +
+                            $"no_action_scope={MultiplayerScenarioReevaluationPolicy.NoActionScopeDiagnosticValue}");
+                    }
+                }
+
+                if (u4RobustDecision != null
+                    && u4NominalDecision != null
+                    && u4BoundedRiskDecision != null)
+                {
+                    (string Name, ScenarioDecisionSummary Summary)[] strategyResults =
+                    [
+                        ("robust", u4RobustDecision),
+                        ("nominal_reference", u4NominalDecision),
+                        ("bounded_risk", u4BoundedRiskDecision),
+                    ];
+                    foreach ((string strategyName, ScenarioDecisionSummary strategySummary)
+                             in strategyResults)
+                    {
+                        MultiplayerScenarioDecisionRank rank = strategySummary.Rank;
+                        MultiplayerScenarioRiskMetrics risk =
+                            strategySummary.RiskMetrics
+                            ?? throw new InvalidOperationException(
+                                "Complete U4 strategy comparison requires risk metrics.");
+                        diagnostics.Info(
+                            $"[CombatSolver/Multiplayer] MP_U4_STRATEGY_RESULT " +
+                            $"strategy={strategyName} " +
+                            $"selected_baseline_rank={strategySummary.BaselineIndex + 1} " +
+                            $"all_alive={rank.AllScenariosAlive.ToString().ToLowerInvariant()} " +
+                            $"guaranteed_victory={rank.GuaranteedVictory.ToString().ToLowerInvariant()} " +
+                            $"mean_loss={rank.MeanLossEquivalent:0.0000} " +
+                            $"worst_loss={rank.WorstLossEquivalent:0.0000} " +
+                            $"bounded_loss={MultiplayerScenarioReevaluationPolicy.BoundedRiskLossEquivalent(rank):0.0000} " +
+                            $"worst_player_loss={rank.WorstPlayerLossRatio:0.0000} " +
+                            $"mean_team_loss={risk.MeanTeamLossRatio:0.0000} " +
+                            $"worst_team_loss={risk.WorstTeamLossRatio:0.0000} " +
+                            $"mean_team_final_hp_ratio={risk.MeanTeamRemainingHpRatio:0.0000} " +
+                            $"worst_team_final_hp_ratio={risk.WorstTeamRemainingHpRatio:0.0000} " +
+                            $"worst_player_final_hp_ratio={risk.WorstPlayerRemainingHpRatio:0.0000} " +
+                            $"coop_team_loss_benefit={risk.CooperationTeamLossBenefit:0.0000} " +
                             $"coop_progress_benefit={risk.CooperationProgressBenefit:0.0000}");
                     }
+
+                    bool allAgree =
+                        u4RobustDecision.BaselineIndex == u4NominalDecision.BaselineIndex
+                        && u4RobustDecision.BaselineIndex
+                            == u4BoundedRiskDecision.BaselineIndex;
+                    diagnostics.Info(
+                        $"[CombatSolver/Multiplayer] MP_U4_STRATEGY_AB " +
+                        $"same_matrix=true extra_replay=0 production_strategy=robust " +
+                        $"robust_rank={u4RobustDecision.BaselineIndex + 1} " +
+                        $"nominal_ref_rank={u4NominalDecision.BaselineIndex + 1} " +
+                        $"bounded_risk_rank={u4BoundedRiskDecision.BaselineIndex + 1} " +
+                        $"all_agree={allAgree.ToString().ToLowerInvariant()}");
                 }
 
                 if (selectedScenarioDecision != null)
