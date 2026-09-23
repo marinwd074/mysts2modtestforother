@@ -52,6 +52,13 @@ internal static class MultiplayerChanceDecisionIdentity
         {
             if (action.Turn != rootTurn)
                 continue;
+
+            // U5 teammate forecasts are observations, not deployable choices. Everything after
+            // the first forecast boundary is contingent on a state that must be observed and
+            // replanned before another local action may be authorized.
+            if (action.Kind == PlanActionKind.TeammateForecast)
+                break;
+
             AppendDecisionAction(key, action);
             if (action.Kind == PlanActionKind.EndTurn)
                 break;
