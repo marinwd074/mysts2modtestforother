@@ -2,12 +2,6 @@ using MegaCrit.Sts2.Core.Entities.Creatures;
 
 namespace CombatSolver;
 
-internal enum MultiplayerCombatObjectiveStrategy
-{
-    MinimizeTeamLoss,
-    AdaptiveLethalTempo,
-}
-
 internal static class MultiplayerCombatObjectivePolicy
 {
     internal static double ComputeEnemyDurabilityRatio(IEnumerable<Creature> enemies)
@@ -20,6 +14,23 @@ internal static class MultiplayerCombatObjectivePolicy
             durability += Math.Max(0, enemy.CurrentHp) + Math.Max(0, enemy.Block);
         }
 
+        return ComputeEnemyDurabilityRatio(durability, maximumHp);
+    }
+
+    internal static double ComputeEnemyDurabilityRatio(
+        EnemyDurabilityVector enemies,
+        int initialEnemyMaximumHp)
+    {
+        long durability = 0;
+        for (int index = 0; index < enemies.Count; index++)
+            durability += Math.Max(0, enemies[index].Durability);
+        return ComputeEnemyDurabilityRatio(durability, initialEnemyMaximumHp);
+    }
+
+    private static double ComputeEnemyDurabilityRatio(
+        long durability,
+        long maximumHp)
+    {
         if (maximumHp <= 0)
             return 0d;
         return Math.Clamp(durability / (double)maximumHp, 0d, 1d);

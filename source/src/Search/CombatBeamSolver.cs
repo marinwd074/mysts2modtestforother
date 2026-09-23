@@ -50,6 +50,8 @@ internal sealed partial class CombatBeamSolver(
     private readonly IntentForecast _forecast = root.Forecast;
     private readonly int _startTurnNumber = root.StartTurnNumber;
     private readonly int _initialEnemyCount = root.Enemies.Count;
+    private readonly int _initialEnemyMaximumHp = root.Enemies.Sum(enemy =>
+        Math.Max(0, enemy.MaxHp));
     private readonly bool _keysCombatHistoryCounters =
         root.PlayerCount == 1 && CombatHistoryCounterKey.AppliesTo(root.PlayerCardIds);
     private readonly bool _isActEndingBoss = root.IsActEndingBoss;
@@ -91,6 +93,10 @@ internal sealed partial class CombatBeamSolver(
     private BeamRetentionPolicy Retention => _retention ??= new BeamRetentionPolicy(
         _profile,
         policy.RoutePolicy,
+        policy.MultiplayerCombatObjectiveStrategy,
+        policy.MultiplayerEnemyDurabilityRatio,
+        _initialEnemyMaximumHp,
+        _startTurnNumber,
         _isActEndingBoss,
         _strategicBossHpRelief,
         root.PostCombatRelicHeal,
@@ -123,6 +129,7 @@ internal sealed partial class CombatBeamSolver(
         policy.RoutePolicy,
         policy.MultiplayerCombatObjectiveStrategy,
         policy.MultiplayerEnemyDurabilityRatio,
+        _initialEnemyMaximumHp,
         _startTurnNumber,
         root.CarryRankingContext,
         battleDamage,

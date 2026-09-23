@@ -74,6 +74,10 @@ internal sealed partial class CombatBeamSolver
     private sealed partial class BeamRetentionPolicy(
         SolverSearchProfile _profile,
         SearchRoutePolicy _routePolicy,
+        MultiplayerCombatObjectiveStrategy _multiplayerCombatObjectiveStrategy,
+        double _multiplayerEnemyDurabilityRatio,
+        int _multiplayerEnemyMaximumHp,
+        int _startTurnNumber,
         bool _isActEndingBoss,
         BossHpRelief _bossHpRelief,
         PostCombatRelicHealProfile _postCombatRelicHeal,
@@ -274,17 +278,59 @@ internal sealed partial class CombatBeamSolver
 
         private Comparison<SearchNode>? _finalCandidateComparison;
 
+        private MultiplayerCombatObjectiveRank BuildMultiplayerObjectiveRank(SearchNode node)
+        {
+            bool completeVictory = IsCompleteVictory(node);
+            double enemyDurabilityRatio =
+                MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(
+                    node.Snapshot.EnemyDurabilityByCombatId,
+                    _multiplayerEnemyMaximumHp);
+            return MultiplayerCombatObjectiveMath.BuildRank(
+                _multiplayerCombatObjectiveStrategy,
+                completeVictory,
+                node.Snapshot.AllPlayersAlive,
+                node.Snapshot.TeamLossRatio,
+                node.Snapshot.WorstPlayerLossRatio,
+                enemyDurabilityRatio,
+                _multiplayerEnemyDurabilityRatio,
+                completeVictory ? CompletedCombatTurn(node) : null,
+                _startTurnNumber);
+        }
+
+        private int CompareMultiplayerObjective(SearchNode left, SearchNode right)
+            => _routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
+                ? MultiplayerCombatObjectiveMath.Compare(
+                    BuildMultiplayerObjectiveRank(left),
+                    BuildMultiplayerObjectiveRank(right))
+                : 0;
+
         private void SortByBeamRank(List<SearchNode> ranked)
         {
             if (ranked.Count < 2)
                 return;
-            // Score inputs are frozen during this sort. Preserve the same List.Sort
-            // comparison and tie behavior while evaluating the formula once per entry.
-            List<(SearchNode Node, double Score)> scored = new(ranked.Count);
+            bool useTeamObjective =
+                _routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn;
+            // Freeze both objective and score inputs once per node. P1 puts the same team
+            // objective ahead of the historical Beam score; single-player keeps the old order.
+            List<(SearchNode Node, double Score, MultiplayerCombatObjectiveRank TeamObjective)> scored =
+                new(ranked.Count);
             foreach (SearchNode node in ranked)
-                scored.Add((node, BeamRankScore(node)));
-            scored.Sort(static (left, right) =>
             {
+                scored.Add((
+                    node,
+                    BeamRankScore(node),
+                    useTeamObjective ? BuildMultiplayerObjectiveRank(node) : default));
+            }
+            scored.Sort((left, right) =>
+            {
+                if (useTeamObjective)
+                {
+                    int objective = MultiplayerCombatObjectiveMath.Compare(
+                        left.TeamObjective,
+                        right.TeamObjective);
+                    if (objective != 0)
+                        return objective;
+                }
                 return CompareBeamRankOrder(
                     left.Score, left.Node.Snapshot.OffensiveProgressValue, left.Node.ActionCount,
                     right.Score, right.Node.Snapshot.OffensiveProgressValue, right.Node.ActionCount);
@@ -1343,7 +1389,10 @@ internal sealed partial class CombatBeamSolver
             SimulationSnapshot rightSnapshot = right.Snapshot;
             bool leftWon = IsCompleteVictory(left);
             bool rightWon = IsCompleteVictory(right);
-            int comparison = rightWon.CompareTo(leftWon);
+            int comparison = CompareMultiplayerObjective(left, right);
+            if (comparison != 0)
+                return comparison;
+            comparison = rightWon.CompareTo(leftWon);
             if (comparison != 0)
                 return comparison;
             if (!leftWon && !rightWon)
@@ -2105,9 +2154,15 @@ internal sealed partial class CombatBeamSolver
             return noWorse && strictlyBetter;
         }
 
-        private static bool IsBetterSearchNode(SearchNode candidate, SearchNode current)
-            => candidate.Score > current.Score
-                || candidate.Score.Equals(current.Score) && candidate.ActionCount < current.ActionCount;
+        private bool IsBetterSearchNode(SearchNode candidate, SearchNode current)
+        {
+            int objective = CompareMultiplayerObjective(candidate, current);
+            if (objective != 0)
+                return objective < 0;
+            return candidate.Score > current.Score
+                || candidate.Score.Equals(current.Score)
+                    && candidate.ActionCount < current.ActionCount;
+        }
 
         private double BeamRankScore(SearchNode node)
         {

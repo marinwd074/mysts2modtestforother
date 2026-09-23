@@ -309,6 +309,107 @@ Check(
             > MultiplayerCombatObjectiveMath.ComputeLethalUrgency(0.75d),
     "Adaptive lethal urgency rises smoothly as enemy effective durability falls.");
 
+double earlyBaselineEquivalent =
+    MultiplayerCombatObjectiveMath.InterimLossEquivalent(
+        teamLossRatio: 0.005d,
+        worstPlayerLossRatio: 0.10d,
+        enemyDurabilityRatio: 0.80d);
+double earlyRiskierProgressEquivalent =
+    MultiplayerCombatObjectiveMath.InterimLossEquivalent(
+        teamLossRatio: 0.020d,
+        worstPlayerLossRatio: 0.10d,
+        enemyDurabilityRatio: 0.70d);
+double lateProgressEquivalent =
+    MultiplayerCombatObjectiveMath.InterimLossEquivalent(
+        teamLossRatio: 0.020d,
+        worstPlayerLossRatio: 0.10d,
+        enemyDurabilityRatio: 0.20d);
+Check(
+    earlyRiskierProgressEquivalent > earlyBaselineEquivalent
+        && lateProgressEquivalent < earlyBaselineEquivalent,
+    "Interim objective keeps extra-loss tolerance tiny at high durability but can trade modest loss for strong near-lethal progress.");
+
+MultiplayerCombatObjectiveRank adaptiveFastRank =
+    MultiplayerCombatObjectiveMath.BuildRank(
+        MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo,
+        completeVictory: true,
+        allPlayersAlive: true,
+        teamLossRatio: 0.12d,
+        worstPlayerLossRatio: 0.10d,
+        enemyDurabilityRatio: 0d,
+        terminalTempoReferenceEnemyDurabilityRatio: 0.08d,
+        combatEndedTurn: 3,
+        startTurnNumber: 1);
+MultiplayerCombatObjectiveRank adaptiveSlowRank =
+    MultiplayerCombatObjectiveMath.BuildRank(
+        MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo,
+        completeVictory: true,
+        allPlayersAlive: true,
+        teamLossRatio: 0.08d,
+        worstPlayerLossRatio: 0.10d,
+        enemyDurabilityRatio: 0d,
+        terminalTempoReferenceEnemyDurabilityRatio: 0.08d,
+        combatEndedTurn: 5,
+        startTurnNumber: 1);
+Check(
+    MultiplayerCombatObjectiveMath.Compare(adaptiveFastRank, adaptiveSlowRank) < 0,
+    "The shared P1 terminal rank preserves adaptive loss-versus-finish-turn behavior.");
+
+MultiplayerCombatObjectiveRank safeIncompleteRank =
+    MultiplayerCombatObjectiveMath.BuildRank(
+        MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo,
+        completeVictory: false,
+        allPlayersAlive: true,
+        teamLossRatio: 0.04d,
+        worstPlayerLossRatio: 0.05d,
+        enemyDurabilityRatio: 0.30d,
+        terminalTempoReferenceEnemyDurabilityRatio: 0.30d,
+        combatEndedTurn: null,
+        startTurnNumber: 1);
+MultiplayerCombatObjectiveRank deadIncompleteRank =
+    MultiplayerCombatObjectiveMath.BuildRank(
+        MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo,
+        completeVictory: false,
+        allPlayersAlive: false,
+        teamLossRatio: 0.01d,
+        worstPlayerLossRatio: 0.01d,
+        enemyDurabilityRatio: 0.05d,
+        terminalTempoReferenceEnemyDurabilityRatio: 0.30d,
+        combatEndedTurn: null,
+        startTurnNumber: 1);
+Check(
+    MultiplayerCombatObjectiveMath.Compare(safeIncompleteRank, deadIncompleteRank) < 0,
+    "All-player survival remains a hard objective boundary before loss or enemy progress.");
+
+MultiplayerCombatObjectiveRank minimizeHighDurability =
+    MultiplayerCombatObjectiveMath.BuildRank(
+        MultiplayerCombatObjectiveStrategy.MinimizeTeamLoss,
+        completeVictory: false,
+        allPlayersAlive: true,
+        teamLossRatio: 0.03d,
+        worstPlayerLossRatio: 0.03d,
+        enemyDurabilityRatio: 0.80d,
+        terminalTempoReferenceEnemyDurabilityRatio: 0.80d,
+        combatEndedTurn: null,
+        startTurnNumber: 1);
+MultiplayerCombatObjectiveRank minimizeLowDurability =
+    MultiplayerCombatObjectiveMath.BuildRank(
+        MultiplayerCombatObjectiveStrategy.MinimizeTeamLoss,
+        completeVictory: false,
+        allPlayersAlive: true,
+        teamLossRatio: 0.03d,
+        worstPlayerLossRatio: 0.03d,
+        enemyDurabilityRatio: 0.20d,
+        terminalTempoReferenceEnemyDurabilityRatio: 0.80d,
+        combatEndedTurn: null,
+        startTurnNumber: 1);
+Check(
+    minimizeHighDurability.LossEquivalent == minimizeLowDurability.LossEquivalent
+        && MultiplayerCombatObjectiveMath.Compare(
+            minimizeLowDurability,
+            minimizeHighDurability) < 0,
+    "MinimizeTeamLoss keeps loss primary while enemy durability remains a deterministic tie-break.");
+
 double healthyTempoRate =
     MultiplayerCombatObjectiveMath.LossRatioPerTurn(
         enemyDurabilityRatio: 0.1d,

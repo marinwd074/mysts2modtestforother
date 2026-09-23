@@ -18,6 +18,7 @@ internal sealed partial class CombatBeamSolver
         SearchRoutePolicy routePolicy,
         MultiplayerCombatObjectiveStrategy multiplayerCombatObjectiveStrategy,
         double multiplayerEnemyDurabilityRatio,
+        int multiplayerEnemyMaximumHp,
         int startTurnNumber,
         MultiplayerCarryRankingContext carryRankingContext,
         BattleDamageSnapshot battleDamage,
@@ -134,6 +135,23 @@ internal sealed partial class CombatBeamSolver
                         features.AllEnemiesDead,
                         candidate.Snapshot.PlayerDead,
                         features.ProjectedPlayerHp);
+                    double candidateEnemyDurabilityRatio =
+                        MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(
+                            candidate.Snapshot.EnemyDurabilityByCombatId,
+                            multiplayerEnemyMaximumHp);
+                    MultiplayerCombatObjectiveRank multiplayerObjective =
+                        routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
+                            ? MultiplayerCombatObjectiveMath.BuildRank(
+                                multiplayerCombatObjectiveStrategy,
+                                completeVictory,
+                                candidate.Snapshot.AllPlayersAlive,
+                                candidate.Snapshot.TeamLossRatio,
+                                candidate.Snapshot.WorstPlayerLossRatio,
+                                candidateEnemyDurabilityRatio,
+                                multiplayerEnemyDurabilityRatio,
+                                completeVictory ? candidate.Snapshot.CombatEndedTurn : null,
+                                startTurnNumber)
+                            : default;
                     // Relics that heal on victory pay out after the fight, so their HP never reaches
                     // RecoveredPlayerHp, yet it carries into the next fight exactly like in-combat healing.
                     int relicHeal = ActEndingBossPolicy.RankedPostCombatRelicHeal(
@@ -176,6 +194,7 @@ internal sealed partial class CombatBeamSolver
                         OptionalPotionStrategicCost: optionalPotionStrategicCost,
                         OptionalAmbergrisCount: optionalAmbergrisCount,
                         EffectivePotionPolicy: effectivePotionPolicy,
+                        MultiplayerObjective: multiplayerObjective,
                         CarryEvaluation: carryEvaluation,
                         CarryObservationActionCount: carryObservationNode.ActionCount,
                         CarryCompatibility: new MultiplayerCarryCompatibilityKey(
@@ -354,25 +373,22 @@ internal sealed partial class CombatBeamSolver
                     multiplayerCombatObjectiveStrategy);
             var selected = policyEligibleCandidates
                 .OrderByDescending(candidate => candidate.CompleteVictory)
-                .ThenBy(candidate => useTeamObjective && !candidate.Snapshot.AllPlayersAlive ? 1 : 0)
-                .ThenBy(candidate => useTeamObjective && candidate.CompleteVictory
-                    ? useAdaptiveLethalTempo
-                        ? MultiplayerCombatObjectiveMath.ContinuousTempoScore(
-                            candidate.Snapshot.TeamLossRatio,
-                            candidate.Snapshot.WorstPlayerLossRatio,
-                            multiplayerEnemyDurabilityRatio,
-                            candidate.CombatEndedTurn ?? int.MaxValue,
-                            startTurnNumber)
-                        : candidate.Snapshot.TeamLossRatio
+                .ThenBy(candidate => useTeamObjective
+                    && !candidate.MultiplayerObjective.AllPlayersAlive ? 1 : 0)
+                .ThenBy(candidate => useTeamObjective
+                    ? candidate.MultiplayerObjective.LossEquivalent
+                    : 0d)
+                .ThenBy(candidate => useTeamObjective
+                    ? candidate.MultiplayerObjective.WorstPlayerLossRatio
+                    : 0d)
+                .ThenBy(candidate => useTeamObjective
+                    ? candidate.MultiplayerObjective.TeamLossRatio
+                    : 0d)
+                .ThenBy(candidate => useTeamObjective && !candidate.CompleteVictory
+                    ? candidate.MultiplayerObjective.EnemyDurabilityRatio
                     : 0d)
                 .ThenBy(candidate => useTeamObjective && candidate.CompleteVictory
-                    ? candidate.Snapshot.WorstPlayerLossRatio
-                    : 0d)
-                .ThenBy(candidate => useTeamObjective && candidate.CompleteVictory
-                    ? candidate.Snapshot.TeamLossRatio
-                    : 0d)
-                .ThenBy(candidate => useTeamObjective && candidate.CompleteVictory
-                    ? candidate.CombatEndedTurn ?? int.MaxValue
+                    ? candidate.MultiplayerObjective.CombatEndedTurn
                     : 0)
                 // A live incomplete fallback is always preferable to a dead fallback. For
                 // complete victories this key is uniformly zero and cannot weaken the
@@ -430,6 +446,8 @@ internal sealed partial class CombatBeamSolver
                 diagnostics.Info(
                     $"[CombatSolver/Multiplayer] MP_OBJECTIVE strategy={multiplayerCombatObjectiveStrategy} " +
                     $"enemy_durability_ratio={multiplayerEnemyDurabilityRatio:0.000} " +
+                    $"candidate_enemy_durability_ratio={selected[0].MultiplayerObjective.EnemyDurabilityRatio:0.0000} " +
+                    $"objective_loss_equivalent={selected[0].MultiplayerObjective.LossEquivalent:0.0000} " +
                     $"team_loss_ratio={selected[0].Snapshot.TeamLossRatio:0.0000} " +
                     $"worst_player_loss_ratio={selected[0].Snapshot.WorstPlayerLossRatio:0.0000} " +
                     $"all_players_alive={selected[0].Snapshot.AllPlayersAlive.ToString().ToLowerInvariant()} " +
@@ -452,7 +470,19 @@ internal sealed partial class CombatBeamSolver
             var carryFreeWinner = policyEligibleCandidates
                 .Where(candidate =>
                     candidate.CarryCompatibility == selectedCandidate.CarryCompatibility)
-                .OrderByDescending(candidate => candidate.Score)
+                .OrderBy(candidate => useTeamObjective
+                    && !candidate.MultiplayerObjective.AllPlayersAlive ? 1 : 0)
+                .ThenBy(candidate => useTeamObjective
+                    ? candidate.MultiplayerObjective.LossEquivalent : 0d)
+                .ThenBy(candidate => useTeamObjective
+                    ? candidate.MultiplayerObjective.WorstPlayerLossRatio : 0d)
+                .ThenBy(candidate => useTeamObjective
+                    ? candidate.MultiplayerObjective.TeamLossRatio : 0d)
+                .ThenBy(candidate => useTeamObjective && !candidate.CompleteVictory
+                    ? candidate.MultiplayerObjective.EnemyDurabilityRatio : 0d)
+                .ThenBy(candidate => useTeamObjective && candidate.CompleteVictory
+                    ? candidate.MultiplayerObjective.CombatEndedTurn : 0)
+                .ThenByDescending(candidate => candidate.Score)
                 .ThenByDescending(candidate =>
                     routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
                     && candidate.HasCurrentTurnCardAction)

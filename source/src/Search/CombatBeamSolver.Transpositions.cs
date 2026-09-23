@@ -54,6 +54,10 @@ internal sealed partial class CombatBeamSolver
             return true;
         }
 
+        // P1 objective inputs are deliberately explicit in this Pareto label. StateKey already
+        // fixes turn/enemy durability; TeamLossRatio, WorstPlayerLossRatio and AllPlayersAlive
+        // keep transposition pruning conservative instead of collapsing histories that rank
+        // differently under the shared multiplayer objective.
         private static bool Dominates(TranspositionLabel left, TranspositionLabel right)
             => left.PotionCount <= right.PotionCount
                 && left.PotionStrategicCost <= right.PotionStrategicCost
