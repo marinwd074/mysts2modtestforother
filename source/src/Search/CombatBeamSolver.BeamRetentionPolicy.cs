@@ -108,8 +108,10 @@ internal sealed partial class CombatBeamSolver
 
         private const int PersistentRoutingContextRounds = 8;
         private const int RoutingChoiceLimit = 96;
-        // P3 final-only chance coverage is staged but disabled until P2 is closed.
+        // Probability-weighted P3 experiments remain disabled until behavior priors are calibrated.
         private const int FinalChanceCoverageLimit = 0;
+        private const int FinalScenarioCoverageLimit =
+            MultiplayerScenarioReevaluationPolicy.MaximumCoverageCandidates;
         private const int AmbiguousCompressedChoiceLimit = 48;
         private sealed record OrderedPileCohort(IReadOnlyList<SearchNode> PrefixVariants);
         private readonly record struct PocketwatchCadenceSignature(
@@ -198,6 +200,10 @@ internal sealed partial class CombatBeamSolver
             // expansion count and time budget are unchanged.
             if (_routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn)
             {
+                AddFinalScenarioCoverageRepresentatives(
+                    candidates,
+                    ranked,
+                    FinalScenarioCoverageLimit);
                 AddFinalChanceCoverageRepresentatives(
                     candidates,
                     ranked,
@@ -214,6 +220,114 @@ internal sealed partial class CombatBeamSolver
             });
             AssignRetentionRanks(ranked, []);
             return ranked;
+        }
+
+        private void AddFinalScenarioCoverageRepresentatives(
+            IReadOnlyList<SearchNode> candidates,
+            List<SearchNode> ranked,
+            int extraLimit)
+        {
+            if (extraLimit <= 0 || candidates.Count == 0 || ranked.Count == 0)
+                return;
+
+            List<string> decisionKeys = [];
+            HashSet<string> decisionSet = new(StringComparer.Ordinal);
+            foreach (SearchNode node in ranked)
+            {
+                if (!MultiplayerChanceDecisionIdentity.TryGetCurrentTurnShadowOutcome(
+                        node,
+                        _startTurnNumber,
+                        out _,
+                        out ShadowForecastPlan forecast)
+                    || !forecast.ScenarioProbabilityTrusted
+                    || forecast.ScenarioKind == ShadowTeammateScenarioKind.Unspecified)
+                {
+                    continue;
+                }
+
+                string key = MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(
+                    node,
+                    _startTurnNumber);
+                if (decisionSet.Add(key))
+                {
+                    decisionKeys.Add(key);
+                    if (decisionKeys.Count
+                        == MultiplayerScenarioReevaluationPolicy.MaximumCurrentDecisions)
+                    {
+                        break;
+                    }
+                }
+            }
+            if (decisionKeys.Count == 0)
+                return;
+
+            Dictionary<string, Dictionary<ShadowTeammateScenarioKind, SearchNode>>
+                leadersByDecision = new(StringComparer.Ordinal);
+            foreach (SearchNode candidate in candidates)
+            {
+                if (!MultiplayerChanceDecisionIdentity.TryGetCurrentTurnShadowOutcome(
+                        candidate,
+                        _startTurnNumber,
+                        out _,
+                        out ShadowForecastPlan forecast)
+                    || !forecast.ScenarioProbabilityTrusted
+                    || forecast.ScenarioKind == ShadowTeammateScenarioKind.Unspecified)
+                {
+                    continue;
+                }
+
+                string decisionKey =
+                    MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(
+                        candidate,
+                        _startTurnNumber);
+                if (!decisionSet.Contains(decisionKey))
+                    continue;
+
+                if (!leadersByDecision.TryGetValue(
+                        decisionKey,
+                        out Dictionary<ShadowTeammateScenarioKind, SearchNode>? leaders))
+                {
+                    leaders = [];
+                    leadersByDecision.Add(decisionKey, leaders);
+                }
+
+                if (!leaders.TryGetValue(forecast.ScenarioKind, out SearchNode? current)
+                    || CompareFinalCandidates(candidate, current) < 0)
+                {
+                    leaders[forecast.ScenarioKind] = candidate;
+                }
+            }
+
+            int added = 0;
+            foreach (string decisionKey in decisionKeys)
+            {
+                if (!leadersByDecision.TryGetValue(
+                        decisionKey,
+                        out Dictionary<ShadowTeammateScenarioKind, SearchNode>? leaders))
+                {
+                    continue;
+                }
+
+                foreach (ShadowTeammateScenarioKind kind in new[]
+                         {
+                             ShadowTeammateScenarioKind.Aggressive,
+                             ShadowTeammateScenarioKind.Defensive,
+                             ShadowTeammateScenarioKind.Conserve,
+                             ShadowTeammateScenarioKind.NoAction,
+                         })
+                {
+                    if (!leaders.TryGetValue(kind, out SearchNode? candidate)
+                        || ContainsReference(ranked, candidate))
+                    {
+                        continue;
+                    }
+
+                    ranked.Add(candidate);
+                    added++;
+                    if (added == extraLimit)
+                        return;
+                }
+            }
         }
 
         private void AddFinalChanceCoverageRepresentatives(

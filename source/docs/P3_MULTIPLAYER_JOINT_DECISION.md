@@ -1,32 +1,68 @@
-# P3 多人联合决策
+# P3 多情景复评
 
-> 预备实现已存在，但按阶段计划在 P2 期间保持禁用；P3 开始时再启用。
+P3 的目标是：**对少量当前本地动作，在不同队友行为压力情景下重新评价；推荐不能依赖单一乐观 Shadow 路线。**
 
-## P3A 预备实现：最终 Chance Coverage
+P2 已通过 CI。P3 不扩大主 Beam，不提高搜索深度，不给队友动作任何部署权限。
 
-目标：保证 P2 chance-node 在最终选择前不会因为普通 final-quality trimming 丢掉主要概率场景。
+## 情景集合
 
-实现位置：`BeamRetentionPolicy.RankFinal`。
+Shadow Team Top-K 在 exact future-state merge 后，固定优先保护四种非概率压力情景：
 
-约束：
+1. `Aggressive`：优先完整斩杀，其次敌方有效耐久最低；
+2. `Defensive`：优先全员存活、最脆弱队员有效生命和团队有效生命；
+3. `Conserve`：优先保留团队 Energy / Stars，并减少额外动作；
+4. `NoAction`：队友本回合不再出牌。
 
-- 主 Beam 宽度不变；
-- 搜索时间预算不变；
-- 不新增模拟扩展；
-- 只补已经有普通最终候选代表的本地当前回合决策；
-- 按精确 `ScenarioFingerprint` 保留场景代表；
-- 优先高 `ScenarioProbabilityMass`，跨决策 round-robin；
-- 最多额外 16 条最终候选；
-- 已在普通结果中的场景占据它原本的 round-robin 轮次，但不会重复加入；
-- 不可信概率场景不进入 coverage portfolio。
+这四类是 stress scenarios，不是经过实测校准的真实概率。通用 `BehaviorLogMass` 只用于相同情景质量下的稳定 tie-break，以及未来做经验校准；**当前推荐不做概率加权**。
 
-`MultiplayerChanceCoveragePolicy` 提供纯合同，固定验证跨决策 round-robin 与 hard cap；因此 P3A 的覆盖调度不只依赖集成代码审查。
+如果 Shadow beam 还有剩余槽位，优先补不同 `ActionOrderKey`。Team Shadow 搜索本身按单 action 交错扩展，因此 A→B、B→A、易伤→攻击、攻击→易伤等顺序都是真正按该顺序推进 simulator/RNG；只有完整 future fingerprint 相同才允许 exact merge。
 
-## 后续 P3B
+## 少量候选复评
 
-下一步再处理“本地玩家与远端玩家在同一 player side 内真正交错动作”的 scheduler。P3B 必须继续满足：
+只处理普通 P1/P2 最终排序前 **4 个不同当前本地动作组**。每个动作组最多补 4 个情景代表，因此 final-only coverage 上限是 16。
 
-- 远端动作始终 prediction-only；
-- 部署只允许本地玩家动作；
-- 真实队友任何偏离都由 revalidation / fresh search 接管；
-- 不通过增加 Beam/时间预算掩盖调度状态空间增长。
+coverage 只从已经生成的候选中选代表：
+
+- 不新增 simulator expansion；
+- 不增加主 BeamWidth；
+- 不延长 Shadow action depth；
+- 同一情景只留一个 final-quality 最好的代表。
+
+## 当前动作必须跨情景一致
+
+分组键使用 `MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey`：
+
+- 包含当前回合本地出牌、目标、药水和当前回合选择；
+- 到当前本地 EndTurn 为止；
+- 排除 Shadow forecast；
+- 排除 EndTurn 之后才能观察到的 TurnStart choices。
+
+因此复评比较的是**同一个当前可部署动作**在不同队友未来下的结果，不允许每个情景提前选择不同当前动作，避免 strategy fusion。
+
+## 排序
+
+只有前述少量动作组都取得可信的情景集合，并至少包含 `NoAction` + 另一个情景时，P3 rerank 才启用；否则 fail closed 回 P1/P2 排序。
+
+情景之间不使用概率，排序为：
+
+1. 所有情景全员存活；
+2. 所有情景均斩杀；
+3. 最坏 `LossEquivalent`；
+4. 最坏队员战损；
+5. 情景平均 `LossEquivalent`；
+6. 最坏团队战损；
+7. 最坏敌方有效耐久；
+8. 情景覆盖数量；
+9. 原 P1/P2 排名。
+
+选定当前动作后，用该动作组里的保守情景作为显示/continuation 代表。真实状态若与该世界线不一致，已有 continuation revalidation 仍会 fresh-search。
+
+## 概率代码
+
+此前预备的 `MultiplayerChanceDecisionMath` 与 chance coverage 保留但继续禁用：
+
+`EnableMultiplayerChanceAggregation = false`
+
+`FinalChanceCoverageLimit = 0`
+
+等后续有真实队友行为日志后，再考虑把压力情景替换或补充为经验概率模型。
