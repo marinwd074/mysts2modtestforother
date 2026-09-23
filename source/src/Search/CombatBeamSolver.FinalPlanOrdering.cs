@@ -182,7 +182,8 @@ internal sealed partial class CombatBeamSolver
         public FinalPlanSelection Select(
             IReadOnlyList<(SearchNode Node, SimulationSnapshot Snapshot)> evaluated,
             int initialHp,
-            bool emitDiagnostics)
+            bool emitDiagnostics,
+            bool reevaluateScenarios = false)
         {
             var policyCandidates = evaluated
                 .Select(candidate =>
@@ -575,7 +576,7 @@ internal sealed partial class CombatBeamSolver
 
                 Dictionary<string, MultiplayerScenarioDecisionEvaluation> replayByDecision =
                     new(StringComparer.Ordinal);
-                if (emitDiagnostics
+                if (reevaluateScenarios
                     && scenarioReevaluator != null
                     && decisionKeys.Count > 1)
                 {
