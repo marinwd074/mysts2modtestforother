@@ -93,6 +93,7 @@ internal sealed partial class CombatBeamSolver(
     private BeamRetentionPolicy Retention => _retention ??= new BeamRetentionPolicy(
         _profile,
         policy.RoutePolicy,
+        policy.UseMultiplayerTeamObjective,
         policy.MultiplayerCombatObjectiveStrategy,
         policy.MultiplayerEnemyDurabilityRatio,
         _initialEnemyMaximumHp,
@@ -127,6 +128,7 @@ internal sealed partial class CombatBeamSolver(
         policy.Diagnostics,
         _detailedDiagnostics,
         policy.RoutePolicy,
+        policy.UseMultiplayerTeamObjective,
         policy.MultiplayerCombatObjectiveStrategy,
         policy.MultiplayerEnemyDurabilityRatio,
         _initialEnemyMaximumHp,
