@@ -122,3 +122,5 @@ pwsh -NoLogo -NoProfile -File .\source\tools\multiplayer-lab\validate-u3-scenari
 - `reevaluation_budget_unavailable` 路径不得同时执行 U3 budget/replay，最终仍须 `scenario_rerank=false`
 
 判定器不会把 synthetic fixture 当 runtime 证据，也不会替代 Host/Client 身份确认。
+
+判定器本身已由 compatibility workflow run `35880541738`（run 796）验证 SUCCESS；该结果只证明分类逻辑可运行，不提升 U3 双玩家 runtime 的证据等级。
