@@ -133,7 +133,7 @@ internal sealed partial class CombatBeamSolver
                 policy.Diagnostics.Info(
                     $"[CombatSolver/Multiplayer] MP_U5_INTERLEAVE " +
                     $"turn={node.Turn} order=local_then_teammate " +
-                    $"local={node.Action.CardId} remote_player={remoteAction.PlayerNetId} " +
+                    $"local={node.Action?.CardId ?? "-"} remote_player={remoteAction.PlayerNetId} " +
                     $"remote={remoteAction.CardId} target={remoteAction.TargetCombatId?.ToString() ?? "-"} " +
                     $"reverse_order={orderRelation} " +
                     $"order_collapsible={MultiplayerInterleaveOrderPolicy.CanCollapseOrder(orderRelation).ToString().ToLowerInvariant()} " +
