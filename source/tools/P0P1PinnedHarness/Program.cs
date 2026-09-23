@@ -184,8 +184,8 @@ internal static class Program
                 : [],
             [],
             GameMode.Standard,
-            ascension: 10,
-            seed: "GENERATED-COMBAT-001");
+            10,
+            "GENERATED-COMBAT-001");
         RunManager.Instance.SetUpNewSingleplayer(runState, shouldSave: false);
         await RunManager.Instance.FinalizeStartingRelics();
         RunManager.Instance.Launch();
