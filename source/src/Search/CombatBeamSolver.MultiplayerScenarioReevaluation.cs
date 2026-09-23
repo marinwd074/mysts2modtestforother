@@ -12,8 +12,8 @@ internal sealed partial class CombatBeamSolver
         int decisionCount = Math.Min(
             decisionRepresentatives.Count,
             MultiplayerScenarioReevaluationPolicy.MaximumCurrentDecisions);
-        int cellBudget =
-            MultiplayerScenarioReevaluationPolicy.ExpandedBranchBudgetPerScenario(
+        int decisionBudget =
+            MultiplayerScenarioReevaluationPolicy.ExpandedBranchBudgetPerDecision(
                 _scenarioReevaluationReservedBranches,
                 decisionCount);
 
@@ -22,26 +22,9 @@ internal sealed partial class CombatBeamSolver
         for (int decisionIndex = 0; decisionIndex < decisionCount; decisionIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            SearchNode representative = decisionRepresentatives[decisionIndex];
-            string decisionKey =
-                MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(
-                    representative,
-                    _startTurnNumber);
-            List<MultiplayerScenarioEvaluation> cells =
-                new(MultiplayerScenarioReevaluationPolicy.MaximumScenariosPerDecision);
-
-            foreach (MultiplayerScenarioSpec spec in
-                     MultiplayerScenarioReevaluationPolicy.ScenarioSpecs)
-            {
-                cells.Add(EvaluateScenarioCell(
-                    representative,
-                    spec,
-                    cellBudget));
-            }
-
-            decisions.Add(new MultiplayerScenarioDecisionEvaluation(
-                decisionKey,
-                cells));
+            decisions.Add(EvaluateScenarioDecision(
+                decisionRepresentatives[decisionIndex],
+                decisionBudget));
         }
 
         policy.Diagnostics.Info(
@@ -51,24 +34,34 @@ internal sealed partial class CombatBeamSolver
             $"reserved={_scenarioReevaluationReservedBranches} " +
             $"decisions={decisionCount} " +
             $"scenarios_per_decision={MultiplayerScenarioReevaluationPolicy.MaximumScenariosPerDecision} " +
-            $"cell_budget={cellBudget} " +
+            $"decision_budget={decisionBudget} " +
             $"replay_expanded={decisions.Sum(decision => decision.ExpandedBranches)}");
         return decisions;
     }
 
-    private MultiplayerScenarioEvaluation EvaluateScenarioCell(
+    private MultiplayerScenarioDecisionEvaluation EvaluateScenarioDecision(
         SearchNode representative,
-        MultiplayerScenarioSpec spec,
         int maxExpandedBranches)
     {
+        string decisionKey =
+            MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(
+                representative,
+                _startTurnNumber);
+
+        MultiplayerScenarioDecisionEvaluation UnknownDecision(int sharedWork = 0)
+            => new(
+                decisionKey,
+                MultiplayerScenarioReevaluationPolicy.ScenarioSpecs
+                    .Select(spec => new MultiplayerScenarioEvaluation(
+                        spec,
+                        MultiplayerScenarioEvaluationStatus.Unknown,
+                        Outcome: null,
+                        ExpandedBranches: 0))
+                    .ToArray(),
+                SharedExpandedBranches: sharedWork);
+
         if (_includeTurnSetup || maxExpandedBranches <= 0)
-        {
-            return new MultiplayerScenarioEvaluation(
-                spec,
-                MultiplayerScenarioEvaluationStatus.Unknown,
-                Outcome: null,
-                ExpandedBranches: 0);
-        }
+            return UnknownDecision();
 
         List<PlanAction> prefix = [];
         PlanAction? endTurn = null;
@@ -91,6 +84,10 @@ internal sealed partial class CombatBeamSolver
             }
         }
 
+        int sharedWork = prefix.Count;
+        if (sharedWork > maxExpandedBranches)
+            return UnknownDecision();
+
         SimulationSnapshot preEndSnapshot = Replay(
             prefix,
             parentSnapshot: null,
@@ -98,123 +95,158 @@ internal sealed partial class CombatBeamSolver
             priorActionCount: 0,
             countTransition: false,
             allowExecutionCapture: false);
-        _run.TransitionCount += prefix.Count;
+        _run.Expanded += sharedWork;
+        _run.TransitionCount += sharedWork;
         try
         {
             if (preEndSnapshot.AllEnemiesDead || preEndSnapshot.PlayerDead)
             {
-                return new MultiplayerScenarioEvaluation(
-                    spec,
-                    MultiplayerScenarioEvaluationStatus.Terminal,
-                    BuildScenarioOutcome(
-                        preEndSnapshot,
-                        prefix.Count,
-                        spec.Kind),
-                    ExpandedBranches: 0);
+                return new MultiplayerScenarioDecisionEvaluation(
+                    decisionKey,
+                    MultiplayerScenarioReevaluationPolicy.ScenarioSpecs
+                        .Select(spec => new MultiplayerScenarioEvaluation(
+                            spec,
+                            MultiplayerScenarioEvaluationStatus.Terminal,
+                            BuildScenarioOutcome(
+                                preEndSnapshot,
+                                prefix.Count,
+                                spec.Kind),
+                            ExpandedBranches: 0))
+                        .ToArray(),
+                    SharedExpandedBranches: sharedWork);
             }
 
             if (endTurn == null
                 || unsupportedImplicitTurnEnd
                 || preEndSnapshot.BoundaryReason != SearchBoundaryReason.None)
             {
-                return new MultiplayerScenarioEvaluation(
-                    spec,
-                    MultiplayerScenarioEvaluationStatus.Unknown,
-                    Outcome: null,
-                    ExpandedBranches: 0);
+                return UnknownDecision(sharedWork);
             }
 
+            int scenarioCount =
+                MultiplayerScenarioReevaluationPolicy.MaximumScenariosPerDecision;
+            int remainingBudget = maxExpandedBranches - sharedWork;
+            if (remainingBudget <= scenarioCount)
+                return UnknownDecision(sharedWork);
+
+            // One bounded teammate search produces all four fixed ScenarioSpec representatives.
+            // Do not rerun the same Shadow tree once per stress lane.
+            int plannerBudget = remainingBudget - scenarioCount;
             ShadowTeammatePlanResult forecast =
                 ShadowTeammatePlanner.BuildTeamTopKRoutes(
-                    (Engine.InCombat.Simulation.CombatPredictionSimulator)
+                    (CombatSolver.Engine.InCombat.Simulation.CombatPredictionSimulator)
                         preEndSnapshot.Simulator,
                     _player,
                     preEndSnapshot.ProcessedEnemyDeaths,
                     beamWidth: ShadowTeammateScenarioPolicy.DefaultScenarioCount,
                     maxActionsPerPlayer: ShadowTeammatePlanner.DefaultMaxActions,
-                    maxExpandedBranches: maxExpandedBranches);
+                    maxExpandedBranches: plannerBudget);
             _run.Expanded += forecast.ExpandedBranches;
             _run.TransitionCount += forecast.ExpandedBranches;
+            sharedWork += forecast.ExpandedBranches;
 
             if (forecast.HitExpansionBudgetLimit
                 || forecast.PendingChoiceBranches > 0
                 || forecast.HitActionDepthLimit)
             {
-                return new MultiplayerScenarioEvaluation(
-                    spec,
-                    MultiplayerScenarioEvaluationStatus.Unknown,
-                    Outcome: null,
-                    forecast.ExpandedBranches);
+                return UnknownDecision(sharedWork);
             }
 
-            ShadowTeammateRoute? route = forecast.Routes.FirstOrDefault(candidate =>
-                candidate.ScenarioKind == spec.Kind
-                && candidate.ScenarioSetComplete);
-            if (route == null)
+            Dictionary<ShadowTeammateScenarioKind, ShadowTeammateRoute> routes = [];
+            foreach (ShadowTeammateRoute route in forecast.Routes)
             {
-                return new MultiplayerScenarioEvaluation(
-                    spec,
-                    MultiplayerScenarioEvaluationStatus.Unknown,
-                    Outcome: null,
-                    forecast.ExpandedBranches);
-            }
-
-            ShadowForecastPlan replayForecast = new(
-                route.Actions.ToArray(),
-                route.BehaviorLogProbability,
-                route.BehaviorDecisionCount,
-                route.ScenarioProbabilityMass,
-                route.ScenarioConditionalProbability,
-                route.RetainedScenarioProbabilityMass,
-                route.ScenarioProbabilityTrusted,
-                route.ScenarioFingerprint,
-                route.ScenarioKind,
-                route.ScenarioSetComplete);
-            PlanAction replayEndTurn = endTurn with
-            {
-                // U3 fixes only the current decision. Future turn-start choices are observations
-                // after the scenario divergence boundary and must not leak into reevaluation.
-                TurnStartChoices = null,
-                ShadowForecast = replayForecast,
-            };
-
-            SimulationSnapshot outcomeSnapshot = Replay(
-                [replayEndTurn],
-                preEndSnapshot,
-                startingTurn: _startTurnNumber,
-                priorActionCount: prefix.Count,
-                countTransition: false,
-                allowExecutionCapture: false);
-            _run.TransitionCount++;
-            try
-            {
-                bool terminal =
-                    outcomeSnapshot.AllEnemiesDead || outcomeSnapshot.PlayerDead;
-                if (!terminal
-                    && outcomeSnapshot.BoundaryReason != SearchBoundaryReason.None)
+                if (!route.ScenarioSetComplete
+                    || !MultiplayerScenarioReevaluationPolicy.IsRequiredScenario(
+                        route.ScenarioKind)
+                    || routes.ContainsKey(route.ScenarioKind))
                 {
-                    return new MultiplayerScenarioEvaluation(
+                    continue;
+                }
+                routes.Add(route.ScenarioKind, route);
+            }
+
+            List<MultiplayerScenarioEvaluation> evaluations =
+                new(scenarioCount);
+            int scenarioReplayWork = 0;
+            foreach (MultiplayerScenarioSpec spec in
+                     MultiplayerScenarioReevaluationPolicy.ScenarioSpecs)
+            {
+                if (!routes.TryGetValue(spec.Kind, out ShadowTeammateRoute? route)
+                    || sharedWork + scenarioReplayWork >= maxExpandedBranches)
+                {
+                    evaluations.Add(new MultiplayerScenarioEvaluation(
                         spec,
                         MultiplayerScenarioEvaluationStatus.Unknown,
                         Outcome: null,
-                        forecast.ExpandedBranches);
+                        ExpandedBranches: 0));
+                    continue;
                 }
 
-                return new MultiplayerScenarioEvaluation(
-                    spec,
-                    terminal
-                        ? MultiplayerScenarioEvaluationStatus.Terminal
-                        : MultiplayerScenarioEvaluationStatus.Completed,
-                    BuildScenarioOutcome(
-                        outcomeSnapshot,
-                        prefix.Count + 1,
-                        spec.Kind),
-                    forecast.ExpandedBranches);
+                ShadowForecastPlan replayForecast = new(
+                    route.Actions.ToArray(),
+                    route.BehaviorLogProbability,
+                    route.BehaviorDecisionCount,
+                    route.ScenarioProbabilityMass,
+                    route.ScenarioConditionalProbability,
+                    route.RetainedScenarioProbabilityMass,
+                    route.ScenarioProbabilityTrusted,
+                    route.ScenarioFingerprint,
+                    route.ScenarioKind,
+                    route.ScenarioSetComplete);
+                PlanAction replayEndTurn = endTurn with
+                {
+                    // Only the root-turn local decision is fixed. TurnStartChoices and the
+                    // original Shadow metadata are post-decision observations and must not leak.
+                    TurnStartChoices = null,
+                    ShadowForecast = replayForecast,
+                };
+
+                SimulationSnapshot outcomeSnapshot = Replay(
+                    [replayEndTurn],
+                    preEndSnapshot,
+                    startingTurn: _startTurnNumber,
+                    priorActionCount: prefix.Count,
+                    countTransition: false,
+                    allowExecutionCapture: false);
+                _run.Expanded++;
+                _run.TransitionCount++;
+                scenarioReplayWork++;
+                try
+                {
+                    bool terminal =
+                        outcomeSnapshot.AllEnemiesDead || outcomeSnapshot.PlayerDead;
+                    if (!terminal
+                        && outcomeSnapshot.BoundaryReason != SearchBoundaryReason.None)
+                    {
+                        evaluations.Add(new MultiplayerScenarioEvaluation(
+                            spec,
+                            MultiplayerScenarioEvaluationStatus.Unknown,
+                            Outcome: null,
+                            ExpandedBranches: 1));
+                        continue;
+                    }
+
+                    evaluations.Add(new MultiplayerScenarioEvaluation(
+                        spec,
+                        terminal
+                            ? MultiplayerScenarioEvaluationStatus.Terminal
+                            : MultiplayerScenarioEvaluationStatus.Completed,
+                        BuildScenarioOutcome(
+                            outcomeSnapshot,
+                            prefix.Count + 1,
+                            spec.Kind),
+                        ExpandedBranches: 1));
+                }
+                finally
+                {
+                    outcomeSnapshot.ReleaseSimulator();
+                }
             }
-            finally
-            {
-                outcomeSnapshot.ReleaseSimulator();
-            }
+
+            return new MultiplayerScenarioDecisionEvaluation(
+                decisionKey,
+                evaluations,
+                SharedExpandedBranches: sharedWork);
         }
         finally
         {
