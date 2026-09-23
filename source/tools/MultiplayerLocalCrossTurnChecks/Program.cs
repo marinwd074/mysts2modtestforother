@@ -435,6 +435,26 @@ Check(
         .Count() >= 3,
     "P3 default four-scenario portfolio retains distinct modeled action orders inside the production beam, not only in a wider test-only beam.");
 
+ShadowTeammateScenarioObservation[] sharedBestOrderObservations =
+[
+    new(2, false, true, 10, 80, 0.90d, 3, 2, -0.1d, "A:Vulnerable>B:Attack"),
+    new(2, false, true, 12, 75, 0.85d, 2, 1, -0.2d, "B:Attack>A:Vulnerable"),
+    new(1, false, true, 30, 70, 0.80d, 4, 2, -0.3d, "A:Power"),
+    new(0, false, true, 40, 60, 0.70d, 5, 3, -0.4d, ""),
+];
+IReadOnlyList<ShadowTeammateScenarioChoice> sharedBestOrderChoices =
+    ShadowTeammateScenarioPolicy.SelectProtected(
+        sharedBestOrderObservations,
+        limit: 4);
+Check(
+    sharedBestOrderChoices.Count == 4
+        && sharedBestOrderChoices
+            .Where(choice => choice.Kind != ShadowTeammateScenarioKind.NoAction)
+            .Select(choice => sharedBestOrderObservations[choice.Index].ActionOrderKey)
+            .Distinct(StringComparer.Ordinal)
+            .Count() == 3,
+    "P3 reuses the four production slots to preserve distinct key action orders across stress lanes whenever such order variants exist.");
+
 Console.WriteLine($"PASS: {checks} multiplayer local-cross-turn contract checks");
 
 

@@ -15,7 +15,7 @@ Shadow Team Top-K 在 exact future-state merge 后，固定优先保护四种非
 
 这四类是 stress scenarios，不是经过实测校准的真实概率。通用 `BehaviorLogMass` 只用于相同情景质量下的稳定 tie-break，以及未来做经验校准；**当前推荐不做概率加权**。
 
-如果 Shadow beam 还有剩余槽位，优先补不同 `ActionOrderKey`。Team Shadow 搜索本身按单 action 交错扩展，因此 A→B、B→A、易伤→攻击、攻击→易伤等顺序都是真正按该顺序推进 simulator/RNG；只有完整 future fingerprint 相同才允许 exact merge。
+生产默认 Shadow beam=4，四个压力情景正好占满。为避免因此丢掉顺序敏感性，Aggressive / Defensive / Conserve 在各自目标内会优先选择尚未使用的 `ActionOrderKey`；只有没有新的合法顺序时才复用已有顺序。若显式配置了更宽的 Shadow beam，剩余槽位继续优先补不同 `ActionOrderKey`。Team Shadow 搜索本身按单 action 交错扩展，因此 A→B、B→A、易伤→攻击、攻击→易伤等顺序都是真正按该顺序推进 simulator/RNG；只有完整 future fingerprint 相同才允许 exact merge。
 
 ## 少量候选复评
 

@@ -40,6 +40,7 @@ internal static class ShadowTeammateScenarioPolicy
 
         List<ShadowTeammateScenarioChoice> selected = new(Math.Min(limit, 4));
         HashSet<int> selectedIndices = [];
+        HashSet<string> selectedActionOrders = new(StringComparer.Ordinal);
 
         AddBest(
             ShadowTeammateScenarioKind.Aggressive,
@@ -109,17 +110,44 @@ internal static class ShadowTeammateScenarioPolicy
                 return;
 
             int best = -1;
+            bool preferFreshActionOrder = false;
+            if (kind != ShadowTeammateScenarioKind.NoAction)
+            {
+                for (int index = 0; index < observations.Count; index++)
+                {
+                    ShadowTeammateScenarioObservation observation = observations[index];
+                    if (!selectedIndices.Contains(index)
+                        && eligible(observation)
+                        && !string.IsNullOrEmpty(observation.ActionOrderKey)
+                        && !selectedActionOrders.Contains(observation.ActionOrderKey))
+                    {
+                        preferFreshActionOrder = true;
+                        break;
+                    }
+                }
+            }
+
             for (int index = 0; index < observations.Count; index++)
             {
-                if (selectedIndices.Contains(index) || !eligible(observations[index]))
+                ShadowTeammateScenarioObservation observation = observations[index];
+                if (selectedIndices.Contains(index) || !eligible(observation))
                     continue;
-                if (best < 0 || compare(observations[index], observations[best]) < 0)
+                if (preferFreshActionOrder
+                    && (string.IsNullOrEmpty(observation.ActionOrderKey)
+                        || selectedActionOrders.Contains(observation.ActionOrderKey)))
+                {
+                    continue;
+                }
+
+                if (best < 0 || compare(observation, observations[best]) < 0)
                     best = index;
             }
             if (best < 0)
                 return;
 
             selectedIndices.Add(best);
+            if (!string.IsNullOrEmpty(observations[best].ActionOrderKey))
+                selectedActionOrders.Add(observations[best].ActionOrderKey);
             selected.Add(new ShadowTeammateScenarioChoice(best, kind));
         }
     }
