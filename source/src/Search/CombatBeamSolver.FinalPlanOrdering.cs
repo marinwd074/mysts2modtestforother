@@ -435,7 +435,7 @@ internal sealed partial class CombatBeamSolver
                     $"all_players_alive={selected[0].Snapshot.AllPlayersAlive.ToString().ToLowerInvariant()} " +
                     $"adaptive_tempo={useAdaptiveLethalTempo.ToString().ToLowerInvariant()} " +
                     $"tempo_urgency={MultiplayerCombatObjectiveMath.ComputeLethalUrgency(multiplayerEnemyDurabilityRatio):0.0000} " +
-                    $"team_safety_factor={MultiplayerCombatObjectiveMath.ComputeTeamSafetyFactor(selected[0].Snapshot.WorstPlayerLossRatio):0.0000} " +
+                    $"team_risk_factor={MultiplayerCombatObjectiveMath.ComputeTeamRiskFactor(selected[0].Snapshot.WorstPlayerLossRatio):0.0000} " +
                     $"loss_ratio_per_turn={MultiplayerCombatObjectiveMath.LossRatioPerTurn(multiplayerEnemyDurabilityRatio, selected[0].Snapshot.WorstPlayerLossRatio):0.0000} " +
                     $"max_loss_ratio_per_turn={MultiplayerCombatObjectiveMath.MaximumExtraLossRatioPerTurn:0.0000}");
             }
