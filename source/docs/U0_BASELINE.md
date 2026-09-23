@@ -116,20 +116,20 @@ U2 才负责在相同抽象 root、动作集、目标和固定预算下断言首
 - 空队友事件和固定队友动作序列已有可复用离线夹具。
 - 固定脚本直接走生产 Shadow replay，不存在第二套卡牌效果实现。
 - `source/tools/run-contract-tests.ps1` 已接入 `U0BaselineChecks`。
+- 新增 `source/tools/U0U1PinnedHarness`，直接使用 pinned STS2 `0.107.1` DLL、生产 `CombatBeamSolver`、`SearchPathObserver` 与生产 Shadow replay。GitHub Actions run `35857680737` 在 commit `3ee2a7a54b875a45c145f6fe8a187d5b34fbaad6` 已 PASS：固定 IRONCLAD / FUZZY_WURM_CRAWLER_WEAK / U0U1PINNED1 root 上首动作 BASH，220 expanded / 579 transitions；观察到 Root / Generated / Expanded / ActionAdmitted，输出 3 条 FINAL_CANDIDATE + 1 条 FINAL_SELECTION；空队友事件生产 replay 前后 modeled state 指纹保持一致（`BC42282DEF196DB7:1D1E115B9588656D`）。
+- 同一提交的 compatibility run `35857680764` SUCCESS；完整 pinned workflow 中 U2、P0 baseline、P0/P1 harness 也继续 SUCCESS。因此这次 U0 pinned 接线没有破坏既有回归链。
 
 ### 仍为 UNVERIFIED
 
 本轮没有把以下项目写成 PASS：
 
-- Release build 0 error；
-- SP 固定 workload 的新 U0 实际输出；
-- Host/Client 的 Joint Reuse / Joint Mismatch；
+- 真实 Host/Client 的 U0 四层端到端关联（尤其实际 native execution 层）；
 - 重锤+烙印合法 Choice 链；
 - 连续祭品后抽出并继续使用后续牌；
 - 队友插入动作后旧计划失效且不重复提交；
 - U0 四层日志在同一真实问题包中的端到端关联。
 
-这些需要本地游戏 DLL / 可见多人运行；属于 U0 之后的最小运行补测，不能由字符串门禁替代。
+Pinned DLL 下的 production Search / replay 已有运行证据；剩余项目依赖真实 native 提交、Choice/ActionQueue 与 Host/Client timing，不能由离线 pinned harness 冒充。
 
 ## 8. U0 结论与停止条件
 

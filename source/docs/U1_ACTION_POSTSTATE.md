@@ -186,10 +186,12 @@ U0 时的 post-action gate 主要依赖：
 - ActionQueueIdle 已从实际 executor 读取；
 - legacy gate 已降为旁路诊断；
 - 纯 policy 行为合同和 U1 结构门禁已加入总 contract suite。
+- 新增 `source/tools/U0U1PinnedHarness` 的 U1 production replay + fault-injection 层。GitHub Actions run `35857680737` 在 commit `3ee2a7a54b875a45c145f6fe8a187d5b34fbaad6` 已 PASS：同一真实 0.107.1 root 的首动作 BASH 连续两次走 `ReplayDiagnosticPrefix([action])` 得到相同 continuation / remote fingerprint；legacy heuristics 故意全部冲突时 semantic match 仍为 `SafeToContinue`；remote semantic mismatch → `RemoteOrUnknownChange`；continuation mismatch → `ActionMismatch`；pre-action WorldVersion 插入被 `world_version_not_accepted` 拒绝；abort 后迟到重试被 `session_state_Aborted` 拒绝。
+- 同 run 的主项目 Release、U0/U1 structural contracts、U2、P0/P1 全部 SUCCESS；compatibility run `35857680764` 也 SUCCESS。
 
 ### 仍为 UNVERIFIED
 
-以下不能由 CI 的纯合同/字符串门禁替代：
+以下不能由当前 pinned production replay + fault injection 替代：
 
 - 真实多人“重锤 + Choice/烙印 + 后续牌”；
 - 真实多人连续祭品抽牌链；
