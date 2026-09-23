@@ -64,11 +64,13 @@ internal static class MultiplayerScenarioReevaluationPolicy
     // U3 final reevaluation never receives an unbounded hidden work allowance. The reserve is
     // carved from the caller's existing node budget in a later integration step; these helpers
     // only define the deterministic split and are intentionally independent of candidate order.
-    internal const int MaximumExpandedBranchesPerDecision = 64;
+    internal const int MaximumExpandedBranchesPerScenario = 32;
+    internal const int MaximumExpandedBranchesPerDecision =
+        MaximumScenariosPerDecision * MaximumExpandedBranchesPerScenario;
     internal const int MaximumReservedExpandedBranches =
         MaximumCurrentDecisions * MaximumExpandedBranchesPerDecision;
     private const int MinimumTotalBudgetForReevaluation = 64;
-    private const int ReevaluationBudgetDivisor = 16;
+    private const int ReevaluationBudgetDivisor = 8;
 
     internal static int ReserveExpandedBranchBudget(
         int totalExpandedNodeBudget,
@@ -84,7 +86,7 @@ internal static class MultiplayerScenarioReevaluationPolicy
         return Math.Min(MaximumReservedExpandedBranches, proportional);
     }
 
-    internal static int ExpandedBranchBudgetPerDecision(
+    internal static int ExpandedBranchBudgetPerScenario(
         int reservedExpandedBranches,
         int comparedDecisionCount)
     {
@@ -95,9 +97,10 @@ internal static class MultiplayerScenarioReevaluationPolicy
             throw new ArgumentOutOfRangeException(nameof(comparedDecisionCount));
         }
 
+        int cells = checked(comparedDecisionCount * MaximumScenariosPerDecision);
         return Math.Min(
-            MaximumExpandedBranchesPerDecision,
-            reservedExpandedBranches / comparedDecisionCount);
+            MaximumExpandedBranchesPerScenario,
+            reservedExpandedBranches / cells);
     }
 
     internal static bool IsRequiredScenario(ShadowTeammateScenarioKind kind)
