@@ -38,27 +38,27 @@ static/contract evidence, not a substitute for that differential.
 
 | Card | 0.107.1 route-relevant behavior | Solver/source status | Local cross-turn boundary / remaining evidence |
 |---|---|---|---|
-| 希望 beacon（Beacon of Hope） | 出牌者获得格挡，存活队友获得修正后格挡的一半；防递归 | **source-confirmed / 预测支持 / 手动出牌** | 仍依赖分数值格挡与递归边界合同 |
+| 希望 beacon（Beacon of Hope） | 出牌者获得格挡，存活队友获得修正后格挡的一半；防递归 | **source-confirmed / 镜像保留 / 多人搜索禁用主动出牌** | 仍依赖分数值格挡与递归边界合同 |
 | Believe in You | selected ally gains 2/3 Energy | **boundary / fail closed** | teammate Energy is now root-captured; selected-ally Energy mutation and Safe Execute targeting still need focused source/runtime promotion |
-| 协调（Coordinate） | 选定队友获得 5/8 点临时力量 | **source-confirmed / 预测支持 / 手动出牌** | 复用临时力量恢复语义；动作完成后重新搜索 |
+| 协调（Coordinate） | 选定队友获得 5/8 点临时力量 | **source-confirmed / 镜像保留 / 多人搜索禁用主动出牌** | 复用临时力量恢复语义；动作完成后重新搜索 |
 | Demonic Shield | lose 1 HP first, then selected ally gains Block equal to owner's resulting current Block | **source-confirmed** | differential with HP-loss hooks and Block modifiers |
 | Energy Surge | every living player ally gains 2/3 Energy | **boundary / fail closed** | teammate Energy is root-captured; all-player Energy fan-out still needs exact 0.107.1 differential and deployment-contract promotion |
-| 夹击（Flanking） | 施加实例减益；非出牌者造成的攻击伤害在目标侧回合结束前为 2 倍 | **source-confirmed / 预测支持 / 手动出牌** | 需保持出牌者排除、叠层和到期语义 |
-| 围攻（Gang Up） | 基础伤害加上本回合同阵营、非出牌者对目标造成的强化攻击次数加成 | **checked match / 预测支持 / 手动出牌** | 分支历史分别统计多段攻击与 Osty 出牌者 |
+| 夹击（Flanking） | 施加实例减益；非出牌者造成的攻击伤害在目标侧回合结束前为 2 倍 | **source-confirmed / 镜像保留 / 多人搜索禁用主动出牌** | 需保持出牌者排除、叠层和到期语义 |
+| 围攻（Gang Up） | 基础伤害加上本回合同阵营、非出牌者对目标造成的强化攻击次数加成 | **checked match / 镜像保留 / 多人搜索禁用主动出牌** | 分支历史分别统计多段攻击与 Osty 出牌者 |
 | Glimpse Beyond | creates Soul cards for each living player and inserts them into each owner's Draw pile | **boundary / fail closed** | teammate Draw piles are root-captured, but multi-owner generated-card insertion/ownership has not been promoted or runtime-differentialed |
 | Hammer Time | when owner Forges, every other living player Forges same amount; HammerTime-sourced Forge does not recurse | **source-confirmed** | teammate card state is now root-captured, so source prediction can inspect it; focused multi-player Forge differential and execution staging are still required |
 | Huddle Up | every living player ally draws 2/3 cards | **boundary / fail closed** | teammate Draw/Hand is root-captured; all-player draw ordering, hooks, and Safe Execute world-delta attribution still need promotion/evidence |
 | Ignition | selected ally channels Plasma | **boundary / fail closed** | teammate Orb queues are root-captured; selected-ally channel/evoke semantics and target execution still need focused validation |
 | Intercept | owner gains Block; Covered zeros covered ally Powered Attack damage and Intercept multiplies owner's corresponding damage by covered-count+1 | **source-confirmed** | reciprocal-Intercept and death/expiry native differential |
-| 击倒（Knockdown） | 其他己方强化攻击获得 2/3 倍实例倍率；减益方回合结束时消耗 | **source-confirmed / 预测支持 / 手动出牌** | 需保持多实例、出牌者排除与 Osty 出牌者身份 |
+| 击倒（Knockdown） | 其他己方强化攻击获得 2/3 倍实例倍率；减益方回合结束时消耗 | **source-confirmed / 镜像保留 / 多人搜索禁用主动出牌** | 需保持多实例、出牌者排除与 Osty 出牌者身份 |
 | Largesse | select from target ally's unlocked Colorless pool; generated card is owned by target and enters target Hand | **isolation-only** | target generation pool and Hand can be detached into the root; ownership-sensitive generation/choice/write semantics still require focused modeling and runtime evidence |
 | Legion of Bone | summon/heal Osty for each living player | **boundary / fail closed** | readable player/pet state can be captured, but all-player Osty summon/heal lifecycle and death interactions still need explicit source/runtime validation |
-| 提振（Lift） | 选定队友获得 11/16 点格挡 | **checked match / 预测支持 / 手动出牌** | AnyAlly 格挡配方匹配原生命令；动作完成后重新搜索 |
-| 模仿（Mimic） | 读取选定队友当前格挡，出牌者获得等量格挡 | **source-confirmed / 预测支持 / 手动出牌** | 目标格挡是公开状态；动作完成后重新搜索 |
-| 集结（Rally） | 每名存活玩家队友获得 12/17 点格挡 | **checked match / 预测支持 / 手动出牌** | AllAllies 按分支玩家存活状态处理；动作完成后重新搜索 |
-| 鬼祟（Sneaky） | 施加 1/2 层鬼祟；其他生物出攻击牌时，出牌者获得等量无强化格挡 | **source-confirmed / 预测支持 / 手动出牌** | 不生成未来队友动作，只处理已观察到的动作 |
-| 组队（Tag Team） | 先攻击，再施加实例减益；其他玩家的合格攻击会重放并在修改出牌次数后消耗 | **checked match / Safe Execute 关闭** | 现有 TagTeamPower 镜像支持单敌人与全敌人目标；队友后续重放仍不纳入安全执行 |
-| 坦克（Tank） | 出牌者获得坦克并承受 2 倍强化攻击伤害；存活队友获得 0.5 倍防护，出牌者死亡时清理 | **source-confirmed / Safe Execute 关闭** | 保持 0.107.1 的 2 倍/0.5 倍语义，不采用 v0.108 改写 |
+| 提振（Lift） | 选定队友获得 11/16 点格挡 | **checked match / 镜像保留 / 多人搜索禁用主动出牌** | AnyAlly 格挡配方匹配原生命令；动作完成后重新搜索 |
+| 模仿（Mimic） | 读取选定队友当前格挡，出牌者获得等量格挡 | **source-confirmed / 镜像保留 / 多人搜索禁用主动出牌** | 目标格挡是公开状态；动作完成后重新搜索 |
+| 集结（Rally） | 每名存活玩家队友获得 12/17 点格挡 | **checked match / 镜像保留 / 多人搜索禁用主动出牌** | AllAllies 按分支玩家存活状态处理；动作完成后重新搜索 |
+| 鬼祟（Sneaky） | 施加 1/2 层鬼祟；其他生物出攻击牌时，出牌者获得等量无强化格挡 | **source-confirmed / 镜像保留 / 多人搜索禁用主动出牌** | 不生成未来队友动作，只处理已观察到的动作 |
+| 组队（Tag Team） | 先攻击，再施加实例减益；其他玩家的合格攻击会重放并在修改出牌次数后消耗 | **checked match / 镜像保留 / 多人搜索禁用主动出牌** | 现有 TagTeamPower 镜像支持单敌人与全敌人目标；队友后续重放仍不纳入安全执行 |
+| 坦克（Tank） | 出牌者获得坦克并承受 2 倍强化攻击伤害；存活队友获得 0.5 倍防护，出牌者死亡时清理 | **source-confirmed / 镜像保留 / 多人搜索禁用主动出牌** | 保持 0.107.1 的 2 倍/0.5 倍语义，不采用 v0.108 改写 |
 
 ## Online patch-history cross-check
 
@@ -109,62 +109,31 @@ Important version traps confirmed against public patch history:
 This cross-check is intentionally descriptive. Numeric/effect truth for the
 target remains the pinned v0.107.1 model/DLL, not the live wiki card page.
 
-## Safe Execute staging
+## Current MultiplayerOnly policy
 
-> 当前执行策略：所有 `MultiplayerOnly` 卡只参与搜索/推荐，不由 Safe Execute 自动出牌。遇到多人牌时由玩家手动完成原生目标选择与出牌，随后基于新状态 Fresh Search。
+The coverage matrix above remains a **source-semantics audit** for the pinned
+0.107.1 models. It is no longer an execution whitelist.
 
-Safe Execute no longer admits MultiplayerOnly cards. Their prediction support
-is still used to rank and display routes, but the runtime stops before the first
-MultiplayerOnly action so the player performs the native play and target selection.
+> 当前多人策略：`MultiplayerOnly` 卡保留在 Hand/Draw/Discard/Exhaust/Play 中，
+> 继续占手牌位并保持真实牌堆顺序，但不生成本地搜索动作、不进入推荐路线，
+> 也不作为 Shadow teammate 的主动出牌候选。
 
-### Stage A — local/public execution candidates
+The active search/runtime contract is:
 
-These cards are the first candidates for a future source/contract-only whitelist
-because playing them does not require a teammate target or teammate-private state:
+- local Beam expansion, parallel expansion, opening-power candidates, replay,
+  fixed-prefix/reuse admission, and playable-state scoring all exclude
+  `MultiplayerOnly` actions under multiplayer route policies;
+- Shadow teammate forecasting also excludes `MultiplayerOnly` active plays;
+- the cards remain in simulated piles so draw order, hand clogging, discard /
+  exhaust lifecycle, and future “已在手牌 / 再抽 N 张” UI remain observable;
+- Safe Execute has no MultiplayerOnly whitelist or cross-player auto-execution
+  boundary; runtime classification still rejects one fail-closed if such an
+  action reaches deployment unexpectedly;
+- `SinglePlayerFullRoute` keeps the original card-search behavior.
 
-- `Beacon of Hope` — 已开放
-- `Flanking` — 已开放
-- `Gang Up` — 已开放
-- `Knockdown` — 已开放
-- `Sneaky` — 已开放
-- `Tag Team` — 保持关闭；后续队友攻击重放不属于本批安全执行
-
-The five opened cards use the existing deterministic card/power mirrors and
-still require the normal live revalidation boundary. Runtime Host/Client
-evidence is only required if source behavior and local simulation diverge.
-
-### Stage B — public teammate target or intentional remote-public mutation
-
-These cards use the explicit cross-player public boundary: execute the native
-action once, end the current continuation, and require Fresh Search:
-
-- `Coordinate`
-- `Lift`
-- `Mimic`
-- `Rally`
-
-The remaining cards in this category stay deferred:
-
-- `Demonic Shield`
-- `Hammer Time`
-- `Intercept`
-- `Tank`
-
-### Stage C — keep fail closed pending cross-player semantic promotion
-
-These depend on teammate resources, piles, Orbs, generated-card ownership, or
-pet lifecycle. Those values may now be readable in the detached root, but
-readability alone is not enough to enable deployment: exact mutation semantics,
-choice/RNG ordering, world-delta attribution, and Host/Client evidence still
-have to be established.
-
-- `Believe in You`
-- `Energy Surge`
-- `Glimpse Beyond`
-- `Huddle Up`
-- `Ignition`
-- `Largesse`
-- `Legion of Bone`
+There is therefore no current Stage A / Stage B promotion list. The old
+cross-player execution staging is historical and should be recovered from Git
+history only if needed.
 
 ### Non-exclusive multiplayer semantics already cross-checked
 
@@ -177,26 +146,24 @@ have to be established.
 - `Stratagem`: remains implemented and is legal in the 0.107.1 multiplayer
   colorless pool.
 
-## Readable-root / local-action policy
+## Readable-root / Shadow-forecast policy
 
-The multiplayer route predicts only the local player's decisions, but the root
-may detach any teammate combat state already materialized in the local game
-process. That currently includes teammate Hand/Draw/Discard/Exhaust, Energy,
-Stars, Orb queue, potions, relics, Powers, generation pools, creature state and
-other captured hook state. `RootActionPlayers` remains local-only.
+The multiplayer root may detach teammate combat state already materialized in
+the local process, including ordered card piles, Energy/Stars, Orbs, potions,
+relics, Powers, generation pools, creature state, and captured hook state.
+`RootActionPlayers` remains local-only.
 
-Readable teammate state is a **frozen root input**, not a teammate-behavior
-model. Search may evaluate deterministic effects that consume or mutate that
-detached state only where the exact 0.107.1 semantics have been implemented.
-It must never invent a teammate card choice, future action, or hidden network
-read. When the real multiplayer world changes, the teammate readable-state
-fingerprint invalidates continuation reuse and forces a fresh capture/search.
+Unlike the old local-only forecast policy, current Joint prediction **does**
+model teammate future actions through `ShadowTeammatePlanner` inside detached
+simulator forks. Those actions are forecast metadata only: they never become
+local `PlanAction` deployment permissions and never control another player.
+`MultiplayerOnly` cards remain excluded from those Shadow action candidates.
 
-Therefore cards such as Believe in You, Energy Surge, Huddle Up, Ignition,
-Glimpse Beyond, Largesse, and Legion of Bone remain staged fail-closed because
-their cross-player mutation / choice / RNG / lifecycle contracts are not yet
-fully promoted and runtime-validated — **not** because the root is forbidden
-from reading teammate state.
+A selected Joint EndTurn worldline stores its exact `ShadowForecastPlan` for
+prediction replay, then advances enemy/player sides using that detached world.
+Readable teammate fingerprints and WorldVersion are checked against the real
+multiplayer state before continuation reuse. Any real teammate/world divergence
+invalidates the old future route and requires Fresh Search.
 
 ## Version boundary
 
