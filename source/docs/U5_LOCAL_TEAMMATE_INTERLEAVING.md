@@ -66,6 +66,26 @@ GitHub Actions run `35890994702`：**SUCCESS**。
 - 仅 `ExactEquivalent` 可做顺序 collapse；
 - Safe Auto 在 forecast observation boundary 保持 fresh-search 资格。
 
+### Pinned 0.107.1 order-sensitive production replay
+
+新增到 `U0U1PinnedHarness` 的 U5 离线固定场景已直接使用生产
+`CombatBeamSolver.ReplayDiagnosticPrefix` 和
+`ShadowFutureStateFingerprint.Capture` 执行两种顺序：
+
+- `BASH → STRIKE_IRONCLAD`：enemy HP = **39**，future fingerprint =
+  `7D7857814B038E3D:4A6951B304DF0382`
+- `STRIKE_IRONCLAD → BASH`：enemy HP = **42**，future fingerprint =
+  `93D0F278205774EB:8DB470E2DA385E5E`
+
+两顺序都能从同一固定 0.107.1 根合法完成；Bash 先施加 Vulnerable 后再攻击产生了
+更低的敌方剩余 HP，且完整 modeled future fingerprint 不同。因此该反例证明生产 F
+实际保留动作顺序影响，`OrderSensitive` 不能 exact-collapse。证据级别为
+`pinned_offline_production_replay`，明确记录
+`RealMultiplayerOwnershipVerified=false`：它验证模拟/顺序语义，不冒充真实远端玩家所有权或网络时序。
+
+对应 pinned run `35892680392`：**SUCCESS**，并继续通过 U0/U1、U2、P0/P1
+runtime 和历史 P0 A/B 分类。
+
 ### Pinned 0.107.1
 
 GitHub Actions run `35890656903`：**SUCCESS**。
