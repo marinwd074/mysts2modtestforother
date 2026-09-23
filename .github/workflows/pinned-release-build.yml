@@ -85,7 +85,7 @@ jobs:
           $gameData = (Resolve-Path '.\game-body\data_sts2_windows_x86_64').Path
           dotnet build '.\source\tools\P0P1PinnedHarness\P0P1PinnedHarness.csproj' -c Release -p:Sts2DataDir="$gameData" -p:RitsuLibReferencesProps="$env:RITSU_PROPS" -p:RitsuWorkshopRoot="$env:RITSU_ROOT" -p:RitsuLibReferenceTarget='0.107.1' -p:TreatWarningsAsErrors=true --nologo
 
-      - name: Run P0 P1 pinned runtime suite (collect all outcomes)
+      - name: Run P0 P1 pinned runtime suite (exact P0 settings)
         shell: pwsh
         run: |
           $workspace = Join-Path $env:RUNNER_TEMP 'p0-p1-pinned'
