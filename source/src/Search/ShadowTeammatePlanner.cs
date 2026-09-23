@@ -57,6 +57,8 @@ internal sealed record ShadowTeammateRoute(
 
     internal StateFingerprint ScenarioFingerprint { get; init; }
 
+    internal ShadowTeammateScenarioKind ScenarioKind { get; init; }
+
     internal double BehaviorMeanLogProbability =>
         ShadowTeammateBehaviorModel.MeanLogProbability(
             BehaviorLogProbability,
@@ -281,14 +283,14 @@ internal static class ShadowTeammatePlanner
                 }
             }
 
-            frontier = RetainBehaviorAwareSpectrum(next, beamWidth);
+            frontier = RetainBehaviorAwareSpectrum(next, beamWidth, labelScenarios: false);
             if (depth == maxTeamActions - 1 && frontier.Count > 0)
                 hitActionDepthLimit = true;
         }
 
         completed.AddRange(frontier);
         List<ShadowTeammateRoute> retained =
-            RetainBehaviorAwareSpectrum(completed, beamWidth);
+            RetainBehaviorAwareSpectrum(completed, beamWidth, labelScenarios: true);
         bool probabilityTrusted = pendingChoiceBranches == 0 && !hitActionDepthLimit;
         IReadOnlyList<ShadowTeammateRoute> finalized =
             FinalizeBehaviorScenarioProbabilities(retained, probabilityTrusted);
@@ -564,50 +566,85 @@ internal static class ShadowTeammatePlanner
 
     private static List<ShadowTeammateRoute> RetainBehaviorAwareSpectrum(
         IReadOnlyList<ShadowTeammateRoute> candidates,
-        int limit)
+        int limit,
+        bool labelScenarios)
     {
         List<ShadowTeammateRoute> exactSurvivors = ApplyExactDominance(candidates);
-        if (!ShadowRoutePruningPolicy.MayUseApproximateBeamPruning(
+        if (exactSurvivors.Count == 0)
+            return [];
+
+        ShadowTeammateScenarioObservation[] observations =
+            exactSurvivors.Select(route => new ShadowTeammateScenarioObservation(
+                route.Actions.Count,
+                route.CompleteVictory,
+                route.AllPlayersAlive,
+                route.EnemyDurability,
+                route.TeamEffectiveHp,
+                route.WorstPlayerEffectiveHpRatio,
+                route.TeamEnergy,
+                route.TeamStars,
+                route.BehaviorLogMass,
+                BuildActionOrderKey(route.Actions))).ToArray();
+        IReadOnlyList<ShadowTeammateScenarioChoice> scenarioChoices =
+            ShadowTeammateScenarioPolicy.SelectProtected(
+                observations,
+                Math.Min(limit, exactSurvivors.Count));
+
+        List<ShadowTeammateRoute> selected = new(Math.Min(limit, exactSurvivors.Count));
+        HashSet<ShadowTeammateRoute> selectedSet =
+            new(ReferenceEqualityComparer.Instance);
+        foreach (ShadowTeammateScenarioChoice choice in scenarioChoices)
+        {
+            ShadowTeammateRoute route = exactSurvivors[choice.Index];
+            if (labelScenarios && choice.Kind != ShadowTeammateScenarioKind.Unspecified)
+                route = route with { ScenarioKind = choice.Kind };
+            selected.Add(route);
+            selectedSet.Add(exactSurvivors[choice.Index]);
+        }
+
+        if (selected.Count < limit
+            && ShadowRoutePruningPolicy.MayUseApproximateBeamPruning(
                 exactSurvivors.Count,
                 limit))
         {
-            exactSurvivors.Sort(CompareRoutesForBehavior);
-            return exactSurvivors;
-        }
-
-        // Only an actual beam overflow may invoke approximate quality pruning. Behavior and
-        // outcome quality remain separate axes: half of the beam protects plausible behavior,
-        // while the other half draws from the explicitly heuristic quality frontier.
-        int behaviorSlots = Math.Max(1, (limit + 1) / 2);
-        List<ShadowTeammateRoute> behaviorRanked = [.. exactSurvivors];
-        behaviorRanked.Sort(CompareRoutesForBehavior);
-
-        List<ShadowTeammateRoute> selected = new(limit);
-        for (int index = 0; index < behaviorRanked.Count
-             && selected.Count < behaviorSlots; index++)
-        {
-            selected.Add(behaviorRanked[index]);
-        }
-
-        foreach (ShadowTeammateRoute route in
-                 SelectApproximateQualityBeam(exactSurvivors, limit))
-        {
-            if (selected.Any(existing => ReferenceEquals(existing, route)))
-                continue;
-            selected.Add(route);
-            if (selected.Count == limit)
-                break;
-        }
-
-        for (int index = 0; index < behaviorRanked.Count && selected.Count < limit; index++)
-        {
-            ShadowTeammateRoute route = behaviorRanked[index];
-            if (!selected.Any(existing => ReferenceEquals(existing, route)))
+            foreach (ShadowTeammateRoute route in
+                     SelectApproximateQualityBeam(exactSurvivors, limit))
+            {
+                if (!selectedSet.Add(route))
+                    continue;
                 selected.Add(route);
+                if (selected.Count == limit)
+                    break;
+            }
+        }
+
+        if (selected.Count < limit)
+        {
+            List<ShadowTeammateRoute> behaviorRanked = [.. exactSurvivors];
+            behaviorRanked.Sort(CompareRoutesForBehavior);
+            foreach (ShadowTeammateRoute route in behaviorRanked)
+            {
+                if (!selectedSet.Add(route))
+                    continue;
+                selected.Add(route);
+                if (selected.Count == limit)
+                    break;
+            }
         }
 
         selected.Sort(CompareRoutesForBehavior);
         return selected;
+    }
+
+    private static string BuildActionOrderKey(
+        IReadOnlyList<ShadowTeammateActionCandidate> actions)
+    {
+        if (actions.Count == 0)
+            return string.Empty;
+        return string.Join(
+            ">",
+            actions.Select(action =>
+                $"{action.PlayerNetId}:{action.SemanticKey}:{action.TargetCombatId?.ToString() ?? "-"}"));
     }
 
     private static IReadOnlyList<ShadowTeammateRoute>

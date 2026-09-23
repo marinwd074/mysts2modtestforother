@@ -12,6 +12,8 @@
     <Compile Include="../../src/Search/ShadowTeammateBehaviorModel.cs" Link="ShadowTeammateBehaviorModel.cs" />
     <Compile Include="../../src/Search/MultiplayerCombatObjectiveMath.cs" Link="MultiplayerCombatObjectiveMath.cs" />
     <Compile Include="../../src/Search/MultiplayerRetentionDiversityPolicy.cs" Link="MultiplayerRetentionDiversityPolicy.cs" />
+    <Compile Include="../../src/Search/ShadowTeammateScenarioPolicy.cs" Link="ShadowTeammateScenarioPolicy.cs" />
+    <Compile Include="../../src/Search/MultiplayerScenarioReevaluationPolicy.cs" Link="MultiplayerScenarioReevaluationPolicy.cs" />
     <Compile Include="../../src/Search/MultiplayerChanceCoveragePolicy.cs" Link="MultiplayerChanceCoveragePolicy.cs" />
     <Compile Include="../../src/Search/ShadowScenarioChanceMath.cs" Link="ShadowScenarioChanceMath.cs" />
     <Compile Include="../../src/Search/ShadowRoutePruningPolicy.cs" Link="ShadowRoutePruningPolicy.cs" />

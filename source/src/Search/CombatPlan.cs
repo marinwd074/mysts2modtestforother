@@ -139,7 +139,8 @@ internal sealed record ShadowForecastPlan(
     double ScenarioConditionalProbability = 1d,
     double RetainedScenarioProbabilityMass = 1d,
     bool ScenarioProbabilityTrusted = true,
-    StateFingerprint ScenarioFingerprint = default)
+    StateFingerprint ScenarioFingerprint = default,
+    ShadowTeammateScenarioKind ScenarioKind = ShadowTeammateScenarioKind.Unspecified)
 {
     public double BehaviorMeanLogProbability =>
         ShadowTeammateBehaviorModel.MeanLogProbability(

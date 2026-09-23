@@ -332,6 +332,91 @@ Check(
     cappedChanceCoverage.SequenceEqual([3, 5]),
     "P3 chance coverage obeys its hard extra-candidate cap instead of widening the final portfolio without bound.");
 
+
+ShadowTeammateScenarioObservation[] teammateScenarioObservations =
+[
+    new(2, false, true, 20, 50, 0.50d, 1, 0, -1.0d, "A:Vulnerable>B:Attack"),
+    new(2, false, true, 35, 75, 0.80d, 1, 0, -1.2d, "B:Defend>A:Attack"),
+    new(1, false, true, 45, 55, 0.55d, 3, 1, -0.9d, "A:Power"),
+    new(0, false, true, 50, 50, 0.50d, 4, 1, -0.7d, ""),
+    new(2, false, true, 24, 52, 0.52d, 1, 0, -0.8d, "B:Attack>A:Vulnerable"),
+];
+IReadOnlyList<ShadowTeammateScenarioChoice> teammateScenarioChoices =
+    ShadowTeammateScenarioPolicy.SelectProtected(
+        teammateScenarioObservations,
+        limit: 4);
+Check(
+    teammateScenarioChoices.Count == 4
+        && teammateScenarioChoices.Any(choice =>
+            choice.Kind == ShadowTeammateScenarioKind.Aggressive
+            && choice.Index == 0)
+        && teammateScenarioChoices.Any(choice =>
+            choice.Kind == ShadowTeammateScenarioKind.Defensive
+            && choice.Index == 1)
+        && teammateScenarioChoices.Any(choice =>
+            choice.Kind == ShadowTeammateScenarioKind.Conserve
+            && choice.Index == 2)
+        && teammateScenarioChoices.Any(choice =>
+            choice.Kind == ShadowTeammateScenarioKind.NoAction
+            && choice.Index == 3),
+    "P3 Shadow Top-K protects aggressive, defensive, conserve-resource and no-action teammate stress scenarios.");
+
+IReadOnlyList<ShadowTeammateScenarioChoice> orderDiversityChoices =
+    ShadowTeammateScenarioPolicy.SelectProtected(
+        teammateScenarioObservations,
+        limit: 5);
+Check(
+    orderDiversityChoices.Count == 5
+        && orderDiversityChoices.Select(choice => choice.Index).Distinct().Count() == 5
+        && orderDiversityChoices.Any(choice => choice.Index == 4),
+    "P3 uses remaining Shadow capacity for a distinct ordered action sequence, so vulnerable-before-attack and attack-before-vulnerable can remain separate when their modeled states differ.");
+
+MultiplayerScenarioDecisionRank optimisticSingleRoute =
+    MultiplayerScenarioReevaluationPolicy.Aggregate(
+    [
+        new(
+            ShadowTeammateScenarioKind.Aggressive,
+            CompleteVictory: true,
+            AllPlayersAlive: true,
+            LossEquivalent: 0.01d,
+            WorstPlayerLossRatio: 0.01d,
+            TeamLossRatio: 0.01d,
+            EnemyDurabilityRatio: 0d),
+        new(
+            ShadowTeammateScenarioKind.NoAction,
+            CompleteVictory: false,
+            AllPlayersAlive: true,
+            LossEquivalent: 0.45d,
+            WorstPlayerLossRatio: 0.35d,
+            TeamLossRatio: 0.40d,
+            EnemyDurabilityRatio: 0.90d),
+    ]);
+MultiplayerScenarioDecisionRank robustCurrentAction =
+    MultiplayerScenarioReevaluationPolicy.Aggregate(
+    [
+        new(
+            ShadowTeammateScenarioKind.Aggressive,
+            CompleteVictory: false,
+            AllPlayersAlive: true,
+            LossEquivalent: 0.12d,
+            WorstPlayerLossRatio: 0.10d,
+            TeamLossRatio: 0.10d,
+            EnemyDurabilityRatio: 0.30d),
+        new(
+            ShadowTeammateScenarioKind.NoAction,
+            CompleteVictory: false,
+            AllPlayersAlive: true,
+            LossEquivalent: 0.14d,
+            WorstPlayerLossRatio: 0.12d,
+            TeamLossRatio: 0.12d,
+            EnemyDurabilityRatio: 0.40d),
+    ]);
+Check(
+    MultiplayerScenarioReevaluationPolicy.Compare(
+        robustCurrentAction,
+        optimisticSingleRoute) < 0,
+    "P3 robust reranking prefers the current action with a better worst teammate scenario over a route that only wins under one optimistic teammate behavior.");
+
 Console.WriteLine($"PASS: {checks} multiplayer local-cross-turn contract checks");
 
 
