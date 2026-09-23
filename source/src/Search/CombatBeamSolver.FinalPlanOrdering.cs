@@ -20,6 +20,7 @@ internal sealed partial class CombatBeamSolver
         int minimumPotionUses,
         SearchDiagnosticsSink diagnostics,
         bool detailedDiagnostics,
+        SearchRoutePolicy routePolicy,
         bool useMultiplayerRouteSemantics,
         bool useMultiplayerTeamObjective,
         MultiplayerCombatObjectiveStrategy multiplayerCombatObjectiveStrategy,
