@@ -126,6 +126,24 @@ try {
 
     $baselineBoundary = [string]$baseline.search.boundary
     $currentBoundary = [string]$current.p0.spRegression.Boundary
+
+    $baselineSingleMember = $baseline.singleMemberTimed
+    $currentSingleMember = $current.p0.singleMemberTimed
+    if ($null -eq $baselineSingleMember -or $null -eq $currentSingleMember) {
+        throw 'P0 timed single-member evidence is missing from baseline or current run.'
+    }
+    $baselineSingleTime = [string]$baselineSingleMember.boundary -eq 'TimeLimit'
+    $currentSingleTime = [string]$currentSingleMember.Boundary -eq 'TimeLimit'
+    $p0SingleMemberClassification = if ($baselineSingleTime -and $currentSingleTime) {
+        'BOTH_TIME_BOUNDARY'
+    } elseif (-not $baselineSingleTime -and -not $currentSingleTime) {
+        'BOTH_NON_TIME_BOUNDARY'
+    } elseif (-not $baselineSingleTime -and $currentSingleTime) {
+        'CURRENT_ONLY_TIME_BOUNDARY'
+    } else {
+        'BASELINE_ONLY_TIME_BOUNDARY'
+    }
+
     $baselineFixedWork = $baseline.fixedWork
     $currentFixedWork = $current.p0.fixedWork
     if ($null -eq $baselineFixedWork -or $null -eq $currentFixedWork) {
@@ -241,6 +259,17 @@ try {
         classification = $classification
         pinnedTarget = '0.107.1'
         baselineCommit = $BaselineCommit
+        p0SingleMemberTimed = [ordered]@{
+            classification = $p0SingleMemberClassification
+            baselineBoundary = [string]$baselineSingleMember.boundary
+            baselineFirstAction = [string]$baselineSingleMember.firstAction
+            baselineFinalEnemyHp = [int]$baselineSingleMember.finalEnemyHp
+            baselineExpandedNodes = [long]$baselineSingleMember.expandedNodes
+            currentBoundary = [string]$currentSingleMember.Boundary
+            currentFirstAction = [string]$currentSingleMember.FirstAction
+            currentFinalEnemyHp = [int]$currentSingleMember.FinalEnemyHp
+            currentExpandedNodes = [long]$currentSingleMember.ExpandedNodes
+        }
         p0FixedWork = [ordered]@{
             classification = $p0FixedWorkClassification
             nodeBudget = [int]$current.settings.p0FixedWorkNodeBudget
@@ -313,7 +342,11 @@ try {
     if ($summary.status -ne 'PASS') {
         throw "P0 baseline A/B failed: $classification"
     }
+    if ($p0SingleMemberClassification -eq 'CURRENT_ONLY_TIME_BOUNDARY') {
+        throw 'P0 timed single-member diagnostic found a current-only TimeLimit regression candidate.'
+    }
     Write-Output "P0_BASELINE_AB $classification"
+    Write-Output "P0_SINGLE_MEMBER_TIMED $p0SingleMemberClassification"
     Write-Output "P0_FIXED_WORK $p0FixedWorkClassification"
     Write-Output "P0_JOINT PASS"
     Write-Output "P1_OBJECTIVE_CONTRACTS PASS"
