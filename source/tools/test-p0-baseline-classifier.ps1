@@ -34,7 +34,7 @@ function Classify {
 
 try {
     $simulation = Classify @(
-        '[CombatSolver/Evidence] ROUTE_REPLAY {"schemaVersion":1,"firstScalarDifference":2,"actionCount":4}'
+        '{"Time":1,"Level":"info","Message":"[CombatSolver/Evidence] ROUTE_REPLAY {\\"schemaVersion\\":1,\\"firstScalarDifference\\":2,\\"actionCount\\":4}"}'
     )
     Check ($simulation.primaryClassification -eq 'simulation_error') 'Replay scalar divergence classifies as simulation_error.'
 

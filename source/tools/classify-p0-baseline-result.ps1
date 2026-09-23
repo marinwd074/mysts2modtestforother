@@ -24,11 +24,20 @@ foreach ($pathValue in $LogPath) {
     $lineNumber = 0
     foreach ($line in Get-Content -LiteralPath $path) {
         $lineNumber++
+        $normalized = [string]$line
+        try {
+            $parsed = $normalized | ConvertFrom-Json -ErrorAction Stop
+            if ($null -ne $parsed.PSObject.Properties['Message']) {
+                $normalized = [string]$parsed.Message
+            }
+        } catch {
+            # Plain-text game logs are expected too.
+        }
         $records.Add([pscustomobject]@{
                 Index = $globalIndex++
                 Path = $path
                 LineNumber = $lineNumber
-                Text = [string]$line
+                Text = $normalized
             })
     }
 }

@@ -90,9 +90,7 @@ pwsh -NoLogo -NoProfile -File .\source\tools\multiplayer-lab\stop-owned-instance
 Reuse + Mismatch 都 PASS 后，再对两个结果日志运行 P0 分类器：
 
 ~~~powershell
-pwsh -NoLogo -NoProfile -File .\source\tools\classify-p0-baseline-result.ps1 \
-  -LogPath '<reuse-log>','<mismatch-log>' \
-  -OutputPath '.\.local\multiplayer-lab\results\p0-classification.json'
+pwsh -NoLogo -NoProfile -File .\source\tools\classify-p0-baseline-result.ps1 -LogPath '<reuse-log>','<mismatch-log>' -OutputPath '.\.local\multiplayer-lab\results\p0-classification.json'
 ~~~
 
 预期至少能把 mismatch 样例识别为 `teammate_prediction_deviation`，且不能出现 `simulation_error`。
