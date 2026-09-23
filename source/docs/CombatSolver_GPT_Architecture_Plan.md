@@ -199,11 +199,11 @@ F 必须执行每张牌与触发器，而不是先合并成“队友本回合打
 
 ### U5 — 本地与队友的关键顺序
 
-先加入少量本地/队友关键交错：易伤与攻击、先击杀与触发、共享RNG消耗、抽牌/资源变化。队友之间现有交错保留，不重复实现。
+**状态（2026-09-23）：COMPLETE（代码/合同/pinned 0.107.1 回归完成；真实 Host/Client U5 专项 smoke 仍 `UNVERIFIED`）。** 详细实现与证据见 [U5_LOCAL_TEAMMATE_INTERLEAVING.md](U5_LOCAL_TEAMMATE_INTERLEAVING.md)。多人本地搜索现在可形成“本地 A → forecast-only 队友 B → 从 B 后真实模拟状态继续本地 C”；B 始终只存在于 detached simulator，不获得部署权限。A→B 前向路线与 B→A reverse-order probe 都逐动作走生产 F；reverse 顺序若导致牌身份、合法性、目标、牌堆/RNG/History/死亡处理等变化，会标为 `OrderSensitive` 或 `ReverseUnavailable`。只有两顺序的 `ShadowFutureStateFingerprint` 完全相同才允许 `ExactEquivalent` collapse；仅“不同怪物”不构成可交换证明。
 
-只在可证明可交换时合并顺序：两动作互不影响合法性、目标、牌堆、RNG、触发器、历史、死亡处理等完整后态。仅“打不同怪”不是可交换证明。无法证明则不做精确合并，以明确标注的beam近似裁剪。
+调度保持有界：每个本地回合最多一个 teammate forecast observation、每个观察最多保留 4 条路线；`AllowsProactiveWaitForTeammate=false`，没有“等待理想队友行动”的无限等待动作。真实部署在 forecast observation 前截断；Safe Auto 保持 fresh-search 资格并重新观察/规划，绝不会跳过 forecast 节点继续部署条件后缀。U3 当前决策身份和情景复评同样在 forecast 边界 fail closed，避免预知队友选择。
 
-验收：实际按A→B与B→A分别推进F；队友动作始终仅预测；等待队友作为调度行为须有明确观察/超时机制，不能让求解器无限等理想行动。
+验证：compatibility run `35890994702` SUCCESS；pinned 0.107.1 run `35890656903` SUCCESS，后者完整通过 Release、U0/U1 production replay、U2 degenerate equivalence、P0/P1 pinned runtime 与历史 P0 A/B 分类。没有扩大 Beam、节点或时间预算。真实 Host/Client 的 vulnerable/attack、先击杀/触发、共享 RNG/抽牌/资源换序最小 smoke 留到 U6 最终实机闭环集中完成；不由合同测试冒充实机 PASS。下一张卡为 U6。
 
 ### U6 — 实机闭环与清理
 
