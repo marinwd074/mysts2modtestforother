@@ -80,6 +80,19 @@ try {
         "using CombatSolver.Engine.Common;`r`nusing CombatSolver.Engine.InCombat.Mirrors.Orbs;")
     Set-Content -LiteralPath $fingerprintPath -Value $fingerprintText -Encoding utf8
 
+    # The historical OfflineSearchHarness calls test-only scenario/session types, while the
+    # production csproj at this exact commit already excluded src/Testing. For the temporary
+    # A/B build only, include those original historical test sources. Search/runtime production
+    # sources remain frozen at the baseline commit.
+    $baselineProject = Join-Path $baselineRoot 'source/CombatSolver.csproj'
+    $projectText = Get-Content -LiteralPath $baselineProject -Raw
+    $testingExclude = '    <Compile Remove="src/Testing/**/*.cs" />'
+    if (-not $projectText.Contains($testingExclude, [StringComparison]::Ordinal)) {
+        throw 'Historical CombatSolver test-source exclusion was not found.'
+    }
+    $projectText = $projectText.Replace($testingExclude, '')
+    Set-Content -LiteralPath $baselineProject -Value $projectText -Encoding utf8
+
     $requestPath = Join-Path $Workspace 'baseline-request.json'
     [ordered]@{
         schemaVersion = 1
