@@ -73,7 +73,8 @@ internal readonly record struct MultiplayerChanceOutcome(
 
 internal readonly record struct MultiplayerChanceDecisionRank(
     double RetainedProbabilityMass,
-    double ConservativeFailureProbability,
+    bool GuaranteedVictory,
+    double VictoryProbabilityLower,
     double ConservativeTeamDeathProbability,
     double ExpectedLossEquivalentUpper,
     double ExpectedWorstPlayerLossRatioUpper,
@@ -88,7 +89,10 @@ internal static class MultiplayerChanceDecisionMath
         if (outcomes.Count == 0)
         {
             return new MultiplayerChanceDecisionRank(
-                0d, 1d, 1d,
+                0d,
+                GuaranteedVictory: false,
+                VictoryProbabilityLower: 0d,
+                ConservativeTeamDeathProbability: 1d,
                 double.PositiveInfinity,
                 double.PositiveInfinity,
                 double.PositiveInfinity,
@@ -144,10 +148,13 @@ internal static class MultiplayerChanceDecisionMath
 
         retainedMass = Math.Clamp(retainedMass, 0d, 1d);
         double omittedMass = 1d - retainedMass;
+        double victoryProbabilityLower = Math.Clamp(successMass, 0d, 1d);
         return new MultiplayerChanceDecisionRank(
             retainedMass,
-            Math.Clamp(1d - Math.Min(1d, successMass), 0d, 1d),
-            Math.Clamp(1d - Math.Min(1d, aliveMass), 0d, 1d),
+            GuaranteedVictory: victoryProbabilityLower >= 1d - 1e-9d,
+            VictoryProbabilityLower: victoryProbabilityLower,
+            ConservativeTeamDeathProbability:
+                Math.Clamp(1d - Math.Min(1d, aliveMass), 0d, 1d),
             weightedLoss + omittedMass * worstLoss,
             weightedWorstLoss + omittedMass * worstWorstLoss,
             weightedTeamLoss + omittedMass * worstTeamLoss,
@@ -159,8 +166,7 @@ internal static class MultiplayerChanceDecisionMath
         MultiplayerChanceDecisionRank left,
         MultiplayerChanceDecisionRank right)
     {
-        int comparison = left.ConservativeFailureProbability.CompareTo(
-            right.ConservativeFailureProbability);
+        int comparison = right.GuaranteedVictory.CompareTo(left.GuaranteedVictory);
         if (comparison != 0)
             return comparison;
         comparison = left.ConservativeTeamDeathProbability.CompareTo(
@@ -177,6 +183,10 @@ internal static class MultiplayerChanceDecisionMath
             return comparison;
         comparison = left.ExpectedTeamLossRatioUpper.CompareTo(
             right.ExpectedTeamLossRatioUpper);
+        if (comparison != 0)
+            return comparison;
+        comparison = right.VictoryProbabilityLower.CompareTo(
+            left.VictoryProbabilityLower);
         if (comparison != 0)
             return comparison;
         comparison = left.ExpectedEnemyDurabilityRatioUpper.CompareTo(
