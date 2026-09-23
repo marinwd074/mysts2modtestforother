@@ -2030,7 +2030,7 @@ internal sealed partial class CombatBeamSolver
         if (simulatedCombat.HasPendingChoice)
             return SearchBoundaryReason.PendingChoice;
         var progress = new PlayerStartProgress(_player, _startTurnNumber, rootSetup: true,
-            policy.RoutePolicy, takingExtraTurn: false, processedEnemyDeaths, 0,
+            _useMultiplayerRouteSemantics, takingExtraTurn: false, processedEnemyDeaths, 0,
             simulator.ShuffleEventCount);
         return ContinuePlayerStart(simulator, simulatedCombat, progress, PlayerStartStage.BeforeHand);
     }
