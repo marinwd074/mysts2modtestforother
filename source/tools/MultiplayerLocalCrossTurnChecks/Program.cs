@@ -305,6 +305,33 @@ Check(
         && overlappingLaneChoices.Select(choice => choice.Index).Distinct().Count() == 4,
     "When one route leads multiple objectives, P2 reuses that route once and spends remaining protected slots on distinct representatives.");
 
+MultiplayerChanceCoverageCandidate[] chanceCoverageCandidates =
+[
+    // Decision 0 already retained its modal scenario; its next scenario belongs to round 1.
+    new(0, DecisionRank: 0, ScenarioRank: 0, AlreadyRetained: true),
+    new(1, DecisionRank: 0, ScenarioRank: 1, AlreadyRetained: false),
+    new(2, DecisionRank: 0, ScenarioRank: 2, AlreadyRetained: false),
+    // Decisions 1 and 2 still need their modal scenarios.
+    new(3, DecisionRank: 1, ScenarioRank: 0, AlreadyRetained: false),
+    new(4, DecisionRank: 1, ScenarioRank: 1, AlreadyRetained: false),
+    new(5, DecisionRank: 2, ScenarioRank: 0, AlreadyRetained: false),
+];
+IReadOnlyList<int> chanceCoverage =
+    MultiplayerChanceCoveragePolicy.SelectAdditionalCandidateIndices(
+        chanceCoverageCandidates,
+        extraLimit: 4);
+Check(
+    chanceCoverage.SequenceEqual([3, 5, 1, 4]),
+    "P3 chance coverage counts an already-retained modal scenario in its natural round and fills missing scenarios round-robin across represented decisions.");
+
+IReadOnlyList<int> cappedChanceCoverage =
+    MultiplayerChanceCoveragePolicy.SelectAdditionalCandidateIndices(
+        chanceCoverageCandidates,
+        extraLimit: 2);
+Check(
+    cappedChanceCoverage.SequenceEqual([3, 5]),
+    "P3 chance coverage obeys its hard extra-candidate cap instead of widening the final portfolio without bound.");
+
 Console.WriteLine($"PASS: {checks} multiplayer local-cross-turn contract checks");
 
 

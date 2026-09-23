@@ -288,9 +288,13 @@ internal sealed partial class CombatBeamSolver
                 }
             }
 
-            List<IReadOnlyList<SearchNode>> orderedScenariosByDecision = [];
-            foreach (string decisionKey in representedDecisionKeys)
+            List<SearchNode> coverageNodes = [];
+            List<MultiplayerChanceCoverageCandidate> coverageCandidates = [];
+            for (int decisionRank = 0;
+                 decisionRank < representedDecisionKeys.Count;
+                 decisionRank++)
             {
+                string decisionKey = representedDecisionKeys[decisionRank];
                 if (!leadersByDecision.TryGetValue(
                         decisionKey,
                         out Dictionary<StateFingerprint, SearchNode>? scenarioLeaders))
@@ -316,28 +320,26 @@ internal sealed partial class CombatBeamSolver
                         return comparison;
                     return CompareFinalCandidates(left, right);
                 });
-                orderedScenariosByDecision.Add(ordered);
+
+                for (int scenarioRank = 0; scenarioRank < ordered.Count; scenarioRank++)
+                {
+                    SearchNode node = ordered[scenarioRank];
+                    int candidateIndex = coverageNodes.Count;
+                    coverageNodes.Add(node);
+                    coverageCandidates.Add(new MultiplayerChanceCoverageCandidate(
+                        candidateIndex,
+                        decisionRank,
+                        scenarioRank,
+                        ContainsReference(ranked, node)));
+                }
             }
 
-            int added = 0;
-            int round = 0;
-            while (added < extraLimit
-                   && orderedScenariosByDecision.Any(group => round < group.Count))
+            foreach (int candidateIndex in
+                     MultiplayerChanceCoveragePolicy.SelectAdditionalCandidateIndices(
+                         coverageCandidates,
+                         extraLimit))
             {
-                foreach (IReadOnlyList<SearchNode> scenarios in orderedScenariosByDecision)
-                {
-                    if (round >= scenarios.Count)
-                        continue;
-                    SearchNode candidate = scenarios[round];
-                    if (!ContainsReference(ranked, candidate))
-                    {
-                        ranked.Add(candidate);
-                        added++;
-                        if (added == extraLimit)
-                            break;
-                    }
-                }
-                round++;
+                ranked.Add(coverageNodes[candidateIndex]);
             }
         }
 

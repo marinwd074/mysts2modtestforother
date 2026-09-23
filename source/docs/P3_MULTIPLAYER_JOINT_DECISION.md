@@ -15,7 +15,10 @@
 - 按精确 `ScenarioFingerprint` 保留场景代表；
 - 优先高 `ScenarioProbabilityMass`，跨决策 round-robin；
 - 最多额外 16 条最终候选；
+- 已在普通结果中的场景占据它原本的 round-robin 轮次，但不会重复加入；
 - 不可信概率场景不进入 coverage portfolio。
+
+`MultiplayerChanceCoveragePolicy` 提供纯合同，固定验证跨决策 round-robin 与 hard cap；因此 P3A 的覆盖调度不只依赖集成代码审查。
 
 ## 后续 P3B
 
