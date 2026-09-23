@@ -245,6 +245,7 @@ internal static class Program
             options.BudgetMilliseconds,
             options.PotionPolicy,
             options.SearchMode,
+            options.RoutePolicy,
             options.UsePortfolio,
             fixedSearchBudget = true,
             enableNoGcRegion = false,
@@ -316,6 +317,7 @@ internal sealed record HarnessOptions
           --budget-ms <int>      搜索预算毫秒（默认 600000）
           --potion-policy <p>    药水政策（默认 Smart）
           --search-mode <m>      Evaluate（单次求解，不经协调器，默认）| Coordinator（生产协调器）
+          --route-policy <p>     U2 A/B：SinglePlayerFullRoute|MultiplayerLocalCrossTurn
           --use-portfolio        开宽度组合（只对 --search-mode Coordinator 有效）
           --milestone <M1|M2>    跑到哪个里程碑（默认 M2）
           --out <dir>            产物目录（默认 <workspace>/offline）
@@ -338,6 +340,7 @@ internal sealed record HarnessOptions
     public int BudgetMilliseconds { get; init; } = 600_000;
     public string PotionPolicy { get; init; } = "Smart";
     public string SearchMode { get; init; } = "Evaluate";
+    public string? RoutePolicy { get; init; }
     /// <summary>开宽度组合（协调器的组合成员通道）；Evaluate 模式下没有意义。</summary>
     public bool UsePortfolio { get; init; }
     public string Milestone { get; init; } = "M2";
@@ -356,7 +359,7 @@ internal sealed record HarnessOptions
         bool usePortfolio = false;
         string potionPolicy = "Smart", milestone = "M2", language = "eng";
         string profile = "Custom", searchMode = "Evaluate", label = "offline";
-        string? output = null, requestPath = null;
+        string? routePolicy = null, output = null, requestPath = null;
         string workspace = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory, "../../../../../.local/offline-harness"));
         bool verbose = false;
@@ -389,6 +392,7 @@ internal sealed record HarnessOptions
                 case "--budget-ms": budget = int.Parse(Value()); break;
                 case "--potion-policy": potionPolicy = Value(); break;
                 case "--search-mode": searchMode = Value(); break;
+                case "--route-policy": routePolicy = Value(); break;
                 case "--use-portfolio": usePortfolio = true; break;
                 case "--milestone": milestone = Value(); break;
                 case "--out": output = Value(); break;
@@ -404,6 +408,11 @@ internal sealed record HarnessOptions
             throw new ArgumentException("--profile 只接受 Low|Medium|High|VeryHigh|Custom。");
         if (searchMode is not ("Evaluate" or "Coordinator"))
             throw new ArgumentException("--search-mode 只接受 Evaluate 或 Coordinator。");
+        if (routePolicy is not null
+            && routePolicy is not ("SinglePlayerFullRoute" or "MultiplayerLocalCrossTurn"))
+        {
+            throw new ArgumentException("--route-policy 只接受 SinglePlayerFullRoute 或 MultiplayerLocalCrossTurn。");
+        }
         if (usePortfolio && searchMode != "Coordinator")
             throw new ArgumentException("--use-portfolio 只对 --search-mode Coordinator 有效。");
         if (profile == "Custom" && requestPath == null)
@@ -427,6 +436,7 @@ internal sealed record HarnessOptions
             BudgetMilliseconds = budget,
             PotionPolicy = potionPolicy,
             SearchMode = searchMode,
+            RoutePolicy = routePolicy,
             UsePortfolio = usePortfolio,
             Milestone = milestone,
             WorkspaceDirectory = Path.GetFullPath(workspace),
