@@ -1273,22 +1273,28 @@ internal static partial class SolverController
             failedChecks.Add("native_play_card");
         if (!facts.ActionQueueIdle)
             failedChecks.Add("action_queue_idle");
-        if (!facts.LocalCardRemovedFromHand)
-            failedChecks.Add("local_card_removed");
-        if (!facts.LocalPlayerIdentityStable)
-            failedChecks.Add("local_identity");
-        if (!facts.EnergyStateConsistent)
-            failedChecks.Add("energy_or_stars");
-        if (!facts.TargetIdentityStable)
-            failedChecks.Add("target_identity");
-        if (!facts.RemotePublicStateUnchanged)
-            failedChecks.Add("remote_public_state");
-        if (!facts.EnemyStateMatchesExpectedTarget)
-            failedChecks.Add("enemy_state");
+        if (!facts.ExpectedContinuationStateMatched)
+            failedChecks.Add("expected_continuation_state");
+        if (!facts.ExpectedRemoteStateMatched)
+            failedChecks.Add("expected_remote_state");
         if (!facts.WorldVersionAdvanced)
             failedChecks.Add("world_version_advanced");
         if (!facts.WorldVersionStable)
             failedChecks.Add("world_version_stable");
+
+        List<string> legacyMismatches = [];
+        if (!facts.LocalCardRemovedFromHand)
+            legacyMismatches.Add("local_card_removed");
+        if (!facts.LocalPlayerIdentityStable)
+            legacyMismatches.Add("local_identity");
+        if (!facts.EnergyStateConsistent)
+            legacyMismatches.Add("energy_or_stars");
+        if (!facts.TargetIdentityStable)
+            legacyMismatches.Add("target_identity");
+        if (!facts.RemotePublicStateUnchanged)
+            legacyMismatches.Add("remote_public_state");
+        if (!facts.EnemyStateMatchesExpectedTarget)
+            legacyMismatches.Add("enemy_state");
 
         List<string> changedFields = [];
         if (before.LocalHp != after.LocalHp)
@@ -1338,6 +1344,7 @@ internal static partial class SolverController
             $"card={action.CardId ?? "-"} target={action.TargetCombatId?.ToString() ?? "-"} " +
             $"decision={decision} reason={decisionReason} " +
             $"failed_checks={FormatSafeDiagnosticTokens(failedChecks)} " +
+            $"legacy_mismatches={FormatSafeDiagnosticTokens(legacyMismatches)} " +
             $"changed_fields={FormatSafeDiagnosticTokens(changedFields)} " +
             $"before_world_version={before.WorldVersion} after_world_version={after.WorldVersion} " +
             $"before_observation_sequence={before.ObservationSequence} " +
