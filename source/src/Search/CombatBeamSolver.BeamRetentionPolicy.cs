@@ -306,12 +306,16 @@ internal sealed partial class CombatBeamSolver
 
         private void SortByBeamRank(List<SearchNode> ranked)
         {
+            if (_routePolicy != SearchRoutePolicy.MultiplayerLocalCrossTurn)
+            {
+                SortByLegacyBeamRank(ranked);
+                return;
+            }
             if (ranked.Count < 2)
                 return;
-            bool useTeamObjective =
-                _routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn;
-            // Freeze both objective and score inputs once per node. P1 puts the same team
-            // objective ahead of the historical Beam score; single-player keeps the old order.
+
+            // Multiplayer freezes both objective and score inputs once per node. The shared
+            // P1 team objective is primary; historical Beam score remains only a tie-break.
             List<(SearchNode Node, double Score, MultiplayerCombatObjectiveRank TeamObjective)> scored =
                 new(ranked.Count);
             foreach (SearchNode node in ranked)
@@ -319,18 +323,34 @@ internal sealed partial class CombatBeamSolver
                 scored.Add((
                     node,
                     BeamRankScore(node),
-                    useTeamObjective ? BuildMultiplayerObjectiveRank(node) : default));
+                    BuildMultiplayerObjectiveRank(node)));
             }
             scored.Sort((left, right) =>
             {
-                if (useTeamObjective)
-                {
-                    int objective = MultiplayerCombatObjectiveMath.Compare(
-                        left.TeamObjective,
-                        right.TeamObjective);
-                    if (objective != 0)
-                        return objective;
-                }
+                int objective = MultiplayerCombatObjectiveMath.Compare(
+                    left.TeamObjective,
+                    right.TeamObjective);
+                if (objective != 0)
+                    return objective;
+                return CompareBeamRankOrder(
+                    left.Score, left.Node.Snapshot.OffensiveProgressValue, left.Node.ActionCount,
+                    right.Score, right.Node.Snapshot.OffensiveProgressValue, right.Node.ActionCount);
+            });
+            for (int index = 0; index < ranked.Count; index++)
+                ranked[index] = scored[index].Node;
+        }
+
+        private void SortByLegacyBeamRank(List<SearchNode> ranked)
+        {
+            if (ranked.Count < 2)
+                return;
+            // This is the pre-P1 single-player ordering. Keep it isolated so the extracted
+            // BeamRankSortChecks contract proves that P1 does not change single-player order.
+            List<(SearchNode Node, double Score)> scored = new(ranked.Count);
+            foreach (SearchNode node in ranked)
+                scored.Add((node, BeamRankScore(node)));
+            scored.Sort(static (left, right) =>
+            {
                 return CompareBeamRankOrder(
                     left.Score, left.Node.Snapshot.OffensiveProgressValue, left.Node.ActionCount,
                     right.Score, right.Node.Snapshot.OffensiveProgressValue, right.Node.ActionCount);
