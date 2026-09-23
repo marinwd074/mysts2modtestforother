@@ -58,7 +58,7 @@ internal sealed partial class CombatBeamSolver
         // conservative transposition-dominance contract, not "exact dedup": StateKey fixes the
         // modeled combat state, while these labels preserve policy/history dimensions that can
         // still rank differently. Heuristic retention dominance lives separately in
-        // BeamRetentionPolicy.MultiObjectiveDominates.
+        // BeamRetentionPolicy.HeuristicQualityDominates.
         private static bool Dominates(TranspositionLabel left, TranspositionLabel right)
             => left.PotionCount <= right.PotionCount
                 && left.PotionStrategicCost <= right.PotionStrategicCost

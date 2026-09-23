@@ -21,7 +21,7 @@ P2 的目标是：**在相同搜索预算下，减少低战损、快斩杀、团
 
 - **exact future-state merge**：只有像 `ShadowFutureStateFingerprint` 这种覆盖完整 modeled future state 的键才能这样命名；
 - **StateKey representative compression / transposition dominance**：主搜索同状态仍可能带不同累计战损或 policy history，因此保留 label/目标比较，不宣称“严格等价”；
-- **heuristic retention pruning**：`MultiObjectiveDominates`、Beam 截断和 portfolio 采样只是预算内启发式，不能用于“证明最优”。
+- **heuristic retention pruning**：`HeuristicQualityDominates`、Beam 截断和 portfolio 采样只是预算内启发式，不能用于“证明最优”；函数名本身明确标出 `Heuristic`，避免后续精确搜索误用。
 
 因此后续 P4 的“精确斩杀”不得复用 P2 的 heuristic dominance 作为安全剪枝条件。
 

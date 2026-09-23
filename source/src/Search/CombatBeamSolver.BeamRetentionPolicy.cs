@@ -706,7 +706,7 @@ internal sealed partial class CombatBeamSolver
                     paretoByContext[contextIndex] = candidates
                         .Where(candidate => !candidates.Any(other =>
                             !ReferenceEquals(candidate, other)
-                            && MultiObjectiveDominates(other, candidate)))
+                            && HeuristicQualityDominates(other, candidate)))
                         .ToList();
                 }
                 if (orderedRoutingContexts.Count >= 8)
@@ -884,7 +884,7 @@ internal sealed partial class CombatBeamSolver
                         foreach (IGrouping<StateFingerprint, SearchNode> other in candidates)
                         {
                             if (ReferenceEquals(candidate, other)
-                                || !MultiObjectiveDominates(other.First(), candidate.First()))
+                                || !HeuristicQualityDominates(other.First(), candidate.First()))
                                 continue;
                             dominated = true;
                             break;
@@ -1351,7 +1351,7 @@ internal sealed partial class CombatBeamSolver
                         AddRequired(required, FindBestLane(potionCountGroup.ToList(), trait), limit);
                     }
                 }
-                // MultiObjectiveDominates intentionally cannot compare nodes from different
+                // HeuristicQualityDominates intentionally cannot compare nodes from different
                 // combat/control/pile cohorts. Looking at the whole ranked pool therefore did
                 // O(n^2) fingerprint checks at large turn boundaries (tens of thousands of
                 // ended candidates) even though nearly every pair was incomparable.
@@ -1383,7 +1383,7 @@ internal sealed partial class CombatBeamSolver
                         candidate.Snapshot.UnorderedPileKey);
                     foreach (SearchNode other in paretoCohorts[cohortKey])
                     {
-                        if (!MultiObjectiveDominates(other, candidate))
+                        if (!HeuristicQualityDominates(other, candidate))
                             continue;
                         dominated = true;
                         break;
@@ -2237,7 +2237,7 @@ internal sealed partial class CombatBeamSolver
         /// protected representatives have been reserved; it is not exact state equality and
         /// must never be used as an optimality proof or as a replacement for transposition identity.
         /// </summary>
-        private bool MultiObjectiveDominates(SearchNode left, SearchNode right)
+        private bool HeuristicQualityDominates(SearchNode left, SearchNode right)
         {
             if (ReferenceEquals(left, right))
                 return false;
