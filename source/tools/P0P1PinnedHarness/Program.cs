@@ -448,7 +448,11 @@ internal static class Program
             battleDamage,
             policy,
             searchProfile: profile).Solve();
-        P0SearchEvidence evidence = CaptureSearch(result);
+        P0SearchEvidence evidence = CaptureSearch(result) with
+        {
+            ExpandedNodes = result.ExpandedNodes,
+            ChoiceBranchesEvaluated = result.ChoiceBranchesEvaluated,
+        };
         Require(
             evidence.Boundary != SearchBoundaryReason.TimeLimit.ToString(),
             "P0 fixed-work probe unexpectedly hit a wall-clock TimeLimit.");
