@@ -244,6 +244,217 @@ Check(
             currentHasCurrentTurnCard: false),
     "Local cross-turn tie-breaking prefers a current-turn card over an EndTurn-only route without changing single-player or current-turn-only policies.");
 
+
+MultiplayerRetentionObservation[] diversityObservations =
+[
+    // Lowest team loss, but not the safest individual.
+    new(false, true, 0.01d, 0.20d, 0.70d, int.MaxValue, 0, 0, 0, 0, 0, 0),
+    // Safest worst-player route.
+    new(false, true, 0.03d, 0.02d, 0.65d, int.MaxValue, 0, 0, 0, 0, 0, 0),
+    // Fast completed lethal route.
+    new(true, true, 0.06d, 0.08d, 0d, 2, 0, 0, 0, 0, 0, 0),
+    // Growth route.
+    new(false, true, 0.04d, 0.10d, 0.60d, int.MaxValue, 9, 7, 5, 4, 3, 2),
+    // Attractive but dead route: must not consume a protected lane while any alive route exists.
+    new(true, false, 0.00d, 0.00d, 0d, 1, 99, 99, 99, 99, 99, 99),
+];
+IReadOnlyList<MultiplayerRetentionChoice> diversityChoices =
+    MultiplayerRetentionDiversityPolicy.SelectProtected(
+        diversityObservations,
+        limit: 4);
+Check(
+    diversityChoices.Count == 4
+        && diversityChoices.Any(choice =>
+            choice.Lane == MultiplayerRetentionLane.LowTeamLoss
+            && choice.Index == 0)
+        && diversityChoices.Any(choice =>
+            choice.Lane == MultiplayerRetentionLane.TeamSafety
+            && choice.Index == 1)
+        && diversityChoices.Any(choice =>
+            choice.Lane == MultiplayerRetentionLane.FastLethal
+            && choice.Index == 2)
+        && diversityChoices.Any(choice =>
+            choice.Lane == MultiplayerRetentionLane.Growth
+            && choice.Index == 3)
+        && diversityChoices.All(choice => choice.Index != 4),
+    "P2 fixed-budget retention protects distinct low-loss, team-safety, fast-lethal and growth representatives without spending a slot on a dead route.");
+
+IReadOnlyList<MultiplayerRetentionChoice> tightDiversityChoices =
+    MultiplayerRetentionDiversityPolicy.SelectProtected(
+        diversityObservations,
+        limit: 2);
+Check(
+    tightDiversityChoices.Count == 2
+        && tightDiversityChoices[0].Lane == MultiplayerRetentionLane.LowTeamLoss
+        && tightDiversityChoices[1].Lane == MultiplayerRetentionLane.TeamSafety,
+    "P2 diversity protection respects the existing beam limit instead of expanding the budget.");
+
+MultiplayerRetentionObservation[] overlappingLaneObservations =
+[
+    new(false, true, 0.01d, 0.01d, 0.80d, int.MaxValue, 0, 0, 0, 0, 0, 0),
+    new(false, true, 0.02d, 0.02d, 0.70d, int.MaxValue, 0, 0, 0, 0, 0, 0),
+    new(false, true, 0.03d, 0.03d, 0.10d, int.MaxValue, 0, 0, 0, 0, 0, 0),
+    new(false, true, 0.04d, 0.04d, 0.60d, int.MaxValue, 8, 6, 4, 3, 2, 1),
+];
+IReadOnlyList<MultiplayerRetentionChoice> overlappingLaneChoices =
+    MultiplayerRetentionDiversityPolicy.SelectProtected(
+        overlappingLaneObservations,
+        limit: 4);
+Check(
+    overlappingLaneChoices.Count == 4
+        && overlappingLaneChoices.Select(choice => choice.Index).Distinct().Count() == 4,
+    "When one route leads multiple objectives, P2 reuses that route once and spends remaining protected slots on distinct representatives.");
+
+MultiplayerChanceCoverageCandidate[] chanceCoverageCandidates =
+[
+    // Decision 0 already retained its modal scenario; its next scenario belongs to round 1.
+    new(0, DecisionRank: 0, ScenarioRank: 0, AlreadyRetained: true),
+    new(1, DecisionRank: 0, ScenarioRank: 1, AlreadyRetained: false),
+    new(2, DecisionRank: 0, ScenarioRank: 2, AlreadyRetained: false),
+    // Decisions 1 and 2 still need their modal scenarios.
+    new(3, DecisionRank: 1, ScenarioRank: 0, AlreadyRetained: false),
+    new(4, DecisionRank: 1, ScenarioRank: 1, AlreadyRetained: false),
+    new(5, DecisionRank: 2, ScenarioRank: 0, AlreadyRetained: false),
+];
+IReadOnlyList<int> chanceCoverage =
+    MultiplayerChanceCoveragePolicy.SelectAdditionalCandidateIndices(
+        chanceCoverageCandidates,
+        extraLimit: 4);
+Check(
+    chanceCoverage.SequenceEqual([3, 5, 1, 4]),
+    "P3 chance coverage counts an already-retained modal scenario in its natural round and fills missing scenarios round-robin across represented decisions.");
+
+IReadOnlyList<int> cappedChanceCoverage =
+    MultiplayerChanceCoveragePolicy.SelectAdditionalCandidateIndices(
+        chanceCoverageCandidates,
+        extraLimit: 2);
+Check(
+    cappedChanceCoverage.SequenceEqual([3, 5]),
+    "P3 chance coverage obeys its hard extra-candidate cap instead of widening the final portfolio without bound.");
+
+
+ShadowTeammateScenarioObservation[] teammateScenarioObservations =
+[
+    new(2, false, true, 20, 50, 0.50d, 1, 0, -1.0d, "A:Vulnerable>B:Attack"),
+    new(2, false, true, 35, 75, 0.80d, 1, 0, -1.2d, "B:Defend>A:Attack"),
+    new(1, false, true, 45, 55, 0.55d, 3, 1, -0.9d, "A:Power"),
+    new(0, false, true, 50, 50, 0.50d, 4, 1, -0.7d, ""),
+    new(2, false, true, 24, 52, 0.52d, 1, 0, -0.8d, "B:Attack>A:Vulnerable"),
+];
+IReadOnlyList<ShadowTeammateScenarioChoice> teammateScenarioChoices =
+    ShadowTeammateScenarioPolicy.SelectProtected(
+        teammateScenarioObservations,
+        limit: 4);
+string teammateScenarioSelection = string.Join(
+    ",",
+    teammateScenarioChoices.Select(choice => $"{choice.Kind}:{choice.Index}"));
+Check(
+    teammateScenarioChoices.Count == 4
+        && teammateScenarioChoices.Any(choice =>
+            choice.Kind == ShadowTeammateScenarioKind.Aggressive
+            && choice.Index == 0)
+        && teammateScenarioChoices.Any(choice =>
+            choice.Kind == ShadowTeammateScenarioKind.Defensive
+            && choice.Index == 1)
+        && teammateScenarioChoices.Any(choice =>
+            choice.Kind == ShadowTeammateScenarioKind.Conserve
+            && choice.Index == 2)
+        && teammateScenarioChoices.Any(choice =>
+            choice.Kind == ShadowTeammateScenarioKind.NoAction
+            && choice.Index == 3),
+    $"P3 Shadow Top-K protects aggressive, defensive, conserve-resource and no-action teammate stress scenarios. actual={teammateScenarioSelection}");
+
+IReadOnlyList<ShadowTeammateScenarioChoice> orderDiversityChoices =
+    ShadowTeammateScenarioPolicy.SelectProtected(
+        teammateScenarioObservations,
+        limit: 5);
+Check(
+    orderDiversityChoices.Count == 5
+        && orderDiversityChoices.Select(choice => choice.Index).Distinct().Count() == 5
+        && orderDiversityChoices.Any(choice => choice.Index == 4),
+    "P3 uses remaining Shadow capacity for a distinct ordered action sequence, so vulnerable-before-attack and attack-before-vulnerable can remain separate when their modeled states differ.");
+
+MultiplayerScenarioDecisionRank optimisticSingleRoute =
+    MultiplayerScenarioReevaluationPolicy.Aggregate(
+    [
+        new(
+            ShadowTeammateScenarioKind.Aggressive,
+            CompleteVictory: true,
+            AllPlayersAlive: true,
+            LossEquivalent: 0.01d,
+            WorstPlayerLossRatio: 0.01d,
+            TeamLossRatio: 0.01d,
+            EnemyDurabilityRatio: 0d),
+        new(
+            ShadowTeammateScenarioKind.NoAction,
+            CompleteVictory: false,
+            AllPlayersAlive: true,
+            LossEquivalent: 0.45d,
+            WorstPlayerLossRatio: 0.35d,
+            TeamLossRatio: 0.40d,
+            EnemyDurabilityRatio: 0.90d),
+    ]);
+MultiplayerScenarioDecisionRank robustCurrentAction =
+    MultiplayerScenarioReevaluationPolicy.Aggregate(
+    [
+        new(
+            ShadowTeammateScenarioKind.Aggressive,
+            CompleteVictory: false,
+            AllPlayersAlive: true,
+            LossEquivalent: 0.12d,
+            WorstPlayerLossRatio: 0.10d,
+            TeamLossRatio: 0.10d,
+            EnemyDurabilityRatio: 0.30d),
+        new(
+            ShadowTeammateScenarioKind.NoAction,
+            CompleteVictory: false,
+            AllPlayersAlive: true,
+            LossEquivalent: 0.14d,
+            WorstPlayerLossRatio: 0.12d,
+            TeamLossRatio: 0.12d,
+            EnemyDurabilityRatio: 0.40d),
+    ]);
+Check(
+    MultiplayerScenarioReevaluationPolicy.Compare(
+        robustCurrentAction,
+        optimisticSingleRoute) < 0,
+    "P3 robust reranking prefers the current action with a better worst teammate scenario over a route that only wins under one optimistic teammate behavior.");
+
+
+Check(
+    ShadowTeammateScenarioPolicy.DefaultScenarioCount
+        == MultiplayerScenarioReevaluationPolicy.MaximumScenariosPerDecision,
+    "P3 shared production scenario count exactly fits the four stress-scenario lanes; ShadowTeammatePlanner consumes the same constant.");
+
+Check(
+    teammateScenarioChoices
+        .Where(choice => choice.Kind != ShadowTeammateScenarioKind.NoAction)
+        .Select(choice => teammateScenarioObservations[choice.Index].ActionOrderKey)
+        .Where(key => !string.IsNullOrEmpty(key))
+        .Distinct(StringComparer.Ordinal)
+        .Count() >= 3,
+    "P3 default four-scenario portfolio retains distinct modeled action orders inside the production beam, not only in a wider test-only beam.");
+
+ShadowTeammateScenarioObservation[] sharedBestOrderObservations =
+[
+    new(2, false, true, 10, 80, 0.90d, 3, 2, -0.1d, "A:Vulnerable>B:Attack"),
+    new(2, false, true, 12, 75, 0.85d, 2, 1, -0.2d, "B:Attack>A:Vulnerable"),
+    new(1, false, true, 30, 70, 0.80d, 4, 2, -0.3d, "A:Power"),
+    new(0, false, true, 40, 60, 0.70d, 5, 3, -0.4d, ""),
+];
+IReadOnlyList<ShadowTeammateScenarioChoice> sharedBestOrderChoices =
+    ShadowTeammateScenarioPolicy.SelectProtected(
+        sharedBestOrderObservations,
+        limit: 4);
+Check(
+    sharedBestOrderChoices.Count == 4
+        && sharedBestOrderChoices
+            .Where(choice => choice.Kind != ShadowTeammateScenarioKind.NoAction)
+            .Select(choice => sharedBestOrderObservations[choice.Index].ActionOrderKey)
+            .Distinct(StringComparer.Ordinal)
+            .Count() == 3,
+    "P3 reuses the four production slots to preserve distinct key action orders across stress lanes whenever such order variants exist.");
+
 Console.WriteLine($"PASS: {checks} multiplayer local-cross-turn contract checks");
 
 
@@ -308,6 +519,160 @@ Check(
         && MultiplayerCombatObjectiveMath.ComputeLethalUrgency(0.25d)
             > MultiplayerCombatObjectiveMath.ComputeLethalUrgency(0.75d),
     "Adaptive lethal urgency rises smoothly as enemy effective durability falls.");
+
+double earlyBaselineEquivalent =
+    MultiplayerCombatObjectiveMath.InterimLossEquivalent(
+        teamLossRatio: 0.005d,
+        worstPlayerLossRatio: 0.10d,
+        enemyDurabilityRatio: 0.80d);
+double earlyRiskierProgressEquivalent =
+    MultiplayerCombatObjectiveMath.InterimLossEquivalent(
+        teamLossRatio: 0.020d,
+        worstPlayerLossRatio: 0.10d,
+        enemyDurabilityRatio: 0.70d);
+double lateProgressEquivalent =
+    MultiplayerCombatObjectiveMath.InterimLossEquivalent(
+        teamLossRatio: 0.020d,
+        worstPlayerLossRatio: 0.10d,
+        enemyDurabilityRatio: 0.20d);
+Check(
+    earlyRiskierProgressEquivalent > earlyBaselineEquivalent
+        && lateProgressEquivalent < earlyBaselineEquivalent,
+    "Interim objective keeps extra-loss tolerance tiny at high durability but can trade modest loss for strong near-lethal progress.");
+
+MultiplayerCombatObjectiveRank adaptiveFastRank =
+    MultiplayerCombatObjectiveMath.BuildRank(
+        MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo,
+        completeVictory: true,
+        allPlayersAlive: true,
+        teamLossRatio: 0.12d,
+        worstPlayerLossRatio: 0.10d,
+        enemyDurabilityRatio: 0d,
+        terminalTempoReferenceEnemyDurabilityRatio: 0.08d,
+        combatEndedTurn: 3,
+        startTurnNumber: 1);
+MultiplayerCombatObjectiveRank adaptiveSlowRank =
+    MultiplayerCombatObjectiveMath.BuildRank(
+        MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo,
+        completeVictory: true,
+        allPlayersAlive: true,
+        teamLossRatio: 0.08d,
+        worstPlayerLossRatio: 0.10d,
+        enemyDurabilityRatio: 0d,
+        terminalTempoReferenceEnemyDurabilityRatio: 0.08d,
+        combatEndedTurn: 5,
+        startTurnNumber: 1);
+Check(
+    MultiplayerCombatObjectiveMath.Compare(adaptiveFastRank, adaptiveSlowRank) < 0,
+    "The shared P1 terminal rank preserves adaptive loss-versus-finish-turn behavior.");
+
+MultiplayerCombatObjectiveRank safeIncompleteRank =
+    MultiplayerCombatObjectiveMath.BuildRank(
+        MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo,
+        completeVictory: false,
+        allPlayersAlive: true,
+        teamLossRatio: 0.04d,
+        worstPlayerLossRatio: 0.05d,
+        enemyDurabilityRatio: 0.30d,
+        terminalTempoReferenceEnemyDurabilityRatio: 0.30d,
+        combatEndedTurn: null,
+        startTurnNumber: 1);
+MultiplayerCombatObjectiveRank deadIncompleteRank =
+    MultiplayerCombatObjectiveMath.BuildRank(
+        MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo,
+        completeVictory: false,
+        allPlayersAlive: false,
+        teamLossRatio: 0.01d,
+        worstPlayerLossRatio: 0.01d,
+        enemyDurabilityRatio: 0.05d,
+        terminalTempoReferenceEnemyDurabilityRatio: 0.30d,
+        combatEndedTurn: null,
+        startTurnNumber: 1);
+Check(
+    MultiplayerCombatObjectiveMath.Compare(safeIncompleteRank, deadIncompleteRank) < 0,
+    "All-player survival remains a hard objective boundary before loss or enemy progress.");
+
+MultiplayerCombatObjectiveRank minimizeHighDurability =
+    MultiplayerCombatObjectiveMath.BuildRank(
+        MultiplayerCombatObjectiveStrategy.MinimizeTeamLoss,
+        completeVictory: false,
+        allPlayersAlive: true,
+        teamLossRatio: 0.03d,
+        worstPlayerLossRatio: 0.03d,
+        enemyDurabilityRatio: 0.80d,
+        terminalTempoReferenceEnemyDurabilityRatio: 0.80d,
+        combatEndedTurn: null,
+        startTurnNumber: 1);
+MultiplayerCombatObjectiveRank minimizeLowDurability =
+    MultiplayerCombatObjectiveMath.BuildRank(
+        MultiplayerCombatObjectiveStrategy.MinimizeTeamLoss,
+        completeVictory: false,
+        allPlayersAlive: true,
+        teamLossRatio: 0.03d,
+        worstPlayerLossRatio: 0.03d,
+        enemyDurabilityRatio: 0.20d,
+        terminalTempoReferenceEnemyDurabilityRatio: 0.80d,
+        combatEndedTurn: null,
+        startTurnNumber: 1);
+Check(
+    minimizeHighDurability.LossEquivalent == minimizeLowDurability.LossEquivalent
+        && MultiplayerCombatObjectiveMath.Compare(
+            minimizeLowDurability,
+            minimizeHighDurability) < 0,
+    "MinimizeTeamLoss keeps loss primary while enemy durability remains a deterministic tie-break.");
+
+double mergedScenarioLogMass = ShadowScenarioChanceMath.LogAddExp(
+    Math.Log(0.20d),
+    Math.Log(0.30d));
+Check(
+    Math.Abs(Math.Exp(mergedScenarioLogMass) - 0.50d) < 1e-12d,
+    "Exact-equivalent Shadow histories add probability mass instead of keeping only the most likely representative.");
+
+ShadowScenarioProbabilitySet retainedScenarioProbabilities =
+    ShadowScenarioChanceMath.NormalizeRetainedLogMasses(
+        [Math.Log(0.20d), Math.Log(0.30d)]);
+Check(
+    Math.Abs(retainedScenarioProbabilities.RetainedProbabilityMass - 0.50d) < 1e-12d
+        && Math.Abs(retainedScenarioProbabilities.ConditionalProbabilities[0] - 0.40d) < 1e-12d
+        && Math.Abs(retainedScenarioProbabilities.ConditionalProbabilities[1] - 0.60d) < 1e-12d,
+    "Retained Shadow scenarios expose both raw behavior-mass coverage and normalized conditional scenario weights.");
+
+MultiplayerChanceDecisionRank luckyButUsuallyBad =
+    MultiplayerChanceDecisionMath.Aggregate(
+    [
+        new MultiplayerChanceOutcome(
+            0.10d, true, true,
+            0.00d, 0.00d, 0.00d, 0.00d),
+        new MultiplayerChanceOutcome(
+            0.90d, false, true,
+            0.50d, 0.30d, 0.40d, 0.80d),
+    ]);
+MultiplayerChanceDecisionRank consistentlyModerate =
+    MultiplayerChanceDecisionMath.Aggregate(
+    [
+        new MultiplayerChanceOutcome(
+            1.00d, false, true,
+            0.10d, 0.10d, 0.10d, 0.35d),
+    ]);
+Check(
+    MultiplayerChanceDecisionMath.Compare(
+        consistentlyModerate,
+        luckyButUsuallyBad) < 0,
+    "Chance-node ranking does not select a locally lucky low-probability teammate outcome over the probability-weighted current-turn decision.");
+
+MultiplayerChanceDecisionRank partiallyCoveredVictory =
+    MultiplayerChanceDecisionMath.Aggregate(
+    [
+        new MultiplayerChanceOutcome(
+            0.60d, true, true,
+            0.02d, 0.02d, 0.02d, 0d),
+    ]);
+Check(
+    Math.Abs(partiallyCoveredVictory.RetainedProbabilityMass - 0.60d) < 1e-12d
+        && !partiallyCoveredVictory.GuaranteedVictory
+        && Math.Abs(partiallyCoveredVictory.VictoryProbabilityLower - 0.60d) < 1e-12d
+        && Math.Abs(partiallyCoveredVictory.ConservativeTeamDeathProbability - 0.40d) < 1e-12d,
+    "Uncovered Shadow probability mass is treated conservatively rather than silently renormalized into guaranteed success.");
 
 double healthyTempoRate =
     MultiplayerCombatObjectiveMath.LossRatioPerTurn(

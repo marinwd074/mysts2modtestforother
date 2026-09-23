@@ -1,8 +1,25 @@
 namespace CombatSolver;
 
+internal enum MultiplayerCombatObjectiveStrategy
+{
+    MinimizeTeamLoss,
+    AdaptiveLethalTempo,
+}
+
+internal readonly record struct MultiplayerCombatObjectiveRank(
+    bool CompleteVictory,
+    bool AllPlayersAlive,
+    double LossEquivalent,
+    double WorstPlayerLossRatio,
+    double TeamLossRatio,
+    double EnemyDurabilityRatio,
+    int CombatEndedTurn);
+
 /// <summary>
-/// Pure math for the multiplayer loss/tempo objective. The tempo term is continuous in both
-/// enemy durability and team fragility; no HP threshold changes the ordering regime.
+/// Pure math for the multiplayer loss/tempo objective. Terminal selection and intermediate
+/// retention use the same normalized loss-equivalent scale. The terminal form prices each
+/// additional turn; the intermediate form grants a bounded progress credit so Beam pruning
+/// does not optimize a different objective from the final selector.
 /// </summary>
 internal static class MultiplayerCombatObjectiveMath
 {
@@ -45,5 +62,87 @@ internal static class MultiplayerCombatObjectiveMath
             + turnsToEnd * LossRatioPerTurn(
                 enemyDurabilityRatio,
                 worstPlayerLossRatio);
+    }
+
+    internal static double InterimLossEquivalent(
+        double teamLossRatio,
+        double worstPlayerLossRatio,
+        double enemyDurabilityRatio)
+    {
+        double remaining = Math.Clamp(enemyDurabilityRatio, 0d, 1d);
+        double progress = 1d - remaining;
+        double progressCredit = progress * LossRatioPerTurn(
+            remaining,
+            worstPlayerLossRatio);
+        return Math.Max(0d, teamLossRatio) - progressCredit;
+    }
+
+    internal static MultiplayerCombatObjectiveRank BuildRank(
+        MultiplayerCombatObjectiveStrategy strategy,
+        bool completeVictory,
+        bool allPlayersAlive,
+        double teamLossRatio,
+        double worstPlayerLossRatio,
+        double enemyDurabilityRatio,
+        double terminalTempoReferenceEnemyDurabilityRatio,
+        int? combatEndedTurn,
+        int startTurnNumber)
+    {
+        int endedTurn = completeVictory
+            ? combatEndedTurn
+                ?? throw new ArgumentException(
+                    "A complete multiplayer victory requires a combat-ended turn.",
+                    nameof(combatEndedTurn))
+            : int.MaxValue;
+        double lossEquivalent = strategy == MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo
+            ? completeVictory
+                ? ContinuousTempoScore(
+                    teamLossRatio,
+                    worstPlayerLossRatio,
+                    terminalTempoReferenceEnemyDurabilityRatio,
+                    endedTurn,
+                    startTurnNumber)
+                : InterimLossEquivalent(
+                    teamLossRatio,
+                    worstPlayerLossRatio,
+                    enemyDurabilityRatio)
+            : Math.Max(0d, teamLossRatio);
+        return new MultiplayerCombatObjectiveRank(
+            completeVictory,
+            allPlayersAlive,
+            lossEquivalent,
+            Math.Max(0d, worstPlayerLossRatio),
+            Math.Max(0d, teamLossRatio),
+            Math.Clamp(enemyDurabilityRatio, 0d, 1d),
+            endedTurn);
+    }
+
+    /// <summary>
+    /// Negative means left is preferred. This ordering is the shared P1 team objective used by
+    /// final candidate preselection, final policy ordering, ordinary Beam ranking and same-state
+    /// representative selection.
+    /// </summary>
+    internal static int Compare(
+        MultiplayerCombatObjectiveRank left,
+        MultiplayerCombatObjectiveRank right)
+    {
+        int comparison = right.CompleteVictory.CompareTo(left.CompleteVictory);
+        if (comparison != 0)
+            return comparison;
+        comparison = right.AllPlayersAlive.CompareTo(left.AllPlayersAlive);
+        if (comparison != 0)
+            return comparison;
+        comparison = left.LossEquivalent.CompareTo(right.LossEquivalent);
+        if (comparison != 0)
+            return comparison;
+        comparison = left.WorstPlayerLossRatio.CompareTo(right.WorstPlayerLossRatio);
+        if (comparison != 0)
+            return comparison;
+        comparison = left.TeamLossRatio.CompareTo(right.TeamLossRatio);
+        if (comparison != 0)
+            return comparison;
+        return left.CompleteVictory && right.CompleteVictory
+            ? left.CombatEndedTurn.CompareTo(right.CombatEndedTurn)
+            : left.EnemyDurabilityRatio.CompareTo(right.EnemyDurabilityRatio);
     }
 }

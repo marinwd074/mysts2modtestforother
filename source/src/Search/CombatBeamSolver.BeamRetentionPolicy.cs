@@ -74,6 +74,10 @@ internal sealed partial class CombatBeamSolver
     private sealed partial class BeamRetentionPolicy(
         SolverSearchProfile _profile,
         SearchRoutePolicy _routePolicy,
+        MultiplayerCombatObjectiveStrategy _multiplayerCombatObjectiveStrategy,
+        double _multiplayerEnemyDurabilityRatio,
+        int _multiplayerEnemyMaximumHp,
+        int _startTurnNumber,
         bool _isActEndingBoss,
         BossHpRelief _bossHpRelief,
         PostCombatRelicHealProfile _postCombatRelicHeal,
@@ -104,6 +108,10 @@ internal sealed partial class CombatBeamSolver
 
         private const int PersistentRoutingContextRounds = 8;
         private const int RoutingChoiceLimit = 96;
+        // Probability-weighted P3 experiments remain disabled until behavior priors are calibrated.
+        private const int FinalChanceCoverageLimit = 0;
+        private const int FinalScenarioCoverageLimit =
+            MultiplayerScenarioReevaluationPolicy.MaximumCoverageCandidates;
         private const int AmbiguousCompressedChoiceLimit = 48;
         private sealed record OrderedPileCohort(IReadOnlyList<SearchNode> PrefixVariants);
         private readonly record struct PocketwatchCadenceSignature(
@@ -147,7 +155,11 @@ internal sealed partial class CombatBeamSolver
                             _bossHpRelief,
                             _postCombatRelicHeal,
                             _theftPolicy,
-                            _routePolicy) < 0))
+                            _routePolicy,
+                            _multiplayerCombatObjectiveStrategy,
+                            _multiplayerEnemyDurabilityRatio,
+                            _multiplayerEnemyMaximumHp,
+                            _startTurnNumber) < 0))
                 {
                     potionFreeBaseline = candidate;
                 }
@@ -179,6 +191,24 @@ internal sealed partial class CombatBeamSolver
             }
             if (potionFreeBaseline != null && !ContainsReference(ranked, potionFreeBaseline))
                 ranked.Add(potionFreeBaseline);
+
+            // P2 chance aggregation happens after RankFinal. If ordinary final-quality trimming
+            // keeps only a lucky low-probability Shadow outcome, the chance node becomes biased
+            // before it is evaluated. P3A therefore adds a tiny final-only coverage portfolio:
+            // only decisions already represented in the ordinary ranked set are eligible, and
+            // at most FinalChanceCoverageLimit extra nodes are admitted. Main Beam width,
+            // expansion count and time budget are unchanged.
+            if (_routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn)
+            {
+                AddFinalScenarioCoverageRepresentatives(
+                    candidates,
+                    ranked,
+                    FinalScenarioCoverageLimit);
+                AddFinalChanceCoverageRepresentatives(
+                    candidates,
+                    ranked,
+                    FinalChanceCoverageLimit);
+            }
             ranked.Sort((left, right) =>
             {
                 int comparison = CompareFinalCandidates(left, right);
@@ -190,6 +220,242 @@ internal sealed partial class CombatBeamSolver
             });
             AssignRetentionRanks(ranked, []);
             return ranked;
+        }
+
+        private void AddFinalScenarioCoverageRepresentatives(
+            IReadOnlyList<SearchNode> candidates,
+            List<SearchNode> ranked,
+            int extraLimit)
+        {
+            if (extraLimit <= 0 || candidates.Count == 0 || ranked.Count == 0)
+                return;
+
+            List<string> decisionKeys = [];
+            HashSet<string> decisionSet = new(StringComparer.Ordinal);
+            foreach (SearchNode node in ranked)
+            {
+                if (!MultiplayerChanceDecisionIdentity.TryGetCurrentTurnShadowOutcome(
+                        node,
+                        _startTurnNumber,
+                        out _,
+                        out ShadowForecastPlan forecast)
+                    || !forecast.ScenarioSetComplete
+                    || forecast.ScenarioKind == ShadowTeammateScenarioKind.Unspecified)
+                {
+                    continue;
+                }
+
+                string key = MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(
+                    node,
+                    _startTurnNumber);
+                if (decisionSet.Add(key))
+                {
+                    decisionKeys.Add(key);
+                    if (decisionKeys.Count
+                        == MultiplayerScenarioReevaluationPolicy.MaximumCurrentDecisions)
+                    {
+                        break;
+                    }
+                }
+            }
+            if (decisionKeys.Count == 0)
+                return;
+
+            Dictionary<string, Dictionary<ShadowTeammateScenarioKind, SearchNode>>
+                leadersByDecision = new(StringComparer.Ordinal);
+            foreach (SearchNode candidate in candidates)
+            {
+                if (!MultiplayerChanceDecisionIdentity.TryGetCurrentTurnShadowOutcome(
+                        candidate,
+                        _startTurnNumber,
+                        out _,
+                        out ShadowForecastPlan forecast)
+                    || !forecast.ScenarioSetComplete
+                    || forecast.ScenarioKind == ShadowTeammateScenarioKind.Unspecified)
+                {
+                    continue;
+                }
+
+                string decisionKey =
+                    MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(
+                        candidate,
+                        _startTurnNumber);
+                if (!decisionSet.Contains(decisionKey))
+                    continue;
+
+                if (!leadersByDecision.TryGetValue(
+                        decisionKey,
+                        out Dictionary<ShadowTeammateScenarioKind, SearchNode>? leaders))
+                {
+                    leaders = [];
+                    leadersByDecision.Add(decisionKey, leaders);
+                }
+
+                if (!leaders.TryGetValue(forecast.ScenarioKind, out SearchNode? current)
+                    || CompareFinalCandidates(candidate, current) < 0)
+                {
+                    leaders[forecast.ScenarioKind] = candidate;
+                }
+            }
+
+            int added = 0;
+            foreach (string decisionKey in decisionKeys)
+            {
+                if (!leadersByDecision.TryGetValue(
+                        decisionKey,
+                        out Dictionary<ShadowTeammateScenarioKind, SearchNode>? leaders))
+                {
+                    continue;
+                }
+
+                foreach (ShadowTeammateScenarioKind kind in new[]
+                         {
+                             ShadowTeammateScenarioKind.Aggressive,
+                             ShadowTeammateScenarioKind.Defensive,
+                             ShadowTeammateScenarioKind.Conserve,
+                             ShadowTeammateScenarioKind.NoAction,
+                         })
+                {
+                    if (!leaders.TryGetValue(kind, out SearchNode? candidate)
+                        || ContainsReference(ranked, candidate))
+                    {
+                        continue;
+                    }
+
+                    ranked.Add(candidate);
+                    added++;
+                    if (added == extraLimit)
+                        return;
+                }
+            }
+        }
+
+        private void AddFinalChanceCoverageRepresentatives(
+            IReadOnlyList<SearchNode> candidates,
+            List<SearchNode> ranked,
+            int extraLimit)
+        {
+            if (extraLimit <= 0 || candidates.Count == 0 || ranked.Count == 0)
+                return;
+
+            List<string> representedDecisionKeys = [];
+            HashSet<string> representedDecisionSet = new(StringComparer.Ordinal);
+            foreach (SearchNode node in ranked)
+            {
+                if (!MultiplayerChanceDecisionIdentity.TryGetCurrentTurnShadowOutcome(
+                        node,
+                        _startTurnNumber,
+                        out _,
+                        out ShadowForecastPlan forecast)
+                    || !forecast.ScenarioProbabilityTrusted)
+                {
+                    continue;
+                }
+
+                string decisionKey =
+                    MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(
+                        node,
+                        _startTurnNumber);
+                if (representedDecisionSet.Add(decisionKey))
+                    representedDecisionKeys.Add(decisionKey);
+            }
+            if (representedDecisionKeys.Count == 0)
+                return;
+
+            Dictionary<string, Dictionary<StateFingerprint, SearchNode>> leadersByDecision =
+                new(StringComparer.Ordinal);
+            Dictionary<SearchNode, double> probabilityByLeader =
+                new(ReferenceEqualityComparer.Instance);
+
+            foreach (SearchNode candidate in candidates)
+            {
+                if (!MultiplayerChanceDecisionIdentity.TryGetCurrentTurnShadowOutcome(
+                        candidate,
+                        _startTurnNumber,
+                        out _,
+                        out ShadowForecastPlan forecast)
+                    || !forecast.ScenarioProbabilityTrusted)
+                {
+                    continue;
+                }
+
+                string decisionKey =
+                    MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(
+                        candidate,
+                        _startTurnNumber);
+                if (!representedDecisionSet.Contains(decisionKey))
+                    continue;
+
+                if (!leadersByDecision.TryGetValue(
+                        decisionKey,
+                        out Dictionary<StateFingerprint, SearchNode>? scenarioLeaders))
+                {
+                    scenarioLeaders = [];
+                    leadersByDecision.Add(decisionKey, scenarioLeaders);
+                }
+
+                if (!scenarioLeaders.TryGetValue(
+                        forecast.ScenarioFingerprint,
+                        out SearchNode? current)
+                    || CompareFinalCandidates(candidate, current) < 0)
+                {
+                    scenarioLeaders[forecast.ScenarioFingerprint] = candidate;
+                }
+            }
+
+            List<SearchNode> coverageNodes = [];
+            List<MultiplayerChanceCoverageCandidate> coverageCandidates = [];
+            for (int decisionRank = 0;
+                 decisionRank < representedDecisionKeys.Count;
+                 decisionRank++)
+            {
+                string decisionKey = representedDecisionKeys[decisionRank];
+                if (!leadersByDecision.TryGetValue(
+                        decisionKey,
+                        out Dictionary<StateFingerprint, SearchNode>? scenarioLeaders))
+                {
+                    continue;
+                }
+
+                List<SearchNode> ordered = [.. scenarioLeaders.Values];
+                foreach (SearchNode node in ordered)
+                {
+                    _ = MultiplayerChanceDecisionIdentity.TryGetCurrentTurnShadowOutcome(
+                        node,
+                        _startTurnNumber,
+                        out _,
+                        out ShadowForecastPlan forecast);
+                    probabilityByLeader[node] = forecast.ScenarioProbabilityMass;
+                }
+                ordered.Sort((left, right) =>
+                {
+                    int comparison = probabilityByLeader[right].CompareTo(
+                        probabilityByLeader[left]);
+                    if (comparison != 0)
+                        return comparison;
+                    return CompareFinalCandidates(left, right);
+                });
+
+                for (int scenarioRank = 0; scenarioRank < ordered.Count; scenarioRank++)
+                {
+                    SearchNode node = ordered[scenarioRank];
+                    int candidateIndex = coverageNodes.Count;
+                    coverageNodes.Add(node);
+                    coverageCandidates.Add(new MultiplayerChanceCoverageCandidate(
+                        candidateIndex,
+                        decisionRank,
+                        scenarioRank,
+                        ContainsReference(ranked, node)));
+                }
+            }
+
+            foreach (int candidateIndex in
+                     MultiplayerChanceCoveragePolicy.SelectAdditionalCandidateIndices(
+                         coverageCandidates,
+                         extraLimit))
+            {
+                ranked.Add(coverageNodes[candidateIndex]);
+            }
         }
 
         public static (int Value, int Count) GetLongTermResourceMaximum(
@@ -274,12 +540,74 @@ internal sealed partial class CombatBeamSolver
 
         private Comparison<SearchNode>? _finalCandidateComparison;
 
+        private MultiplayerCombatObjectiveRank BuildMultiplayerObjectiveRank(SearchNode node)
+        {
+            bool completeVictory = IsCompleteVictory(node);
+            double enemyDurabilityRatio =
+                MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(
+                    node.Snapshot.EnemyDurabilityByCombatId,
+                    _multiplayerEnemyMaximumHp);
+            return MultiplayerCombatObjectiveMath.BuildRank(
+                _multiplayerCombatObjectiveStrategy,
+                completeVictory,
+                node.Snapshot.AllPlayersAlive,
+                node.Snapshot.TeamLossRatio,
+                node.Snapshot.WorstPlayerLossRatio,
+                enemyDurabilityRatio,
+                _multiplayerEnemyDurabilityRatio,
+                completeVictory ? CompletedCombatTurn(node) : null,
+                _startTurnNumber);
+        }
+
+        private int CompareMultiplayerObjective(SearchNode left, SearchNode right)
+            => _routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
+                ? MultiplayerCombatObjectiveMath.Compare(
+                    BuildMultiplayerObjectiveRank(left),
+                    BuildMultiplayerObjectiveRank(right))
+                : 0;
+
         private void SortByBeamRank(List<SearchNode> ranked)
+        {
+            if (_routePolicy != SearchRoutePolicy.MultiplayerLocalCrossTurn)
+            {
+                SortByLegacyBeamRank(ranked);
+                return;
+            }
+            if (ranked.Count < 2)
+                return;
+
+            // Multiplayer freezes both objective and score inputs once per node. The shared
+            // P1 team objective is primary; historical Beam score remains only a tie-break.
+            List<(SearchNode Node, double Score, MultiplayerCombatObjectiveRank TeamObjective)> scored =
+                new(ranked.Count);
+            foreach (SearchNode node in ranked)
+            {
+                scored.Add((
+                    node,
+                    BeamRankScore(node),
+                    BuildMultiplayerObjectiveRank(node)));
+            }
+            scored.Sort((left, right) =>
+            {
+                int objective = MultiplayerCombatObjectiveMath.Compare(
+                    left.TeamObjective,
+                    right.TeamObjective);
+                if (objective != 0)
+                    return objective;
+                return CompareBeamRankOrder(
+                    left.Score, left.Node.Snapshot.OffensiveProgressValue, left.Node.ActionCount,
+                    right.Score, right.Node.Snapshot.OffensiveProgressValue, right.Node.ActionCount);
+            });
+            for (int index = 0; index < ranked.Count; index++)
+                ranked[index] = scored[index].Node;
+        }
+
+        private void SortByLegacyBeamRank(List<SearchNode> ranked)
         {
             if (ranked.Count < 2)
                 return;
-            // Score inputs are frozen during this sort. Preserve the same List.Sort
-            // comparison and tie behavior while evaluating the formula once per entry.
+            // This is the pre-P1 single-player ordering. Keep it isolated so the extracted
+            // BeamRankSortChecks contract proves that P1 does not change single-player order.
             List<(SearchNode Node, double Score)> scored = new(ranked.Count);
             foreach (SearchNode node in ranked)
                 scored.Add((node, BeamRankScore(node)));
@@ -336,16 +664,21 @@ internal sealed partial class CombatBeamSolver
             }
             else
             {
-                Dictionary<StateFingerprint, SearchNode> bestByState = [];
+                // This is representative compression, not an "exact-equivalence" proof:
+                // identical simulator StateKey values can still arrive with different cumulative
+                // loss/policy history. P1 chooses the representative with the shared objective.
+                // Exact future-state merging is reserved for explicitly complete fingerprints
+                // such as ShadowFutureStateFingerprint.
+                Dictionary<StateFingerprint, SearchNode> representativeByState = [];
                 foreach (SearchNode node in nodes)
                 {
-                    if (!bestByState.TryGetValue(node.StateKey, out SearchNode? current)
+                    if (!representativeByState.TryGetValue(node.StateKey, out SearchNode? current)
                         || IsBetterSearchNode(node, current))
                     {
-                        bestByState[node.StateKey] = node;
+                        representativeByState[node.StateKey] = node;
                     }
                 }
-                ranked = [.. bestByState.Values];
+                ranked = [.. representativeByState.Values];
             }
 
             if (finalQualityFirst)
@@ -487,7 +820,7 @@ internal sealed partial class CombatBeamSolver
                     paretoByContext[contextIndex] = candidates
                         .Where(candidate => !candidates.Any(other =>
                             !ReferenceEquals(candidate, other)
-                            && MultiObjectiveDominates(other, candidate)))
+                            && HeuristicQualityDominates(other, candidate)))
                         .ToList();
                 }
                 if (orderedRoutingContexts.Count >= 8)
@@ -665,7 +998,7 @@ internal sealed partial class CombatBeamSolver
                         foreach (IGrouping<StateFingerprint, SearchNode> other in candidates)
                         {
                             if (ReferenceEquals(candidate, other)
-                                || !MultiObjectiveDominates(other.First(), candidate.First()))
+                                || !HeuristicQualityDominates(other.First(), candidate.First()))
                                 continue;
                             dominated = true;
                             break;
@@ -759,8 +1092,11 @@ internal sealed partial class CombatBeamSolver
             List<SearchNode> required = [];
             if (_routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn)
             {
-                foreach (SearchNode teamCandidate in BuildTeamSafetyPortfolio(ranked))
+                foreach (SearchNode teamCandidate in
+                         BuildMultiplayerDiversityPortfolio(ranked, limit))
+                {
                     AddRequired(required, teamCandidate, limit);
+                }
             }
             foreach (IGrouping<int, SearchNode> victoryGroup in ranked
                          .Where(IsCompleteVictory)
@@ -1129,7 +1465,7 @@ internal sealed partial class CombatBeamSolver
                         AddRequired(required, FindBestLane(potionCountGroup.ToList(), trait), limit);
                     }
                 }
-                // MultiObjectiveDominates intentionally cannot compare nodes from different
+                // HeuristicQualityDominates intentionally cannot compare nodes from different
                 // combat/control/pile cohorts. Looking at the whole ranked pool therefore did
                 // O(n^2) fingerprint checks at large turn boundaries (tens of thousands of
                 // ended candidates) even though nearly every pair was incomparable.
@@ -1161,7 +1497,7 @@ internal sealed partial class CombatBeamSolver
                         candidate.Snapshot.UnorderedPileKey);
                     foreach (SearchNode other in paretoCohorts[cohortKey])
                     {
-                        if (!MultiObjectiveDominates(other, candidate))
+                        if (!HeuristicQualityDominates(other, candidate))
                             continue;
                         dominated = true;
                         break;
@@ -1279,46 +1615,43 @@ internal sealed partial class CombatBeamSolver
 
 
 
-        private IEnumerable<SearchNode> BuildTeamSafetyPortfolio(
-            IReadOnlyList<SearchNode> nodes)
+        private IEnumerable<SearchNode> BuildMultiplayerDiversityPortfolio(
+            IReadOnlyList<SearchNode> nodes,
+            int limit)
         {
-            if (nodes.Count == 0)
+            if (nodes.Count == 0 || limit <= 0)
                 yield break;
 
-            IReadOnlyList<SearchNode> pool = nodes.Any(node => node.Snapshot.AllPlayersAlive)
-                ? nodes.Where(node => node.Snapshot.AllPlayersAlive).ToArray()
-                : nodes;
-
-            SearchNode bestTeamLoss = pool
-                .OrderBy(node => node.Snapshot.TeamLossRatio)
-                .ThenBy(node => node.Snapshot.WorstPlayerLossRatio)
-                .ThenBy(node => node.Snapshot.AliveEnemyCount)
-                .ThenBy(node => node.Snapshot.EnemyHp)
-                .ThenByDescending(BeamRankScore)
-                .First();
-            yield return bestTeamLoss;
-
-            SearchNode bestWorstPlayer = pool
-                .OrderBy(node => node.Snapshot.WorstPlayerLossRatio)
-                .ThenBy(node => node.Snapshot.TeamLossRatio)
-                .ThenBy(node => node.Snapshot.AliveEnemyCount)
-                .ThenBy(node => node.Snapshot.EnemyHp)
-                .ThenByDescending(BeamRankScore)
-                .First();
-            if (!ReferenceEquals(bestWorstPlayer, bestTeamLoss))
-                yield return bestWorstPlayer;
-
-            SearchNode bestEnemyProgress = pool
-                .OrderBy(node => node.Snapshot.AliveEnemyCount)
-                .ThenBy(node => node.Snapshot.EnemyHp)
-                .ThenBy(node => node.Snapshot.TeamLossRatio)
-                .ThenBy(node => node.Snapshot.WorstPlayerLossRatio)
-                .ThenByDescending(BeamRankScore)
-                .First();
-            if (!ReferenceEquals(bestEnemyProgress, bestTeamLoss)
-                && !ReferenceEquals(bestEnemyProgress, bestWorstPlayer))
+            MultiplayerRetentionObservation[] observations =
+                new MultiplayerRetentionObservation[nodes.Count];
+            for (int index = 0; index < nodes.Count; index++)
             {
-                yield return bestEnemyProgress;
+                SearchNode node = nodes[index];
+                SimulationSnapshot snapshot = node.Snapshot;
+                bool completeVictory = IsCompleteVictory(node);
+                observations[index] = new MultiplayerRetentionObservation(
+                    completeVictory,
+                    snapshot.AllPlayersAlive,
+                    snapshot.TeamLossRatio,
+                    snapshot.WorstPlayerLossRatio,
+                    MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(
+                        snapshot.EnemyDurabilityByCombatId,
+                        _multiplayerEnemyMaximumHp),
+                    completeVictory ? CompletedCombatTurn(node) : int.MaxValue,
+                    snapshot.LongTermResourceValue,
+                    snapshot.PersistentBuffValue,
+                    snapshot.LatentSetupValue,
+                    snapshot.FutureResourceValue,
+                    RetainedAttackGrowth(snapshot),
+                    snapshot.ReplayPotentialValue);
+            }
+
+            foreach (MultiplayerRetentionChoice choice in
+                     MultiplayerRetentionDiversityPolicy.SelectProtected(
+                         observations,
+                         Math.Min(limit, 4)))
+            {
+                yield return nodes[choice.Index];
             }
         }
 
@@ -1343,7 +1676,10 @@ internal sealed partial class CombatBeamSolver
             SimulationSnapshot rightSnapshot = right.Snapshot;
             bool leftWon = IsCompleteVictory(left);
             bool rightWon = IsCompleteVictory(right);
-            int comparison = rightWon.CompareTo(leftWon);
+            int comparison = CompareMultiplayerObjective(left, right);
+            if (comparison != 0)
+                return comparison;
+            comparison = rightWon.CompareTo(leftWon);
             if (comparison != 0)
                 return comparison;
             if (!leftWon && !rightWon)
@@ -1719,7 +2055,7 @@ internal sealed partial class CombatBeamSolver
                 && left.Snapshot.ProjectedPlayerHp == right.Snapshot.ProjectedPlayerHp
                 && left.Score.Equals(right.Score);
 
-        private static SearchNode? FindBestTacticalEnabler(IReadOnlyList<SearchNode> nodes)
+        private SearchNode? FindBestTacticalEnabler(IReadOnlyList<SearchNode> nodes)
         {
             SearchNode? best = null;
             foreach (SearchNode node in nodes)
@@ -2010,7 +2346,12 @@ internal sealed partial class CombatBeamSolver
             return best;
         }
 
-        private bool MultiObjectiveDominates(SearchNode left, SearchNode right)
+        /// <summary>
+        /// Heuristic retention relation only. This may shape routing/portfolio sampling after
+        /// protected representatives have been reserved; it is not exact state equality and
+        /// must never be used as an optimality proof or as a replacement for transposition identity.
+        /// </summary>
+        private bool HeuristicQualityDominates(SearchNode left, SearchNode right)
         {
             if (ReferenceEquals(left, right))
                 return false;
@@ -2105,9 +2446,15 @@ internal sealed partial class CombatBeamSolver
             return noWorse && strictlyBetter;
         }
 
-        private static bool IsBetterSearchNode(SearchNode candidate, SearchNode current)
-            => candidate.Score > current.Score
-                || candidate.Score.Equals(current.Score) && candidate.ActionCount < current.ActionCount;
+        private bool IsBetterSearchNode(SearchNode candidate, SearchNode current)
+        {
+            int objective = CompareMultiplayerObjective(candidate, current);
+            if (objective != 0)
+                return objective < 0;
+            return candidate.Score > current.Score
+                || candidate.Score.Equals(current.Score)
+                    && candidate.ActionCount < current.ActionCount;
+        }
 
         private double BeamRankScore(SearchNode node)
         {

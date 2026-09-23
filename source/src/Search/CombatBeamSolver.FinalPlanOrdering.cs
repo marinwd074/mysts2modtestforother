@@ -2,6 +2,11 @@ namespace CombatSolver;
 
 internal sealed partial class CombatBeamSolver
 {
+    // P3 robust stress-scenario reranking is active. Probability-weighted aggregation remains
+    // disabled until teammate behavior priors are empirically calibrated.
+    private const bool EnableMultiplayerScenarioReevaluation = true;
+    private const bool EnableMultiplayerChanceAggregation = false;
+
     private sealed class FinalPlanOrdering(
         SolverPotionPolicy potionPolicy,
         PotionStrategySnapshot potionStrategy,
@@ -18,6 +23,7 @@ internal sealed partial class CombatBeamSolver
         SearchRoutePolicy routePolicy,
         MultiplayerCombatObjectiveStrategy multiplayerCombatObjectiveStrategy,
         double multiplayerEnemyDurabilityRatio,
+        int multiplayerEnemyMaximumHp,
         int startTurnNumber,
         MultiplayerCarryRankingContext carryRankingContext,
         BattleDamageSnapshot battleDamage,
@@ -83,6 +89,91 @@ internal sealed partial class CombatBeamSolver
                 MultiplayerCarryCandidateObservation.Create(allEnemiesDead, enemiesAfter));
         }
 
+        private sealed record ScenarioDecisionSummary(
+            string DecisionKey,
+            MultiplayerScenarioDecisionRank Rank,
+            bool ScenarioSetComplete,
+            int BaselineIndex,
+            int ConservativeRepresentativeIndex,
+            string ScenarioKinds);
+
+        private sealed record ChanceDecisionSummary(
+            string DecisionKey,
+            MultiplayerChanceDecisionRank Rank,
+            bool HasShadowChance,
+            bool ProbabilityTrusted,
+            int BaselineIndex);
+
+        private MultiplayerScenarioOutcome BuildScenarioOutcome(
+            SearchNode outcomeNode,
+            ShadowTeammateScenarioKind kind)
+        {
+            SimulationSnapshot snapshot = outcomeNode.Snapshot;
+            bool completeVictory = SolverInterimResultOrdering.IsCompleteVictory(
+                outcomeNode.ActionCount,
+                snapshot.AllEnemiesDead,
+                snapshot.PlayerDead,
+                snapshot.ProjectedPlayerHp);
+            double enemyDurabilityRatio =
+                MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(
+                    snapshot.EnemyDurabilityByCombatId,
+                    multiplayerEnemyMaximumHp);
+            MultiplayerCombatObjectiveRank objective =
+                MultiplayerCombatObjectiveMath.BuildRank(
+                    multiplayerCombatObjectiveStrategy,
+                    completeVictory,
+                    snapshot.AllPlayersAlive,
+                    snapshot.TeamLossRatio,
+                    snapshot.WorstPlayerLossRatio,
+                    enemyDurabilityRatio,
+                    multiplayerEnemyDurabilityRatio,
+                    completeVictory ? snapshot.CombatEndedTurn : null,
+                    startTurnNumber);
+            return new MultiplayerScenarioOutcome(
+                kind,
+                completeVictory,
+                snapshot.AllPlayersAlive,
+                objective.LossEquivalent,
+                objective.WorstPlayerLossRatio,
+                objective.TeamLossRatio,
+                objective.EnemyDurabilityRatio);
+        }
+
+        private MultiplayerChanceOutcome BuildChanceOutcome(
+            SearchNode outcomeNode,
+            double probabilityMass)
+        {
+            SimulationSnapshot snapshot = outcomeNode.Snapshot;
+            bool completeVictory = SolverInterimResultOrdering.IsCompleteVictory(
+                outcomeNode.ActionCount,
+                snapshot.AllEnemiesDead,
+                snapshot.PlayerDead,
+                snapshot.ProjectedPlayerHp);
+            double enemyDurabilityRatio =
+                MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(
+                    snapshot.EnemyDurabilityByCombatId,
+                    multiplayerEnemyMaximumHp);
+            MultiplayerCombatObjectiveRank objective =
+                MultiplayerCombatObjectiveMath.BuildRank(
+                    multiplayerCombatObjectiveStrategy,
+                    completeVictory,
+                    snapshot.AllPlayersAlive,
+                    snapshot.TeamLossRatio,
+                    snapshot.WorstPlayerLossRatio,
+                    enemyDurabilityRatio,
+                    multiplayerEnemyDurabilityRatio,
+                    completeVictory ? snapshot.CombatEndedTurn : null,
+                    startTurnNumber);
+            return new MultiplayerChanceOutcome(
+                probabilityMass,
+                completeVictory,
+                snapshot.AllPlayersAlive,
+                objective.LossEquivalent,
+                objective.WorstPlayerLossRatio,
+                objective.TeamLossRatio,
+                objective.EnemyDurabilityRatio);
+        }
+
         public FinalPlanSelection Select(
             IReadOnlyList<(SearchNode Node, SimulationSnapshot Snapshot)> evaluated,
             int initialHp,
@@ -134,6 +225,23 @@ internal sealed partial class CombatBeamSolver
                         features.AllEnemiesDead,
                         candidate.Snapshot.PlayerDead,
                         features.ProjectedPlayerHp);
+                    double candidateEnemyDurabilityRatio =
+                        MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(
+                            candidate.Snapshot.EnemyDurabilityByCombatId,
+                            multiplayerEnemyMaximumHp);
+                    MultiplayerCombatObjectiveRank multiplayerObjective =
+                        routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
+                            ? MultiplayerCombatObjectiveMath.BuildRank(
+                                multiplayerCombatObjectiveStrategy,
+                                completeVictory,
+                                candidate.Snapshot.AllPlayersAlive,
+                                candidate.Snapshot.TeamLossRatio,
+                                candidate.Snapshot.WorstPlayerLossRatio,
+                                candidateEnemyDurabilityRatio,
+                                multiplayerEnemyDurabilityRatio,
+                                completeVictory ? candidate.Snapshot.CombatEndedTurn : null,
+                                startTurnNumber)
+                            : default;
                     // Relics that heal on victory pay out after the fight, so their HP never reaches
                     // RecoveredPlayerHp, yet it carries into the next fight exactly like in-combat healing.
                     int relicHeal = ActEndingBossPolicy.RankedPostCombatRelicHeal(
@@ -176,6 +284,7 @@ internal sealed partial class CombatBeamSolver
                         OptionalPotionStrategicCost: optionalPotionStrategicCost,
                         OptionalAmbergrisCount: optionalAmbergrisCount,
                         EffectivePotionPolicy: effectivePotionPolicy,
+                        MultiplayerObjective: multiplayerObjective,
                         CarryEvaluation: carryEvaluation,
                         CarryObservationActionCount: carryObservationNode.ActionCount,
                         CarryCompatibility: new MultiplayerCarryCompatibilityKey(
@@ -241,7 +350,11 @@ internal sealed partial class CombatBeamSolver
                             bossHpRelief,
                             postCombatRelicHeal,
                             theftPolicy,
-                            routePolicy) >= 0)
+                            routePolicy,
+                            multiplayerCombatObjectiveStrategy,
+                            multiplayerEnemyDurabilityRatio,
+                            multiplayerEnemyMaximumHp,
+                            startTurnNumber) >= 0)
                 {
                     continue;
                 }
@@ -354,25 +467,22 @@ internal sealed partial class CombatBeamSolver
                     multiplayerCombatObjectiveStrategy);
             var selected = policyEligibleCandidates
                 .OrderByDescending(candidate => candidate.CompleteVictory)
-                .ThenBy(candidate => useTeamObjective && !candidate.Snapshot.AllPlayersAlive ? 1 : 0)
-                .ThenBy(candidate => useTeamObjective && candidate.CompleteVictory
-                    ? useAdaptiveLethalTempo
-                        ? MultiplayerCombatObjectiveMath.ContinuousTempoScore(
-                            candidate.Snapshot.TeamLossRatio,
-                            candidate.Snapshot.WorstPlayerLossRatio,
-                            multiplayerEnemyDurabilityRatio,
-                            candidate.CombatEndedTurn ?? int.MaxValue,
-                            startTurnNumber)
-                        : candidate.Snapshot.TeamLossRatio
+                .ThenBy(candidate => useTeamObjective
+                    && !candidate.MultiplayerObjective.AllPlayersAlive ? 1 : 0)
+                .ThenBy(candidate => useTeamObjective
+                    ? candidate.MultiplayerObjective.LossEquivalent
+                    : 0d)
+                .ThenBy(candidate => useTeamObjective
+                    ? candidate.MultiplayerObjective.WorstPlayerLossRatio
+                    : 0d)
+                .ThenBy(candidate => useTeamObjective
+                    ? candidate.MultiplayerObjective.TeamLossRatio
+                    : 0d)
+                .ThenBy(candidate => useTeamObjective && !candidate.CompleteVictory
+                    ? candidate.MultiplayerObjective.EnemyDurabilityRatio
                     : 0d)
                 .ThenBy(candidate => useTeamObjective && candidate.CompleteVictory
-                    ? candidate.Snapshot.WorstPlayerLossRatio
-                    : 0d)
-                .ThenBy(candidate => useTeamObjective && candidate.CompleteVictory
-                    ? candidate.Snapshot.TeamLossRatio
-                    : 0d)
-                .ThenBy(candidate => useTeamObjective && candidate.CompleteVictory
-                    ? candidate.CombatEndedTurn ?? int.MaxValue
+                    ? candidate.MultiplayerObjective.CombatEndedTurn
                     : 0)
                 // A live incomplete fallback is always preferable to a dead fallback. For
                 // complete victories this key is uniformly zero and cannot weaken the
@@ -423,13 +533,315 @@ internal sealed partial class CombatBeamSolver
                     && candidate.HasCurrentTurnCardAction)
                 .ThenBy(candidate => candidate.Features.ActionCount)
                 .ToList();
+
+            ScenarioDecisionSummary? selectedScenarioDecision = null;
+            bool scenarioReevaluationEnabled = false;
+            if (EnableMultiplayerScenarioReevaluation
+                && useTeamObjective
+                && selected.Count > 0)
+            {
+                Dictionary<SearchNode, int> baselineIndex =
+                    new(ReferenceEqualityComparer.Instance);
+                for (int index = 0; index < selected.Count; index++)
+                    baselineIndex[selected[index].Node] = index;
+
+                List<string> decisionKeys = [];
+                HashSet<string> decisionSet = new(StringComparer.Ordinal);
+                foreach (var candidate in selected)
+                {
+                    if (!MultiplayerChanceDecisionIdentity.TryGetCurrentTurnShadowOutcome(
+                            candidate.Node,
+                            startTurnNumber,
+                            out _,
+                            out ShadowForecastPlan forecast)
+                        || !forecast.ScenarioSetComplete
+                        || forecast.ScenarioKind == ShadowTeammateScenarioKind.Unspecified)
+                    {
+                        continue;
+                    }
+
+                    string key =
+                        MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(
+                            candidate.Node,
+                            startTurnNumber);
+                    if (decisionSet.Add(key))
+                    {
+                        decisionKeys.Add(key);
+                        if (decisionKeys.Count
+                            == MultiplayerScenarioReevaluationPolicy.MaximumCurrentDecisions)
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                List<ScenarioDecisionSummary> summaries = [];
+                foreach (string decisionKey in decisionKeys)
+                {
+                    var group = selected
+                        .Where(candidate =>
+                            MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(
+                                candidate.Node,
+                                startTurnNumber) == decisionKey)
+                        .ToList();
+
+                    Dictionary<ShadowTeammateScenarioKind,
+                        (MultiplayerScenarioOutcome Outcome, int CandidateIndex)> outcomes = [];
+                    bool complete = true;
+                    foreach (var candidate in group)
+                    {
+                        if (!MultiplayerChanceDecisionIdentity.TryGetCurrentTurnShadowOutcome(
+                                candidate.Node,
+                                startTurnNumber,
+                                out SearchNode outcomeNode,
+                                out ShadowForecastPlan forecast))
+                        {
+                            // A baseline/final-policy representative can share the same deployable
+                            // current action without carrying a Shadow outcome. It is not evidence
+                            // that the scenario set itself is incomplete.
+                            continue;
+                        }
+                        if (!forecast.ScenarioSetComplete)
+                        {
+                            complete = false;
+                            continue;
+                        }
+                        if (forecast.ScenarioKind == ShadowTeammateScenarioKind.Unspecified)
+                            continue;
+
+                        int candidateIndex = baselineIndex[candidate.Node];
+                        MultiplayerScenarioOutcome outcome =
+                            BuildScenarioOutcome(outcomeNode, forecast.ScenarioKind);
+                        if (!outcomes.TryGetValue(
+                                forecast.ScenarioKind,
+                                out var current)
+                            || MultiplayerScenarioReevaluationPolicy.Compare(
+                                MultiplayerScenarioReevaluationPolicy.Aggregate([outcome]),
+                                MultiplayerScenarioReevaluationPolicy.Aggregate([current.Outcome])) < 0)
+                        {
+                            outcomes[forecast.ScenarioKind] = (outcome, candidateIndex);
+                        }
+                    }
+
+                    bool hasNoAction =
+                        outcomes.ContainsKey(ShadowTeammateScenarioKind.NoAction);
+                    complete &= hasNoAction && outcomes.Count >= 2;
+                    if (outcomes.Count == 0)
+                        continue;
+
+                    MultiplayerScenarioDecisionRank rank =
+                        MultiplayerScenarioReevaluationPolicy.Aggregate(
+                            outcomes.Values.Select(value => value.Outcome).ToArray());
+                    int conservativeRepresentativeIndex = outcomes.Values
+                        .OrderByDescending(value => value.Outcome.LossEquivalent)
+                        .ThenByDescending(value => value.Outcome.WorstPlayerLossRatio)
+                        .ThenByDescending(value => value.Outcome.TeamLossRatio)
+                        .ThenByDescending(value => value.Outcome.EnemyDurabilityRatio)
+                        .ThenBy(value => value.CandidateIndex)
+                        .First()
+                        .CandidateIndex;
+                    summaries.Add(new ScenarioDecisionSummary(
+                        decisionKey,
+                        rank,
+                        complete,
+                        group.Min(candidate => baselineIndex[candidate.Node]),
+                        conservativeRepresentativeIndex,
+                        string.Join(",",
+                            outcomes.Keys.OrderBy(kind => (int)kind))));
+                }
+
+                List<ScenarioDecisionSummary> completeSummaries =
+                    summaries.Where(summary => summary.ScenarioSetComplete).ToList();
+                scenarioReevaluationEnabled = completeSummaries.Count > 1;
+                if (scenarioReevaluationEnabled)
+                {
+                    selectedScenarioDecision = completeSummaries
+                        .OrderByDescending(summary => summary.Rank.AllScenariosAlive)
+                        .ThenByDescending(summary => summary.Rank.GuaranteedVictory)
+                        .ThenBy(summary => summary.Rank.WorstLossEquivalent)
+                        .ThenBy(summary => summary.Rank.WorstPlayerLossRatio)
+                        .ThenBy(summary => summary.Rank.MeanLossEquivalent)
+                        .ThenBy(summary => summary.Rank.WorstTeamLossRatio)
+                        .ThenBy(summary => summary.Rank.WorstEnemyDurabilityRatio)
+                        .ThenByDescending(summary => summary.Rank.ScenarioCount)
+                        .ThenBy(summary => summary.BaselineIndex)
+                        .First();
+
+                    string winningDecisionKey = selectedScenarioDecision.DecisionKey;
+                    int conservativeIndex =
+                        selectedScenarioDecision.ConservativeRepresentativeIndex;
+                    selected = selected
+                        .Where(candidate =>
+                            MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(
+                                candidate.Node,
+                                startTurnNumber) == winningDecisionKey)
+                        .OrderBy(candidate =>
+                            baselineIndex[candidate.Node] == conservativeIndex ? 0 : 1)
+                        .ThenBy(candidate => baselineIndex[candidate.Node])
+                        .Concat(selected.Where(candidate =>
+                            MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(
+                                candidate.Node,
+                                startTurnNumber) != winningDecisionKey))
+                        .ToList();
+                }
+            }
+
+            ChanceDecisionSummary? selectedChanceDecision = null;
+            bool chanceAggregationEnabled = false;
+            if (EnableMultiplayerChanceAggregation
+                && useTeamObjective
+                && selected.Count > 0)
+            {
+                Dictionary<SearchNode, int> baselineIndex =
+                    new(ReferenceEqualityComparer.Instance);
+                for (int index = 0; index < selected.Count; index++)
+                    baselineIndex[selected[index].Node] = index;
+
+                List<ChanceDecisionSummary> chanceDecisions = [];
+                foreach (var decisionGroup in selected.GroupBy(candidate =>
+                             MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(candidate.Node, startTurnNumber)))
+                {
+                    Dictionary<StateFingerprint, MultiplayerChanceOutcome> outcomes = [];
+                    bool hasShadowChance = false;
+                    bool probabilityTrusted = true;
+                    foreach (var candidate in decisionGroup)
+                    {
+                        if (MultiplayerChanceDecisionIdentity.TryGetCurrentTurnShadowOutcome(
+                                candidate.Node,
+                                startTurnNumber,
+                                out SearchNode outcomeNode,
+                                out ShadowForecastPlan forecast))
+                        {
+                            hasShadowChance = true;
+                            probabilityTrusted &= forecast.ScenarioProbabilityTrusted;
+                            if (!outcomes.ContainsKey(forecast.ScenarioFingerprint))
+                            {
+                                outcomes.Add(
+                                    forecast.ScenarioFingerprint,
+                                    BuildChanceOutcome(
+                                        outcomeNode,
+                                        forecast.ScenarioProbabilityMass));
+                            }
+                        }
+                    }
+
+                    if (!hasShadowChance)
+                    {
+                        var deterministic = decisionGroup
+                            .OrderBy(candidate => baselineIndex[candidate.Node])
+                            .First();
+                        outcomes.Add(
+                            deterministic.Node.StateKey,
+                            new MultiplayerChanceOutcome(
+                                1d,
+                                deterministic.CompleteVictory,
+                                deterministic.Snapshot.AllPlayersAlive,
+                                deterministic.MultiplayerObjective.LossEquivalent,
+                                deterministic.MultiplayerObjective.WorstPlayerLossRatio,
+                                deterministic.MultiplayerObjective.TeamLossRatio,
+                                deterministic.MultiplayerObjective.EnemyDurabilityRatio));
+                    }
+
+                    chanceDecisions.Add(new ChanceDecisionSummary(
+                        decisionGroup.Key,
+                        MultiplayerChanceDecisionMath.Aggregate([.. outcomes.Values]),
+                        hasShadowChance,
+                        probabilityTrusted,
+                        decisionGroup.Min(candidate => baselineIndex[candidate.Node])));
+                }
+
+                chanceAggregationEnabled = chanceDecisions.Any(decision => decision.HasShadowChance)
+                    && chanceDecisions
+                        .Where(decision => decision.HasShadowChance)
+                        .All(decision => decision.ProbabilityTrusted);
+                if (chanceAggregationEnabled)
+                {
+                    selectedChanceDecision = chanceDecisions
+                        .OrderByDescending(decision => decision.Rank.GuaranteedVictory)
+                        .ThenBy(decision => decision.Rank.ConservativeTeamDeathProbability)
+                        .ThenBy(decision => decision.Rank.ExpectedLossEquivalentUpper)
+                        .ThenBy(decision => decision.Rank.ExpectedWorstPlayerLossRatioUpper)
+                        .ThenBy(decision => decision.Rank.ExpectedTeamLossRatioUpper)
+                        .ThenByDescending(decision => decision.Rank.VictoryProbabilityLower)
+                        .ThenBy(decision => decision.Rank.ExpectedEnemyDurabilityRatioUpper)
+                        .ThenByDescending(decision => decision.Rank.RetainedProbabilityMass)
+                        .ThenBy(decision => decision.BaselineIndex)
+                        .First();
+
+                    string winningDecisionKey = selectedChanceDecision.DecisionKey;
+                    selected = selected
+                        .Where(candidate =>
+                            MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(candidate.Node, startTurnNumber)
+                                == winningDecisionKey)
+                        .OrderByDescending(candidate =>
+                            MultiplayerChanceDecisionIdentity.TryGetCurrentTurnShadowOutcome(
+                                candidate.Node,
+                                startTurnNumber,
+                                out _,
+                                out ShadowForecastPlan forecast)
+                                ? forecast.ScenarioProbabilityMass
+                                : 1d)
+                        .ThenBy(candidate => baselineIndex[candidate.Node])
+                        .Concat(selected.Where(candidate =>
+                            MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(candidate.Node, startTurnNumber)
+                                != winningDecisionKey))
+                        .ToList();
+                }
+            }
+
             if (emitDiagnostics
                 && routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
                 && selected.Count > 0)
             {
+                if (selectedScenarioDecision != null)
+                {
+                    MultiplayerScenarioDecisionRank scenarioRank =
+                        selectedScenarioDecision.Rank;
+                    diagnostics.Info(
+                        $"[CombatSolver/Multiplayer] MP_SCENARIO_RERANK " +
+                        $"enabled={scenarioReevaluationEnabled.ToString().ToLowerInvariant()} " +
+                        $"complete={selectedScenarioDecision.ScenarioSetComplete.ToString().ToLowerInvariant()} " +
+                        $"scenarios={selectedScenarioDecision.ScenarioKinds} " +
+                        $"scenario_count={scenarioRank.ScenarioCount} " +
+                        $"all_alive={scenarioRank.AllScenariosAlive.ToString().ToLowerInvariant()} " +
+                        $"guaranteed_victory={scenarioRank.GuaranteedVictory.ToString().ToLowerInvariant()} " +
+                        $"worst_loss={scenarioRank.WorstLossEquivalent:0.0000} " +
+                        $"mean_loss={scenarioRank.MeanLossEquivalent:0.0000} " +
+                        $"worst_player_loss={scenarioRank.WorstPlayerLossRatio:0.0000} " +
+                        $"worst_enemy_durability={scenarioRank.WorstEnemyDurabilityRatio:0.0000}");
+                }
+                else
+                {
+                    diagnostics.Info(
+                        $"[CombatSolver/Multiplayer] MP_SCENARIO_RERANK " +
+                        $"enabled=false reason=fewer_than_two_complete_current_decisions");
+                }
+
+                if (selectedChanceDecision != null)
+                {
+                    MultiplayerChanceDecisionRank chanceRank = selectedChanceDecision.Rank;
+                    diagnostics.Info(
+                        $"[CombatSolver/Multiplayer] MP_SHADOW_CHANCE " +
+                        $"enabled={chanceAggregationEnabled.ToString().ToLowerInvariant()} " +
+                        $"trusted={selectedChanceDecision.ProbabilityTrusted.ToString().ToLowerInvariant()} " +
+                        $"retained_probability_mass={chanceRank.RetainedProbabilityMass:0.0000} " +
+                        $"guaranteed_victory={chanceRank.GuaranteedVictory.ToString().ToLowerInvariant()} " +
+                        $"victory_probability_lower={chanceRank.VictoryProbabilityLower:0.0000} " +
+                        $"team_death_upper={chanceRank.ConservativeTeamDeathProbability:0.0000} " +
+                        $"expected_loss_upper={chanceRank.ExpectedLossEquivalentUpper:0.0000} " +
+                        $"expected_enemy_durability_upper={chanceRank.ExpectedEnemyDurabilityRatioUpper:0.0000}");
+                }
+                else
+                {
+                    diagnostics.Info(
+                        $"[CombatSolver/Multiplayer] MP_SHADOW_CHANCE enabled=false trusted=false reason=no_trusted_shadow_chance");
+                }
+
                 diagnostics.Info(
                     $"[CombatSolver/Multiplayer] MP_OBJECTIVE strategy={multiplayerCombatObjectiveStrategy} " +
                     $"enemy_durability_ratio={multiplayerEnemyDurabilityRatio:0.000} " +
+                    $"candidate_enemy_durability_ratio={selected[0].MultiplayerObjective.EnemyDurabilityRatio:0.0000} " +
+                    $"objective_loss_equivalent={selected[0].MultiplayerObjective.LossEquivalent:0.0000} " +
                     $"team_loss_ratio={selected[0].Snapshot.TeamLossRatio:0.0000} " +
                     $"worst_player_loss_ratio={selected[0].Snapshot.WorstPlayerLossRatio:0.0000} " +
                     $"all_players_alive={selected[0].Snapshot.AllPlayersAlive.ToString().ToLowerInvariant()} " +
@@ -452,7 +864,19 @@ internal sealed partial class CombatBeamSolver
             var carryFreeWinner = policyEligibleCandidates
                 .Where(candidate =>
                     candidate.CarryCompatibility == selectedCandidate.CarryCompatibility)
-                .OrderByDescending(candidate => candidate.Score)
+                .OrderBy(candidate => useTeamObjective
+                    && !candidate.MultiplayerObjective.AllPlayersAlive ? 1 : 0)
+                .ThenBy(candidate => useTeamObjective
+                    ? candidate.MultiplayerObjective.LossEquivalent : 0d)
+                .ThenBy(candidate => useTeamObjective
+                    ? candidate.MultiplayerObjective.WorstPlayerLossRatio : 0d)
+                .ThenBy(candidate => useTeamObjective
+                    ? candidate.MultiplayerObjective.TeamLossRatio : 0d)
+                .ThenBy(candidate => useTeamObjective && !candidate.CompleteVictory
+                    ? candidate.MultiplayerObjective.EnemyDurabilityRatio : 0d)
+                .ThenBy(candidate => useTeamObjective && candidate.CompleteVictory
+                    ? candidate.MultiplayerObjective.CombatEndedTurn : 0)
+                .ThenByDescending(candidate => candidate.Score)
                 .ThenByDescending(candidate =>
                     routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
                     && candidate.HasCurrentTurnCardAction)
@@ -539,7 +963,11 @@ internal sealed partial class CombatBeamSolver
         BossHpRelief bossHpRelief,
         PostCombatRelicHealProfile postCombatRelicHeal,
         SolverTheftPolicy? theftPolicy,
-        SearchRoutePolicy routePolicy)
+        SearchRoutePolicy routePolicy,
+        MultiplayerCombatObjectiveStrategy multiplayerCombatObjectiveStrategy,
+        double multiplayerEnemyDurabilityRatio,
+        int multiplayerEnemyMaximumHp,
+        int startTurnNumber)
     {
         SimulationSnapshot leftSnapshot = left.Snapshot;
         SimulationSnapshot rightSnapshot = right.Snapshot;
@@ -553,7 +981,46 @@ internal sealed partial class CombatBeamSolver
             rightSnapshot.AllEnemiesDead,
             rightSnapshot.PlayerDead,
             rightSnapshot.ProjectedPlayerHp);
-        int comparison = rightWon.CompareTo(leftWon);
+        int comparison;
+        if (routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn)
+        {
+            double leftEnemyDurabilityRatio =
+                MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(
+                    leftSnapshot.EnemyDurabilityByCombatId,
+                    multiplayerEnemyMaximumHp);
+            double rightEnemyDurabilityRatio =
+                MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(
+                    rightSnapshot.EnemyDurabilityByCombatId,
+                    multiplayerEnemyMaximumHp);
+            MultiplayerCombatObjectiveRank leftObjective =
+                MultiplayerCombatObjectiveMath.BuildRank(
+                    multiplayerCombatObjectiveStrategy,
+                    leftWon,
+                    leftSnapshot.AllPlayersAlive,
+                    leftSnapshot.TeamLossRatio,
+                    leftSnapshot.WorstPlayerLossRatio,
+                    leftEnemyDurabilityRatio,
+                    multiplayerEnemyDurabilityRatio,
+                    leftWon ? leftSnapshot.CombatEndedTurn : null,
+                    startTurnNumber);
+            MultiplayerCombatObjectiveRank rightObjective =
+                MultiplayerCombatObjectiveMath.BuildRank(
+                    multiplayerCombatObjectiveStrategy,
+                    rightWon,
+                    rightSnapshot.AllPlayersAlive,
+                    rightSnapshot.TeamLossRatio,
+                    rightSnapshot.WorstPlayerLossRatio,
+                    rightEnemyDurabilityRatio,
+                    multiplayerEnemyDurabilityRatio,
+                    rightWon ? rightSnapshot.CombatEndedTurn : null,
+                    startTurnNumber);
+            comparison = MultiplayerCombatObjectiveMath.Compare(
+                leftObjective,
+                rightObjective);
+            if (comparison != 0)
+                return comparison;
+        }
+        comparison = rightWon.CompareTo(leftWon);
         if (comparison != 0)
             return comparison;
         if (!leftWon && !rightWon)

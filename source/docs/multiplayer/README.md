@@ -1,10 +1,12 @@
 # Multiplayer 适配阶段
 
-当前阶段：**MP-0 Core 与 Host 重建房间后的 Client 重新加入生命周期均已通过；MP-1 Advisor 受控 Smoke 已通过，重连后的远端私有药水语义保持 fail-closed；MP-2A 显式一动作 Safe Execute、MP-2B 两动作基线、MP-2C bounded N-action 以及 Reactive Carry Foundation 三轮实机 Smoke 均已通过，默认多人仍保持 Probe**。
+当前目标架构已经从历史的 MP-1/MP-2 “当前回合 Advisor / Reactive Carry”推进为：**完整 Joint/Shadow 战斗预测 + 只执行本地动作 + 每次真实状态变化后校验 continuation，偏离则滚动重规划**。队友动作只存在于预测情景，不授予部署权限；MultiplayerOnly 卡保留真实牌堆状态，但不进入主动搜索候选。
 
-本阶段依据 `Multiplayer Apply` 中的精简功能方案和修正版执行计划实现，目标是先用隔离的双实例完成真实 Host/Client 证据，不改变多人会话语义。
+当前开发阶段是 **P0 基线**。先固定 0.107.1、代表性单人/多人 workload、Joint continuation exact reuse 与 mismatch fresh-search 行为，并建立“模拟错误 / 搜索漏解证据 / 队友预测偏差 / Runtime 状态偏差”的统一分类。P0 不修改目标函数；下一阶段 P1 才统一终局排序、中途保留和去重标签。详见 [P0_BASELINE.md](../P0_BASELINE.md)。
 
-## 当前门禁状态
+下面的 MP-0/MP-1/MP-2 内容保留为历史能力门禁与实机证据，不再代表当前总架构。
+
+## 历史门禁状态（保留证据）
 
 - **MP-0 Core：PASS**。连接兼容、本地私有状态只读采集、远端公开战斗状态、双 Client 对照和 Probe 只读契约均有证据。
 - **MP-0 Hardening：PASS（受控生命周期）**。已按游戏规则由 Host 退出并重新创建房间，Client 收到 `Quit` 后重新握手、加入、Ready，并再次进入有效战斗；进程停止本身不计入证据。
@@ -39,7 +41,7 @@
 
 ## 当前明确未启用
 
-多人 Safe Execute 仅通过精确的 `COMBATSOLVER_MULTIPLAYER_MODE=safe-execute` 显式开启，默认安装保持 Probe，不因玩家数或网络类型自动升级；当前已开放的 Reactive Carry 仍只允许最新安全边界上的原生 Safe EndTurn，不构成 Full Auto。Carry Ranking 也只在显式 Advisor/Safe Execute 搜索中运行，不读取远端私有状态。药水、选择驱动、Replay、Instant、旧跨回合路线复用、Route Repair 和队友控制仍未开放。Advisor 仍受本地私有/远端公开 root contract、当前回合和 fail-closed 约束。
+多人 Safe Execute 仍只通过精确的 `COMBATSOLVER_MULTIPLAYER_MODE=safe-execute` 显式开启，默认安装保持 Probe，不因玩家数或网络类型自动升级。当前 Joint/Shadow 路线可以跨回合预测，但真实部署权限始终只属于本地玩家；下一本地回合只有 exact continuation 才允许复用，任何可读队友状态偏差都会 fail closed 并 fresh-search。药水自动执行、选择驱动、Instant、Route Repair 和队友控制仍不因 Joint 预测而自动开放。历史 Advisor/Carry 文档仅用于追溯旧门禁。
 
 ## MP-2B 历史基线与 MP-2C 当前实现
 

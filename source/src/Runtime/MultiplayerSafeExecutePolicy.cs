@@ -104,7 +104,7 @@ internal sealed class MultiplayerSafeExecutionSession
         long startWorldVersion,
         int maxActions)
     {
-        if (maxActions <= 0)
+        if (maxActions < 0)
             throw new ArgumentOutOfRangeException(nameof(maxActions));
 
         RequestId = Interlocked.Increment(ref _nextRequestId);
@@ -296,9 +296,11 @@ internal sealed class MultiplayerSafeExecutionSession
 /// </summary>
 internal static class MultiplayerSafeExecutePolicy
 {
-    // MP-2C deliberately uses one finite ceiling for every Safe Execute deployment.
-    // The live safe prefix may be shorter; no route can make this bound unbounded.
-    internal const int MaxActionsPerDeployment = 6;
+    // Safe Execute is bounded by the finite current-turn route selected by the search.
+    // Per-action live revalidation remains the actual safety boundary. The historical
+    // constant is retained only for source/evidence compatibility and is not used to size
+    // production execution sessions.
+    internal const int MaxActionsPerDeployment = 32;
     internal const string SingleActionLimitReason = "mp2a_single_action_limit";
     internal const string BoundedActionCeilingReason = "mp2c_action_ceiling";
     internal const string TwoActionLimitReason = BoundedActionCeilingReason;
@@ -317,8 +319,9 @@ internal static class MultiplayerSafeExecutePolicy
             return new(false, "ends_player_turn");
         if (facts.HasReplaySemantics)
             return new(false, "replay_semantics");
-        if (facts.RequiresChoice)
-            return new(false, "choice_required");
+        // Local Choice/NestedChoices/TurnStartChoices use the same native plan driver
+        // as singleplayer. Multiplayer safety is enforced by ownership/target admission
+        // and post-action state revalidation rather than by rejecting planned choices.
         return SafeLocalActionDecision.Allow;
     }
 
@@ -348,9 +351,11 @@ internal static class MultiplayerSafeExecutePolicy
     internal static SafeLocalActionDecision DeploymentStopAfter(
         int safeActionCount,
         int plannedActionCount)
-        => safeActionCount >= MaxActionsPerDeployment && plannedActionCount > safeActionCount
-            ? new(false, BoundedActionCeilingReason)
-            : SafeLocalActionDecision.Allow;
+    {
+        _ = safeActionCount;
+        _ = plannedActionCount;
+        return SafeLocalActionDecision.Allow;
+    }
 
     internal static bool ShouldAutoDeploy(
         bool safeAutoEnabled,
@@ -378,12 +383,6 @@ internal static class MultiplayerSafeExecutePolicy
         List<T> safe = [];
         foreach (T action in actions)
         {
-            if (safe.Count >= MaxActionsPerDeployment)
-            {
-                stop = DeploymentStopAfter(safe.Count, actions.Count);
-                return safe;
-            }
-
             SafeLocalActionDecision decision = classify(action);
             if (!decision.IsSafe)
             {
@@ -393,8 +392,59 @@ internal static class MultiplayerSafeExecutePolicy
             safe.Add(action);
         }
 
-        stop = DeploymentStopAfter(safe.Count, actions.Count);
+        // The input route is already finite. Do not introduce a second arbitrary action
+        // ceiling that can cut off valid draw/energy chains such as Offering routes.
+        stop = SafeLocalActionDecision.Allow;
         return safe;
+    }
+
+    internal static bool EnemyStateMatchesExpectedLocalAction(
+        IReadOnlyList<string> before,
+        IReadOnlyList<string> after,
+        uint? targetCombatId)
+    {
+        if (!TryBuildEnemyTokensById(before, out Dictionary<string, string> beforeById)
+            || !TryBuildEnemyTokensById(after, out Dictionary<string, string> afterById))
+        {
+            return false;
+        }
+
+        string[] beforeIds = [.. beforeById.Keys.OrderBy(key => key, StringComparer.Ordinal)];
+        string[] afterIds = [.. afterById.Keys.OrderBy(key => key, StringComparer.Ordinal)];
+        if (!beforeIds.SequenceEqual(afterIds, StringComparer.Ordinal))
+            return false;
+
+        // A targetless local card may legitimately damage/apply powers to one or many enemies.
+        // Remote teammate mutations are guarded independently by RemotePublicStateUnchanged.
+        if (targetCombatId is null)
+            return true;
+
+        string targetId = targetCombatId.Value.ToString();
+        foreach ((string id, string token) in beforeById)
+        {
+            if (string.Equals(id, targetId, StringComparison.Ordinal))
+                continue;
+            if (!string.Equals(afterById[id], token, StringComparison.Ordinal))
+                return false;
+        }
+        return true;
+    }
+
+    private static bool TryBuildEnemyTokensById(
+        IEnumerable<string> tokens,
+        out Dictionary<string, string> byId)
+    {
+        byId = new(StringComparer.Ordinal);
+        foreach (string token in tokens)
+        {
+            int separator = token.IndexOf(':');
+            if (separator <= 0 || !byId.TryAdd(token[..separator], token))
+            {
+                byId.Clear();
+                return false;
+            }
+        }
+        return true;
     }
 
     internal static MultiplayerSafeActionRevalidationDecision RevalidateAction(

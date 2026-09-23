@@ -233,7 +233,7 @@ internal static class SolverSessionCapabilities
         CanSearch: true,
         CanDeploySimpleLocalActions: true,
         CanEndTurnAutomatically: true,
-        CanDriveChoices: false,
+        CanDriveChoices: true,
         CanInterceptTurnSetup: false,
         CanCrossTurnSearch: false,
         CanPlanLocalCrossTurn: true,

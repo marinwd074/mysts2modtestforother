@@ -35,7 +35,7 @@ Check(Structural("usepotion", isPlayCard: false).Reason == "kind_usepotion", "Po
 Check(Structural(hasCardIdentity: false).Reason == "card_identity_missing", "Missing card identity fails closed.");
 Check(Structural(endsTurn: true).Reason == "ends_player_turn", "Cards that end the player turn fail closed.");
 Check(Structural(replay: true).Reason == "replay_semantics", "Replay semantics fail closed.");
-Check(Structural(choice: true).Reason == "choice_required", "Choice-driving cards fail closed.");
+Check(Structural(choice: true).IsSafe, "Planned local choices use the same native choice driver as singleplayer.");
 Check(Resolved(localPlayer: false).Reason == "local_player_missing", "Missing local player fails closed.");
 Check(Resolved(localCard: false).Reason == "local_card_missing", "A card outside the local hand fails closed.");
 Check(
@@ -58,16 +58,16 @@ Check(
     "A resolved local-player or enemy target is allowed.");
 Check(Resolved(incompleteTarget: true).Reason == "target_identity_incomplete", "Incomplete target identity fails closed.");
 Check(Resolved().IsSafe, "A targetless resolved local card is allowed.");
+IReadOnlyList<SafeLocalActionDecision> longSafeRoute =
+    Enumerable.Repeat(SafeLocalActionDecision.Allow, 64).ToArray();
+IReadOnlyList<SafeLocalActionDecision> longSafePrefix =
+    MultiplayerSafeExecutePolicy.TakeBoundedSafePrefix(
+        longSafeRoute,
+        decision => decision,
+        out SafeLocalActionDecision longSafeStop);
 Check(
-    MultiplayerSafeExecutePolicy.MaxActionsPerDeployment == 6,
-    "MP-2C uses one finite six-action Safe Execute ceiling.");
-Check(
-    MultiplayerSafeExecutePolicy.DeploymentStopAfter(6, 7).Reason
-        == MultiplayerSafeExecutePolicy.BoundedActionCeilingReason,
-    "A seventh planned action stops at the bounded MP-2C ceiling.");
-Check(
-    MultiplayerSafeExecutePolicy.DeploymentStopAfter(5, 6).IsSafe,
-    "A sixth planned action remains admissible before the MP-2C ceiling is reached.");
+    longSafePrefix.Count == longSafeRoute.Count && longSafeStop.IsSafe,
+    "Safe Execute preflight is bounded by the finite planned route, not a fixed action-count ceiling.");
 IReadOnlyList<SafeLocalActionDecision> allSafe =
     [SafeLocalActionDecision.Allow, SafeLocalActionDecision.Allow,
      SafeLocalActionDecision.Allow, SafeLocalActionDecision.Allow];
@@ -76,14 +76,14 @@ IReadOnlyList<SafeLocalActionDecision> fullPrefix =
 Check(fullPrefix.Count == 4 && fullStop.IsSafe, "An all-safe route returns its complete bounded prefix.");
 IReadOnlyList<SafeLocalActionDecision> safeThenUnsafe =
     [SafeLocalActionDecision.Allow, SafeLocalActionDecision.Allow,
-     new(false, "choice_required"), SafeLocalActionDecision.Allow];
+     new(false, "replay_semantics"), SafeLocalActionDecision.Allow];
 IReadOnlyList<SafeLocalActionDecision> truncatedPrefix =
     MultiplayerSafeExecutePolicy.TakeBoundedSafePrefix(
         safeThenUnsafe,
         decision => decision,
         out SafeLocalActionDecision truncatedStop);
 Check(
-    truncatedPrefix.Count == 2 && truncatedStop.Reason == "choice_required",
+    truncatedPrefix.Count == 2 && truncatedStop.Reason == "replay_semantics",
     "The first unsafe route action is a hard boundary; later safe actions are not skipped to.");
 IReadOnlyList<SafeLocalActionDecision> unsafeFirst =
     [new(false, "ends_player_turn"), SafeLocalActionDecision.Allow];
@@ -93,16 +93,16 @@ IReadOnlyList<SafeLocalActionDecision> emptyPrefix =
         decision => decision,
         out SafeLocalActionDecision emptyStop);
 Check(emptyPrefix.Count == 0 && emptyStop.Reason == "ends_player_turn", "An unsafe first route action returns an empty prefix.");
-IReadOnlyList<SafeLocalActionDecision> overCeiling =
-    Enumerable.Repeat(SafeLocalActionDecision.Allow, 7).ToArray();
-IReadOnlyList<SafeLocalActionDecision> cappedPrefix =
+IReadOnlyList<SafeLocalActionDecision> fortyActionRoute =
+    Enumerable.Repeat(SafeLocalActionDecision.Allow, 40).ToArray();
+IReadOnlyList<SafeLocalActionDecision> fortyActionPrefix =
     MultiplayerSafeExecutePolicy.TakeBoundedSafePrefix(
-        overCeiling,
+        fortyActionRoute,
         decision => decision,
-        out SafeLocalActionDecision ceilingStop);
+        out SafeLocalActionDecision fortyActionStop);
 Check(
-    cappedPrefix.Count == 6 && ceilingStop.Reason == MultiplayerSafeExecutePolicy.BoundedActionCeilingReason,
-    "A route longer than the hard ceiling is truncated without becoming unbounded.");
+    fortyActionPrefix.Count == fortyActionRoute.Count && fortyActionStop.IsSafe,
+    "A route longer than the historical 32-action cap remains intact.");
 Check(
     MultiplayerSafeExecutePolicy.CanGrantLabCapability(
         new(MultiplayerSafeExecutePolicy.LabModeToken, true, true)),
@@ -129,8 +129,8 @@ MultiplayerSafeExecutionSession session = new(
     startTurnNumber: 1,
     routeGeneration: 7,
     startWorldVersion: 4,
-    maxActions: MultiplayerSafeExecutePolicy.MaxActionsPerDeployment);
-Check(session.State == MultiplayerSafeExecutionState.Authorized, "A Safe Execute request starts authorized.");
+    maxActions: 5);
+Check(session.State == MultiplayerSafeExecutionState.Authorized, "A Safe Execute request starts authorized with the planned route capacity.");
 bool fiveActionRouteAccepted = true;
 for (int actionIndex = 0; actionIndex < 5; actionIndex++)
 {
@@ -155,7 +155,7 @@ MultiplayerSafeExecutionSession indexSession = new(
     startTurnNumber: 1,
     routeGeneration: 7,
     startWorldVersion: 4,
-    maxActions: MultiplayerSafeExecutePolicy.MaxActionsPerDeployment);
+    maxActions: 2);
 Check(
     indexSession.TryBeginAction(0, "PlayCard:STRIKE:0:target=-", 1, 7, 4, out _)
         && indexSession.MarkAwaitingWorldUpdate()
@@ -185,12 +185,12 @@ for (int actionIndex = 0; actionIndex < 2; actionIndex++)
 Check(
     !ceilingSession.TryBeginAction(2, "PlayCard:EXTRA:0:target=-", 1, 7, 6, out string capReason)
         && capReason == "session_state_Completed",
-    "A completed bounded session rejects an action beyond its configured ceiling.");
+    "A completed route-bounded session rejects an action beyond its planned action capacity.");
 MultiplayerSafeExecutionSession conflictSession = new(
     startTurnNumber: 1,
     routeGeneration: 7,
     startWorldVersion: 4,
-    maxActions: MultiplayerSafeExecutePolicy.MaxActionsPerDeployment);
+    maxActions: 1);
 Check(
     !conflictSession.TryBeginAction(0, "PlayCard:STRIKE:0:target=-", 1, 7, 5, out string worldReason)
         && worldReason == "world_version_not_accepted",
@@ -238,6 +238,27 @@ Check(
         RevalidationFacts() with { EnemyStateMatchesExpectedTarget = false })
         == MultiplayerSafeActionRevalidationDecision.RemoteOrUnknownChange,
     "An enemy mutation outside the expected target is treated as remote or unknown.");
+
+string[] oneEnemyBefore = ["7:VINE:54/100/0:MOVE_A:powers=-"];
+string[] oneEnemyAfter = ["7:VINE:29/100/0:MOVE_A:powers=VULNERABLE:1"];
+Check(
+    MultiplayerSafeExecutePolicy.EnemyStateMatchesExpectedLocalAction(
+        oneEnemyBefore,
+        oneEnemyAfter,
+        targetCombatId: null),
+    "A targetless local card may legitimately mutate existing enemy state without being mistaken for a remote delta.");
+Check(
+    !MultiplayerSafeExecutePolicy.EnemyStateMatchesExpectedLocalAction(
+        oneEnemyBefore,
+        [.. oneEnemyAfter, "8:SPAWN:10/10/0:MOVE:powers=-"],
+        targetCombatId: null),
+    "A targetless local card still fails closed if the enemy identity set changes unexpectedly.");
+Check(
+    !MultiplayerSafeExecutePolicy.EnemyStateMatchesExpectedLocalAction(
+        ["7:A:50/50/0:M:powers=-", "8:B:50/50/0:M:powers=-"],
+        ["7:A:40/50/0:M:powers=-", "8:B:40/50/0:M:powers=-"],
+        targetCombatId: 7),
+    "A targeted action still rejects mutation of a different enemy.");
 Check(
     MultiplayerSafeExecutePolicy.RevalidateAction(
         RevalidationFacts() with { WorldVersionStable = false })
@@ -307,7 +328,7 @@ MultiplayerSafeExecutionSession endTurnSession = new(
     startTurnNumber: 1,
     routeGeneration: 7,
     startWorldVersion: 4,
-    maxActions: MultiplayerSafeExecutePolicy.MaxActionsPerDeployment);
+    maxActions: 0);
 Check(
     endTurnSession.TryBeginEndTurn(1, 7, 4, out string endTurnStartReason)
         && endTurnStartReason == "end_turn_executing"
@@ -322,7 +343,7 @@ MultiplayerSafeExecutionSession actionThenEndTurnSession = new(
     startTurnNumber: 1,
     routeGeneration: 7,
     startWorldVersion: 4,
-    maxActions: MultiplayerSafeExecutePolicy.MaxActionsPerDeployment);
+    maxActions: 1);
 Check(
     actionThenEndTurnSession.TryBeginAction(0, "PlayCard:STRIKE:0:target=-", 1, 7, 4, out _)
         && actionThenEndTurnSession.MarkAwaitingWorldUpdate()
@@ -346,7 +367,7 @@ MultiplayerSafeExecutionSession nextTurnSession = new(
     startTurnNumber: 2,
     routeGeneration: 8,
     startWorldVersion: 6,
-    maxActions: MultiplayerSafeExecutePolicy.MaxActionsPerDeployment);
+    maxActions: 1);
 Check(
     nextTurnSession.TryBeginAction(
         0,
@@ -361,7 +382,7 @@ MultiplayerSafeExecutionSession repeatedRemoteChangeSession = new(
     startTurnNumber: 1,
     routeGeneration: 7,
     startWorldVersion: 4,
-    maxActions: MultiplayerSafeExecutePolicy.MaxActionsPerDeployment);
+    maxActions: 1);
 repeatedRemoteChangeSession.Abort("remote_or_unknown_change_1");
 repeatedRemoteChangeSession.Abort("remote_or_unknown_change_2");
 Check(
@@ -391,16 +412,14 @@ Check(
 Check(
     MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(SafeLocalActionDecision.Allow)
         && MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(
-            new(false, MultiplayerSafeExecutePolicy.BoundedActionCeilingReason))
-        && MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(
             new(false, MultiplayerSafeExecutePolicy.ManualMultiplayerCardReason)),
-    "A completed safe prefix, bounded action ceiling, or manual multiplayer-card boundary keeps Safe Auto eligible for a fresh search.");
+    "A completed safe prefix or manual multiplayer-card boundary keeps Safe Auto eligible for a fresh search.");
 
 Check(
-    !MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(new(false, "choice_required"))
+    !MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(new(false, "replay_semantics"))
         && !MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(new(false, "kind_usepotion"))
         && !MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(
             new(false, "remote_player_or_unknown_target")),
-    "Unsupported Choice, Potion, or teammate/unknown-target boundaries stop Safe Auto instead of looping.");
+    "Replay, Potion, or teammate/unknown-target boundaries stop Safe Auto instead of looping.");
 
 Console.WriteLine($"PASS: {checks} multiplayer safe-execute policy checks");

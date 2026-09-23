@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "phase": "P0",
+  "repository": "marinwd074/mysts2modtestforother",
+  "baselineCommit": "380b0801c5882c502d099d704a4bd5d55082e15a",
+  "target": {
+    "sts2": "0.107.1",
+    "compileSymbol": "STS2_01071",
+    "dotnet": "9",
+    "godot": "4.5.1"
+  },
+  "comparisonProtocol": {
+    "sameInput": true,
+    "sameTotalBudget": true,
+    "teammateForecastCostIncluded": true,
+    "timeBoundaryInvalidatesSample": true,
+    "stopRepeatingAfterPass": true
+  },
+  "workloads": [
+    {
+      "id": "SP-REGRESSION",
+      "kind": "singleplayer",
+      "fixture": "source/tools/GeneratedCombatScenarios/regression-necrobinder-elite.json",
+      "character": "NECROBINDER",
+      "ascension": 10,
+      "encounter": "PHROG_PARASITE_ELITE",
+      "profile": "Medium",
+      "searchBudgetMilliseconds": 5000,
+      "maxDegreeOfParallelism": 1,
+      "status": "SKIPPED_LOCAL_BY_USER",
+      "seed": "GENERATED-COMBAT-001",
+      "modeOverride": "Search",
+      "fixedSearchBudget": true,
+      "potionPolicy": "Smart",
+      "launcherArgs": {
+        "PerformancePresetForTest": "Medium",
+        "FixedSearchBudget": true,
+        "SearchBudgetOverrideMilliseconds": 5000,
+        "SearchMaxDegreeOfParallelismForTest": 1,
+        "PotionPolicyForTest": "Smart"
+      }
+    },
+    {
+      "id": "MP-JOINT-REUSE",
+      "kind": "multiplayer",
+      "procedure": "source/docs/multiplayer/NEXT_LOCAL_JOINT_CONTINUATION_SMOKE.md#3-smoke-r--exact-reuse",
+      "requiredValidatorMode": "Reuse",
+      "status": "SKIPPED_LOCAL_BY_USER"
+    },
+    {
+      "id": "MP-JOINT-MISMATCH",
+      "kind": "multiplayer",
+      "procedure": "source/docs/multiplayer/NEXT_LOCAL_JOINT_CONTINUATION_SMOKE.md#4-smoke-m--teammate-mismatch",
+      "requiredValidatorMode": "Mismatch",
+      "expectedRejectReason": "remote_public_mismatch",
+      "expectedClassification": "teammate_prediction_deviation",
+      "status": "SKIPPED_LOCAL_BY_USER"
+    }
+  ],
+  "metrics": [
+    "victory",
+    "allPlayersAlive",
+    "teamDamageTaken",
+    "turnsToVictory",
+    "potionsConsumed",
+    "firstUsableResultMilliseconds",
+    "totalElapsedMilliseconds",
+    "expanded",
+    "transitions",
+    "teammateForecastWork",
+    "predictionDeviation"
+  ],
+  "failureClasses": [
+    "simulation_error",
+    "search_miss_evidence",
+    "teammate_prediction_deviation",
+    "runtime_state_mismatch",
+    "unclassified"
+  ],
+  "phaseStatus": "INCOMPLETE_LOCAL_VALIDATION_SKIPPED",
+  "localValidation": {
+    "status": "SKIPPED_LOCAL_BY_USER",
+    "recordedDate": "2026-09-23",
+    "countsAsPass": false,
+    "reason": "Local Release build, fixed single-player baseline capture, Joint exact-reuse smoke, and Joint teammate-mismatch smoke were intentionally deferred before P1.",
+    "resumeFrom": "source/docs/P0_BASELINE.md"
+  },
+  "nextPhase": "P1_UNIFIED_OBJECTIVE_ALLOWED_WITH_UNVALIDATED_P0_RUNTIME"
+}
