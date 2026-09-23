@@ -2144,7 +2144,8 @@ internal sealed partial class CombatBeamSolver
         FinalPlanSelection ordering = FinalOrdering.Select(
             evaluated,
             initialHp,
-            emitDiagnostics: true);
+            emitDiagnostics: true,
+            reevaluateScenarios: true);
         SolverResult result = MaterializeSelectedRoute(
             ordering,
             onlyDeathRoutesFound,
