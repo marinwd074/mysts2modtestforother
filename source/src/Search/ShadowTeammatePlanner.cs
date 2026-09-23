@@ -317,14 +317,14 @@ internal static class ShadowTeammatePlanner
                 }
             }
 
-            frontier = RetainParetoSpectrum(next, beamWidth);
+            frontier = RetainQualitySpectrum(next, beamWidth);
             if (depth == maxActions - 1 && frontier.Any(route => !route.IsTerminal))
                 hitDepthLimit = true;
         }
 
         completed.AddRange(frontier);
         return new ShadowTeammatePlanResult(
-            RetainParetoSpectrum(completed, beamWidth),
+            RetainQualitySpectrum(completed, beamWidth),
             expandedBranches,
             pendingChoiceBranches,
             hitDepthLimit);
@@ -530,18 +530,18 @@ internal static class ShadowTeammatePlanner
         IReadOnlyList<ShadowTeammateRoute> candidates,
         int limit)
     {
-        if (candidates.Count <= limit)
+        List<ShadowTeammateRoute> exactSurvivors = ApplyExactDominance(candidates);
+        if (exactSurvivors.Count <= limit)
         {
-            List<ShadowTeammateRoute> all = [.. candidates];
-            all.Sort(CompareRoutesForBehavior);
-            return all;
+            exactSurvivors.Sort(CompareRoutesForBehavior);
+            return exactSurvivors;
         }
 
-        // Behavior and outcome quality remain separate axes. Protect the most plausible
-        // half of the beam before consulting the existing quality Pareto heuristic, so an
-        // outcome-dominated but human-plausible route cannot disappear solely for being worse.
+        // Only an actual beam overflow may invoke approximate quality pruning. Behavior and
+        // outcome quality remain separate axes: half of the beam protects plausible behavior,
+        // while the other half draws from the explicitly heuristic quality frontier.
         int behaviorSlots = Math.Max(1, (limit + 1) / 2);
-        List<ShadowTeammateRoute> behaviorRanked = [.. candidates];
+        List<ShadowTeammateRoute> behaviorRanked = [.. exactSurvivors];
         behaviorRanked.Sort(CompareRoutesForBehavior);
 
         List<ShadowTeammateRoute> selected = new(limit);
@@ -551,7 +551,8 @@ internal static class ShadowTeammatePlanner
             selected.Add(behaviorRanked[index]);
         }
 
-        foreach (ShadowTeammateRoute route in RetainParetoSpectrum(candidates, limit))
+        foreach (ShadowTeammateRoute route in
+                 SelectApproximateQualityBeam(exactSurvivors, limit))
         {
             if (selected.Any(existing => ReferenceEquals(existing, route)))
                 continue;
@@ -571,6 +572,52 @@ internal static class ShadowTeammatePlanner
         return selected;
     }
 
+    private static List<ShadowTeammateRoute> RetainQualitySpectrum(
+        IReadOnlyList<ShadowTeammateRoute> candidates,
+        int limit)
+    {
+        List<ShadowTeammateRoute> exactSurvivors = ApplyExactDominance(candidates);
+        if (exactSurvivors.Count <= limit)
+        {
+            exactSurvivors.Sort(CompareRoutesForSpectrum);
+            return exactSurvivors;
+        }
+        return SelectApproximateQualityBeam(exactSurvivors, limit);
+    }
+
+    private static List<ShadowTeammateRoute> ApplyExactDominance(
+        IReadOnlyList<ShadowTeammateRoute> candidates)
+    {
+        if (candidates.Count <= 1)
+            return [.. candidates];
+
+        Dictionary<StateFingerprint, ShadowTeammateRoute> winners = [];
+        for (int index = 0; index < candidates.Count; index++)
+        {
+            ShadowTeammateRoute candidate = candidates[index];
+            StateFingerprint futureState = ShadowFutureStateFingerprint.Capture(
+                candidate.Simulator,
+                candidate.ProcessedEnemyDeaths,
+                candidate.TurnEndedPlayerNetIds,
+                candidate.Actions);
+
+            if (!winners.TryGetValue(futureState, out ShadowTeammateRoute? current))
+            {
+                winners.Add(futureState, candidate);
+                continue;
+            }
+
+            // Equal future-state fingerprints include all captured player/enemy mutable state,
+            // ordered piles, RNG streams, modeled combat state, action-budget usage and ended
+            // teammates. The branch with the stronger behavior evidence is therefore the better
+            // representation of the same modeled continuation, not a guessed gameplay dominance.
+            if (CompareRoutesForBehavior(candidate, current) < 0)
+                winners[futureState] = candidate;
+        }
+
+        return [.. winners.Values];
+    }
+
     private static int CompareRoutesForBehavior(
         ShadowTeammateRoute left,
         ShadowTeammateRoute right)
@@ -585,40 +632,44 @@ internal static class ShadowTeammatePlanner
         return CompareRoutesForSpectrum(left, right);
     }
 
-    private static List<ShadowTeammateRoute> RetainParetoSpectrum(
+    private static List<ShadowTeammateRoute> SelectApproximateQualityBeam(
         IReadOnlyList<ShadowTeammateRoute> candidates,
         int limit)
     {
-        if (candidates.Count <= 1)
-            return [.. candidates];
+        if (candidates.Count <= limit)
+        {
+            List<ShadowTeammateRoute> all = [.. candidates];
+            all.Sort(CompareRoutesForSpectrum);
+            return all;
+        }
 
-        List<ShadowTeammateRoute> frontier = [];
+        List<ShadowTeammateRoute> heuristicFrontier = [];
         for (int index = 0; index < candidates.Count; index++)
         {
             ShadowTeammateRoute candidate = candidates[index];
-            bool dominated = false;
+            bool heuristicallyDominated = false;
             for (int otherIndex = 0; otherIndex < candidates.Count; otherIndex++)
             {
                 if (index == otherIndex)
                     continue;
-                if (Dominates(candidates[otherIndex], candidate))
+                if (HeuristicQualityDominates(candidates[otherIndex], candidate))
                 {
-                    dominated = true;
+                    heuristicallyDominated = true;
                     break;
                 }
             }
-            if (!dominated)
-                frontier.Add(candidate);
+            if (!heuristicallyDominated)
+                heuristicFrontier.Add(candidate);
         }
 
-        frontier.Sort(CompareRoutesForSpectrum);
-        if (frontier.Count <= limit)
-            return frontier;
+        heuristicFrontier.Sort(CompareRoutesForSpectrum);
+        if (heuristicFrontier.Count <= limit)
+            return heuristicFrontier;
 
         List<ShadowTeammateRoute> sampled = new(limit);
         if (limit == 1)
         {
-            sampled.Add(frontier[0]);
+            sampled.Add(heuristicFrontier[0]);
             return sampled;
         }
 
@@ -626,38 +677,34 @@ internal static class ShadowTeammatePlanner
         for (int slot = 0; slot < limit; slot++)
         {
             int index = (int)Math.Round(
-                slot * (frontier.Count - 1d) / (limit - 1d),
+                slot * (heuristicFrontier.Count - 1d) / (limit - 1d),
                 MidpointRounding.AwayFromZero);
             if (index == previous)
                 continue;
-            sampled.Add(frontier[index]);
+            sampled.Add(heuristicFrontier[index]);
             previous = index;
         }
         return sampled;
     }
 
-    private static bool Dominates(ShadowTeammateRoute left, ShadowTeammateRoute right)
-    {
-        bool noWorse = (left.CompleteVictory || !right.CompleteVictory)
-            && (left.AllPlayersAlive || !right.AllPlayersAlive)
-            && left.EnemyDurability <= right.EnemyDurability
-            && left.TeamEffectiveHp >= right.TeamEffectiveHp
-            && left.WorstPlayerEffectiveHpRatio >= right.WorstPlayerEffectiveHpRatio
-            && left.TeamEnergy >= right.TeamEnergy
-            && left.TeamStars >= right.TeamStars
-            && left.Actions.Count <= right.Actions.Count;
-        if (!noWorse)
-            return false;
+    private static bool HeuristicQualityDominates(
+        ShadowTeammateRoute left,
+        ShadowTeammateRoute right)
+        => ShadowRoutePruningPolicy.HeuristicQualityDominates(
+            DescribeApproximateQuality(left),
+            DescribeApproximateQuality(right));
 
-        return left.CompleteVictory != right.CompleteVictory
-            || left.AllPlayersAlive != right.AllPlayersAlive
-            || left.EnemyDurability != right.EnemyDurability
-            || left.TeamEffectiveHp != right.TeamEffectiveHp
-            || !left.WorstPlayerEffectiveHpRatio.Equals(right.WorstPlayerEffectiveHpRatio)
-            || left.TeamEnergy != right.TeamEnergy
-            || left.TeamStars != right.TeamStars
-            || left.Actions.Count != right.Actions.Count;
-    }
+    private static ShadowApproximateQuality DescribeApproximateQuality(
+        ShadowTeammateRoute route)
+        => new(
+            route.CompleteVictory,
+            route.AllPlayersAlive,
+            route.EnemyDurability,
+            route.TeamEffectiveHp,
+            route.WorstPlayerEffectiveHpRatio,
+            route.TeamEnergy,
+            route.TeamStars,
+            route.Actions.Count);
 
     private static int CompareRoutesForSpectrum(
         ShadowTeammateRoute left,
