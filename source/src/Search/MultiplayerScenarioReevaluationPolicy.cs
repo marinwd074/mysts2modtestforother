@@ -28,7 +28,8 @@ internal readonly record struct MultiplayerScenarioEvaluation(
 
 internal sealed record MultiplayerScenarioDecisionEvaluation(
     string DecisionKey,
-    IReadOnlyList<MultiplayerScenarioEvaluation> Scenarios)
+    IReadOnlyList<MultiplayerScenarioEvaluation> Scenarios,
+    int SharedExpandedBranches = 0)
 {
     internal bool CompleteCoverage =>
         Scenarios.Count == MultiplayerScenarioReevaluationPolicy.MaximumScenariosPerDecision
@@ -41,7 +42,8 @@ internal sealed record MultiplayerScenarioDecisionEvaluation(
                 .Select(evaluation => evaluation.Spec.Kind));
 
     internal int ExpandedBranches =>
-        Scenarios.Sum(evaluation => evaluation.ExpandedBranches ?? 0);
+        SharedExpandedBranches
+        + Scenarios.Sum(evaluation => evaluation.ExpandedBranches ?? 0);
 }
 
 internal readonly record struct MultiplayerScenarioDecisionRank(
@@ -82,9 +84,7 @@ internal static class MultiplayerScenarioReevaluationPolicy
     // U3 final reevaluation never receives an unbounded hidden work allowance. The reserve is
     // carved from the caller's existing node budget in a later integration step; these helpers
     // only define the deterministic split and are intentionally independent of candidate order.
-    internal const int MaximumExpandedBranchesPerScenario = 32;
-    internal const int MaximumExpandedBranchesPerDecision =
-        MaximumScenariosPerDecision * MaximumExpandedBranchesPerScenario;
+    internal const int MaximumExpandedBranchesPerDecision = 128;
     internal const int MaximumReservedExpandedBranches =
         MaximumCurrentDecisions * MaximumExpandedBranchesPerDecision;
     private const int MinimumTotalBudgetForReevaluation = 64;
@@ -113,7 +113,7 @@ internal static class MultiplayerScenarioReevaluationPolicy
             - ReserveExpandedBranchBudget(totalExpandedNodeBudget, enabled);
     }
 
-    internal static int ExpandedBranchBudgetPerScenario(
+    internal static int ExpandedBranchBudgetPerDecision(
         int reservedExpandedBranches,
         int comparedDecisionCount)
     {
@@ -124,10 +124,9 @@ internal static class MultiplayerScenarioReevaluationPolicy
             throw new ArgumentOutOfRangeException(nameof(comparedDecisionCount));
         }
 
-        int cells = checked(comparedDecisionCount * MaximumScenariosPerDecision);
         return Math.Min(
-            MaximumExpandedBranchesPerScenario,
-            reservedExpandedBranches / cells);
+            MaximumExpandedBranchesPerDecision,
+            reservedExpandedBranches / comparedDecisionCount);
     }
 
     internal static bool IsRequiredScenario(ShadowTeammateScenarioKind kind)
