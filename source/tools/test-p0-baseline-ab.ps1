@@ -47,6 +47,19 @@ try {
     $fixture.mode = 'Search'
     $fixture | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $baselineFixture -Encoding utf8
 
+    # The historical OfflineSearchHarness was a profiling harness and explicitly disabled
+    # these two production defaults. P0's documented unattended launcher did not, so restore
+    # them before using wall-clock completion as an A/B criterion.
+    $baselineModRuntime = Join-Path $baselineRoot 'source/tools/OfflineSearchHarness/ModRuntime.cs'
+    $baselineModText = Get-Content -LiteralPath $baselineModRuntime -Raw
+    if ($baselineModText -notmatch 'EnableNoGcRegion = false' -or
+        $baselineModText -notmatch 'StopAtAcceptableBattleHpLoss = false') {
+        throw 'Historical harness default-setting patch targets were not found.'
+    }
+    $baselineModText = $baselineModText.Replace('EnableNoGcRegion = false', 'EnableNoGcRegion = true')
+    $baselineModText = $baselineModText.Replace('StopAtAcceptableBattleHpLoss = false', 'StopAtAcceptableBattleHpLoss = true')
+    Set-Content -LiteralPath $baselineModRuntime -Value $baselineModText -Encoding utf8
+
     $requestPath = Join-Path $Workspace 'baseline-request.json'
     [ordered]@{
         schemaVersion = 1
