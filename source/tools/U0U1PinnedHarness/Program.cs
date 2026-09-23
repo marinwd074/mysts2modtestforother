@@ -72,6 +72,7 @@ internal static class Program
 
             U0Evidence u0 = RunU0(combat, names, damage, captured, profile);
             U1Evidence u1 = RunU1(combat, names, damage, captured, profile, u0.FirstAction);
+            U5Evidence u5 = RunU5(combat, names, damage, captured, profile);
 
             var evidence = new
             {
@@ -92,6 +93,7 @@ internal static class Program
                 },
                 u0,
                 u1,
+                u5,
                 remainingRuntimeSmoke = new[]
                 {
                     "real multiplayer Heavy Blade + native Choice/Brand + following card",
@@ -371,6 +373,142 @@ internal static class Program
             CancelledRetryRejectedReason: cancelReason);
     }
 
+    private static U5Evidence RunU5(
+        CombatState combat,
+        SolverDisplayNames names,
+        BattleDamageSnapshot damage,
+        SearchPolicySnapshot captured,
+        SolverSearchProfile profile)
+    {
+        SearchPolicySnapshot replayPolicy = captured with
+        {
+            Profile = profile,
+            RoutePolicy = SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            CurrentTurnOnly = false,
+            UseMultiplayerTeamObjective = false,
+            DetailedDiagnostics = false,
+            VerifyIncrementalSearch = true,
+            FixedBudget = true,
+            MaxDegreeOfParallelism = 1,
+            BudgetOverrideMilliseconds = null,
+            UseNoveltyPortfolio = false,
+            NoveltySearch = null,
+            UseBeamWidthPortfolio = false,
+            BeamWidthPortfolioWidths = null,
+            Interaction = null,
+            RequestWorkTotals = new SearchRequestWorkTotals(),
+        };
+
+        CombatRootSnapshot routeRoot = CombatRootSnapshot.Capture(combat);
+        CombatBeamSolver routeSolver = new(
+            routeRoot,
+            names,
+            damage,
+            replayPolicy,
+            searchProfile: profile);
+        SolverResult route = routeSolver.Solve();
+        PlanAction[] turnOneCards = route.BestNode.Actions
+            .Where(action => action.Turn == route.StartTurnNumber
+                && action.Kind == PlanActionKind.PlayCard)
+            .Take(2)
+            .ToArray();
+        Require(
+            turnOneCards.Length == 2,
+            $"U5 pinned fixture needs two current-turn PlayCard actions, got {turnOneCards.Length}.");
+        PlanAction bash = turnOneCards[0];
+        PlanAction strike = turnOneCards[1];
+        Require(
+            string.Equals(bash.CardId, "BASH", StringComparison.Ordinal)
+                && string.Equals(strike.CardId, "STRIKE_IRONCLAD", StringComparison.Ordinal),
+            $"U5 pinned fixture drifted: first={bash.CardId} second={strike.CardId}.");
+
+        U5OrderReplay bashThenStrike = ReplayU5Order(
+            combat,
+            names,
+            damage,
+            replayPolicy,
+            profile,
+            [bash, strike]);
+        U5OrderReplay strikeThenBash = ReplayU5Order(
+            combat,
+            names,
+            damage,
+            replayPolicy,
+            profile,
+            [strike, bash]);
+
+        Require(
+            bashThenStrike.FutureFingerprint != strikeThenBash.FutureFingerprint,
+            "U5 order-sensitive Bash/Strike pair collapsed to the same complete future fingerprint.");
+        Require(
+            bashThenStrike.EnemyHp < strikeThenBash.EnemyHp,
+            $"U5 vulnerable ordering lost its expected effect: " +
+            $"bash_then_strike_enemy_hp={bashThenStrike.EnemyHp} " +
+            $"strike_then_bash_enemy_hp={strikeThenBash.EnemyHp}.");
+        Require(
+            !MultiplayerInterleaveOrderPolicy.CanCollapseOrder(
+                MultiplayerInterleaveOrderRelation.OrderSensitive)
+                && !MultiplayerInterleaveOrderPolicy.CanCollapseOrder(
+                    MultiplayerInterleaveOrderRelation.ReverseUnavailable)
+                && MultiplayerInterleaveOrderPolicy.CanCollapseOrder(
+                    MultiplayerInterleaveOrderRelation.ExactEquivalent),
+            "U5 exact-collapse policy changed.");
+
+        return new U5Evidence(
+            Status: "PASS",
+            EvidenceLevel: "pinned_offline_production_replay",
+            ForwardOrder: $"{bash.CardId}->{strike.CardId}",
+            ReverseOrder: $"{strike.CardId}->{bash.CardId}",
+            ForwardFutureFingerprint: Format(bashThenStrike.FutureFingerprint),
+            ReverseFutureFingerprint: Format(strikeThenBash.FutureFingerprint),
+            ForwardEnemyHp: bashThenStrike.EnemyHp,
+            ReverseEnemyHp: strikeThenBash.EnemyHp,
+            OrderSensitive: true,
+            ExactCollapseRejected: true,
+            RealMultiplayerOwnershipVerified: false);
+    }
+
+    private static U5OrderReplay ReplayU5Order(
+        CombatState combat,
+        SolverDisplayNames names,
+        BattleDamageSnapshot damage,
+        SearchPolicySnapshot policy,
+        SolverSearchProfile profile,
+        IReadOnlyList<PlanAction> actions)
+    {
+        CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
+        CombatBeamSolver replay = new(
+            root,
+            names,
+            damage,
+            policy,
+            searchProfile: profile);
+        SimulationSnapshot snapshot = replay.ReplayDiagnosticPrefix(actions);
+        try
+        {
+            Require(
+                snapshot.BoundaryReason == SearchBoundaryReason.None,
+                $"U5 replay {string.Join("->", actions.Select(action => action.CardId))} " +
+                $"reached {snapshot.BoundaryReason}.");
+
+            StateFingerprint future = ShadowFutureStateFingerprint.Capture(
+                snapshot.Simulator,
+                snapshot.ProcessedEnemyDeaths,
+                new HashSet<string>(StringComparer.Ordinal),
+                Array.Empty<ShadowTeammateActionCandidate>());
+            return new U5OrderReplay(
+                future,
+                snapshot.EnemyHp,
+                snapshot.PlayerHp,
+                snapshot.Energy,
+                snapshot.HandCount);
+        }
+        finally
+        {
+            snapshot.ReleaseSimulator();
+        }
+    }
+
     private static PlanAction FindFirstAction(
         CombatState combat,
         SolverDisplayNames names,
@@ -492,6 +630,26 @@ internal static class Program
         int SelectionDiagnosticLines,
         IReadOnlyDictionary<string, int> PathStages,
         string NoTeammateReplayFingerprint);
+
+    internal sealed record U5Evidence(
+        string Status,
+        string EvidenceLevel,
+        string ForwardOrder,
+        string ReverseOrder,
+        string ForwardFutureFingerprint,
+        string ReverseFutureFingerprint,
+        int ForwardEnemyHp,
+        int ReverseEnemyHp,
+        bool OrderSensitive,
+        bool ExactCollapseRejected,
+        bool RealMultiplayerOwnershipVerified);
+
+    private sealed record U5OrderReplay(
+        StateFingerprint FutureFingerprint,
+        int EnemyHp,
+        int PlayerHp,
+        int Energy,
+        int HandCount);
 
     internal sealed record U1Evidence(
         string Status,
