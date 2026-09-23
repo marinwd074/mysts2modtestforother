@@ -21,6 +21,7 @@ internal sealed partial class CombatBeamSolver
         SearchDiagnosticsSink diagnostics,
         bool detailedDiagnostics,
         SearchRoutePolicy routePolicy,
+        bool useMultiplayerTeamObjective,
         MultiplayerCombatObjectiveStrategy multiplayerCombatObjectiveStrategy,
         double multiplayerEnemyDurabilityRatio,
         int multiplayerEnemyMaximumHp,
@@ -230,7 +231,7 @@ internal sealed partial class CombatBeamSolver
                             candidate.Snapshot.EnemyDurabilityByCombatId,
                             multiplayerEnemyMaximumHp);
                     MultiplayerCombatObjectiveRank multiplayerObjective =
-                        routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
+                        useMultiplayerTeamObjective
                             ? MultiplayerCombatObjectiveMath.BuildRank(
                                 multiplayerCombatObjectiveStrategy,
                                 completeVictory,
@@ -351,6 +352,7 @@ internal sealed partial class CombatBeamSolver
                             postCombatRelicHeal,
                             theftPolicy,
                             routePolicy,
+                            useMultiplayerTeamObjective,
                             multiplayerCombatObjectiveStrategy,
                             multiplayerEnemyDurabilityRatio,
                             multiplayerEnemyMaximumHp,
@@ -459,12 +461,11 @@ internal sealed partial class CombatBeamSolver
                         && passesAmbergrisPolicy;
                 })
                 .ToList();
-            bool useTeamObjective =
-                routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn;
+            bool useTeamObjective = useMultiplayerTeamObjective;
             bool useAdaptiveLethalTempo =
-                MultiplayerCombatObjectivePolicy.UsesAdaptiveLethalTempo(
-                    routePolicy,
-                    multiplayerCombatObjectiveStrategy);
+                useMultiplayerTeamObjective
+                && multiplayerCombatObjectiveStrategy
+                    == MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo;
             var selected = policyEligibleCandidates
                 .OrderByDescending(candidate => candidate.CompleteVictory)
                 .ThenBy(candidate => useTeamObjective
@@ -790,7 +791,7 @@ internal sealed partial class CombatBeamSolver
             }
 
             if (emitDiagnostics
-                && routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
+                && useTeamObjective
                 && selected.Count > 0)
             {
                 if (selectedScenarioDecision != null)
@@ -1005,6 +1006,7 @@ internal sealed partial class CombatBeamSolver
         PostCombatRelicHealProfile postCombatRelicHeal,
         SolverTheftPolicy? theftPolicy,
         SearchRoutePolicy routePolicy,
+        bool useMultiplayerTeamObjective,
         MultiplayerCombatObjectiveStrategy multiplayerCombatObjectiveStrategy,
         double multiplayerEnemyDurabilityRatio,
         int multiplayerEnemyMaximumHp,
@@ -1023,7 +1025,7 @@ internal sealed partial class CombatBeamSolver
             rightSnapshot.PlayerDead,
             rightSnapshot.ProjectedPlayerHp);
         int comparison;
-        if (routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn)
+        if (useMultiplayerTeamObjective)
         {
             double leftEnemyDurabilityRatio =
                 MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(
