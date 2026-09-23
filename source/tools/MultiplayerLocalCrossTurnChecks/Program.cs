@@ -289,6 +289,22 @@ Check(
         && tightDiversityChoices[1].Lane == MultiplayerRetentionLane.TeamSafety,
     "P2 diversity protection respects the existing beam limit instead of expanding the budget.");
 
+MultiplayerRetentionObservation[] overlappingLaneObservations =
+[
+    new(false, true, 0.01d, 0.01d, 0.80d, int.MaxValue, 0, 0, 0, 0, 0, 0),
+    new(false, true, 0.02d, 0.02d, 0.70d, int.MaxValue, 0, 0, 0, 0, 0, 0),
+    new(false, true, 0.03d, 0.03d, 0.10d, int.MaxValue, 0, 0, 0, 0, 0, 0),
+    new(false, true, 0.04d, 0.04d, 0.60d, int.MaxValue, 8, 6, 4, 3, 2, 1),
+];
+IReadOnlyList<MultiplayerRetentionChoice> overlappingLaneChoices =
+    MultiplayerRetentionDiversityPolicy.SelectProtected(
+        overlappingLaneObservations,
+        limit: 4);
+Check(
+    overlappingLaneChoices.Count == 4
+        && overlappingLaneChoices.Select(choice => choice.Index).Distinct().Count() == 4,
+    "When one route leads multiple objectives, P2 reuses that route once and spends remaining protected slots on distinct representatives.");
+
 Console.WriteLine($"PASS: {checks} multiplayer local-cross-turn contract checks");
 
 
