@@ -1,5 +1,5 @@
 using MegaCrit.Sts2.Core.Entities.Players;
-using MegaCrit.Sts2.Core.Models.Orbs;
+using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Random;
 using CombatSolver.Engine.Common;
 using CombatSolver.Engine.InCombat.Mirrors.Orbs;

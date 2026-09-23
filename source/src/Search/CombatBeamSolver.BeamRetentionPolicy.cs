@@ -2055,7 +2055,7 @@ internal sealed partial class CombatBeamSolver
                 && left.Snapshot.ProjectedPlayerHp == right.Snapshot.ProjectedPlayerHp
                 && left.Score.Equals(right.Score);
 
-        private static SearchNode? FindBestTacticalEnabler(IReadOnlyList<SearchNode> nodes)
+        private SearchNode? FindBestTacticalEnabler(IReadOnlyList<SearchNode> nodes)
         {
             SearchNode? best = null;
             foreach (SearchNode node in nodes)

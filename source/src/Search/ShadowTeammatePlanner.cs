@@ -150,10 +150,10 @@ internal static class ShadowTeammatePlanner
             CaptureProcessedEnemyDeaths(source, processedEnemyDeaths));
         if (teammates.Length == 0)
         {
-            IReadOnlyList<ShadowTeammateRoute> finalized =
+            IReadOnlyList<ShadowTeammateRoute> noTeammateRoutes =
                 FinalizeBehaviorScenarioProbabilities([seed], scenarioSetComplete: true);
             return new ShadowTeammatePlanResult(
-                finalized,
+                noTeammateRoutes,
                 ExpandedBranches: 0,
                 PendingChoiceBranches: 0,
                 HitActionDepthLimit: false,
