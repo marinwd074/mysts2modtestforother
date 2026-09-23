@@ -420,8 +420,8 @@ int u3ReservedBudget =
     MultiplayerScenarioReevaluationPolicy.ReserveExpandedBranchBudget(
         totalExpandedNodeBudget: 5_000,
         enabled: true);
-int u3PerScenarioBudget =
-    MultiplayerScenarioReevaluationPolicy.ExpandedBranchBudgetPerScenario(
+int u3PerDecisionBudget =
+    MultiplayerScenarioReevaluationPolicy.ExpandedBranchBudgetPerDecision(
         u3ReservedBudget,
         comparedDecisionCount: 4);
 Check(
@@ -433,10 +433,9 @@ Check(
             enabled: true) == 150
         && u3ReservedBudget
             == MultiplayerScenarioReevaluationPolicy.MaximumReservedExpandedBranches
-        && u3PerScenarioBudget
-            == MultiplayerScenarioReevaluationPolicy.MaximumExpandedBranchesPerScenario
-        && u3PerScenarioBudget
-            * MultiplayerScenarioReevaluationPolicy.MaximumScenariosPerDecision
+        && u3PerDecisionBudget
+            == MultiplayerScenarioReevaluationPolicy.MaximumExpandedBranchesPerDecision
+        && u3PerDecisionBudget
             * MultiplayerScenarioReevaluationPolicy.MaximumCurrentDecisions
             <= u3ReservedBudget
         && MultiplayerScenarioReevaluationPolicy.MainSearchExpandedNodeBudget(
@@ -445,7 +444,7 @@ Check(
         && MultiplayerScenarioReevaluationPolicy.MainSearchExpandedNodeBudget(
             totalExpandedNodeBudget: 5_000,
             enabled: false) == 5_000,
-    "U3 reevaluation uses a deterministic bounded reserve carved from the existing work budget and splits it equally across candidate-scenario cells.");
+    "U3 reevaluation uses a deterministic bounded reserve carved from the existing work budget and splits it equally across current decisions.");
 
 PlanAction u3AggressiveFuture = new(
     PlanActionKind.EndTurn,
@@ -494,7 +493,7 @@ MultiplayerScenarioEvaluation[] u3CompletedMatrix =
             ExpandedBranches: index + 1))
         .ToArray();
 MultiplayerScenarioDecisionEvaluation u3CompleteDecision =
-    new("same-current-decision", u3CompletedMatrix);
+    new("same-current-decision", u3CompletedMatrix, SharedExpandedBranches: 7);
 MultiplayerScenarioEvaluation[] u3InterruptedMatrix =
     u3CompletedMatrix
         .Select((evaluation, index) => index == 2
@@ -506,12 +505,12 @@ MultiplayerScenarioEvaluation[] u3InterruptedMatrix =
             : evaluation)
         .ToArray();
 MultiplayerScenarioDecisionEvaluation u3InterruptedDecision =
-    new("same-current-decision", u3InterruptedMatrix);
+    new("same-current-decision", u3InterruptedMatrix, SharedExpandedBranches: 7);
 Check(
     u3CompleteDecision.CompleteCoverage
-        && u3CompleteDecision.ExpandedBranches == 10
+        && u3CompleteDecision.ExpandedBranches == 17
         && !u3InterruptedDecision.CompleteCoverage,
-    "U3 matrix records Completed/Terminal cells as complete, sums real expanded work, and an Unknown budget-interrupted cell cannot masquerade as full scenario coverage.");
+    "U3 matrix records Completed/Terminal cells as complete, counts shared planner work once plus scenario-specific replay work, and an Unknown budget-interrupted cell cannot masquerade as full scenario coverage.");
 
 IReadOnlyList<ShadowTeammateScenarioChoice> orderDiversityChoices =
     ShadowTeammateScenarioPolicy.SelectProtected(
