@@ -157,6 +157,7 @@ internal sealed partial class CombatBeamSolver
                             _postCombatRelicHeal,
                             _theftPolicy,
                             _routePolicy,
+                            _useMultiplayerTeamObjective,
                             _multiplayerCombatObjectiveStrategy,
                             _multiplayerEnemyDurabilityRatio,
                             _multiplayerEnemyMaximumHp,
