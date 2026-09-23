@@ -155,7 +155,7 @@ F 必须执行每张牌与触发器，而不是先合并成“队友本回合打
 
 ### U1 — 先修动作后态校验
 
-**状态（2026-09-23）：代码/合同/Release 构建已完成，真实多人验收仍 `UNVERIFIED`。** 当前实现见 [`U1_ACTION_POSTSTATE.md`](U1_ACTION_POSTSTATE.md)：每张动作前 fresh probe；每张动作提交前由生产 `CombatBeamSolver.ReplayDiagnosticPrefix` 冻结 predicted `ContinuationStamp + remote fingerprint`；原生队列稳定后与 live 精确比较。旧 `local_card_removed/energy/enemy_target/remote_unchanged` 只保留旁路诊断。兼容合同为 `PASS: 30 / FAIL: 0 / SKIP: 0`，pinned 0.107.1 Release 构建为 `0 warnings / 0 errors`。重锤+Choice、连续祭品、真实队友插入和 cancellation 双端 timing 未经新代码实机复测前，不进入 U2。
+**状态（2026-09-23）：代码/合同/Release 构建已完成，真实多人验收仍 `UNVERIFIED`。** 当前实现见 [`U1_ACTION_POSTSTATE.md`](U1_ACTION_POSTSTATE.md)：每张动作前 fresh probe；每张动作提交前由生产 `CombatBeamSolver.ReplayDiagnosticPrefix` 冻结 predicted `ContinuationStamp + remote fingerprint`；原生队列稳定后与 live 精确比较。旧 `local_card_removed/energy/enemy_target/remote_unchanged` 只保留旁路诊断。重锤+Choice、连续祭品、真实队友插入和 cancellation 双端 timing 仍需实机复测；该 runtime debt 与已完成的 U2 搜索共核验收分开记录。
 
 入口：MultiplayerSafeExecutePolicy、MultiplayerSafeLocalActionClassifier、SolverController.Deployment、现有native action/Choice与快照实现。
 
@@ -164,6 +164,8 @@ F 必须执行每张牌与触发器，而不是先合并成“队友本回合打
 验收：重锤+真实Choice链、连续祭品抽出后续牌、合法本地连锁变化可继续；真实远端插入导致旧计划失效后不再部署旧后缀；取消/迟到回调不会重复出牌。若游戏不支持某条假设，用真实等价效果替代，记录实际测试牌。
 
 ### U2 — 搜索共核与退化等价
+
+**状态（2026-09-23）：COMPLETE。** 详细实现与证据见 [U2_SEARCH_KERNEL.md](U2_SEARCH_KERNEL.md)。SinglePlayerFullRoute 与 MultiplayerLocalCrossTurn 已共用完整搜索核；搜索能力与部署权限、route mechanics 与 team objective 分离。历史多人 Anger/current-turn/Shuffle 例外仅在实际多人根启用。pinned 0.107.1 的同根 differential 在相同 objective、DOP=1 与固定预算下实跑通过：首动作、完整 18-action 固定 tie-break 序列、终局值、score、expanded nodes 和 transitions 全部一致。真实多人 Joint/Shadow、MultiplayerOnly、网络/revalidation 与共享 RNG 边界均保留。
 
 只消除有证据的单多人能力差异；保持单人默认目标和路线。队友模型先用确定性脚本；无队友事件时共用同一候选生成、预算和排序配置。
 
