@@ -42,6 +42,7 @@ P1 Rank 已接入：
 - `BeamRetentionPolicy.CompareFinalCandidates`：最终候选预筛选，避免团队更优路线在正式 FinalPlanOrdering 前被删；
 - `BeamRetentionPolicy.SortByBeamRank`：普通 Beam；
 - `BeamRetentionPolicy.IsBetterSearchNode`：同一 `StateKey` 代表选择；
+- `ComparePotionFreePolicyBaselines`：Smart potion 的无药参考路线先按同一多人 Rank 比较，避免药水资格判断继续引用旧的本地 HP 目标；
 - Transposition Pareto：保持原保守条件。其 `StateKey` 已固定 turn/enemy durability，label 已显式保存 `AllPlayersAlive / TeamLossRatio / WorstPlayerLossRatio`，因此不需要新增一个可产生错误 dominance 的近似 scalar。
 
 Shadow 自己的 exact fingerprint / heuristic overflow pruning 不在 P1 修改范围；它仍负责生成候选世界线，主搜索负责用统一 Rank 评价进入主路线的结果。
