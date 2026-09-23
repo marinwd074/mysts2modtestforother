@@ -50,6 +50,18 @@ internal static class ShadowFutureStateFingerprint
             key.Add(combat.GetPlayerGold(player));
             key.Add(combat.GetCumulativeHpLost(player.Creature));
             key.Add(combat.GetRecoveredHp(player.Creature));
+            if (combat.GetOsty(player) is { } osty)
+            {
+                key.Add(true);
+                key.Add(osty.CombatId ?? uint.MaxValue);
+                key.Add(simulator.State.GetCreature(osty).CurrentHp);
+                key.Add(combat.GetOstyMaxHp(simulator, player));
+                key.Add(combat.IsOstyHittable(simulator, player));
+            }
+            else
+            {
+                key.Add(false);
+            }
             AppendPile(ref key, playerState.Hand, 'H');
             AppendPile(ref key, playerState.DrawPile, 'D');
             AppendPile(ref key, playerState.DiscardPile, 'C');
