@@ -29,6 +29,8 @@ internal sealed partial class CombatBeamSolver
         int startTurnNumber,
         MultiplayerCarryRankingContext carryRankingContext,
         BattleDamageSnapshot battleDamage,
+        Func<IReadOnlyList<SearchNode>, IReadOnlyList<MultiplayerScenarioDecisionEvaluation>>?
+            scenarioReevaluator,
         PotionStrategicCostLookup? potionStrategicCosts = null)
     {
         private readonly PotionStrategicCostLookup _potionStrategicCosts = potionStrategicCosts ?? new();
@@ -97,7 +99,8 @@ internal sealed partial class CombatBeamSolver
             bool ScenarioSetComplete,
             int BaselineIndex,
             int ConservativeRepresentativeIndex,
-            string ScenarioStatuses);
+            string ScenarioStatuses,
+            int ReplayExpandedBranches);
 
         private sealed record ChanceDecisionSummary(
             string DecisionKey,
@@ -570,6 +573,25 @@ internal sealed partial class CombatBeamSolver
                     }
                 }
 
+                Dictionary<string, MultiplayerScenarioDecisionEvaluation> replayByDecision =
+                    new(StringComparer.Ordinal);
+                if (emitDiagnostics
+                    && scenarioReevaluator != null
+                    && decisionKeys.Count > 1)
+                {
+                    List<SearchNode> representatives = decisionKeys
+                        .Select(key => selected.First(candidate =>
+                            MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(
+                                candidate.Node,
+                                startTurnNumber) == key).Node)
+                        .ToList();
+                    foreach (MultiplayerScenarioDecisionEvaluation replay in
+                             scenarioReevaluator(representatives))
+                    {
+                        replayByDecision[replay.DecisionKey] = replay;
+                    }
+                }
+
                 foreach (string decisionKey in decisionKeys)
                 {
                     var group = selected
@@ -578,55 +600,81 @@ internal sealed partial class CombatBeamSolver
                                 candidate.Node,
                                 startTurnNumber) == decisionKey)
                         .ToList();
+                    int baselineRepresentativeIndex =
+                        group.Min(candidate => baselineIndex[candidate.Node]);
 
                     Dictionary<ShadowTeammateScenarioKind,
                         (MultiplayerScenarioOutcome Outcome,
                          int CandidateIndex,
                          MultiplayerScenarioEvaluationStatus Status)> outcomes = [];
                     bool plannerReportedComplete = true;
-                    foreach (var candidate in group)
-                    {
-                        if (!MultiplayerChanceDecisionIdentity.TryGetCurrentTurnShadowOutcome(
-                                candidate.Node,
-                                startTurnNumber,
-                                out SearchNode outcomeNode,
-                                out ShadowForecastPlan forecast))
-                        {
-                            // A baseline/final-policy representative can share the same deployable
-                            // current action without carrying a Shadow outcome. It adds no scenario
-                            // evidence and therefore cannot fill a missing ScenarioSpec.
-                            continue;
-                        }
-                        if (!forecast.ScenarioSetComplete)
-                        {
-                            // Choice/depth/budget interruption is Unknown. Never convert it into a
-                            // favorable completed lane or simply remove this decision from comparison.
-                            plannerReportedComplete = false;
-                            continue;
-                        }
-                        if (!MultiplayerScenarioReevaluationPolicy.IsRequiredScenario(
-                                forecast.ScenarioKind))
-                        {
-                            continue;
-                        }
+                    int replayExpandedBranches = 0;
+                    bool usedFinalReplay = replayByDecision.TryGetValue(
+                        decisionKey,
+                        out MultiplayerScenarioDecisionEvaluation? replayDecision);
 
-                        int candidateIndex = baselineIndex[candidate.Node];
-                        MultiplayerScenarioOutcome outcome =
-                            BuildScenarioOutcome(outcomeNode, forecast.ScenarioKind);
-                        MultiplayerScenarioEvaluationStatus status =
-                            outcomeNode.Snapshot.AllEnemiesDead
-                            || outcomeNode.Snapshot.PlayerDead
-                                ? MultiplayerScenarioEvaluationStatus.Terminal
-                                : MultiplayerScenarioEvaluationStatus.Completed;
-                        if (!outcomes.TryGetValue(
-                                forecast.ScenarioKind,
-                                out var current)
-                            || MultiplayerScenarioReevaluationPolicy.Compare(
-                                MultiplayerScenarioReevaluationPolicy.Aggregate([outcome]),
-                                MultiplayerScenarioReevaluationPolicy.Aggregate([current.Outcome])) < 0)
+                    if (usedFinalReplay)
+                    {
+                        plannerReportedComplete = replayDecision!.CompleteCoverage;
+                        replayExpandedBranches = replayDecision.ExpandedBranches;
+                        foreach (MultiplayerScenarioEvaluation evaluation in
+                                 replayDecision.Scenarios)
                         {
-                            outcomes[forecast.ScenarioKind] =
-                                (outcome, candidateIndex, status);
+                            if (evaluation.Status == MultiplayerScenarioEvaluationStatus.Unknown
+                                || evaluation.Outcome is not { } outcome)
+                            {
+                                continue;
+                            }
+
+                            outcomes[evaluation.Spec.Kind] = (
+                                outcome,
+                                baselineRepresentativeIndex,
+                                evaluation.Status);
+                        }
+                    }
+                    else
+                    {
+                        foreach (var candidate in group)
+                        {
+                            if (!MultiplayerChanceDecisionIdentity.TryGetCurrentTurnShadowOutcome(
+                                    candidate.Node,
+                                    startTurnNumber,
+                                    out SearchNode outcomeNode,
+                                    out ShadowForecastPlan forecast))
+                            {
+                                // A baseline/final-policy representative can share the same
+                                // deployable current action without carrying a Shadow outcome.
+                                continue;
+                            }
+                            if (!forecast.ScenarioSetComplete)
+                            {
+                                plannerReportedComplete = false;
+                                continue;
+                            }
+                            if (!MultiplayerScenarioReevaluationPolicy.IsRequiredScenario(
+                                    forecast.ScenarioKind))
+                            {
+                                continue;
+                            }
+
+                            int candidateIndex = baselineIndex[candidate.Node];
+                            MultiplayerScenarioOutcome outcome =
+                                BuildScenarioOutcome(outcomeNode, forecast.ScenarioKind);
+                            MultiplayerScenarioEvaluationStatus status =
+                                outcomeNode.Snapshot.AllEnemiesDead
+                                || outcomeNode.Snapshot.PlayerDead
+                                    ? MultiplayerScenarioEvaluationStatus.Terminal
+                                    : MultiplayerScenarioEvaluationStatus.Completed;
+                            if (!outcomes.TryGetValue(
+                                    forecast.ScenarioKind,
+                                    out var current)
+                                || MultiplayerScenarioReevaluationPolicy.Compare(
+                                    MultiplayerScenarioReevaluationPolicy.Aggregate([outcome]),
+                                    MultiplayerScenarioReevaluationPolicy.Aggregate([current.Outcome])) < 0)
+                            {
+                                outcomes[forecast.ScenarioKind] =
+                                    (outcome, candidateIndex, status);
+                            }
                         }
                     }
 
@@ -636,18 +684,17 @@ internal sealed partial class CombatBeamSolver
                     MultiplayerScenarioDecisionRank rank =
                         MultiplayerScenarioReevaluationPolicy.Aggregate(
                             outcomes.Values.Select(value => value.Outcome).ToArray());
-                    int baselineRepresentativeIndex =
-                        group.Min(candidate => baselineIndex[candidate.Node]);
-                    int conservativeRepresentativeIndex = outcomes.Count == 0
-                        ? baselineRepresentativeIndex
-                        : outcomes.Values
-                            .OrderByDescending(value => value.Outcome.LossEquivalent)
-                            .ThenByDescending(value => value.Outcome.WorstPlayerLossRatio)
-                            .ThenByDescending(value => value.Outcome.TeamLossRatio)
-                            .ThenByDescending(value => value.Outcome.EnemyDurabilityRatio)
-                            .ThenBy(value => value.CandidateIndex)
-                            .First()
-                            .CandidateIndex;
+                    int conservativeRepresentativeIndex = usedFinalReplay
+                        || outcomes.Count == 0
+                            ? baselineRepresentativeIndex
+                            : outcomes.Values
+                                .OrderByDescending(value => value.Outcome.LossEquivalent)
+                                .ThenByDescending(value => value.Outcome.WorstPlayerLossRatio)
+                                .ThenByDescending(value => value.Outcome.TeamLossRatio)
+                                .ThenByDescending(value => value.Outcome.EnemyDurabilityRatio)
+                                .ThenBy(value => value.CandidateIndex)
+                                .First()
+                                .CandidateIndex;
 
                     List<string> statusTokens = [];
                     foreach (MultiplayerScenarioSpec spec in
@@ -666,7 +713,8 @@ internal sealed partial class CombatBeamSolver
                         complete,
                         baselineRepresentativeIndex,
                         conservativeRepresentativeIndex,
-                        string.Join(",", statusTokens)));
+                        string.Join(",", statusTokens),
+                        replayExpandedBranches));
                 }
 
                 scenarioReevaluationEnabled =
@@ -823,7 +871,7 @@ internal sealed partial class CombatBeamSolver
                         $"complete={summary.ScenarioSetComplete.ToString().ToLowerInvariant()} " +
                         $"statuses={summary.ScenarioStatuses} " +
                         $"scenario_count={summary.Rank.ScenarioCount} " +
-                        "replay_expanded=untracked");
+                        $"replay_expanded={summary.ReplayExpandedBranches}");
                 }
 
                 if (selectedScenarioDecision != null)
