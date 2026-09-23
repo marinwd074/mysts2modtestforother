@@ -12,6 +12,7 @@ on:
       - 'source/tools/test-u1-action-poststate.ps1'
       - 'source/tools/P0HistoricalPinnedHarness/**'
       - 'source/tools/test-p0-baseline-ab.ps1'
+      - 'source/src/Search/MultiplayerCombatObjectiveMath.cs'
       - 'source/src/Search/MultiplayerScenarioReevaluationPolicy.cs'
       - 'source/src/Search/ShadowTeammateScenarioPolicy.cs'
       - 'source/src/Search/ShadowTeammatePlanner.cs'
