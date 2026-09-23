@@ -2230,7 +2230,8 @@ internal sealed partial class CombatBeamSolver
                     $"state_occurrence={action.CardStateOccurrence} state_key={action.CardStateKey} hand={hand}。");
             }
             Creature? target = simulatedCombat.GetCreature(action.TargetCombatId);
-            if (cardChoiceFrame is null && !simulatedCombat.CanPlayCard(simulator, card))
+            if (cardChoiceFrame is null
+                && (!CanConsiderCardAction(card) || !simulatedCombat.CanPlayCard(simulator, card)))
             {
                 int energyCost = card.GetEnergyCostWithModifiers(simulator, playerState);
                 int starCost = card.GetStarCostWithModifiers(simulator, playerState);
