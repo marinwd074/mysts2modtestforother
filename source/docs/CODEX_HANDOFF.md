@@ -47,7 +47,8 @@
 ## 当前未完成
 
 - **P0/P1 pinned 正确性测试已结束，不再是当前 blocker。** P0 固定工作量历史 A/B、Joint continuation、classifier 均通过；P1 固定工作量 runtime 语义与目标合同通过。两者的 5000 ms `TimeLimit` 只保留性能遥测，不通过扩大预算解决。
-- **当前 runtime blocker 仍是 U1 smoke；U2 已独立完成。** U1 必须用新 DLL 实测三类样例后才能把安全执行链标为稳定：①重锤 + 真实 Choice/烙印 + 后续牌；②连续祭品抽出并继续使用后续牌；③队友在两张本地动作之间插入一个可读变化，确认 `U1_PRE_ACTION_PROBE` 在下一张 native submit 前使旧 session 失效。另保留 cancellation/late callback 不重复提交检查。最小证据链：`U1_PRE_ACTION_PROBE → U1_EXPECTED_POST_STATE → NATIVE_ACTION_CAPTURED → DEPLOY_ACTION_COMPLETE → U1_POST_STATE_COMPARE → MP2B_ACTION_RECONCILED`。这项是 Safe Execute 的实机风险，不再列作 U2 搜索共核的缺口。
+- **U1-D cancellation / late callback 实机时序已 PASS（2026-09-23）**：commit `50f519f9868bcd7018b28b08195c3cdfb4740a3f` 的 request 10 在 OFFERING `NATIVE_ACTION_CAPTURED` 后 121 ms 关闭 Solver；随后仍有本地 world/state 变化，直到约 538 ms 后才 `DEPLOY_CANCELED`。期间没有 post-action reconcile、第二次 `DEPLOY_ACTION` / `NATIVE_ACTION_CAPTURED` 或旧 action 新授权。结合 `SetSolverDisabled(true) → CancelDeployment()` 与 Deployment 先等待已提交 native action 再进入 cancellation-aware queue-idle wait 的源码顺序，可确认在途动作可完成而旧 Safe Execute 后缀不会继续提交。问题包没有独立 native completion 时间戳，因此只按该生命周期边界记 PASS。
+- **U1 剩余真实运行证据与 U0 correlation 分开管理。** U0 real diagnostic correlation 仍为 NOT VERIFIED；request 10 不改变这个状态。U1-A/B/C 的状态继续以各自专用实机证据为准，不从 U1-D 推导。最小证据链仍是：`U1_PRE_ACTION_PROBE → U1_EXPECTED_POST_STATE → NATIVE_ACTION_CAPTURED → DEPLOY_ACTION_COMPLETE → U1_POST_STATE_COMPARE → MP2B_ACTION_RECONCILED`。
 
 - **P3 多情景复评已完成代码接线（2026-09-23）**。P3 使用 Aggressive / Defensive / Conserve / NoAction 四类压力情景，不把通用行为 prior 当真实概率；生产 Shadow beam=4 正好对应四类压力情景，并通过 action-interleaved simulator 保留关键出牌顺序语义。只对 P1/P2 前 4 个不同当前动作组做 final-only 复评，每组最多 4 个情景代表；至少 2 个完整动作组时启用 robust rerank，不完整动作组不参与 P3 胜出竞争但仍留在 P1/P2 fallback 列表。跨情景以同一 `CurrentTurnDecisionKey` 聚合，先看全员存活，再看全情景斩杀、最坏战损、最差队员和平均战损。通用行为 prior 明确保持 `ScenarioProbabilityTrusted=false`，概率加权 chance 代码继续关闭。
 
