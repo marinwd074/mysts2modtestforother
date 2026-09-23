@@ -156,7 +156,6 @@ try {
             projectedBattleHpLost = $baseline.search.projectedBattleHpLost
             finalHp = $baseline.search.finalHp
             finalEnemyHp = $baseline.search.finalEnemyHp
-            combatEndedTurn = $baseline.search.combatEndedTurn
             expandedNodes = $baseline.search.expandedNodes
             portfolioMembers = $baseline.search.portfolioMembers
         }
@@ -168,7 +167,6 @@ try {
             projectedBattleHpLost = $current.p0.spRegression.ProjectedBattleHpLost
             finalHp = $current.p0.spRegression.FinalHp
             finalEnemyHp = $current.p0.spRegression.FinalEnemyHp
-            combatEndedTurn = $current.p0.spRegression.CombatEndedTurn
             expandedNodes = $current.p0.spRegression.ExpandedNodes
             portfolioMembers = $current.p0.spRegression.PortfolioMembers
         }
