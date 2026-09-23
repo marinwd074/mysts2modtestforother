@@ -57,9 +57,8 @@ internal static class MultiplayerScenarioReevaluationPolicy
     internal static IReadOnlyList<MultiplayerScenarioSpec> ScenarioSpecs =>
         ScenarioSpecsValue;
 
-    internal static int MaximumScenariosPerDecision => ScenarioSpecsValue.Length;
-
-    internal static int MaximumCoverageCandidates =>
+    internal const int MaximumScenariosPerDecision = 4;
+    internal const int MaximumCoverageCandidates =
         MaximumCurrentDecisions * MaximumScenariosPerDecision;
 
     internal static bool IsRequiredScenario(ShadowTeammateScenarioKind kind)
