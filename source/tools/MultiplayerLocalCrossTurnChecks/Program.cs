@@ -245,3 +245,46 @@ Check(
     "Local cross-turn tie-breaking prefers a current-turn card over an EndTurn-only route without changing single-player or current-turn-only policies.");
 
 Console.WriteLine($"PASS: {checks} multiplayer local-cross-turn contract checks");
+
+
+ShadowBehaviorActionObservation[] behaviorActions =
+[
+    new(
+        CompleteVictory: false,
+        EnemyDurabilityReduction: 18,
+        TeamEffectiveHpGain: 0,
+        EnergyCost: 1,
+        StarCost: 0,
+        IsPowerCard: false),
+    new(
+        CompleteVictory: false,
+        EnemyDurabilityReduction: 0,
+        TeamEffectiveHpGain: 0,
+        EnergyCost: 1,
+        StarCost: 0,
+        IsPowerCard: false),
+    new(
+        CompleteVictory: true,
+        EnemyDurabilityReduction: 5,
+        TeamEffectiveHpGain: 0,
+        EnergyCost: 1,
+        StarCost: 0,
+        IsPowerCard: false),
+];
+double[] behaviorLogProbabilities =
+    ShadowTeammateBehaviorModel.DecisionLogProbabilities(behaviorActions);
+double behaviorProbabilitySum = behaviorLogProbabilities.Sum(Math.Exp);
+Check(
+    Math.Abs(behaviorProbabilitySum - 1d) < 1e-9
+        && behaviorLogProbabilities.Length == behaviorActions.Length + 1,
+    "Shadow behavior decisions normalize legal actions plus stop into one probability distribution.");
+
+Check(
+    behaviorLogProbabilities[2] > behaviorLogProbabilities[0]
+        && behaviorLogProbabilities[0] > behaviorLogProbabilities[1],
+    "Shadow behavior prior prefers lethal over ordinary progress and ordinary progress over visible no-op play.");
+
+Check(
+    ShadowTeammateBehaviorModel.MeanLogProbability(-2d, 2) == -1d
+        && ShadowTeammateBehaviorModel.MeanLogProbability(-2d, 0) == 0d,
+    "Shadow route plausibility keeps cumulative and per-decision likelihood as separate values.");
