@@ -318,10 +318,10 @@ double fragileTempoRate =
         enemyDurabilityRatio: 0.1d,
         worstPlayerLossRatio: 0.8d);
 Check(
-    healthyTempoRate > fragileTempoRate
-        && healthyTempoRate <= MultiplayerCombatObjectiveMath.MaximumExtraLossRatioPerTurn
-        && fragileTempoRate > 0d,
-    "Tempo loss tolerance remains bounded and decreases continuously for a fragile team.");
+    fragileTempoRate > healthyTempoRate
+        && fragileTempoRate <= MultiplayerCombatObjectiveMath.MaximumExtraLossRatioPerTurn
+        && healthyTempoRate > 0d,
+    "Tempo pressure remains bounded and rises continuously as accumulated team risk increases.");
 
 double healthyFastScore =
     MultiplayerCombatObjectiveMath.ContinuousTempoScore(
