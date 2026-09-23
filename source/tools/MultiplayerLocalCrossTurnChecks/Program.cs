@@ -288,3 +288,73 @@ Check(
     ShadowTeammateBehaviorModel.MeanLogProbability(-2d, 2) == -1d
         && ShadowTeammateBehaviorModel.MeanLogProbability(-2d, 0) == 0d,
     "Shadow route plausibility keeps cumulative and per-decision likelihood as separate values.");
+
+
+double urgencyAboveOldThreshold =
+    MultiplayerCombatObjectiveMath.ComputeLethalUrgency(0.350001d);
+double urgencyAtOldThreshold =
+    MultiplayerCombatObjectiveMath.ComputeLethalUrgency(0.35d);
+double urgencyBelowOldThreshold =
+    MultiplayerCombatObjectiveMath.ComputeLethalUrgency(0.349999d);
+Check(
+    urgencyBelowOldThreshold > urgencyAtOldThreshold
+        && urgencyAtOldThreshold > urgencyAboveOldThreshold
+        && Math.Abs(urgencyBelowOldThreshold - urgencyAboveOldThreshold) < 0.00001d,
+    "Adaptive lethal urgency is continuous through the old 35% durability boundary.");
+
+Check(
+    MultiplayerCombatObjectiveMath.ComputeLethalUrgency(1d) == 0d
+        && MultiplayerCombatObjectiveMath.ComputeLethalUrgency(0d) == 1d
+        && MultiplayerCombatObjectiveMath.ComputeLethalUrgency(0.25d)
+            > MultiplayerCombatObjectiveMath.ComputeLethalUrgency(0.75d),
+    "Adaptive lethal urgency rises smoothly as enemy effective durability falls.");
+
+double healthyTempoRate =
+    MultiplayerCombatObjectiveMath.LossRatioPerTurn(
+        enemyDurabilityRatio: 0.1d,
+        worstPlayerLossRatio: 0d);
+double fragileTempoRate =
+    MultiplayerCombatObjectiveMath.LossRatioPerTurn(
+        enemyDurabilityRatio: 0.1d,
+        worstPlayerLossRatio: 0.8d);
+Check(
+    healthyTempoRate > fragileTempoRate
+        && healthyTempoRate <= MultiplayerCombatObjectiveMath.MaximumExtraLossRatioPerTurn
+        && fragileTempoRate > 0d,
+    "Tempo loss tolerance remains bounded and decreases continuously for a fragile team.");
+
+double healthyFastScore =
+    MultiplayerCombatObjectiveMath.ContinuousTempoScore(
+        teamLossRatio: 0.12d,
+        worstPlayerLossRatio: 0.10d,
+        enemyDurabilityRatio: 0.08d,
+        combatEndedTurn: 3,
+        startTurnNumber: 1);
+double healthySlowScore =
+    MultiplayerCombatObjectiveMath.ContinuousTempoScore(
+        teamLossRatio: 0.08d,
+        worstPlayerLossRatio: 0.10d,
+        enemyDurabilityRatio: 0.08d,
+        combatEndedTurn: 5,
+        startTurnNumber: 1);
+Check(
+    healthyFastScore < healthySlowScore,
+    "Near lethal, a healthy team may rationally accept modest extra loss to finish multiple turns earlier.");
+
+double fullDurabilityFastScore =
+    MultiplayerCombatObjectiveMath.ContinuousTempoScore(
+        teamLossRatio: 0.12d,
+        worstPlayerLossRatio: 0d,
+        enemyDurabilityRatio: 1d,
+        combatEndedTurn: 3,
+        startTurnNumber: 1);
+double fullDurabilitySlowScore =
+    MultiplayerCombatObjectiveMath.ContinuousTempoScore(
+        teamLossRatio: 0.08d,
+        worstPlayerLossRatio: 0d,
+        enemyDurabilityRatio: 1d,
+        combatEndedTurn: 5,
+        startTurnNumber: 1);
+Check(
+    fullDurabilitySlowScore < fullDurabilityFastScore,
+    "At full enemy durability the continuous tempo term is zero, so lower team loss remains primary.");
