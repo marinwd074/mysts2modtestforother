@@ -440,6 +440,7 @@ internal sealed partial class CombatBeamSolver
             SolverResultScope resultScope,
             int candidateSearchedTurnLayers,
             bool candidateTimeBudgetReached,
+            bool candidateNodeBudgetReached,
             IReadOnlyList<PlanAction>? routeAdoptionActions = null)
         {
             SearchMeasurement finalMeasurement = _run.Performance.Begin();
@@ -496,7 +497,7 @@ internal sealed partial class CombatBeamSolver
                 if (boundary == SearchBoundaryReason.None && candidateTimeBudgetReached)
                     boundary = SearchBoundaryReason.TimeLimit;
                 else if (boundary == SearchBoundaryReason.None
-                         && _run.Expanded >= _totalExpandedNodeBudget)
+                         && candidateNodeBudgetReached)
                     boundary = SearchBoundaryReason.NodeLimit;
                 else if (boundary == SearchBoundaryReason.None
                          && policy.VerifyIncrementalSearch
@@ -963,6 +964,7 @@ internal sealed partial class CombatBeamSolver
                     SolverResultScope.RouteAdoption,
                     candidateSearchedTurnLayers,
                     candidateTimeBudgetReached: false,
+                    candidateNodeBudgetReached: false,
                     routeAdoptionActions: adoptionActions));
             lastRoutePreviewAt = System.Environment.TickCount64;
         }
@@ -2141,11 +2143,21 @@ internal sealed partial class CombatBeamSolver
         bool onlyDeathRoutesFound = evaluated.All(candidate =>
             candidate.Snapshot.PlayerDead || candidate.Snapshot.ProjectedPlayerHp <= 0);
         _run.ReusedNodeSnapshots += evaluated.Count;
+        // Freeze the main-search stop reason before U3 spends its reserved reevaluation work.
+        // Whether the main search exhausted its allocation must not depend on how much of the
+        // separate U3 reserve the final candidate matrix later consumes.
+        bool nodeBudgetReached = _run.Expanded >= _profile.MaxExpandedNodes;
         FinalPlanSelection ordering = FinalOrdering.Select(
             evaluated,
             initialHp,
             emitDiagnostics: true,
             reevaluateScenarios: true);
+        if (_run.Expanded > _totalExpandedNodeBudget)
+        {
+            throw new InvalidOperationException(
+                $"U3 reevaluation exceeded the total expanded-work budget: " +
+                $"{_run.Expanded}/{_totalExpandedNodeBudget}.");
+        }
         SolverResult result = MaterializeSelectedRoute(
             ordering,
             onlyDeathRoutesFound,
@@ -2153,7 +2165,8 @@ internal sealed partial class CombatBeamSolver
                 ? SolverResultScope.CurrentTurnAdoption
                 : SolverResultScope.SearchCompletion,
             searchedTurnLayers,
-            timeBudgetReached);
+            timeBudgetReached,
+            nodeBudgetReached);
         foreach (SearchNode candidate in finalCandidates)
             candidate.Snapshot.ReleaseSimulator();
         return result;
