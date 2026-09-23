@@ -9,6 +9,8 @@ internal sealed partial class CombatBeamSolver
         if (decisionRepresentatives.Count == 0)
             return [];
 
+        int expandedBefore = _run.Expanded;
+        int transitionsBefore = _run.TransitionCount;
         int decisionCount = Math.Min(
             decisionRepresentatives.Count,
             MultiplayerScenarioReevaluationPolicy.MaximumCurrentDecisions);
@@ -27,6 +29,14 @@ internal sealed partial class CombatBeamSolver
                 decisionBudget));
         }
 
+        int replayExpanded = _run.Expanded - expandedBefore;
+        int replayTransitions = _run.TransitionCount - transitionsBefore;
+        int matrixExpanded = decisions.Sum(decision => decision.ExpandedBranches);
+        if (replayExpanded != matrixExpanded)
+        {
+            throw new InvalidOperationException(
+                $"U3 scenario work accounting diverged: run={replayExpanded} matrix={matrixExpanded}.");
+        }
         policy.Diagnostics.Info(
             $"[CombatSolver/Multiplayer] MP_SCENARIO_BUDGET " +
             $"total_node_budget={_totalExpandedNodeBudget} " +
@@ -35,7 +45,8 @@ internal sealed partial class CombatBeamSolver
             $"decisions={decisionCount} " +
             $"scenarios_per_decision={MultiplayerScenarioReevaluationPolicy.MaximumScenariosPerDecision} " +
             $"decision_budget={decisionBudget} " +
-            $"replay_expanded={decisions.Sum(decision => decision.ExpandedBranches)}");
+            $"replay_expanded={replayExpanded} " +
+            $"replay_transitions={replayTransitions}");
         return decisions;
     }
 
