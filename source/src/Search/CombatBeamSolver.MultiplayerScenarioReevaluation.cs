@@ -44,6 +44,15 @@ internal sealed partial class CombatBeamSolver
                 cells));
         }
 
+        policy.Diagnostics.Info(
+            $"[CombatSolver/Multiplayer] MP_SCENARIO_BUDGET " +
+            $"total_node_budget={_totalExpandedNodeBudget} " +
+            $"main_node_budget={_profile.MaxExpandedNodes} " +
+            $"reserved={_scenarioReevaluationReservedBranches} " +
+            $"decisions={decisionCount} " +
+            $"scenarios_per_decision={MultiplayerScenarioReevaluationPolicy.MaximumScenariosPerDecision} " +
+            $"cell_budget={cellBudget} " +
+            $"replay_expanded={decisions.Sum(decision => decision.ExpandedBranches)}");
         return decisions;
     }
 
