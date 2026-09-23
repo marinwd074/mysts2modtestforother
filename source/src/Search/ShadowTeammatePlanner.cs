@@ -16,7 +16,8 @@ internal readonly record struct ShadowTeammateActionCandidate(
     string SemanticKey,
     int EnergyCost,
     int StarCost,
-    uint? TargetCombatId);
+    uint? TargetCombatId,
+    bool IsPowerCard = false);
 
 internal sealed record ShadowTeammateRoute(
     CombatPredictionSimulator Simulator,
@@ -35,6 +36,15 @@ internal sealed record ShadowTeammateRoute(
 
     internal IReadOnlySet<string> TurnEndedPlayerNetIds { get; init; } =
         new HashSet<string>(StringComparer.Ordinal);
+
+    internal double BehaviorLogProbability { get; init; }
+
+    internal int BehaviorDecisionCount { get; init; }
+
+    internal double BehaviorMeanLogProbability =>
+        ShadowTeammateBehaviorModel.MeanLogProbability(
+            BehaviorLogProbability,
+            BehaviorDecisionCount);
 }
 
 internal readonly record struct ShadowTeammatePlanResult(
@@ -80,7 +90,8 @@ internal static class ShadowTeammatePlanner
                     semanticKey,
                     energyCost,
                     starCost,
-                    target?.CombatId));
+                    target?.CombatId,
+                    card.Preview.Type == CardType.Power));
             }
         }
 
@@ -133,12 +144,14 @@ internal static class ShadowTeammatePlanner
             List<ShadowTeammateRoute> next = [];
             foreach (ShadowTeammateRoute route in frontier)
             {
-                // At every prefix all teammates may simply stop playing cards. Keeping the
-                // prefix preserves the old optional-stop behavior without imposing a player order.
-                completed.Add(route);
                 if (route.CompleteVictory || !route.AllPlayersAlive)
+                {
+                    completed.Add(route);
                     continue;
+                }
 
+                List<(ShadowTeammateRoute Route, ShadowBehaviorActionObservation Observation)>
+                    behaviorChoices = [];
                 foreach (Player teammate in teammates)
                 {
                     string playerNetId = teammate.NetId.ToString();
@@ -198,19 +211,58 @@ internal static class ShadowTeammatePlanner
                         {
                             TurnEndedPlayerNetIds = turnEndedPlayers,
                         };
-                        next.Add(child);
+                        behaviorChoices.Add((
+                            child,
+                            new ShadowBehaviorActionObservation(
+                                child.CompleteVictory,
+                                Math.Max(0, route.EnemyDurability - child.EnemyDurability),
+                                Math.Max(0, child.TeamEffectiveHp - route.TeamEffectiveHp),
+                                candidate.EnergyCost,
+                                candidate.StarCost,
+                                candidate.IsPowerCard)));
                     }
+                }
+
+                if (behaviorChoices.Count == 0)
+                {
+                    completed.Add(route);
+                    continue;
+                }
+
+                ShadowBehaviorActionObservation[] observations =
+                    behaviorChoices.Select(choice => choice.Observation).ToArray();
+                double[] decisionLogProbabilities =
+                    ShadowTeammateBehaviorModel.DecisionLogProbabilities(observations);
+
+                // Stopping is modeled as an explicit alternative whenever at least one legal
+                // remote action exists. It is a behavior decision, not a quality judgment.
+                completed.Add(route with
+                {
+                    BehaviorLogProbability =
+                        route.BehaviorLogProbability + decisionLogProbabilities[^1],
+                    BehaviorDecisionCount = route.BehaviorDecisionCount + 1,
+                });
+
+                for (int choiceIndex = 0; choiceIndex < behaviorChoices.Count; choiceIndex++)
+                {
+                    ShadowTeammateRoute child = behaviorChoices[choiceIndex].Route with
+                    {
+                        BehaviorLogProbability =
+                            route.BehaviorLogProbability + decisionLogProbabilities[choiceIndex],
+                        BehaviorDecisionCount = route.BehaviorDecisionCount + 1,
+                    };
+                    next.Add(child);
                 }
             }
 
-            frontier = RetainParetoSpectrum(next, beamWidth);
+            frontier = RetainBehaviorAwareSpectrum(next, beamWidth);
             if (depth == maxTeamActions - 1 && frontier.Count > 0)
                 hitActionDepthLimit = true;
         }
 
         completed.AddRange(frontier);
         return new ShadowTeammatePlanResult(
-            RetainParetoSpectrum(completed, beamWidth),
+            RetainBehaviorAwareSpectrum(completed, beamWidth),
             expandedBranches,
             pendingChoiceBranches,
             hitActionDepthLimit);
@@ -472,6 +524,65 @@ internal static class ShadowTeammatePlanner
             worstPlayerEffectiveHpRatio,
             teamEnergy,
             teamStars);
+    }
+
+    private static List<ShadowTeammateRoute> RetainBehaviorAwareSpectrum(
+        IReadOnlyList<ShadowTeammateRoute> candidates,
+        int limit)
+    {
+        if (candidates.Count <= limit)
+        {
+            List<ShadowTeammateRoute> all = [.. candidates];
+            all.Sort(CompareRoutesForBehavior);
+            return all;
+        }
+
+        // Behavior and outcome quality remain separate axes. Protect the most plausible
+        // half of the beam before consulting the existing quality Pareto heuristic, so an
+        // outcome-dominated but human-plausible route cannot disappear solely for being worse.
+        int behaviorSlots = Math.Max(1, (limit + 1) / 2);
+        List<ShadowTeammateRoute> behaviorRanked = [.. candidates];
+        behaviorRanked.Sort(CompareRoutesForBehavior);
+
+        List<ShadowTeammateRoute> selected = new(limit);
+        for (int index = 0; index < behaviorRanked.Count
+             && selected.Count < behaviorSlots; index++)
+        {
+            selected.Add(behaviorRanked[index]);
+        }
+
+        foreach (ShadowTeammateRoute route in RetainParetoSpectrum(candidates, limit))
+        {
+            if (selected.Any(existing => ReferenceEquals(existing, route)))
+                continue;
+            selected.Add(route);
+            if (selected.Count == limit)
+                break;
+        }
+
+        for (int index = 0; index < behaviorRanked.Count && selected.Count < limit; index++)
+        {
+            ShadowTeammateRoute route = behaviorRanked[index];
+            if (!selected.Any(existing => ReferenceEquals(existing, route)))
+                selected.Add(route);
+        }
+
+        selected.Sort(CompareRoutesForBehavior);
+        return selected;
+    }
+
+    private static int CompareRoutesForBehavior(
+        ShadowTeammateRoute left,
+        ShadowTeammateRoute right)
+    {
+        int comparison = right.BehaviorMeanLogProbability.CompareTo(
+            left.BehaviorMeanLogProbability);
+        if (comparison != 0)
+            return comparison;
+        comparison = right.BehaviorLogProbability.CompareTo(left.BehaviorLogProbability);
+        if (comparison != 0)
+            return comparison;
+        return CompareRoutesForSpectrum(left, right);
     }
 
     private static List<ShadowTeammateRoute> RetainParetoSpectrum(
