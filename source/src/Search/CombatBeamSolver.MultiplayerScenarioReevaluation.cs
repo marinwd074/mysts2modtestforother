@@ -1,3 +1,5 @@
+using CombatSolver.Engine.InCombat.Simulation;
+
 namespace CombatSolver;
 
 internal sealed partial class CombatBeamSolver
