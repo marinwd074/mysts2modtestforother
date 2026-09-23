@@ -40,7 +40,26 @@ internal sealed partial class CombatBeamSolver(
     int? minimumPotionUses = null,
     PrimarySearchIncumbent? primaryIncumbent = null)
 {
-    private readonly SolverSearchProfile _profile = searchProfile ?? SolverSearchProfile.Default;
+    private readonly int _totalExpandedNodeBudget =
+        (searchProfile ?? SolverSearchProfile.Default).MaxExpandedNodes;
+    private readonly int _scenarioReevaluationReservedBranches =
+        MultiplayerScenarioReevaluationPolicy.ReserveExpandedBranchBudget(
+            (searchProfile ?? SolverSearchProfile.Default).MaxExpandedNodes,
+            MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(
+                policy.RoutePolicy,
+                root.PlayerCount)
+            && policy.UseMultiplayerTeamObjective);
+    private readonly SolverSearchProfile _profile =
+        (searchProfile ?? SolverSearchProfile.Default) with
+        {
+            MaxExpandedNodes =
+                MultiplayerScenarioReevaluationPolicy.MainSearchExpandedNodeBudget(
+                    (searchProfile ?? SolverSearchProfile.Default).MaxExpandedNodes,
+                    MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(
+                        policy.RoutePolicy,
+                        root.PlayerCount)
+                    && policy.UseMultiplayerTeamObjective),
+        };
     private readonly SearchRunContext _run = new(
         policy.MeasurePhasePerformance,
         policy.FramePressureSignal);
