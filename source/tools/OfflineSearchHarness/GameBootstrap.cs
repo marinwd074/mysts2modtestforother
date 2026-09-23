@@ -165,7 +165,7 @@ internal static class GameBootstrap
         Trace("localization " + OfflineLocalization.Install(HarnessLog.Language));
         _bypasses.Add($"LocManager 单例改为空表实例（language={HarnessLog.Language}），不跑其构造函数与 res://localization 加载");
 
-        Type? assemblyInfoType = typeof(AbstractModel).Assembly.GetTypes()
+        Type? assemblyInfoType = LoadableGameTypes()
             .FirstOrDefault(type =>
                 type.Name == "AssemblyInfo"
                 && type.Namespace?.StartsWith("MegaCrit.Sts2", StringComparison.Ordinal) == true);
@@ -221,13 +221,34 @@ internal static class GameBootstrap
             + $"characters={ModelDb.AllCharacters.Count()} main_thread={NGame.IsMainThread()}";
     }
 
+    private static Type[] LoadableGameTypes()
+    {
+        try
+        {
+            return typeof(AbstractModel).Assembly.GetTypes();
+        }
+        catch (ReflectionTypeLoadException error)
+        {
+            foreach (Exception? loaderError in error.LoaderExceptions
+                         .Where(loaderError => loaderError != null)
+                         .DistinctBy(loaderError => loaderError!.Message))
+            {
+                Trace($"type_load_skipped {loaderError!.GetType().Name}: {loaderError.Message}");
+            }
+            return error.Types
+                .Where(type => type != null)
+                .Cast<Type>()
+                .ToArray();
+        }
+    }
+
     /// <summary>
     /// 逐个跑 sts2 里名字匹配的类型的静态构造。段错误（跳地址 0）常常发生在某个
     /// 静态字段初始化要造 Godot 原生对象时；最后一行 trace 就是罪魁。
     /// </summary>
     public static int ProbeStaticConstructors(string filter)
     {
-        Type[] types = typeof(AbstractModel).Assembly.GetTypes()
+        Type[] types = LoadableGameTypes()
             .Where(type => type.FullName?.Contains(filter, StringComparison.OrdinalIgnoreCase) == true)
             .OrderBy(type => type.FullName, StringComparer.Ordinal)
             .ToArray();
@@ -263,7 +284,7 @@ internal static class GameBootstrap
         MethodInfo prefix = typeof(GameBootstrap).GetMethod(
             trace ? nameof(TraceNodeStaticConstructorPrefix) : nameof(SkipNodeStaticConstructorPrefix),
             BindingFlags.Static | BindingFlags.NonPublic)!;
-        foreach (Type type in typeof(AbstractModel).Assembly.GetTypes())
+        foreach (Type type in LoadableGameTypes())
         {
             if (!godotObject.IsAssignableFrom(type) || type.ContainsGenericParameters)
                 continue;
