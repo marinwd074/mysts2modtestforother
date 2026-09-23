@@ -81,7 +81,7 @@ internal sealed partial class CombatBeamSolver
         if (simulatedCombat.HasPendingChoice)
             return SearchBoundaryReason.PendingChoice;
         var progress = new PlayerStartProgress(_player, _startTurnNumber + roundIndex + 1,
-            rootSetup: false, policy.RoutePolicy, takingExtraTurn, processedEnemyDeaths,
+            rootSetup: false, _useMultiplayerRouteSemantics, takingExtraTurn, processedEnemyDeaths,
             shufflesCrossed, simulator.ShuffleEventCount);
         SearchBoundaryReason result = ContinuePlayerStart(simulator, simulatedCombat, progress,
             PlayerStartStage.BeforeHand, this, capture, _run.Performance);
@@ -175,7 +175,7 @@ internal sealed partial class CombatBeamSolver
                     player,
                     combat.GetPlayerTurnNumber(player),
                     rootSetup: false,
-                    policy.RoutePolicy,
+                    _useMultiplayerRouteSemantics,
                     takingExtraTurn: false,
                     processedEnemyDeaths,
                     shufflesCrossed,
@@ -493,7 +493,7 @@ internal sealed partial class CombatBeamSolver
         {
             using var measure = _run.Performance.Measure(SearchMetricPhase.RoundPlayerStart);
             var progress = new PlayerStartProgress(_player, _startTurnNumber + roundIndex + 1,
-                rootSetup: false, policy.RoutePolicy, checkpoint.TakingExtraTurn, deaths,
+                rootSetup: false, _useMultiplayerRouteSemantics, checkpoint.TakingExtraTurn, deaths,
                 shufflesCrossed, simulator.ShuffleEventCount)
             {
                 SideStarted = checkpoint.SideTurnStartTriggeredEarly,
