@@ -35,6 +35,10 @@ $baselineRoot = Join-Path $Workspace 'baseline-source'
 $baselineOut = Join-Path $Workspace 'baseline-run'
 $current = Get-Content -LiteralPath $CurrentEvidencePath -Raw | ConvertFrom-Json -Depth 100
 
+# Historical source comparison needs code only. Game/Ritsu binaries come from the already
+# verified pinned paths passed into this script, so do not smudge multi-gigabyte LFS content.
+$env:GIT_LFS_SKIP_SMUDGE = '1'
+
 git fetch origin $BaselineCommit --depth=1
 if ($LASTEXITCODE -ne 0) { throw "git fetch baseline commit failed: $BaselineCommit" }
 git worktree add --detach $baselineRoot $BaselineCommit
