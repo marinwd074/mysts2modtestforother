@@ -8,6 +8,7 @@ internal enum PlanActionKind
     PlayCard,
     UsePotion,
     EndTurn,
+    TeammateForecast,
 }
 
 internal enum PlanChoiceEffect
