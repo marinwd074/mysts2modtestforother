@@ -86,6 +86,15 @@ internal static class MultiplayerScenarioReevaluationPolicy
         return Math.Min(MaximumReservedExpandedBranches, proportional);
     }
 
+    internal static int MainSearchExpandedNodeBudget(
+        int totalExpandedNodeBudget,
+        bool enabled)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(totalExpandedNodeBudget);
+        return totalExpandedNodeBudget
+            - ReserveExpandedBranchBudget(totalExpandedNodeBudget, enabled);
+    }
+
     internal static int ExpandedBranchBudgetPerScenario(
         int reservedExpandedBranches,
         int comparedDecisionCount)
