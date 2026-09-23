@@ -426,6 +426,42 @@ Check(
         && Math.Abs(retainedScenarioProbabilities.ConditionalProbabilities[1] - 0.60d) < 1e-12d,
     "Retained Shadow scenarios expose both raw behavior-mass coverage and normalized conditional scenario weights.");
 
+MultiplayerChanceDecisionRank luckyButUsuallyBad =
+    MultiplayerChanceDecisionMath.Aggregate(
+    [
+        new MultiplayerChanceOutcome(
+            0.10d, true, true,
+            0.00d, 0.00d, 0.00d, 0.00d),
+        new MultiplayerChanceOutcome(
+            0.90d, false, true,
+            0.50d, 0.30d, 0.40d, 0.80d),
+    ]);
+MultiplayerChanceDecisionRank consistentlyModerate =
+    MultiplayerChanceDecisionMath.Aggregate(
+    [
+        new MultiplayerChanceOutcome(
+            1.00d, false, true,
+            0.10d, 0.10d, 0.10d, 0.35d),
+    ]);
+Check(
+    MultiplayerChanceDecisionMath.Compare(
+        consistentlyModerate,
+        luckyButUsuallyBad) < 0,
+    "Chance-node ranking does not select a locally lucky low-probability teammate outcome over the probability-weighted current-turn decision.");
+
+MultiplayerChanceDecisionRank partiallyCoveredVictory =
+    MultiplayerChanceDecisionMath.Aggregate(
+    [
+        new MultiplayerChanceOutcome(
+            0.60d, true, true,
+            0.02d, 0.02d, 0.02d, 0d),
+    ]);
+Check(
+    Math.Abs(partiallyCoveredVictory.RetainedProbabilityMass - 0.60d) < 1e-12d
+        && Math.Abs(partiallyCoveredVictory.ConservativeFailureProbability - 0.40d) < 1e-12d
+        && Math.Abs(partiallyCoveredVictory.ConservativeTeamDeathProbability - 0.40d) < 1e-12d,
+    "Uncovered Shadow probability mass is treated conservatively rather than silently renormalized into guaranteed success.");
+
 double healthyTempoRate =
     MultiplayerCombatObjectiveMath.LossRatioPerTurn(
         enemyDurabilityRatio: 0.1d,
