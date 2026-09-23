@@ -87,3 +87,38 @@ P0/P1 pinned fixture 实际是单玩家 root；即使把 route policy 设为 `Mu
 8. 若主搜索命中 TimeLimit，确认 `MP_SCENARIO_RERANK ... reason=reevaluation_budget_unavailable`，且没有超时后的 U3 replay 扩展。
 
 真实双玩家 smoke 通过后，U3 runtime 才可记 PASS；此前不要推进 U4 的默认策略迁移。
+
+## 日志判定器
+
+正常多人搜索先只判矩阵：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\source\tools\multiplayer-lab\validate-u3-scenario-results.ps1 `
+  -LogPath <CombatSolver日志> -Phase Matrix
+~~~
+
+退出码：
+
+- `0`：Matrix PASS
+- `1`：发现预算/覆盖/fallback 自相矛盾，FAIL
+- `2`：没有观察到可验证的真实 U3 matrix，UNVERIFIED
+
+若专门制造一次主搜索 `TimeLimit`，再单独验证：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\source\tools\multiplayer-lab\validate-u3-scenario-results.ps1 `
+  -LogPath <CombatSolver日志> -Phase Timeout
+~~~
+
+需要一次性检查两类证据时使用 `-Phase All`。判定器会检查：
+
+- `main_node_budget + reserved == total_node_budget`
+- `replay_expanded <= reserved`
+- coverage 行数与 `decisions` 一致
+- 每个 coverage 恰好包含 aggressive / defensive / conserve / no_action
+- coverage 的 `replay_expanded` 总和等于预算日志中的实际复评展开量
+- 任一 `Unknown` 时 robust rerank 必须关闭且 `FINAL_SELECTION scenario_rerank=false`
+- 全部四情景完整时 robust rerank 必须开启
+- `reevaluation_budget_unavailable` 路径不得同时执行 U3 budget/replay，最终仍须 `scenario_rerank=false`
+
+判定器不会把 synthetic fixture 当 runtime 证据，也不会替代 Host/Client 身份确认。
