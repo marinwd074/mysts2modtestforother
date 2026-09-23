@@ -345,6 +345,9 @@ IReadOnlyList<ShadowTeammateScenarioChoice> teammateScenarioChoices =
     ShadowTeammateScenarioPolicy.SelectProtected(
         teammateScenarioObservations,
         limit: 4);
+string teammateScenarioSelection = string.Join(
+    ",",
+    teammateScenarioChoices.Select(choice => $"{choice.Kind}:{choice.Index}"));
 Check(
     teammateScenarioChoices.Count == 4
         && teammateScenarioChoices.Any(choice =>
@@ -359,7 +362,7 @@ Check(
         && teammateScenarioChoices.Any(choice =>
             choice.Kind == ShadowTeammateScenarioKind.NoAction
             && choice.Index == 3),
-    "P3 Shadow Top-K protects aggressive, defensive, conserve-resource and no-action teammate stress scenarios.");
+    $"P3 Shadow Top-K protects aggressive, defensive, conserve-resource and no-action teammate stress scenarios. actual={teammateScenarioSelection}");
 
 IReadOnlyList<ShadowTeammateScenarioChoice> orderDiversityChoices =
     ShadowTeammateScenarioPolicy.SelectProtected(
