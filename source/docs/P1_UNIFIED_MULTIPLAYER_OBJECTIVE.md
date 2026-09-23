@@ -2,7 +2,7 @@
 
 P1 只解决一个问题：**最终选中的路线、Beam 中途保留的路线、同状态代表路线必须优化同一个团队目标。** 不扩大 Beam、不增加时间预算、不修改 Shadow 行为先验。
 
-P0 本机验证在 2026-09-23 被明确跳过，因此 P1 的静态/合同 PASS 不能反向宣称 P0 runtime 已通过。
+2026-09-23 已补做 pinned 0.107.1 runtime。P0 的原 5000 ms SP 性能门仍因历史与当前版本都命中 `TimeLimit` 而保持未封口；这与 P1 的正确性验收分开记录。
 
 ## 统一 Rank
 
@@ -57,4 +57,4 @@ Shadow 自己的 exact fingerprint / heuristic overflow pruning 不在 P1 修改
 - 全员存活是硬边界；
 - `MinimizeTeamLoss` 不把进度混进 loss-equivalent，只在战损相同后用耐久 tie-break。
 
-P1 不要求当前执行本机 smoke；本机验证继续按 P0/P1 后续统一验证集补做。
+Pinned runtime 已补做：AdaptiveLethalTempo 与 MinimizeTeamLoss 的正式 5000 ms 运行都找到 T5、团队战损 0、全员存活、enemy HP 0 的胜利路线，但都以 `TimeLimit` 返回，因此 5 秒结果只记性能边界。确定性补充验证使用同一生产搜索语义、Beam 60 / DOP1 / 单成员、各 5000 expanded nodes、关闭 wall-clock 截断；两种目标均在 `NodeLimit` 前得到 enemy HP 0、全员存活，`FixedWorkSemanticPass=true`。因此 P1 的目标语义/runtime 正确性验收已闭合，5 秒 TimeLimit 不作为扩大预算的理由。
