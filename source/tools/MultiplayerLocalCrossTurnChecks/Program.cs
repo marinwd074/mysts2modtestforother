@@ -369,6 +369,80 @@ Check(
             && choice.Index == 3),
     $"P3 Shadow Top-K protects aggressive, defensive, conserve-resource and no-action teammate stress scenarios. actual={teammateScenarioSelection}");
 
+
+IReadOnlyList<MultiplayerScenarioSpec> u3ScenarioSpecs =
+    MultiplayerScenarioReevaluationPolicy.ScenarioSpecs;
+Check(
+    u3ScenarioSpecs.Count
+        == MultiplayerScenarioReevaluationPolicy.MaximumScenariosPerDecision
+        && u3ScenarioSpecs.Select(spec => spec.Id).SequenceEqual(
+        [
+            "aggressive",
+            "defensive",
+            "conserve",
+            "no_action",
+        ])
+        && u3ScenarioSpecs.Select(spec => spec.Kind).SequenceEqual(
+        [
+            ShadowTeammateScenarioKind.Aggressive,
+            ShadowTeammateScenarioKind.Defensive,
+            ShadowTeammateScenarioKind.Conserve,
+            ShadowTeammateScenarioKind.NoAction,
+        ]),
+    "U3 uses one fixed ScenarioSpec portfolio for every compared current decision.");
+
+ShadowTeammateScenarioKind[] u3CompleteCoverage =
+[
+    ShadowTeammateScenarioKind.NoAction,
+    ShadowTeammateScenarioKind.Conserve,
+    ShadowTeammateScenarioKind.Aggressive,
+    ShadowTeammateScenarioKind.Defensive,
+];
+Check(
+    MultiplayerScenarioReevaluationPolicy.HasCompleteCoverage(u3CompleteCoverage)
+        && MultiplayerScenarioReevaluationPolicy.HasCompleteCoverage(
+            u3CompleteCoverage.Reverse())
+        && !MultiplayerScenarioReevaluationPolicy.HasCompleteCoverage(
+            u3CompleteCoverage.Where(kind =>
+                kind != ShadowTeammateScenarioKind.Defensive)),
+    "U3 fair coverage is independent of candidate/scenario enumeration order and missing one required scenario remains incomplete.");
+
+Check(
+    MultiplayerScenarioReevaluationPolicy.CanRerank([true, true])
+        && MultiplayerScenarioReevaluationPolicy.CanRerank([true, true, true, true])
+        && !MultiplayerScenarioReevaluationPolicy.CanRerank([true])
+        && !MultiplayerScenarioReevaluationPolicy.CanRerank([true, false])
+        && !MultiplayerScenarioReevaluationPolicy.CanRerank([true, true, false]),
+    "U3 reranking requires the same complete ScenarioSpec coverage for every compared decision; an Unknown/budget-interrupted decision forces the shared baseline fallback.");
+
+PlanAction u3AggressiveFuture = new(
+    PlanActionKind.EndTurn,
+    Turn: 7,
+    ShadowForecast: new ShadowForecastPlan(
+        [],
+        ScenarioKind: ShadowTeammateScenarioKind.Aggressive));
+PlanAction u3NoActionFuture = u3AggressiveFuture with
+{
+    TurnStartChoices = [],
+    ShadowForecast = new ShadowForecastPlan(
+        [],
+        ScenarioKind: ShadowTeammateScenarioKind.NoAction),
+};
+string u3AggressiveDecisionKey =
+    MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(
+        [u3AggressiveFuture],
+        rootTurn: 7);
+string u3NoActionDecisionKey =
+    MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(
+        [u3NoActionFuture],
+        rootTurn: 7);
+Check(
+    string.Equals(
+        u3AggressiveDecisionKey,
+        u3NoActionDecisionKey,
+        StringComparison.Ordinal),
+    "U3 current-decision identity excludes future teammate scenario and TurnStart observations, preventing clairvoyant current-action splitting.");
+
 IReadOnlyList<ShadowTeammateScenarioChoice> orderDiversityChoices =
     ShadowTeammateScenarioPolicy.SelectProtected(
         teammateScenarioObservations,
