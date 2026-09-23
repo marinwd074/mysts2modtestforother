@@ -16,7 +16,9 @@ P0 后续提交与这个源码基线比较。基线 commit 不是“最终正确
 
 ## 当前状态
 
-**2026-09-23：本机验证按用户要求暂时跳过。** 这不是 PASS。Release Build、SP-REGRESSION 实际基线、Joint Reuse 与 Joint Mismatch 均保留为未验证项；进入 P1 只表示继续开发，不允许后续文档把 P0 runtime 写成已通过。需要恢复时从本文固定命令继续，不重新设计 P0。
+**2026-09-23：pinned 0.107.1 runtime 已补做。** Release Build、P0 contracts 与 Joint continuation gate 已通过；Joint exact reuse 与 remote fingerprint mismatch 均由生产 continuation 代码验证。SP-REGRESSION 的原始 Medium / Smart / fixed 5000 ms / DOP1 门仍不能计 PASS：历史 P0 基线 `380b0801` 与当前版本在同一 pinned runner 上都命中 `TimeLimit`，因此正式分类保持 `INCONCLUSIVE_TIME_BOUNDARY`。
+
+为区分 wall-clock 波动与搜索语义回归，增加了**补充诊断**，但不替代原 5000 ms 性能门：同一 root、Beam 60、DOP1、单成员、固定 1200 expanded nodes、关闭 wall-clock 截断时，历史与当前结果完全一致——首动作 `PROWESS`、累计战损 0、final HP 66、enemy HP 4、1200 expanded，分类 `OBSERVED_EQUIVALENT`。因此目前没有 P0 核心搜索质量回归证据；未封口项只剩原 5000 ms SP 性能/完成性门。
 
 ## 固定 workload
 
