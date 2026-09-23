@@ -173,6 +173,8 @@ F 必须执行每张牌与触发器，而不是先合并成“队友本回合打
 
 ### U3 — 公平情景复演与非预知决策
 
+**状态（2026-09-23）：代码/合同/pinned 0.107.1 构建完成；真实双玩家 runtime 仍 UNVERIFIED。** source `3c990c61fa90343f7e4385cd2d490019553f7c89` 已实现固定四 ScenarioSpec、公平完整覆盖、Completed/Terminal/Unknown、非预知 CurrentTurnDecisionKey、从原 MaxExpandedNodes 预留的 bounded 复评预算、TimeLimit fail-closed 与真实 replay work 计数。compatibility run `35878443605`、pinned run `35878443497` 均 SUCCESS；U2 degenerate 继续 PASS。详细证据与双玩家最小 smoke 见 [U3_FAIR_SCENARIO_REEVALUATION.md](U3_FAIR_SCENARIO_REEVALUATION.md)。在真实双玩家 smoke 前不得把 U3 runtime 标为 PASS，也不要开始 U4 默认策略迁移。
+
 入口：FinalPlanOrdering、MultiplayerScenarioReevaluationPolicy、ShadowTeammateScenarioPolicy、CurrentTurnDecisionKey。
 
 对少量候选建立同一ScenarioSpec集合；ScenarioSpec是会随状态响应的行为规则/事件调度，而不是强行重放在别的候选下可能已非法的牌串。分配独立的有限复评预算并计入总预算，禁止偷偷增加总算力。
