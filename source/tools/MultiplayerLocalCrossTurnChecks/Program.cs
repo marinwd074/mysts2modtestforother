@@ -358,3 +358,59 @@ double fullDurabilitySlowScore =
 Check(
     fullDurabilitySlowScore < fullDurabilityFastScore,
     "At full enemy durability the continuous tempo term is zero, so lower team loss remains primary.");
+
+
+Check(
+    !ShadowRoutePruningPolicy.MayUseApproximateBeamPruning(
+        exactSurvivorCount: 4,
+        beamLimit: 4)
+        && ShadowRoutePruningPolicy.MayUseApproximateBeamPruning(
+            exactSurvivorCount: 5,
+            beamLimit: 4),
+    "Shadow heuristic quality pruning is forbidden until exact survivors exceed the beam limit.");
+
+ShadowApproximateQuality approximateBetter = new(
+    CompleteVictory: false,
+    AllPlayersAlive: true,
+    EnemyDurability: 20,
+    TeamEffectiveHp: 100,
+    WorstPlayerEffectiveHpRatio: 0.80d,
+    TeamEnergy: 3,
+    TeamStars: 1,
+    ActionCount: 2);
+ShadowApproximateQuality approximateWorse = new(
+    CompleteVictory: false,
+    AllPlayersAlive: true,
+    EnemyDurability: 30,
+    TeamEffectiveHp: 90,
+    WorstPlayerEffectiveHpRatio: 0.70d,
+    TeamEnergy: 2,
+    TeamStars: 1,
+    ActionCount: 3);
+Check(
+    ShadowRoutePruningPolicy.HeuristicQualityDominates(
+        approximateBetter,
+        approximateWorse)
+        && !ShadowRoutePruningPolicy.HeuristicQualityDominates(
+            approximateWorse,
+            approximateBetter),
+    "Shadow summary-quality dominance remains available only as an explicitly heuristic beam relation.");
+
+ShadowApproximateQuality incomparableDeckProxyA = approximateBetter with
+{
+    EnemyDurability = 15,
+    TeamEnergy = 1,
+};
+ShadowApproximateQuality incomparableDeckProxyB = approximateBetter with
+{
+    EnemyDurability = 25,
+    TeamEnergy = 4,
+};
+Check(
+    !ShadowRoutePruningPolicy.HeuristicQualityDominates(
+        incomparableDeckProxyA,
+        incomparableDeckProxyB)
+        && !ShadowRoutePruningPolicy.HeuristicQualityDominates(
+            incomparableDeckProxyB,
+            incomparableDeckProxyA),
+    "Conflicting summary advantages remain incomparable instead of being mislabeled exact dominance.");
