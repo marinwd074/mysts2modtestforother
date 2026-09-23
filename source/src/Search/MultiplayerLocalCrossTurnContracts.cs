@@ -131,19 +131,19 @@ internal static class MultiplayerLocalCrossTurnContracts
     }
 
     /// <summary>
-    /// Multiplayer local-cross-turn prediction may cross one future shared Shuffle RNG
-    /// boundary. This deliberately extends the horizon beyond the first reshuffle while
-    /// still bounding compounded RNG uncertainty: a second projected shuffle stops the
-    /// route. Root setup remains exempt because it starts from freshly captured live state.
+    /// Shuffle count is not a correctness boundary. A multiplayer forecast may cross any
+    /// number of shuffles while the selected Joint/Shadow worldline owns the shared Shuffle
+    /// RNG state. Fallback local-only prediction stops at the first future shuffle whose RNG
+    /// state is not justified by that worldline. Root setup starts from live captured state.
     /// </summary>
     internal static bool ShouldStopBeforeSharedRngShuffle(
         SearchRoutePolicy routePolicy,
         bool rootSetup,
-        int shufflesCrossed,
+        bool sharedShuffleForecastTrusted,
         bool willShuffle)
         => routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
             && !rootSetup
-            && shufflesCrossed >= 1
+            && !sharedShuffleForecastTrusted
             && willShuffle;
 
     internal static bool IsExactContinuation(MultiplayerContinuationMatchInput input)

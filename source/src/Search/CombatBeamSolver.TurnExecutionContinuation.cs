@@ -27,7 +27,7 @@ internal sealed partial class CombatBeamSolver
         public bool SideStarted;
         public int DrawCount;
         public bool WillShuffle;
-        public bool AllowSharedShuffleForecast;
+        public bool SharedShuffleForecastTrusted;
         public int DrawHistoryStart;
 
         public PlayerStartProgress Fork(PredictionForkContext context)
@@ -106,11 +106,10 @@ internal sealed partial class CombatBeamSolver
             }
             int effectiveDraw = Math.Min(progress.DrawCount, combat.GetMaxHandSize(player) - playerState.Hand.Cards.Count);
             progress.WillShuffle = effectiveDraw > playerState.DrawPile.Cards.Count && !playerState.DiscardPile.IsEmpty;
-            if (!progress.AllowSharedShuffleForecast
-                && MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
+            if (MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
                     progress.RoutePolicy,
                     progress.RootSetup,
-                    progress.ShufflesCrossed,
+                    progress.SharedShuffleForecastTrusted,
                     progress.WillShuffle))
             {
                 return SearchBoundaryReason.Shuffle;

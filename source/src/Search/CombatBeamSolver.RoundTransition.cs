@@ -181,7 +181,7 @@ internal sealed partial class CombatBeamSolver
                     shufflesCrossed,
                     simulator.ShuffleEventCount)
                 {
-                    AllowSharedShuffleForecast = true,
+                    SharedShuffleForecastTrusted = true,
                 };
                 SearchBoundaryReason setup = ContinuePlayerStart(
                     simulator,
