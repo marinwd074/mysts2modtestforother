@@ -92,8 +92,8 @@ try {
     }
     $projectText = $projectText.Replace(
         $testingExclude,
-        "    <Compile Remove=\"src/Runtime/UnattendedTestRunner.Compatibility.cs\" />`r`n" +
-        "    <Compile Remove=\"src/Runtime/TestingBridge/UnattendedAsyncActivityTracker.cs\" />")
+        '    <Compile Remove="src/Runtime/UnattendedTestRunner.Compatibility.cs" />' + [Environment]::NewLine +
+        '    <Compile Remove="src/Runtime/TestingBridge/UnattendedAsyncActivityTracker.cs" />')
     Set-Content -LiteralPath $baselineProject -Value $projectText -Encoding utf8
 
     $requestPath = Join-Path $Workspace 'baseline-request.json'
