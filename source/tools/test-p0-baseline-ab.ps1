@@ -60,6 +60,22 @@ try {
     $baselineModText = $baselineModText.Replace('StopAtAcceptableBattleHpLoss = false', 'StopAtAcceptableBattleHpLoss = true')
     Set-Content -LiteralPath $baselineModRuntime -Value $baselineModText -Encoding utf8
 
+    # The frozen P0 commit predates two namespace-only compile fixes for the pinned 0.107.1
+    # model/simulation types. Apply only those using fixes; no search implementation is copied.
+    $fingerprintPath = Join-Path $baselineRoot 'source/src/Search/ShadowFutureStateFingerprint.cs'
+    $fingerprintText = Get-Content -LiteralPath $fingerprintPath -Raw
+    if ($fingerprintText -notmatch 'using MegaCrit\.Sts2\.Core\.Models\.Orbs;' -or
+        $fingerprintText -match 'using CombatSolver\.Engine\.Common;') {
+        throw 'Historical ShadowFutureStateFingerprint compile-fix targets were not found as expected.'
+    }
+    $fingerprintText = $fingerprintText.Replace(
+        'using MegaCrit.Sts2.Core.Models.Orbs;',
+        'using MegaCrit.Sts2.Core.Models;')
+    $fingerprintText = $fingerprintText.Replace(
+        'using CombatSolver.Engine.InCombat.Mirrors.Orbs;',
+        "using CombatSolver.Engine.Common;`r`nusing CombatSolver.Engine.InCombat.Mirrors.Orbs;")
+    Set-Content -LiteralPath $fingerprintPath -Value $fingerprintText -Encoding utf8
+
     $requestPath = Join-Path $Workspace 'baseline-request.json'
     [ordered]@{
         schemaVersion = 1
