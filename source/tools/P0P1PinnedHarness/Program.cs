@@ -24,6 +24,8 @@ internal static class Program
     private const int BeamWidth = 60;
     private const int MaxExpandedNodes = 120_000;
     private const int BudgetMilliseconds = 5_000;
+    private const int P0FixedWorkNodeBudget = 1_200;
+    private const int P1FixedWorkNodeBudget = 5_000;
 
     private static readonly string[] AddedCards =
     [
@@ -129,6 +131,12 @@ internal static class Program
                 CancellationToken.None,
                 progressCallback: null);
             P0SearchEvidence p0Search = CaptureSearch(p0Result);
+            P0SearchEvidence p0FixedWork = RunP0FixedWorkProbe(
+                p0Root,
+                names,
+                battleDamage,
+                captured,
+                settings);
 
             P0JointEvidence joint;
             try
@@ -169,6 +177,9 @@ internal static class Program
                     Pass: false,
                     Adaptive: null,
                     MinimizeTeamLoss: null,
+                    AdaptiveFixedWork: null,
+                    MinimizeTeamLossFixedWork: null,
+                    FixedWorkSemanticPass: false,
                     AdaptiveFastBeatsSlowContract: false,
                     AllPlayersAliveHardBoundaryContract: false,
                     SelectedRoutesDiffer: false,
@@ -197,6 +208,7 @@ internal static class Program
                 p0 = new
                 {
                     spRegression = p0Search,
+                    fixedWork = p0FixedWork,
                     joint,
                     classifier = "covered_by_contract_suite",
                 },
@@ -401,6 +413,51 @@ internal static class Program
             Error: null);
     }
 
+    private static P0SearchEvidence RunP0FixedWorkProbe(
+        CombatRootSnapshot root,
+        SolverDisplayNames names,
+        BattleDamageSnapshot battleDamage,
+        SearchPolicySnapshot captured,
+        SolverSettingsSnapshot settings)
+    {
+        SolverSearchProfile profile = settings.Profile with
+        {
+            BeamWidth = BeamWidth,
+            MaxExpandedNodes = P0FixedWorkNodeBudget,
+            SoftTimeBudgetMilliseconds = BudgetMilliseconds,
+        };
+        SearchPolicySnapshot policy = captured with
+        {
+            Profile = profile,
+            RoutePolicy = SearchRoutePolicy.SinglePlayerFullRoute,
+            CurrentTurnOnly = false,
+            VerifyIncrementalSearch = true,
+            FixedBudget = true,
+            MaxDegreeOfParallelism = 1,
+            BudgetOverrideMilliseconds = null,
+            UseNoveltyPortfolio = false,
+            NoveltySearch = null,
+            UseBeamWidthPortfolio = false,
+            BeamWidthPortfolioWidths = null,
+            Interaction = null,
+            RequestWorkTotals = new SearchRequestWorkTotals(),
+        };
+        SolverResult result = new CombatBeamSolver(
+            root,
+            names,
+            battleDamage,
+            policy,
+            searchProfile: profile).Solve();
+        P0SearchEvidence evidence = CaptureSearch(result);
+        Require(
+            evidence.Boundary != SearchBoundaryReason.TimeLimit.ToString(),
+            "P0 fixed-work probe unexpectedly hit a wall-clock TimeLimit.");
+        Require(
+            evidence.ExpandedNodes <= P0FixedWorkNodeBudget,
+            $"P0 fixed-work probe exceeded node budget: {evidence.ExpandedNodes}/{P0FixedWorkNodeBudget}.");
+        return evidence;
+    }
+
     private static P1Evidence VerifyP1ObjectiveRuntime(
         CombatState combat,
         SolverSettingsSnapshot settings,
@@ -429,6 +486,28 @@ internal static class Program
             captured,
             profile,
             MultiplayerCombatObjectiveStrategy.MinimizeTeamLoss);
+
+        SolverSearchProfile fixedWorkProfile = profile with
+        {
+            MaxExpandedNodes = P1FixedWorkNodeBudget,
+        };
+        P1SearchEvidence adaptiveFixedWork = RunP1(
+            CombatRootSnapshot.Capture(combat),
+            names,
+            battleDamage,
+            captured,
+            fixedWorkProfile,
+            MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo,
+            deterministicFixedWork: true);
+        P1SearchEvidence minimizeFixedWork = RunP1(
+            CombatRootSnapshot.Capture(combat),
+            names,
+            battleDamage,
+            captured,
+            fixedWorkProfile,
+            MultiplayerCombatObjectiveStrategy.MinimizeTeamLoss,
+            deterministicFixedWork: true);
+        bool fixedWorkSemanticPass = adaptiveFixedWork.Pass && minimizeFixedWork.Pass;
 
         MultiplayerCombatObjectiveRank fast = MultiplayerCombatObjectiveMath.BuildRank(
             MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo,
@@ -488,6 +567,9 @@ internal static class Program
                 && MultiplayerCombatObjectiveMath.Compare(alive, dead) < 0,
             Adaptive: adaptive,
             MinimizeTeamLoss: minimize,
+            AdaptiveFixedWork: adaptiveFixedWork,
+            MinimizeTeamLossFixedWork: minimizeFixedWork,
+            FixedWorkSemanticPass: fixedWorkSemanticPass,
             AdaptiveFastBeatsSlowContract: true,
             AllPlayersAliveHardBoundaryContract: true,
             SelectedRoutesDiffer: routesDiffer,
@@ -500,7 +582,8 @@ internal static class Program
         BattleDamageSnapshot battleDamage,
         SearchPolicySnapshot captured,
         SolverSearchProfile profile,
-        MultiplayerCombatObjectiveStrategy strategy)
+        MultiplayerCombatObjectiveStrategy strategy,
+        bool deterministicFixedWork = false)
     {
         SearchRequestWorkTotals totals = new();
         SearchPolicySnapshot policy = captured with
@@ -510,9 +593,10 @@ internal static class Program
             CurrentTurnOnly = false,
             UseMultiplayerTeamObjective = true,
             MultiplayerCombatObjectiveStrategy = strategy,
+            VerifyIncrementalSearch = deterministicFixedWork,
             FixedBudget = true,
             MaxDegreeOfParallelism = 1,
-            BudgetOverrideMilliseconds = BudgetMilliseconds,
+            BudgetOverrideMilliseconds = deterministicFixedWork ? null : BudgetMilliseconds,
             UseNoveltyPortfolio = false,
             NoveltySearch = null,
             UseBeamWidthPortfolio = false,
@@ -524,7 +608,9 @@ internal static class Program
         SolverResult result = solver.Solve();
         SearchRequestWorkSnapshot work = totals.Snapshot();
         bool pass = result.BoundaryReason != SearchBoundaryReason.TimeLimit
-            && result.BestNode.Actions.Count > 0;
+            && result.BestNode.Actions.Count > 0
+            && (!deterministicFixedWork
+                || result.Snapshot.EnemyHp == 0 && result.Snapshot.AllPlayersAlive);
         return new(
             Pass: pass,
             Strategy: strategy.ToString(),
@@ -673,6 +759,9 @@ internal static class Program
         bool Pass,
         P1SearchEvidence? Adaptive,
         P1SearchEvidence? MinimizeTeamLoss,
+        P1SearchEvidence? AdaptiveFixedWork,
+        P1SearchEvidence? MinimizeTeamLossFixedWork,
+        bool FixedWorkSemanticPass,
         bool AdaptiveFastBeatsSlowContract,
         bool AllPlayersAliveHardBoundaryContract,
         bool SelectedRoutesDiffer,
