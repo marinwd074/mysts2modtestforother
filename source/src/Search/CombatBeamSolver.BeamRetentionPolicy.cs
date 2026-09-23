@@ -406,16 +406,21 @@ internal sealed partial class CombatBeamSolver
             }
             else
             {
-                Dictionary<StateFingerprint, SearchNode> bestByState = [];
+                // This is representative compression, not an "exact-equivalence" proof:
+                // identical simulator StateKey values can still arrive with different cumulative
+                // loss/policy history. P1 chooses the representative with the shared objective.
+                // Exact future-state merging is reserved for explicitly complete fingerprints
+                // such as ShadowFutureStateFingerprint.
+                Dictionary<StateFingerprint, SearchNode> representativeByState = [];
                 foreach (SearchNode node in nodes)
                 {
-                    if (!bestByState.TryGetValue(node.StateKey, out SearchNode? current)
+                    if (!representativeByState.TryGetValue(node.StateKey, out SearchNode? current)
                         || IsBetterSearchNode(node, current))
                     {
-                        bestByState[node.StateKey] = node;
+                        representativeByState[node.StateKey] = node;
                     }
                 }
-                ranked = [.. bestByState.Values];
+                ranked = [.. representativeByState.Values];
             }
 
             if (finalQualityFirst)
@@ -829,8 +834,11 @@ internal sealed partial class CombatBeamSolver
             List<SearchNode> required = [];
             if (_routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn)
             {
-                foreach (SearchNode teamCandidate in BuildTeamSafetyPortfolio(ranked))
+                foreach (SearchNode teamCandidate in
+                         BuildMultiplayerDiversityPortfolio(ranked, limit))
+                {
                     AddRequired(required, teamCandidate, limit);
+                }
             }
             foreach (IGrouping<int, SearchNode> victoryGroup in ranked
                          .Where(IsCompleteVictory)
@@ -1349,46 +1357,43 @@ internal sealed partial class CombatBeamSolver
 
 
 
-        private IEnumerable<SearchNode> BuildTeamSafetyPortfolio(
-            IReadOnlyList<SearchNode> nodes)
+        private IEnumerable<SearchNode> BuildMultiplayerDiversityPortfolio(
+            IReadOnlyList<SearchNode> nodes,
+            int limit)
         {
-            if (nodes.Count == 0)
+            if (nodes.Count == 0 || limit <= 0)
                 yield break;
 
-            IReadOnlyList<SearchNode> pool = nodes.Any(node => node.Snapshot.AllPlayersAlive)
-                ? nodes.Where(node => node.Snapshot.AllPlayersAlive).ToArray()
-                : nodes;
-
-            SearchNode bestTeamLoss = pool
-                .OrderBy(node => node.Snapshot.TeamLossRatio)
-                .ThenBy(node => node.Snapshot.WorstPlayerLossRatio)
-                .ThenBy(node => node.Snapshot.AliveEnemyCount)
-                .ThenBy(node => node.Snapshot.EnemyHp)
-                .ThenByDescending(BeamRankScore)
-                .First();
-            yield return bestTeamLoss;
-
-            SearchNode bestWorstPlayer = pool
-                .OrderBy(node => node.Snapshot.WorstPlayerLossRatio)
-                .ThenBy(node => node.Snapshot.TeamLossRatio)
-                .ThenBy(node => node.Snapshot.AliveEnemyCount)
-                .ThenBy(node => node.Snapshot.EnemyHp)
-                .ThenByDescending(BeamRankScore)
-                .First();
-            if (!ReferenceEquals(bestWorstPlayer, bestTeamLoss))
-                yield return bestWorstPlayer;
-
-            SearchNode bestEnemyProgress = pool
-                .OrderBy(node => node.Snapshot.AliveEnemyCount)
-                .ThenBy(node => node.Snapshot.EnemyHp)
-                .ThenBy(node => node.Snapshot.TeamLossRatio)
-                .ThenBy(node => node.Snapshot.WorstPlayerLossRatio)
-                .ThenByDescending(BeamRankScore)
-                .First();
-            if (!ReferenceEquals(bestEnemyProgress, bestTeamLoss)
-                && !ReferenceEquals(bestEnemyProgress, bestWorstPlayer))
+            MultiplayerRetentionObservation[] observations =
+                new MultiplayerRetentionObservation[nodes.Count];
+            for (int index = 0; index < nodes.Count; index++)
             {
-                yield return bestEnemyProgress;
+                SearchNode node = nodes[index];
+                SimulationSnapshot snapshot = node.Snapshot;
+                bool completeVictory = IsCompleteVictory(node);
+                observations[index] = new MultiplayerRetentionObservation(
+                    completeVictory,
+                    snapshot.AllPlayersAlive,
+                    snapshot.TeamLossRatio,
+                    snapshot.WorstPlayerLossRatio,
+                    MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(
+                        snapshot.EnemyDurabilityByCombatId,
+                        _multiplayerEnemyMaximumHp),
+                    completeVictory ? CompletedCombatTurn(node) : int.MaxValue,
+                    snapshot.LongTermResourceValue,
+                    snapshot.PersistentBuffValue,
+                    snapshot.LatentSetupValue,
+                    snapshot.FutureResourceValue,
+                    RetainedAttackGrowth(snapshot),
+                    snapshot.ReplayPotentialValue);
+            }
+
+            foreach (MultiplayerRetentionChoice choice in
+                     MultiplayerRetentionDiversityPolicy.SelectProtected(
+                         observations,
+                         Math.Min(limit, 4)))
+            {
+                yield return nodes[choice.Index];
             }
         }
 
@@ -2083,6 +2088,11 @@ internal sealed partial class CombatBeamSolver
             return best;
         }
 
+        /// <summary>
+        /// Heuristic retention relation only. This may shape routing/portfolio sampling after
+        /// protected representatives have been reserved; it is not exact state equality and
+        /// must never be used as an optimality proof or as a replacement for transposition identity.
+        /// </summary>
         private bool MultiObjectiveDominates(SearchNode left, SearchNode right)
         {
             if (ReferenceEquals(left, right))

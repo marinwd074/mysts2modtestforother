@@ -244,6 +244,51 @@ Check(
             currentHasCurrentTurnCard: false),
     "Local cross-turn tie-breaking prefers a current-turn card over an EndTurn-only route without changing single-player or current-turn-only policies.");
 
+
+MultiplayerRetentionObservation[] diversityObservations =
+[
+    // Lowest team loss, but not the safest individual.
+    new(false, true, 0.01d, 0.20d, 0.70d, int.MaxValue, 0, 0, 0, 0, 0, 0),
+    // Safest worst-player route.
+    new(false, true, 0.03d, 0.02d, 0.65d, int.MaxValue, 0, 0, 0, 0, 0, 0),
+    // Fast completed lethal route.
+    new(true, true, 0.06d, 0.08d, 0d, 2, 0, 0, 0, 0, 0, 0),
+    // Growth route.
+    new(false, true, 0.04d, 0.10d, 0.60d, int.MaxValue, 9, 7, 5, 4, 3, 2),
+    // Attractive but dead route: must not consume a protected lane while any alive route exists.
+    new(true, false, 0.00d, 0.00d, 0d, 1, 99, 99, 99, 99, 99, 99),
+];
+IReadOnlyList<MultiplayerRetentionChoice> diversityChoices =
+    MultiplayerRetentionDiversityPolicy.SelectProtected(
+        diversityObservations,
+        limit: 4);
+Check(
+    diversityChoices.Count == 4
+        && diversityChoices.Any(choice =>
+            choice.Lane == MultiplayerRetentionLane.LowTeamLoss
+            && choice.Index == 0)
+        && diversityChoices.Any(choice =>
+            choice.Lane == MultiplayerRetentionLane.TeamSafety
+            && choice.Index == 1)
+        && diversityChoices.Any(choice =>
+            choice.Lane == MultiplayerRetentionLane.FastLethal
+            && choice.Index == 2)
+        && diversityChoices.Any(choice =>
+            choice.Lane == MultiplayerRetentionLane.Growth
+            && choice.Index == 3)
+        && diversityChoices.All(choice => choice.Index != 4),
+    "P2 fixed-budget retention protects distinct low-loss, team-safety, fast-lethal and growth representatives without spending a slot on a dead route.");
+
+IReadOnlyList<MultiplayerRetentionChoice> tightDiversityChoices =
+    MultiplayerRetentionDiversityPolicy.SelectProtected(
+        diversityObservations,
+        limit: 2);
+Check(
+    tightDiversityChoices.Count == 2
+        && tightDiversityChoices[0].Lane == MultiplayerRetentionLane.LowTeamLoss
+        && tightDiversityChoices[1].Lane == MultiplayerRetentionLane.TeamSafety,
+    "P2 diversity protection respects the existing beam limit instead of expanding the budget.");
+
 Console.WriteLine($"PASS: {checks} multiplayer local-cross-turn contract checks");
 
 
