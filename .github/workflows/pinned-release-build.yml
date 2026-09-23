@@ -20,6 +20,7 @@ on:
       - 'source/src/Search/CombatBeamSolver.FinalPlanOrdering.cs'
       - 'source/src/Search/CombatBeamSolver.cs'
       - 'source/src/Search/CombatBeamSolver.Phases.cs'
+      - 'source/src/Search/CombatBeamSolver.ParallelExpansion.cs'
       - 'source/tools/MultiplayerLocalCrossTurnChecks/**'
 
 permissions:
