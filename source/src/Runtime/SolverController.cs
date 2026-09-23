@@ -25,7 +25,6 @@ internal enum SearchReason
     Deploy,
     FullAuto,
     DeploymentDrift,
-    CrossPlayerBoundary,
     PlanExhausted,
 }
 
@@ -36,7 +35,6 @@ internal enum ReplanCause
     ManualDivergence,
     ContinuationMissing,
     DeploymentDrift,
-    CrossPlayerBoundary,
     PlanExhausted,
     ExplicitRequest,
 }
@@ -1299,12 +1297,6 @@ internal static partial class SolverController
                             $"world_version={MultiplayerWorldTracker.WorldVersion} " +
                             $"reason={MultiplayerWorldTracker.LastReason} " +
                             $"session_state={_deployment?.SafeExecutionSession?.State.ToString() ?? "-"}");
-                        Entry.Logger.Info(
-                            $"[LIFT-DIAG] WORLD_VERSION_CHANGE " +
-                            $"timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
-                            $"world_version={MultiplayerWorldTracker.WorldVersion} " +
-                            $"reason={MultiplayerWorldTracker.LastReason} " +
-                            $"session_state={_deployment?.SafeExecutionSession?.State.ToString() ?? "-"}");
                     }
                 }
                 if (enteredMultiplayerSession)
@@ -1376,12 +1368,6 @@ internal static partial class SolverController
 
     private static void InvalidateMultiplayerSearch(CombatState state)
     {
-        Entry.Logger.Info(
-            $"[LIFT-DIAG] INVALIDATE_MULTIPLAYER_SEARCH " +
-            $"timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
-            $"world_version={MultiplayerWorldTracker.WorldVersion} " +
-            $"reason={MultiplayerWorldTracker.LastReason} " +
-            $"session_state={_deployment?.SafeExecutionSession?.State.ToString() ?? "-"}");
         CancelMultiplayerDebouncedSearch();
         CancelDeferredSearch();
         CancelSearch();

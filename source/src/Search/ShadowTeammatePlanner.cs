@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Models;
 using CombatSolver.Engine.Common;
 using CombatSolver.Engine.InCombat.Simulation;
 
@@ -60,6 +61,8 @@ internal static class ShadowTeammatePlanner
         for (int handIndex = 0; handIndex < playerState.Hand.Cards.Count; handIndex++)
         {
             PredictedCard card = playerState.Hand.Cards[handIndex];
+            if (card.Preview.MultiplayerConstraint == CardMultiplayerConstraint.MultiplayerOnly)
+                continue;
             if (!combat.CanPlayCard(simulator, card, out int energyCost, out int starCost))
                 continue;
 

@@ -475,7 +475,7 @@ internal sealed partial class CombatBeamSolver
                 if (string.Equals(hand[priorIndex].Preview.Id.Entry, cardId, StringComparison.Ordinal))
                     occurrence++;
             }
-            if (!simulatedCombat.CanPlayCard(simulator, card))
+            if (!CanConsiderCardAction(card) || !simulatedCombat.CanPlayCard(simulator, card))
                 continue;
             StateFingerprint playableKey = BuildPlayableCardKey(card);
             bool duplicate = false;

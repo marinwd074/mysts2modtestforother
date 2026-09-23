@@ -153,6 +153,17 @@ if (-not $monsterMoveEffectsText.Contains('combat.GetMonsterStaticInt(move.Owner
     $violations.Add("${monsterMoveEffectsPath}: LouseProgenitor CURL_AND_GROW must consume captured _growStrength")
 }
 
+$multiplayerCardSearchPaths = @(
+    'src/Search/CombatBeamSolver.Expansion.cs',
+    'src/Search/CombatBeamSolver.ParallelExpansion.cs'
+)
+foreach ($relativePath in $multiplayerCardSearchPaths) {
+    $path = Join-Path $repositoryRoot $relativePath
+    if (-not (Select-String -LiteralPath $path -SimpleMatch 'CanConsiderCardAction(card)' -Quiet)) {
+        $violations.Add("$($path): multiplayer-only card search exclusion is missing")
+    }
+}
+
 $contractRunnerPath = Join-Path $repositoryRoot 'tools/run-contract-tests.ps1'
 $contractRunnerText = [IO.File]::ReadAllText($contractRunnerPath)
 if (-not $contractRunnerText.Contains("Invoke-DotnetContract 'BfwsResearchChecks' 'tools/BfwsResearchChecks/BfwsResearchChecks.csproj'")) {
@@ -2156,7 +2167,8 @@ foreach ($relativePath in @(
 # A suspended own-choice frame belongs to its continuation; ordinary Fork remains strict.
 foreach ($rule in @(
     @{ RelativePath = 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.cs'; Text = 'GuardOrdinaryCardContinuationFork();' },
-    @{ RelativePath = 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.CardContinuation.cs'; Text = 'context.Register(source.Play, play);' },
+    @{ RelativePath = 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.CardContinuation.cs'; Text = 'PrepareExecutionCardPlay(source.Card, source.Play, context);' },
+    @{ RelativePath = 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.CardContinuation.cs'; Text = 'CardPlay play = context.RequireRemap(source.Play);' },
     @{ RelativePath = 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.CardContinuation.cs'; Text = 'StateStore.SupportsManualCardChoiceContinuation' },
     @{ RelativePath = 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.CardContinuation.cs'; Text = 'DetachPendingManualCardChoice();' },
     @{ RelativePath = 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.CardContinuation.cs'; Text = 'source.Choice.Fork(context)' },

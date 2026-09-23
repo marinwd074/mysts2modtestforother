@@ -59,8 +59,12 @@ internal sealed partial class CombatBeamSolver
             for (int handIndex = 0; handIndex < hand.Count; handIndex++)
             {
                 PredictedCard card = hand[handIndex];
-                if (card.Preview.Type != CardType.Power || !combat.CanPlayCard(simulator, card))
+                if (card.Preview.Type != CardType.Power
+                    || !CanConsiderCardAction(card)
+                    || !combat.CanPlayCard(simulator, card))
+                {
                     continue;
+                }
 
                 string cardStateKey = CardChoiceSupport.ChoiceCardKey(card);
                 if (!seenCardStates.Add(cardStateKey))

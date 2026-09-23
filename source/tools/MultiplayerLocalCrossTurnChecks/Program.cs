@@ -43,6 +43,21 @@ Check(
     "Singleplayer and multiplayer local-cross-turn share full search heuristics while current-turn-only remains reduced; persistent route cache stays singleplayer-only.");
 
 Check(
+    !MultiplayerLocalCrossTurnContracts.ShouldExcludeMultiplayerOnlyCard(
+        SearchRoutePolicy.SinglePlayerFullRoute,
+        isMultiplayerOnly: true)
+        && MultiplayerLocalCrossTurnContracts.ShouldExcludeMultiplayerOnlyCard(
+            SearchRoutePolicy.MultiplayerCurrentTurnOnly,
+            isMultiplayerOnly: true)
+        && MultiplayerLocalCrossTurnContracts.ShouldExcludeMultiplayerOnlyCard(
+            SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            isMultiplayerOnly: true)
+        && !MultiplayerLocalCrossTurnContracts.ShouldExcludeMultiplayerOnlyCard(
+            SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            isMultiplayerOnly: false),
+    "Multiplayer-only cards remain in card state but never become multiplayer search actions; singleplayer policy is unchanged.");
+
+Check(
     !MultiplayerLocalCrossTurnContracts.DelayAngerCopyPreferenceUntilAfterEnemyHp(
         SearchRoutePolicy.SinglePlayerFullRoute,
         completeVictory: false)
@@ -58,24 +73,34 @@ Check(
     MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
         SearchRoutePolicy.MultiplayerLocalCrossTurn,
         rootSetup: false,
+        sharedShuffleForecastTrusted: false,
         willShuffle: true)
         && !MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
             SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            rootSetup: false,
+            sharedShuffleForecastTrusted: true,
+            willShuffle: true)
+        && !MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
+            SearchRoutePolicy.MultiplayerLocalCrossTurn,
             rootSetup: true,
+            sharedShuffleForecastTrusted: false,
             willShuffle: true)
         && !MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
             SearchRoutePolicy.MultiplayerLocalCrossTurn,
             rootSetup: false,
+            sharedShuffleForecastTrusted: false,
             willShuffle: false)
         && !MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
             SearchRoutePolicy.SinglePlayerFullRoute,
             rootSetup: false,
+            sharedShuffleForecastTrusted: false,
             willShuffle: true)
         && !MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
             SearchRoutePolicy.MultiplayerCurrentTurnOnly,
             rootSetup: false,
+            sharedShuffleForecastTrusted: false,
             willShuffle: true),
-    "Only a future multiplayer local-cross-turn hand stops before consuming the shared Shuffle RNG.");
+    "Shuffle is a trust boundary, not a count boundary: a Joint/Shadow worldline may cross repeated shuffles while an untrusted multiplayer fallback stops at the first future shuffle.");
 
 Check(
     MultiplayerLocalCrossTurnContracts.ValidateLocalOnlyProjection(

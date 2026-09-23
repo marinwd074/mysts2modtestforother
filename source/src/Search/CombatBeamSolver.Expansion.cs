@@ -32,7 +32,9 @@ internal sealed partial class CombatBeamSolver
         var simulator = (CombatPredictionSimulator)node.Snapshot.Simulator;
         var combat = (SimulatedCombatState)simulator.State.CombatState;
         return simulator.State.GetPlayerCombatState(_player).Hand.Cards.Any(card =>
-            card.Preview.Type == CardType.Power && combat.CanPlayCard(simulator, card)
+            card.Preview.Type == CardType.Power
+            && CanConsiderCardAction(card)
+            && combat.CanPlayCard(simulator, card)
             && choice.Cards.Any(token => CardChoiceSupport.MatchesToken(card, token)));
     }
 
@@ -87,7 +89,7 @@ internal sealed partial class CombatBeamSolver
                 if (string.Equals(hand[priorIndex].Preview.Id.Entry, cardId, StringComparison.Ordinal))
                     occurrence++;
             }
-            if (!simulatedCombat.CanPlayCard(simulator, card))
+            if (!CanConsiderCardAction(card) || !simulatedCombat.CanPlayCard(simulator, card))
                 continue;
             StateFingerprint playableKey = BuildPlayableCardKey(card);
             bool duplicate = false;
@@ -2228,7 +2230,8 @@ internal sealed partial class CombatBeamSolver
                     $"state_occurrence={action.CardStateOccurrence} state_key={action.CardStateKey} hand={hand}。");
             }
             Creature? target = simulatedCombat.GetCreature(action.TargetCombatId);
-            if (cardChoiceFrame is null && !simulatedCombat.CanPlayCard(simulator, card))
+            if (cardChoiceFrame is null
+                && (!CanConsiderCardAction(card) || !simulatedCombat.CanPlayCard(simulator, card)))
             {
                 int energyCost = card.GetEnergyCostWithModifiers(simulator, playerState);
                 int starCost = card.GetStarCostWithModifiers(simulator, playerState);

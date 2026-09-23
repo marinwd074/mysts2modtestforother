@@ -2,13 +2,9 @@ namespace CombatSolver;
 
 internal readonly record struct SafeLocalActionDecision(
     bool IsSafe,
-    string Reason,
-    bool EndsContinuation = false)
+    string Reason)
 {
     public static SafeLocalActionDecision Allow { get; } = new(true, "safe_local_play_card");
-
-    public static SafeLocalActionDecision CrossPlayerPublicBoundary { get; }
-        = new(true, "cross_player_public_boundary", EndsContinuation: true);
 }
 
 internal readonly record struct MultiplayerSafeActionStructuralFacts(
@@ -26,8 +22,7 @@ internal readonly record struct MultiplayerSafeActionResolvedFacts(
     bool HasTarget,
     bool TargetExists,
     bool IsAllowedTarget,
-    bool HasIncompleteTargetIdentity,
-    bool IsPromotedMultiplayerOnlyCard = false);
+    bool HasIncompleteTargetIdentity);
 
 internal readonly record struct MultiplayerSafeExecuteLabFacts(
     string? ModeToken,
@@ -62,7 +57,6 @@ internal readonly record struct MultiplayerSafeActionRevalidationFacts(
     bool EnergyStateConsistent,
     bool TargetIdentityStable,
     bool RemotePublicStateUnchanged,
-    bool ExpectedRemotePublicMutation,
     bool EnemyStateMatchesExpectedTarget,
     bool WorldVersionAdvanced,
     bool WorldVersionStable,
@@ -335,10 +329,8 @@ internal static class MultiplayerSafeExecutePolicy
             return new(false, "local_player_missing");
         if (!facts.HasLocalCard)
             return new(false, "local_card_missing");
-        if (facts.IsMultiplayerOnlyCard && !facts.IsPromotedMultiplayerOnlyCard)
+        if (facts.IsMultiplayerOnlyCard)
             return new(false, ManualMultiplayerCardReason);
-        if (facts.IsPromotedMultiplayerOnlyCard && !facts.HasTarget)
-            return new(false, "target_missing");
         if (facts.HasTarget)
         {
             if (!facts.TargetExists)
@@ -350,9 +342,7 @@ internal static class MultiplayerSafeExecutePolicy
         {
             return new(false, "target_identity_incomplete");
         }
-        return facts.IsPromotedMultiplayerOnlyCard
-            ? SafeLocalActionDecision.CrossPlayerPublicBoundary
-            : SafeLocalActionDecision.Allow;
+        return SafeLocalActionDecision.Allow;
     }
 
     internal static SafeLocalActionDecision DeploymentStopAfter(
@@ -401,11 +391,6 @@ internal static class MultiplayerSafeExecutePolicy
                 return safe;
             }
             safe.Add(action);
-            if (decision.EndsContinuation)
-            {
-                stop = decision;
-                return safe;
-            }
         }
 
         stop = DeploymentStopAfter(safe.Count, actions.Count);
@@ -426,11 +411,8 @@ internal static class MultiplayerSafeExecutePolicy
         {
             return MultiplayerSafeActionRevalidationDecision.ActionMismatch;
         }
-        if ((!facts.RemotePublicStateUnchanged && !facts.ExpectedRemotePublicMutation)
-            || !facts.EnemyStateMatchesExpectedTarget)
-        {
+        if (!facts.RemotePublicStateUnchanged || !facts.EnemyStateMatchesExpectedTarget)
             return MultiplayerSafeActionRevalidationDecision.RemoteOrUnknownChange;
-        }
         return facts.HasNextAction
             ? MultiplayerSafeActionRevalidationDecision.SafeToContinue
             : MultiplayerSafeActionRevalidationDecision.ExpectedLocalChange;

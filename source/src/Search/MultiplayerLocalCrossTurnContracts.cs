@@ -59,6 +59,12 @@ internal static class MultiplayerLocalCrossTurnContracts
     internal static bool CanUsePersistentRouteCache(SearchRoutePolicy policy)
         => policy == SearchRoutePolicy.SinglePlayerFullRoute;
 
+    internal static bool ShouldExcludeMultiplayerOnlyCard(
+        SearchRoutePolicy policy,
+        bool isMultiplayerOnly)
+        => policy != SearchRoutePolicy.SinglePlayerFullRoute
+            && isMultiplayerOnly;
+
     internal static bool CanPreserveFutureRoute(
         bool canReuse,
         bool awaitingContinuation,
@@ -125,17 +131,19 @@ internal static class MultiplayerLocalCrossTurnContracts
     }
 
     /// <summary>
-    /// A future local hand must not be projected through the shared Shuffle RNG after
-    /// yielding the local turn. Teammate actions are intentionally not simulated and may
-    /// advance that RNG, so the post-shuffle order is not locally knowable. Root setup is
-    /// exempt because it starts from the freshly captured live state.
+    /// Shuffle count is not a correctness boundary. A multiplayer forecast may cross any
+    /// number of shuffles while the selected Joint/Shadow worldline owns the shared Shuffle
+    /// RNG state. Fallback local-only prediction stops at the first future shuffle whose RNG
+    /// state is not justified by that worldline. Root setup starts from live captured state.
     /// </summary>
     internal static bool ShouldStopBeforeSharedRngShuffle(
         SearchRoutePolicy routePolicy,
         bool rootSetup,
+        bool sharedShuffleForecastTrusted,
         bool willShuffle)
         => routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
             && !rootSetup
+            && !sharedShuffleForecastTrusted
             && willShuffle;
 
     internal static bool IsExactContinuation(MultiplayerContinuationMatchInput input)
