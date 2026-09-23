@@ -160,9 +160,9 @@ internal sealed partial class CombatBeamSolver
                     route.ScenarioConditionalProbability,
                     route.RetainedScenarioProbabilityMass,
                     route.ScenarioProbabilityTrusted,
-                    route.ScenarioSetComplete,
                     route.ScenarioFingerprint,
-                    route.ScenarioKind),
+                    route.ScenarioKind,
+                    route.ScenarioSetComplete),
             };
             yield return (jointAction, snapshot);
         }
