@@ -38,14 +38,16 @@ internal sealed partial class CombatBeamSolver(
     int? maximumPotionUses = null,
     IReadOnlyList<PlanAction>? fixedPrefixActions = null,
     int? minimumPotionUses = null,
-    PrimarySearchIncumbent? primaryIncumbent = null)
+    PrimarySearchIncumbent? primaryIncumbent = null,
+    bool reserveScenarioReevaluationBudget = true)
 {
     private readonly int _totalExpandedNodeBudget =
         (searchProfile ?? SolverSearchProfile.Default).MaxExpandedNodes;
     private readonly int _scenarioReevaluationReservedBranches =
         MultiplayerScenarioReevaluationPolicy.ReserveExpandedBranchBudget(
             (searchProfile ?? SolverSearchProfile.Default).MaxExpandedNodes,
-            MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(
+            reserveScenarioReevaluationBudget
+            && MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(
                 policy.RoutePolicy,
                 root.PlayerCount)
             && policy.UseMultiplayerTeamObjective);
@@ -55,7 +57,8 @@ internal sealed partial class CombatBeamSolver(
             MaxExpandedNodes =
                 MultiplayerScenarioReevaluationPolicy.MainSearchExpandedNodeBudget(
                     (searchProfile ?? SolverSearchProfile.Default).MaxExpandedNodes,
-                    MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(
+                    reserveScenarioReevaluationBudget
+                    && MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(
                         policy.RoutePolicy,
                         root.PlayerCount)
                     && policy.UseMultiplayerTeamObjective),
