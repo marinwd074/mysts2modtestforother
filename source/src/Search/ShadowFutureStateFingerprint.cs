@@ -73,6 +73,20 @@ internal static class ShadowFutureStateFingerprint
             key.Add(turnEndedPlayerNetIds.Contains(netId));
         }
 
+        key.Add("present_creatures");
+        foreach (var creature in combat.Creatures.OrderBy(creature => creature.CombatId ?? uint.MaxValue))
+        {
+            SimCreatureState state = simulator.State.GetCreature(creature);
+            key.Add(creature.CombatId ?? uint.MaxValue);
+            key.Add((int)creature.Side);
+            key.Add(state.CurrentHp);
+            key.Add(state.MaxHp);
+            key.Add(state.Block);
+        }
+
+        // Keep known enemies separately: a removed enemy can still matter while death/revive
+        // lifecycle work is pending even though it is no longer in combat.Creatures.
+        key.Add("known_enemies");
         foreach (var enemy in combat.KnownEnemies.OrderBy(enemy => enemy.CombatId ?? uint.MaxValue))
         {
             SimCreatureState state = simulator.State.GetCreature(enemy);
