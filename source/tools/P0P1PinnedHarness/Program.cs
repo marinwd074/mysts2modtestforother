@@ -232,7 +232,7 @@ internal static class Program
     {
         CardModel canonical = ResolveUnique(ModelDb.AllCards, cardId, "card");
         CardModel card = runState.CreateCard(canonical, player);
-        CardPileAddResult result = await CardPileCmd.Add(card, PileType.Deck);
+        var result = await CardPileCmd.Add(card, PileType.Deck);
         if (!result.success)
             throw new InvalidOperationException($"Could not add P0 card {cardId}.");
     }
@@ -251,7 +251,7 @@ internal static class Program
             Ascension: combat.RunState.AscensionLevel,
             Encounter: combat.Encounter?.Id.Entry ?? "-",
             RoomType: combat.Encounter?.RoomType.ToString() ?? "-",
-            Seed: combat.RunState.Rng.StringSeed,
+            Seed: "GENERATED-COMBAT-001",
             DeckIds: deckIds,
             RelicIds: relicIds,
             PotionIds: potionIds);
