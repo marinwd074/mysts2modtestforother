@@ -32,6 +32,9 @@ internal sealed record ShadowTeammateRoute(
     int TeamStars)
 {
     internal bool IsTerminal => CompleteVictory || !AllPlayersAlive || TurnEndRequested;
+
+    internal IReadOnlySet<string> TurnEndedPlayerNetIds { get; init; } =
+        new HashSet<string>(StringComparer.Ordinal);
 }
 
 internal readonly record struct ShadowTeammatePlanResult(
@@ -102,65 +105,112 @@ internal static class ShadowTeammatePlanner
             .Where(player => !ReferenceEquals(player, localPlayer))
             .OrderBy(player => player.NetId)
             .ToArray();
-        List<ShadowTeammateRoute> worlds =
-            [CaptureRoute(
-                source.Fork(),
-                Array.Empty<ShadowTeammateActionCandidate>(),
-                CaptureProcessedEnemyDeaths(source, processedEnemyDeaths))];
+        ShadowTeammateRoute seed = CaptureRoute(
+            source.Fork(),
+            Array.Empty<ShadowTeammateActionCandidate>(),
+            CaptureProcessedEnemyDeaths(source, processedEnemyDeaths));
+        if (teammates.Length == 0)
+        {
+            return new ShadowTeammatePlanResult(
+                [seed],
+                ExpandedBranches: 0,
+                PendingChoiceBranches: 0,
+                HitActionDepthLimit: false);
+        }
+
+        // Team search is action-interleaved: each search layer plays exactly one card from
+        // any teammate that can still act. NetId is used only for deterministic enumeration,
+        // never to grant one teammate an entire route before another teammate is considered.
+        List<ShadowTeammateRoute> frontier = [seed];
+        List<ShadowTeammateRoute> completed = [];
         int expandedBranches = 0;
         int pendingChoiceBranches = 0;
         bool hitActionDepthLimit = false;
+        int maxTeamActions = checked(maxActionsPerPlayer * teammates.Length);
 
-        for (int teammateIndex = 0; teammateIndex < teammates.Length; teammateIndex++)
+        for (int depth = 0; depth < maxTeamActions && frontier.Count > 0; depth++)
         {
-            Player teammate = teammates[teammateIndex];
-            List<ShadowTeammateRoute> nextWorlds = [];
-            foreach (ShadowTeammateRoute world in worlds)
+            List<ShadowTeammateRoute> next = [];
+            foreach (ShadowTeammateRoute route in frontier)
             {
-                if (world.CompleteVictory
-                    || !world.Simulator.State.GetCreature(teammate.Creature).IsAlive)
-                {
-                    nextWorlds.Add(world);
+                // At every prefix all teammates may simply stop playing cards. Keeping the
+                // prefix preserves the old optional-stop behavior without imposing a player order.
+                completed.Add(route);
+                if (route.CompleteVictory || !route.AllPlayersAlive)
                     continue;
-                }
 
-                ShadowTeammatePlanResult forecast = BuildTopKRoutes(
-                    world.Simulator,
-                    teammate,
-                    world.ProcessedEnemyDeaths,
-                    beamWidth,
-                    maxActionsPerPlayer);
-                expandedBranches = checked(expandedBranches + forecast.ExpandedBranches);
-                pendingChoiceBranches = checked(
-                    pendingChoiceBranches + forecast.PendingChoiceBranches);
-                hitActionDepthLimit |= forecast.HitActionDepthLimit;
-
-                foreach (ShadowTeammateRoute teammateRoute in forecast.Routes)
+                foreach (Player teammate in teammates)
                 {
-                    SimulatedCombatState combat =
-                        (SimulatedCombatState)teammateRoute.Simulator.State.CombatState;
-                    _ = combat.ConsumePlayerTurnEndRequest();
+                    string playerNetId = teammate.NetId.ToString();
+                    if (route.TurnEndedPlayerNetIds.Contains(playerNetId)
+                        || !route.Simulator.State.GetCreature(teammate.Creature).IsAlive)
+                    {
+                        continue;
+                    }
 
-                    ShadowTeammateActionCandidate[] combined =
-                        new ShadowTeammateActionCandidate[
-                            world.Actions.Count + teammateRoute.Actions.Count];
-                    for (int index = 0; index < world.Actions.Count; index++)
-                        combined[index] = world.Actions[index];
-                    for (int index = 0; index < teammateRoute.Actions.Count; index++)
-                        combined[world.Actions.Count + index] = teammateRoute.Actions[index];
+                    int playerActionCount = 0;
+                    for (int actionIndex = 0; actionIndex < route.Actions.Count; actionIndex++)
+                    {
+                        if (string.Equals(
+                                route.Actions[actionIndex].PlayerNetId,
+                                playerNetId,
+                                StringComparison.Ordinal))
+                        {
+                            playerActionCount++;
+                        }
+                    }
+                    if (playerActionCount >= maxActionsPerPlayer)
+                        continue;
 
-                    nextWorlds.Add(CaptureRoute(
-                        teammateRoute.Simulator,
-                        combined,
-                        teammateRoute.ProcessedEnemyDeaths));
+                    IReadOnlyList<ShadowTeammateActionCandidate> candidates =
+                        EnumerateLegalActions(route.Simulator, teammate);
+                    foreach (ShadowTeammateActionCandidate candidate in candidates)
+                    {
+                        expandedBranches++;
+                        if (!TryPlayCandidate(
+                                route,
+                                teammate,
+                                candidate,
+                                out ShadowTeammateRoute? child))
+                        {
+                            pendingChoiceBranches++;
+                            continue;
+                        }
+
+                        HashSet<string> turnEndedPlayers =
+                            new(route.TurnEndedPlayerNetIds, StringComparer.Ordinal);
+                        if (child.TurnEndRequested)
+                        {
+                            // A force-end card ends only the acting teammate's shadow turn.
+                            // Consume the prediction-only request immediately so other teammates
+                            // can still interleave actions in subsequent layers.
+                            SimulatedCombatState childCombat =
+                                (SimulatedCombatState)child.Simulator.State.CombatState;
+                            _ = childCombat.ConsumePlayerTurnEndRequest();
+                            turnEndedPlayers.Add(playerNetId);
+                            child = CaptureRoute(
+                                child.Simulator,
+                                child.Actions,
+                                child.ProcessedEnemyDeaths);
+                        }
+
+                        child = child with
+                        {
+                            TurnEndedPlayerNetIds = turnEndedPlayers,
+                        };
+                        next.Add(child);
+                    }
                 }
             }
 
-            worlds = RetainParetoSpectrum(nextWorlds, beamWidth);
+            frontier = RetainParetoSpectrum(next, beamWidth);
+            if (depth == maxTeamActions - 1 && frontier.Count > 0)
+                hitActionDepthLimit = true;
         }
 
+        completed.AddRange(frontier);
         return new ShadowTeammatePlanResult(
-            worlds,
+            RetainParetoSpectrum(completed, beamWidth),
             expandedBranches,
             pendingChoiceBranches,
             hitActionDepthLimit);
@@ -233,17 +283,12 @@ internal static class ShadowTeammatePlanner
         IReadOnlyList<ShadowTeammateActionCandidate> actions,
         ISet<uint> processedEnemyDeaths)
     {
-        string? activePlayerNetId = null;
+        HashSet<string> turnEndedPlayers = new(StringComparer.Ordinal);
         for (int index = 0; index < actions.Count; index++)
         {
             ShadowTeammateActionCandidate action = actions[index];
-            if (activePlayerNetId != null
-                && !string.Equals(activePlayerNetId, action.PlayerNetId, StringComparison.Ordinal))
-            {
-                SimulatedCombatState betweenPlayers =
-                    (SimulatedCombatState)simulator.State.CombatState;
-                _ = betweenPlayers.ConsumePlayerTurnEndRequest();
-            }
+            if (turnEndedPlayers.Contains(action.PlayerNetId))
+                return false;
 
             Player teammate = FindCapturedPlayer(simulator, action.PlayerNetId);
             if (!TryPlayCandidateInPlace(
@@ -254,14 +299,14 @@ internal static class ShadowTeammatePlanner
             {
                 return false;
             }
-            activePlayerNetId = action.PlayerNetId;
-        }
 
-        if (activePlayerNetId != null)
-        {
             SimulatedCombatState combat =
                 (SimulatedCombatState)simulator.State.CombatState;
-            _ = combat.ConsumePlayerTurnEndRequest();
+            if (combat.PlayerTurnEndRequested)
+            {
+                _ = combat.ConsumePlayerTurnEndRequest();
+                turnEndedPlayers.Add(action.PlayerNetId);
+            }
         }
         return true;
     }
