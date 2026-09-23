@@ -77,7 +77,19 @@ Pinned 0.107.1 workflow：
 
 ## 仍未验证
 
-**U3 Timeout fail-closed real double-player runtime 仍为 UNVERIFIED。**
+**U3 Timeout fail-closed real double-player runtime：PASS（2026-09-23）。**
+
+真实双玩家 Client 问题包在 `players=2`、`local_net_id=1000`、`remote_players=1` 下使用 `500 ms` 搜索预算触发生产 `TimeLimit`。该请求记录：
+
+- `BEAM_WIDTH_PORTFOLIO_MEMBER ... termination=TimeLimit`
+- `SEARCH_SESSION mode=single_anytime total_budget_ms=500`
+- `MP_LOCAL_CROSS_TURN_RESULT ... boundary=TimeLimit`
+- `MP_SCENARIO_RERANK enabled=false reason=reevaluation_budget_unavailable`
+- `FINAL_SELECTION ... scenario_rerank=false`
+
+同一 combat 日志中没有任何 `MP_SCENARIO_BUDGET` 或 `MP_SCENARIO_COVERAGE`，因此主搜索 TimeLimit 后没有继续启动 U3 scenario reevaluation。该结果验证了 fail-closed 路径，不是 synthetic validator 证据。
+
+至此 U3 的真实双玩家 Matrix 与 Timeout 两类 runtime smoke 均 PASS，U3 可整体记 COMPLETE。
 
 P0/P1 pinned fixture 实际是单玩家 root；即使把 route policy 设为 `MultiplayerLocalCrossTurn`，`HasActiveMultiplayerRouteSemantics` 仍为 false，因此不能拿该结果冒充 U3 双玩家运行证据。
 
@@ -94,7 +106,7 @@ P0/P1 pinned fixture 实际是单玩家 root；即使把 route policy 设为 `Mu
 7. 构造或观察队友不同后续行为时，确认相同当前本地动作仍只有一个 `CurrentTurnDecisionKey`。
 8. 若主搜索命中 TimeLimit，确认 `MP_SCENARIO_RERANK ... reason=reevaluation_budget_unavailable`，且没有超时后的 U3 replay 扩展。
 
-Matrix smoke 已通过；U3 整体 runtime 尚需一次真实双玩家 TimeLimit fail-closed smoke 才可完整记 PASS。在该路径验证前不要推进 U4 的默认策略迁移。
+Matrix 与 TimeLimit fail-closed 两类真实双玩家 smoke 均已通过；U3 整体记 COMPLETE。下一阶段可进入 U4 风险与目标 A/B。
 
 ## 日志判定器
 
