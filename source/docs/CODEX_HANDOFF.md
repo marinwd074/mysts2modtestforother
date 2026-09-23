@@ -18,6 +18,7 @@
 - v0.16 将 63 项多人怪物目标分类合并为一次 target-mode switch，避免每个模拟 Move 依次经过 3 套字符串分类器；支持范围不变。
 - Multiplayer MP-0 / Advisor / Safe Execute MP-2A/B/C / Reactive Carry 已有真实 Host/Client 基线。
 - Multiplayer Safe Auto 已完成真实 3 个本地回合 Smoke：每回合 fresh request/search、原生 PlayCardAction + EndPlayerTurnAction，无旧授权跨回合复用。
+- 2026-09-23 Safe Execute 连续执行不再由固定 6/32 action ceiling 截断；每次授权会话的 `MaxActions` 直接取当前搜索结果中可安全执行的有限本回合路线长度，逐动作 live gate、原生动作归因和 post-action revalidation 继续 fail closed。`choice_required`/其他前缀边界会记录具体 action/card/choice 来源；revalidation abort 新增 `MP2B_ACTION_REVALIDATION_DIAGNOSTIC` 与 `MP2B_ACTION_STATE_DIFF`，用于区分 remote public、enemy、WorldVersion、手牌/牌堆、资源、Power、target/lifecycle 等变化。
 - Carry Ranking R1 已有 runtime 证据；R2 decisive runtime 仍 `UNVERIFIED`，不是当前 blocker。
 - 旧的 CombatSolver 单 Client Console Fixture 整组已删除。
 - 完整 `TheBookOfAges / GM Console` 作为 **test-only submodule** 保留在：

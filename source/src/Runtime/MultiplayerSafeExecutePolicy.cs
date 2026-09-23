@@ -104,7 +104,7 @@ internal sealed class MultiplayerSafeExecutionSession
         long startWorldVersion,
         int maxActions)
     {
-        if (maxActions <= 0)
+        if (maxActions < 0)
             throw new ArgumentOutOfRangeException(nameof(maxActions));
 
         RequestId = Interlocked.Increment(ref _nextRequestId);
@@ -296,9 +296,10 @@ internal sealed class MultiplayerSafeExecutionSession
 /// </summary>
 internal static class MultiplayerSafeExecutePolicy
 {
-    // Keep one finite ceiling for every Safe Execute deployment, but make it large enough
-    // to cover a normal complete current-turn route. Per-action live revalidation remains the
-    // actual safety boundary; this cap only prevents unbounded automation.
+    // Safe Execute is bounded by the finite current-turn route selected by the search.
+    // Per-action live revalidation remains the actual safety boundary. The historical
+    // constant is retained only for source/evidence compatibility and is not used to size
+    // production execution sessions.
     internal const int MaxActionsPerDeployment = 32;
     internal const string SingleActionLimitReason = "mp2a_single_action_limit";
     internal const string BoundedActionCeilingReason = "mp2c_action_ceiling";
@@ -349,9 +350,11 @@ internal static class MultiplayerSafeExecutePolicy
     internal static SafeLocalActionDecision DeploymentStopAfter(
         int safeActionCount,
         int plannedActionCount)
-        => safeActionCount >= MaxActionsPerDeployment && plannedActionCount > safeActionCount
-            ? new(false, BoundedActionCeilingReason)
-            : SafeLocalActionDecision.Allow;
+    {
+        _ = safeActionCount;
+        _ = plannedActionCount;
+        return SafeLocalActionDecision.Allow;
+    }
 
     internal static bool ShouldAutoDeploy(
         bool safeAutoEnabled,
@@ -379,12 +382,6 @@ internal static class MultiplayerSafeExecutePolicy
         List<T> safe = [];
         foreach (T action in actions)
         {
-            if (safe.Count >= MaxActionsPerDeployment)
-            {
-                stop = DeploymentStopAfter(safe.Count, actions.Count);
-                return safe;
-            }
-
             SafeLocalActionDecision decision = classify(action);
             if (!decision.IsSafe)
             {
@@ -394,7 +391,9 @@ internal static class MultiplayerSafeExecutePolicy
             safe.Add(action);
         }
 
-        stop = DeploymentStopAfter(safe.Count, actions.Count);
+        // The input route is already finite. Do not introduce a second arbitrary action
+        // ceiling that can cut off valid draw/energy chains such as Offering routes.
+        stop = SafeLocalActionDecision.Allow;
         return safe;
     }
 

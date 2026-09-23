@@ -104,6 +104,12 @@ internal static partial class SolverController
                 action.Turn,
                 result.StartTurnNumber))
             .ToArray();
+        int safeSessionActionCapacity = capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute
+            ? MultiplayerSafeLocalActionClassifier.TakeBoundedDeploymentSlice(
+                state,
+                plannedTurnActions,
+                out _).Count
+            : 0;
         SolverDeploymentSession deployment = new()
         {
             State = state,
@@ -118,7 +124,7 @@ internal static partial class SolverController
                     result.StartTurnNumber,
                      _combat.SearchesStarted,
                      capabilities.IsMultiplayer ? MultiplayerWorldTracker.WorldVersion : 0,
-                     MultiplayerSafeExecutePolicy.MaxActionsPerDeployment)
+                     safeSessionActionCapacity)
                 : null,
         };
         _deployment = deployment;
@@ -139,7 +145,8 @@ internal static partial class SolverController
                 deployment.SafeExecutionSession?.Abort(stop.Reason);
                 Entry.Logger.Info(
                     $"[CombatSolver/MultiplayerSafeExecute] MP2B_DEPLOY_STOP " +
-                    $"turn={result.StartTurnNumber} reason={stop.Reason}");
+                    $"turn={result.StartTurnNumber} reason={stop.Reason} " +
+                    DescribeSafeExecutionStopAction(plannedTurnActions, safeActions.Count));
                 CompleteDeployment(deployment);
                 return;
             }
@@ -205,7 +212,8 @@ internal static partial class SolverController
             {
                 Entry.Logger.Info(
                     $"[CombatSolver/MultiplayerSafeExecute] DEPLOY_PREFIX_STOP " +
-                    $"turn={turn} action={safeStop.Reason}");
+                    $"turn={turn} reason={safeStop.Reason} " +
+                    DescribeSafeExecutionStopAction(plannedTurnActions, actions.Count));
             }
         }
         else
@@ -280,6 +288,10 @@ internal static partial class SolverController
                     : SafeLocalActionDecision.Allow;
                 if (safeExecute && !liveSafety.IsSafe)
                 {
+                    Entry.Logger.Warn(
+                        $"[CombatSolver/MultiplayerSafeExecute] MP2B_LIVE_GATE_STOP " +
+                        $"turn={turn} reason={liveSafety.Reason} " +
+                        DescribeSafeExecutionStopAction(actions, actionIndex));
                     AbortSafeExecution(
                         host,
                         deployment,
@@ -525,6 +537,17 @@ internal static partial class SolverController
                     if (decision is not MultiplayerSafeActionRevalidationDecision.SafeToContinue
                         and not MultiplayerSafeActionRevalidationDecision.ExpectedLocalChange)
                     {
+                        LogSafeActionRevalidationDiagnostic(
+                            deployment,
+                            safeSession,
+                            turn,
+                            actionIndex,
+                            action,
+                            facts,
+                            beforeBoundary,
+                            afterBoundary,
+                            decision,
+                            decisionReason);
                         AbortSafeExecution(host, deployment, turn, actionIndex, decisionReason);
                         return;
                     }
@@ -1096,6 +1119,176 @@ internal static partial class SolverController
             WorldVersionStable: MultiplayerWorldTracker.TryReadStable(out long stableVersion)
                 && stableVersion == after.WorldVersion,
             HasNextAction: hasNextAction);
+    }
+
+    private static string DescribeSafeExecutionStopAction(
+        IReadOnlyList<PlanAction> plannedActions,
+        int actionIndex)
+    {
+        if (actionIndex < 0 || actionIndex >= plannedActions.Count)
+        {
+            return $"action_index={actionIndex} kind=- card=- target=- " +
+                   "choice_type=none turn_start_choice_count=0 choice_sources=-";
+        }
+
+        PlanAction action = plannedActions[actionIndex];
+        IReadOnlyList<PlanCardChoice>? turnStartChoices = action.TurnStartChoices;
+        string choiceType;
+        string choiceSources;
+        if (turnStartChoices is { Count: > 0 })
+        {
+            choiceType = "turn_start:" + string.Join(
+                ",",
+                turnStartChoices
+                    .Select(choice => choice.Timing.ToString())
+                    .Distinct(StringComparer.Ordinal));
+            choiceSources = string.Join(
+                ",",
+                turnStartChoices.Select(choice =>
+                    string.IsNullOrEmpty(choice.SourceId)
+                        ? choice.Effect.ToString()
+                        : choice.SourceId));
+        }
+        else if (action.Choice != null
+                 || action.NestedChoices is { Count: > 0 }
+                 || action.NestedChoicesBeforePrimary != 0)
+        {
+            choiceType = "immediate_local";
+            choiceSources = "-";
+        }
+        else
+        {
+            choiceType = "none";
+            choiceSources = "-";
+        }
+
+        return $"action_index={actionIndex} kind={action.Kind} " +
+               $"card={action.CardId ?? "-"} target={action.TargetCombatId?.ToString() ?? "-"} " +
+               $"choice_type={choiceType} turn_start_choice_count={turnStartChoices?.Count ?? 0} " +
+               $"choice_sources={choiceSources}";
+    }
+
+    private static void LogSafeActionRevalidationDiagnostic(
+        SolverDeploymentSession deployment,
+        MultiplayerSafeExecutionSession safeSession,
+        int turn,
+        int actionIndex,
+        PlanAction action,
+        MultiplayerSafeActionRevalidationFacts facts,
+        MultiplayerSafeExecutionBoundary before,
+        MultiplayerSafeExecutionBoundary after,
+        MultiplayerSafeActionRevalidationDecision decision,
+        string decisionReason)
+    {
+        List<string> failedChecks = [];
+        if (!facts.NativePlayCardCaptured)
+            failedChecks.Add("native_play_card");
+        if (!facts.ActionQueueIdle)
+            failedChecks.Add("action_queue_idle");
+        if (!facts.LocalCardRemovedFromHand)
+            failedChecks.Add("local_card_removed");
+        if (!facts.LocalPlayerIdentityStable)
+            failedChecks.Add("local_identity");
+        if (!facts.EnergyStateConsistent)
+            failedChecks.Add("energy_or_stars");
+        if (!facts.TargetIdentityStable)
+            failedChecks.Add("target_identity");
+        if (!facts.RemotePublicStateUnchanged)
+            failedChecks.Add("remote_public_state");
+        if (!facts.EnemyStateMatchesExpectedTarget)
+            failedChecks.Add("enemy_state");
+        if (!facts.WorldVersionAdvanced)
+            failedChecks.Add("world_version_advanced");
+        if (!facts.WorldVersionStable)
+            failedChecks.Add("world_version_stable");
+
+        List<string> changedFields = [];
+        if (before.LocalHp != after.LocalHp)
+            changedFields.Add("hp");
+        if (before.LocalBlock != after.LocalBlock)
+            changedFields.Add("block");
+        if (before.LocalEnergy != after.LocalEnergy)
+            changedFields.Add("energy");
+        if (before.LocalStars != after.LocalStars)
+            changedFields.Add("stars");
+        if (!before.LocalHand.SequenceEqual(after.LocalHand, StringComparer.Ordinal))
+            changedFields.Add("hand");
+        if (!before.LocalDrawPile.SequenceEqual(after.LocalDrawPile, StringComparer.Ordinal))
+            changedFields.Add("draw");
+        if (!before.LocalDiscard.SequenceEqual(after.LocalDiscard, StringComparer.Ordinal))
+            changedFields.Add("discard");
+        if (!before.LocalExhaust.SequenceEqual(after.LocalExhaust, StringComparer.Ordinal))
+            changedFields.Add("exhaust");
+        if (!before.LocalPowers.SequenceEqual(after.LocalPowers, StringComparer.Ordinal))
+            changedFields.Add("powers");
+        if (!before.RemotePlayers.SequenceEqual(after.RemotePlayers, StringComparer.Ordinal))
+            changedFields.Add("remote_players");
+        if (!before.Enemies.SequenceEqual(after.Enemies, StringComparer.Ordinal))
+            changedFields.Add("enemies");
+        if (!before.LocalFingerprint.Equals(after.LocalFingerprint))
+            changedFields.Add("local_fingerprint");
+        if (!before.RemotePublicFingerprint.Equals(after.RemotePublicFingerprint))
+            changedFields.Add("remote_public_fingerprint");
+        if (before.RoundNumber != after.RoundNumber)
+            changedFields.Add("round");
+        if (!string.Equals(before.CurrentSide, after.CurrentSide, StringComparison.Ordinal))
+            changedFields.Add("side");
+        if (before.LocalTurn != after.LocalTurn)
+            changedFields.Add("turn");
+        if (!string.Equals(before.LocalPhase, after.LocalPhase, StringComparison.Ordinal))
+            changedFields.Add("phase");
+
+        int currentLifecycleGeneration = Volatile.Read(ref _combatLifecycleGeneration);
+        bool lifecycleCurrent = deployment.State != null
+            && IsCurrentCombatLifecycle(
+                deployment.State,
+                deployment.CombatLifecycleGeneration);
+
+        Entry.Logger.Warn(
+            $"[CombatSolver/MultiplayerSafeExecute] MP2B_ACTION_REVALIDATION_DIAGNOSTIC " +
+            $"request_id={safeSession.RequestId} turn={turn} action_index={actionIndex} " +
+            $"card={action.CardId ?? "-"} target={action.TargetCombatId?.ToString() ?? "-"} " +
+            $"decision={decision} reason={decisionReason} " +
+            $"failed_checks={FormatSafeDiagnosticTokens(failedChecks)} " +
+            $"changed_fields={FormatSafeDiagnosticTokens(changedFields)} " +
+            $"before_world_version={before.WorldVersion} after_world_version={after.WorldVersion} " +
+            $"before_observation_sequence={before.ObservationSequence} " +
+            $"after_observation_sequence={after.ObservationSequence} " +
+            $"lifecycle_current={lifecycleCurrent.ToString().ToLowerInvariant()} " +
+            $"expected_lifecycle_generation={deployment.CombatLifecycleGeneration} " +
+            $"current_lifecycle_generation={currentLifecycleGeneration} " +
+            $"before_local_fingerprint={before.LocalFingerprint.First:X16}:{before.LocalFingerprint.Second:X16} " +
+            $"after_local_fingerprint={after.LocalFingerprint.First:X16}:{after.LocalFingerprint.Second:X16} " +
+            $"before_remote_fingerprint={before.RemotePublicFingerprint.First:X16}:{before.RemotePublicFingerprint.Second:X16} " +
+            $"after_remote_fingerprint={after.RemotePublicFingerprint.First:X16}:{after.RemotePublicFingerprint.Second:X16}");
+
+        Entry.Logger.Warn(
+            $"[CombatSolver/MultiplayerSafeExecute] MP2B_ACTION_STATE_DIFF " +
+            $"request_id={safeSession.RequestId} action_index={actionIndex} " +
+            $"before_hp={before.LocalHp?.ToString() ?? "-"} after_hp={after.LocalHp?.ToString() ?? "-"} " +
+            $"before_block={before.LocalBlock?.ToString() ?? "-"} after_block={after.LocalBlock?.ToString() ?? "-"} " +
+            $"before_energy={before.LocalEnergy?.ToString() ?? "-"} after_energy={after.LocalEnergy?.ToString() ?? "-"} " +
+            $"before_stars={before.LocalStars?.ToString() ?? "-"} after_stars={after.LocalStars?.ToString() ?? "-"} " +
+            $"before_hand=[{FormatSafeDiagnosticTokens(before.LocalHand)}] " +
+            $"after_hand=[{FormatSafeDiagnosticTokens(after.LocalHand)}] " +
+            $"before_draw=[{FormatSafeDiagnosticTokens(before.LocalDrawPile)}] " +
+            $"after_draw=[{FormatSafeDiagnosticTokens(after.LocalDrawPile)}] " +
+            $"before_discard=[{FormatSafeDiagnosticTokens(before.LocalDiscard)}] " +
+            $"after_discard=[{FormatSafeDiagnosticTokens(after.LocalDiscard)}] " +
+            $"before_exhaust=[{FormatSafeDiagnosticTokens(before.LocalExhaust)}] " +
+            $"after_exhaust=[{FormatSafeDiagnosticTokens(after.LocalExhaust)}] " +
+            $"before_powers=[{FormatSafeDiagnosticTokens(before.LocalPowers)}] " +
+            $"after_powers=[{FormatSafeDiagnosticTokens(after.LocalPowers)}] " +
+            $"before_remote=[{FormatSafeDiagnosticTokens(before.RemotePlayers)}] " +
+            $"after_remote=[{FormatSafeDiagnosticTokens(after.RemotePlayers)}] " +
+            $"before_enemies=[{FormatSafeDiagnosticTokens(before.Enemies)}] " +
+            $"after_enemies=[{FormatSafeDiagnosticTokens(after.Enemies)}]");
+    }
+
+    private static string FormatSafeDiagnosticTokens(IEnumerable<string> tokens)
+    {
+        string[] values = tokens as string[] ?? tokens.ToArray();
+        return values.Length == 0 ? "-" : string.Join("|", values);
     }
 
     private static string DescribeSafeExecutionAction(PlanAction action)

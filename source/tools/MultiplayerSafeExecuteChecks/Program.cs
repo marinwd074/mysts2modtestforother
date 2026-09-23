@@ -58,16 +58,16 @@ Check(
     "A resolved local-player or enemy target is allowed.");
 Check(Resolved(incompleteTarget: true).Reason == "target_identity_incomplete", "Incomplete target identity fails closed.");
 Check(Resolved().IsSafe, "A targetless resolved local card is allowed.");
+IReadOnlyList<SafeLocalActionDecision> longSafeRoute =
+    Enumerable.Repeat(SafeLocalActionDecision.Allow, 64).ToArray();
+IReadOnlyList<SafeLocalActionDecision> longSafePrefix =
+    MultiplayerSafeExecutePolicy.TakeBoundedSafePrefix(
+        longSafeRoute,
+        decision => decision,
+        out SafeLocalActionDecision longSafeStop);
 Check(
-    MultiplayerSafeExecutePolicy.MaxActionsPerDeployment == 32,
-    "Safe Execute keeps a finite 32-action hard ceiling while allowing complete normal current-turn routes.");
-Check(
-    MultiplayerSafeExecutePolicy.DeploymentStopAfter(32, 33).Reason
-        == MultiplayerSafeExecutePolicy.BoundedActionCeilingReason,
-    "A thirty-third planned action stops at the finite Safe Execute ceiling.");
-Check(
-    MultiplayerSafeExecutePolicy.DeploymentStopAfter(7, 8).IsSafe,
-    "An eight-action lethal route is no longer truncated by the old six-action ceiling.");
+    longSafePrefix.Count == longSafeRoute.Count && longSafeStop.IsSafe,
+    "Safe Execute preflight is bounded by the finite planned route, not a fixed action-count ceiling.");
 IReadOnlyList<SafeLocalActionDecision> allSafe =
     [SafeLocalActionDecision.Allow, SafeLocalActionDecision.Allow,
      SafeLocalActionDecision.Allow, SafeLocalActionDecision.Allow];
@@ -93,19 +93,16 @@ IReadOnlyList<SafeLocalActionDecision> emptyPrefix =
         decision => decision,
         out SafeLocalActionDecision emptyStop);
 Check(emptyPrefix.Count == 0 && emptyStop.Reason == "ends_player_turn", "An unsafe first route action returns an empty prefix.");
-IReadOnlyList<SafeLocalActionDecision> overCeiling =
-    Enumerable.Repeat(
-        SafeLocalActionDecision.Allow,
-        MultiplayerSafeExecutePolicy.MaxActionsPerDeployment + 1).ToArray();
-IReadOnlyList<SafeLocalActionDecision> cappedPrefix =
+IReadOnlyList<SafeLocalActionDecision> fortyActionRoute =
+    Enumerable.Repeat(SafeLocalActionDecision.Allow, 40).ToArray();
+IReadOnlyList<SafeLocalActionDecision> fortyActionPrefix =
     MultiplayerSafeExecutePolicy.TakeBoundedSafePrefix(
-        overCeiling,
+        fortyActionRoute,
         decision => decision,
-        out SafeLocalActionDecision ceilingStop);
+        out SafeLocalActionDecision fortyActionStop);
 Check(
-    cappedPrefix.Count == MultiplayerSafeExecutePolicy.MaxActionsPerDeployment
-        && ceilingStop.Reason == MultiplayerSafeExecutePolicy.BoundedActionCeilingReason,
-    "A route longer than the hard ceiling is truncated without becoming unbounded.");
+    fortyActionPrefix.Count == fortyActionRoute.Count && fortyActionStop.IsSafe,
+    "A route longer than the historical 32-action cap remains intact.");
 Check(
     MultiplayerSafeExecutePolicy.CanGrantLabCapability(
         new(MultiplayerSafeExecutePolicy.LabModeToken, true, true)),
@@ -132,8 +129,8 @@ MultiplayerSafeExecutionSession session = new(
     startTurnNumber: 1,
     routeGeneration: 7,
     startWorldVersion: 4,
-    maxActions: MultiplayerSafeExecutePolicy.MaxActionsPerDeployment);
-Check(session.State == MultiplayerSafeExecutionState.Authorized, "A Safe Execute request starts authorized.");
+    maxActions: 5);
+Check(session.State == MultiplayerSafeExecutionState.Authorized, "A Safe Execute request starts authorized with the planned route capacity.");
 bool fiveActionRouteAccepted = true;
 for (int actionIndex = 0; actionIndex < 5; actionIndex++)
 {
@@ -158,7 +155,7 @@ MultiplayerSafeExecutionSession indexSession = new(
     startTurnNumber: 1,
     routeGeneration: 7,
     startWorldVersion: 4,
-    maxActions: MultiplayerSafeExecutePolicy.MaxActionsPerDeployment);
+    maxActions: 2);
 Check(
     indexSession.TryBeginAction(0, "PlayCard:STRIKE:0:target=-", 1, 7, 4, out _)
         && indexSession.MarkAwaitingWorldUpdate()
@@ -188,12 +185,12 @@ for (int actionIndex = 0; actionIndex < 2; actionIndex++)
 Check(
     !ceilingSession.TryBeginAction(2, "PlayCard:EXTRA:0:target=-", 1, 7, 6, out string capReason)
         && capReason == "session_state_Completed",
-    "A completed bounded session rejects an action beyond its configured ceiling.");
+    "A completed route-bounded session rejects an action beyond its planned action capacity.");
 MultiplayerSafeExecutionSession conflictSession = new(
     startTurnNumber: 1,
     routeGeneration: 7,
     startWorldVersion: 4,
-    maxActions: MultiplayerSafeExecutePolicy.MaxActionsPerDeployment);
+    maxActions: 1);
 Check(
     !conflictSession.TryBeginAction(0, "PlayCard:STRIKE:0:target=-", 1, 7, 5, out string worldReason)
         && worldReason == "world_version_not_accepted",
@@ -331,7 +328,7 @@ MultiplayerSafeExecutionSession endTurnSession = new(
     startTurnNumber: 1,
     routeGeneration: 7,
     startWorldVersion: 4,
-    maxActions: MultiplayerSafeExecutePolicy.MaxActionsPerDeployment);
+    maxActions: 0);
 Check(
     endTurnSession.TryBeginEndTurn(1, 7, 4, out string endTurnStartReason)
         && endTurnStartReason == "end_turn_executing"
@@ -346,7 +343,7 @@ MultiplayerSafeExecutionSession actionThenEndTurnSession = new(
     startTurnNumber: 1,
     routeGeneration: 7,
     startWorldVersion: 4,
-    maxActions: MultiplayerSafeExecutePolicy.MaxActionsPerDeployment);
+    maxActions: 1);
 Check(
     actionThenEndTurnSession.TryBeginAction(0, "PlayCard:STRIKE:0:target=-", 1, 7, 4, out _)
         && actionThenEndTurnSession.MarkAwaitingWorldUpdate()
@@ -370,7 +367,7 @@ MultiplayerSafeExecutionSession nextTurnSession = new(
     startTurnNumber: 2,
     routeGeneration: 8,
     startWorldVersion: 6,
-    maxActions: MultiplayerSafeExecutePolicy.MaxActionsPerDeployment);
+    maxActions: 1);
 Check(
     nextTurnSession.TryBeginAction(
         0,
@@ -385,7 +382,7 @@ MultiplayerSafeExecutionSession repeatedRemoteChangeSession = new(
     startTurnNumber: 1,
     routeGeneration: 7,
     startWorldVersion: 4,
-    maxActions: MultiplayerSafeExecutePolicy.MaxActionsPerDeployment);
+    maxActions: 1);
 repeatedRemoteChangeSession.Abort("remote_or_unknown_change_1");
 repeatedRemoteChangeSession.Abort("remote_or_unknown_change_2");
 Check(
@@ -415,10 +412,8 @@ Check(
 Check(
     MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(SafeLocalActionDecision.Allow)
         && MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(
-            new(false, MultiplayerSafeExecutePolicy.BoundedActionCeilingReason))
-        && MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(
             new(false, MultiplayerSafeExecutePolicy.ManualMultiplayerCardReason)),
-    "A completed safe prefix, bounded action ceiling, or manual multiplayer-card boundary keeps Safe Auto eligible for a fresh search.");
+    "A completed safe prefix or manual multiplayer-card boundary keeps Safe Auto eligible for a fresh search.");
 
 Check(
     !MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(new(false, "choice_required"))
