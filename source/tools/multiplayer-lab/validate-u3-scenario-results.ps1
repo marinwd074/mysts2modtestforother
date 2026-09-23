@@ -135,7 +135,8 @@ $matrixEvidence = [Collections.Generic.List[object]]::new()
 
 foreach ($budget in $budgets) {
     $nextBudget = @($budgets | Where-Object { $_.Index -gt $budget.Index } | Select-Object -First 1)
-    $sessionEnd = if ($nextBudget.Count -eq 1) { [int]$nextBudget[0].Index } else { [int]::MaxValue }
+    $nextSessionStart = if ($nextBudget.Count -eq 1) { [int]$nextBudget[0].Index } else { [int]::MaxValue }
+    $sessionEnd = $nextSessionStart
 
     $sessionReranks = @($reranks | Where-Object {
             $_.Index -gt $budget.Index -and $_.Index -lt $sessionEnd
@@ -149,7 +150,8 @@ foreach ($budget in $budgets) {
             $_.Index -gt $budget.Index -and $_.Index -lt $sessionEnd
         })
     $selection = @($selections | Where-Object {
-            $_.Index -gt $(if ($rerank.Count -eq 1) { $rerank[0].Index } else { $budget.Index })
+            $_.Index -gt $(if ($rerank.Count -eq 1) { $rerank[0].Index } else { $budget.Index }) -and
+            $_.Index -lt $nextSessionStart
         } | Select-Object -First 1)
 
     $total = Get-IntToken $budget.Text 'total_node_budget'
