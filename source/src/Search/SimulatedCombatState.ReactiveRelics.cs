@@ -12,6 +12,16 @@ namespace CombatSolver;
 
 internal sealed partial class SimulatedCombatState
 {
+    public bool HasPotentialExtraPlayerTurn(IReadOnlyList<Player> players)
+    {
+        foreach (Player player in players)
+        {
+            if (RelicsOf(player).Any(static relic => !relic.IsMelted && relic is PaelsEye))
+                return true;
+        }
+        return false;
+    }
+
     public bool TryPrepareExtraPlayerTurn(
         CombatPredictionSimulator simulator,
         Player player,

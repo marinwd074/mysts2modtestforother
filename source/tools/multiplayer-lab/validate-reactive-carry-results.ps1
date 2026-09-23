@@ -134,7 +134,9 @@ $scopedRecords = if ($null -eq $RequestId) {
 $turns = @()
 $requests = @()
 $freshSearches = [Collections.Generic.List[object]]::new()
-$missingFresh = [Collections.Generic.List[object]]::new()
+$continuationReuses = [Collections.Generic.List[object]]::new()
+$missingNextPlan = [Collections.Generic.List[object]]::new()
+$ambiguousNextPlan = [Collections.Generic.List[object]]::new()
 $reusedOldRequest = [Collections.Generic.List[object]]::new()
 $remoteDeltaEvidence = [Collections.Generic.List[object]]::new()
 $boundaryEvidence = [Collections.Generic.List[object]]::new()
@@ -172,7 +174,18 @@ foreach ($end in $selectedAccepted) {
             $_.Text -match 'MP_REACTIVE_FRESH_SEARCH\b.*after_safe_end_turn=true' -and
             ($null -eq $requestId -or $_.Text -match ('previous_end_turn_request_id=' + [regex]::Escape([string]$requestId) + '\b'))
         } | Select-Object -First 1)
-    if ($fresh.Count -eq 1) {
+    $nextTurn = if ($null -eq $turn) { $null } else { $turn + 1 }
+    $reuse = @($records | Where-Object {
+            ($_.Index -gt $end.Index) -and
+            $_.Text -match '\[CombatSolver/Test\] MP_LOCAL_XTURN_CONTINUATION_REUSED\b' -and
+            $_.Text -match '\blocal_state_exact=true\b' -and
+            $_.Text -match '\breason=exact\b' -and
+            ($null -eq $nextTurn -or $_.Text -match ('turn=' + [regex]::Escape([string]$nextTurn) + '\b'))
+        } | Select-Object -First 1)
+
+    if ($fresh.Count -eq 1 -and $reuse.Count -eq 1) {
+        $ambiguousNextPlan.Add($end)
+    } elseif ($fresh.Count -eq 1) {
         $freshSearches.Add($fresh[0])
         $freshIndex = [int]$fresh[0].Index
         $oldAction = @($records | Where-Object {
@@ -181,13 +194,21 @@ foreach ($end in $selectedAccepted) {
                 $_.Text -match 'NATIVE_ACTION_CAPTURED\b'
             } | Select-Object -First 1)
         if ($oldAction.Count -eq 1) { $reusedOldRequest.Add($oldAction[0]) }
+    } elseif ($reuse.Count -eq 1) {
+        $continuationReuses.Add($reuse[0])
     } else {
-        $missingFresh.Add($end)
+        $missingNextPlan.Add($end)
     }
 
-    $nextFreshIndex = if ($fresh.Count -eq 1) { [int]$fresh[0].Index } else { [int]::MaxValue }
+    $nextPlanIndex = if ($fresh.Count -eq 1) {
+        [int]$fresh[0].Index
+    } elseif ($reuse.Count -eq 1) {
+        [int]$reuse[0].Index
+    } else {
+        [int]::MaxValue
+    }
     $remoteDelta = @($records | Where-Object {
-            ($_.Index -gt $end.Index) -and ($_.Index -lt $nextFreshIndex) -and
+            ($_.Index -gt $end.Index) -and ($_.Index -lt $nextPlanIndex) -and
             (($_.Text -match 'MP_REACTIVE_WORLD_DELTA\b.*remote_public_changed=true') -or
              ($_.Text -match 'MP2B_WORLD_CHANGED\b'))
         } | Select-Object -First 1)
@@ -213,19 +234,26 @@ if ($safeValid) {
     Add-Check 'safeEndTurnBoundary' FAIL (Join-Evidence @($safeRevalidationEvidence + $nativeEndTurnEvidence)) 'Every accepted EndTurn needs a Safe pre-boundary revalidation, native EndPlayerTurnAction, and cleared authorization markers.'
 }
 
-$freshValid = (
+$nextPlanCount = $freshSearches.Count + $continuationReuses.Count
+$nextPlanPolicyValid = if ($Smoke -eq 'B') {
+    $freshSearches.Count -eq $requiredCount -and $continuationReuses.Count -eq 0
+} else {
+    $nextPlanCount -eq $requiredCount
+}
+$nextPlanValid = (
     $selectedAccepted.Count -eq $requiredCount -and
-    $freshSearches.Count -eq $requiredCount -and
-    $missingFresh.Count -eq 0 -and
+    $nextPlanPolicyValid -and
+    $missingNextPlan.Count -eq 0 -and
+    $ambiguousNextPlan.Count -eq 0 -and
     $boundaryEvidence.Count -eq $requiredCount -and
     $reusedOldRequest.Count -eq 0
 )
-if ($freshValid) {
-    Add-Check 'freshProbeAndSearch' PASS (Join-Evidence @($boundaryEvidence + $freshSearches))
+if ($nextPlanValid) {
+    Add-Check 'freshProbeAndSearch' PASS (Join-Evidence @($boundaryEvidence + $freshSearches + $continuationReuses)) 'Each EndTurn reached a fresh Probe/capture boundary, then either an exact Joint continuation reuse or a fresh search. Smoke B requires fresh search after the intentional remote delta.'
 } elseif ($selectedAccepted.Count -eq 0) {
-    Add-Check 'freshProbeAndSearch' UNVERIFIED '' 'No accepted EndTurn is available for fresh-boundary validation.'
+    Add-Check 'freshProbeAndSearch' UNVERIFIED '' 'No accepted EndTurn is available for next-plan validation.'
 } else {
-    Add-Check 'freshProbeAndSearch' FAIL (Join-Evidence @($boundaryEvidence + $freshSearches + $missingFresh + $reusedOldRequest)) 'Each EndTurn must be followed by a fresh Probe/capture boundary and a new search without old request reuse.'
+    Add-Check 'freshProbeAndSearch' FAIL (Join-Evidence @($boundaryEvidence + $freshSearches + $continuationReuses + $missingNextPlan + $ambiguousNextPlan + $reusedOldRequest)) 'Each EndTurn must be followed by exactly one safe next-plan path: exact Joint continuation reuse when the prediction matches, or fresh search when it does not. Smoke B must fresh-search.'
 }
 
 $uniqueRequestCount = @($requests | Sort-Object -Unique).Count

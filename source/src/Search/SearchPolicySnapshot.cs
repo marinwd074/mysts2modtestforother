@@ -31,6 +31,9 @@ internal sealed record SearchPolicySnapshot(
     /// <see cref="RoutePolicy"/> and let policy capture set this value consistently.
     /// </summary>
     public bool CurrentTurnOnly { get; init; }
+    public MultiplayerCombatObjectiveStrategy MultiplayerCombatObjectiveStrategy { get; init; }
+        = MultiplayerCombatObjectiveStrategy.MinimizeTeamLoss;
+    public double MultiplayerEnemyDurabilityRatio { get; init; } = 1d;
     public bool UseNoveltyPortfolio { get; init; }
     public NoveltySearchOptions? NoveltySearch { get; init; }
     public NoveltyPortfolioBudget NoveltyBudget { get; init; } = NoveltyPortfolioBudget.Default;

@@ -62,11 +62,33 @@ internal sealed class CombatRootSnapshot
     public bool HasRenewablePotionShapedRock { get; }
     public PostCombatRelicHealProfile PostCombatRelicHeal { get; }
     /// <summary>
+    /// Exact detached teammate state available to future shadow planning. These snapshots
+    /// are observation-only; RootActionPlayers remains local-player-only.
+    /// </summary>
+    public IReadOnlyList<MultiplayerTeammateForecastState> TeammateForecastStates { get; }
+    /// <summary>
     /// Immutable public multiplayer input captured with this root. Single-player and
     /// read-only Probe roots carry a disabled context; background search never reads live
     /// remote players or creatures through this property.
     /// </summary>
     public MultiplayerCarryRankingContext CarryRankingContext { get; }
+    internal int CapturedPlayerMaxHp(Player player)
+    {
+        if (ReferenceEquals(player, PlayerIdentity))
+            return InitialPlayerMaxHp;
+
+        string netId = player.NetId.ToString();
+        for (int index = 0; index < TeammateForecastStates.Count; index++)
+        {
+            MultiplayerTeammateForecastState teammate = TeammateForecastStates[index];
+            if (string.Equals(teammate.NetId, netId, StringComparison.Ordinal))
+                return teammate.MaxHp;
+        }
+
+        throw new InvalidOperationException(
+            $"Captured multiplayer root has no max-HP baseline for player {netId}.");
+    }
+
     internal HookLayoutCacheStatistics HookLayoutCacheStatistics
         => ((SimulatedCombatState)_rootSimulator.State.CombatState).HookLayoutCacheStatistics;
     internal HookListenerSegmentStatistics HookListenerSegmentStatistics
@@ -103,6 +125,7 @@ internal sealed class CombatRootSnapshot
         bool hasUnusedCardReplayAllocator,
         bool hasRenewablePotionShapedRock,
         PostCombatRelicHealProfile postCombatRelicHeal,
+        IReadOnlyList<MultiplayerTeammateForecastState> teammateForecastStates,
         MultiplayerCarryRankingContext carryRankingContext)
     {
         PlayerIdentity = playerIdentity;
@@ -141,6 +164,7 @@ internal sealed class CombatRootSnapshot
         HasUnusedCardReplayAllocator = hasUnusedCardReplayAllocator;
         HasRenewablePotionShapedRock = hasRenewablePotionShapedRock;
         PostCombatRelicHeal = postCombatRelicHeal;
+        TeammateForecastStates = teammateForecastStates;
         CarryRankingContext = carryRankingContext;
     }
 
@@ -194,8 +218,13 @@ internal sealed class CombatRootSnapshot
                 ? player
                 : null);
         CombatPredictionSimulator simulator = new(simulatedCombat);
+        IReadOnlyList<MultiplayerTeammateForecastState> teammateForecastStates = [];
         if (capabilities.IsMultiplayer && capabilities.CanSearch)
+        {
             MultiplayerRootCaptureContracts.Verify(state, simulator, player);
+            teammateForecastStates =
+                MultiplayerTeammateForecastCapture.Capture(simulator, player);
+        }
         ContinuationStamp projected = ContinuationStamp.CapturePredicted(
             player,
             simulator,
@@ -305,6 +334,7 @@ internal sealed class CombatRootSnapshot
             hasUnusedCardReplayAllocator,
             hasRenewablePotionShapedRock,
             postCombatRelicHeal,
+            teammateForecastStates,
             carryRankingContext);
     }
 

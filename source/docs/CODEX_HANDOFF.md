@@ -24,16 +24,19 @@
   `source/tools/multiplayer-lab/MultiplayerTestTools/TheBookOfAges`
   固定上游 commit `234a74ccbaf46d7e385ed318c64857f1f7a90cae`。它不进入 CombatSolver 正式构建/发布。
 - 2026-09-22 同构 GM Console 实机 Smoke 已通过：Host/Client 加载同一 DLL/PCK 与 BaseLib 构建，进入同一战斗且没有 game-data mismatch；Host 和 Client 各发起一次 `energy 1` 并在两端执行，Host 发放并实际打出原生 `CARD.TANK`，owner 为 Host player 1、无目标，动作在两端结算并生成 checksum。摘要见 `docs/multiplayer/evidence/gm-console-multiplayer-smoke-2026-09-22.json`。Client 反向打出本轮按用户要求未执行。
-- MultiplayerOnly 卡现在统一为**搜索/推荐可见、玩家手动出牌**：Safe Execute 不再自动打任何 MultiplayerOnly 卡；遇到多人牌时停止自动前缀但保留 Safe Auto，等待玩家手动完成原生目标选择与出牌，状态变化后再 Fresh Search。此前已验证的 Beacon of Hope、Flanking、Gang Up、Knockdown、Sneaky、Lift、Rally、Mimic、Coordinate 仍保留预测语义，但不再进入自动执行。
+- MultiplayerOnly 卡统一为**搜索/推荐可见、玩家手动出牌**：Safe Execute 不自动打任何 MultiplayerOnly 卡，包括 Lift；路线遇到多人牌时停止自动前缀但保留 Safe Auto，等待玩家使用游戏原生目标选择手动出牌，状态变化后立即 Fresh Search。删除/停止继续发展 LIFT 等多人牌的跨玩家自动执行白名单。
 - `AnyAlly` 空目标问题已从目标生成层修正，并补齐相同根因的 `AnyPlayer` 分支；卡牌/药水的玩家目标枚举使用预测态目标解析，不靠部署期判空或异常兜底。`RootActionPlayers` 仍只包含本地玩家。
 - 单人搜索算法向多人本地跨回合模式的第一批迁移已落地：`SinglePlayerFullRoute` 与 `MultiplayerLocalCrossTurn` 现在共用 full-search heuristics，因此 Novelty Portfolio、成长预算、遗物目标、成长机会目标和长期收益评估不再因多人能力表中的 `CanCrossTurnSearch=false` 被关闭；`MultiplayerCurrentTurnOnly` 仍保持精简。执行权限、队友动作、共享 Shuffle RNG 边界和多人牌手动出牌规则均未放宽。
 - 问题包 `25b905c1322b41e6b9a8e10baeae5606` 复现 0 费 Anger 被遗漏：T2 手牌含 `ANGER(0)`，Solver 选择 Tremble→Dismantle→Strike→EndTurn，并在 Shuffle 边界形成 `PartialLocalCrossTurnProjection`。已修正多人未完成路线的最终排序：确定的 Enemy HP 进展现在先于 Anger copy 长期惩罚；单人和完整胜利路线保持原排序。
+- 多人新基线改为“完整联合战斗预测 + 滚动重规划”：旧的 partial-route/Carry 补丁仅作为历史兼容层，不再作为目标架构。第一阶段已把预测根中现有的完整队友状态正式暴露为 `TeammateForecastStates`，包含 Hand/Draw/Discard/Exhaust/Play 的有序语义快照、Energy/Stars、HP/Block、Phase、Turn、Orbs；Root capture 同时逐玩家核对 live 与 detached prediction 的五牌堆顺序、资源和 Orb 状态。执行权限没有变化，`RootActionPlayers` 仍只有本地玩家。
+- 多人牌 UI 计划改为**抽牌距离窗口**，不再承担“预测/自动执行多人牌”的含义：只读取本地玩家当前有序 DrawPile，列出 MultiplayerOnly 卡距离牌堆顶的位置。显示规则使用 1-based 抽牌数：牌堆顶的多人牌显示“再抽 1 张”，下一张显示“再抽 2 张”；已在手牌显示“已在手牌”。每次实际抽牌、插牌、洗牌或 Fresh Search 后重新计算；发生洗牌边界或目标牌当前不在 DrawPile 时不伪造精确距离。该窗口不预测队友未来动作，也不授予任何多人牌自动执行权限。
+- 新增多人专用“多人路线目标”设置：`MinimizeTeamLoss` 与默认 `AdaptiveLethalTempo`。动态斩杀按当前 root 的敌方总有效耐久判断，≤35% 时启用战损/回合联合排序，每提前 1 回合可抵消 5% 战损比；>35% 时仍按最低战损优先。Snapshot 现在从所有 captured players 的 `GetCumulativeHpLost` 精确计算 `TeamLossRatio`、`WorstPlayerLossRatio`、`AllPlayersAlive`；分母通过 `CombatRootSnapshot.CapturedPlayerMaxHp` 只读取 root 冻结值（本地 `InitialPlayerMaxHp` / 队友 forecast MaxHp），后台搜索不再触碰 live Creature MaxHP。多人完整胜利路线已按这些团队指标排序；动态斩杀也已改用真实 TeamLossRatio。单人排序不读取这些团队键。
 
 ## 当前未完成
 
-1. 继续把剩余单人搜索能力迁到多人本地跨回合模式，优先审计药水推荐、回合开始选择/选择题和仍由 session capability 关闭的搜索质量入口；只迁搜索/推荐，不扩大多人自动执行。
-2. 多人团队价值评分尚未补齐；队友格挡、力量、能量等公开收益仍可能被低估。
-3. 继续审计 Tag Team、Tank 等复杂多人牌；MultiplayerOnly 继续由玩家手动出牌。
+1. `ShadowTeammatePlanner` 已从单队友 Top-K 扩为 Team Top-K：队友按 NetId 依次在同一预测世界上模拟，每处理完一个队友就按 EnemyDurability / TeamEffectiveHp / WorstPlayerEffectiveHpRatio / TeamEnergy / TeamStars / 动作数重新取 Pareto 前沿并压回全局 beam=4，因此不会形成 K^N 笛卡尔爆炸。强制结束自己出牌的 shadow 卡只结束该队友分支，切换到下一队友前会消费 prediction-only end request；所有候选仍只存在于 simulator fork，不生成 `PlanAction`。每条 Shadow route 现在还携带独立 `ProcessedEnemyDeaths`，每次卡牌分叉复制并更新，避免跨 Shadow 动作丢失敌人死亡生命周期状态；接主搜索时可直接从 parent snapshot 的集合初始化。
+2. Joint EndTurn 主接线已落地，并补齐精确回放：每个 Joint EndTurn 都携带非执行的 `ShadowForecastPlan`，记录本次选中世界线的队友动作；即使队友 0-action，非 null metadata 也明确表示 Joint 世界。搜索/最终注释回放会按记录的 PlayerNetId + HandIndex + SemanticKey + TargetCombatId 在 detached simulator 中重放，再走全队 End → Enemy Side → 全队 Start；不重新跑 Top-K 猜一次。Deployment 不读取此字段，真实执行权限仍只有本地 EndTurn/本地牌。
+3. Team-Safety 中途保路已接入；Joint continuation 已保存“该预测节点”的队友语义指纹，不再错误复用搜索 root 的旧队友指纹。live/predicted 共用 MultiplayerContinuationRemoteFingerprint，覆盖队友 HP/Block/Gold、Turn/Phase/Energy/Stars、五牌堆语义、Orb、药水、遗物及遗物预测状态；Power 继续由 ContinuationStamp 的全局 Power 校验负责。Root capture 会直接校验 live/predicted 队友指纹一致。下一回合只有真实队友状态与 Shadow 世界一致才可 continuation reuse；任何可读语义偏离仍因 CanSoftReuseRemotePublicDelta=false 强制 Fresh Search。2026-09-22 又修正了一个生命周期问题：历史 EndTurn 节点的 simulator 会在最终 materialization 前主动释放，因此队友 continuation fingerprint 现在与 ContinuationStamp 一样，在节点存活时冻结到 SimulationSnapshot；fallback 则用同一次 replay simulator 同时生成 stamp + remote fingerprint，BuildContinuations 不再读取历史 node.Snapshot.Simulator。新增 MultiplayerContinuationLifecycleChecks，CI 已确认 26 PASS / 0 FAIL。下一步只做本地 Release Build，再做 Joint continuation 的 Reuse + Mismatch 两个最小 runtime smoke；直接按 `docs/multiplayer/NEXT_LOCAL_JOINT_CONTINUATION_SMOKE.md` 执行。
 
 ## 当前开发 / 性能规则
 

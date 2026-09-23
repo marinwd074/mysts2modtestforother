@@ -25,6 +25,7 @@ internal enum SearchReason
     Deploy,
     FullAuto,
     DeploymentDrift,
+    CrossPlayerBoundary,
     PlanExhausted,
 }
 
@@ -35,6 +36,7 @@ internal enum ReplanCause
     ManualDivergence,
     ContinuationMissing,
     DeploymentDrift,
+    CrossPlayerBoundary,
     PlanExhausted,
     ExplicitRequest,
 }
@@ -482,6 +484,10 @@ internal static partial class SolverController
             Interaction = interaction,
             RoutePolicy = routePolicy,
             CurrentTurnOnly = MultiplayerLocalCrossTurnContracts.IsCurrentTurnOnly(routePolicy),
+            MultiplayerCombatObjectiveStrategy = settings.MultiplayerCombatObjectiveStrategy,
+            MultiplayerEnemyDurabilityRatio = capabilities.IsMultiplayer
+                ? MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(state.Enemies)
+                : 1d,
             UseNoveltyPortfolio = (settings.UseNoveltyPortfolio
                 || UnattendedTestRunner.UseNoveltyPortfolioOverride)
                 && useFullSearchHeuristics,
@@ -1289,6 +1295,13 @@ internal static partial class SolverController
                     {
                         Entry.Logger.Info(
                             $"[CombatSolver/MultiplayerSafeExecute] MP2B_WORLD_CHANGED " +
+                            $"timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
+                            $"world_version={MultiplayerWorldTracker.WorldVersion} " +
+                            $"reason={MultiplayerWorldTracker.LastReason} " +
+                            $"session_state={_deployment?.SafeExecutionSession?.State.ToString() ?? "-"}");
+                        Entry.Logger.Info(
+                            $"[LIFT-DIAG] WORLD_VERSION_CHANGE " +
+                            $"timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
                             $"world_version={MultiplayerWorldTracker.WorldVersion} " +
                             $"reason={MultiplayerWorldTracker.LastReason} " +
                             $"session_state={_deployment?.SafeExecutionSession?.State.ToString() ?? "-"}");
@@ -1325,9 +1338,6 @@ internal static partial class SolverController
             _multiplayerInertSessionObserved = false;
         }
 
-        if (!capabilities.CanSearch)
-            return;
-
         if (_combat.State != null && !ReferenceEquals(current, _combat.State))
         {
             BeginCombat(current);
@@ -1349,9 +1359,16 @@ internal static partial class SolverController
                 SolverOverlay.ShowSearchStopped(host);
             else if (!AutomaticCalculationEnabled || !UnattendedTestRunner.AutomaticTurnSearchEnabled)
                 SolverOverlay.ShowManualCalculationReady(host, HasCalculatedThisCombat);
+            else if (!capabilities.CanSearch)
+                SolverOverlay.Show(
+                    host,
+                    SolverText.Get("多人精简模式：当前仅记录只读状态，未启用多人搜索。"));
             else if (!capabilities.IsMultiplayer && CanSolve(current, out _))
                 RequestSearch(host, current, SearchReason.AutoTurnStart);
         }
+
+        if (!capabilities.CanSearch)
+            return;
 
         if (capabilities.IsMultiplayer)
             TryScheduleMultiplayerSearch(host: NGame.Instance, current);
@@ -1359,6 +1376,12 @@ internal static partial class SolverController
 
     private static void InvalidateMultiplayerSearch(CombatState state)
     {
+        Entry.Logger.Info(
+            $"[LIFT-DIAG] INVALIDATE_MULTIPLAYER_SEARCH " +
+            $"timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
+            $"world_version={MultiplayerWorldTracker.WorldVersion} " +
+            $"reason={MultiplayerWorldTracker.LastReason} " +
+            $"session_state={_deployment?.SafeExecutionSession?.State.ToString() ?? "-"}");
         CancelMultiplayerDebouncedSearch();
         CancelDeferredSearch();
         CancelSearch();
@@ -1426,6 +1449,7 @@ internal static partial class SolverController
             : "[CombatSolver/MultiplayerAdvisor] WORLD_INVALIDATED";
         Entry.Logger.Info(
             $"{invalidationPrefix} " +
+            $"timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
             $"world_version={MultiplayerWorldTracker.WorldVersion} " +
             $"reason={MultiplayerWorldTracker.LastReason} " +
             $"turn={LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0} " +

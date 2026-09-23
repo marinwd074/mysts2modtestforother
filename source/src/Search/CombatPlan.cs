@@ -128,6 +128,12 @@ internal sealed record PlanRelicEffect(
     string RelicTitle,
     string Summary);
 
+/// <summary>
+/// Forecast-only metadata for multiplayer EndTurn replay. Deployment never executes these actions.
+/// </summary>
+internal sealed record ShadowForecastPlan(
+    IReadOnlyList<ShadowTeammateActionCandidate> Actions);
+
 internal sealed record PlanAction(
     PlanActionKind Kind,
     int Turn,
@@ -150,7 +156,8 @@ internal sealed record PlanAction(
     int CardStateOccurrence = 0,
     bool EndsPlayerTurn = false,
     int CardUpgradeLevel = 0,
-    string CardEnchantmentId = "")
+    string CardEnchantmentId = "",
+    ShadowForecastPlan? ShadowForecast = null)
 {
     public bool IsExecutable => Kind is PlanActionKind.PlayCard or PlanActionKind.UsePotion;
     public string ActionTitle => Kind == PlanActionKind.UsePotion ? PotionTitle : CardTitle;
@@ -1260,6 +1267,10 @@ internal sealed class SimulationSnapshot(
     public int DeathSaveHpRestored => DeathSaveRelicHpRestored + DeathSavePotionHpRestored;
     public int DeathSaveUseCount { get; init; }
     public int ProjectedDeathSaveUseCount { get; init; }
+    public bool AllPlayersAlive { get; init; } = true;
+    public int TeamCumulativeHpLost { get; init; }
+    public double TeamLossRatio { get; init; }
+    public double WorstPlayerLossRatio { get; init; }
 
     public int LongTermResourceValue { get; } = longTermResourceValue;
     public RelicCounterEvaluation RelicCounters { get; init; }
@@ -1334,6 +1345,7 @@ internal sealed class SimulationSnapshot(
     public SearchBoundaryReason BoundaryReason { get; } = boundaryReason;
     public IReadOnlyList<PredictionGap> PredictionGaps { get; } = predictionGaps;
     public ContinuationStamp? Continuation { get; private set; }
+    public StateFingerprint? ContinuationRemoteFingerprint { get; private set; }
 
     public CombatPredictionSimulator Simulator => _simulator
         ?? throw new InvalidOperationException(
@@ -1341,8 +1353,13 @@ internal sealed class SimulationSnapshot(
 
     public bool HasSimulator => _simulator != null;
 
-    public void SetContinuation(ContinuationStamp continuation)
-        => Continuation = continuation;
+    public void SetContinuation(
+        ContinuationStamp continuation,
+        StateFingerprint? remoteFingerprint = null)
+    {
+        Continuation = continuation;
+        ContinuationRemoteFingerprint = remoteFingerprint;
+    }
 
     public void ReleaseSimulator(
         [CallerMemberName] string caller = "",
@@ -1392,6 +1409,10 @@ internal sealed record SolverSnapshot(
     public int DeathSaveHpRestored => DeathSaveRelicHpRestored + DeathSavePotionHpRestored;
     public int DeathSaveUseCount { get; init; }
     public int ProjectedDeathSaveUseCount { get; init; }
+    public bool AllPlayersAlive { get; init; } = true;
+    public int TeamCumulativeHpLost { get; init; }
+    public double TeamLossRatio { get; init; }
+    public double WorstPlayerLossRatio { get; init; }
     public int? UnrecoveredGold { get; init; }
     public int? UnrecoveredCards { get; init; }
     public RelicCounterEvaluation RelicCounters { get; init; }

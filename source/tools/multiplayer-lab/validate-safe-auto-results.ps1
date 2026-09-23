@@ -158,11 +158,33 @@ if ($enabled.Count -eq 0) {
                 $_.Text -match 'MP_REACTIVE_FRESH_SEARCH\b.*after_safe_end_turn=true' -and
                 $_.Text -match ('previous_end_turn_request_id=' + [regex]::Escape([string]$request) + '\b')
             } | Select-Object -First 1)
+        $nextTurn = $turn + 1
+        $searchReuse = @($records | Where-Object {
+                $_.Index -gt $end.Index -and
+                $_.Text -match '\[CombatSolver/Test\] SEARCH_REUSED\b' -and
+                $_.Text -match ('turn=' + [regex]::Escape([string]$nextTurn) + '\b') -and
+                $_.Text -match '\bold_authorization_dead=true\b' -and
+                $_.Text -match '\bnew_authorization_pending=true\b'
+            } | Select-Object -First 1)
+        $continuationReuse = @($records | Where-Object {
+                $_.Index -gt $end.Index -and
+                $_.Text -match '\[CombatSolver/Test\] MP_LOCAL_XTURN_CONTINUATION_REUSED\b' -and
+                $_.Text -match ('turn=' + [regex]::Escape([string]$nextTurn) + '\b') -and
+                $_.Text -match '\blocal_state_exact=true\b' -and
+                $_.Text -match '\breason=exact\b'
+            } | Select-Object -First 1)
 
         if ($revalidated.Count -ne 1) { $missing.Add("request=$request missing safe end-turn revalidation") }
         if ($nativeEnd.Count -ne 1) { $missing.Add("request=$request missing native EndPlayerTurnAction") }
         if ($freshBoundary.Count -ne 1) { $missing.Add("request=$request missing fresh Probe/capture boundary") }
-        if ($freshSearch.Count -ne 1) { $missing.Add("request=$request missing fresh search") }
+
+        $hasFresh = $freshSearch.Count -eq 1
+        $hasExactReuse = $searchReuse.Count -eq 1 -and $continuationReuse.Count -eq 1
+        if ($hasFresh -and $hasExactReuse) {
+            $missing.Add("request=$request has both fresh search and exact continuation reuse")
+        } elseif (-not $hasFresh -and -not $hasExactReuse) {
+            $missing.Add("request=$request missing safe next-plan path")
+        }
 
         if ($freshSearch.Count -eq 1) {
             $oldReuse = @($records | Where-Object {
@@ -176,7 +198,11 @@ if ($enabled.Count -eq 0) {
         }
 
         if ($freshBoundary.Count -eq 1) { $boundaryEvidence.Add($freshBoundary[0]) }
-        if ($freshSearch.Count -eq 1) { $boundaryEvidence.Add($freshSearch[0]) }
+        if ($freshSearch.Count -eq 1) {
+            $boundaryEvidence.Add($freshSearch[0])
+        } elseif ($hasExactReuse) {
+            $boundaryEvidence.Add($continuationReuse[0])
+        }
     }
 
     if ($selected.Count -ge $MinLocalTurns -and $armedEvidence.Count -eq $MinLocalTurns) {
@@ -249,7 +275,7 @@ $result = [ordered]@{
     checks = @($checks)
     limitations = @(
         'This validator proves journal ordering and Safe Auto authorization; it does not replace human confirmation of Host/Client identity and visible game behavior.',
-        'Potion, Choice, teammate-target, and multiplayer-only-card stop behavior requires a separate targeted runtime fixture if those boundaries are to be promoted beyond contract coverage.'
+        'Exact Joint continuation reuse is accepted only when SEARCH_REUSED creates a new authorization and MP_LOCAL_XTURN_CONTINUATION_REUSED reports local_state_exact=true reason=exact; otherwise Safe Auto must fresh-search.'
     )
 }
 

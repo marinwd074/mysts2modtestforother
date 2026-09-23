@@ -106,14 +106,13 @@ internal sealed partial class CombatPredictionSimulator
         using PredictionForkContext context = new();
         PredictionTrace trace = new();
         CombatPredictionState state = State.Fork(context);
+        // A suspended manual choice can outlive ordinary pile membership for its
+        // actively executing card. Reuse the execution-continuation preparation
+        // contract so the PredictedCard, its preview CardModel, and CardPlay are
+        // all registered in the same fork context before history/state-store fork.
+        PrepareExecutionCardPlay(source.Card, source.Play, context);
         PredictedCard card = context.RequireRemap(source.Card);
-        CardPlay play = new()
-        {
-            Card = card.MutablePreview, Target = source.Play.Target,
-            ResultPile = source.Play.ResultPile, Resources = source.Play.Resources,
-            IsAutoPlay = source.Play.IsAutoPlay, PlayIndex = source.Play.PlayIndex, PlayCount = source.Play.PlayCount,
-        };
-        context.Register(source.Play, play);
+        CardPlay play = context.RequireRemap(source.Play);
         PredictionTraceFrame action = new() { Source = source.Trace.Source,
             Invocation = source.Trace.Invocation, Parent = null };
         context.Register(source.Trace, action);

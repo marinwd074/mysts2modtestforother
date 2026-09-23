@@ -22,8 +22,23 @@ namespace CombatSolver;
 internal static class PredictionModPatchAudit
 {
     private static readonly string[] IncompatibleModIds = ["WheelchairSpire", "PengoTarot", "BetterCharacterRelics"];
+    private static readonly MultiplayerNeutralOnPlayPatch[] MultiplayerNeutralOnPlayPatches =
+    [
+        new(
+            "TheBookOfAges",
+            "TheBookOfAges.TheBookOfAgesCode.Patches.ChronicleHandLimitPillagePatch",
+            "MegaCrit.Sts2.Core.Models.Cards.Pillage"),
+        new(
+            "TheBookOfAges",
+            "TheBookOfAges.TheBookOfAgesCode.Patches.ChronicleHandLimitScrawlPatch",
+            "MegaCrit.Sts2.Core.Models.Cards.Scrawl"),
+    ];
 
     internal readonly record struct ForeignPatch(string ModId, string ModName, string Description);
+    private readonly record struct MultiplayerNeutralOnPlayPatch(
+        string Owner,
+        string PatchType,
+        string TargetType);
 
     /// <summary>
     /// Throws when any card reachable from the captured root has a third-party patch on its mirrored OnPlay.
@@ -35,7 +50,9 @@ internal static class PredictionModPatchAudit
     public static void ValidateCardOnPlay(IEnumerable<CardModel> cards)
         => CaptureCardOnPlay(cards);
 
-    internal static AdaptedOnPlaySnapshot? CaptureCardOnPlay(IEnumerable<CardModel> cards)
+    internal static AdaptedOnPlaySnapshot? CaptureCardOnPlay(
+        IEnumerable<CardModel> cards,
+        bool isMultiplayer = false)
     {
         ValidateLoadedMods(ModManager.GetLoadedMods());
         bool adapted = AdaptedCardOnPlayMirrors.Seal();
@@ -49,7 +66,7 @@ internal static class PredictionModPatchAudit
                 continue;
 
             AdaptedCardOnPlayMirrors.Registration? selected =
-                AuditCardOnPlay(type, adapted, out ForeignPatch? firstForeign);
+                AuditCardOnPlay(type, adapted, isMultiplayer, out ForeignPatch? firstForeign);
             if (selected is null && firstForeign is { } unsupported)
             {
                 throw new IncompatibleGameplayModException(
@@ -73,7 +90,11 @@ internal static class PredictionModPatchAudit
             try
             {
                 AdaptedCardOnPlayMirrors.Registration? selected =
-                    AuditCardOnPlay(type, adapted: true, out ForeignPatch? firstForeign);
+                    AuditCardOnPlay(
+                        type,
+                        adapted: true,
+                        isMultiplayer: isMultiplayer,
+                        out ForeignPatch? firstForeign);
                 if (selected is null && firstForeign is { } unsupported)
                 {
                     deferredFailures.Add(
@@ -102,6 +123,7 @@ internal static class PredictionModPatchAudit
     internal static AdaptedCardOnPlayMirrors.Registration? AuditCardOnPlay(
         Type type,
         bool adapted,
+        bool isMultiplayer,
         out ForeignPatch? firstForeign)
     {
         MethodInfo target = AdaptedCardOnPlayMirrors.ResolveOnPlay(type)
@@ -115,7 +137,7 @@ internal static class PredictionModPatchAudit
                 foreach (Patch patch in group.Patches)
                 {
                     // Resolve every source even when the full composition has an adapter.
-                    ForeignPatch? foreign = TryDescribeForeignPatch(patch, target);
+                    ForeignPatch? foreign = TryDescribeForeignPatch(patch, target, isMultiplayer);
                     firstForeign ??= foreign;
                 }
             }
@@ -149,12 +171,22 @@ internal static class PredictionModPatchAudit
         }
     }
 
-    private static ForeignPatch? TryDescribeForeignPatch(Patch patch, MethodInfo target)
+    private static ForeignPatch? TryDescribeForeignPatch(
+        Patch patch,
+        MethodInfo target,
+        bool isMultiplayer)
     {
         Type? patchType = patch.PatchMethod.DeclaringType;
         if (patchType == null)
             throw new PredictionUnsupportedException(
                 $"Unknown Harmony patch {patch.PatchMethod} (owner={patch.owner}) on {target}.");
+
+        // The pinned test-only TheBookOfAges GM console installs its Chronicle hand-limit
+        // prefixes at process startup, but both prefixes return true in network multiplayer
+        // because that Chronicle feature is explicitly disabled there. Keep this exception
+        // exact and multiplayer-only; arbitrary third-party OnPlay patches remain unsupported.
+        if (isMultiplayer && IsKnownMultiplayerNeutralOnPlayPatch(patch, patchType, target))
+            return null;
 
 #if !STS2_01071
         var mod = AssemblyInfo.ModForType(patchType, out bool isBaseGame);
@@ -187,5 +219,29 @@ internal static class PredictionModPatchAudit
             $"Unknown third-party Harmony patch {patchType.FullName}.{patch.PatchMethod.Name} "
             + $"(owner={patch.owner}) on mirrored {target.DeclaringType?.FullName}.{target.Name}.");
 #endif
+    }
+
+    private static bool IsKnownMultiplayerNeutralOnPlayPatch(
+        Patch patch,
+        Type patchType,
+        MethodInfo target)
+    {
+        if (!string.Equals(patch.owner, "TheBookOfAges", StringComparison.Ordinal)
+            || !string.Equals(patch.PatchMethod.Name, "Prefix", StringComparison.Ordinal)
+            || !string.Equals(
+                patchType.Assembly.GetName().Name,
+                "TheBookOfAges",
+                StringComparison.Ordinal)
+            || !string.Equals(target.Name, "OnPlay", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string? patchTypeName = patchType.FullName;
+        string? targetTypeName = target.DeclaringType?.FullName;
+        return MultiplayerNeutralOnPlayPatches.Any(candidate =>
+            string.Equals(candidate.Owner, patch.owner, StringComparison.Ordinal)
+            && string.Equals(candidate.PatchType, patchTypeName, StringComparison.Ordinal)
+            && string.Equals(candidate.TargetType, targetTypeName, StringComparison.Ordinal));
     }
 }

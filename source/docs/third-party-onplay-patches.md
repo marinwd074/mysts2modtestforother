@@ -21,6 +21,13 @@ AdaptedCardOnPlayMirrors.Register<MyCard>(
 
 `DescribeRegisteredCompositions()` 提供条件签名及标准 `MethodMirrorRegistryDescriptor`，无需反射私有表。条件支持不写成原版 CoverageCatalog 的无条件覆盖；当前没有内置第三方适配声明。
 
+当前 `0.107.1` Multiplayer Lab 有一个明确、封闭的多人惰性例外：固定版本的
+`TheBookOfAges` 测试 Mod 会在进程启动时安装 `ChronicleHandLimitPillagePatch` 和
+`ChronicleHandLimitScrawlPatch`，但这两个 Prefix 在网络多人模式直接返回原逻辑（该 Mod 的
+Chronicle 功能本身不支持多人）。根审计只在显式多人捕获、精确 owner / 类型 / 目标方法全部匹配时
+忽略这两个补丁；单人捕获仍按未知玩法补丁拒绝。这个例外不是按 Mod ID 放行，也不适用于其他
+TheBookOfAges 补丁或其他第三方 OnPlay 补丁。
+
 ## 根、Fork 与旧路线
 
 `PredictionModHookSubscriberCapture` 拥有根内选择表，`SimulatedCombatState` 的 Fork 只共享不可变选择和配置标记。worker 每次 OnPlay 只查表，不扫描 Harmony，也不调用原生补丁。启用登记后，首次根审计未见过的卡牌类型即使后来生成也明确失败；下一次捕获可重新审计。

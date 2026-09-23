@@ -102,13 +102,21 @@ internal sealed partial class CombatBeamSolver
             ? []
             : [new PredictionGap("TEST", nextRiskMethod, "risk", false)];
         TranspositionLabel first = new(
-            0, 0, 0, 0, 1, 10, firstTraits, firstHasNonPotionAction,
-            firstBoundary, firstPlayerDead, firstAllEnemiesDead, firstGaps,
-            new CombatProgressState(firstProgress));
+            0, 0, 0, 0,
+            AllPlayersAlive: true, TeamLossRatio: 0, WorstPlayerLossRatio: 0,
+            ActionCount: 1, Score: 10, Traits: firstTraits,
+            HasNonPotionAction: firstHasNonPotionAction,
+            BoundaryReason: firstBoundary, PlayerDead: firstPlayerDead,
+            AllEnemiesDead: firstAllEnemiesDead, PredictionGaps: firstGaps,
+            CombatProgress: new CombatProgressState(firstProgress));
         TranspositionLabel next = new(
-            0, 0, 0, 0, 1, 10, nextTraits, nextHasNonPotionAction,
-            nextBoundary, nextPlayerDead, nextAllEnemiesDead, nextGaps,
-            new CombatProgressState(nextProgress));
+            0, 0, 0, 0,
+            AllPlayersAlive: true, TeamLossRatio: 0, WorstPlayerLossRatio: 0,
+            ActionCount: 1, Score: 10, Traits: nextTraits,
+            HasNonPotionAction: nextHasNonPotionAction,
+            BoundaryReason: nextBoundary, PlayerDead: nextPlayerDead,
+            AllEnemiesDead: nextAllEnemiesDead, PredictionGaps: nextGaps,
+            CombatProgress: new CombatProgressState(nextProgress));
         return new TranspositionFrontier(first).TryAccept(next);
     }
 }

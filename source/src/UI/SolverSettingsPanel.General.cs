@@ -13,6 +13,7 @@ internal sealed partial class SolverSettingsPanel
     private CheckButton _stopOnWorseRecalculation = null!;
     private OptionButton _actTransitionBossHpStrategy = null!;
     private OptionButton _finalBossHpStrategy = null!;
+    private OptionButton _multiplayerCombatObjective = null!;
     private LineEdit _acceptableBattleHpLoss = null!;
     private OptionButton _searchCompletionNotificationPolicy = null!;
     private OptionButton _overlayTheme = null!;
@@ -229,6 +230,19 @@ internal sealed partial class SolverSettingsPanel
         AddSettingsSection(content, SolverText.Get("幕末 Boss"),
             SolverText.Get("分别设置幕末战斗的血量取舍，重新计算后生效。"), bossStrategyGrid);
 
+        GridContainer multiplayerObjectiveGrid = CreateSettingsGrid();
+        _multiplayerCombatObjective = CreateMultiplayerCombatObjectiveInput();
+        AddBasicRow(
+            multiplayerObjectiveGrid,
+            SolverText.Get("多人路线目标"),
+            _multiplayerCombatObjective,
+            SolverText.Get("仅多人搜索生效。最低团队战损始终优先保血；动态斩杀会在敌方总有效血量降到 35% 以下后，用提前结束回合数与战损比共同选路：每提前 1 回合最多容忍约 5% 的额外战损比。"));
+        AddSettingsSection(
+            content,
+            SolverText.Get("多人模式"),
+            SolverText.Get("多人专用的完整战斗路线目标；单人搜索不读取此设置。"),
+            multiplayerObjectiveGrid);
+
         GridContainer interfaceGrid = CreateSettingsGrid();
         _overlayTheme = CreateOverlayThemeInput();
         AddBasicRow(
@@ -316,6 +330,32 @@ internal sealed partial class SolverSettingsPanel
             SolverSettings.Update(write(SolverSettings.Current, strategy));
             SolverOverlay.RefreshBossHpStrategyHint();
             SetStatus(SolverText.Get("已保存，重新计算后生效"), SolverUiTokens.Palette.Success);
+        };
+        return input;
+    }
+
+    private OptionButton CreateMultiplayerCombatObjectiveInput()
+    {
+        OptionButton input = CreateOptionInput(260);
+        input.AddItem(
+            SolverText.Get("最低团队战损"),
+            (int)MultiplayerCombatObjectiveStrategy.MinimizeTeamLoss);
+        input.AddItem(
+            SolverText.Get("动态斩杀（推荐）"),
+            (int)MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo);
+        _reloadInputs.Add(data => input.Selected = input.GetItemIndex(
+            (int)data.MultiplayerCombatObjectiveStrategy));
+        input.ItemSelected += index =>
+        {
+            if (_loading)
+                return;
+            MultiplayerCombatObjectiveStrategy strategy =
+                (MultiplayerCombatObjectiveStrategy)input.GetItemId((int)index);
+            SolverSettings.Update(SolverSettings.Current with
+            {
+                MultiplayerCombatObjectiveStrategy = strategy,
+            });
+            SetStatus(SolverText.Get("多人路线目标已保存，重新计算后生效"), SolverUiTokens.Palette.Success);
         };
         return input;
     }

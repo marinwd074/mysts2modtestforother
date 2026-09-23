@@ -74,6 +74,17 @@ internal static partial class SolverController
 
     private static void StartDeployment(NGame host, CombatState state, SolverResult result)
     {
+        PlanAction? firstCurrentTurnAction = result.BestNode.Actions.FirstOrDefault(action =>
+            MultiplayerLocalCrossTurnContracts.IsCurrentTurnAction(action.Turn, result.StartTurnNumber)
+            && (action.IsExecutable || action.Kind == PlanActionKind.EndTurn));
+        bool isFirstLiftAction = firstCurrentTurnAction is { Kind: PlanActionKind.PlayCard }
+            && string.Equals(firstCurrentTurnAction.CardId, "LIFT", StringComparison.Ordinal);
+        if (isFirstLiftAction)
+        {
+            Entry.Logger.Info(
+                $"[LIFT-DIAG] DEPLOY_ENTER turn={result.StartTurnNumber} action_index=0 " +
+                $"target_combat_id={firstCurrentTurnAction!.TargetCombatId?.ToString() ?? "-"}");
+        }
         SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
         if (!capabilities.CanDeploySimpleLocalActions)
         {
@@ -243,6 +254,9 @@ internal static partial class SolverController
             for (int actionIndex = 0; actionIndex < actions.Count; actionIndex++)
             {
                 PlanAction action = actions[actionIndex];
+                bool liftDiagnostic = actionIndex == 0
+                    && action.Kind == PlanActionKind.PlayCard
+                    && string.Equals(action.CardId, "LIFT", StringComparison.Ordinal);
                 token.ThrowIfCancellationRequested();
                 if (safeExecute && safeSession is null)
                     throw new InvalidOperationException("多人 Safe Execute 缺少活动执行会话。");
@@ -268,6 +282,14 @@ internal static partial class SolverController
 
                 Player player = LocalContext.GetMe(state)!;
                 Creature? target = state.GetCreature(action.TargetCombatId);
+                if (liftDiagnostic)
+                {
+                    Entry.Logger.Info(
+                        $"[LIFT-DIAG] TARGET_RESOLVE planned_combat_id={action.TargetCombatId?.ToString() ?? "-"} " +
+                        $"resolved={(target != null).ToString().ToLowerInvariant()} " +
+                        $"resolved_combat_id={target?.CombatId.ToString() ?? "-"} " +
+                        $"resolved_player_net_id={target?.Player?.NetId.ToString() ?? "-"}");
+                }
                 MultiplayerSafeExecutionBoundary? beforeBoundary = safeExecute
                     ? MultiplayerClientProbe.CaptureSafeExecutionBoundary(state)
                     : null;
@@ -392,11 +414,38 @@ internal static partial class SolverController
                 else
                 {
                     List<CardModel> hand = player.PlayerCombatState!.Hand.Cards.ToList();
-                    CardModel card = FindCardForDeployment(hand, action);
-                    playedCard = card;
-                    if (!card.CanPlayTargeting(target))
+                    CardModel card;
+                    try
                     {
-                        bool targetValid = card.IsValidTarget(target);
+                        card = FindCardForDeployment(hand, action);
+                    }
+                    catch (InvalidOperationException) when (liftDiagnostic)
+                    {
+                        Entry.Logger.Warn(
+                            $"[LIFT-DIAG] CARD_RESOLVE found=false card_id={action.CardId ?? "-"} " +
+                            $"occurrence={action.CardOccurrence} owner_net_id=-");
+                        throw;
+                    }
+                    playedCard = card;
+                    if (liftDiagnostic)
+                    {
+                        Entry.Logger.Info(
+                            $"[LIFT-DIAG] CARD_RESOLVE found=true card_id={card.Id.Entry} " +
+                            $"occurrence={action.CardOccurrence} owner_net_id={card.Owner?.NetId.ToString() ?? "-"}");
+                    }
+                    bool canPlayTargeting = card.CanPlayTargeting(target);
+                    bool? liftTargetValid = liftDiagnostic
+                        ? card.IsValidTarget(target)
+                        : null;
+                    if (liftDiagnostic)
+                    {
+                        Entry.Logger.Info(
+                            $"[LIFT-DIAG] CAN_PLAY is_valid_target={liftTargetValid!.Value.ToString().ToLowerInvariant()} " +
+                            $"can_play_targeting={canPlayTargeting.ToString().ToLowerInvariant()}");
+                    }
+                    if (!canPlayTargeting)
+                    {
+                        bool targetValid = liftTargetValid ?? card.IsValidTarget(target);
                         bool cardPlayable = card.CanPlay(out UnplayableReason reason, out AbstractModel? preventer);
                         if (safeExecute)
                         {
@@ -419,15 +468,34 @@ internal static partial class SolverController
                             deployWhenReady: !_combat.FullAutoEnabled);
                         return;
                     }
-                    GameAction queuedAction = await EnqueueAndCaptureActionAsync(
-                        candidate => candidate is PlayCardAction playCard
-                            && ReferenceEquals(playCard.NetCombatCard.ToCardModelOrNull(), card),
-                        () =>
-                        {
-                            if (!card.TryManualPlay(target))
-                                throw new InvalidOperationException($"部署卡牌 {action.CardId} 在入队时失去可用状态。");
-                        },
-                        token);
+                    GameAction queuedAction;
+                    try
+                    {
+                        queuedAction = await EnqueueAndCaptureActionAsync(
+                            candidate => candidate is PlayCardAction playCard
+                                && ReferenceEquals(playCard.NetCombatCard.ToCardModelOrNull(), card),
+                            () =>
+                            {
+                                bool result = card.TryManualPlay(target);
+                                if (liftDiagnostic)
+                                {
+                                    Entry.Logger.Info(
+                                        $"[LIFT-DIAG] TRY_MANUAL_PLAY result={result.ToString().ToLowerInvariant()}");
+                                }
+                                if (!result)
+                                    throw new InvalidOperationException($"部署卡牌 {action.CardId} 在入队时失去可用状态。");
+                            },
+                            token,
+                            logLiftDiagnostics: liftDiagnostic);
+                    }
+                    catch (TimeoutException) when (liftDiagnostic)
+                    {
+                        if (safeExecute)
+                            AbortSafeExecution(host, deployment, turn, actionIndex, "capture_timeout");
+                        else
+                            CompleteDeployment(deployment);
+                        return;
+                    }
                     capturedAction = queuedAction;
                     actionCompletion = queuedAction.CompletionTask;
                     LastDeployedActionStartedAtMillisecondsForTesting = System.Environment.TickCount64;
@@ -437,6 +505,7 @@ internal static partial class SolverController
                     {
                         Entry.Logger.Info(
                             $"[CombatSolver/MultiplayerSafeExecute] NATIVE_ACTION_CAPTURED " +
+                            $"timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
                             $"request_id={safeSession?.RequestId ?? 0} action_index={actionIndex} " +
                             $"type={queuedAction.GetType().Name} turn={turn} card={action.CardId} " +
                             $"local_net_id={player.NetId} custom_network_api_used=false");
@@ -508,6 +577,7 @@ internal static partial class SolverController
                             action,
                             target,
                             state,
+                            liveSafety.EndsContinuation,
                             hasNextAction);
                     MultiplayerSafeActionRevalidationDecision decision =
                         MultiplayerSafeExecutePolicy.RevalidateAction(facts);
@@ -536,6 +606,41 @@ internal static partial class SolverController
                         return;
                     }
                     lastAcceptedBoundary = afterBoundary;
+                    if (liveSafety.EndsContinuation)
+                    {
+                        _combat.MultiplayerSafeExecuteDeploymentRequested = false;
+                        _combat.ContinuationSource = null;
+                        _combat.LatestResult = null;
+                        _combat.LatestStamp = null;
+                        InvalidateRenderedRouteAdoptionSeed();
+                        CompleteDeployment(deployment);
+                        SolverOverlay.ShowDeploymentComplete(
+                            host,
+                            turn,
+                            actionIndex + 1,
+                            endedTurn: false,
+                            completionMessage: "多人牌已执行，正在基于最新多人状态重新计算。");
+                        _combat.LastSolverDeployedTurn = turn;
+                        Entry.Logger.Info(
+                            $"[CombatSolver/MultiplayerSafeExecute] CROSS_PLAYER_BOUNDARY_REPLAN " +
+                            $"timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
+                            $"request_id={safeSession.RequestId} turn={turn} action_index={actionIndex} " +
+                            $"card={action.CardId} target={action.TargetCombatId?.ToString() ?? "-"} " +
+                            $"world_version={afterBoundary.WorldVersion}");
+                        if (CombatManager.Instance.IsInProgress
+                            && IsCurrentCombatLifecycle(
+                                state,
+                                Volatile.Read(ref _combatLifecycleGeneration))
+                            && CanSolve(state, out _))
+                        {
+                            RequestSearch(
+                                host,
+                                state,
+                                SearchReason.CrossPlayerBoundary,
+                                deployWhenReady: _combat.MultiplayerSafeAutoEnabled);
+                        }
+                        return;
+                    }
                     if ((!hasNextAction || safeSession.State == MultiplayerSafeExecutionState.Completed)
                         && plannedEndTurn == null)
                     {
@@ -1051,6 +1156,7 @@ internal static partial class SolverController
         PlanAction action,
         Creature? expectedTarget,
         CombatState state,
+        bool expectedRemotePublicMutation,
         bool hasNextAction)
     {
         PlayerCombatState? liveCombat = player.PlayerCombatState;
@@ -1084,6 +1190,7 @@ internal static partial class SolverController
             EnergyStateConsistent: energyConsistent && starsConsistent,
             TargetIdentityStable: targetStable,
             RemotePublicStateUnchanged: before.RemotePublicFingerprint == after.RemotePublicFingerprint,
+            ExpectedRemotePublicMutation: expectedRemotePublicMutation,
             EnemyStateMatchesExpectedTarget: EnemyStateMatchesExpectedTarget(
                 before.Enemies,
                 after.Enemies,
@@ -1297,12 +1404,31 @@ internal static partial class SolverController
     internal static async Task<GameAction> EnqueueAndCaptureActionAsync(
         Func<GameAction, bool> matches,
         Action enqueue,
-        CancellationToken token)
+        CancellationToken token,
+        bool logLiftDiagnostics = false)
     {
         TaskCompletionSource<GameAction> captured = new(TaskCreationOptions.RunContinuationsAsynchronously);
         ActionExecutor executor = RunManager.Instance.ActionExecutor;
         void OnBeforeActionExecuted(GameAction action)
         {
+            if (logLiftDiagnostics && action is PlayCardAction playCard)
+            {
+                bool referenceEqual = matches(action);
+                CardModel? observedCard = playCard.NetCombatCard.ToCardModelOrNull();
+                Entry.Logger.Info(
+                    $"[LIFT-DIAG] PLAYCARD_SEEN card={observedCard?.Id.Entry ?? playCard.CardModelId.Entry} " +
+                    $"target={playCard.Target?.CombatId.ToString() ?? "-"} " +
+                    $"reference_equal={referenceEqual.ToString().ToLowerInvariant()}");
+                if (referenceEqual)
+                {
+                    bool accepted = captured.TrySetResult(action);
+                    Entry.Logger.Info(
+                        $"[LIFT-DIAG] CAPTURE_SET_RESULT timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
+                        $"accepted={accepted.ToString().ToLowerInvariant()} " +
+                        $"token_requested={token.IsCancellationRequested.ToString().ToLowerInvariant()}");
+                }
+                return;
+            }
             if (matches(action))
                 captured.TrySetResult(action);
         }
@@ -1311,7 +1437,29 @@ internal static partial class SolverController
         try
         {
             enqueue();
-            return await captured.Task.WaitAsync(token);
+            if (!logLiftDiagnostics)
+                return await captured.Task.WaitAsync(token);
+            try
+            {
+                GameAction capturedAction = await captured.Task.WaitAsync(TimeSpan.FromSeconds(5), token);
+                Entry.Logger.Info(
+                    $"[LIFT-DIAG] CAPTURE_AWAIT_RETURNED timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
+                    $"type={capturedAction.GetType().Name} " +
+                    $"token_requested={token.IsCancellationRequested.ToString().ToLowerInvariant()}");
+                return capturedAction;
+            }
+            catch (TimeoutException)
+            {
+                Entry.Logger.Warn("[LIFT-DIAG] CAPTURE_TIMEOUT");
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                Entry.Logger.Warn(
+                    $"[LIFT-DIAG] CAPTURE_CANCELED timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
+                    $"token_requested={token.IsCancellationRequested.ToString().ToLowerInvariant()}");
+                throw;
+            }
         }
         finally
         {
@@ -1365,6 +1513,10 @@ internal static partial class SolverController
         _deployment = null;
         if (deployment == null)
             return;
+        Entry.Logger.Info(
+            $"[LIFT-DIAG] CANCEL_DEPLOYMENT timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
+            $"turn={deployment.StartTurnNumber} " +
+            $"session_state={deployment.SafeExecutionSession?.State.ToString() ?? "-"}");
         deployment.SafeExecutionSession?.Abort("deployment_cancelled");
         deployment.Cancellation.Cancel();
         QueueDeploymentReferenceRelease(deployment);
