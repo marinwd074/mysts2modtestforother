@@ -563,6 +563,22 @@ internal static partial class SolverController
                         AbortSafeExecution(host, deployment, turn, actionIndex, "world_unstable");
                         return;
                     }
+
+                    SafeExecutionPostActionComparison semanticComparison =
+                        CompareSafeExecutionPostAction(
+                            state,
+                            player,
+                            expectedPostAction
+                                ?? throw new InvalidOperationException(
+                                    "多人 Safe Execute 缺少 U1 预测后态。"));
+                    LogSafeExecutionPostActionComparison(
+                        safeSession!,
+                        turn,
+                        actionIndex,
+                        action,
+                        expectedPostAction!,
+                        semanticComparison);
+
                     if (!safeSession!.BeginRevalidation())
                     {
                         AbortSafeExecution(host, deployment, turn, actionIndex, "session_not_revalidating");
@@ -574,6 +590,7 @@ internal static partial class SolverController
                         BuildSafeActionRevalidationFacts(
                             beforeBoundary!,
                             afterBoundary,
+                            semanticComparison,
                             capturedAction,
                             playedCard,
                             player,
@@ -590,6 +607,11 @@ internal static partial class SolverController
                         $"[CombatSolver/MultiplayerSafeExecute] MP2B_ACTION_RECONCILED " +
                         $"request_id={safeSession!.RequestId} action_index={actionIndex} " +
                         $"card={action.CardId} decision={decision} reason={decisionReason} " +
+                        $"semantic_state_match={facts.ExpectedContinuationStateMatched.ToString().ToLowerInvariant()} " +
+                        $"semantic_remote_match={facts.ExpectedRemoteStateMatched.ToString().ToLowerInvariant()} " +
+                        $"legacy_local_card_removed={facts.LocalCardRemovedFromHand.ToString().ToLowerInvariant()} " +
+                        $"legacy_remote_unchanged={facts.RemotePublicStateUnchanged.ToString().ToLowerInvariant()} " +
+                        $"legacy_enemy_target_match={facts.EnemyStateMatchesExpectedTarget.ToString().ToLowerInvariant()} " +
                         $"before_world_version={beforeBoundary!.WorldVersion} " +
                         $"after_world_version={afterBoundary.WorldVersion} " +
                         $"observation_sequence={afterBoundary.ObservationSequence}");
@@ -1128,6 +1150,7 @@ internal static partial class SolverController
     private static MultiplayerSafeActionRevalidationFacts BuildSafeActionRevalidationFacts(
         MultiplayerSafeExecutionBoundary before,
         MultiplayerSafeExecutionBoundary after,
+        SafeExecutionPostActionComparison semanticComparison,
         GameAction? capturedAction,
         CardModel? playedCard,
         Player player,
@@ -1161,9 +1184,15 @@ internal static partial class SolverController
             && before.LocalTurn == after.LocalTurn
             && before.LocalPhase == after.LocalPhase;
 
+        ActionExecutor actionExecutor = RunManager.Instance.ActionExecutor;
+        bool actionQueueIdle = actionExecutor.CurrentlyRunningAction == null
+            && actionExecutor.FinishedExecutingActions().IsCompleted;
+
         return new(
             NativePlayCardCaptured: capturedAction is PlayCardAction,
-            ActionQueueIdle: true,
+            ActionQueueIdle: actionQueueIdle,
+            ExpectedContinuationStateMatched: semanticComparison.ContinuationMatched,
+            ExpectedRemoteStateMatched: semanticComparison.RemoteMatched,
             LocalCardRemovedFromHand: localCardRemoved,
             LocalPlayerIdentityStable: localIdentityStable,
             EnergyStateConsistent: energyConsistent && starsConsistent,
