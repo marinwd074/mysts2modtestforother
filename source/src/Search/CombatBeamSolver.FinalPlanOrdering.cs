@@ -851,6 +851,47 @@ internal sealed partial class CombatBeamSolver
                     $"loss_ratio_per_turn={MultiplayerCombatObjectiveMath.LossRatioPerTurn(multiplayerEnemyDurabilityRatio, selected[0].Snapshot.WorstPlayerLossRatio):0.0000} " +
                     $"max_loss_ratio_per_turn={MultiplayerCombatObjectiveMath.MaximumExtraLossRatioPerTurn:0.0000}");
             }
+            if (emitDiagnostics)
+            {
+                const int u0CandidateLimit = 8;
+                int visibleCandidateCount = Math.Min(selected.Count, u0CandidateLimit);
+                for (int index = 0; index < visibleCandidateCount; index++)
+                {
+                    var candidate = selected[index];
+                    diagnostics.Info(
+                        $"[CombatSolver/U0] FINAL_CANDIDATE " +
+                        $"rank={index + 1} total={selected.Count} " +
+                        $"route_policy={routePolicy} complete_victory={candidate.CompleteVictory.ToString().ToLowerInvariant()} " +
+                        $"state={candidate.Node.StateKey.First:X16}:{candidate.Node.StateKey.Second:X16} " +
+                        $"turn={candidate.Node.Turn} action_count={candidate.Node.ActionCount} " +
+                        $"enemy_hp={candidate.Features.EnemyHp} projected_hp={candidate.Features.ProjectedPlayerHp} " +
+                        $"team_loss={candidate.Snapshot.TeamLossRatio:0.0000} " +
+                        $"worst_player_loss={candidate.Snapshot.WorstPlayerLossRatio:0.0000} " +
+                        $"boundary={candidate.Features.BoundaryReason} " +
+                        $"actions={string.Join(',', candidate.Node.Actions.Select(CombatBeamSolver.PolicyActionToken))}");
+                }
+
+                if (selected.Count > visibleCandidateCount)
+                {
+                    diagnostics.Info(
+                        $"[CombatSolver/U0] FINAL_CANDIDATE_TRUNCATED " +
+                        $"shown={visibleCandidateCount} total={selected.Count}");
+                }
+
+                if (selected.Count > 0)
+                {
+                    var winner = selected[0];
+                    diagnostics.Info(
+                        $"[CombatSolver/U0] FINAL_SELECTION " +
+                        $"route_policy={routePolicy} state={winner.Node.StateKey.First:X16}:{winner.Node.StateKey.Second:X16} " +
+                        $"turn={winner.Node.Turn} action_count={winner.Node.ActionCount} " +
+                        $"complete_victory={winner.CompleteVictory.ToString().ToLowerInvariant()} " +
+                        $"scenario_rerank={scenarioReevaluationEnabled.ToString().ToLowerInvariant()} " +
+                        $"chance_rerank={chanceAggregationEnabled.ToString().ToLowerInvariant()} " +
+                        $"actions={string.Join(',', winner.Node.Actions.Select(CombatBeamSolver.PolicyActionToken))}");
+                }
+            }
+
             if (selected.Count == 0)
             {
                 throw new PotionPolicyUnsatisfiedException(
