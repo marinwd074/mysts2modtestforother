@@ -104,6 +104,9 @@ internal static partial class SolverController
                 action.Turn,
                 result.StartTurnNumber))
             .ToArray();
+        IReadOnlyList<PlanAction> preForecastTurnActions = plannedTurnActions
+            .TakeWhile(action => !action.IsForecastOnlyObservation)
+            .ToArray();
         int safeSessionActionCapacity = capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute
             ? MultiplayerSafeLocalActionClassifier.TakeBoundedDeploymentSlice(
                 state,
@@ -170,7 +173,7 @@ internal static partial class SolverController
         }
         else
         {
-            actionCount = plannedTurnActions.Count(action => action.IsExecutable);
+            actionCount = preForecastTurnActions.Count(action => action.IsExecutable);
         }
         deployment.SafeEndTurnAction = safeEndTurnAction;
         SolverOverlay.ShowDeploying(
@@ -179,7 +182,7 @@ internal static partial class SolverController
             actionCount,
             willEndTurn: safeEndTurnAction != null
                 || (capabilities.Kind != SolverSessionKind.MultiplayerSafeExecute
-                    && plannedTurnActions.Any(action => action.Kind == PlanActionKind.EndTurn)));
+                    && preForecastTurnActions.Any(action => action.Kind == PlanActionKind.EndTurn)));
         Task deploymentTask = DeployCurrentTurn(
             host,
             state,
@@ -214,6 +217,9 @@ internal static partial class SolverController
                 action.Turn,
                 turn))
             .ToArray();
+        IReadOnlyList<PlanAction> preForecastTurnActions = plannedTurnActions
+            .TakeWhile(action => !action.IsForecastOnlyObservation)
+            .ToArray();
         List<PlanAction> actions;
         SafeLocalActionDecision safeStop = SafeLocalActionDecision.Allow;
         MultiplayerSafeExecutionSession? safeSession = deployment.SafeExecutionSession;
@@ -233,13 +239,15 @@ internal static partial class SolverController
         }
         else
         {
-            actions = plannedTurnActions.Where(action => action.IsExecutable).ToList();
+            // Forecast-only teammate observations are hard deployment boundaries in every
+            // session kind. Never skip one and execute a contingent local suffix.
+            actions = preForecastTurnActions.Where(action => action.IsExecutable).ToList();
         }
         PlanAction? plannedEndTurn = safeExecute
             ? deployment.SafeEndTurnAction
             : !capabilities.CanEndTurnAutomatically
                 ? null
-                : plannedTurnActions.FirstOrDefault(action => action.Kind == PlanActionKind.EndTurn);
+                : preForecastTurnActions.FirstOrDefault(action => action.Kind == PlanActionKind.EndTurn);
         MultiplayerSafeExecutionBoundary? lastAcceptedBoundary = null;
         FastModeType originalFastMode = SaveManager.Instance.PrefsSave.FastMode;
         SolverDeploymentFastMode allowedFastMode = capabilities.CanUseFastDeployment
@@ -661,6 +669,19 @@ internal static partial class SolverController
                             $"search_world_version={deployment.WorldVersion} " +
                             $"last_accepted_world_version={safeSession.LastAcceptedWorldVersion} " +
                             $"automatic_end_turn=false custom_network_api_used=false");
+                        if (MultiplayerInterleaveOrderPolicy.IsForecastBoundaryReason(safeStop.Reason))
+                        {
+                            Entry.Logger.Info(
+                                $"[CombatSolver/Multiplayer] MP_U5_OBSERVE " +
+                                $"turn={turn} executed_actions={actionIndex + 1} " +
+                                "boundary=teammate_forecast proactive_wait=false timeout_ms=0 replan=true");
+                            _combat.ContinuationSource = null;
+                            RequestSearch(
+                                host,
+                                state,
+                                SearchReason.DeploymentDrift,
+                                deployWhenReady: false);
+                        }
                         return;
                     }
                 }
@@ -720,6 +741,19 @@ internal static partial class SolverController
                         $"search_world_version={deployment.WorldVersion} " +
                         $"last_accepted_world_version={safeSession?.LastAcceptedWorldVersion ?? 0} " +
                         "automatic_end_turn=false custom_network_api_used=false");
+                    if (MultiplayerInterleaveOrderPolicy.IsForecastBoundaryReason(safeStop.Reason))
+                    {
+                        Entry.Logger.Info(
+                            $"[CombatSolver/Multiplayer] MP_U5_OBSERVE " +
+                            $"turn={turn} executed_actions={actions.Count} " +
+                            "boundary=teammate_forecast proactive_wait=false timeout_ms=0 replan=true");
+                        _combat.ContinuationSource = null;
+                        RequestSearch(
+                            host,
+                            state,
+                            SearchReason.DeploymentDrift,
+                            deployWhenReady: false);
+                    }
                 }
                 else
                 {
