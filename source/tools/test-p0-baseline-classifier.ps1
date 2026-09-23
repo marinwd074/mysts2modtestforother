@@ -33,9 +33,13 @@ function Classify {
 }
 
 try {
-    $simulation = Classify @(
-        '{"Time":1,"Level":"info","Message":"[CombatSolver/Evidence] ROUTE_REPLAY {\\"schemaVersion\\":1,\\"firstScalarDifference\\":2,\\"actionCount\\":4}"}'
-    )
+    $simulationMessage = '[CombatSolver/Evidence] ROUTE_REPLAY {"schemaVersion":1,"firstScalarDifference":2,"actionCount":4}'
+    $simulationJsonLine = [pscustomobject]@{
+        Time = 1
+        Level = 'info'
+        Message = $simulationMessage
+    } | ConvertTo-Json -Compress
+    $simulation = Classify @($simulationJsonLine)
     Check ($simulation.primaryClassification -eq 'simulation_error') 'Replay scalar divergence classifies as simulation_error.'
 
     $searchMiss = Classify @(
