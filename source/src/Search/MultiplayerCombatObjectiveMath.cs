@@ -64,6 +64,11 @@ internal static class MultiplayerCombatObjectiveMath
                 worstPlayerLossRatio);
     }
 
+    internal static double InterimProgressCreditRate(double enemyDurabilityRatio)
+        => MaximumExtraLossRatioPerTurn
+            * ComputeLethalUrgency(enemyDurabilityRatio)
+            * 0.5d;
+
     internal static double InterimLossEquivalent(
         double teamLossRatio,
         double worstPlayerLossRatio,
@@ -71,9 +76,14 @@ internal static class MultiplayerCombatObjectiveMath
     {
         double remaining = Math.Clamp(enemyDurabilityRatio, 0d, 1d);
         double progress = 1d - remaining;
-        double progressCredit = progress * LossRatioPerTurn(
-            remaining,
-            worstPlayerLossRatio);
+
+        // U4: interim Beam progress is a search heuristic, not the terminal tempo price.
+        // It therefore uses the healthy baseline risk factor (0.5) instead of increasing
+        // credit when damage is concentrated on one fragile teammate. Worst-player loss
+        // remains an explicit later rank key, so fragility can only tie-break against a route,
+        // never make otherwise identical progress look cheaper.
+        _ = worstPlayerLossRatio;
+        double progressCredit = progress * InterimProgressCreditRate(remaining);
         return Math.Max(0d, teamLossRatio) - progressCredit;
     }
 
