@@ -1,6 +1,8 @@
-# Next local: Joint continuation smoke
+# P0 local: Joint continuation smoke
 
-只做本页。不要重新审计旧多人计划。
+这是 P0 的实机门禁。只做本页，不修改目标函数、Beam、Shadow 行为模型或搜索预算。
+
+基线与故障分类口径见 [`../P0_BASELINE.md`](../P0_BASELINE.md)。
 
 ## 1. Release Build
 
@@ -85,4 +87,14 @@ pwsh -NoLogo -NoProfile -File .\source\tools\multiplayer-lab\stop-owned-instance
   -InstanceRoot "$labRoot\runtime-mp-host"
 ~~~
 
-Reuse + Mismatch 都 PASS 后，Joint continuation runtime 阶段封口；再进入多人路线目标/战损-斩杀节奏优化。
+Reuse + Mismatch 都 PASS 后，再对两个结果日志运行 P0 分类器：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\source\tools\classify-p0-baseline-result.ps1 \
+  -LogPath '<reuse-log>','<mismatch-log>' \
+  -OutputPath '.\.local\multiplayer-lab\results\p0-classification.json'
+~~~
+
+预期至少能把 mismatch 样例识别为 `teammate_prediction_deviation`，且不能出现 `simulation_error`。
+
+两项 smoke 与分类均通过后，Joint continuation runtime 阶段封口并记录到 P0 基线；随后进入 P1 统一目标。不要继续重复同一 smoke，除非后续修改触及 continuation、root capture、Shadow replay 或 runtime deployment 边界。
