@@ -108,7 +108,8 @@ internal sealed partial class CombatBeamSolver
 
         private const int PersistentRoutingContextRounds = 8;
         private const int RoutingChoiceLimit = 96;
-        private const int FinalChanceCoverageLimit = 16;
+        // P3 final-only chance coverage is staged but disabled until P2 is closed.
+        private const int FinalChanceCoverageLimit = 0;
         private const int AmbiguousCompressedChoiceLimit = 48;
         private sealed record OrderedPileCohort(IReadOnlyList<SearchNode> PrefixVariants);
         private readonly record struct PocketwatchCadenceSignature(

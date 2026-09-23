@@ -1,6 +1,8 @@
 # P3 多人联合决策
 
-## P3A 已实现：最终 Chance Coverage
+> 预备实现已存在，但按阶段计划在 P2 期间保持禁用；P3 开始时再启用。
+
+## P3A 预备实现：最终 Chance Coverage
 
 目标：保证 P2 chance-node 在最终选择前不会因为普通 final-quality trimming 丢掉主要概率场景。
 

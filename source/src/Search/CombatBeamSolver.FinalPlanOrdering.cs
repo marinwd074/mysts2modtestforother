@@ -2,6 +2,9 @@ namespace CombatSolver;
 
 internal sealed partial class CombatBeamSolver
 {
+    // P3 is intentionally staged but disabled while P2 candidate-retention validation is active.
+    private const bool EnableMultiplayerChanceAggregation = false;
+
     private sealed class FinalPlanOrdering(
         SolverPotionPolicy potionPolicy,
         PotionStrategySnapshot potionStrategy,
@@ -488,7 +491,9 @@ internal sealed partial class CombatBeamSolver
 
             ChanceDecisionSummary? selectedChanceDecision = null;
             bool chanceAggregationEnabled = false;
-            if (useTeamObjective && selected.Count > 0)
+            if (EnableMultiplayerChanceAggregation
+                && useTeamObjective
+                && selected.Count > 0)
             {
                 Dictionary<SearchNode, int> baselineIndex =
                     new(ReferenceEqualityComparer.Instance);

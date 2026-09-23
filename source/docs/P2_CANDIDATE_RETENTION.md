@@ -35,3 +35,12 @@ P2 的目标是：**在相同搜索预算下，减少低战损、快斩杀、团
 - 单人路径不调用该多人专用 portfolio。
 
 本机搜索效果对比仍按 P0 记录暂缓；因此当前只能声明结构/合同完成，不能声称实战漏解率已经下降。
+
+## P2 阶段隔离
+
+P3 的 Shadow chance-node / final chance coverage 代码已经有预备实现，但在 P2 验证期间显式关闭：
+
+- `EnableMultiplayerChanceAggregation = false`;
+- `FinalChanceCoverageLimit = 0`.
+
+因此 P2 的行为变化只来自候选保留与剪枝语义收口，不会把多情景复评混入同预算比较。进入 P3 时再单独启用并验证。
