@@ -178,6 +178,7 @@ U0 时的 post-action gate 主要依赖：
 
 ### 已完成
 
+- GitHub `0.107.1 compatibility consistency`（代码基线 `2e403c46a22470fb62e1266fdb9ecb500816542a`）已通过：`static-consistency` SUCCESS；`MultiplayerSafeExecuteChecks` 59 PASS；`U1ActionPostStateChecks` PASS；总合同 `PASS: 30 / FAIL: 0 / SKIP: 0`。
 - U1 生产代码已接线；
 - 新 gate 已切到 production semantic replay；
 - pre-action remote race 已补 fresh probe；
