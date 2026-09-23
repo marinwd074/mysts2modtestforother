@@ -486,6 +486,7 @@ internal static partial class SolverController
             Interaction = interaction,
             RoutePolicy = routePolicy,
             CurrentTurnOnly = MultiplayerLocalCrossTurnContracts.IsCurrentTurnOnly(routePolicy),
+            UseMultiplayerTeamObjective = capabilities.IsMultiplayer,
             MultiplayerCombatObjectiveStrategy = settings.MultiplayerCombatObjectiveStrategy,
             MultiplayerEnemyDurabilityRatio = capabilities.IsMultiplayer
                 ? MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(state.Enemies)
