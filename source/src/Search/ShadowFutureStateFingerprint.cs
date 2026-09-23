@@ -24,10 +24,14 @@ internal static class ShadowFutureStateFingerprint
         StateFingerprintBuilder key = new();
 
         key.Add("shadow_future_v1");
+        key.Add(combat.RoundNumber);
         key.Add((int)combat.CurrentSide);
         key.Add(combat.PlayerTurnEndRequested);
         key.Add(simulator.IsInProgress);
         key.Add(simulator.TerminalStamp?.Outcome.ToString());
+        key.Add(simulator.ShuffleEventCount);
+        key.Add(simulator.History.Entries.Count);
+        key.Add(simulator.HasRisk);
 
         foreach (Player player in simulator.State.RootCapturedPlayers.OrderBy(player => player.NetId))
         {
@@ -43,6 +47,9 @@ internal static class ShadowFutureStateFingerprint
             key.Add((int)playerState.Phase);
             key.Add(playerState.Energy);
             key.Add(playerState.Stars);
+            key.Add(combat.GetPlayerGold(player));
+            key.Add(combat.GetCumulativeHpLost(player.Creature));
+            key.Add(combat.GetRecoveredHp(player.Creature));
             AppendPile(ref key, playerState.Hand, 'H');
             AppendPile(ref key, playerState.DrawPile, 'D');
             AppendPile(ref key, playerState.DiscardPile, 'C');
