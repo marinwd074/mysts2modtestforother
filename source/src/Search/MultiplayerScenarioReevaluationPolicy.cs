@@ -26,6 +26,24 @@ internal readonly record struct MultiplayerScenarioEvaluation(
     MultiplayerScenarioOutcome? Outcome,
     int? ExpandedBranches);
 
+internal sealed record MultiplayerScenarioDecisionEvaluation(
+    string DecisionKey,
+    IReadOnlyList<MultiplayerScenarioEvaluation> Scenarios)
+{
+    internal bool CompleteCoverage =>
+        Scenarios.Count == MultiplayerScenarioReevaluationPolicy.MaximumScenariosPerDecision
+        && Scenarios.All(evaluation =>
+            evaluation.Status != MultiplayerScenarioEvaluationStatus.Unknown
+            && evaluation.Outcome.HasValue)
+        && MultiplayerScenarioReevaluationPolicy.HasCompleteCoverage(
+            Scenarios
+                .Where(evaluation => evaluation.Status != MultiplayerScenarioEvaluationStatus.Unknown)
+                .Select(evaluation => evaluation.Spec.Kind));
+
+    internal int ExpandedBranches =>
+        Scenarios.Sum(evaluation => evaluation.ExpandedBranches ?? 0);
+}
+
 internal readonly record struct MultiplayerScenarioDecisionRank(
     int ScenarioCount,
     bool AllScenariosAlive,
