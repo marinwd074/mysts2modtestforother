@@ -428,10 +428,24 @@ internal static partial class SolverController
         SearchInteractionState? interaction = null)
     {
         SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
-        SolverPotionPolicy effectivePotionPolicy = capabilities.CanUsePotionsAutomatically
+        SearchRoutePolicy routePolicy = capabilities.Kind switch
+        {
+            SolverSessionKind.Singleplayer => SearchRoutePolicy.SinglePlayerFullRoute,
+            SolverSessionKind.MultiplayerProbe => SearchRoutePolicy.MultiplayerCurrentTurnOnly,
+            _ when capabilities.CanPlanLocalCrossTurn
+                => SearchRoutePolicy.MultiplayerLocalCrossTurn,
+            _ => SearchRoutePolicy.MultiplayerCurrentTurnOnly,
+        };
+        // U2: planning capability belongs to the search route, not to deployment authority.
+        // Multiplayer local-cross-turn therefore sees the same configured local potion
+        // candidates as singleplayer. Safe Execute still has CanUsePotionsAutomatically=false,
+        // so automatic native potion deployment remains a separate fail-closed boundary.
+        bool useFullSearchKernel =
+            MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(routePolicy);
+        SolverPotionPolicy effectivePotionPolicy = useFullSearchKernel
             ? settings.PotionPolicy
             : SolverPotionPolicy.Disabled;
-        PotionStrategySnapshot effectivePotionStrategy = capabilities.CanUsePotionsAutomatically
+        PotionStrategySnapshot effectivePotionStrategy = useFullSearchKernel
             ? CapturePotionStrategy(state, effectivePotionPolicy)
             : new PotionStrategySnapshot(SolverPotionPolicy.Disabled, []);
         FramePressureSignal.ResetPressure(
@@ -448,16 +462,6 @@ internal static partial class SolverController
                 $"搜索并行度必须在 1..{SolverWeights.MaximumSearchMaxDegreeOfParallelism} 之间，" +
                 $"实际为 {maxDegreeOfParallelism}。");
         }
-        SearchRoutePolicy routePolicy = capabilities.Kind switch
-        {
-            SolverSessionKind.Singleplayer => SearchRoutePolicy.SinglePlayerFullRoute,
-            SolverSessionKind.MultiplayerProbe => SearchRoutePolicy.MultiplayerCurrentTurnOnly,
-            _ when capabilities.CanPlanLocalCrossTurn
-                => SearchRoutePolicy.MultiplayerLocalCrossTurn,
-            _ => SearchRoutePolicy.MultiplayerCurrentTurnOnly,
-        };
-        bool useFullSearchHeuristics =
-            MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(routePolicy);
         SearchPolicySnapshot policy = new(
             settings.Profile,
             effectivePotionPolicy,
@@ -488,7 +492,7 @@ internal static partial class SolverController
                 : 1d,
             UseNoveltyPortfolio = (settings.UseNoveltyPortfolio
                 || UnattendedTestRunner.UseNoveltyPortfolioOverride)
-                && useFullSearchHeuristics,
+                && useFullSearchKernel,
             UseBeamWidthPortfolio = settings.UseBeamWidthPortfolio
                 || UnattendedTestRunner.UseBeamWidthPortfolioOverride,
             BeamWidthPortfolioWidths = UnattendedTestRunner.BeamWidthPortfolioWidthsOverride,
@@ -496,16 +500,16 @@ internal static partial class SolverController
                 && SearchPolicySnapshot.IsAct3BossEncounter(state.RunState.CurrentActIndex, state.Encounter?.Id.Entry),
             // 这里记的是玩家填的原始值；「不考虑局外收益」的折算交给快照上的 Effective* 一处做，
             // 免得两边各判一次而走岔。问题包里两样都在，方便看出当时是填了额度还是开了开关。
-            GrowthBudgets = useFullSearchHeuristics ? settings.GrowthBudgets : default,
-            RelicTargets = useFullSearchHeuristics
+            GrowthBudgets = useFullSearchKernel ? settings.GrowthBudgets : default,
+            RelicTargets = useFullSearchKernel
                 ? RelicCounterCatalog.Capture(state, settings.RelicStrategyEnabled, settings.RelicCounterRules)
                 : [],
             StopAtAcceptableBattleHpLoss = settings.StopAtAcceptableBattleHpLoss,
             BrightestFlameMaxHpLossLimit = settings.BrightestFlameMaxHpLossLimit,
-            GrowthOpportunityTargets = useFullSearchHeuristics
+            GrowthOpportunityTargets = useFullSearchKernel
                 ? GrowthOpportunityPolicy.Capture(state)
                 : GrowthOpportunityTargets.Empty,
-            IgnoreLongTermRewards = settings.IgnoreLongTermRewards || !useFullSearchHeuristics,
+            IgnoreLongTermRewards = settings.IgnoreLongTermRewards || !useFullSearchKernel,
         };
         CombatBugReportExporter.RecordSearchPolicy(state, policy);
         return policy;
