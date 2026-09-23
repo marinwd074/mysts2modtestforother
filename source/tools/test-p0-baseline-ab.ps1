@@ -143,11 +143,66 @@ try {
         'INFRASTRUCTURE_OR_NON_TIME_FAILURE'
     }
 
+    if (-not [bool]$current.p0.joint.Pass) {
+        throw "P0 Joint continuation gate failed: $($current.p0.joint | ConvertTo-Json -Compress -Depth 20)"
+    }
+
+    if (-not [bool]$current.p1.AdaptiveFastBeatsSlowContract -or
+        -not [bool]$current.p1.AllPlayersAliveHardBoundaryContract) {
+        throw 'P1 objective math contract failed in pinned runtime evidence.'
+    }
+
+    $adaptiveProperty = $current.p1.PSObject.Properties['Adaptive']
+    $minimizeProperty = $current.p1.PSObject.Properties['MinimizeTeamLoss']
+    if ($null -eq $adaptiveProperty -or $null -eq $minimizeProperty) {
+        throw 'P1 runtime evidence is missing one or both strategy results.'
+    }
+    $adaptive = $adaptiveProperty.Value
+    $minimize = $minimizeProperty.Value
+    $adaptiveBoundary = [string]$adaptive.Boundary
+    $minimizeBoundary = [string]$minimize.Boundary
+
+    $p1RuntimeClassification = if ([bool]$current.p1.Pass) {
+        'PASS'
+    } else {
+        $adaptiveTimeLimitedVictory =
+            $adaptiveBoundary -eq 'TimeLimit' -and
+            @($adaptive.Actions).Count -gt 0 -and
+            [bool]$adaptive.AllPlayersAlive -and
+            [int]$adaptive.FinalEnemyHp -eq 0
+        $minimizeTimeLimitedVictory =
+            $minimizeBoundary -eq 'TimeLimit' -and
+            @($minimize.Actions).Count -gt 0 -and
+            [bool]$minimize.AllPlayersAlive -and
+            [int]$minimize.FinalEnemyHp -eq 0
+        if (-not $adaptiveTimeLimitedVictory -or -not $minimizeTimeLimitedVictory) {
+            throw "P1 runtime failure is not a pure valid-victory TimeLimit boundary. adaptive=$adaptiveBoundary minimize=$minimizeBoundary"
+        }
+        'INCONCLUSIVE_TIME_BOUNDARY'
+    }
+
     $summary = [ordered]@{
         status = if ($classification -in @('CURRENT_REGRESSION_CANDIDATE', 'INFRASTRUCTURE_OR_NON_TIME_FAILURE')) { 'FAIL' } else { 'PASS' }
         classification = $classification
         pinnedTarget = '0.107.1'
         baselineCommit = $BaselineCommit
+        p0Joint = [ordered]@{
+            status = 'PASS'
+            exactReuse = [bool]$current.p0.joint.ExactReuse
+            exactReason = [string]$current.p0.joint.ExactReason
+            mismatchRejected = [bool]$current.p0.joint.MismatchRejected
+            mismatchReason = [string]$current.p0.joint.MismatchReason
+        }
+        p1 = [ordered]@{
+            objectiveContracts = 'PASS'
+            runtimeClassification = $p1RuntimeClassification
+            adaptiveBoundary = $adaptiveBoundary
+            adaptiveFinalEnemyHp = [int]$adaptive.FinalEnemyHp
+            adaptiveAllPlayersAlive = [bool]$adaptive.AllPlayersAlive
+            minimizeBoundary = $minimizeBoundary
+            minimizeFinalEnemyHp = [int]$minimize.FinalEnemyHp
+            minimizeAllPlayersAlive = [bool]$minimize.AllPlayersAlive
+        }
         baseline = [ordered]@{
             boundary = $baselineBoundary
             timeBoundary = $baselineTimeBoundary
@@ -180,6 +235,9 @@ try {
         throw "P0 baseline A/B failed: $classification"
     }
     Write-Output "P0_BASELINE_AB $classification"
+    Write-Output "P0_JOINT PASS"
+    Write-Output "P1_OBJECTIVE_CONTRACTS PASS"
+    Write-Output "P1_RUNTIME $p1RuntimeClassification"
 }
 finally {
     Push-Location $repoRoot
