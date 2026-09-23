@@ -6,6 +6,9 @@ on:
     paths:
       - '.github/workflows/pinned-release-build.yml'
       - 'source/tools/P0P1PinnedHarness/**'
+      - 'source/tools/U0U1PinnedHarness/**'
+      - 'source/tools/test-u0-baseline.ps1'
+      - 'source/tools/test-u1-action-poststate.ps1'
       - 'source/tools/P0HistoricalPinnedHarness/**'
       - 'source/tools/test-p0-baseline-ab.ps1'
 
@@ -62,6 +65,32 @@ jobs:
         run: |
           $gameData = (Resolve-Path '.\game-body\data_sts2_windows_x86_64').Path
           dotnet build '.\source\CombatSolver.csproj' -c Release -p:CopyModOnBuild=false -p:Sts2DataDir="$gameData" -p:RitsuLibReferencesProps="$env:RITSU_PROPS" -p:RitsuLibReferenceTarget='0.107.1' -p:TreatWarningsAsErrors=true --nologo
+
+      - name: Run U0 U1 structural contracts
+        shell: pwsh
+        run: |
+          pwsh -NoLogo -NoProfile -File '.\source\tools\test-u0-baseline.ps1'
+          pwsh -NoLogo -NoProfile -File '.\source\tools\test-u1-action-poststate.ps1'
+
+      - name: Build U0 U1 pinned harness
+        shell: pwsh
+        run: |
+          $gameData = (Resolve-Path '.\game-body\data_sts2_windows_x86_64').Path
+          dotnet build '.\source\tools\U0U1PinnedHarness\U0U1PinnedHarness.csproj' -c Release -p:Sts2DataDir="$gameData" -p:RitsuLibReferencesProps="$env:RITSU_PROPS" -p:RitsuWorkshopRoot="$env:RITSU_ROOT" -p:RitsuLibReferenceTarget='0.107.1' -p:TreatWarningsAsErrors=true --nologo
+
+      - name: Run U0 U1 pinned production replay suite
+        shell: pwsh
+        run: |
+          $workspace = Join-Path $env:RUNNER_TEMP 'u0-u1-pinned'
+          & dotnet '.\source\tools\U0U1PinnedHarness\bin\Release\net9.0\U0U1PinnedHarness.dll' --out $workspace
+          if ($LASTEXITCODE -ne 0) {
+            throw "U0/U1 pinned harness failed with exit $LASTEXITCODE."
+          }
+          $evidence = Join-Path $workspace 'u0-u1-pinned-evidence.json'
+          if (-not (Test-Path -LiteralPath $evidence)) {
+            throw 'U0/U1 pinned harness produced no evidence.'
+          }
+          Get-Content -LiteralPath $evidence
 
       - name: Build U2 degenerate harness
         shell: pwsh
