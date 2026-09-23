@@ -150,7 +150,7 @@ internal static class ShadowTeammatePlanner
         if (teammates.Length == 0)
         {
             IReadOnlyList<ShadowTeammateRoute> finalized =
-                FinalizeBehaviorScenarioProbabilities([seed], probabilityTrusted: true);
+                FinalizeBehaviorScenarioProbabilities([seed], scenarioSetComplete: true);
             return new ShadowTeammatePlanResult(
                 finalized,
                 ExpandedBranches: 0,
@@ -298,9 +298,9 @@ internal static class ShadowTeammatePlanner
         completed.AddRange(frontier);
         List<ShadowTeammateRoute> retained =
             RetainBehaviorAwareSpectrum(completed, beamWidth, labelScenarios: true);
-        bool probabilityTrusted = pendingChoiceBranches == 0 && !hitActionDepthLimit;
+        bool scenarioSetComplete = pendingChoiceBranches == 0 && !hitActionDepthLimit;
         IReadOnlyList<ShadowTeammateRoute> finalized =
-            FinalizeBehaviorScenarioProbabilities(retained, probabilityTrusted);
+            FinalizeBehaviorScenarioProbabilities(retained, scenarioSetComplete);
         double retainedProbabilityMass = finalized.Count == 0
             ? 0d
             : finalized[0].RetainedScenarioProbabilityMass;
@@ -310,7 +310,7 @@ internal static class ShadowTeammatePlanner
             pendingChoiceBranches,
             hitActionDepthLimit,
             retainedProbabilityMass,
-            probabilityTrusted);
+            ProbabilityModelTrusted: false);
     }
 
     internal static ShadowTeammatePlanResult BuildTopKRoutes(
@@ -657,7 +657,7 @@ internal static class ShadowTeammatePlanner
     private static IReadOnlyList<ShadowTeammateRoute>
         FinalizeBehaviorScenarioProbabilities(
             IReadOnlyList<ShadowTeammateRoute> routes,
-            bool probabilityTrusted)
+            bool scenarioSetComplete)
     {
         if (routes.Count == 0)
             return Array.Empty<ShadowTeammateRoute>();
@@ -682,8 +682,11 @@ internal static class ShadowTeammatePlanner
                     probabilitySet.ConditionalProbabilities[index],
                 RetainedScenarioProbabilityMass =
                     probabilitySet.RetainedProbabilityMass,
-                ScenarioProbabilityTrusted = probabilityTrusted,
-                ScenarioSetComplete = probabilityTrusted,
+                // The generic behavior prior is intentionally not calibrated to a real player.
+                // Probability-weighted decisions therefore remain fail-closed even when the
+                // stress-scenario search itself completed normally.
+                ScenarioProbabilityTrusted = false,
+                ScenarioSetComplete = scenarioSetComplete,
                 ScenarioFingerprint = scenarioFingerprint,
             };
         }

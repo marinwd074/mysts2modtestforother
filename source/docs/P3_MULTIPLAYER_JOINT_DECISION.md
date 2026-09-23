@@ -41,7 +41,7 @@ coverage 只从已经生成的候选中选代表：
 
 ## 排序
 
-只有前述少量动作组的 `ScenarioSetComplete=true`，并至少包含 `NoAction` + 另一个情景时，P3 rerank 才启用；否则 fail closed 回 P1/P2 排序。`ScenarioSetComplete` 只表示情景搜索没有被 unsupported Choice / 动作深度截断，与概率模型是否经过经验校准是两件不同的事。
+每个动作组只有在 `ScenarioSetComplete=true`，并至少包含 `NoAction` + 另一个情景时，才进入 P3 rerank。前 4 个动作组里只要有至少 2 个完整动作组就进行复评；不完整组不参与 P3 胜出竞争，但仍保留在原 P1/P2 列表中。完整组不足 2 个时才 fail closed 回 P1/P2 排序。`ScenarioSetComplete` 只表示情景搜索没有被 unsupported Choice / 动作深度截断，与概率模型是否经过经验校准是两件不同的事。
 
 情景之间不使用概率，排序为：
 
@@ -65,4 +65,4 @@ coverage 只从已经生成的候选中选代表：
 
 `FinalChanceCoverageLimit = 0`
 
-等后续有真实队友行为日志后，再考虑把压力情景替换或补充为经验概率模型。
+通用行为 prior 未经真实队友历史校准，因此当前 `ScenarioProbabilityTrusted=false`；即使有人误改 chance 开关，概率路径也会 fail closed。等后续有真实队友行为日志后，再考虑把压力情景替换或补充为经验概率模型。

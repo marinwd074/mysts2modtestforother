@@ -576,7 +576,6 @@ internal sealed partial class CombatBeamSolver
                 }
 
                 List<ScenarioDecisionSummary> summaries = [];
-                bool allDecisionSetsComplete = decisionKeys.Count > 1;
                 foreach (string decisionKey in decisionKeys)
                 {
                     var group = selected
@@ -627,7 +626,6 @@ internal sealed partial class CombatBeamSolver
                     bool hasNoAction =
                         outcomes.ContainsKey(ShadowTeammateScenarioKind.NoAction);
                     complete &= hasNoAction && outcomes.Count >= 2;
-                    allDecisionSetsComplete &= complete;
                     if (outcomes.Count == 0)
                         continue;
 
@@ -652,12 +650,12 @@ internal sealed partial class CombatBeamSolver
                             outcomes.Keys.OrderBy(kind => (int)kind))));
                 }
 
-                scenarioReevaluationEnabled = allDecisionSetsComplete
-                    && summaries.Count == decisionKeys.Count
-                    && summaries.Count > 1;
+                List<ScenarioDecisionSummary> completeSummaries =
+                    summaries.Where(summary => summary.ScenarioSetComplete).ToList();
+                scenarioReevaluationEnabled = completeSummaries.Count > 1;
                 if (scenarioReevaluationEnabled)
                 {
-                    selectedScenarioDecision = summaries
+                    selectedScenarioDecision = completeSummaries
                         .OrderByDescending(summary => summary.Rank.AllScenariosAlive)
                         .ThenByDescending(summary => summary.Rank.GuaranteedVictory)
                         .ThenBy(summary => summary.Rank.WorstLossEquivalent)
@@ -816,7 +814,7 @@ internal sealed partial class CombatBeamSolver
                 {
                     diagnostics.Info(
                         $"[CombatSolver/Multiplayer] MP_SCENARIO_RERANK " +
-                        $"enabled=false reason=incomplete_or_single_current_decision");
+                        $"enabled=false reason=fewer_than_two_complete_current_decisions");
                 }
 
                 if (selectedChanceDecision != null)

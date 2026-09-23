@@ -420,6 +420,21 @@ Check(
         optimisticSingleRoute) < 0,
     "P3 robust reranking prefers the current action with a better worst teammate scenario over a route that only wins under one optimistic teammate behavior.");
 
+
+Check(
+    ShadowTeammatePlanner.DefaultBeamWidth
+        == MultiplayerScenarioReevaluationPolicy.MaximumScenariosPerDecision,
+    "P3 production Shadow beam exactly fits the four stress-scenario lanes; no hidden fifth production slot is required.");
+
+Check(
+    teammateScenarioChoices
+        .Where(choice => choice.Kind != ShadowTeammateScenarioKind.NoAction)
+        .Select(choice => teammateScenarioObservations[choice.Index].ActionOrderKey)
+        .Where(key => !string.IsNullOrEmpty(key))
+        .Distinct(StringComparer.Ordinal)
+        .Count() >= 3,
+    "P3 default four-scenario portfolio retains distinct modeled action orders inside the production beam, not only in a wider test-only beam.");
+
 Console.WriteLine($"PASS: {checks} multiplayer local-cross-turn contract checks");
 
 
