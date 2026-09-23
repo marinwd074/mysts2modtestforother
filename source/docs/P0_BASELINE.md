@@ -22,7 +22,15 @@ P0 后续提交与这个源码基线比较。基线 commit 不是“最终正确
 
 `source/tools/GeneratedCombatScenarios/regression-necrobinder-elite.json`
 
-这是固定的 NECROBINDER / A10 / PHROG_PARASITE_ELITE 生成场景。P0 首次有效运行记录实际 root fingerprint、路线、搜索预算和结果；后续 A/B 必须复用同一解析后场景和同一总预算。
+这是固定的 NECROBINDER / A10 / PHROG_PARASITE_ELITE 生成场景。原 fixture 自带 `Deploy`，P0 **必须覆盖为 `Search`**，避免部署逻辑混进算法基线。固定搜索口径为 Medium / Smart / fixed budget 5000 ms / DOP 1。
+
+Windows 本地执行：
+
+~~~powershell
+python .\source\tools\GeneratedCombatScenarios\run.py --config .\source\tools\GeneratedCombatScenarios\regression-necrobinder-elite.json --count 1 --mode Search --output .\.local\p0-sp-regression -- -PerformancePresetForTest Medium -FixedSearchBudget -SearchBudgetOverrideMilliseconds 5000 -SearchMaxDegreeOfParallelismForTest 1 -PotionPolicyForTest Smart
+~~~
+
+只接受 `.local\p0-sp-regression\0000\result.json` 中 `status=Passed` 且没有时间边界的样本。P0 首次有效运行记录实际 root fingerprint、路线、搜索预算和结果；后续 A/B 必须复用该次生成的 resolved scenario、相同输入和相同总预算。
 
 时间边界命中则该根无效，不能把“更快超时”当改进。
 

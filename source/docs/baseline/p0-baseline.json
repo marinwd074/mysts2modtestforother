@@ -27,7 +27,17 @@
       "profile": "Medium",
       "searchBudgetMilliseconds": 5000,
       "maxDegreeOfParallelism": 1,
-      "status": "PENDING_CAPTURE"
+      "status": "PENDING_CAPTURE",
+      "seed": "GENERATED-COMBAT-001",
+      "modeOverride": "Search",
+      "fixedSearchBudget": true,
+      "potionPolicy": "Smart",
+      "launcherArgs": {
+        "PerformancePresetForTest": "Medium",
+        "FixedSearchBudget": true,
+        "SearchBudgetOverrideMilliseconds": 5000,
+        "SearchMaxDegreeOfParallelismForTest": 1
+      }
     },
     {
       "id": "MP-JOINT-REUSE",
