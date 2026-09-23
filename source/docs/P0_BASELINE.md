@@ -14,6 +14,10 @@ P0 的目标不是提高搜索强度，而是冻结输入、验证 continuation 
 
 P0 后续提交与这个源码基线比较。基线 commit 不是“最终正确版本”，只是防止后续比较时输入继续漂移。
 
+## 当前状态
+
+**2026-09-23：本机验证按用户要求暂时跳过。** 这不是 PASS。Release Build、SP-REGRESSION 实际基线、Joint Reuse 与 Joint Mismatch 均保留为未验证项；进入 P1 只表示继续开发，不允许后续文档把 P0 runtime 写成已通过。需要恢复时从本文固定命令继续，不重新设计 P0。
+
 ## 固定 workload
 
 ### SP-REGRESSION
