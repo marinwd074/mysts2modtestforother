@@ -1,57 +1,44 @@
-# P3 预备：Shadow 概率与 Chance Node
+# P3 概率模型实验（当前禁用）
 
-该文件记录 P3 的预备实现。按冻结计划，当前 P2 只处理候选保留；chance-node 代码在 P2 期间保持禁用，不参与运行时选择。
+当前正式 P3 使用 **Aggressive / Defensive / Conserve / NoAction 非概率压力情景**，不使用行为 prior 对推荐做概率加权。正式设计见 `P3_MULTIPLAYER_JOINT_DECISION.md`。
 
-## P2A：概率质量
+本文件只保留已经实现的概率基础设施，供后续有真实队友行为日志后继续实验。
 
-`BehaviorLogProbability` 继续表示一条代表动作历史本身的 log probability。新增 `BehaviorLogMass` 表示某个**精确未来状态**承载的总概率质量。
+## 已有概率质量基础
 
-当两条不同动作历史得到相同 `ShadowFutureStateFingerprint` 时：
+`BehaviorLogProbability` 表示一条代表动作历史的 log probability；`BehaviorLogMass` 表示 exact-equivalent future state 聚合后的总概率质量。不同动作历史只有在完整 `ShadowFutureStateFingerprint` 相同时才合并，概率质量用 log-sum-exp 相加。
 
-- 仍只保留一条代表动作历史用于回放；
-- 概率质量用 log-sum-exp 相加；
-- 不再因为 exact dedup 丢掉另一条历史的概率。
+保留场景还记录：
 
-最终 Team Top-K 为每个保留场景冻结：
+- `ScenarioProbabilityMass`；
+- `ScenarioConditionalProbability`；
+- `RetainedScenarioProbabilityMass`；
+- `ScenarioFingerprint`；
+- `ScenarioProbabilityTrusted`。
 
-- `ScenarioProbabilityMass`：该场景在当前 Shadow 行为树中的原始概率质量；
-- `ScenarioConditionalProbability`：只在保留场景集合内归一化后的权重；
-- `RetainedScenarioProbabilityMass`：Top-K 总共覆盖的原始行为概率质量；
-- `ScenarioFingerprint`：精确未来状态身份；
-- `ScenarioProbabilityTrusted`：只有未遇到 unsupported/pending Choice 且未撞动作深度上限时才为 true。
+这些值目前来自通用、未经玩家历史校准的弱 prior，因此不能解释为真实队友选择概率。
 
-因此“Top-K 条数”与“Top-K 覆盖了多少行为概率”不再混为一谈。概率归一化同时检查互斥场景的总质量不得超过 1；违反时直接抛错，而不是静默截断。
+`ScenarioSetComplete` 与上述概率字段分离：它只表示 Shadow 情景搜索没有因为 unsupported/pending Choice 或动作深度上限被截断。当前正式 P3 robust rerank 使用的是这个 completeness bit，而不是概率可信度。
 
-## Fail closed
+## 当前关闭的代码
 
-如果存在 pending Choice 或动作深度截断，概率仍可用于诊断，但下一层期望值决策不得把它当作完整概率分布。主搜索仍可使用 P1 的团队目标与保守路线搜索。
+概率加权选择继续硬关闭：
 
-## P2B：当前回合 Chance Node
+`EnableMultiplayerChanceAggregation = false`
 
-最终选择不再直接把 Joint Shadow 分支当作玩家可自由选择的结果。候选先按**当前本地回合可部署动作序列**分组；`TurnStartChoices` 与 Shadow metadata 明确不进入当前决策键。对于每组，只读取当前回合第一个 Joint EndTurn 后的立即场景状态：
+概率型 final coverage 继续为：
 
-1. 用 `ScenarioFingerprint` 去掉后续搜索造成的同场景重复；
-2. 用 `ScenarioProbabilityMass` 聚合当前回合结束后的概率分布；
-3. 全部保留概率质量都已斩杀时才获得“确定胜利”硬优势；少量幸运斩杀只作为后续 tie-break，不能压过大概率高战损场景；
-4. 先保护全员存活，再比较概率加权的 P1 战损/tempo 目标；Top-K 未覆盖的概率质量不重新归一化成“必然落在已知好场景”，而按当前已观察到的最坏目标值补齐，且未覆盖的存活质量按不安全处理；
-5. 选定当前回合动作组后，具体展示/continuation 代表优先使用该组中概率质量更大的 Shadow 场景；
-6. 下一真实回合仍重新捕获状态和滚动重规划，因此 P2B 不构造无限多回合的 chance tree。
+`FinalChanceCoverageLimit = 0`
 
-如果本次 Shadow 遇到 pending Choice 或动作深度上限，`ScenarioProbabilityTrusted=false`，整个概率聚合 fail closed，回退到 P1 排序。
+正式 P3 使用独立的 scenario coverage：最多 4 个当前动作组 × 4 个压力情景，只补已经生成的 candidate，不新增 simulator expansion。
 
-实际部署权限没有变化：Shadow 仍只存在于 detached simulator，`RootActionPlayers` 仍只允许本地玩家。
+## 将来何时启用
 
-## P3A：最终候选 Chance Coverage
+只有取得足够的“预测队友行为 vs 实际队友行为”日志后，才重新评估：
 
-P2 的 chance 聚合发生在 `RankFinal` 之后，因此还需要防止最终候选预筛只留下“某个本地决策下最幸运的一条 Shadow 场景”。
+1. prior 是否需要按玩家、角色、牌组或局面校准；
+2. retained probability mass 是否达到可接受覆盖率；
+3. probability-weighted 结果是否优于当前 robust stress-scenario 排序；
+4. 所有比较是否把队友预测开销计入相同总预算。
 
-P3A 不扩大主 Beam，也不增加搜索深度或时间预算。它只在最终候选阶段增加最多 **16 条** coverage representative：
-
-- 只有已经在普通 `RankFinal` 结果中出现的当前本地决策才有资格补场景，不会把被主搜索淘汰的整个动作决策重新救活；
-- 对每个有资格的本地决策，按 `ScenarioFingerprint` 合并后选择一个最终质量最好的代表；
-- 场景先按原始 `ScenarioProbabilityMass` 从高到低；
-- 多个本地决策之间 round-robin 补入，避免一个决策独占全部 coverage 槽位；
-- 只保护 `ScenarioProbabilityTrusted=true` 的场景；
-- 额外候选总数硬上限为 16，且它们只进入最终选择，不重新扩展。
-
-这样 P2 的 expected/chance 排序至少能看到各个主候选决策的高概率场景，同时不会把“概率覆盖”变成新的 Beam 膨胀机制。
+在此之前，概率值只用于诊断和未来校准，不参与推荐。

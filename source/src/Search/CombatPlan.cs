@@ -139,6 +139,7 @@ internal sealed record ShadowForecastPlan(
     double ScenarioConditionalProbability = 1d,
     double RetainedScenarioProbabilityMass = 1d,
     bool ScenarioProbabilityTrusted = true,
+    bool ScenarioSetComplete = true,
     StateFingerprint ScenarioFingerprint = default,
     ShadowTeammateScenarioKind ScenarioKind = ShadowTeammateScenarioKind.Unspecified)
 {

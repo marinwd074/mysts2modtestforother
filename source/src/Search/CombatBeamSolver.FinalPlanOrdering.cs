@@ -589,7 +589,7 @@ internal sealed partial class CombatBeamSolver
                             complete = false;
                             continue;
                         }
-                        if (!forecast.ScenarioProbabilityTrusted)
+                        if (!forecast.ScenarioSetComplete)
                         {
                             complete = false;
                             continue;

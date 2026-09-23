@@ -41,7 +41,7 @@ coverage 只从已经生成的候选中选代表：
 
 ## 排序
 
-只有前述少量动作组都取得可信的情景集合，并至少包含 `NoAction` + 另一个情景时，P3 rerank 才启用；否则 fail closed 回 P1/P2 排序。
+只有前述少量动作组的 `ScenarioSetComplete=true`，并至少包含 `NoAction` + 另一个情景时，P3 rerank 才启用；否则 fail closed 回 P1/P2 排序。`ScenarioSetComplete` 只表示情景搜索没有被 unsupported Choice / 动作深度截断，与概率模型是否经过经验校准是两件不同的事。
 
 情景之间不使用概率，排序为：
 

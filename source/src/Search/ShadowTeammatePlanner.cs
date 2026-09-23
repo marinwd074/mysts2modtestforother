@@ -55,6 +55,13 @@ internal sealed record ShadowTeammateRoute(
 
     internal bool ScenarioProbabilityTrusted { get; init; } = true;
 
+    /// <summary>
+    /// True only when the Shadow scenario search itself was not truncated by unsupported Choice
+    /// handling or the action-depth ceiling. P3 robust reranking uses this completeness bit and
+    /// does not depend on the behavior prior being probabilistically calibrated.
+    /// </summary>
+    internal bool ScenarioSetComplete { get; init; } = true;
+
     internal StateFingerprint ScenarioFingerprint { get; init; }
 
     internal ShadowTeammateScenarioKind ScenarioKind { get; init; }
@@ -676,6 +683,7 @@ internal static class ShadowTeammatePlanner
                 RetainedScenarioProbabilityMass =
                     probabilitySet.RetainedProbabilityMass,
                 ScenarioProbabilityTrusted = probabilityTrusted,
+                ScenarioSetComplete = probabilityTrusted,
                 ScenarioFingerprint = scenarioFingerprint,
             };
         }

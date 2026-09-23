@@ -239,7 +239,7 @@ internal sealed partial class CombatBeamSolver
                         _startTurnNumber,
                         out _,
                         out ShadowForecastPlan forecast)
-                    || !forecast.ScenarioProbabilityTrusted
+                    || !forecast.ScenarioSetComplete
                     || forecast.ScenarioKind == ShadowTeammateScenarioKind.Unspecified)
                 {
                     continue;
@@ -270,7 +270,7 @@ internal sealed partial class CombatBeamSolver
                         _startTurnNumber,
                         out _,
                         out ShadowForecastPlan forecast)
-                    || !forecast.ScenarioProbabilityTrusted
+                    || !forecast.ScenarioSetComplete
                     || forecast.ScenarioKind == ShadowTeammateScenarioKind.Unspecified)
                 {
                     continue;
