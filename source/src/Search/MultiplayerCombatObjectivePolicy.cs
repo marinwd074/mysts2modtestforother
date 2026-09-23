@@ -10,9 +10,6 @@ internal enum MultiplayerCombatObjectiveStrategy
 
 internal static class MultiplayerCombatObjectivePolicy
 {
-    internal const double LethalDurabilityRatioThreshold = 0.35d;
-    internal const double ExtraLossRatioPerTurnSaved = 0.05d;
-
     internal static double ComputeEnemyDurabilityRatio(IEnumerable<Creature> enemies)
     {
         long maximumHp = 0;
@@ -28,21 +25,9 @@ internal static class MultiplayerCombatObjectivePolicy
         return Math.Clamp(durability / (double)maximumHp, 0d, 1d);
     }
 
-    internal static bool UsesLethalTempoTradeoff(
+    internal static bool UsesAdaptiveLethalTempo(
         SearchRoutePolicy routePolicy,
-        MultiplayerCombatObjectiveStrategy strategy,
-        double enemyDurabilityRatio)
+        MultiplayerCombatObjectiveStrategy strategy)
         => routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
-            && strategy == MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo
-            && enemyDurabilityRatio <= LethalDurabilityRatioThreshold;
-
-    internal static double LethalTempoScore(
-        double teamLossRatio,
-        int combatEndedTurn,
-        int startTurnNumber)
-    {
-        int turnsToEnd = Math.Max(0, combatEndedTurn - startTurnNumber);
-        return Math.Max(0d, teamLossRatio)
-            + turnsToEnd * ExtraLossRatioPerTurnSaved;
-    }
+            && strategy == MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo;
 }
