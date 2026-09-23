@@ -633,6 +633,58 @@ Check(
         optimisticSingleRoute) < 0,
     "P3 robust reranking prefers the current action with a better worst teammate scenario over a route that only wins under one optimistic teammate behavior.");
 
+MultiplayerScenarioDecisionRank u4RobustFavorite = new(
+    ScenarioCount: 4,
+    AllScenariosAlive: true,
+    GuaranteedVictory: false,
+    WorstLossEquivalent: 0.09d,
+    MeanLossEquivalent: 0.09d,
+    WorstPlayerLossRatio: 0.10d,
+    WorstTeamLossRatio: 0.09d,
+    WorstEnemyDurabilityRatio: 0.40d);
+MultiplayerScenarioDecisionRank u4NominalFavorite = new(
+    ScenarioCount: 4,
+    AllScenariosAlive: true,
+    GuaranteedVictory: false,
+    WorstLossEquivalent: 0.16d,
+    MeanLossEquivalent: 0.03d,
+    WorstPlayerLossRatio: 0.10d,
+    WorstTeamLossRatio: 0.09d,
+    WorstEnemyDurabilityRatio: 0.40d);
+MultiplayerScenarioDecisionRank u4BoundedFavorite = new(
+    ScenarioCount: 4,
+    AllScenariosAlive: true,
+    GuaranteedVictory: false,
+    WorstLossEquivalent: 0.11d,
+    MeanLossEquivalent: 0.05d,
+    WorstPlayerLossRatio: 0.10d,
+    WorstTeamLossRatio: 0.09d,
+    WorstEnemyDurabilityRatio: 0.40d);
+Check(
+    MultiplayerScenarioReevaluationPolicy.CompareByRiskStrategy(
+        MultiplayerScenarioRiskStrategy.Robust,
+        u4RobustFavorite,
+        u4BoundedFavorite) < 0
+        && MultiplayerScenarioReevaluationPolicy.CompareByRiskStrategy(
+            MultiplayerScenarioRiskStrategy.NominalReference,
+            u4NominalFavorite,
+            u4BoundedFavorite) < 0
+        && MultiplayerScenarioReevaluationPolicy.CompareByRiskStrategy(
+            MultiplayerScenarioRiskStrategy.BoundedRisk,
+            u4BoundedFavorite,
+            u4RobustFavorite) < 0
+        && MultiplayerScenarioReevaluationPolicy.CompareByRiskStrategy(
+            MultiplayerScenarioRiskStrategy.BoundedRisk,
+            u4BoundedFavorite,
+            u4NominalFavorite) < 0,
+    "U4 experiment keeps Robust, equal-lane nominal reference, and BoundedRisk as distinct orderings without changing the production comparator.");
+
+Check(
+    Math.Abs(
+        MultiplayerScenarioReevaluationPolicy.BoundedRiskLossEquivalent(
+            u4BoundedFavorite) - 0.08d) < 1e-12d,
+    "U4 BoundedRisk prices half of the equal-lane mean-to-worst loss gap.");
+
 
 Check(
     ShadowTeammateScenarioPolicy.DefaultScenarioCount
@@ -752,6 +804,45 @@ Check(
     earlyRiskierProgressEquivalent > earlyBaselineEquivalent
         && lateProgressEquivalent < earlyBaselineEquivalent,
     "Interim objective keeps extra-loss tolerance tiny at high durability but can trade modest loss for strong near-lethal progress.");
+
+double interimHealthyDistribution =
+    MultiplayerCombatObjectiveMath.InterimLossEquivalent(
+        teamLossRatio: 0.040d,
+        worstPlayerLossRatio: 0.05d,
+        enemyDurabilityRatio: 0.20d);
+double interimFragileDistribution =
+    MultiplayerCombatObjectiveMath.InterimLossEquivalent(
+        teamLossRatio: 0.040d,
+        worstPlayerLossRatio: 0.80d,
+        enemyDurabilityRatio: 0.20d);
+MultiplayerCombatObjectiveRank interimHealthyRank =
+    MultiplayerCombatObjectiveMath.BuildRank(
+        MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo,
+        completeVictory: false,
+        allPlayersAlive: true,
+        teamLossRatio: 0.040d,
+        worstPlayerLossRatio: 0.05d,
+        enemyDurabilityRatio: 0.20d,
+        terminalTempoReferenceEnemyDurabilityRatio: 0.20d,
+        combatEndedTurn: null,
+        startTurnNumber: 1);
+MultiplayerCombatObjectiveRank interimFragileRank =
+    MultiplayerCombatObjectiveMath.BuildRank(
+        MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo,
+        completeVictory: false,
+        allPlayersAlive: true,
+        teamLossRatio: 0.040d,
+        worstPlayerLossRatio: 0.80d,
+        enemyDurabilityRatio: 0.20d,
+        terminalTempoReferenceEnemyDurabilityRatio: 0.20d,
+        combatEndedTurn: null,
+        startTurnNumber: 1);
+Check(
+    Math.Abs(interimHealthyDistribution - interimFragileDistribution) < 1e-12d
+        && MultiplayerCombatObjectiveMath.Compare(
+            interimHealthyRank,
+            interimFragileRank) < 0,
+    "U4 interim progress credit is independent of fragility, so concentrating the same team loss on one player cannot become an implicit reward.");
 
 MultiplayerCombatObjectiveRank adaptiveFastRank =
     MultiplayerCombatObjectiveMath.BuildRank(
