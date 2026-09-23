@@ -531,7 +531,9 @@ internal static class ShadowTeammatePlanner
         int limit)
     {
         List<ShadowTeammateRoute> exactSurvivors = ApplyExactDominance(candidates);
-        if (exactSurvivors.Count <= limit)
+        if (!ShadowRoutePruningPolicy.MayUseApproximateBeamPruning(
+                exactSurvivors.Count,
+                limit))
         {
             exactSurvivors.Sort(CompareRoutesForBehavior);
             return exactSurvivors;
@@ -577,7 +579,9 @@ internal static class ShadowTeammatePlanner
         int limit)
     {
         List<ShadowTeammateRoute> exactSurvivors = ApplyExactDominance(candidates);
-        if (exactSurvivors.Count <= limit)
+        if (!ShadowRoutePruningPolicy.MayUseApproximateBeamPruning(
+                exactSurvivors.Count,
+                limit))
         {
             exactSurvivors.Sort(CompareRoutesForSpectrum);
             return exactSurvivors;
