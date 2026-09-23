@@ -26,7 +26,7 @@ jobs:
       - name: Fetch pinned 0.107.1 game references
         shell: pwsh
         run: |
-          git lfs pull --include="game-body/data_sts2_windows_x86_64/sts2.dll,game-body/data_sts2_windows_x86_64/0Harmony.dll,game-body/data_sts2_windows_x86_64/GodotSharp.dll" --exclude=""
+          git lfs pull --include="game-body/data_sts2_windows_x86_64/sts2.dll,game-body/data_sts2_windows_x86_64/0Harmony.dll,game-body/data_sts2_windows_x86_64/GodotSharp.dll,game-body/data_sts2_windows_x86_64/Steamworks.NET.dll,game-body/data_sts2_windows_x86_64/System.IO.Hashing.dll,game-body/data_sts2_windows_x86_64/SmartFormat.dll,game-body/data_sts2_windows_x86_64/SmartFormat.ZString.dll,game-body/data_sts2_windows_x86_64/JetBrains.Annotations.dll,game-body/data_sts2_windows_x86_64/Sentry.dll" --exclude=""
           $dll = '.\game-body\data_sts2_windows_x86_64\sts2.dll'
           $actual = (Get-FileHash -LiteralPath $dll -Algorithm SHA256).Hash.ToLowerInvariant()
           $expected = 'a1f9e653f1e28e4076558fee1e60d218619cb7e057b887c6417f62c62c6d7a52'
@@ -52,9 +52,23 @@ jobs:
             throw 'RitsuLib.References.props not found in pinned compatibility package.'
           }
           "RITSU_PROPS=$($props.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RITSU_ROOT=$out" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Build CombatSolver Release
         shell: pwsh
         run: |
           $gameData = (Resolve-Path '.\game-body\data_sts2_windows_x86_64').Path
-          dotnet build '.\source\CombatSolver.csproj' -c Release -p:CopyModOnBuild=false -p:Sts2DataDir="$gameData" -p:RitsuLibReferencesProps="$env:RITSU_PROPS" -p:RitsuLibReferenceTarget='0.107.1' --nologo
+          dotnet build '.\source\CombatSolver.csproj' -c Release -p:CopyModOnBuild=false -p:Sts2DataDir="$gameData" -p:RitsuLibReferencesProps="$env:RITSU_PROPS" -p:RitsuLibReferenceTarget='0.107.1' -p:TreatWarningsAsErrors=true --nologo
+
+      - name: Build U2 degenerate harness
+        shell: pwsh
+        run: |
+          $gameData = (Resolve-Path '.\game-body\data_sts2_windows_x86_64').Path
+          dotnet build '.\source\tools\U2DegenerateHarness\U2DegenerateHarness.csproj' -c Release -p:Sts2DataDir="$gameData" -p:RitsuLibReferencesProps="$env:RITSU_PROPS" -p:RitsuWorkshopRoot="$env:RITSU_ROOT" -p:RitsuLibReferenceTarget='0.107.1' -p:TreatWarningsAsErrors=true --nologo
+
+      - name: Run U2 degenerate equivalence
+        shell: pwsh
+        run: |
+          $workspace = Join-Path $env:RUNNER_TEMP 'u2-degenerate-equivalence'
+          pwsh -NoLogo -NoProfile -File '.\source\tools\test-u2-degenerate-equivalence.ps1' -Workspace $workspace
+          Get-Content -LiteralPath (Join-Path $workspace 'u2-degenerate-equivalence.json')

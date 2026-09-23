@@ -74,6 +74,7 @@ try {
     Invoke-PowerShellContract 'P0BaselineManifestChecks' 'tools/test-p0-baseline-manifest.ps1'
     Invoke-PowerShellContract 'U0BaselineChecks' 'tools/test-u0-baseline.ps1'
     Invoke-PowerShellContract 'U1ActionPostStateChecks' 'tools/test-u1-action-poststate.ps1'
+    Invoke-PowerShellContract 'U2SearchKernelChecks' 'tools/test-u2-search-kernel.ps1'
     Invoke-PowerShellContract 'MultiplayerContinuationLifecycleChecks' 'tools/test-multiplayer-continuation-lifecycle.ps1'
     Invoke-PowerShellContract 'MultiplayerSnapshotChecks' 'tools/test-headless-runtime.ps1' -Arguments @('-MultiplayerSnapshot')
 

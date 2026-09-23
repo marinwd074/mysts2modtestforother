@@ -13,13 +13,13 @@ internal sealed partial class CombatBeamSolver
     // One branch owns the progress object. All frames and the replay accounting refer to
     // the same forked copy; an early side-start callback is never stored in a frame.
     private sealed class PlayerStartProgress(Player player, int turnNumber, bool rootSetup,
-        SearchRoutePolicy routePolicy, bool takingExtraTurn, ISet<uint> deaths,
+        bool multiplayerRouteSemanticsActive, bool takingExtraTurn, ISet<uint> deaths,
         int shufflesCrossed, int beforeHandShuffles)
     {
         public Player Player { get; } = player;
         public int TurnNumber { get; } = turnNumber;
         public bool RootSetup { get; } = rootSetup;
-        public SearchRoutePolicy RoutePolicy { get; } = routePolicy;
+        public bool MultiplayerRouteSemanticsActive { get; } = multiplayerRouteSemanticsActive;
         public bool TakingExtraTurn { get; } = takingExtraTurn;
         public ISet<uint> Deaths { get; private set; } = deaths;
         public int ShufflesCrossed = shufflesCrossed;
@@ -107,7 +107,7 @@ internal sealed partial class CombatBeamSolver
             int effectiveDraw = Math.Min(progress.DrawCount, combat.GetMaxHandSize(player) - playerState.Hand.Cards.Count);
             progress.WillShuffle = effectiveDraw > playerState.DrawPile.Cards.Count && !playerState.DiscardPile.IsEmpty;
             if (MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
-                    progress.RoutePolicy,
+                    progress.MultiplayerRouteSemanticsActive,
                     progress.RootSetup,
                     progress.SharedShuffleForecastTrusted,
                     progress.WillShuffle))

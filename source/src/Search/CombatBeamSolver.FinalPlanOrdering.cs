@@ -21,6 +21,8 @@ internal sealed partial class CombatBeamSolver
         SearchDiagnosticsSink diagnostics,
         bool detailedDiagnostics,
         SearchRoutePolicy routePolicy,
+        bool useMultiplayerRouteSemantics,
+        bool useMultiplayerTeamObjective,
         MultiplayerCombatObjectiveStrategy multiplayerCombatObjectiveStrategy,
         double multiplayerEnemyDurabilityRatio,
         int multiplayerEnemyMaximumHp,
@@ -230,7 +232,7 @@ internal sealed partial class CombatBeamSolver
                             candidate.Snapshot.EnemyDurabilityByCombatId,
                             multiplayerEnemyMaximumHp);
                     MultiplayerCombatObjectiveRank multiplayerObjective =
-                        routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
+                        useMultiplayerTeamObjective
                             ? MultiplayerCombatObjectiveMath.BuildRank(
                                 multiplayerCombatObjectiveStrategy,
                                 completeVictory,
@@ -350,7 +352,8 @@ internal sealed partial class CombatBeamSolver
                             bossHpRelief,
                             postCombatRelicHeal,
                             theftPolicy,
-                            routePolicy,
+                            useMultiplayerRouteSemantics,
+                            useMultiplayerTeamObjective,
                             multiplayerCombatObjectiveStrategy,
                             multiplayerEnemyDurabilityRatio,
                             multiplayerEnemyMaximumHp,
@@ -459,12 +462,11 @@ internal sealed partial class CombatBeamSolver
                         && passesAmbergrisPolicy;
                 })
                 .ToList();
-            bool useTeamObjective =
-                routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn;
+            bool useTeamObjective = useMultiplayerTeamObjective;
             bool useAdaptiveLethalTempo =
-                MultiplayerCombatObjectivePolicy.UsesAdaptiveLethalTempo(
-                    routePolicy,
-                    multiplayerCombatObjectiveStrategy);
+                useMultiplayerTeamObjective
+                && multiplayerCombatObjectiveStrategy
+                    == MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo;
             var selected = policyEligibleCandidates
                 .OrderByDescending(candidate => candidate.CompleteVictory)
                 .ThenBy(candidate => useTeamObjective
@@ -507,7 +509,7 @@ internal sealed partial class CombatBeamSolver
                 .ThenByDescending(candidate => candidate.Features.LongTermResourceValue)
                 .ThenBy(candidate =>
                     MultiplayerLocalCrossTurnContracts.DelayAngerCopyPreferenceUntilAfterEnemyHp(
-                        routePolicy,
+                        useMultiplayerRouteSemantics,
                         candidate.CompleteVictory)
                         ? 0
                         : candidate.Features.AngerCopiesGenerated)
@@ -517,7 +519,7 @@ internal sealed partial class CombatBeamSolver
                 .ThenBy(candidate => candidate.Features.EnemyHp)
                 .ThenBy(candidate =>
                     MultiplayerLocalCrossTurnContracts.DelayAngerCopyPreferenceUntilAfterEnemyHp(
-                        routePolicy,
+                        useMultiplayerRouteSemantics,
                         candidate.CompleteVictory)
                         ? candidate.Features.AngerCopiesGenerated
                         : 0)
@@ -529,7 +531,7 @@ internal sealed partial class CombatBeamSolver
                 // preceding quality keys tie, keep an actual current-turn card action
                 // instead of letting the shorter-action tie-break turn a playable turn
                 // into an empty recommendation followed by EndTurn.
-                .ThenByDescending(candidate => routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
+                .ThenByDescending(candidate => useMultiplayerRouteSemantics
                     && candidate.HasCurrentTurnCardAction)
                 .ThenBy(candidate => candidate.Features.ActionCount)
                 .ToList();
@@ -790,7 +792,7 @@ internal sealed partial class CombatBeamSolver
             }
 
             if (emitDiagnostics
-                && routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
+                && useTeamObjective
                 && selected.Count > 0)
             {
                 if (selectedScenarioDecision != null)
@@ -919,7 +921,7 @@ internal sealed partial class CombatBeamSolver
                     ? candidate.MultiplayerObjective.CombatEndedTurn : 0)
                 .ThenByDescending(candidate => candidate.Score)
                 .ThenByDescending(candidate =>
-                    routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
+                    useMultiplayerRouteSemantics
                     && candidate.HasCurrentTurnCardAction)
                 .ThenBy(candidate => candidate.Features.ActionCount)
                 .First();
@@ -1004,7 +1006,8 @@ internal sealed partial class CombatBeamSolver
         BossHpRelief bossHpRelief,
         PostCombatRelicHealProfile postCombatRelicHeal,
         SolverTheftPolicy? theftPolicy,
-        SearchRoutePolicy routePolicy,
+        bool useMultiplayerRouteSemantics,
+        bool useMultiplayerTeamObjective,
         MultiplayerCombatObjectiveStrategy multiplayerCombatObjectiveStrategy,
         double multiplayerEnemyDurabilityRatio,
         int multiplayerEnemyMaximumHp,
@@ -1023,7 +1026,7 @@ internal sealed partial class CombatBeamSolver
             rightSnapshot.PlayerDead,
             rightSnapshot.ProjectedPlayerHp);
         int comparison;
-        if (routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn)
+        if (useMultiplayerTeamObjective)
         {
             double leftEnemyDurabilityRatio =
                 MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(
@@ -1132,7 +1135,7 @@ internal sealed partial class CombatBeamSolver
             return comparison;
         bool delayAngerPreference =
             MultiplayerLocalCrossTurnContracts.DelayAngerCopyPreferenceUntilAfterEnemyHp(
-                routePolicy,
+                useMultiplayerRouteSemantics,
                 completeVictory: leftWon && rightWon);
         if (!delayAngerPreference)
         {

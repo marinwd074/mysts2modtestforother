@@ -235,6 +235,9 @@ internal static class ModRuntime
     public static object DescribePolicy(SearchPolicySnapshot policy) => new
     {
         policy.Profile,
+        policy.RoutePolicy,
+        policy.CurrentTurnOnly,
+        policy.UseMultiplayerTeamObjective,
         policy.PotionPolicy,
         policy.PotionStrategy,
         policy.FixedBudget,
@@ -332,6 +335,19 @@ internal static class ModRuntime
         SolverSettingsSnapshot settings = SolverSettings.Capture();
         SearchPolicySnapshot policy = SolverController.CaptureSearchPolicy(
             settings, state, includeTurnSetup: false, theftPolicy: null);
+        if (options.RoutePolicy is { } routePolicyOverride)
+        {
+            SearchRoutePolicy routePolicy = Enum.Parse<SearchRoutePolicy>(
+                routePolicyOverride,
+                ignoreCase: false);
+            policy = policy with
+            {
+                RoutePolicy = routePolicy,
+                CurrentTurnOnly = MultiplayerLocalCrossTurnContracts.IsCurrentTurnOnly(routePolicy),
+                // Keep the objective captured from the root. U2 A/B changes route mechanics
+                // only, so a single-player root compares both policies under the same objective.
+            };
+        }
         HarnessLog.Trace("search_policy");
         bool timeBoundary = false;
         object describedPolicy = DescribePolicy(policy);

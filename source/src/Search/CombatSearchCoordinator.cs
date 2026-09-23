@@ -1767,9 +1767,9 @@ internal static partial class CombatSearchCoordinator
             return primaryQuality < 0;
         if (candidate.PotionCount != current.PotionCount)
             return candidate.PotionCount < current.PotionCount;
-        if (PreferPlayableCurrentTurnRoute(policy, candidate, current))
+        if (PreferPlayableCurrentTurnRoute(root, policy, candidate, current))
             return true;
-        if (PreferPlayableCurrentTurnRoute(policy, current, candidate))
+        if (PreferPlayableCurrentTurnRoute(root, policy, current, candidate))
             return false;
         return candidate.BestNode.Score > current.BestNode.Score;
     }
@@ -1788,9 +1788,9 @@ internal static partial class CombatSearchCoordinator
             currentInterim);
         if (quality != 0)
             return quality < 0;
-        if (PreferPlayableCurrentTurnRoute(policy, candidate, current))
+        if (PreferPlayableCurrentTurnRoute(root, policy, candidate, current))
             return true;
-        if (PreferPlayableCurrentTurnRoute(policy, current, candidate))
+        if (PreferPlayableCurrentTurnRoute(root, policy, current, candidate))
             return false;
         return candidate.BestNode.Score > current.BestNode.Score;
     }
@@ -1851,11 +1851,14 @@ internal static partial class CombatSearchCoordinator
     }
 
     private static bool PreferPlayableCurrentTurnRoute(
+        CombatRootSnapshot root,
         SearchPolicySnapshot policy,
         SolverResult candidate,
         SolverResult current)
         => MultiplayerLocalCrossTurnContracts.PreferCurrentTurnPlayableRoute(
-            policy.RoutePolicy,
+            MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(
+                policy.RoutePolicy,
+                root.PlayerCount),
             HasCurrentTurnCardAction(candidate),
             HasCurrentTurnCardAction(current));
 

@@ -46,6 +46,10 @@ internal sealed partial class CombatBeamSolver(
         policy.FramePressureSignal);
     private readonly bool _includeTurnSetup = policy.IncludeTurnSetup;
     private readonly SearchRoutePolicy _routePolicy = policy.RoutePolicy;
+    private readonly bool _useMultiplayerRouteSemantics =
+        MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(
+            policy.RoutePolicy,
+            root.PlayerCount);
     private readonly Player _player = root.PlayerIdentity;
     private readonly IntentForecast _forecast = root.Forecast;
     private readonly int _startTurnNumber = root.StartTurnNumber;
@@ -92,7 +96,8 @@ internal sealed partial class CombatBeamSolver(
     private BeamRetentionPolicy? _retention;
     private BeamRetentionPolicy Retention => _retention ??= new BeamRetentionPolicy(
         _profile,
-        policy.RoutePolicy,
+        _useMultiplayerRouteSemantics,
+        policy.UseMultiplayerTeamObjective,
         policy.MultiplayerCombatObjectiveStrategy,
         policy.MultiplayerEnemyDurabilityRatio,
         _initialEnemyMaximumHp,
@@ -127,6 +132,8 @@ internal sealed partial class CombatBeamSolver(
         policy.Diagnostics,
         _detailedDiagnostics,
         policy.RoutePolicy,
+        _useMultiplayerRouteSemantics,
+        policy.UseMultiplayerTeamObjective,
         policy.MultiplayerCombatObjectiveStrategy,
         policy.MultiplayerEnemyDurabilityRatio,
         _initialEnemyMaximumHp,

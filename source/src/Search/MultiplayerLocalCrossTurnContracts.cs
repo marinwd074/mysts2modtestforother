@@ -50,10 +50,16 @@ internal static class MultiplayerLocalCrossTurnContracts
         => policy is SearchRoutePolicy.SinglePlayerFullRoute
             or SearchRoutePolicy.MultiplayerLocalCrossTurn;
 
-    internal static bool DelayAngerCopyPreferenceUntilAfterEnemyHp(
+    internal static bool HasActiveMultiplayerRouteSemantics(
         SearchRoutePolicy policy,
-        bool completeVictory)
+        int playerCount)
         => policy == SearchRoutePolicy.MultiplayerLocalCrossTurn
+            && playerCount > 1;
+
+    internal static bool DelayAngerCopyPreferenceUntilAfterEnemyHp(
+        bool multiplayerRouteSemanticsActive,
+        bool completeVictory)
+        => multiplayerRouteSemanticsActive
             && !completeVictory;
 
     internal static bool CanUsePersistentRouteCache(SearchRoutePolicy policy)
@@ -94,10 +100,10 @@ internal static class MultiplayerLocalCrossTurnContracts
             && !action.IsEndTurn);
 
     internal static bool PreferCurrentTurnPlayableRoute(
-        SearchRoutePolicy routePolicy,
+        bool multiplayerRouteSemanticsActive,
         bool candidateHasCurrentTurnCard,
         bool currentHasCurrentTurnCard)
-        => routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
+        => multiplayerRouteSemanticsActive
             && candidateHasCurrentTurnCard
             && !currentHasCurrentTurnCard;
 
@@ -137,11 +143,11 @@ internal static class MultiplayerLocalCrossTurnContracts
     /// state is not justified by that worldline. Root setup starts from live captured state.
     /// </summary>
     internal static bool ShouldStopBeforeSharedRngShuffle(
-        SearchRoutePolicy routePolicy,
+        bool multiplayerRouteSemanticsActive,
         bool rootSetup,
         bool sharedShuffleForecastTrusted,
         bool willShuffle)
-        => routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
+        => multiplayerRouteSemanticsActive
             && !rootSetup
             && !sharedShuffleForecastTrusted
             && willShuffle;

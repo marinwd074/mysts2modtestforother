@@ -29,7 +29,7 @@ internal static class OfflineCombat
     {
         CharacterModel character = ResolveUnique(ModelDb.AllCharacters, scenario.CharacterId, "角色");
         EncounterModel encounter = ResolveUnique(
-            ModelDb.All.OfType<EncounterModel>(), scenario.EncounterId, "遭遇");
+            ModelDb.AllEncounters, scenario.EncounterId, "遭遇");
 
         if (RunManager.Instance.IsInProgress)
             throw new InvalidOperationException("已经有进行中的跑局。");

@@ -31,6 +31,14 @@ internal sealed record SearchPolicySnapshot(
     /// <see cref="RoutePolicy"/> and let policy capture set this value consistently.
     /// </summary>
     public bool CurrentTurnOnly { get; init; }
+
+    /// <summary>
+    /// Ranking objective is independent from route mechanics. Production multiplayer enables
+    /// the team objective; U2 differential checks can keep multiplayer route semantics while
+    /// deliberately using the single-player objective on an otherwise identical root.
+    /// </summary>
+    public bool UseMultiplayerTeamObjective { get; init; }
+
     public MultiplayerCombatObjectiveStrategy MultiplayerCombatObjectiveStrategy { get; init; }
         = MultiplayerCombatObjectiveStrategy.MinimizeTeamLoss;
     public double MultiplayerEnemyDurabilityRatio { get; init; } = 1d;
