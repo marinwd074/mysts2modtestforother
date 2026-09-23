@@ -173,7 +173,7 @@ F 必须执行每张牌与触发器，而不是先合并成“队友本回合打
 
 ### U3 — 公平情景复演与非预知决策
 
-**状态（2026-09-23）：COMPLETE。** 代码/合同/pinned 0.107.1 构建、真实双玩家 Matrix runtime、真实双玩家 Timeout fail-closed runtime 均已 PASS。 source `3c990c61fa90343f7e4385cd2d490019553f7c89` 已实现固定四 ScenarioSpec、公平完整覆盖、Completed/Terminal/Unknown、非预知 CurrentTurnDecisionKey、从原 MaxExpandedNodes 预留的 bounded 复评预算、TimeLimit fail-closed 与真实 replay work 计数。compatibility run `35878443605`、pinned run `35878443497` 均 SUCCESS；U2 degenerate 继续 PASS。2026-09-23 的真实 Host/Client `RUBY_RAIDERS_NORMAL` 问题包又观察到 5 轮完整 U3 Matrix，均满足 4 decisions × 4 ScenarioSpec、总预算守恒、replay work 对账和完整 coverage→rerank 一致，因此 Matrix 记 PASS。详细证据与剩余 Timeout smoke 见 [U3_FAIR_SCENARIO_REEVALUATION.md](U3_FAIR_SCENARIO_REEVALUATION.md)。真实双玩家 Matrix 与 TimeLimit fail-closed smoke 均已完成；U3 已收口，下一张卡进入 U4 风险与目标 A/B。
+**状态（2026-09-23）：COMPLETE。** 代码/合同/pinned 0.107.1 构建、真实双玩家 Matrix runtime、真实双玩家 Timeout fail-closed runtime 均已 PASS。 source `3c990c61fa90343f7e4385cd2d490019553f7c89` 已实现固定四 ScenarioSpec、公平完整覆盖、Completed/Terminal/Unknown、非预知 CurrentTurnDecisionKey、从原 MaxExpandedNodes 预留的 bounded 复评预算、TimeLimit fail-closed 与真实 replay work 计数。compatibility run `35878443605`、pinned run `35878443497` 均 SUCCESS；U2 degenerate 继续 PASS。2026-09-23 的真实 Host/Client `RUBY_RAIDERS_NORMAL` 问题包又观察到 5 轮完整 U3 Matrix，均满足 4 decisions × 4 ScenarioSpec、总预算守恒、replay work 对账和完整 coverage→rerank 一致，因此 Matrix 记 PASS。详细证据与剩余 Timeout smoke 见 [U3_FAIR_SCENARIO_REEVALUATION.md](U3_FAIR_SCENARIO_REEVALUATION.md)。真实双玩家 Matrix 与 TimeLimit fail-closed smoke 均已完成；U3 已收口。U4 风险与目标 A/B 随后也已完成，当前下一张卡为 U5。
 
 入口：FinalPlanOrdering、MultiplayerScenarioReevaluationPolicy、ShadowTeammateScenarioPolicy、CurrentTurnDecisionKey。
 
@@ -185,11 +185,17 @@ F 必须执行每张牌与触发器，而不是先合并成“队友本回合打
 
 ### U4 — 风险与目标 A/B
 
-入口：MultiplayerCombatObjectiveMath 与情景排序。先验证本文给出的 interim-risk 反例，并检查对真实Beam保留的影响。将进度启发与终局目标分离，保持单人目标不变。
+**状态（2026-09-23）：COMPLETE。** U4 已验证并修正 interim-risk 反例：旧中途 progress credit 会随 `WorstPlayerLossRatio` 增大，使同团队总战损、同敌方进度时“伤害更集中到单个脆弱队员”的状态反而获得更低 loss-equivalent。当前中途进度启发固定使用健康基线风险因子 `0.5`，而终局 `ContinuousTempoScore` 仍保留风险定价；`WorstPlayerLossRatio` 继续作为独立后续排序键。真实多人 Beam 的 `BuildMultiplayerObjectiveRank → MultiplayerCombatObjectiveMath.BuildRank/Compare` 直接消费该 interim 结果，因此修正作用于实际 Beam 保留；单人排序路径未改。
 
-同预算比较现行Robust、Nominal、BoundedRisk；容差目标仅作为独立实验，避免与风险策略同时改。明确累计损失/最终HP/队员死亡/终局完整性的排序。
+现有 U3 四情景 Matrix 只计算一次，然后在**同一 Matrix、同一预算、额外 replay=0** 的条件下并行报告三种风险解释：`Robust` 完全复用当前生产 comparator；`NominalReference` 使用四个压力情景的等权均值，只是参考值，不冒充概率期望；`BoundedRisk` 实验标尺为 `mean + 0.5 × (worst - mean)`。生产诊断新增 `MP_U4_STRATEGY_RESULT` / `MP_U4_STRATEGY_AB`，但正式 final selection 仍固定使用 Robust。行为 prior 尚未校准，旧 U3 实机 Matrix 又早于 U4 指标，因此没有足够真实质量证据支持默认迁移；按本计划要求保持旧默认，也不声称任一方案“数学上最优”。
 
-验收：不把更脆弱当隐性奖励；NoAction不会被误解为必须长期独自打完整场；合作收益和损失风险均报告。性能/质量证据不足保持旧默认，不写“数学上最优”。
+容差目标保持为独立实验：`SelectNominalToleranceExperimentIndex` 只接受调用方显式 tolerance，先守住全员存活/终局完整性硬边界，再在 nominal loss 容差集合内比较 worst loss；生产没有调用它，也没有设置默认容差，避免与 BoundedRisk 同时改目标。
+
+排序含义已经明确分层：单个 outcome 仍为完整胜利 → 全员存活 → loss-equivalent → 最差队员累计战损 → 团队累计战损 → 结束回合/敌方耐久；Scenario 层先要求所有情景全员存活，再看全情景胜利，随后才由 Robust/NominalReference/BoundedRisk 解释损失风险。团队剩余 HP 与最差队员剩余 HP 作为独立 U4 遥测报告，不偷偷加入排序，避免把“风险策略 A/B”和“新增目标权重”混成一次改动。
+
+`NoAction` 已显式定义为 **current Joint forecast window only**：只表示本次 Joint 预测窗口内队友不出牌，不代表队友在剩余整场战斗长期不行动。U4 同时报告合作情景相对 NoAction 的团队战损收益与敌方耐久推进收益，以及 nominal/robust 差距、平均/最坏团队战损、团队/最差队员剩余 HP。
+
+验证：interim 脆弱性、三策略不同赢家、同 Matrix selector、独立 tolerance、合作收益、最终 HP 与 NoAction scope 均进入 `MultiplayerLocalCrossTurnChecks`；compatibility run `35886546305` SUCCESS，pinned 0.107.1 run `35886546204` SUCCESS，后者通过 CombatSolver Release、U0/U1 production replay、U2 degenerate equivalence、P0/P1 pinned runtime 与历史 P0 A/B 分类。U4 已收口，下一张卡进入 U5。
 
 ### U5 — 本地与队友的关键顺序
 

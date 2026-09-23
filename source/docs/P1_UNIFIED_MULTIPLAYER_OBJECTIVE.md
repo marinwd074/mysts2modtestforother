@@ -28,11 +28,13 @@ P1 只解决一个问题：**最终选中的路线、Beam 中途保留的路线�
 
 ### 未结束路线
 
-Beam 不能直接使用“结束回合”项，因此使用同一损失尺度的 bounded progress credit：
+Beam 不能直接使用“结束回合”项，因此使用同一损失尺度的 bounded progress credit。U4 已修正这里原先的 interim-risk 耦合：若 progress credit 随 `worstPlayerLossRatio` 增大，同总战损、同敌方进度下，伤害越集中到单个脆弱队员反而会获得更多减分奖励。
 
-`teamLossRatio - progress × LossRatioPerTurn(currentEnemyDurability, worstPlayerLossRatio)`
+当前公式等价于：
 
-高耐久时 urgency 很低，额外战损几乎不能靠进度抵消；接近斩杀时允许少量额外战损换取明显敌方耐久下降。整个 progress credit 上限仍受 5% 常数与 team-risk factor 约束。
+`teamLossRatio - progress × MaximumExtraLossRatioPerTurn × lethalUrgency × 0.5`
+
+也就是中途进度启发固定使用健康基线风险因子 `0.5`；`WorstPlayerLossRatio` 仍作为后续独立排序键。这样高耐久时 urgency 仍很低，接近斩杀时仍允许有限战损换明显进度，但“更脆弱”本身不能降低 interim loss-equivalent。终局 `ContinuousTempoScore` 的风险定价保持不变。
 
 ## 接线范围
 

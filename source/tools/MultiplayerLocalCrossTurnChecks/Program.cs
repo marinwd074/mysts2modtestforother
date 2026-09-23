@@ -633,6 +633,143 @@ Check(
         optimisticSingleRoute) < 0,
     "P3 robust reranking prefers the current action with a better worst teammate scenario over a route that only wins under one optimistic teammate behavior.");
 
+MultiplayerScenarioDecisionRank u4RobustFavorite = new(
+    ScenarioCount: 4,
+    AllScenariosAlive: true,
+    GuaranteedVictory: false,
+    WorstLossEquivalent: 0.09d,
+    MeanLossEquivalent: 0.09d,
+    WorstPlayerLossRatio: 0.10d,
+    WorstTeamLossRatio: 0.09d,
+    WorstEnemyDurabilityRatio: 0.40d);
+MultiplayerScenarioDecisionRank u4NominalFavorite = new(
+    ScenarioCount: 4,
+    AllScenariosAlive: true,
+    GuaranteedVictory: false,
+    WorstLossEquivalent: 0.16d,
+    MeanLossEquivalent: 0.03d,
+    WorstPlayerLossRatio: 0.10d,
+    WorstTeamLossRatio: 0.09d,
+    WorstEnemyDurabilityRatio: 0.40d);
+MultiplayerScenarioDecisionRank u4BoundedFavorite = new(
+    ScenarioCount: 4,
+    AllScenariosAlive: true,
+    GuaranteedVictory: false,
+    WorstLossEquivalent: 0.11d,
+    MeanLossEquivalent: 0.05d,
+    WorstPlayerLossRatio: 0.10d,
+    WorstTeamLossRatio: 0.09d,
+    WorstEnemyDurabilityRatio: 0.40d);
+Check(
+    MultiplayerScenarioReevaluationPolicy.CompareByRiskStrategy(
+        MultiplayerScenarioRiskStrategy.Robust,
+        u4RobustFavorite,
+        u4BoundedFavorite) < 0
+        && MultiplayerScenarioReevaluationPolicy.CompareByRiskStrategy(
+            MultiplayerScenarioRiskStrategy.NominalReference,
+            u4NominalFavorite,
+            u4BoundedFavorite) < 0
+        && MultiplayerScenarioReevaluationPolicy.CompareByRiskStrategy(
+            MultiplayerScenarioRiskStrategy.BoundedRisk,
+            u4BoundedFavorite,
+            u4RobustFavorite) < 0
+        && MultiplayerScenarioReevaluationPolicy.CompareByRiskStrategy(
+            MultiplayerScenarioRiskStrategy.BoundedRisk,
+            u4BoundedFavorite,
+            u4NominalFavorite) < 0,
+    "U4 experiment keeps Robust, equal-lane nominal reference, and BoundedRisk as distinct orderings without changing the production comparator.");
+
+Check(
+    Math.Abs(
+        MultiplayerScenarioReevaluationPolicy.BoundedRiskLossEquivalent(
+            u4BoundedFavorite) - 0.08d) < 1e-12d,
+    "U4 BoundedRisk prices half of the equal-lane mean-to-worst loss gap.");
+
+MultiplayerScenarioDecisionRank[] u4RiskAbRanks =
+[
+    u4RobustFavorite,
+    u4NominalFavorite,
+    u4BoundedFavorite,
+];
+Check(
+    MultiplayerScenarioReevaluationPolicy.SelectPreferredIndex(
+        MultiplayerScenarioRiskStrategy.Robust,
+        u4RiskAbRanks) == 0
+        && MultiplayerScenarioReevaluationPolicy.SelectPreferredIndex(
+            MultiplayerScenarioRiskStrategy.NominalReference,
+            u4RiskAbRanks) == 1
+        && MultiplayerScenarioReevaluationPolicy.SelectPreferredIndex(
+            MultiplayerScenarioRiskStrategy.BoundedRisk,
+            u4RiskAbRanks) == 2,
+    "U4 same-matrix selector can report distinct Robust, nominal-reference, and BoundedRisk winners without another search.");
+
+Check(
+    MultiplayerScenarioReevaluationPolicy.SelectNominalToleranceExperimentIndex(
+        u4RiskAbRanks,
+        nominalLossTolerance: 0d) == 1
+        && MultiplayerScenarioReevaluationPolicy.SelectNominalToleranceExperimentIndex(
+            u4RiskAbRanks,
+            nominalLossTolerance: 0.02d) == 2,
+    "U4 nominal-loss tolerance remains an independent experiment: zero tolerance keeps the nominal winner while a caller-supplied tolerance can admit a safer worst-case route.");
+
+MultiplayerScenarioOutcome[] u4MeasuredOutcomes =
+[
+    new(
+        ShadowTeammateScenarioKind.Aggressive,
+        CompleteVictory: false,
+        AllPlayersAlive: true,
+        LossEquivalent: 0.04d,
+        WorstPlayerLossRatio: 0.10d,
+        TeamLossRatio: 0.05d,
+        EnemyDurabilityRatio: 0.20d,
+        TeamRemainingHpRatio: 0.82d,
+        WorstPlayerRemainingHpRatio: 0.70d),
+    new(
+        ShadowTeammateScenarioKind.Defensive,
+        CompleteVictory: false,
+        AllPlayersAlive: true,
+        LossEquivalent: 0.05d,
+        WorstPlayerLossRatio: 0.08d,
+        TeamLossRatio: 0.04d,
+        EnemyDurabilityRatio: 0.30d,
+        TeamRemainingHpRatio: 0.86d,
+        WorstPlayerRemainingHpRatio: 0.74d),
+    new(
+        ShadowTeammateScenarioKind.Conserve,
+        CompleteVictory: false,
+        AllPlayersAlive: true,
+        LossEquivalent: 0.06d,
+        WorstPlayerLossRatio: 0.12d,
+        TeamLossRatio: 0.06d,
+        EnemyDurabilityRatio: 0.35d,
+        TeamRemainingHpRatio: 0.80d,
+        WorstPlayerRemainingHpRatio: 0.68d),
+    new(
+        ShadowTeammateScenarioKind.NoAction,
+        CompleteVictory: false,
+        AllPlayersAlive: true,
+        LossEquivalent: 0.10d,
+        WorstPlayerLossRatio: 0.20d,
+        TeamLossRatio: 0.12d,
+        EnemyDurabilityRatio: 0.55d,
+        TeamRemainingHpRatio: 0.65d,
+        WorstPlayerRemainingHpRatio: 0.50d),
+];
+MultiplayerScenarioRiskMetrics u4MeasuredRisk =
+    MultiplayerScenarioReevaluationPolicy.MeasureRisk(u4MeasuredOutcomes);
+Check(
+    Math.Abs(u4MeasuredRisk.MeanTeamRemainingHpRatio - 0.7825d) < 1e-12d
+        && Math.Abs(u4MeasuredRisk.WorstTeamRemainingHpRatio - 0.65d) < 1e-12d
+        && Math.Abs(u4MeasuredRisk.WorstPlayerRemainingHpRatio - 0.50d) < 1e-12d
+        && u4MeasuredRisk.CooperationTeamLossBenefit > 0d
+        && u4MeasuredRisk.CooperationProgressBenefit > 0d,
+    "U4 reports final team HP, worst-player final HP, cooperation loss benefit, and cooperation progress benefit from the same fixed scenario matrix.");
+
+Check(
+    MultiplayerScenarioReevaluationPolicy.NoActionScopeDiagnosticValue
+        == "current_joint_forecast_only",
+    "U4 NoAction is explicitly scoped to the current Joint forecast window and cannot be interpreted as the teammate doing nothing for the rest of combat.");
+
 
 Check(
     ShadowTeammateScenarioPolicy.DefaultScenarioCount
@@ -752,6 +889,45 @@ Check(
     earlyRiskierProgressEquivalent > earlyBaselineEquivalent
         && lateProgressEquivalent < earlyBaselineEquivalent,
     "Interim objective keeps extra-loss tolerance tiny at high durability but can trade modest loss for strong near-lethal progress.");
+
+double interimHealthyDistribution =
+    MultiplayerCombatObjectiveMath.InterimLossEquivalent(
+        teamLossRatio: 0.040d,
+        worstPlayerLossRatio: 0.05d,
+        enemyDurabilityRatio: 0.20d);
+double interimFragileDistribution =
+    MultiplayerCombatObjectiveMath.InterimLossEquivalent(
+        teamLossRatio: 0.040d,
+        worstPlayerLossRatio: 0.80d,
+        enemyDurabilityRatio: 0.20d);
+MultiplayerCombatObjectiveRank interimHealthyRank =
+    MultiplayerCombatObjectiveMath.BuildRank(
+        MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo,
+        completeVictory: false,
+        allPlayersAlive: true,
+        teamLossRatio: 0.040d,
+        worstPlayerLossRatio: 0.05d,
+        enemyDurabilityRatio: 0.20d,
+        terminalTempoReferenceEnemyDurabilityRatio: 0.20d,
+        combatEndedTurn: null,
+        startTurnNumber: 1);
+MultiplayerCombatObjectiveRank interimFragileRank =
+    MultiplayerCombatObjectiveMath.BuildRank(
+        MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo,
+        completeVictory: false,
+        allPlayersAlive: true,
+        teamLossRatio: 0.040d,
+        worstPlayerLossRatio: 0.80d,
+        enemyDurabilityRatio: 0.20d,
+        terminalTempoReferenceEnemyDurabilityRatio: 0.20d,
+        combatEndedTurn: null,
+        startTurnNumber: 1);
+Check(
+    Math.Abs(interimHealthyDistribution - interimFragileDistribution) < 1e-12d
+        && MultiplayerCombatObjectiveMath.Compare(
+            interimHealthyRank,
+            interimFragileRank) < 0,
+    "U4 interim progress credit is independent of fragility, so concentrating the same team loss on one player cannot become an implicit reward.");
 
 MultiplayerCombatObjectiveRank adaptiveFastRank =
     MultiplayerCombatObjectiveMath.BuildRank(
