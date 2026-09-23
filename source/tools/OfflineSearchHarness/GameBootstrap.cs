@@ -91,8 +91,15 @@ internal static class GameBootstrap
 
         // 6) 联机握手用的本机版本信息：版本号读 Godot 资源（ReleaseInfoManager），分支读 OS.HasFeature。
         //    离线是单机，这两项只进 PeerVersionInfo，不影响战斗。
-        Patch(typeof(NGame), nameof(NGame.GetGameVersion), prefix: nameof(GameVersionPrefix),
-            note: "NGame.GetGameVersion -> 固定串（原为 ReleaseInfoManager/Git 读 Godot 资源）");
+        if (AccessTools.Method(typeof(NGame), "GetGameVersion") != null)
+        {
+            Patch(typeof(NGame), "GetGameVersion", prefix: nameof(GameVersionPrefix),
+                note: "NGame.GetGameVersion -> 固定串（原为 ReleaseInfoManager/Git 读 Godot 资源）");
+        }
+        else
+        {
+            _bypasses.Add("NGame.GetGameVersion -> 当前目标无此 API，无需绕过");
+        }
         Patch(typeof(MegaCrit.Sts2.Core.Platform.PlatformUtil),
             nameof(MegaCrit.Sts2.Core.Platform.PlatformUtil.GetPlatformBranch),
             prefix: nameof(PlatformBranchPrefix),
@@ -158,9 +165,30 @@ internal static class GameBootstrap
         Trace("localization " + OfflineLocalization.Install(HarnessLog.Language));
         _bypasses.Add($"LocManager 单例改为空表实例（language={HarnessLog.Language}），不跑其构造函数与 res://localization 加载");
 
-        AssemblyInfo.Init();
+        Type? assemblyInfoType = typeof(AbstractModel).Assembly.GetTypes()
+            .FirstOrDefault(type =>
+                type.Name == "AssemblyInfo"
+                && type.Namespace?.StartsWith("MegaCrit.Sts2", StringComparison.Ordinal) == true);
+        AccessTools.Method(assemblyInfoType, "Init")?.Invoke(null, null);
         Trace("assembly_info");
-        ModelDb.Init(AbstractModelSubtypes.All.ToArray());
+
+        MethodInfo[] modelDbInitMethods = typeof(ModelDb)
+            .GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
+            .Where(method => method.Name == "Init")
+            .ToArray();
+        MethodInfo? modelDbInit = modelDbInitMethods
+            .FirstOrDefault(method => method.GetParameters().Length == 0);
+        if (modelDbInit != null)
+        {
+            modelDbInit.Invoke(null, null);
+        }
+        else
+        {
+            modelDbInit = modelDbInitMethods
+                .FirstOrDefault(method => method.GetParameters().Length == 1)
+                ?? throw new MissingMethodException(typeof(ModelDb).FullName, "Init");
+            modelDbInit.Invoke(null, [AbstractModelSubtypes.All.ToArray()]);
+        }
         Trace("model_db_init");
         ModelIdSerializationCache.Init();
         Trace("model_id_cache");
@@ -183,8 +211,13 @@ internal static class GameBootstrap
         if (!NGame.IsMainThread())
             throw new InvalidOperationException("NGame.IsMainThread() 仍为 false。");
 
-        return $"models={ModelDb.All.Count()} cards={ModelDb.AllCards.Count()} "
-            + $"encounters={ModelDb.All.OfType<EncounterModel>().Count()} "
+        int knownModelCount = ModelDb.AllCharacters.Count()
+            + ModelDb.AllCards.Count()
+            + ModelDb.AllRelics.Count()
+            + ModelDb.AllPotions.Count()
+            + ModelDb.AllEncounters.Count();
+        return $"known_models={knownModelCount} cards={ModelDb.AllCards.Count()} "
+            + $"encounters={ModelDb.AllEncounters.Count()} "
             + $"characters={ModelDb.AllCharacters.Count()} main_thread={NGame.IsMainThread()}";
     }
 
