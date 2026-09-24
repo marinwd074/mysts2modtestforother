@@ -82,16 +82,24 @@
 - compatibility run `35983184607` **SUCCESS**；Pinned 0.107.1 Release run `35983115684` **SUCCESS**。中途两个失败只暴露字段从 `NativePlayCardCaptured` 泛化为 `NativeLocalActionCaptured` 后的测试/诊断残留，均已修正。
 - 现有 potion differential / potion continuation runtime fixtures 继续覆盖资源、伤害/状态、Choice、原生 `UsePotionAction` 与槽位消费语义；本轮没有在真实 Host/Client 多人局重新跑这些 fixture，因此实际多人自动喝药仍记为 `UNVERIFIED`。
 
+## Quality-first 第三项状态
+
+- **第一轮坏路线归因 / 排序可观测性：IMPLEMENTED；生产默认未迁移。**
+- 已恢复真实历史问题包 `25b905c1322b41e6b9a8e10baeae5606`：T2 手牌含 `ANGER(0)`，旧 Solver 路线 `Tremble → Dismantle → Strike → EndTurn`，在 Shuffle 边界形成 `PartialLocalCrossTurnProjection`。根因是未完成多人路线的最终基础排序过早惩罚 `AngerCopiesGenerated`；当前 HEAD 已保留 Enemy HP 优先的定向修复和合同。
+- 重锤→烙印、连续 Offering 的既有坏体验属于 Safe Execute / deployment 截断，不是 Robust 情景排序证据；这些执行层边界由 U1/U6 负责。
+- 新增 `MultiplayerScenarioStrategySelection` 和 `MP_QUALITY_SORTING`。同一 U3 Matrix / 同一预算下现在能直接看到 baseline winner 是否被 Robust 覆盖，以及 Robust/NominalReference/BoundedRisk 是否一致；不增加 replay、不改变搜索预算。
+- 生产仍为 Robust。现有可复原坏路线没有证明修复后 HEAD 上是 U3/U4 Robust 推翻了更好的共同搜索核心路线，因此本轮不改风险权重、不把等权压力情景均值当概率期望。
+- 当前验证：源码改动已推送；compatibility / pinned Release CI 正在运行。无新的真实 Host/Client 重放，因此不宣称当前实际出牌质量已实机改善。
+
 ## 下一任务
 
-按照 `CombatSolver_Quality_First_Next.md` 进入**第三项：用实际坏路线对照决定生产排序**。
+继续第三项，只处理**当前 HEAD 新出现的明显坏路线**。优先保留问题包和用户明确更好的合法手打前缀，并用 `FINAL_CANDIDATE → MP_QUALITY_SORTING → FINAL_SELECTION → Safe Execute` 定位丢失层。
 
 边界：
 
-1. 从已有问题包选少量可复现局面，固定真实初态、队友脚本与总搜索预算。
-2. 同时重放当前 Robust、本地共同搜索核心基线、明确可解释的合作名义策略，以及用户认为更好的合法手打前缀。
-3. 先定位好路线在哪一层丢失：候选未枚举、Beam 剪枝、目标评分、U3/U4 情景复评，还是执行 gate；只修有证据的一层。
-4. 比较生存、累计战损、最终 HP、结束轮数、药水支出与响应时间，不把所有维度压成新的任意常数。
-5. 第二项真实 Host/Client 药水 smoke 仍可后补，但不阻塞第三项代码/重放分析；没有实机证据时不宣称自动药水体验已实测改善。
+1. 若手打前缀未进入 FINAL_CANDIDATE，继续区分未枚举与 Beam 丢失；不要直接改 U4。
+2. 若 hand/baseline 候选仍在且 `robust_overrode_baseline=true`，再用同一 Matrix 的各情景指标判断是否确为 Robust 过度保守；没有证据不切默认。
+3. 若 FINAL_SELECTION 正确但实际动作缺失，回到 Safe Execute / Choice / continuation 处理，不污染排序目标。
+4. 比较生存、累计战损、最终 HP、结束轮数、药水支出与响应时间；保持总预算不变。
 
 仍按小阶段推进。
