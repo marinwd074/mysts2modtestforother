@@ -162,14 +162,14 @@ if ($newAuthorization.Count -eq 1) {
     if ($newRequestId -ne $requestId -and
         $null -ne $newWorldVersion -and
         $newWorldVersion -ge $deltaWorldVersion) {
-        Add-Check 'freshAuthorization' PASS $newAuthorization[0]
+        Add-Check 'nextAuthorizationConsistency' PASS $newAuthorization[0]
     } else {
-        Add-Check 'freshAuthorization' FAIL $newAuthorization[0] 'The next deployment reused the old request or a stale WorldVersion.'
+        Add-Check 'nextAuthorizationConsistency' FAIL $newAuthorization[0] 'The next deployment reused the old request or a stale WorldVersion.'
     }
 } elseif ($freshSearch.Count -eq 1) {
-    Add-Check 'freshAuthorization' UNVERIFIED $freshSearch[0] 'Fresh search was observed, but no later deployment was captured.'
+    Add-Check 'nextAuthorizationConsistency' PASS $freshSearch[0] 'No later deployment was captured; a second deployment is not required for U6 closure.'
 } else {
-    Add-Check 'freshAuthorization' UNVERIFIED
+    Add-Check 'nextAuthorizationConsistency' UNVERIFIED
 }
 
 $failed = @($checks | Where-Object { $_.status -eq 'FAIL' })

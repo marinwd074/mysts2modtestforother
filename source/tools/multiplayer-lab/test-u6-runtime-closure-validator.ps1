@@ -40,10 +40,17 @@ $base = @(
 
 try {
     Invoke-Case -Name 'pass' -Lines $base -ExpectedExit 0 -ExpectedStatus 'PASS'
+    Invoke-Case -Name 'pass-no-redeploy' -Lines @(
+        $base[0], $base[1], $base[2], $base[3], $base[4], $base[5]
+    ) -ExpectedExit 0 -ExpectedStatus 'PASS'
     Invoke-Case -Name 'fail-old-request-reuse' -Lines @(
         $base[0], $base[1], $base[2], $base[3],
         '[CombatSolver/MultiplayerSafeExecute] NATIVE_ACTION_CAPTURED request_id=31 action_index=1 type=PlayCardAction turn=1 card=STRIKE local_net_id=1 custom_network_api_used=false',
         $base[4], $base[5], $base[6]
+    ) -ExpectedExit 1 -ExpectedStatus 'FAIL'
+    Invoke-Case -Name 'fail-stale-next-authorization' -Lines @(
+        $base[0], $base[1], $base[2], $base[3], $base[4], $base[5],
+        '[CombatSolver/MultiplayerSafeExecute] MP2B_DEPLOY_START turn=1 request_id=31 route_generation=8 route_identity=stale new_authorization=true action_count=1 max_actions=1 search_world_version=9 stop_reason=safe_local_play_card'
     ) -ExpectedExit 1 -ExpectedStatus 'FAIL'
     Invoke-Case -Name 'unverified-no-remote-delta' -Lines @(
         $base[0], $base[1], $base[2], $base[3]

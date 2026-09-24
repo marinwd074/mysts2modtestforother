@@ -26,6 +26,8 @@
 5. 随后出现基于新 WorldVersion 的 fresh debounced search。
 6. 若再次部署，必须使用新的 request id，且 `search_world_version` 不早于远端变化版本。
 
+第二次部署不是 U6 PASS 的必要条件；只要已经证明旧授权停止、远端 WorldVersion 前进并触发基于新版本的 fresh search，即可闭环。若日志中确实出现后续部署，validator 会额外检查其授权一致性。
+
 验证命令：
 
 ~~~powershell
