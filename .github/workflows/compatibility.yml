@@ -3,12 +3,22 @@ name: 0.107.1 compatibility consistency
 on:
   push:
     paths:
-      - '.github/workflows/compatibility.yml'
+      - '.github/**'
+      - '.editorconfig'
+      - '.gitignore'
+      - '.gitattributes'
+      - 'CONTRIBUTING.md'
+      - 'UPSTREAM.md'
       - 'source/**'
       - '!source/docs/**'
   pull_request:
     paths:
-      - '.github/workflows/compatibility.yml'
+      - '.github/**'
+      - '.editorconfig'
+      - '.gitignore'
+      - '.gitattributes'
+      - 'CONTRIBUTING.md'
+      - 'UPSTREAM.md'
       - 'source/**'
       - '!source/docs/**'
   workflow_dispatch:
@@ -27,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@v6.0.2
         with:
           persist-credentials: false
 
@@ -38,6 +48,10 @@ jobs:
       - name: Verify architecture boundaries
         shell: pwsh
         run: ./source/tools/verify-refactor-boundaries.ps1
+
+      - name: Verify repository hygiene
+        shell: pwsh
+        run: ./source/tools/verify-repository-hygiene.ps1
 
       - name: Validate target manifest and project XML
         shell: pwsh
@@ -58,7 +72,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Check out source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@v6.0.2
         with:
           persist-credentials: false
 

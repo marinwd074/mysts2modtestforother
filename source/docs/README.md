@@ -19,6 +19,8 @@
 | 性能护栏 | [PERFORMANCE_GUARDRAILS.md](PERFORMANCE_GUARDRAILS.md) |
 | 仓库保留/清理规则 | [REPOSITORY_MAINTENANCE.md](REPOSITORY_MAINTENANCE.md) |
 | 本 fork 版本演进 | [PROJECT_VERSION_HISTORY.md](PROJECT_VERSION_HISTORY.md) |
+| 上游同步策略 | [../../UPSTREAM.md](../../UPSTREAM.md) |
+| 贡献与 PR 规则 | [../../CONTRIBUTING.md](../../CONTRIBUTING.md) |
 
 ## 专题资料
 

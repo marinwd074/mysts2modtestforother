@@ -21,3 +21,8 @@
 ## ARCHIVED
 
 完成引用审计、确认无默认门禁和无当前证据依赖后，过期研究工具直接从当前工作树移除，不建立第二套 archive 目录。恢复路径为 Git history。
+
+## GOVERNANCE
+
+- `verify-repository-hygiene.ps1`：校验仓库保留规则、版本一致性、game-body LFS 边界和必需协作文件。
+- GitHub tag 发布由 `.github/workflows/release.yml` 负责；不再维护带本机绝对路径或私有网盘流程的发布脚本。

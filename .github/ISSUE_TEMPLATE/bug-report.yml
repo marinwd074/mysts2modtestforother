@@ -1,0 +1,91 @@
+name: Bug / 问题反馈
+description: Report a wrong route, unexpected recalculation, execution failure, compatibility bug, or regression.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        优先附上 CombatSolver 导出的问题包。错误路线问题请同时写出你认为更优且合法的出牌前缀。
+        Do not include passwords, tokens, or unrelated personal information.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area / 范围
+      options:
+        - Route quality / 路线质量
+        - Simulation correctness / 模拟正确性
+        - Multiplayer / 多人
+        - Safe Execute / 自动执行
+        - Choice / 选牌
+        - Compatibility / 0.107.1 兼容
+        - Performance
+        - UI
+        - Build / CI
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: CombatSolver version / commit
+      placeholder: "0.40.2 or commit SHA"
+    validations:
+      required: true
+
+  - type: input
+    id: game
+    attributes:
+      label: Game version
+      value: "0.107.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode / 模式
+      options:
+        - Single-player
+        - Multiplayer Host
+        - Multiplayer Client
+        - Offline / pinned test
+        - Build only
+    validations:
+      required: true
+
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior / 实际现象
+      description: Encounter, turn, chosen route, failure, or unexpected recalculation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior / 期望行为
+      description: For route-quality issues, include the legal route you believe is better.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction / 复现
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: false
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Problem bundle / logs / evidence
+      description: Drag the exported problem ZIP here or attach the smallest useful logs. Do not commit these files to the repository.
+    validations:
+      required: false

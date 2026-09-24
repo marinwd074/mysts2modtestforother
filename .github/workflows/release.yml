@@ -1,0 +1,127 @@
+name: GitHub Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: github-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-release:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+          lfs: false
+          fetch-depth: 0
+
+      - name: Verify release tag and repository policy
+        shell: pwsh
+        run: |
+          pwsh -NoLogo -NoProfile -File '.\source\tools\verify-repository-hygiene.ps1'
+          pwsh -NoLogo -NoProfile -File '.\source\tools\verify-target-version.ps1'
+          pwsh -NoLogo -NoProfile -File '.\source\tools\verify-refactor-boundaries.ps1'
+
+          $tag = $env:GITHUB_REF_NAME
+          if ($tag -notmatch '^v(?<version>\d+\.\d+\.\d+)$') {
+            throw "Release tag must be vMAJOR.MINOR.PATCH, got $tag"
+          }
+          $version = $Matches.version
+          $manifest = Get-Content -LiteralPath '.\source\CombatSolver.json' -Raw | ConvertFrom-Json
+          [xml]$project = Get-Content -LiteralPath '.\source\CombatSolver.csproj' -Raw
+          $projectVersion = [string](@($project.Project.PropertyGroup.Version) | Where-Object { $_ } | Select-Object -First 1)
+          if ([string]$manifest.version -cne $version -or $projectVersion -cne $version) {
+            throw "Tag/version mismatch: tag=$version manifest=$($manifest.version) project=$projectVersion"
+          }
+
+      - name: Fetch pinned 0.107.1 game references
+        shell: pwsh
+        run: |
+          git lfs pull --include="game-body/data_sts2_windows_x86_64/sts2.dll,game-body/data_sts2_windows_x86_64/0Harmony.dll,game-body/data_sts2_windows_x86_64/GodotSharp.dll,game-body/data_sts2_windows_x86_64/Steamworks.NET.dll,game-body/data_sts2_windows_x86_64/System.IO.Hashing.dll,game-body/data_sts2_windows_x86_64/SmartFormat.dll,game-body/data_sts2_windows_x86_64/SmartFormat.ZString.dll,game-body/data_sts2_windows_x86_64/JetBrains.Annotations.dll,game-body/data_sts2_windows_x86_64/Sentry.dll" --exclude=""
+          $dll = '.\game-body\data_sts2_windows_x86_64\sts2.dll'
+          $actual = (Get-FileHash -LiteralPath $dll -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expected = 'a1f9e653f1e28e4076558fee1e60d218619cb7e057b887c6417f62c62c6d7a52'
+          if ($actual -ne $expected) {
+            throw "Pinned sts2.dll hash mismatch. expected=$expected actual=$actual"
+          }
+
+      - name: Fetch pinned RitsuLib compatibility package
+        shell: pwsh
+        run: |
+          $uri = 'https://github.com/BAKAOLC/STS2-RitsuLib/releases/download/v0.6.2/STS2.RitsuLib.Compat.0.107.1.0.6.2.github.zip'
+          $zip = Join-Path $env:RUNNER_TEMP 'ritsulib-0.107.1-0.6.2.zip'
+          Invoke-WebRequest -Uri $uri -OutFile $zip
+          $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expected = '8cb0bc276d3c64dde5ea5415e1738808dcbe71f0a0baf3ef51008ae6dde13517'
+          if ($actual -ne $expected) {
+            throw "RitsuLib package hash mismatch. expected=$expected actual=$actual"
+          }
+          $out = Join-Path $env:RUNNER_TEMP 'ritsulib'
+          Expand-Archive -LiteralPath $zip -DestinationPath $out -Force
+          $props = Get-ChildItem -LiteralPath $out -Recurse -Filter 'RitsuLib.References.props' | Select-Object -First 1
+          if ($null -eq $props) {
+            throw 'RitsuLib.References.props not found in pinned compatibility package.'
+          }
+          "RITSU_PROPS=$($props.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build Release
+        shell: pwsh
+        run: |
+          $gameData = (Resolve-Path '.\game-body\data_sts2_windows_x86_64').Path
+          dotnet build '.\source\CombatSolver.csproj' -c Release -p:CopyModOnBuild=false -p:Sts2DataDir="$gameData" -p:RitsuLibReferencesProps="$env:RITSU_PROPS" -p:RitsuLibReferenceTarget='0.107.1' -p:TreatWarningsAsErrors=true --nologo
+
+      - name: Package release
+        id: package
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          $stage = Join-Path $env:RUNNER_TEMP 'CombatSolver'
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+
+          $files = @{
+            '.\source\.godot\mono\temp\bin\Release\CombatSolver.dll' = 'CombatSolver.dll'
+            '.\source\CombatSolver.json' = 'CombatSolver.json'
+            '.\source\tools\CombatSolver.MemoryCleaner\bin\Release\net48\CombatSolver.MemoryCleaner.exe' = 'CombatSolver.MemoryCleaner.exe'
+            '.\LICENSE' = 'LICENSE'
+            '.\source\THIRD_PARTY_NOTICES.md' = 'THIRD_PARTY_NOTICES.md'
+          }
+          foreach ($entry in $files.GetEnumerator()) {
+            if (-not (Test-Path -LiteralPath $entry.Key -PathType Leaf)) {
+              throw "Release file missing: $($entry.Key)"
+            }
+            Copy-Item -LiteralPath $entry.Key -Destination (Join-Path $stage $entry.Value)
+          }
+
+          $zip = Join-Path $env:RUNNER_TEMP "CombatSolver-$version.zip"
+          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -CompressionLevel Optimal
+          $sha = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $shaPath = "$zip.sha256"
+          "$sha  $(Split-Path -Leaf $zip)" | Set-Content -LiteralPath $shaPath -Encoding ascii
+          "zip=$zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "sha=$shaPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Create or update draft GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ZIP: ${{ steps.package.outputs.zip }}
+          RELEASE_SHA: ${{ steps.package.outputs.sha }}
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $env:RELEASE_ZIP $env:RELEASE_SHA --clobber --repo $env:GITHUB_REPOSITORY
+            if ($LASTEXITCODE -ne 0) { throw 'GitHub release asset upload failed.' }
+          }
+          else {
+            gh release create $tag $env:RELEASE_ZIP $env:RELEASE_SHA --draft --generate-notes --title "CombatSolver $tag" --repo $env:GITHUB_REPOSITORY
+            if ($LASTEXITCODE -ne 0) { throw 'GitHub draft release creation failed.' }
+          }

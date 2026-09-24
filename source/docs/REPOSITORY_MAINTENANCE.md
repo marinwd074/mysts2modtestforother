@@ -8,6 +8,7 @@
 - `source/docs/compat/0.107.1/` 等长期版本事实。
 - 当前架构、测试矩阵、多人 Runbook/Limitations、当前计划和单一 handoff。
 - LICENSE、THIRD_PARTY_NOTICES、必要署名。
+- 根目录 `.editorconfig`、`CONTRIBUTING.md`、`UPSTREAM.md` 与 `.github/` 协作/发布配置。
 - `game-body/`：固定 `0.107.1` 兼容快照。它是本仓库明确的 LFS 例外，用于 CI/本地 pinned 验证，不参与普通“生成文件”清理。
 
 ## 不提交
@@ -47,3 +48,11 @@
 - `CombatShowcaseApi/Runtime` 仅保留本地导入/回放能力，不负责后台采集或网络上传。
 - 问题包上传属于用户主动触发的反馈动作，与后台 telemetry 分离。
 - 未经明确产品目标，不重新引入常驻 telemetry、后台上传 worker、私有 endpoint/token 元数据或隐式网络请求。
+
+## GitHub Release
+
+- GitHub Release 由 `vMAJOR.MINOR.PATCH` tag 触发 `.github/workflows/release.yml`。
+- tag、`CombatSolver.json` 与 `CombatSolver.csproj` 的版本必须一致。
+- Release 使用固定 0.107.1 game-body 与固定 RitsuLib 兼容包构建，并生成 ZIP + SHA-256。
+- 自动创建的是 draft Release；最终公开仍由维护者确认。
+- Steam Workshop 文案保留在 `docs/workshop/`，GitHub CI 不保存 Workshop/Quark 私有发布凭据或本机路径。

@@ -2,6 +2,11 @@
 *
 !.gitignore
 !.gitattributes
+!.editorconfig
+!README.md
+!LICENSE
+!CONTRIBUTING.md
+!UPSTREAM.md
 !AGENTS.md
 
 # Active source tree.
@@ -16,8 +21,7 @@
 
 # GitHub configuration.
 !.github/
-!.github/workflows/
-!.github/workflows/**
+!.github/**
 
 # Local/generated outputs must stay outside Git.
 /.local/
