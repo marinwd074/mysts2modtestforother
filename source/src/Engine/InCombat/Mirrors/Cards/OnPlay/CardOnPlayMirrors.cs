@@ -104,6 +104,7 @@ internal static partial class CardOnPlayMirrors
         registry.Register<CalculatedGamble>(CardDrawCardMirrors.CalculatedGambleOnPlay);
         registry.Register<Adrenaline>(CardDrawCardMirrors.AdrenalineOnPlay);
         registry.Register<Offering>(CardDrawCardMirrors.OfferingOnPlay);
+        registry.Register<DarkEmbrace>(static (_, _) => { });
         registry.Register<Neurosurge>(CardDrawCardMirrors.NeurosurgeOnPlay);
         registry.Register<BurningPact>(static (_, _) => { });
         registry.Register<CompileDriver>(CardDrawCardMirrors.CompileDriverOnPlay);
