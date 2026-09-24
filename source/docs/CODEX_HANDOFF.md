@@ -69,16 +69,29 @@
 - compatibility static/L1 PASS；Pinned Release run `35974977137` SUCCESS。historical classifier 未出现 current-only regression：P0 timed=`BOTH_TIME_BOUNDARY`，fixed-work=`OBSERVED_EQUIVALENT`，P1=`FIXED_WORK_PASS_TIME_BOUNDARY`。
 - 真实 Host/Client 正反例尚未跑：普通队友非致死伤害应出现 Continue/Reselect；目标死亡等强变化应出现 FullRestart。此项继续记为 UNVERIFIED，不阻止进入下一实现项。
 
+## Quality-first 第二项状态
+
+- **第二项本地药水执行闭环：IMPLEMENTED / PINNED PASS / REAL MP UNVERIFIED。**
+- `MultiplayerSafeExecute` 只有在实际 admission/native/revalidation 链接通后才启用 `CanUsePotionsAutomatically=true`；不是单独翻 capability 开关。
+- Safe Execute structural/resolved gate 现支持本地 `UsePotion`：要求明确槽位与 PotionId，并在提交前重新核对本地槽位实例、PotionId 与 live `IsValidTarget`。
+- 多人搜索中的 `AnyPlayer/AnyAlly` 药水首版只保留本地玩家目标；敌人目标与 Self/AllEnemies/TargetedNoCreature 继续使用已有 0.107.1 模拟语义。队友目标仍关闭，未扩展为控制队友药水。
+- 原生执行复用现有 `potion.EnqueueManualUse(target)` / `UsePotionAction` 与 `NativeChoiceRuntime`；Safe Execute 现在会捕获并归因 `UsePotionAction`，随后复用 U1 one-action predicted/live semantic post-state 校验。
+- `ContinuationStamp` 与 multiplayer compact/local fingerprint 原本已包含药水槽位，因此成功动作必须同时满足槽位消费/身份变化、WorldVersion advance、稳定后态与 continuation 一致；不新造药水专用执行器。
+- Smart / Disabled / RequireAtLeastOne 与 potion-free baseline 未改；`PotionStrategyChecks` 继续约束“无收益不浪费药水”等策略语义。
+- 第一项 bounded refresh 仍故意只重放普通 `PlayCard` 前缀；路线遇到药水不会删掉药水再把后续牌伪装为原路线。无可重放候选时直接 `FullRestart`。
+- compatibility run `35983184607` **SUCCESS**；Pinned 0.107.1 Release run `35983115684` **SUCCESS**。中途两个失败只暴露字段从 `NativePlayCardCaptured` 泛化为 `NativeLocalActionCaptured` 后的测试/诊断残留，均已修正。
+- 现有 potion differential / potion continuation runtime fixtures 继续覆盖资源、伤害/状态、Choice、原生 `UsePotionAction` 与槽位消费语义；本轮没有在真实 Host/Client 多人局重新跑这些 fixture，因此实际多人自动喝药仍记为 `UNVERIFIED`。
+
 ## 下一任务
 
-按照 `CombatSolver_Quality_First_Next.md` 进入**第二项：本地药水执行闭环**。
+按照 `CombatSolver_Quality_First_Next.md` 进入**第三项：用实际坏路线对照决定生产排序**。
 
 边界：
 
-1. 只贯通本地持有、当前 0.107.1 已正确模拟的药水：候选枚举 → 目标解析 → 原生 `UsePotionAction` → Choice → 稳定后态校验 → continuation。
-2. 不直接把 `CanUsePotionsAutomatically=true` 当完成；先查清 Safe Execute 前置 gate 与 `UsePotionAction` 现有 native deployment 路径。
-3. 保留 Smart/Disabled/RequireAtLeastOne 语义和无药备选；队友目标药水按 pinned 0.107.1 API 单独确认，不扩大到控制队友药水。
-4. 复用 U1 predicted/live 后态校验，不新造执行器；失败/Unknown 必须 fail closed。
-5. 第一项 refresh 快路当前故意只保留 PlayCard 候选；药水闭环完成后再决定是否让可自动执行的本地药水进入 bounded refresh 候选。
+1. 从已有问题包选少量可复现局面，固定真实初态、队友脚本与总搜索预算。
+2. 同时重放当前 Robust、本地共同搜索核心基线、明确可解释的合作名义策略，以及用户认为更好的合法手打前缀。
+3. 先定位好路线在哪一层丢失：候选未枚举、Beam 剪枝、目标评分、U3/U4 情景复评，还是执行 gate；只修有证据的一层。
+4. 比较生存、累计战损、最终 HP、结束轮数、药水支出与响应时间，不把所有维度压成新的任意常数。
+5. 第二项真实 Host/Client 药水 smoke 仍可后补，但不阻塞第三项代码/重放分析；没有实机证据时不宣称自动药水体验已实测改善。
 
-仍按小阶段推进；没有实机证据时不宣称真实体验改善。
+仍按小阶段推进。

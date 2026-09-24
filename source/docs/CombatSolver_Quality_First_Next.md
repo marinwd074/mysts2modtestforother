@@ -73,6 +73,21 @@
 
 验收：至少覆盖即时资源、伤害/状态、需要Choice的已支持药水类型，确认使用一次、槽位/身份正确、后续路线继续，且Smart不会无收益浪费药水。按实际修改选择测试，不为列齐清单添加不存在的游戏效果。
 
+### 第二项实施状态（2026-09-24）
+
+**本地药水执行闭环已实现并通过 pinned 门禁；真实 Host/Client 多人自动用药仍为 UNVERIFIED。**
+
+- Safe Execute 不再把 `UsePotion` 作为结构性拒绝。动作必须带 PotionId 与槽位；提交前重新解析本地玩家槽位并核对实例 ID，槽位缺失/换药直接 fail closed。
+- 目标 admission 首版限定为**本地玩家或敌人**。多人搜索对 `AnyPlayer/AnyAlly` 会过滤队友目标；Self、AnyEnemy、AllEnemies、TargetedNoCreature 继续使用已有模拟器规则。队友目标药水尚未按 pinned 0.107.1 逐项验真，因此没有放开。
+- 原生执行继续复用单人 `PotionModel.EnqueueManualUse` 产生的 `UsePotionAction` 与现有 `NativeChoiceRuntime`。Safe Execute 会捕获期望的原生动作类型，并把药水动作送入与出牌相同的 U1 one-action replay → queue/Choice settle → predicted/live semantic post-state 对照。
+- `ContinuationStamp` 与 multiplayer WorldVersion fingerprint 已包含本地药水槽位；因此槽位消费、PotionId 变化和后续 continuation 会参与真实/预测一致性校验。动作只能授权一次，失败或不稳定后态不会继续旧后缀。
+- Smart / Disabled / RequireAtLeastOne、PotionStrategy 与 potion-free baseline 保持原语义；没有为了多人自动执行降低药水成本阈值，也没有删除无药路线。
+- 第一项 bounded refresh 仍只接受普通 PlayCard 前缀。如果当前候选从药水开始，它不会生成可重放候选并会 full restart；如果药水出现在首牌之后，只允许重放药水之前的合法牌前缀，不会跳过药水把后续动作伪装成原路线。
+- 现有测试面中，`UnattendedTestRunner.Potions` 已有真实/模拟差分、槽位消费与资源/伤害/Power 断言；`PotionContinuation` 已覆盖需要 Choice 的药水以及原生 `UsePotionAction` continuation。本轮没有重新跑真实 Host/Client Godot runtime，因此这些现有 fixture 不能替代多人实机证据。
+- 新增/更新的 L1 合同覆盖：合法本地药水 shape、缺 ID/槽位、槽位药水缺失/ID 漂移、队友目标拒绝、live target validation 失败、通用 native local-action attribution。
+- 最终门禁：compatibility run `35983184607` **SUCCESS**；Pinned 0.107.1 Release run `35983115684` **SUCCESS**。
+- **未验证**：真实多人中本人资源药、敌人伤害/状态药、带 Choice 药水各至少一条 Safe Execute 完整链，以及队友在用药结算中插入动作时是否按预期 fail closed/fresh replan。没有这些证据前不宣称实际多人自动用药体验已改善。
+
 ## 第三项：用坏路线对照决定生产排序
 
 从现有问题包选少量可复现快照，添加用户明确更好的手打前缀。每局固定真实初态、相同队友脚本、相同总预算。人类路线也必须用真实规则重放，不能凭主观判优。
@@ -98,11 +113,11 @@
 
 ## GPT下一轮直接执行指令
 
-以当前HEAD为准，先读仓库规定的最小上下文。完成第一项的一个可工作的最小切片：保留旧本地候选、在新根重放、区分继续/重选/完整搜索，优先覆盖队友普通变化导致无意义重启的路径。不要一次重写目标、药水和执行器。
+以当前 HEAD 为准，先读仓库规定的最小上下文。第一项 bounded refresh 与第二项本地药水执行闭环都已实现；下一轮直接进入第三项，不再重复 U0–U6 或重新设计药水执行器。
 
-针对旧实现与新实现运行相同事件序列，证明减少的是完整重启和等待，而不是漏掉变化。保留目标死亡/资源或RNG变化的反例。若现有结构无法支持有界重放，先给出代码级障碍并做最小重构，不回到全仓安全审计。
+从已有问题包选择少量“求解器明显不如手打”的可复现局面。固定真实初态、相同队友脚本与相同总预算，同时重放：当前 Robust 生产路线、共同搜索核心本地基线、一个明确可解释的合作名义策略、以及用户给出的合法手打前缀。先确定更好路线是没被枚举、被 Beam 剪掉、被目标/终局评分压掉、被 U3/U4 情景复评推翻，还是执行 gate 截断，然后只改有证据的层。
 
-每轮报告：实际改变的用户行为、旧新对照、修改函数、验证结果、未验证项。没有实机不宣称体验已改善；也不把缺实机变成停止全部代码工作的理由。按仓库规则提交推送实现，不自动发布。第一项完成后接第二项，然后在实际坏路线中推进第三项。
+每轮报告：实际改变的用户行为、旧新对照、修改函数、验证结果、未验证项。没有实机不宣称体验已改善；也不把缺实机变成停止代码/重放分析的理由。按仓库规则提交推送实现，不自动发布。
 
 ## 核对入口
 
