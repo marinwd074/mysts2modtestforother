@@ -22,6 +22,12 @@ internal static class MultiplayerInterleaveOrderPolicy
     internal static bool CanCollapseOrder(MultiplayerInterleaveOrderRelation relation)
         => relation == MultiplayerInterleaveOrderRelation.ExactEquivalent;
 
+    // Reverse-order replay is an optional equivalence probe. Search intentionally releases
+    // historical parent simulators after expansion, so a later child must treat a missing
+    // parent simulator as "reverse unavailable" instead of dereferencing released state.
+    internal static bool CanProbeReverseOrder(bool parentSimulatorAvailable)
+        => parentSimulatorAvailable;
+
     internal static bool AllowsProactiveWaitForTeammate => false;
 
     internal static bool IsForecastBoundaryReason(string? reason)

@@ -308,6 +308,14 @@ internal sealed class MultiplayerSafeExecutionSession
 /// </summary>
 internal static class MultiplayerSafeExecutePolicy
 {
+    // Safe Execute may replay a choice that was already fixed by the previous accepted
+    // local route. This does not authorize a new multiplayer turn-setup search.
+    internal static bool CanReplayPlannedTurnSetupChoice(
+        bool canDriveChoices,
+        int turn,
+        bool hasPlannedChoices)
+        => canDriveChoices && turn > 1 && hasPlannedChoices;
+
     // Safe Execute is bounded by the finite current-turn route selected by the search.
     // Per-action live revalidation remains the actual safety boundary.
     internal const string ManualMultiplayerCardReason = "multiplayer_only_manual_play";

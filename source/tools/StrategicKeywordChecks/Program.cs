@@ -35,4 +35,14 @@ for(int mask=0;mask<1<<16;mask+=17)Check(cards,(StrategicEffectRequirements)mask
 Check([], (StrategicEffectRequirements)65535,false);
 Check([new(Card("STRIKE",CardType.Attack))],StrategicEffectRequirements.AttackHits,false);
 if(CardModel.KeywordReads!=0)throw new InvalidOperationException("Unused keywords were read");
+CardModel weakOnly=Card("WEAK_ONLY",CardType.Skill);
+CardModel vulnerable=Card("VULNERABLE",CardType.Skill);
+vulnerable.DynamicVars.Remove("Weak");
+vulnerable.DynamicVars["VulnerablePower"]=new(2);
+StrategicEffectContext vulnerableContext=StrategicEffectContext.Build(
+ [new(weakOnly),new(vulnerable)],90,0,0,
+ StrategicEffectRequirements.DebuffApplications|StrategicEffectRequirements.AverageCardValue,
+ false);
+if(vulnerableContext.DebuffApplications!=4||vulnerableContext.VulnerableApplications!=2)
+ throw new InvalidOperationException($"Vulnerable subset differs: debuffs={vulnerableContext.DebuffApplications} vulnerable={vulnerableContext.VulnerableApplications}");
 Console.WriteLine(JsonSerializer.Serialize(new {passed=true,cases,oldReads,newReads,scope="all context fields; all 65536 requirement masks; intrinsic exhaust versus skill exhaust, shivs, generators, external types, mutation between builds"}));

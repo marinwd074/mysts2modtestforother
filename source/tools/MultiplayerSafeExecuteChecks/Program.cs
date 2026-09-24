@@ -87,6 +87,26 @@ Check(Structural(hasCardIdentity: false).Reason == "card_identity_missing", "Mis
 Check(Structural(endsTurn: true).Reason == "ends_player_turn", "Cards that end the player turn fail closed.");
 Check(Structural(replay: true).Reason == "replay_semantics", "Replay semantics fail closed.");
 Check(Structural(choice: true).IsSafe, "Planned local choices use the same native choice driver as singleplayer.");
+Check(
+    MultiplayerSafeExecutePolicy.CanReplayPlannedTurnSetupChoice(
+        canDriveChoices: true,
+        turn: 3,
+        hasPlannedChoices: true),
+    "Safe Execute replays an already-planned local turn-start choice from the accepted cross-turn route.");
+Check(
+    !MultiplayerSafeExecutePolicy.CanReplayPlannedTurnSetupChoice(
+        canDriveChoices: true,
+        turn: 1,
+        hasPlannedChoices: true)
+        && !MultiplayerSafeExecutePolicy.CanReplayPlannedTurnSetupChoice(
+            canDriveChoices: true,
+            turn: 3,
+            hasPlannedChoices: false)
+        && !MultiplayerSafeExecutePolicy.CanReplayPlannedTurnSetupChoice(
+            canDriveChoices: false,
+            turn: 3,
+            hasPlannedChoices: true),
+    "Safe Execute turn-setup replay does not authorize first-turn search, missing choices, or a session that cannot drive native choices.");
 Check(Resolved(localPlayer: false).Reason == "local_player_missing", "Missing local player fails closed.");
 Check(Resolved(localCard: false).Reason == "local_card_missing", "A card outside the local hand fails closed.");
 Check(

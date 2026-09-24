@@ -253,14 +253,15 @@ internal static class PlayerTurnSetupCoordinator
         out Task? task)
     {
         task = null;
+        CombatState? currentCombat = manager.DebugOnlyGetState();
+        SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(currentCombat);
         if (_invokingOriginalSetup
             || !_activeOperation.IsCompleted
             || !Entry.Enabled
             || SolverController.SolverDisabled
             || (!SolverController.AutomaticCalculationEnabled && !SolverController.FullAutoEnabled)
-            || !SolverSessionCapabilities.Capture(manager.DebugOnlyGetState()).CanInterceptTurnSetup
             || SolverController.AutomaticSearchPaused
-            || !ReferenceEquals(LocalContext.GetMe(manager.DebugOnlyGetState()), player)
+            || !ReferenceEquals(LocalContext.GetMe(currentCombat), player)
             || player.PlayerCombatState == null
             || player.PlayerCombatState.Phase != PlayerTurnPhase.Start
             || CardSelectCmd.Selector != null)
@@ -268,19 +269,41 @@ internal static class PlayerTurnSetupCoordinator
             return false;
         }
 
-        CombatState combat = manager.DebugOnlyGetState()
+        CombatState combat = currentCombat
             ?? throw new InvalidOperationException("回合准备选牌接管时战斗状态不存在。");
         int turn = player.PlayerCombatState.TurnNumber;
         IReadOnlyList<PlanCardChoice>? replayChoices = null;
+        bool hasPlannedReplay = turn > 1
+            && SolverController.TryGetPlannedTurnSetupChoices(
+                combat,
+                turn,
+                out replayChoices);
+        bool safeExecutePlannedReplay =
+            capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute
+            && MultiplayerSafeExecutePolicy.CanReplayPlannedTurnSetupChoice(
+                capabilities.CanDriveChoices,
+                turn,
+                hasPlannedReplay);
+        if (!capabilities.CanInterceptTurnSetup && !safeExecutePlannedReplay)
+            return false;
+
         if (turn <= 1)
         {
-            if (!RequiresSolverChoice(player))
+            if (!capabilities.CanInterceptTurnSetup || !RequiresSolverChoice(player))
                 return false;
         }
-        else if (!SolverController.TryGetPlannedTurnSetupChoices(combat, turn, out replayChoices))
+        else if (!hasPlannedReplay)
         {
-            if (!RequiresSolverChoice(player)) return false;
+            if (!capabilities.CanInterceptTurnSetup || !RequiresSolverChoice(player))
+                return false;
             replayChoices = null;
+        }
+
+        if (safeExecutePlannedReplay)
+        {
+            Entry.Logger.Info(
+                $"[CombatSolver/MultiplayerSafeExecute] MP_TURN_SETUP_REPLAY " +
+                $"turn={turn} choices={replayChoices?.Count ?? 0} source=accepted_route");
         }
 
         Task operation = RunSetupAsync(

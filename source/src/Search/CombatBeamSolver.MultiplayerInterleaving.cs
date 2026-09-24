@@ -171,6 +171,12 @@ internal sealed partial class CombatBeamSolver
         }
 
         CombatPredictionSimulator forwardSimulator = localThenRemote.Simulator;
+        if (!MultiplayerInterleaveOrderPolicy.CanProbeReverseOrder(
+                beforeLocal.Snapshot.HasSimulator))
+        {
+            return MultiplayerInterleaveOrderRelation.ReverseUnavailable;
+        }
+
         CombatPredictionSimulator reverseSimulator =
             ((CombatPredictionSimulator)beforeLocal.Snapshot.Simulator).Fork();
         ForkableSet<uint> reverseDeaths =
