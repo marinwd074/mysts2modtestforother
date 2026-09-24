@@ -680,6 +680,7 @@ internal sealed partial class CombatBeamSolver
                 TurnSetupChoices = best.GetTurnSetupChoices().Select(WithDisplayNames).ToArray(),
                 TurnSetupPlayState = best.GetTurnSetupPlayState(),
                 BestNode = selectedPlan,
+                MultiplayerReplayCandidates = ordering.ReplayCandidates,
                 Snapshot = selectedSnapshot,
                 Forecast = _forecast,
                 ExpandedNodes = _run.Expanded,

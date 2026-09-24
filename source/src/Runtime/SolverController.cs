@@ -1392,6 +1392,18 @@ internal static partial class SolverController
                 || _combat.AwaitingMultiplayerContinuation,
             _combat.ContinuationSource?.Continuations.Count ?? 0,
             _combat.ContinuationSource?.MultiplayerScope ?? MultiplayerSearchResultScope.CurrentTurnOnly);
+        int currentTurn = LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0;
+        LiveCombatStamp currentStamp = LiveCombatStamp.Capture(state);
+        SolverResult? refreshSource = _combat.LatestResult;
+        bool canAttemptBoundedPlanRefresh =
+            !preserveExpectedSafeDeployment
+            && refreshSource != null
+            && refreshSource.StartTurnNumber == currentTurn
+            && refreshSource.MultiplayerReplayCandidates.Count > 0
+            && _combat.LatestStamp == currentStamp;
+        _combat.PendingMultiplayerPlanRefresh = canAttemptBoundedPlanRefresh;
+        if (!canAttemptBoundedPlanRefresh)
+            _combat.LastPlanRefreshDecisionTimestampMilliseconds = null;
         if (!preserveExpectedSafeDeployment)
         {
             if (safeExecutionState == MultiplayerSafeExecutionState.Authorized
@@ -1419,17 +1431,28 @@ internal static partial class SolverController
                 abortedDeployment.StartTurnNumber,
                 remoteAbortCompletedActions,
                 endedTurn: false,
-                completionMessage: "检测到多人状态变化，已停止后续执行并重新计算。");
+                completionMessage: canAttemptBoundedPlanRefresh
+                    ? "检测到多人状态变化，已停止旧授权并重新校验当前路线。"
+                    : "检测到多人状态变化，已停止后续执行并重新计算。");
         }
         Task turnSetupRelease = PlayerTurnSetupCoordinator.Reset("multiplayer_capability");
         PendingCombatDeferredOperations.RemoveAll(static task => task.IsCompleted);
         if (!turnSetupRelease.IsCompleted)
             PendingCombatDeferredOperations.Add(turnSetupRelease);
         _combat.FullAutoEnabled = false;
-        _combat.LatestResult = null;
-        _combat.LatestStamp = null;
-        if (!preservePendingContinuation)
+        if (canAttemptBoundedPlanRefresh)
+        {
+            // The displayed result remains only a retained action candidate. Its future
+            // continuation assumptions are stale until a new-root replay authorizes the prefix.
             _combat.ContinuationSource = null;
+        }
+        else
+        {
+            _combat.LatestResult = null;
+            _combat.LatestStamp = null;
+            if (!preservePendingContinuation)
+                _combat.ContinuationSource = null;
+        }
         _combat.PendingCompleteProjectionBaseline = null;
         _combat.PendingManualProjectionBaseline = null;
         InvalidateRenderedRouteAdoptionSeed();
@@ -1445,7 +1468,8 @@ internal static partial class SolverController
             $"reason={MultiplayerWorldTracker.LastReason} " +
             $"turn={LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0} " +
             $"continuation_preserved={preservePendingContinuation.ToString().ToLowerInvariant()} " +
-            $"route_identity={_combat.ContinuationSource?.RouteIdentity ?? "-"}");
+            $"bounded_refresh_pending={canAttemptBoundedPlanRefresh.ToString().ToLowerInvariant()} " +
+            $"route_identity={(refreshSource?.RouteIdentity ?? _combat.ContinuationSource?.RouteIdentity) ?? "-"}");
     }
 
     private static void TryScheduleMultiplayerSearch(NGame? host, CombatState state)
@@ -1549,6 +1573,21 @@ internal static partial class SolverController
             Entry.Logger.Info(
                 $"[CombatSolver/MultiplayerAdvisor] SEARCH_DEBOUNCED_START " +
                 $"world_version={worldVersion} request_id={requestId}");
+            if (_combat.PendingMultiplayerPlanRefresh)
+            {
+                MultiplayerPlanRefreshDecision refreshDecision =
+                    TryBoundedMultiplayerPlanRefresh(state, worldVersion);
+                if (refreshDecision == MultiplayerPlanRefreshDecision.Continue)
+                {
+                    if (_combat.MultiplayerSafeAutoEnabled
+                        && _combat.LatestResult is { } refreshedResult
+                        && _deployment == null)
+                    {
+                        StartDeployment(host, state, refreshedResult);
+                    }
+                    return;
+                }
+            }
             RequestSearch(host, state, SearchReason.AutoTurnStart);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested || combatToken.IsCancellationRequested)

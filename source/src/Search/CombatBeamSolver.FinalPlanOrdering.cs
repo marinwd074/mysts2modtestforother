@@ -1165,6 +1165,36 @@ internal sealed partial class CombatBeamSolver
                 potionHpRequired = PotionUsePolicy.AdditionalRequiredUseStrategicHpCost(
                     potionHpRequired);
             }
+            List<MultiplayerReplayCandidate> replayCandidates = [];
+            HashSet<string> retainedFirstActions = [];
+            for (int index = 0; index < selected.Count && replayCandidates.Count < 3; index++)
+            {
+                List<PlanAction> prefix = [];
+                foreach (PlanAction action in selected[index].Node.Actions)
+                {
+                    if (action.Turn < startTurnNumber)
+                        continue;
+                    if (action.Turn != startTurnNumber
+                        || action.IsForecastOnlyObservation
+                        || action.Kind == PlanActionKind.EndTurn
+                        || action.EndsPlayerTurn)
+                    {
+                        break;
+                    }
+                    if (!action.IsExecutable)
+                        continue;
+                    prefix.Add(action);
+                    if (prefix.Count >= 2)
+                        break;
+                }
+                if (prefix.Count == 0)
+                    continue;
+                string firstAction = CombatBeamSolver.PolicyActionToken(prefix[0]);
+                if (!retainedFirstActions.Add(firstAction))
+                    continue;
+                replayCandidates.Add(new MultiplayerReplayCandidate(index, prefix.ToArray()));
+            }
+
             return new FinalPlanSelection(
                 new FinalPlanCandidate(
                     selectedCandidate.Node,
@@ -1176,7 +1206,8 @@ internal sealed partial class CombatBeamSolver
                     selectedCandidate.Score),
                 potionBranchesRejected,
                 potionHpSaved,
-                potionHpRequired);
+                potionHpRequired,
+                replayCandidates);
         }
     }
 

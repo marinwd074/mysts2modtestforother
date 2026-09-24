@@ -1403,6 +1403,14 @@ internal sealed record SelectedSearchPlan(
     int ActionCount,
     double Score);
 
+/// <summary>
+/// Small immutable local prefixes retained from the already-ranked final pool. They never own a
+/// simulator and are only replayed from a newly captured multiplayer root.
+/// </summary>
+internal sealed record MultiplayerReplayCandidate(
+    int OriginalRank,
+    IReadOnlyList<PlanAction> Prefix);
+
 /// <summary>最终路线的只读标量摘要；不持有 CombatPredictionSimulator。</summary>
 internal sealed record SolverSnapshot(
     bool HasRisk,
@@ -1477,6 +1485,7 @@ internal sealed class SolverResult
     public string RouteIdentity { get; internal set; } = Guid.NewGuid().ToString("N");
     public bool DeterministicBlockPotionInserted { get; internal set; }
     public bool SingleSessionSearch { get; internal set; }
+    public IReadOnlyList<MultiplayerReplayCandidate> MultiplayerReplayCandidates { get; internal set; } = [];
 
     /// <summary>
     /// 本次请求的宽度组合诊断（首条路线发布时刻、逐成员明细、各成员结束后的托管堆峰值）。

@@ -520,12 +520,19 @@ internal static partial class SolverController
                     Entry.Logger.Info($"[CombatSolver/Test] DEPLOY_ACTION turn={turn} card={action.CardId} target_index={action.TargetIndex} target_combat_id={action.TargetCombatId?.ToString() ?? "-"} choice={action.Choice?.Effect.ToString() ?? "-"}");
                     if (safeExecute)
                     {
+                        long nativeCapturedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                        long refreshToNativeSubmitMs =
+                            _combat.LastPlanRefreshDecisionTimestampMilliseconds is { } refreshAt
+                                ? Math.Max(0, nativeCapturedAt - refreshAt)
+                                : -1;
                         Entry.Logger.Info(
                             $"[CombatSolver/MultiplayerSafeExecute] NATIVE_ACTION_CAPTURED " +
-                            $"timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
+                            $"timestamp_ms={nativeCapturedAt} " +
                             $"request_id={safeSession?.RequestId ?? 0} action_index={actionIndex} " +
                             $"type={queuedAction.GetType().Name} turn={turn} card={action.CardId} " +
+                            $"refresh_to_native_submit_ms={refreshToNativeSubmitMs} " +
                             $"local_net_id={player.NetId} custom_network_api_used=false");
+                        _combat.LastPlanRefreshDecisionTimestampMilliseconds = null;
                     }
                 }
                 try

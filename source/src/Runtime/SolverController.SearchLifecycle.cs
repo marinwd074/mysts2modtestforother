@@ -470,6 +470,7 @@ internal static partial class SolverController
             _combat.State = state;
             _combat.LatestResult = null;
             _combat.LatestStamp = null;
+            _combat.LastPlanRefreshDecisionTimestampMilliseconds = null;
             LastCompletedResultForTesting = null;
             LastSearchFailureForTesting = null;
             LastFullAutoStoppedForWorseRecalculationForTesting = false;
