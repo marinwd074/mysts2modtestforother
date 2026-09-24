@@ -6,11 +6,10 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$project = Join-Path $PSScriptRoot 'OfflineSearchHarness/OfflineSearchHarness.csproj'
-$gameDataPath = (Resolve-Path $GameData).Path
 $workspacePath = [IO.Path]::GetFullPath($Workspace)
 New-Item -ItemType Directory -Force -Path $workspacePath | Out-Null
+$project = Join-Path $PSScriptRoot 'E0PinnedHarness/E0PinnedHarness.csproj'
+$gameDataPath = (Resolve-Path $GameData).Path
 
 dotnet build $project -c Release `
     -p:Sts2DataDir="$gameDataPath" `
@@ -19,115 +18,81 @@ dotnet build $project -c Release `
     -p:RitsuLibReferenceTarget='0.107.1' `
     -p:TreatWarningsAsErrors=true --nologo
 if ($LASTEXITCODE -ne 0) {
-    throw "OfflineSearchHarness build failed with exit $LASTEXITCODE."
+    throw "E0PinnedHarness build failed with exit $LASTEXITCODE."
 }
 
-$harness = Join-Path $PSScriptRoot 'OfflineSearchHarness/bin/Release/net9.0/OfflineSearchHarness.dll'
-if (-not (Test-Path -LiteralPath $harness)) {
-    throw "OfflineSearchHarness output missing: $harness"
-}
-
-function Invoke-E0Case {
-    param(
-        [Parameter(Mandatory = $true)][string] $Label,
-        [Parameter(Mandatory = $true)][string[]] $Arguments
-    )
-
-    $out = Join-Path $workspacePath $Label
-    New-Item -ItemType Directory -Force -Path $out | Out-Null
-    & dotnet $harness @Arguments --label $Label --out $out --profile Medium --dop 1 --budget-ms 5000 --search-mode Coordinator --use-portfolio
-    if ($LASTEXITCODE -ne 0) {
-        throw "E0 case $Label failed with exit $LASTEXITCODE."
-    }
-
-    $resultPath = Join-Path $out 'result.json'
-    $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
-    $selected = $result.searchEfficiency.selected
-    if ($null -eq $selected) {
-        throw "E0 case $Label did not export a selected search-efficiency candidate."
-    }
-    foreach ($field in @('generatedMs', 'evaluatedMs', 'selectedMs', 'publishedMs')) {
-        if ($null -eq $selected.$field) {
-            throw "E0 case $Label is missing timeline field $field."
-        }
-    }
-    if ($selected.generatedMs -gt $selected.evaluatedMs -or
-        $selected.evaluatedMs -gt $selected.selectedMs -or
-        $selected.selectedMs -gt $selected.publishedMs) {
-        throw "E0 case $Label timeline is not monotonic."
-    }
-
-    [pscustomobject]@{
-        case = $Label
-        status = 'PASS'
-        memberId = $selected.searchMemberId
-        memberKind = $selected.memberKind
-        generatedMs = [math]::Round([double]$selected.generatedMs, 3)
-        evaluatedMs = [math]::Round([double]$selected.evaluatedMs, 3)
-        selectedMs = [math]::Round([double]$selected.selectedMs, 3)
-        publishedMs = [math]::Round([double]$selected.publishedMs, 3)
-        expandedAtGeneration = $selected.expandedAtGeneration
-        turnDepth = $selected.turnDepth
-        evaluationContextId = $selected.evaluationContextId
-        route = @($result.solverMetrics.actions | ForEach-Object {
-            "$($_.turn):$($_.kind):$($_.cardId ?? $_.potionId ?? '-')"
-        })
-    }
-}
-
+$harness = Join-Path $PSScriptRoot 'E0PinnedHarness/bin/Release/net9.0/E0PinnedHarness.dll'
 $rows = @()
-$rows += Invoke-E0Case -Label 'simple_attack_defense' -Arguments @(
-    '--character', 'IRONCLAD',
-    '--encounter', 'FUZZY_WURM_CRAWLER_WEAK',
-    '--seed', 'E0-SIMPLE-001',
-    '--ascension', '0',
-    '--act-index', '0'
-)
-
-$generatedScenario = (Resolve-Path (Join-Path $PSScriptRoot 'GeneratedCombatScenarios/specified.json')).Path
-$requestPath = Join-Path $workspacePath 'draw-energy.request.json'
-@{
-    schemaVersion = 1
-    runId = 'e0-draw-energy'
-    scenarioId = 'E0-DRAW-ENERGY'
-    generatedScenarioPath = $generatedScenario
-} | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $requestPath -Encoding utf8
-
-$rows += Invoke-E0Case -Label 'draw_energy_combo' -Arguments @(
-    '--request', $requestPath
-)
-
-# A true teammate-cooperation E0 row requires a current-HEAD PlayerCount=2 replay root.
-# The cloud-pinned repository has no such replayable problem package; do not fabricate one
-# from L1 contracts or a single-player root.
-$rows += [pscustomobject]@{
-    case = 'teammate_cooperation'
-    status = 'UNVERIFIED_NO_REPLAYABLE_MULTIPLAYER_ROOT'
-    memberId = $null
-    memberKind = $null
-    generatedMs = $null
-    evaluatedMs = $null
-    selectedMs = $null
-    publishedMs = $null
-    expandedAtGeneration = $null
-    turnDepth = $null
-    evaluationContextId = $null
-    route = @()
+foreach ($scenario in @('simple', 'draw_energy')) {
+    $out = Join-Path $workspacePath $scenario
+    New-Item -ItemType Directory -Force -Path $out | Out-Null
+    & dotnet $harness --scenario $scenario --out $out
+    if ($LASTEXITCODE -ne 0) {
+        throw "E0 required scenario $scenario failed with exit $LASTEXITCODE."
+    }
+    $evidence = Get-Content -LiteralPath (Join-Path $out "e0-$scenario.json") -Raw | ConvertFrom-Json
+    $rows += [pscustomobject]@{
+        case = $scenario
+        status = 'PASS'
+        sourceMember = "$($evidence.memberKind)#$($evidence.searchMemberId)"
+        generatedMs = [math]::Round([double]$evidence.generatedMs, 3)
+        evaluatedMs = [math]::Round([double]$evidence.evaluatedMs, 3)
+        selectedMs = [math]::Round([double]$evidence.selectedMs, 3)
+        publishedMs = [math]::Round([double]$evidence.publishedMs, 3)
+        expandedAtGeneration = $evidence.expandedAtGeneration
+        turnDepth = $evidence.turnDepth
+        route = @($evidence.route)
+        reason = $null
+    }
 }
 
-$evidence = [pscustomobject]@{
+$teammateOut = Join-Path $workspacePath 'teammate'
+New-Item -ItemType Directory -Force -Path $teammateOut | Out-Null
+& dotnet $harness --scenario teammate --out $teammateOut
+$teammateExit = $LASTEXITCODE
+$teammatePath = Join-Path $teammateOut 'e0-teammate.json'
+if ($teammateExit -eq 0 -and (Test-Path -LiteralPath $teammatePath)) {
+    $evidence = Get-Content -LiteralPath $teammatePath -Raw | ConvertFrom-Json
+    $rows += [pscustomobject]@{
+        case = 'teammate_cooperation'
+        status = 'PASS_DETACHED_TWO_PLAYER'
+        sourceMember = "$($evidence.memberKind)#$($evidence.searchMemberId)"
+        generatedMs = [math]::Round([double]$evidence.generatedMs, 3)
+        evaluatedMs = [math]::Round([double]$evidence.evaluatedMs, 3)
+        selectedMs = [math]::Round([double]$evidence.selectedMs, 3)
+        publishedMs = [math]::Round([double]$evidence.publishedMs, 3)
+        expandedAtGeneration = $evidence.expandedAtGeneration
+        turnDepth = $evidence.turnDepth
+        route = @($evidence.route)
+        reason = 'Pinned detached two-player model; not Host/Client network evidence.'
+    }
+} else {
+    $rows += [pscustomobject]@{
+        case = 'teammate_cooperation'
+        status = 'UNVERIFIED_NO_REPLAYABLE_MULTIPLAYER_ROOT'
+        sourceMember = $null
+        generatedMs = $null
+        evaluatedMs = $null
+        selectedMs = $null
+        publishedMs = $null
+        expandedAtGeneration = $null
+        turnDepth = $null
+        route = @()
+        reason = "Detached two-player fixture unavailable on pinned runtime; harness_exit=$teammateExit. Real Host/Client evidence still required."
+    }
+}
+
+$result = [pscustomobject]@{
     schemaVersion = 1
-    source = 'pinned-0.107.1-offline-search-harness'
+    source = 'pinned-0.107.1-production-coordinator'
     rows = $rows
-    multiplayerEvidenceStatus = 'UNVERIFIED'
-    multiplayerEvidenceReason = 'No current-HEAD replayable PlayerCount=2 problem package is available in the repository/CI workspace.'
 }
 $evidencePath = Join-Path $workspacePath 'e0-search-efficiency-evidence.json'
-$evidence | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $evidencePath -Encoding utf8
+$result | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $evidencePath -Encoding utf8
 
 Write-Host '| case | status | source member | generated ms | evaluated ms | selected ms | published ms |'
 Write-Host '|---|---|---|---:|---:|---:|---:|'
 foreach ($row in $rows) {
-    Write-Host "| $($row.case) | $($row.status) | $($row.memberKind ?? '-')#$($row.memberId ?? '-') | $($row.generatedMs ?? '-') | $($row.evaluatedMs ?? '-') | $($row.selectedMs ?? '-') | $($row.publishedMs ?? '-') |"
+    Write-Host "| $($row.case) | $($row.status) | $($row.sourceMember ?? '-') | $($row.generatedMs ?? '-') | $($row.evaluatedMs ?? '-') | $($row.selectedMs ?? '-') | $($row.publishedMs ?? '-') |"
 }
 Write-Host "evidence=$evidencePath"

@@ -47,6 +47,7 @@ on:
       - 'source/src/Search/CombatBeamSolver.EndTurnExpansion.cs'
       - 'source/tools/OfflineSearchHarness/ModRuntime.cs'
       - 'source/tools/OfflineSearchHarness/Program.cs'
+      - 'source/tools/E0PinnedHarness/**'
       - 'source/tools/test-e0-search-efficiency.ps1'
       - 'source/src/Search/CombatBeamSolver.BeamRetentionPolicy.cs'
       - 'source/src/Search/CombatBeamSolver.Retention.cs'
