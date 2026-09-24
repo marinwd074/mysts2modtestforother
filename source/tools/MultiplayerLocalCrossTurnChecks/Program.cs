@@ -777,8 +777,9 @@ Check(
         && qualityStrategySelection.BoundedRiskIndex == 2
         && qualityStrategySelection.RobustOverridesBaseline
         && !qualityStrategySelection.RobustAgreesWithNominal
-        && !qualityStrategySelection.RobustAgreesWithBoundedRisk,
-    "Quality-first attribution distinguishes a Robust scenario override from the shared-core baseline without changing any risk weight or search budget.");
+        && !qualityStrategySelection.RobustAgreesWithBoundedRisk
+        && qualityStrategySelection.HasDisputedRobustOverride,
+    "Quality-first attribution distinguishes a disputed Robust scenario override from the shared-core baseline without changing any risk weight or search budget.");
 
 Check(
     MultiplayerScenarioReevaluationPolicy.SelectNominalToleranceExperimentIndex(
