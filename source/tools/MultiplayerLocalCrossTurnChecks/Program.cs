@@ -304,7 +304,7 @@ Check(
             multiplayerRouteSemanticsActive: false,
             candidateHasCurrentTurnCard: true,
             currentHasCurrentTurnCard: false),
-    "Current-turn-card preference is a real multiplayer deployment tie-break and stays inactive in the U2 single-player degenerate fixture.");
+    "Quality bad-route X1 T3 keeps a playable current-turn card over an equivalent EndTurn-only route; the tie-break stays inactive in the U2 single-player degenerate fixture.");
 
 
 MultiplayerRetentionObservation[] diversityObservations =
