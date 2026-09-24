@@ -6,6 +6,8 @@ internal sealed partial class CombatBeamSolver
 {
     private bool CanUseInlineTeammateForecast(SearchNode node)
     {
+        if (!policy.UseMultiplayerTeammateForecast)
+            return false;
         if (policy.RoutePolicy != SearchRoutePolicy.MultiplayerLocalCrossTurn)
             return false;
         if (node.Action is not

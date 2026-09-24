@@ -493,6 +493,10 @@ internal static partial class SolverController
             MultiplayerEnemyDurabilityRatio = capabilities.IsMultiplayer
                 ? MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(state.Enemies)
                 : 1d,
+            UseMultiplayerTeammateForecast =
+                capabilities.IsMultiplayer && settings.UseMultiplayerTeammateForecast,
+            UseMultiplayerScenarioReevaluation =
+                capabilities.IsMultiplayer && settings.UseMultiplayerScenarioReevaluation,
             UseNoveltyPortfolio = (settings.UseNoveltyPortfolio
                 || UnattendedTestRunner.UseNoveltyPortfolioOverride)
                 && useFullSearchKernel,

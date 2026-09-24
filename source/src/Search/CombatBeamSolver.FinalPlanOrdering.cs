@@ -2,9 +2,8 @@ namespace CombatSolver;
 
 internal sealed partial class CombatBeamSolver
 {
-    // P3 robust stress-scenario reranking is active. Probability-weighted aggregation remains
-    // disabled until teammate behavior priors are empirically calibrated.
-    private const bool EnableMultiplayerScenarioReevaluation = true;
+    // Probability-weighted aggregation remains disabled until teammate behavior priors are
+    // empirically calibrated. Robust scenario reranking is controlled by the per-search policy.
     private const bool EnableMultiplayerChanceAggregation = false;
 
     private sealed class FinalPlanOrdering(
@@ -29,6 +28,7 @@ internal sealed partial class CombatBeamSolver
         int startTurnNumber,
         MultiplayerCarryRankingContext carryRankingContext,
         BattleDamageSnapshot battleDamage,
+        bool enableMultiplayerScenarioReevaluation,
         Func<IReadOnlyList<SearchNode>, IReadOnlyList<MultiplayerScenarioDecisionEvaluation>>?
             scenarioReevaluator,
         PotionStrategicCostLookup? potionStrategicCosts = null)
@@ -544,7 +544,7 @@ internal sealed partial class CombatBeamSolver
             MultiplayerScenarioStrategySelection? u4StrategySelection = null;
             List<ScenarioDecisionSummary> scenarioSummaries = [];
             bool scenarioReevaluationEnabled = false;
-            if (EnableMultiplayerScenarioReevaluation
+            if (enableMultiplayerScenarioReevaluation
                 && allowScenarioRerank
                 && useTeamObjective
                 && selected.Count > 0)

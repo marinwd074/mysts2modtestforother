@@ -105,6 +105,8 @@ internal sealed record SolverSettingsData
     public BossHpStrategy FinalBossHpStrategy { get; init; } = BossHpStrategy.ProgressionFirst;
     public MultiplayerCombatObjectiveStrategy MultiplayerCombatObjectiveStrategy { get; init; }
         = MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo;
+    public bool UseMultiplayerTeammateForecast { get; init; } = true;
+    public bool UseMultiplayerScenarioReevaluation { get; init; } = true;
     public int AcceptableBattleHpLoss { get; init; }
     public bool StopAtAcceptableBattleHpLoss { get; init; } = true;
     public int PerformanceMigrationVersion { get; init; }
@@ -159,6 +161,8 @@ internal sealed record SolverSettingsSnapshot(
     public bool IgnoreLongTermRewards { get; init; }
     public MultiplayerCombatObjectiveStrategy MultiplayerCombatObjectiveStrategy { get; init; }
         = MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo;
+    public bool UseMultiplayerTeammateForecast { get; init; } = true;
+    public bool UseMultiplayerScenarioReevaluation { get; init; } = true;
     public bool UseBeamWidthPortfolio { get; init; }
     public bool UseNoveltyPortfolio { get; init; }
 }
@@ -308,6 +312,8 @@ internal static class SolverSettings
             BrightestFlameMaxHpLossLimit = data.BrightestFlameMaxHpLossLimit,
             IgnoreLongTermRewards = data.IgnoreLongTermRewards,
             MultiplayerCombatObjectiveStrategy = data.MultiplayerCombatObjectiveStrategy,
+            UseMultiplayerTeammateForecast = data.UseMultiplayerTeammateForecast,
+            UseMultiplayerScenarioReevaluation = data.UseMultiplayerScenarioReevaluation,
             UseBeamWidthPortfolio = data.UseBeamWidthPortfolio,
             UseNoveltyPortfolio = data.UseNoveltyPortfolio,
         };

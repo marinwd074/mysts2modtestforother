@@ -42,6 +42,8 @@ internal sealed record SearchPolicySnapshot(
     public MultiplayerCombatObjectiveStrategy MultiplayerCombatObjectiveStrategy { get; init; }
         = MultiplayerCombatObjectiveStrategy.MinimizeTeamLoss;
     public double MultiplayerEnemyDurabilityRatio { get; init; } = 1d;
+    public bool UseMultiplayerTeammateForecast { get; init; } = true;
+    public bool UseMultiplayerScenarioReevaluation { get; init; } = true;
     public bool UseNoveltyPortfolio { get; init; }
     public NoveltySearchOptions? NoveltySearch { get; init; }
     public NoveltyPortfolioBudget NoveltyBudget { get; init; } = NoveltyPortfolioBudget.Default;

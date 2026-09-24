@@ -47,6 +47,7 @@ internal sealed partial class CombatBeamSolver(
         MultiplayerScenarioReevaluationPolicy.ReserveExpandedBranchBudget(
             (searchProfile ?? SolverSearchProfile.Default).MaxExpandedNodes,
             reserveScenarioReevaluationBudget
+            && policy.UseMultiplayerScenarioReevaluation
             && MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(
                 policy.RoutePolicy,
                 root.PlayerCount)
@@ -58,6 +59,7 @@ internal sealed partial class CombatBeamSolver(
                 MultiplayerScenarioReevaluationPolicy.MainSearchExpandedNodeBudget(
                     (searchProfile ?? SolverSearchProfile.Default).MaxExpandedNodes,
                     reserveScenarioReevaluationBudget
+                    && policy.UseMultiplayerScenarioReevaluation
                     && MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(
                         policy.RoutePolicy,
                         root.PlayerCount)
@@ -165,7 +167,10 @@ internal sealed partial class CombatBeamSolver(
         _startTurnNumber,
         root.CarryRankingContext,
         battleDamage,
-        ReevaluateCurrentDecisionsAcrossScenarios,
+        policy.UseMultiplayerScenarioReevaluation,
+        policy.UseMultiplayerScenarioReevaluation
+            ? ReevaluateCurrentDecisionsAcrossScenarios
+            : null,
         _run.PotionStrategicCosts);
 
     private bool CanConsiderCardAction(PredictedCard card)

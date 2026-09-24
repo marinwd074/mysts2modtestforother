@@ -8,6 +8,8 @@ internal sealed partial class SolverSettingsPanel
     private OptionButton _performancePreset = null!;
     private CheckButton _beamWidthPortfolioEnabled = null!;
     private CheckButton _noveltyPortfolioEnabled = null!;
+    private CheckButton _multiplayerTeammateForecastEnabled = null!;
+    private CheckButton _multiplayerScenarioReevaluationEnabled = null!;
     private CheckButton _noGcRegionEnabled = null!;
     private LineEdit _noGcRegionBudget = null!;
     private Control _advancedParameters = null!;
@@ -171,6 +173,60 @@ internal sealed partial class SolverSettingsPanel
         _noGcRegionEnabled = CreateToggle();
         AddSettingsSection(content, SolverText.Get("搜索预算"),
             SolverText.Get("选择性能预设与并行度；详细参数可在下方展开。"), budgetGrid);
+
+        GridContainer multiplayerGrid = CreateSettingsGrid();
+        _multiplayerTeammateForecastEnabled = CreateToggle();
+        _reloadInputs.Add(data =>
+            _multiplayerTeammateForecastEnabled.ButtonPressed = data.UseMultiplayerTeammateForecast);
+        _multiplayerTeammateForecastEnabled.Toggled += enabled =>
+        {
+            if (_loading)
+                return;
+            SolverSettings.Update(SolverSettings.Current with
+            {
+                UseMultiplayerTeammateForecast = enabled,
+            });
+            SetStatus(
+                SolverText.Get(enabled
+                    ? "多人队友联合预测已启用，下次搜索生效"
+                    : "多人队友联合预测已关闭"),
+                SolverUiTokens.Palette.Success);
+        };
+        AddBasicRow(
+            multiplayerGrid,
+            SolverText.Get("多人队友联合预测（高开销）"),
+            _multiplayerTeammateForecastEnabled,
+            SolverText.Get("默认开启。多人搜索会模拟队友可能的未来出牌，包括回合内交错预测和结束回合 Joint 路线。关闭后仍保留本地玩家的完整 Beam、成长、遗物、药水和特殊牌搜索，但不再为队友未来动作展开额外分支；通常会明显提速，但路线不会再主动利用预计的队友配合。下次搜索生效。"));
+
+        _multiplayerScenarioReevaluationEnabled = CreateToggle();
+        _reloadInputs.Add(data =>
+            _multiplayerScenarioReevaluationEnabled.ButtonPressed =
+                data.UseMultiplayerScenarioReevaluation);
+        _multiplayerScenarioReevaluationEnabled.Toggled += enabled =>
+        {
+            if (_loading)
+                return;
+            SolverSettings.Update(SolverSettings.Current with
+            {
+                UseMultiplayerScenarioReevaluation = enabled,
+            });
+            SetStatus(
+                SolverText.Get(enabled
+                    ? "多人 Robust 情景复评已启用，下次搜索生效"
+                    : "多人 Robust 情景复评已关闭"),
+                SolverUiTokens.Palette.Success);
+        };
+        AddBasicRow(
+            multiplayerGrid,
+            SolverText.Get("多人 Robust 情景复评（高开销）"),
+            _multiplayerScenarioReevaluationEnabled,
+            SolverText.Get("默认开启。最终候选会额外按进攻、防守、保留资源和队友不行动等固定情景重新评估，再按多人 Robust 规则选路线。关闭后不再预留或运行这层情景搜索，节点预算全部留给主 Beam；基础多人目标仍保留。下次搜索生效。"));
+        AddSettingsSection(
+            content,
+            SolverText.Get("多人额外搜索"),
+            SolverText.Get("这些算法只在多人战斗生效。关闭可减少额外搜索量，不改变单人模式。"),
+            multiplayerGrid);
+
         GridContainer memoryGrid = CreateSettingsGrid();
         _noGcRegionEnabled.Toggled += OnNoGcRegionEnabledToggled;
         AddBasicRow(
@@ -291,6 +347,9 @@ internal sealed partial class SolverSettingsPanel
         _performancePreset.Selected = _performancePreset.GetItemIndex((int)preset);
         _beamWidthPortfolioEnabled.ButtonPressed = data.UseBeamWidthPortfolio;
         _noveltyPortfolioEnabled.ButtonPressed = data.UseNoveltyPortfolio;
+        _multiplayerTeammateForecastEnabled.ButtonPressed = data.UseMultiplayerTeammateForecast;
+        _multiplayerScenarioReevaluationEnabled.ButtonPressed =
+            data.UseMultiplayerScenarioReevaluation;
         _noGcRegionEnabled.ButtonPressed = data.EnableNoGcRegion;
         _noGcRegionBudget.Editable = data.EnableNoGcRegion;
         SetAdvancedParametersExpanded(preset == SolverPerformancePreset.Custom);
