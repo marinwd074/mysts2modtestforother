@@ -1,31 +1,37 @@
-# This directory is a Steam installation. Track only the CombatSolver artifacts.
+# Repository allow-list: keep the working tree focused on source and durable project data.
 *
 !.gitignore
 !.gitattributes
 !AGENTS.md
-# Build output stays local; releases are produced from source and a verified build.
+
+# Active source tree.
 !source/
 !source/**
-# One-time private Steam game snapshot; files are stored through Git LFS.
+
+# Pinned STS2 0.107.1 game snapshot used by CI and local compatibility checks.
+# Intentionally retained and stored through Git LFS; do not treat as generated output.
 !game-body/
 !game-body/**
-# Runtime logs copied alongside the installation are not part of the snapshot.
 /game-body/**/*.log
-# Multiplayer lab runs and generated coverage stay outside version control.
-/.local/multiplayer-lab/
+
+# GitHub configuration.
+!.github/
+!.github/workflows/
+!.github/workflows/**
+
+# Local/generated outputs must stay outside Git.
+/.local/
 /artifacts/
+/runtime-evidence/
 /source/coverage/
 /source/.godot/
 /source/tools/**/bin/
 /source/tools/**/obj/
-# One-shot performance/strategy machine output stays local or in external archives.
+/source/tools/**/results*.json
+/source/docs/**/evidence/
+/source/docs/**/*.zip
 /source/docs/performance/**/*.json
 /source/docs/performance/**/*.patch
 /source/docs/strategy/**/*.json
 /source/docs/strategy/**/*.patch
 /source/docs/testing/generated-*.json
-!.github/
-!.github/workflows/
-!.github/workflows/**
-!runtime-evidence/
-!runtime-evidence/**

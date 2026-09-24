@@ -1,12 +1,12 @@
 # 战斗路线求解器 / Combat Solver
 
-Combat Solver 是一个面向《杀戮尖塔 2》单人模式的战斗路线求解器。进入战斗后，它会在后台模拟当前手牌、牌堆、敌人行动、药水、遗物、选牌和跨回合状态，并在预算范围内给出推荐路线、预计战损与关键行动。
+Combat Solver 是一个面向《杀戮尖塔 2》的战斗路线求解器。单人和多人复用同一套搜索/模拟核心；多人额外加入队友情景、团队目标、同步边界与本地玩家执行约束。进入战斗后，它会在后台模拟当前手牌、牌堆、敌人行动、药水、遗物、选牌和跨回合状态，并在预算范围内给出推荐路线、预计战损与关键行动。
 
 玩家可以只查看建议，也可以让求解器执行当前回合，或连续接管整场战斗。搜索不会修改游戏 RNG，也不会在后台操作真实战斗状态。
 
 当前版本为 **0.40.2**，并修正了搜索进度与高战损引导。详见 [更新日志](docs/releases/0.40.2-RELEASE_NOTES.md)。
 
-**English UI:** Set the game language to English and restart the game. CombatSolver provides a recommended route; use **Play turn** for one turn or **Auto: On** for continuous play. Configure potions, growth and search budgets in the overlay. **Settings > Reports > Upload report** submits a bug report. Logs, raw errors and some detailed diagnostics retain their original text. Single-player only.
+**English UI:** Set the game language to English and restart the game. CombatSolver provides a recommended route; use **Play turn** for one turn or **Auto: On** for continuous play. Configure potions, growth and search budgets in the overlay. **Settings > Reports > Upload report** submits a bug report. Logs, raw errors and some detailed diagnostics retain their original text. Multiplayer support is local-player-authority only; teammate actions are forecast/observation inputs and are never deployed by the solver.
 
 界面跟随游戏语言：简体/繁体中文使用现有中文文案，其他语言使用英文。简化版不提供独立语言开关；卡牌胶囊、选牌和相关悬停说明支持运行中切换语言，其他既有窗口可通过重启统一刷新。
 
@@ -76,7 +76,7 @@ if (PreCombatForecastApi.IsAvailable)
 
 - 《杀戮尖塔 2》`0.107.1`
 - [RitsuLib](https://steamcommunity.com/sharedfiles/filedetails/?id=3747602295) `0.6.2` 或更高版本
-- 单人战斗模式
+- 单人战斗；多人模式按 `docs/multiplayer/README.md` 的当前能力边界运行
 
 推荐通过 Steam 创意工坊订阅。使用 GitHub Release 手动安装时，在游戏目录的 `mods/CombatSolver` 下放置以下文件：
 
@@ -133,7 +133,7 @@ THIRD_PARTY_NOTICES.md
 
 Combat Solver 使用受时间、节点和内存预算约束的 Beam Search。它展示的是当前预算内找到的最佳路线，不承诺数学意义上的全局最优解。路线视野没有固定回合数或洗牌次数上限，但循环检测、状态合并和预算终止仍会限制实际搜索范围。
 
-当前目标是覆盖 `0.107.1` 的单人战斗内容。运行时遇到尚未支持的新版本或第三方战斗语义时，求解器会明确停止在不支持边界，不会把未完成模拟误报为胜利。多人模式、局外流程和第三方 Mod 的自定义战斗效果不在通用兼容范围内。
+当前目标是覆盖 `0.107.1` 的单人战斗与受控多人本地玩家求解。多人只对本地玩家拥有部署权限，队友行为作为预测/观察因子；多人专属牌当前保留真实牌堆状态与抽牌距离，但不进入主动推荐或自动执行。运行时遇到尚未支持的新版本、未知多人语义或第三方自定义战斗效果时，求解器会停在不支持边界，不会把未完成模拟误报为胜利。当前多人能力与未验证边界见 [多人架构](docs/multiplayer/README.md)。
 
 当前 `0.107.1` 的构建、Hook、原生 Smoke 和限制见 [0.107.1 兼容证据链](docs/compat/0.107.1/README.md)、[战斗 Hook 覆盖报告](docs/COMBAT_HOOK_COVERAGE.md) 与 [当前测试矩阵](docs/TEST_MATRIX.md)。旧版适配验证日志已退役；如需复核原始内容，请从 Git 历史恢复。
 

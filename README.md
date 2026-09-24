@@ -16,3 +16,11 @@ The combat simulation core also contains portions derived from
 [Random Foreseer](https://github.com/hotwords123/StS2.RandomForeseer).
 Required attribution and source-history details are retained in
 [`source/THIRD_PARTY_NOTICES.md`](source/THIRD_PARTY_NOTICES.md).
+
+## Repository layout
+
+- `source/`: active code, tests, build tooling and current documentation.
+- `game-body/`: pinned STS2 `0.107.1` compatibility snapshot used by CI/local verification. It is intentionally retained and tracked with Git LFS.
+- Runtime logs, bug-report bundles, generated benchmark output and one-off investigation evidence are local artifacts and are not kept in the active Git tree.
+
+Repository retention rules are documented in [source/docs/REPOSITORY_MAINTENANCE.md](source/docs/REPOSITORY_MAINTENANCE.md).
