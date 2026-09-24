@@ -16,9 +16,14 @@ namespace CombatSolver;
 
 internal sealed partial class SimulatedCombatState
 {
-    // Each native replay has its own started entry. Capture scalar costs before the worker runs.
-    private static int CaptureBrightestFlameMaxHpSpent(IEnumerable<CardPlayStartedEntry> entries)
-        => entries.Where(entry => entry.CardPlay.Card is BrightestFlame)
+    // Each native replay has its own started entry. In multiplayer, the local search budget
+    // belongs only to the action player; a teammate's Brightest Flame must not spend it.
+    private static int CaptureBrightestFlameMaxHpSpent(
+        IEnumerable<CardPlayStartedEntry> entries,
+        IReadOnlyList<Player> actionPlayers)
+        => entries.Where(entry =>
+                entry.CardPlay.Card is BrightestFlame
+                && actionPlayers.Contains(entry.CardPlay.Card.Owner))
             .Sum(entry => entry.CardPlay.Card.DynamicVars.MaxHp.IntValue);
 
     public int GetCardsDrawnBeforePrediction(Player player)

@@ -428,6 +428,8 @@ internal static partial class SolverController
         SearchInteractionState? interaction = null)
     {
         SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
+        Player localPlayer = LocalContext.GetMe(state)
+            ?? throw new InvalidOperationException("当前战斗找不到本地玩家。");
         SearchRoutePolicy routePolicy = capabilities.Kind switch
         {
             SolverSessionKind.Singleplayer => SearchRoutePolicy.SinglePlayerFullRoute,
@@ -504,15 +506,14 @@ internal static partial class SolverController
             GrowthBudgets = useFullSearchKernel ? settings.GrowthBudgets : default,
             RelicTargets = useFullSearchKernel
                 ? RelicCounterCatalog.Capture(
-                    LocalContext.GetMe(state)
-                        ?? throw new InvalidOperationException("当前战斗找不到本地玩家。"),
+                    localPlayer,
                     settings.RelicStrategyEnabled,
                     settings.RelicCounterRules)
                 : [],
             StopAtAcceptableBattleHpLoss = settings.StopAtAcceptableBattleHpLoss,
             BrightestFlameMaxHpLossLimit = settings.BrightestFlameMaxHpLossLimit,
             GrowthOpportunityTargets = useFullSearchKernel
-                ? GrowthOpportunityPolicy.Capture(state)
+                ? GrowthOpportunityPolicy.Capture(state, localPlayer)
                 : GrowthOpportunityTargets.Empty,
             IgnoreLongTermRewards = settings.IgnoreLongTermRewards || !useFullSearchKernel,
         };
