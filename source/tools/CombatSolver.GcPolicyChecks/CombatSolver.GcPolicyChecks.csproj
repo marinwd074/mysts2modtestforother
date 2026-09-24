@@ -9,7 +9,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../src/Search/SmartLayerMemoryForecast.cs" Link="Production/SmartLayerMemoryForecast.cs" />
-    <Compile Include="../ExperimentalAdaptiveGc/SearchParallelismController.cs" Link="Experimental/SearchParallelismController.cs" />
     <Compile Include="../../src/Runtime/SearchGcLifecycleMetrics.cs" Link="Production/SearchGcLifecycleMetrics.cs" />
     <Compile Include="../../src/Runtime/SearchMemoryPressureSignal.cs" Link="Production/SearchMemoryPressureSignal.cs" />
     <Compile Include="../../src/Runtime/SearchGcPolicy.Recovery.cs" Link="Production/SearchGcPolicy.Recovery.cs" />

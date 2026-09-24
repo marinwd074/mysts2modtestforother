@@ -1,4 +1,4 @@
-> 本工具现验证已撤回的 listener 实验；生产源码恢复原实现。长搜分配反例及启用方式见 [实验说明](../ExperimentalListenerSlots/README.md)。
+> 本工具保留 listener 容器的独立合同检查；已撤回的实验接线、性能反例和补丁只从 Git history 恢复，不再保留 Experimental 目录。
 
 # Immutable listener snapshot checks
 

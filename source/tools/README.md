@@ -16,8 +16,8 @@
 
 ## RESEARCH
 
-名称带有 `Experimental`、`Prototype`、`Research` 或 `Candidate` 的目录（例如 `ExperimentalAdaptiveGc/`、`ChoiceContinuationPrototype/`、`BfwsResearchChecks/`、`PerformanceCandidateProbes/`）按研究工具处理。它们可以被专题任务显式调用，但不属于默认生产门禁或运行时依赖。
+仍被当前研究/回归任务使用的目录（例如 `BfwsResearchChecks/`、`PerformanceCandidateProbes/`）按研究工具处理，不属于生产运行时。已经给出“不采用”结论、固定到旧游戏/旧源码或只保留历史补丁的 Experimental/Prototype 工具从当前工作树移除，由 Git history 负责恢复；若其 helper 仍被合同测试使用，则移动到对应测试项目内。
 
 ## ARCHIVED
 
-只有完成引用审计、确认无默认门禁和无当前证据依赖的工具才能进入此级别。归档前必须记录恢复路径和证据保留期限；本次收口未移动工具目录。
+完成引用审计、确认无默认门禁和无当前证据依赖后，过期研究工具直接从当前工作树移除，不建立第二套 archive 目录。恢复路径为 Git history。
