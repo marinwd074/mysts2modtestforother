@@ -156,6 +156,7 @@ internal sealed partial class CombatBeamSolver
                 outcome.ActualBlock,
                 outcome.EnergyLeft),
         };
+        PropagateCandidateOrigin(outcome.Node, annotated);
         EnsureCandidateOrigin(annotated);
         return annotated;
     }
