@@ -226,7 +226,7 @@ internal sealed partial class CombatBeamSolver
         }
 
         List<SearchNode> legacyOrder = [.. decision.OrderedPool];
-        Retention.SortByLegacyBeamRankForDiagnostics(legacyOrder);
+        Retention.SortByLegacyBeamRank(legacyOrder);
 
         int topCount = Math.Min(decision.Limit, decision.OrderedPool.Count);
         HashSet<SearchNode> productionRawTop = new(
@@ -254,7 +254,7 @@ internal sealed partial class CombatBeamSolver
         int legacyRank = ObservedReferenceIndex(legacyOrder, witness) ?? -1;
         int productionRawRank = ObservedReferenceIndex(decision.OrderedPool, witness) ?? -1;
         int? productionSelectedRank = ObservedReferenceIndex(decision.Selected, witness);
-        MultiplayerCombatObjectiveRank objective = Retention.BuildMultiplayerObjectiveRankForDiagnostics(witness);
+        MultiplayerCombatObjectiveRank objective = Retention.BuildMultiplayerObjectiveRank(witness);
 
         policy.Diagnostics.Info(
             $"[CombatSolver/Multiplayer] MP_BEAM_RETENTION_AB " +
