@@ -1,15 +1,18 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CombatSolver;
 using CombatSolver.Engine.Common;
 using CombatSolver.Engine.InCombat.Simulation;
+using CombatSolver.Engine.InCombat.Mirrors.Cards.OnPlay;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Cards;
 using OfflineSearchHarness;
 using U2DegenerateHarness;
 
@@ -47,6 +50,7 @@ internal static class Program
                 MaxExpandedNodes,
                 BudgetMilliseconds);
             Console.WriteLine($"search_patches={patchCount}");
+            ValidateDarkEmbracePredictionCoverage();
 
             HarnessScenario scenario = new(
                 "IRONCLAD",
@@ -122,6 +126,17 @@ internal static class Program
             Console.Error.WriteLine(error.StackTrace);
             return 1;
         }
+    }
+
+    private static void ValidateDarkEmbracePredictionCoverage()
+    {
+        CardModel darkEmbrace = (CardModel)RuntimeHelpers.GetUninitializedObject(typeof(DarkEmbrace));
+        Require(
+            CardOnPlayMirrors.CanMirror(darkEmbrace),
+            "Dark Embrace OnPlay is not explicitly mirrored.");
+        Require(
+            CardEffectSpecRegistry.Contains(darkEmbrace),
+            "Dark Embrace power application is missing from CardEffectSpecRegistry.");
     }
 
     private static U0Evidence RunU0(
