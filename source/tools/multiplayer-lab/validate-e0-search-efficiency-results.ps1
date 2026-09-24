@@ -42,22 +42,25 @@ function Parse-KeyValues {
 $temporaryRoot = $null
 try {
     $resolved = (Resolve-Path -LiteralPath $EvidencePath -ErrorAction Stop).Path
-    if (Test-Path -LiteralPath $resolved -PathType Leaf -and
-        [IO.Path]::GetExtension($resolved).Equals('.zip', [StringComparison]::OrdinalIgnoreCase)) {
+    $isFile = Test-Path -LiteralPath $resolved -PathType Leaf
+    $isDirectory = Test-Path -LiteralPath $resolved -PathType Container
+    $extension = [IO.Path]::GetExtension($resolved)
+    $isZip = $isFile -and $extension.Equals('.zip', [StringComparison]::OrdinalIgnoreCase)
+
+    if ($isZip) {
         $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) ("combatsolver-e0-" + [guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $temporaryRoot -Force | Out-Null
         Expand-Archive -LiteralPath $resolved -DestinationPath $temporaryRoot -Force
         $scanRoot = $temporaryRoot
     }
-    elseif (Test-Path -LiteralPath $resolved -PathType Container) {
+    elseif ($isDirectory) {
         $scanRoot = $resolved
     }
     else {
         $scanRoot = Split-Path -Parent $resolved
     }
 
-    if (Test-Path -LiteralPath $resolved -PathType Leaf -and
-        -not [IO.Path]::GetExtension($resolved).Equals('.zip', [StringComparison]::OrdinalIgnoreCase)) {
+    if ($isFile -and -not $isZip) {
         $files = @(Get-Item -LiteralPath $resolved)
     }
     else {
