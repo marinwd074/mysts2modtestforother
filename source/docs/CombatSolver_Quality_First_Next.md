@@ -118,6 +118,7 @@
 - 新增 `MP_QUALITY_SORTING`：直接输出 `production_selected_baseline_rank`、`override_layer=baseline|scenario_robust`、`robust_overrode_baseline`、Robust 与两条参考策略是否一致，以及 `quality_signal=scenario_override_disputed|none`。下一份当前版本坏路线不再需要靠人工猜测“是不是 U3/U4 推翻了共同搜索核心”。
 - 新合同用固定输入覆盖“baseline 由 Nominal 选择、Robust 在同 Matrix 改选另一决策、BoundedRisk 再选第三决策”的情况，确认归因层只测量已有选择，不改变风险权重和搜索预算；Anger 真实问题包 ID 也写入当前合同说明。
 - **生产行为刻意未变**：仍使用 Robust。两个可复原的“明显不如手打”排序样本（ANGER 与 X1 T3）都证明**好候选已经存在、基础最终排序曾选错**；重锤/Offering 则属于执行层。现有证据没有一条指向 U3/U4 Robust 推翻了更好的共同搜索核心路线，因此不把 `0.5` 换成别的任意常数，也不把压力情景均值冒充概率期望。
+- 验证：compatibility run `35985739446` **SUCCESS**；Pinned 0.107.1 Release run `35985739404` **SUCCESS**。合同明确覆盖 ANGER 坏例、X1 T3 空推荐坏例，以及“Robust 覆盖 baseline 且与参考策略分歧”的归因信号；这些测试只固定层级归因，不把 synthetic 分歧当作真实生产迁移证据。
 - 下一步只需对**当前 HEAD 新出现的明显坏路线**保留问题包和明确手打前缀；先看 `FINAL_CANDIDATE → MP_QUALITY_SORTING → FINAL_SELECTION → Safe Execute` 即可定位枚举/Beam/基础排序/情景复评/执行中的哪一层。若 `robust_overrode_baseline=true` 且手打前缀在 baseline 中存活，再进入生产风险策略迁移；否则修实际丢失层。
 
 ## 第四项：最后再决定精确斩杀是否值得加
