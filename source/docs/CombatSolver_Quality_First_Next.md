@@ -81,7 +81,7 @@
 - 目标 admission 首版限定为**本地玩家或敌人**。多人搜索对 `AnyPlayer/AnyAlly` 会过滤队友目标；Self、AnyEnemy、AllEnemies、TargetedNoCreature 继续使用已有模拟器规则。队友目标药水尚未按 pinned 0.107.1 逐项验真，因此没有放开。
 - 原生执行继续复用单人 `PotionModel.EnqueueManualUse` 产生的 `UsePotionAction` 与现有 `NativeChoiceRuntime`。Safe Execute 会捕获期望的原生动作类型，并把药水动作送入与出牌相同的 U1 one-action replay → queue/Choice settle → predicted/live semantic post-state 对照。
 - `ContinuationStamp` 与 multiplayer WorldVersion fingerprint 已包含本地药水槽位；因此槽位消费、PotionId 变化和后续 continuation 会参与真实/预测一致性校验。动作只能授权一次，失败或不稳定后态不会继续旧后缀。
-- Smart / Disabled / RequireAtLeastOne、PotionStrategy 与 potion-free baseline 保持原语义；没有为了多人自动执行降低药水成本阈值，也没有删除无药路线。
+- Smart / Disabled / RequireAtLeastOne 与 PotionStrategy 保持单人原语义；多人 potion-free baseline 强制使用本地玩家比较，不再让 TeamLoss/WorstPlayerLoss 参与“该不该喝药”的基线选择。团队目标只在已通过本地药水策略准入的路线之间继续排序；没有降低药水成本阈值，也没有删除无药路线。
 - 第一项 bounded refresh 仍只接受普通 PlayCard 前缀。如果当前候选从药水开始，它不会生成可重放候选并会 full restart；如果药水出现在首牌之后，只允许重放药水之前的合法牌前缀，不会跳过药水把后续动作伪装成原路线。
 - 现有测试面中，`UnattendedTestRunner.Potions` 已有真实/模拟差分、槽位消费与资源/伤害/Power 断言；`PotionContinuation` 已覆盖需要 Choice 的药水以及原生 `UsePotionAction` continuation。本轮没有重新跑真实 Host/Client Godot runtime，因此这些现有 fixture 不能替代多人实机证据。
 - 新增/更新的 L1 合同覆盖：合法本地药水 shape、缺 ID/槽位、槽位药水缺失/ID 漂移、队友目标拒绝、live target validation 失败、通用 native local-action attribution。
