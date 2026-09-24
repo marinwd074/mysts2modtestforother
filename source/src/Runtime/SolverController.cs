@@ -436,10 +436,10 @@ internal static partial class SolverController
                 => SearchRoutePolicy.MultiplayerLocalCrossTurn,
             _ => SearchRoutePolicy.MultiplayerCurrentTurnOnly,
         };
-        // U2: planning capability belongs to the search route, not to deployment authority.
-        // Multiplayer local-cross-turn therefore sees the same configured local potion
-        // candidates as singleplayer. Safe Execute still has CanUsePotionsAutomatically=false,
-        // so automatic native potion deployment remains a separate fail-closed boundary.
+        // Planning capability belongs to the search route, not to deployment authority.
+        // Multiplayer local-cross-turn sees the same configured local potion candidates as
+        // singleplayer. Safe Execute separately admits only local-owned, deployable potion
+        // actions and revalidates their settled native post-state before continuation.
         bool useFullSearchKernel =
             MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(routePolicy);
         SolverPotionPolicy effectivePotionPolicy = useFullSearchKernel

@@ -21,22 +21,31 @@ internal static class MultiplayerSafeLocalActionClassifier
             return structural;
 
         Player? localPlayer = LocalContext.GetMe(state);
+        bool isUsePotion = action.Kind == PlanActionKind.UsePotion;
         CardModel? card = null;
+        PotionModel? potion = null;
         if (localPlayer?.PlayerCombatState is { } localCombat)
         {
-            card = localCombat.Hand.Cards
-                .Where(candidate => string.Equals(candidate.Id.Entry, action.CardId, StringComparison.Ordinal))
-                .Skip(Math.Max(0, action.CardOccurrence))
-                .FirstOrDefault();
+            if (!isUsePotion)
+            {
+                card = localCombat.Hand.Cards
+                    .Where(candidate => string.Equals(candidate.Id.Entry, action.CardId, StringComparison.Ordinal))
+                    .Skip(Math.Max(0, action.CardOccurrence))
+                    .FirstOrDefault();
+            }
+            else if (action.PotionSlot >= 0 && action.PotionSlot < localPlayer.PotionSlots.Count)
+            {
+                potion = localPlayer.GetPotionAtSlotIndex(action.PotionSlot);
+            }
         }
-
 
         bool hasTarget = action.TargetCombatId is not null;
         bool targetExists = false;
         bool allowedTarget = false;
+        Creature? target = null;
         if (action.TargetCombatId is { } targetId)
         {
-            Creature? target = state.GetCreature(targetId);
+            target = state.GetCreature(targetId);
             targetExists = target != null;
             if (localPlayer != null && target != null)
             {
@@ -44,6 +53,15 @@ internal static class MultiplayerSafeLocalActionClassifier
                 bool isEnemyTarget = state.Enemies.Any(enemy => enemy.CombatId == targetId);
                 allowedTarget = isLocalTarget || isEnemyTarget;
             }
+        }
+
+        bool potionTargetValid = true;
+        if (isUsePotion && localPlayer != null && potion != null)
+        {
+            Creature? resolvedPotionTarget = target;
+            if (resolvedPotionTarget == null && potion.IsValidTarget(localPlayer.Creature))
+                resolvedPotionTarget = localPlayer.Creature;
+            potionTargetValid = potion.IsValidTarget(resolvedPotionTarget);
         }
 
         return MultiplayerSafeExecutePolicy.ClassifyResolved(
@@ -55,7 +73,12 @@ internal static class MultiplayerSafeLocalActionClassifier
                 TargetExists: targetExists,
                 IsAllowedTarget: allowedTarget,
                 HasIncompleteTargetIdentity: !hasTarget
-                    && (action.TargetIndex != -1 || !string.IsNullOrEmpty(action.TargetName))));
+                    && (action.TargetIndex != -1 || !string.IsNullOrEmpty(action.TargetName)),
+                IsUsePotion: isUsePotion,
+                HasLocalPotion: potion != null,
+                PotionIdentityMatches: potion != null
+                    && string.Equals(potion.Id.Entry, action.PotionId, StringComparison.Ordinal),
+                PotionTargetValid: potionTargetValid));
     }
 
     internal static SafeLocalActionDecision ClassifyStructural(PlanAction action)
@@ -70,7 +93,10 @@ internal static class MultiplayerSafeLocalActionClassifier
                 // Choice/NestedChoices/TurnStartChoices are therefore not a multiplayer-only
                 // structural boundary; live ownership/state checks still run before and after
                 // the action.
-                RequiresChoice: false));
+                RequiresChoice: false,
+                IsUsePotion: action.Kind == PlanActionKind.UsePotion,
+                HasPotionIdentity: !string.IsNullOrWhiteSpace(action.PotionId),
+                HasPotionSlot: action.PotionSlot >= 0));
 
     public static IReadOnlyList<PlanAction> TakeSafePrefix(
         CombatState state,

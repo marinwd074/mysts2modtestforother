@@ -15,9 +15,21 @@ SafeLocalActionDecision Structural(
     bool hasCardIdentity = true,
     bool endsTurn = false,
     bool replay = false,
-    bool choice = false)
+    bool choice = false,
+    bool isUsePotion = false,
+    bool hasPotionIdentity = false,
+    bool hasPotionSlot = false)
     => MultiplayerSafeExecutePolicy.ClassifyStructural(
-        new(kind, isPlayCard, hasCardIdentity, endsTurn, replay, choice));
+        new(
+            kind,
+            isPlayCard,
+            hasCardIdentity,
+            endsTurn,
+            replay,
+            choice,
+            isUsePotion,
+            hasPotionIdentity,
+            hasPotionSlot));
 
 SafeLocalActionDecision Resolved(
     bool localPlayer = true,
@@ -26,12 +38,51 @@ SafeLocalActionDecision Resolved(
     bool hasTarget = false,
     bool targetExists = false,
     bool allowedTarget = false,
-    bool incompleteTarget = false)
+    bool incompleteTarget = false,
+    bool isUsePotion = false,
+    bool localPotion = false,
+    bool potionIdentityMatches = false,
+    bool potionTargetValid = true)
     => MultiplayerSafeExecutePolicy.ClassifyResolved(
-        new(localPlayer, localCard, multiplayerOnly, hasTarget, targetExists, allowedTarget, incompleteTarget));
+        new(
+            localPlayer,
+            localCard,
+            multiplayerOnly,
+            hasTarget,
+            targetExists,
+            allowedTarget,
+            incompleteTarget,
+            isUsePotion,
+            localPotion,
+            potionIdentityMatches,
+            potionTargetValid));
 
 Check(Structural().IsSafe, "A normal local PlayCard shape passes the structural gate.");
-Check(Structural("usepotion", isPlayCard: false).Reason == "kind_usepotion", "Potion actions fail closed.");
+Check(
+    Structural(
+        "usepotion",
+        isPlayCard: false,
+        hasCardIdentity: false,
+        isUsePotion: true,
+        hasPotionIdentity: true,
+        hasPotionSlot: true).IsSafe,
+    "A local potion shape with slot and identity passes the structural gate.");
+Check(
+    Structural(
+        "usepotion",
+        isPlayCard: false,
+        hasCardIdentity: false,
+        isUsePotion: true,
+        hasPotionSlot: true).Reason == "potion_identity_missing",
+    "A potion without identity fails closed.");
+Check(
+    Structural(
+        "usepotion",
+        isPlayCard: false,
+        hasCardIdentity: false,
+        isUsePotion: true,
+        hasPotionIdentity: true).Reason == "potion_slot_missing",
+    "A potion without a concrete slot fails closed.");
 Check(Structural(hasCardIdentity: false).Reason == "card_identity_missing", "Missing card identity fails closed.");
 Check(Structural(endsTurn: true).Reason == "ends_player_turn", "Cards that end the player turn fail closed.");
 Check(Structural(replay: true).Reason == "replay_semantics", "Replay semantics fail closed.");
@@ -58,6 +109,44 @@ Check(
     "A resolved local-player or enemy target is allowed.");
 Check(Resolved(incompleteTarget: true).Reason == "target_identity_incomplete", "Incomplete target identity fails closed.");
 Check(Resolved().IsSafe, "A targetless resolved local card is allowed.");
+Check(
+    Resolved(
+        localCard: false,
+        isUsePotion: true,
+        localPotion: true,
+        potionIdentityMatches: true).IsSafe,
+    "A matching local potion is admitted without requiring a card in hand.");
+Check(
+    Resolved(
+        localCard: false,
+        isUsePotion: true,
+        localPotion: false).Reason == "local_potion_missing",
+    "A missing local potion slot fails closed.");
+Check(
+    Resolved(
+        localCard: false,
+        isUsePotion: true,
+        localPotion: true,
+        potionIdentityMatches: false).Reason == "local_potion_mismatch",
+    "A changed potion identity fails closed.");
+Check(
+    Resolved(
+        localCard: false,
+        hasTarget: true,
+        targetExists: true,
+        allowedTarget: false,
+        isUsePotion: true,
+        localPotion: true,
+        potionIdentityMatches: true).Reason == "remote_player_or_unknown_target",
+    "A local potion cannot target a teammate through Safe Execute.");
+Check(
+    Resolved(
+        localCard: false,
+        isUsePotion: true,
+        localPotion: true,
+        potionIdentityMatches: true,
+        potionTargetValid: false).Reason == "potion_target_invalid",
+    "A potion whose live native target validation changed fails closed.");
 IReadOnlyList<SafeLocalActionDecision> longSafeRoute =
     Enumerable.Repeat(SafeLocalActionDecision.Allow, 64).ToArray();
 IReadOnlyList<SafeLocalActionDecision> longSafePrefix =
@@ -188,7 +277,7 @@ Check(
 
 MultiplayerSafeActionRevalidationFacts RevalidationFacts(bool hasNextAction = true)
     => new(
-        NativePlayCardCaptured: true,
+        NativeLocalActionCaptured: true,
         ActionQueueIdle: true,
         ExpectedContinuationStateMatched: true,
         ExpectedRemoteStateMatched: true,
@@ -235,7 +324,7 @@ Check(
     MultiplayerSafeExecutePolicy.RevalidateAction(
         RevalidationFacts() with { NativePlayCardCaptured = false })
         == MultiplayerSafeActionRevalidationDecision.ActionMismatch,
-    "A missing native PlayCardAction attribution fails closed.");
+    "A missing expected native local-action attribution fails closed.");
 
 string[] oneEnemyBefore = ["7:VINE:54/100/0:MOVE_A:powers=-"];
 string[] oneEnemyAfter = ["7:VINE:29/100/0:MOVE_A:powers=VULNERABLE:1"];
@@ -417,9 +506,9 @@ Check(
 
 Check(
     !MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(new(false, "replay_semantics"))
-        && !MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(new(false, "kind_usepotion"))
+        && !MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(new(false, "potion_target_invalid"))
         && !MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(
             new(false, "remote_player_or_unknown_target")),
-    "Replay, Potion, or teammate/unknown-target boundaries stop Safe Auto instead of looping.");
+    "Replay, invalid-potion-target, or teammate/unknown-target boundaries stop Safe Auto instead of looping.");
 
 Console.WriteLine($"PASS: {checks} multiplayer safe-execute policy checks");
