@@ -28,8 +28,7 @@ internal readonly record struct SolverSessionCapabilitySet(
     bool CanUseFastDeployment,
     bool CanUseInstantDeployment,
     bool CanShowcase,
-    bool CanPreCombatForecast,
-    bool CanUploadRunStatistics)
+    bool CanPreCombatForecast)
 {
     public bool IsMultiplayer => Kind != SolverSessionKind.Singleplayer;
 
@@ -189,8 +188,7 @@ internal static class SolverSessionCapabilities
         CanUseFastDeployment: true,
         CanUseInstantDeployment: true,
         CanShowcase: true,
-        CanPreCombatForecast: true,
-        CanUploadRunStatistics: true);
+        CanPreCombatForecast: true,);
 
     public static SolverSessionCapabilitySet MultiplayerProbe { get; } = new(
         SolverSessionKind.MultiplayerProbe,
@@ -207,8 +205,7 @@ internal static class SolverSessionCapabilities
         CanUseFastDeployment: false,
         CanUseInstantDeployment: false,
         CanShowcase: false,
-        CanPreCombatForecast: false,
-        CanUploadRunStatistics: false);
+        CanPreCombatForecast: false,);
 
     public static SolverSessionCapabilitySet MultiplayerAdvisor { get; } = new(
         SolverSessionKind.MultiplayerAdvisor,
@@ -225,8 +222,7 @@ internal static class SolverSessionCapabilities
         CanUseFastDeployment: false,
         CanUseInstantDeployment: false,
         CanShowcase: false,
-        CanPreCombatForecast: false,
-        CanUploadRunStatistics: false);
+        CanPreCombatForecast: false,);
 
     public static SolverSessionCapabilitySet MultiplayerSafeExecute { get; } = new(
         SolverSessionKind.MultiplayerSafeExecute,
@@ -243,6 +239,5 @@ internal static class SolverSessionCapabilities
         CanUseFastDeployment: false,
         CanUseInstantDeployment: false,
         CanShowcase: false,
-        CanPreCombatForecast: false,
-        CanUploadRunStatistics: false);
+        CanPreCombatForecast: false,);
 }

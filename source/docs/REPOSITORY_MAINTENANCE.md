@@ -40,3 +40,10 @@
 6. 删除项是否只存在于历史，不影响当前 build/test 输入。
 
 删除历史资料时不重写 Git 历史；需要时按 commit 恢复。
+
+## 网络功能边界
+
+- 已移除后台在线状态 heartbeat、跑局统计上传、服务器版本检查和自动 Showcase 上传。
+- `CombatShowcaseApi/Runtime` 仅保留本地导入/回放能力，不负责后台采集或网络上传。
+- 问题包上传属于用户主动触发的反馈动作，与后台 telemetry 分离。
+- 未经明确产品目标，不重新引入常驻 telemetry、后台上传 worker、私有 endpoint/token 元数据或隐式网络请求。

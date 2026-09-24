@@ -562,7 +562,6 @@ internal static partial class SolverController
                     // The root action can complete before nested card/potion actions settle;
                     // deploy the next planned action only after the native queue is idle.
                     await RunManager.Instance.ActionExecutor.FinishedExecutingActions().WaitAsync(token);
-                    RunStatistics.Activity(state, execution: true, auto: _combat.FullAutoEnabled);
                     if (safeExecute && !safeSession!.MarkAwaitingWorldUpdate())
                         throw new InvalidOperationException("多人 Safe Execute 动作完成时会话状态不一致。");
                 }

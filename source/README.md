@@ -4,7 +4,7 @@ Combat Solver 是一个面向《杀戮尖塔 2》的战斗路线求解器。单�
 
 玩家可以只查看建议，也可以让求解器执行当前回合，或连续接管整场战斗。搜索不会修改游戏 RNG，也不会在后台操作真实战斗状态。
 
-当前版本为 **0.40.2**，并修正了搜索进度与高战损引导。详见 [更新日志](docs/releases/0.40.2-RELEASE_NOTES.md)。
+当前版本为 **0.40.2**。本 fork 的版本演进见 [PROJECT_VERSION_HISTORY.md](docs/PROJECT_VERSION_HISTORY.md)。
 
 **English UI:** Set the game language to English and restart the game. CombatSolver provides a recommended route; use **Play turn** for one turn or **Auto: On** for continuous play. Configure potions, growth and search budgets in the overlay. **Settings > Reports > Upload report** submits a bug report. Logs, raw errors and some detailed diagnostics retain their original text. Multiplayer support is local-player-authority only; teammate actions are forecast/observation inputs and are never deployed by the solver.
 
@@ -22,7 +22,6 @@ Combat Solver 是一个面向《杀戮尖塔 2》的战斗路线求解器。单�
 - **可调搜索预算**：提供低、中、高、极高和自定义配置，并支持单线程或 `2-16` 路并行搜索。
 - **界面与通知**：默认使用深色界面，可切换浅色模式并调整覆盖层透明度；搜索结束可按设置发送 Windows 系统通知和提示音。
 - **问题反馈**：可以从设置中直接上传问题包，也可以导出到本地后手动提交。问题描述会附带本场自动分类，便于定位更优路线、计划外重算、执行中止和搜索失败。
-- **在线统计**：默认每 30 秒向在线统计服务发送随机安装标识、昵称、角色、楼层、当前战斗、预计战损和版本，可在设置中关闭；不上传完整路线，离线后清除昵称和战斗详情，保留历史人数及安装标识对应的累计在线时长。详见 [统计字段与关闭方式](docs/ONLINE_STATISTICS.md)。
 
 ## 工作方式
 

@@ -116,7 +116,6 @@ internal static class ModRuntime
             SearchMaxHandChoiceBranchesPerAction = profile.MaxHandChoiceBranchesPerAction,
             EnableNoGcRegion = false,
             StopAtAcceptableBattleHpLoss = false,
-            OnlineStatisticsEnabled = false,
             SearchCompletionNotificationsEnabled = false,
             PotionPolicy = Enum.Parse<SolverPotionPolicy>(options.PotionPolicy, ignoreCase: true),
         });

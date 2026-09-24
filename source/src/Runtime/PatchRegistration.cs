@@ -46,9 +46,6 @@ internal static class PatchRegistration
         patcher.RegisterPatch<UnattendedHeadlessFtuePatch>();
 #endif
         patcher.RegisterPatch<CombatReplayRecordingPatch>();
-        patcher.RegisterPatch<RunStatisticsNewRunPatch>();
-        patcher.RegisterPatch<RunStatisticsLaunchPatch>();
-        patcher.RegisterPatch<RunStatisticsEndPatch>();
 #if !STS2_01071
         patcher.RegisterPatch<UnattendedCombatStartReplayPatch>();
 #endif

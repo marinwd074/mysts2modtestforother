@@ -221,7 +221,6 @@ internal static partial class SolverController
     {
         AssertMainThread();
         _solverDisabled = disabled;
-        RunStatistics.SettingsChanged();
         if (persist)
             SolverSettings.Update(SolverSettings.Current with { SolverDisabled = disabled });
 

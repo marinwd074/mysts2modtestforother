@@ -144,7 +144,6 @@ internal static partial class SolverController
             Entry.Logger.Info($"[CombatSolver/Test] SEARCH_REJECT reason={rejection}");
             return;
         }
-        CombatShowcaseCollector.TryCaptureInitialRoot(state, reason);
         CombatBugReportExporter.RecordCheckpoint(
             state,
             $"search_request_{reason}",
@@ -478,7 +477,6 @@ internal static partial class SolverController
 
             Player player = LocalContext.GetMe(state)!;
             int turn = player.PlayerCombatState!.TurnNumber;
-            RunStatistics.Activity(state);
             SolverOverlay.ShowSearching(
                 host,
                 turn,
@@ -913,7 +911,6 @@ internal static partial class SolverController
 
         // Optional archive work happens after route delivery/deployment admission.
         if (!currentTurnAdopted && !routeAdopted)
-            CombatShowcaseCollector.TryQueueCompletedRoute(searchedState, result);
     }
 
     private static void ApplyProjectionBaselines(SolverResult result)
