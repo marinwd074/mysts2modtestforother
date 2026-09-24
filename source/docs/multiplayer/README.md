@@ -2,9 +2,9 @@
 
 当前目标架构已经从历史的 MP-1/MP-2 “当前回合 Advisor / Reactive Carry”推进为：**完整 Joint/Shadow 战斗预测 + 只执行本地动作 + 每次真实状态变化后校验 continuation，偏离则滚动重规划**。队友动作只存在于预测情景，不授予部署权限；MultiplayerOnly 卡保留真实牌堆状态，但不进入主动搜索候选。
 
-当前开发阶段是 **P0 基线**。先固定 0.107.1、代表性单人/多人 workload、Joint continuation exact reuse 与 mismatch fresh-search 行为，并建立“模拟错误 / 搜索漏解证据 / 队友预测偏差 / Runtime 状态偏差”的统一分类。P0 不修改目标函数；下一阶段 P1 才统一终局排序、中途保留和去重标签。详见 [P0_BASELINE.md](../P0_BASELINE.md)。
+当前开发阶段是 **U6 实机闭环与清理**。U0–U5 的代码阶段已完成；U6 只剩一次真实 Host/Client 的 teammate forecast → remote WorldVersion 变化 → fresh replan 闭环。详见 [U6_RUNTIME_CLOSURE.md](../U6_RUNTIME_CLOSURE.md)。
 
-下面的 MP-0/MP-1/MP-2 内容保留为历史能力门禁与实机证据，不再代表当前总架构。
+下面的 MP-0/MP-1/MP-2 内容仅保留为历史能力门禁与实机证据，不再代表当前生产限制。
 
 ## 历史门禁状态（保留证据）
 
@@ -12,8 +12,8 @@
 - **MP-0 Hardening：PASS（受控生命周期）**。已按游戏规则由 Host 退出并重新创建房间，Client 收到 `Quit` 后重新握手、加入、Ready，并再次进入有效战斗；进程停止本身不计入证据。
 - **MP-1 Advisor：SMOKE PASS（受控范围）**。静态合同与 Release 构建已通过；默认仍是 Probe，只有显式设置 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才会授予当前回合、本地玩家、只显示路线的搜索能力，绝不会自动执行动作。`BurningBlood`、side-turn relic、多人 block-scaling 和 EndTurn replay 边界均已收敛；fresh `-bbfix` client 的真实复验记录 `SEARCH_COMPLETE=5`、`SEARCH_FAILURE=0`、`FAIL_CLOSED=0`，并有原生完成通知与路线回放证据。Probe 仍保持只读，MP-2 Safe Execute 不在本次通过范围内。
 - **MP-2A Safe Execute：PASS（历史一动作范围）**。2026-09-20 的 HostVanilla + ClientCombatSolver `safe-execute` 单牌 Smoke 已验证通过；该证据保留为一动作基线。默认多人仍是 Probe，只有精确 `COMBATSOLVER_MULTIPLAYER_MODE=safe-execute` 才进入显式 Safe Execute，`safe-execute-lab` 仍只在 Multiplayer Lab 创建的 `ClientCombatSolver` 实例、Probe evidence 已启用且 ownership/profile marker 匹配时授权。
-- **MP-2B Safe Execute：实机 PASS（受控范围）**。当前运行时使用显式 `Authorized → Executing → AwaitingWorldUpdate → Revalidating → next/Completed/Aborted` 会话，一次部署最多接受 2 张本地普通安全牌；每张原生动作完成后都会等待动作队列与 `WorldVersion` 稳定，复核本地手牌/资源/目标、敌人目标变化和远端公开状态。远端或未知变化会记录 `MP2B_REMOTE_DELTA_ABORT`、停止后续动作并重新搜索。正常两动作与远端干扰验证器均已在真实 Host/Client journal 上返回 PASS，摘要见 [`evidence/mp2b-smoke-2026-09-20.json`](evidence/mp2b-smoke-2026-09-20.json)。
-- **MP-2C bounded N-action：实机 PASS（2026-09-20）**。当前 Safe Execute 使用单一有限上限 `MaxActionsPerDeployment=6`，按当前安全本地 `PlayCard` 连续前缀取值；每张牌仍经过原生队列完成、稳定 `WorldVersion`、动作后重验证和同一 session 的下一动作授权。正常 Smoke 自动打出 3 张本地普通牌且不 EndTurn；远端 Client 在主 Client 完成 2 张后制造公开变化，主 Client 停止第 3 张并重新搜索。两个验证器均 PASS，摘要见 [`evidence/mp2c-smoke-2026-09-20.json`](evidence/mp2c-smoke-2026-09-20.json)。
+- **MP-2B Safe Execute：历史两动作实机 PASS。** 该结果只作为 2026-09-20 的历史基线；当前生产会话已不再受“两动作”上限约束。每张原生动作后的稳定 WorldVersion 与语义后态重验证仍保留。证据见 [`evidence/mp2b-smoke-2026-09-20.json`](evidence/mp2b-smoke-2026-09-20.json)。
+- **MP-2C bounded N-action：历史实机 PASS（2026-09-20）。** 当时的固定 6-action ceiling 已在 U6 删除；当前 session 容量直接来自 selected route 的有限可执行前缀。历史正常/远端干扰证据仍可由兼容 parser 读取，摘要见 [`evidence/mp2c-smoke-2026-09-20.json`](evidence/mp2c-smoke-2026-09-20.json)。
 - **Reactive Carry Foundation：实机 PASS（2026-09-20）**。显式 Safe Execute 在当前路线的安全本地牌序列完成后，经最新 world/lifecycle/route/queue/choice/identity 边界复核，通过原生 `EndPlayerTurnAction` 结束回合并清除旧 session/authorization；下一本地回合重新 Probe、capture、search。Smoke A、B、C 分别证明下一回合 fresh carry、EndTurn 后队友公开变化适应和连续 3 个本地回合无旧授权复用；摘要见 [`evidence/reactive-carry-smoke-2026-09-20.json`](evidence/reactive-carry-smoke-2026-09-20.json)。
 - **Multiplayer Carry Ranking v1：离线合同 PASS，实机待定**。显式 Advisor/Safe Execute 的新搜索根只捕获远端公开 HP/MaxHP/Block/回合阶段、公开 Powers、敌人公开状态和公开多人约束；纯 evaluator/目标分类的 10 项合同与 Release 构建已通过。Carry 只在既有本地安全/资源排序之后作兼容候选 tie-break；原版怪物公开 AttackIntent 依据 0.107.1 的原生 all-opponents 攻击合同标记为 `AllPlayers`；非攻击和第三方怪物继续 Unknown/neutral。默认 Probe、单人和远端私有状态不受影响；R1/R2 尚未实机收口。
 - 正式一动作证据摘要见 [`evidence/mp2-safe-execute-formal-2026-09-20.json`](evidence/mp2-safe-execute-formal-2026-09-20.json)。
@@ -43,14 +43,13 @@
 
 多人 Safe Execute 仍只通过精确的 `COMBATSOLVER_MULTIPLAYER_MODE=safe-execute` 显式开启，默认安装保持 Probe，不因玩家数或网络类型自动升级。当前 Joint/Shadow 路线可以跨回合预测，但真实部署权限始终只属于本地玩家；下一本地回合只有 exact continuation 才允许复用，任何可读队友状态偏差都会 fail closed 并 fresh-search。药水自动执行、选择驱动、Instant、Route Repair 和队友控制仍不因 Joint 预测而自动开放。历史 Advisor/Carry 文档仅用于追溯旧门禁。
 
-## MP-2B 历史基线与 MP-2C 当前实现
+## Safe Execute 当前实现与历史证据
 
-- `MultiplayerSafeExecutionSession` 固定一次用户授权的请求 ID、路线 generation、起始/已接受 `WorldVersion`、动作上限和状态迁移；旧路线或生命周期变化不会 reset/rebase 世界版本。
-- MP-2B 历史基线的 `MultiplayerSafeLocalActionClassifier` 只取最多两张本地普通 `PlayCard`，不接受药水、EndTurn、Choice、Replay/重复语义、多人专属牌、队友目标或未知目标；第二张牌执行前仍会针对 live state 重新分类。
-- MP-2C 将该固定两动作切换为 `TakeBoundedSafePrefix` 与单一六动作 policy ceiling；遇到第一张不安全动作立即截断，不跳过 Potion/Choice/EndTurn/Replay/远端或未知目标去执行后面的安全牌。
-- Reactive Carry 在 bounded safe prefix 后只接受路线中真实存在的 EndTurn；EndTurn 前重新检查 lifecycle、local turn、route/generation、queue、pending choice、local identity、accepted WorldVersion、稳定 world 和 dirty observation。接受后 session/authorization/route seed 全部失效，下一回合只由 fresh Probe/Search 重新建立。
-- 每张牌只通过原生 `PlayCardAction`；动作队列完成后强制进行一次 action-boundary Probe，并等待稳定 `WorldVersion`，再复核本地手牌/能量/星星、身份/目标、敌人非目标状态和远端公开 fingerprint。
-- MP2B 历史合同为 39 项 PASS；MP-2C bounded N-action 基线为 40 项 PASS；加入 Reactive Carry 后当前 `MultiplayerSafeExecuteChecks` 为 53 项 PASS，Reactive Carry validator 合成自测 PASS。真实 MP2B/MP-2C 证据仍保留在各自摘要；A/B/C 证据见 `evidence/reactive-carry-smoke-2026-09-20.json`。运行命令见 `tools/multiplayer-lab/README.md`，步骤见 `RUNBOOK.md`。
+- `MultiplayerSafeExecutionSession` 仍绑定 request id、route generation、已接受 `WorldVersion` 与本次 selected route 的有限 action capacity；旧 session 不会 reset/rebase 世界版本。
+- 不再存在固定 2/6/32 action ceiling。结构 preflight 只截断第一个不允许的动作/forecast observation，逐动作 live classifier 与 production semantic post-state compare 决定能否继续。
+- capability 日志使用 `action_limit=selected_route`；`MP2B_DEPLOY_START max_actions=N` 中的 N 是该次实际路线容量，不是全局常量。
+- 历史 MP-2B/MP-2C parser 仍兼容归档日志里的数字 capability ceiling，仅用于读取旧证据，不形成生产兼容边界。
+- U5 teammate forecast 是硬观察边界；不会跳过 forecast-only 节点部署条件后缀。U6 使用 `validate-u6-runtime-closure.ps1` 验证真实远端变化后旧 request dormant 与 fresh search。
 
 ## MP-0A / MP-0B 通过条件
 

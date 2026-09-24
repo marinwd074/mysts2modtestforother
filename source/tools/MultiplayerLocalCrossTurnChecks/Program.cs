@@ -1168,3 +1168,49 @@ Check(
             incomparableDeckProxyB,
             incomparableDeckProxyA),
     "Conflicting summary advantages remain incomparable instead of being mislabeled exact dominance.");
+
+
+PlanAction u5LocalBeforeForecast = new(
+    PlanActionKind.PlayCard,
+    Turn: 7,
+    CardId: "LOCAL_A");
+PlanAction u5ForecastBoundary = new(
+    PlanActionKind.TeammateForecast,
+    Turn: 7,
+    CardId: "REMOTE_B",
+    ShadowForecast: new ShadowForecastPlan([]));
+PlanAction u5ContingentLocal = new(
+    PlanActionKind.PlayCard,
+    Turn: 7,
+    CardId: "LOCAL_C");
+string u5DecisionKeyWithForecast =
+    MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(
+        [u5LocalBeforeForecast, u5ForecastBoundary, u5ContingentLocal],
+        rootTurn: 7);
+string u5DecisionKeyBeforeForecast =
+    MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(
+        [u5LocalBeforeForecast],
+        rootTurn: 7);
+Check(
+    string.Equals(
+        u5DecisionKeyWithForecast,
+        u5DecisionKeyBeforeForecast,
+        StringComparison.Ordinal),
+    "U5 forecast observation is not part of the deployable current decision and contingent local suffixes do not leak across the observation boundary.");
+
+Check(
+    !MultiplayerInterleaveOrderPolicy.AllowsProactiveWaitForTeammate
+        && MultiplayerInterleaveOrderPolicy.MaximumForecastObservationsPerTurn == 1
+        && MultiplayerInterleaveOrderPolicy.MaximumSingleObservationRoutes == 4
+        && MultiplayerInterleaveOrderPolicy.IsForecastBoundaryReason(
+            MultiplayerInterleaveOrderPolicy.ForecastBoundaryReason),
+    "U5 scheduling is bounded to one forecast observation per turn and never invents an unbounded proactive teammate wait.");
+
+Check(
+    MultiplayerInterleaveOrderPolicy.CanCollapseOrder(
+        MultiplayerInterleaveOrderRelation.ExactEquivalent)
+        && !MultiplayerInterleaveOrderPolicy.CanCollapseOrder(
+            MultiplayerInterleaveOrderRelation.OrderSensitive)
+        && !MultiplayerInterleaveOrderPolicy.CanCollapseOrder(
+            MultiplayerInterleaveOrderRelation.ReverseUnavailable),
+    "U5 order collapse is allowed only after both A->B and B->A replay to the same conservative complete future-state identity.");

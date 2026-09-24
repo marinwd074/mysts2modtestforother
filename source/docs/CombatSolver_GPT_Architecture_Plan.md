@@ -18,7 +18,7 @@
 | 已核对内容 | 当前状态 | 含义 |
 |---|---|---|
 | 单多人完整搜索能力 | 交接记录 full-search heuristics 已共用，包含 Novelty、成长、遗物和长期收益 | 不能再把“多人完全没用单人算法”作为前提；执行时核对实际调用链 |
-| 固定执行张数 | 生产路线不再被固定 6/32 张上限截断；32 常数仍为历史兼容保留 | 不应重复删除已经失效的限制，也不能仅因常数存在就断言仍生效 |
+| 固定执行张数 | U6 已删除固定 6/32 张生产上限与旧 MP-2A 单动作兼容入口；Safe Execute session 容量来自本次有限 selected route | 不再恢复任意固定 action ceiling；逐动作后态校验仍是实际边界 |
 | 本地 Choice | 复用 NativeChoiceSession；不再因 choice_required 截断 | Choice 是真实选牌机制，不应删除；减少重复驱动和校验 |
 | Shadow | 已可在不同队友间逐动作交错；精确状态去重与启发式保留已分开 | 还不等于本地玩家与队友完全交错 |
 | Joint | 交接确认目前挂在本地 EndTurn 边界 | 本地易伤→队友攻击→本地后续行动仍需专门建模 |
@@ -199,17 +199,19 @@ F 必须执行每张牌与触发器，而不是先合并成“队友本回合打
 
 ### U5 — 本地与队友的关键顺序
 
-先加入少量本地/队友关键交错：易伤与攻击、先击杀与触发、共享RNG消耗、抽牌/资源变化。队友之间现有交错保留，不重复实现。
+**状态（2026-09-23）：COMPLETE（代码/合同/pinned 0.107.1 回归完成；真实 Host/Client U5 专项 smoke 仍 `UNVERIFIED`）。** 详细实现与证据见 [U5_LOCAL_TEAMMATE_INTERLEAVING.md](U5_LOCAL_TEAMMATE_INTERLEAVING.md)。多人本地搜索现在可形成“本地 A → forecast-only 队友 B → 从 B 后真实模拟状态继续本地 C”；B 始终只存在于 detached simulator，不获得部署权限。A→B 前向路线与 B→A reverse-order probe 都逐动作走生产 F；reverse 顺序若导致牌身份、合法性、目标、牌堆/RNG/History/死亡处理等变化，会标为 `OrderSensitive` 或 `ReverseUnavailable`。只有两顺序的 `ShadowFutureStateFingerprint` 完全相同才允许 `ExactEquivalent` collapse；仅“不同怪物”不构成可交换证明。
 
-只在可证明可交换时合并顺序：两动作互不影响合法性、目标、牌堆、RNG、触发器、历史、死亡处理等完整后态。仅“打不同怪”不是可交换证明。无法证明则不做精确合并，以明确标注的beam近似裁剪。
+调度保持有界：每个本地回合最多一个 teammate forecast observation、每个观察最多保留 4 条路线；`AllowsProactiveWaitForTeammate=false`，没有“等待理想队友行动”的无限等待动作。真实部署在 forecast observation 前截断；Safe Auto 保持 fresh-search 资格并重新观察/规划，绝不会跳过 forecast 节点继续部署条件后缀。U3 当前决策身份和情景复评同样在 forecast 边界 fail closed，避免预知队友选择。
 
-验收：实际按A→B与B→A分别推进F；队友动作始终仅预测；等待队友作为调度行为须有明确观察/超时机制，不能让求解器无限等理想行动。
+验证：compatibility run `35890994702` SUCCESS；原 pinned 0.107.1 run `35890656903` SUCCESS。随后补充 U5 非实机生产 replay：compatibility `35892680315` SUCCESS，pinned 0.107.1 `35892680392` SUCCESS。在固定 0.107.1 场景中，生产 replay 的 `BASH→STRIKE_IRONCLAD` 得到 enemy HP 39 / fingerprint `7D7857814B038E3D:4A6951B304DF0382`，反向 `STRIKE_IRONCLAD→BASH` 得到 enemy HP 42 / fingerprint `93D0F278205774EB:8DB470E2DA385E5E`，确认 Vulnerable/attack 顺序敏感且不能 exact collapse；同一 pinned run 完整通过 Release、U0/U1、U2、P0/P1 runtime 与历史 P0 A/B 分类。 随后再补终局顺序反例：compatibility `35893826085` SUCCESS，pinned `35893825974` SUCCESS；敌人 HP=7 时 `BASH→STRIKE` 在 Bash 结束战斗后拒绝第二动作（`TerminalForwardRejected=true`），而 `STRIKE→BASH` 合法完成并得到 enemy HP 0 / energy 0（`TerminalReverseCompleted=true`），确认提前终局造成的顺序合法性不对称不会被折叠。随后共享生成 RNG 反例也已非实机 PASS：compatibility `35935837095`、pinned `35935837066` 均 SUCCESS；生产 replay 的 `INFERNAL_BLADE→DISTRACTION` 生成 `DISMANTLE + TRUE_GRIT`，反向生成 `PRIMAL_FORCE + UNRELENTING`，两者完整 future fingerprint 分别为 `5EB1604F1125EBD8:7D84CF916EF7DFAB` / `C1076280507FB268:9AC9FCA14C304F1F`，最终手牌 multiset 不同，确认共同 `CombatCardGeneration` RNG 与牌堆后态保留顺序影响。 随后资源顺序反例也已非实机 PASS：compatibility `35936767527`、pinned `35936767565` 均 SUCCESS；根能量=1 时 `OFFERING→BASH` 由 Offering 先改变资源后合法完成并最终 energy=1，而 `BASH→OFFERING` 在第一动作即被生产 replay 以 `energy=1 cost=2` 拒绝，确认资源状态改变导致的动作合法性顺序依赖不会被折叠。 随后抽牌/牌堆顺序反例也已非实机 PASS：compatibility `35937892578`、pinned `35937892644` 均 SUCCESS；固定根顶部 `DEFEND_IRONCLAD, STRIKE_IRONCLAD` 下，`POMMEL_STRIKE→HAVOC` 使 Defend 留手 / Strike 进 Exhaust，而反向使 Strike 留手 / Defend 进 Exhaust，完整 future fingerprint 分别为 `D0C9E5CB263AF5ED:1427A63872339424` / `D79C9EEBE1B22A1F:B06C41B99F93102B`，确认抽牌改变牌堆顶与后续自动出牌对象的顺序影响。没有扩大 Beam、节点或时间预算。该证据仍是 detached 单进程模拟，`RealMultiplayerOwnershipVerified=false`；Vulnerable/attack、提前终局、共享生成 RNG、资源合法性、抽牌/牌堆顶变化五类顺序语义已由 pinned production replay 覆盖；U6 的 U5 最小实机债务收缩为真实远端动作插入后的 ownership / WorldVersion / observation→fresh-replan 链，不由离线 replay 冒充实机 PASS。下一张卡为 U6。
 
 ### U6 — 实机闭环与清理
 
-小规模对照通过后再评估本地精确斩杀、缓存、增量修补和更远期预测。迁移成功后删除失效常数、历史别名与相应旧测试，不为了兼容测试保留虚假的生产边界。
+**状态（2026-09-24）：COMPLETE（实现与清理）。** 真实 Host/Client U6-C smoke 由用户明确跳过，因此当前 HEAD 的该网络时序链继续记为 `UNVERIFIED`，不冒充 runtime PASS。 详见 [U6_RUNTIME_CLOSURE.md](U6_RUNTIME_CLOSURE.md)。失效的固定 32-action ceiling、旧 MP-2A 单动作兼容入口/limit aliases 与对应 validator 已删除；Safe Execute capability 改为 `action_limit=selected_route`。Pinned Release 触发范围已覆盖 Safe Execute policy/classifier/controller。U6 新 validator 只接受真实 forecast boundary → remote readable delta → fresh search → old request dormant 链，缺证据返回 `UNVERIFIED`。
 
-验收：交接只保留当前架构、已验证结果、未验证事项和下一任务；旧路径调用为零才能删除。发布说明区分离线、构建和真实Host/Client测试。
+U6 实现与清理收口后即可独立评估本地精确斩杀、缓存、增量修补和更远期预测；已跳过的 U6-C 只保留为可选 runtime 补证，不阻塞这些后续实验。迁移成功后删除失效常数、历史别名与相应旧测试，不为了兼容测试保留虚假的生产边界。
+
+验收：已完成。交接已压缩为当前架构、已验证结果、未验证事项和下一任务；旧 MP-2A 路径在调用归零后删除；离线/pinned、构建/合同和真实 Host/Client 证据继续分层记录。U6-C 的最小实机步骤保留在 [U6_RUNTIME_CLOSURE.md](U6_RUNTIME_CLOSURE.md)，但因本轮明确跳过，不作为 U6 实现阶段继续阻塞项。
 
 ## 8. 最小验证矩阵与停止条件
 

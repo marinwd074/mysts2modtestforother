@@ -332,6 +332,129 @@ internal static class ShadowTeammatePlanner
             HitExpansionBudgetLimit: hitExpansionBudgetLimit);
     }
 
+    /// <summary>
+    /// Builds a bounded one-observation teammate frontier for U5 local/teammate interleaving.
+    /// Each returned route contains exactly one predicted teammate card. The ordinary local
+    /// continuation remains a separate search branch, so the implicit "teammate does nothing
+    /// now" alternative never requires a synthetic wait action.
+    /// </summary>
+    internal static ShadowTeammatePlanResult BuildTeamSingleActionRoutes(
+        CombatPredictionSimulator source,
+        Player localPlayer,
+        IReadOnlySet<uint>? processedEnemyDeaths = null,
+        int beamWidth = DefaultBeamWidth)
+    {
+        if (beamWidth < 1)
+            throw new ArgumentOutOfRangeException(nameof(beamWidth));
+        if (!source.State.RootActionPlayers.Any(player => ReferenceEquals(player, localPlayer)))
+        {
+            throw new InvalidOperationException(
+                "U5 teammate forecast local player is outside RootActionPlayers.");
+        }
+
+        Player[] teammates = source.State.RootCapturedPlayers
+            .Where(player => !ReferenceEquals(player, localPlayer))
+            .OrderBy(player => player.NetId)
+            .ToArray();
+        if (teammates.Length == 0)
+        {
+            return new ShadowTeammatePlanResult(
+                Array.Empty<ShadowTeammateRoute>(),
+                ExpandedBranches: 0,
+                PendingChoiceBranches: 0,
+                HitActionDepthLimit: false);
+        }
+
+        ShadowTeammateRoute seed = CaptureRoute(
+            source.Fork(),
+            Array.Empty<ShadowTeammateActionCandidate>(),
+            CaptureProcessedEnemyDeaths(source, processedEnemyDeaths));
+        List<(ShadowTeammateRoute Route, ShadowBehaviorActionObservation Observation)> choices = [];
+        int expandedBranches = 0;
+        int pendingChoiceBranches = 0;
+
+        foreach (Player teammate in teammates)
+        {
+            string playerNetId = teammate.NetId.ToString();
+            IReadOnlyList<ShadowTeammateActionCandidate> candidates =
+                EnumerateLegalActions(seed.Simulator, teammate);
+            foreach (ShadowTeammateActionCandidate candidate in candidates)
+            {
+                expandedBranches++;
+                if (!TryPlayCandidate(seed, teammate, candidate, out ShadowTeammateRoute? child))
+                {
+                    pendingChoiceBranches++;
+                    continue;
+                }
+
+                HashSet<string> turnEndedPlayers = new(StringComparer.Ordinal);
+                if (child.TurnEndRequested)
+                {
+                    SimulatedCombatState childCombat =
+                        (SimulatedCombatState)child.Simulator.State.CombatState;
+                    _ = childCombat.ConsumePlayerTurnEndRequest();
+                    turnEndedPlayers.Add(playerNetId);
+                    child = CaptureRoute(
+                        child.Simulator,
+                        child.Actions,
+                        child.ProcessedEnemyDeaths);
+                }
+
+                child = child with { TurnEndedPlayerNetIds = turnEndedPlayers };
+                choices.Add((
+                    child,
+                    new ShadowBehaviorActionObservation(
+                        child.CompleteVictory,
+                        Math.Max(0, seed.EnemyDurability - child.EnemyDurability),
+                        Math.Max(0, child.TeamEffectiveHp - seed.TeamEffectiveHp),
+                        candidate.EnergyCost,
+                        candidate.StarCost,
+                        candidate.IsPowerCard)));
+            }
+        }
+
+        if (choices.Count == 0)
+        {
+            return new ShadowTeammatePlanResult(
+                Array.Empty<ShadowTeammateRoute>(),
+                expandedBranches,
+                pendingChoiceBranches,
+                HitActionDepthLimit: false);
+        }
+
+        ShadowBehaviorActionObservation[] observations =
+            choices.Select(choice => choice.Observation).ToArray();
+        double[] decisionLogProbabilities =
+            ShadowTeammateBehaviorModel.DecisionLogProbabilities(observations);
+        List<ShadowTeammateRoute> weighted = new(choices.Count);
+        for (int index = 0; index < choices.Count; index++)
+        {
+            weighted.Add(choices[index].Route with
+            {
+                BehaviorLogProbability = decisionLogProbabilities[index],
+                BehaviorLogMass = decisionLogProbabilities[index],
+                BehaviorDecisionCount = 1,
+            });
+        }
+
+        List<ShadowTeammateRoute> retained =
+            RetainBehaviorAwareSpectrum(weighted, beamWidth, labelScenarios: false);
+        IReadOnlyList<ShadowTeammateRoute> finalized =
+            FinalizeBehaviorScenarioProbabilities(
+                retained,
+                scenarioSetComplete: false);
+        double retainedProbabilityMass = finalized.Count == 0
+            ? 0d
+            : finalized[0].RetainedScenarioProbabilityMass;
+        return new ShadowTeammatePlanResult(
+            finalized,
+            expandedBranches,
+            pendingChoiceBranches,
+            HitActionDepthLimit: false,
+            retainedProbabilityMass,
+            ProbabilityModelTrusted: false);
+    }
+
     internal static ShadowTeammatePlanResult BuildTopKRoutes(
         CombatPredictionSimulator source,
         Player teammate,
@@ -418,6 +541,68 @@ internal static class ShadowTeammatePlanner
 
             SimulatedCombatState combat =
                 (SimulatedCombatState)simulator.State.CombatState;
+            if (combat.PlayerTurnEndRequested)
+            {
+                _ = combat.ConsumePlayerTurnEndRequest();
+                turnEndedPlayers.Add(action.PlayerNetId);
+            }
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Fail-closed replay used only by U5 order probes. A reverse ordering is allowed to be
+    /// unavailable because the first action may change hand identity, legality or resources;
+    /// that is order sensitivity, not a solver exception.
+    /// </summary>
+    internal static bool TryReplayForecastActionsForOrderProbe(
+        CombatPredictionSimulator simulator,
+        IReadOnlyList<ShadowTeammateActionCandidate> actions,
+        ISet<uint> processedEnemyDeaths)
+    {
+        HashSet<string> turnEndedPlayers = new(StringComparer.Ordinal);
+        foreach (ShadowTeammateActionCandidate action in actions)
+        {
+            if (turnEndedPlayers.Contains(action.PlayerNetId))
+                return false;
+
+            Player teammate;
+            try
+            {
+                teammate = FindCapturedPlayer(simulator, action.PlayerNetId);
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+
+            SimPlayerCombatState playerState =
+                simulator.State.GetPlayerCombatState(teammate);
+            if ((uint)action.HandIndex >= (uint)playerState.Hand.Cards.Count)
+                return false;
+            PredictedCard card = playerState.Hand.Cards[action.HandIndex];
+            if (!string.Equals(card.Preview.Id.Entry, action.CardId, StringComparison.Ordinal)
+                || card.Preview.CurrentUpgradeLevel != action.UpgradeLevel
+                || !string.Equals(
+                    CardChoiceSupport.ChoiceCardKey(card),
+                    action.SemanticKey,
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            SimulatedCombatState combat =
+                (SimulatedCombatState)simulator.State.CombatState;
+            if (!combat.CanPlayCard(simulator, card))
+                return false;
+            if (!TryPlayCandidateInPlace(
+                    simulator,
+                    teammate,
+                    action,
+                    processedEnemyDeaths))
+            {
+                return false;
+            }
             if (combat.PlayerTurnEndRequested)
             {
                 _ = combat.ConsumePlayerTurnEndRequest();

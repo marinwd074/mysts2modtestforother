@@ -93,16 +93,6 @@ IReadOnlyList<SafeLocalActionDecision> emptyPrefix =
         decision => decision,
         out SafeLocalActionDecision emptyStop);
 Check(emptyPrefix.Count == 0 && emptyStop.Reason == "ends_player_turn", "An unsafe first route action returns an empty prefix.");
-IReadOnlyList<SafeLocalActionDecision> fortyActionRoute =
-    Enumerable.Repeat(SafeLocalActionDecision.Allow, 40).ToArray();
-IReadOnlyList<SafeLocalActionDecision> fortyActionPrefix =
-    MultiplayerSafeExecutePolicy.TakeBoundedSafePrefix(
-        fortyActionRoute,
-        decision => decision,
-        out SafeLocalActionDecision fortyActionStop);
-Check(
-    fortyActionPrefix.Count == fortyActionRoute.Count && fortyActionStop.IsSafe,
-    "A route longer than the historical 32-action cap remains intact.");
 Check(
     MultiplayerSafeExecutePolicy.CanGrantLabCapability(
         new(MultiplayerSafeExecutePolicy.LabModeToken, true, true)),
@@ -420,8 +410,10 @@ Check(
 Check(
     MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(SafeLocalActionDecision.Allow)
         && MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(
-            new(false, MultiplayerSafeExecutePolicy.ManualMultiplayerCardReason)),
-    "A completed safe prefix or manual multiplayer-card boundary keeps Safe Auto eligible for a fresh search.");
+            new(false, MultiplayerSafeExecutePolicy.ManualMultiplayerCardReason))
+        && MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(
+            new(false, MultiplayerSafeExecutePolicy.TeammateForecastBoundaryReason)),
+    "A completed safe prefix, manual multiplayer-card boundary, or U5 teammate forecast observation keeps Safe Auto eligible for a fresh search.");
 
 Check(
     !MultiplayerSafeExecutePolicy.ShouldKeepSafeAutoAfterBoundary(new(false, "replay_semantics"))

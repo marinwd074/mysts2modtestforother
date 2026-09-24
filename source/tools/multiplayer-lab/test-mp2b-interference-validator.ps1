@@ -33,7 +33,7 @@ function Invoke-Case {
 
 try {
     $base = @(
-        '[CombatSolver/MultiplayerSafeExecute] MP2B_CAPABILITY enabled=true max_actions=2 attribution=revalidation automatic_end_turn=false custom_network_api=false',
+        '[CombatSolver/MultiplayerSafeExecute] MP2B_CAPABILITY enabled=true action_limit=selected_route attribution=revalidation automatic_end_turn=false custom_network_api=false',
         '[CombatSolver/Evidence] ROUTE_REPLAY {"actionCount":4}',
         '[CombatSolver/Evidence] ROUTE_ACTION {"index":3,"action":{"Kind":"EndTurn"}}',
         '[CombatSolver/MultiplayerSafeExecute] MP2B_DEPLOY_START turn=1 request_id=12 route_generation=4 action_count=2 max_actions=2 search_world_version=4 stop_reason=mp2b_two_action_limit',
@@ -66,7 +66,7 @@ try {
     Invoke-Case -Name 'missing-search-is-unverified' -Lines $missingSearch -ExpectedExitCode 2
 
     $twoActionAbort = @(
-        '[CombatSolver/MultiplayerSafeExecute] MP2B_CAPABILITY enabled=true max_actions=6 attribution=revalidation automatic_end_turn=false custom_network_api=false',
+        '[CombatSolver/MultiplayerSafeExecute] MP2B_CAPABILITY enabled=true action_limit=selected_route attribution=revalidation automatic_end_turn=false custom_network_api=false',
         '[CombatSolver/Evidence] ROUTE_REPLAY {"actionCount":6}',
         '[CombatSolver/Evidence] ROUTE_ACTION {"index":5,"action":{"Kind":"EndTurn"}}',
         '[CombatSolver/MultiplayerSafeExecute] MP2B_DEPLOY_START turn=1 request_id=22 route_generation=4 action_count=5 max_actions=6 search_world_version=4 stop_reason=safe_local_play_card',

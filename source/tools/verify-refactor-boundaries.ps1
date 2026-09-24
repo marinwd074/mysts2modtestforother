@@ -1266,6 +1266,7 @@ $expectedBeamFiles = @(
     "CombatBeamSolver.Expansion.cs",
     "CombatBeamSolver.FinalPlanOrdering.cs",
     "CombatBeamSolver.Models.cs",
+    "CombatBeamSolver.MultiplayerInterleaving.cs",
     "CombatBeamSolver.MultiplayerScenarioReevaluation.cs",
     "CombatBeamSolver.NoveltySearch.cs",
     "CombatBeamSolver.OpeningExpansion.cs",
@@ -1281,6 +1282,30 @@ $expectedBeamFiles = @(
     "CombatBeamSolver.StandPatJobs.cs",
     "CombatBeamSolver.Terminal.cs"
 )
+$u5InterleavePath = Join-Path $searchRoot "CombatBeamSolver.MultiplayerInterleaving.cs"
+$u5InterleaveText = [IO.File]::ReadAllText($u5InterleavePath)
+foreach ($u5InterleaveRule in @(
+    'MaximumForecastObservationsPerTurn',
+    'BuildTeamSingleActionRoutes(',
+    'ProbeReverseInterleaveOrder(',
+    'ShadowFutureStateFingerprint.Capture(',
+    'MultiplayerInterleaveOrderPolicy.CanCollapseOrder(orderRelation)',
+    'deployable=false proactive_wait=false')) {
+    if (-not $u5InterleaveText.Contains($u5InterleaveRule)) {
+        $violations.Add("${u5InterleavePath}: U5 local/teammate interleave boundary drifted '$u5InterleaveRule'")
+    }
+}
+foreach ($u5ExpansionRule in @(
+    'StateFingerprint transpositionKey = ExactTranspositionKey(candidate);',
+    '_run.Transpositions.TryGetValue(transpositionKey, out TranspositionFrontier? frontier)',
+    'StateFingerprint transpositionKey = ExactTranspositionKey(node);',
+    '_run.ExpandedTranspositions.TryGetValue(transpositionKey, out TranspositionFrontier? frontier)',
+    'BuildAcceptedInlineTeammateForecastNodes(node)')) {
+    if (-not $crossTurnTranspositionText.Contains($u5ExpansionRule)) {
+        $violations.Add("${crossTurnTranspositionPath}: U5 exact interleave transposition boundary drifted '$u5ExpansionRule'")
+    }
+}
+
 $pathDiagnosticsPath = Join-Path $searchRoot "CombatBeamSolver.PathDiagnostics.cs"
 foreach ($required in @(
     @{ Path = (Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.cs"); Text = 'HasRetainedRoutingChoice: RetainedRoutingChoice(node) != null' },

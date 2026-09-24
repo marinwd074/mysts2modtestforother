@@ -425,6 +425,9 @@ internal sealed partial class CombatBeamSolver
             }
         }
 
+        foreach (SearchNode forecastNode in BuildAcceptedInlineTeammateForecastNodes(node))
+            yield return forecastNode;
+
         foreach (SearchNode endNode in BuildAcceptedEndTurnNodes(node))
             yield return endNode;
     }
@@ -2163,6 +2166,34 @@ internal sealed partial class CombatBeamSolver
                 }
                 turn = simulatedCombat.GetPlayerTurnNumber(_player);
                 LogAnnotatedReplayState(simulator, action, priorActionCount + actionOffset, turn, replayEvidence);
+                continue;
+            }
+
+            if (action.Kind == PlanActionKind.TeammateForecast)
+            {
+                if (action.ShadowForecast == null)
+                    throw new InvalidOperationException("U5 teammate forecast action is missing forecast metadata.");
+
+                int shadowShuffleEventsBefore = simulator.ShuffleEventCount;
+                if (!ShadowTeammatePlanner.ReplayForecastActions(
+                        simulator,
+                        action.ShadowForecast.Actions,
+                        processedEnemyDeaths))
+                {
+                    boundary = SearchBoundaryReason.PendingChoice;
+                    break;
+                }
+                shufflesCrossed = checked(
+                    shufflesCrossed
+                    + simulator.ShuffleEventCount
+                    - shadowShuffleEventsBefore);
+                simulator.CheckWinCondition(simulatedCombat.GetPlayerTurnNumber(_player));
+                LogAnnotatedReplayState(
+                    simulator,
+                    action,
+                    priorActionCount + actionOffset,
+                    turn,
+                    replayEvidence);
                 continue;
             }
 
@@ -3984,9 +4015,10 @@ internal sealed partial class CombatBeamSolver
             candidate.Snapshot.AllEnemiesDead,
             candidate.Snapshot.PredictionGaps,
             candidate.CombatProgress);
-        if (!_run.Transpositions.TryGetValue(candidate.StateKey, out TranspositionFrontier? frontier))
+        StateFingerprint transpositionKey = ExactTranspositionKey(candidate);
+        if (!_run.Transpositions.TryGetValue(transpositionKey, out TranspositionFrontier? frontier))
         {
-            _run.Transpositions.Add(candidate.StateKey, new TranspositionFrontier(next));
+            _run.Transpositions.Add(transpositionKey, new TranspositionFrontier(next));
             ObserveSearchPath(candidate, SearchPathObservationStage.AdmissionTransposition, "accepted_new_state");
             return true;
         }
@@ -4042,9 +4074,10 @@ internal sealed partial class CombatBeamSolver
             node.Snapshot.AllEnemiesDead,
             node.Snapshot.PredictionGaps,
             node.CombatProgress);
-        if (!_run.ExpandedTranspositions.TryGetValue(node.StateKey, out TranspositionFrontier? frontier))
+        StateFingerprint transpositionKey = ExactTranspositionKey(node);
+        if (!_run.ExpandedTranspositions.TryGetValue(transpositionKey, out TranspositionFrontier? frontier))
         {
-            _run.ExpandedTranspositions.Add(node.StateKey, new TranspositionFrontier(next));
+            _run.ExpandedTranspositions.Add(transpositionKey, new TranspositionFrontier(next));
             ObserveSearchPath(node, SearchPathObservationStage.ExpansionTransposition, "accepted_new_state");
             return true;
         }

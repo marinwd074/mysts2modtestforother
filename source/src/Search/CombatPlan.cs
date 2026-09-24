@@ -11,6 +11,12 @@ internal enum PlanActionKind
     PlayCard,
     UsePotion,
     EndTurn,
+
+    /// <summary>
+    /// Forecast-only teammate observation used by multiplayer search. It is never a local
+    /// deployment action; reaching it is an observation/replan boundary for Safe Execute.
+    /// </summary>
+    TeammateForecast,
 }
 
 internal enum PlanChoiceEffect
@@ -141,7 +147,8 @@ internal sealed record ShadowForecastPlan(
     bool ScenarioProbabilityTrusted = true,
     StateFingerprint ScenarioFingerprint = default,
     ShadowTeammateScenarioKind ScenarioKind = ShadowTeammateScenarioKind.Unspecified,
-    bool ScenarioSetComplete = true)
+    bool ScenarioSetComplete = true,
+    IReadOnlyList<string>? TurnEndedPlayerNetIds = null)
 {
     public double BehaviorMeanLogProbability =>
         ShadowTeammateBehaviorModel.MeanLogProbability(
@@ -175,6 +182,7 @@ internal sealed record PlanAction(
     ShadowForecastPlan? ShadowForecast = null)
 {
     public bool IsExecutable => Kind is PlanActionKind.PlayCard or PlanActionKind.UsePotion;
+    public bool IsForecastOnlyObservation => Kind == PlanActionKind.TeammateForecast;
     public string ActionTitle => Kind == PlanActionKind.UsePotion ? PotionTitle : CardTitle;
 
     public IReadOnlyList<PlanCardChoice> GetActionChoicesInExecutionOrder()
@@ -1966,6 +1974,7 @@ internal sealed class SolverResult
         {
             PlanActionKind.UsePotion => $"{action.PotionTitle}（药水）",
             PlanActionKind.EndTurn => "结束回合",
+            PlanActionKind.TeammateForecast => "队友预测（仅模拟）",
             _ => action.CardTitle,
         };
         string card = string.IsNullOrEmpty(action.TargetName)

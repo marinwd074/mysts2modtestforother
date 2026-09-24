@@ -40,7 +40,7 @@
 
 5. **正式证据只取重启后的运行。**
    - 记录第二次 Client 启动返回的 `logPath`。
-    - MP-2A/MP-2C 历史基线按各自入口运行；当前 Reactive Carry Smoke 使用显式
+    - MP-2B/MP-2C 历史基线按各自入口运行；当前 Reactive Carry Smoke 使用显式
       `-MultiplayerMode safe-execute`。
    - 等待动作完成、WorldVersion 更新和新 debounce search 后再停止。
 
@@ -149,11 +149,6 @@ pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
   -ForceSteamOff `
   -MultiplayerMode safe-execute
 ~~~
-
-用户仍只做一次 Host/Join/Ready、进入战斗、确认未自动出牌后点击“执行本回合”。这段
-只用于复核 MP-2A 历史一动作基线；验证器会检查 `FORMAL_CAPABILITY`、单个原生
-`PlayCardAction`、动作后 `WorldVersion` 失效和新的 debounce search。它不代表当前
- MP-2C N-action 实机已通过。
 
 ## MP-2B 两动作 Smoke（已完成实机；复验步骤）
 
@@ -328,23 +323,6 @@ pwsh -NoLogo -NoProfile -File .\validate-joint-continuation-results.ps1 `
 ~~~
 
 退出码仍为 0=PASS、1=FAIL、2=UNVERIFIED。Reuse 与 Mismatch 都通过后，才把 Joint continuation runtime 从合同覆盖提升为实机证据。
-
-## MP-2A 收尾
-
-游戏进程停止仍由 Codex/Agent 负责，默认使用 Graceful；只有游戏窗口中的点击交给用户。
-
-~~~powershell
-pwsh -NoLogo -NoProfile -File .\stop-owned-instances.ps1 `
-  -InstanceRoot "$labRoot\runtime-mp-client-solver"
-~~~
-
-随后只验证**第二次正式 Client 运行**的日志：
-
-~~~powershell
-pwsh -NoLogo -NoProfile -File .\validate-mp2a-results.ps1 `
-  -LogPath '<post-restart-client-log>' `
-  -OutputPath '.\.local\multiplayer-lab\results\mp2a-summary.json'
-~~~
 
 默认安装仍不因本手册自动进入 Safe Execute。显式 Safe Execute 已包含 Reactive Carry，
 并新增实验性 Safe Auto；Safe Auto 只持续重新授权当前本地安全边界，不等同于单人 Full Auto。

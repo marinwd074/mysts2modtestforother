@@ -79,6 +79,7 @@ internal sealed partial class CombatBeamSolver
         List<PlanAction> prefix = [];
         PlanAction? endTurn = null;
         bool unsupportedImplicitTurnEnd = false;
+        bool forecastObservationBoundary = false;
         foreach (PlanAction action in representative.Actions)
         {
             if (action.Turn != _startTurnNumber)
@@ -86,6 +87,14 @@ internal sealed partial class CombatBeamSolver
             if (action.Kind == PlanActionKind.EndTurn)
             {
                 endTurn = action;
+                break;
+            }
+            if (action.Kind == PlanActionKind.TeammateForecast)
+            {
+                // U3 cannot freeze a specific forecast observation into the current local
+                // decision. Everything after this boundary is contingent and must be replanned
+                // from the observed live state, so fair scenario reranking fails closed.
+                forecastObservationBoundary = true;
                 break;
             }
 
@@ -96,6 +105,9 @@ internal sealed partial class CombatBeamSolver
                 break;
             }
         }
+
+        if (forecastObservationBoundary)
+            return UnknownDecision();
 
         int sharedWork = prefix.Count;
         if (sharedWork > maxExpandedBranches)
@@ -205,7 +217,8 @@ internal sealed partial class CombatBeamSolver
                     route.ScenarioProbabilityTrusted,
                     route.ScenarioFingerprint,
                     route.ScenarioKind,
-                    route.ScenarioSetComplete);
+                    route.ScenarioSetComplete,
+                    route.TurnEndedPlayerNetIds.OrderBy(id => id, StringComparer.Ordinal).ToArray());
                 PlanAction replayEndTurn = endTurn with
                 {
                     // Only the root-turn local decision is fixed. TurnStartChoices and the
