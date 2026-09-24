@@ -1166,32 +1166,35 @@ internal sealed partial class CombatBeamSolver
                     potionHpRequired);
             }
             List<MultiplayerReplayCandidate> replayCandidates = [];
-            HashSet<string> retainedFirstActions = [];
-            for (int index = 0; index < selected.Count && replayCandidates.Count < 3; index++)
+            if (routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn)
             {
-                List<PlanAction> prefix = [];
-                foreach (PlanAction action in selected[index].Node.Actions)
+                HashSet<string> retainedFirstActions = [];
+                for (int index = 0; index < selected.Count && replayCandidates.Count < 3; index++)
                 {
-                    if (action.Turn < startTurnNumber)
-                        continue;
-                    if (action.Turn != startTurnNumber
-                        || action.IsForecastOnlyObservation
-                        || action.Kind == PlanActionKind.EndTurn)
+                    List<PlanAction> prefix = [];
+                    foreach (PlanAction action in selected[index].Node.Actions)
                     {
-                        break;
+                        if (action.Turn < startTurnNumber)
+                            continue;
+                        if (action.Turn != startTurnNumber
+                            || action.IsForecastOnlyObservation
+                            || action.Kind == PlanActionKind.EndTurn)
+                        {
+                            break;
+                        }
+                        if (!action.IsExecutable)
+                            continue;
+                        prefix.Add(action);
+                        if (action.EndsPlayerTurn || prefix.Count >= 2)
+                            break;
                     }
-                    if (!action.IsExecutable)
+                    if (prefix.Count == 0)
                         continue;
-                    prefix.Add(action);
-                    if (action.EndsPlayerTurn || prefix.Count >= 2)
-                        break;
+                    string firstAction = CombatBeamSolver.PolicyActionToken(prefix[0]);
+                    if (!retainedFirstActions.Add(firstAction))
+                        continue;
+                    replayCandidates.Add(new MultiplayerReplayCandidate(index, prefix.ToArray()));
                 }
-                if (prefix.Count == 0)
-                    continue;
-                string firstAction = CombatBeamSolver.PolicyActionToken(prefix[0]);
-                if (!retainedFirstActions.Add(firstAction))
-                    continue;
-                replayCandidates.Add(new MultiplayerReplayCandidate(index, prefix.ToArray()));
             }
 
             return new FinalPlanSelection(
