@@ -1240,6 +1240,7 @@ $expectedBeamFiles = @(
     "CombatBeamSolver.EndTurnChoiceReplay.cs",
     "CombatBeamSolver.EndTurnExpansion.cs",
     "CombatBeamSolver.RoundTransition.cs",
+    'CombatBeamSolver.SearchEfficiencyDiagnostics.cs',
     "CombatBeamSolver.CardChoiceContinuation.cs",
     "CombatBeamSolver.PotionChoiceContinuation.cs",
     "CombatBeamSolver.ExecutionChoiceContinuation.cs",
