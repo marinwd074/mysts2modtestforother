@@ -259,7 +259,9 @@ foreach ($rule in $post01071GuardRules) {
 $cardEffectSpecPath = Join-Path $repositoryRoot 'src/Prediction/CardEffectSpecRegistry.cs'
 $cardEffectSpecText = [IO.File]::ReadAllText($cardEffectSpecPath)
 foreach ($modelDrivenRule in @(
-    'combat.RecordBrightestFlameMaxHpLoss(card.DynamicVars.MaxHp.IntValue)',
+    'combat.RecordBrightestFlameMaxHpLoss(',
+    'card.Owner,',
+    'card.DynamicVars.MaxHp.IntValue',
     'ownerState.MaxHp - card.DynamicVars.MaxHp.IntValue',
     'decimal increase = rampage.DynamicVars["Increase"].BaseValue',
     'mutableRampage.DynamicVars.Damage.BaseValue += increase')) {
