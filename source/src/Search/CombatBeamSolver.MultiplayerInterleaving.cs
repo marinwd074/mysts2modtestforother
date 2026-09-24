@@ -102,9 +102,6 @@ internal sealed partial class CombatBeamSolver
                     TurnEndedPlayerNetIds:
                         route.TurnEndedPlayerNetIds.OrderBy(id => id, StringComparer.Ordinal).ToArray()));
 
-            MultiplayerInterleaveOrderRelation orderRelation =
-                ProbeReverseInterleaveOrder(node, route);
-
             bool terminal = snapshot.PlayerDead
                 || snapshot.AllEnemiesDead
                 || snapshot.BoundaryReason != SearchBoundaryReason.None;
@@ -130,6 +127,11 @@ internal sealed partial class CombatBeamSolver
 
             if (_detailedDiagnostics)
             {
+                // Reverse-order replay is diagnostic-only. Running it for every retained
+                // teammate route multiplied production search work without changing any
+                // candidate, score, transposition key or deployment decision.
+                MultiplayerInterleaveOrderRelation orderRelation =
+                    ProbeReverseInterleaveOrder(node, route);
                 policy.Diagnostics.Info(
                     $"[CombatSolver/Multiplayer] MP_U5_INTERLEAVE " +
                     $"turn={node.Turn} order=local_then_teammate " +
