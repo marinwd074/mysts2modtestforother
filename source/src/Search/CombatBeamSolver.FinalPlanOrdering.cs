@@ -1176,15 +1176,14 @@ internal sealed partial class CombatBeamSolver
                         continue;
                     if (action.Turn != startTurnNumber
                         || action.IsForecastOnlyObservation
-                        || action.Kind == PlanActionKind.EndTurn
-                        || action.EndsPlayerTurn)
+                        || action.Kind == PlanActionKind.EndTurn)
                     {
                         break;
                     }
                     if (!action.IsExecutable)
                         continue;
                     prefix.Add(action);
-                    if (prefix.Count >= 2)
+                    if (action.EndsPlayerTurn || prefix.Count >= 2)
                         break;
                 }
                 if (prefix.Count == 0)

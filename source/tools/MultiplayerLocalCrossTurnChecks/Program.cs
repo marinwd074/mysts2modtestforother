@@ -170,6 +170,63 @@ Check(
             Match(remote: Fingerprint(2), combatIdentity: "combat-b")),
     "A locally readable teammate-state delta always rejects soft reuse and requires a fresh search.");
 
+string refreshBase =
+    "combat_identity=seed=s;players=1,2;enemies=10:A;local_net_id=1;round=1;side=Player;phase=Play;turn=1;" +
+    "hp=80;max_hp=80;block=0;energy=3;stars=0;gold=10;" +
+    "E0=10/A/front/40/50/0/ATTACK;H=A+0;D=B+0;C=;X=;P=;R=1:2:3:4:5/1:2:3:4:5";
+string refreshEnemyDamage = refreshBase.Replace(
+    "E0=10/A/front/40/50/0/ATTACK",
+    "E0=10/A/front/31/50/0/ATTACK",
+    StringComparison.Ordinal);
+string refreshEnemyBlock = refreshBase.Replace(
+    "E0=10/A/front/40/50/0/ATTACK",
+    "E0=10/A/front/40/50/7/ATTACK",
+    StringComparison.Ordinal);
+string refreshTargetDeath = refreshBase.Replace(
+    "E0=10/A/front/40/50/0/ATTACK",
+    "E0=10/A/front/0/50/0/ATTACK",
+    StringComparison.Ordinal);
+string refreshEnergy = refreshBase.Replace("energy=3", "energy=2", StringComparison.Ordinal);
+string refreshRng = refreshBase.Replace(
+    "R=1:2:3:4:5/1:2:3:4:5",
+    "R=2:2:3:4:5/1:2:3:4:5",
+    StringComparison.Ordinal);
+Check(
+    MultiplayerPlanRefreshContracts.IsReplayCompatible(
+        refreshBase,
+        refreshBase,
+        out string exactRefreshReason)
+        && exactRefreshReason == "exact_local_root"
+        && MultiplayerPlanRefreshContracts.IsReplayCompatible(
+            refreshBase,
+            refreshEnemyDamage,
+            out string damageRefreshReason)
+        && damageRefreshReason == "living_enemy_hp_or_block_only"
+        && MultiplayerPlanRefreshContracts.IsReplayCompatible(
+            refreshBase,
+            refreshEnemyBlock,
+            out string blockRefreshReason)
+        && blockRefreshReason == "living_enemy_hp_or_block_only",
+    "Quality-first bounded refresh admits an exact root and nonlethal living-enemy HP/block drift.");
+
+Check(
+    !MultiplayerPlanRefreshContracts.IsReplayCompatible(
+        refreshBase,
+        refreshTargetDeath,
+        out string deathRefreshReason)
+        && deathRefreshReason == "strong_field_change:E0"
+        && !MultiplayerPlanRefreshContracts.IsReplayCompatible(
+            refreshBase,
+            refreshEnergy,
+            out string energyRefreshReason)
+        && energyRefreshReason == "strong_field_change:energy"
+        && !MultiplayerPlanRefreshContracts.IsReplayCompatible(
+            refreshBase,
+            refreshRng,
+            out string rngRefreshReason)
+        && rngRefreshReason == "strong_field_change:R",
+    "Quality-first bounded refresh rejects target death, local resource drift and RNG drift as full-search signals.");
+
 Check(
     !MultiplayerLocalCrossTurnContracts.IsExactContinuation(Match(combatIdentity: "combat-without-target"))
         && MultiplayerLocalCrossTurnContracts.DescribeContinuationMismatch(

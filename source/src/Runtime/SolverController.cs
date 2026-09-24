@@ -1397,9 +1397,9 @@ internal static partial class SolverController
         SolverResult? refreshSource = _combat.LatestResult;
         string refreshCompatibilityReason = "source_or_stamp_missing";
         bool replayCompatible = _combat.LatestStamp is { } previousStamp
-            && IsBoundedMultiplayerRefreshCompatible(
-                previousStamp,
-                currentStamp,
+            && MultiplayerPlanRefreshContracts.IsReplayCompatible(
+                previousStamp.StateText,
+                currentStamp.StateText,
                 out refreshCompatibilityReason);
         bool canAttemptBoundedPlanRefresh =
             !preserveExpectedSafeDeployment
