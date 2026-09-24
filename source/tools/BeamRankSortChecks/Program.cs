@@ -181,4 +181,65 @@ if (!CombatBeamSolver.TryAcceptTranspositionForCheck(
         nextRiskMethod: "AfterDeath"))
     throw new InvalidOperationException("Different prediction-risk histories were incorrectly merged.");
 
-Console.WriteLine(JsonSerializer.Serialize(new { status = "Passed", cases, entries, retained_tie_cases = 3, transposition_path_cases = 16, runtime = Environment.Version.ToString(), scope = "Extracted production ranking plus retained-order and path-sensitive transposition contracts" }));
+
+MultiplayerCombatObjectiveRank Objective(double loss, double worstPlayer, double teamLoss, double enemyDurability)
+    => new(
+        CompleteVictory: false,
+        AllPlayersAlive: true,
+        LossEquivalent: loss,
+        WorstPlayerLossRatio: worstPlayer,
+        TeamLossRatio: teamLoss,
+        EnemyDurabilityRatio: enemyDurability,
+        CombatEndedTurn: int.MaxValue);
+
+SearchNode beamA = new()
+{
+    Label = "A",
+    Score = 300d,
+    ActionCount = 1,
+    Snapshot = new() { OffensiveProgressValue = 30 },
+    TeamObjective = Objective(0.30d, 0.30d, 0.30d, 0.10d),
+};
+SearchNode beamB = new()
+{
+    Label = "B",
+    Score = 200d,
+    ActionCount = 1,
+    Snapshot = new() { OffensiveProgressValue = 20 },
+    TeamObjective = Objective(0.05d, 0.05d, 0.05d, 0.40d),
+};
+SearchNode beamC = new()
+{
+    Label = "C",
+    Score = 100d,
+    ActionCount = 1,
+    Snapshot = new() { OffensiveProgressValue = 10 },
+    TeamObjective = Objective(0.10d, 0.10d, 0.10d, 0.30d),
+};
+
+Scorer singleBeam = new(false, 1, new Run(), useTeamObjective: false);
+Scorer multiplayerBeam = new(false, 1, new Run(), useTeamObjective: true);
+List<SearchNode> singlePool = [beamA, beamB, beamC];
+List<SearchNode> multiplayerPool = [beamA, beamB, beamC];
+singleBeam.SortByProductionBeamRank(singlePool);
+multiplayerBeam.SortByProductionBeamRank(multiplayerPool);
+
+string[] singleTop2 = singlePool.Take(2).Select(node => node.Label).ToArray();
+string[] multiplayerTop2 = multiplayerPool.Take(2).Select(node => node.Label).ToArray();
+if (!singleTop2.SequenceEqual(["A", "B"], StringComparer.Ordinal))
+    throw new InvalidOperationException($"Unexpected legacy Beam top-2: [{string.Join(",", singleTop2)}]");
+if (!multiplayerTop2.SequenceEqual(["B", "C"], StringComparer.Ordinal))
+    throw new InvalidOperationException($"Unexpected multiplayer TeamObjective Beam top-2: [{string.Join(",", multiplayerTop2)}]");
+if (multiplayerTop2.Contains("A", StringComparer.Ordinal))
+    throw new InvalidOperationException("Beam A/B failed to expose a route retained by single-player ordering but pruned by multiplayer TeamObjective ordering.");
+
+MultiplayerCombatObjectiveRank equalObjective = Objective(0.10d, 0.10d, 0.10d, 0.30d);
+beamA.TeamObjective = equalObjective;
+beamB.TeamObjective = equalObjective;
+beamC.TeamObjective = equalObjective;
+List<SearchNode> equalTeamPool = [beamA, beamB, beamC];
+multiplayerBeam.SortByProductionBeamRank(equalTeamPool);
+if (!equalTeamPool.Select(node => node.Label).SequenceEqual(["A", "B", "C"], StringComparer.Ordinal))
+    throw new InvalidOperationException("Equal multiplayer objectives no longer fall back to the legacy single-player Beam ordering.");
+
+Console.WriteLine(JsonSerializer.Serialize(new { status = "Passed", cases, entries, retained_tie_cases = 3, transposition_path_cases = 16, beam_objective_ab = new { single_top2 = singleTop2, multiplayer_top2 = multiplayerTop2, single_only = new[] { "A" } }, runtime = Environment.Version.ToString(), scope = "Extracted production ranking plus retained-order, path-sensitive transposition, and multiplayer TeamObjective Beam A/B contracts" }));
