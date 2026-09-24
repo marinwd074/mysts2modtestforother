@@ -143,10 +143,25 @@ GitHub Actions pinned run `35936767565`：**SUCCESS**；compatibility run `35936
 
 同一 pinned run 完整通过 Release、U0/U1、U2、P0/P1 runtime 与历史 P0 A/B 分类，没有扩大搜索预算。
 
+### U5 非实机抽牌/牌堆顺序 pinned replay
+
+GitHub Actions pinned run `35937892644`：**SUCCESS**；compatibility run `35937892578`：**SUCCESS**。
+
+固定 0.107.1 根的抽牌堆顶部两张为 `DEFEND_IRONCLAD`、`STRIKE_IRONCLAD`。向手牌加入真实 `POMMEL_STRIKE` 与 `HAVOC` 后，通过生产 replay 比较：
+
+- `POMMEL_STRIKE → HAVOC`：Pommel Strike 先抽走顶部 Defend，Havoc 随后自动打出并消耗下一张 Strike；最终手牌保留 Defend，Exhaust 为 `STRIKE_IRONCLAD`，future fingerprint = `D0C9E5CB263AF5ED:1427A63872339424`；
+- `HAVOC → POMMEL_STRIKE`：Havoc 先自动打出顶部 Defend，Pommel Strike 再抽到下一张 Strike；最终手牌保留 Strike，Exhaust 为 `DEFEND_IRONCLAD`，future fingerprint = `D79C9EEBE1B22A1F:B06C41B99F93102B`。
+
+`DrawPileStateDifferent=true`。因此抽牌改变后续牌堆顶、自动出牌对象和最终 pile state 的顺序依赖已由生产模拟器直接验证，不能 exact-transposition 合并。
+
+第一次测试提交因 fixture 把 nullable `CombatId` 直接赋给 `uint`，在 harness 编译阶段失败；修正为显式 fail-closed 的非空 CombatId 后，上述最终 run 全绿。该早期编译失败不计验证证据。
+
+该测试仍是 detached 单进程 simulation，不验证真实远端 ownership、网络到达时序或 `WorldVersion`。同一最终 pinned run 完整通过 Release、U0/U1、U2、P0/P1 runtime 与历史 P0 A/B 分类。
+
 ## 仍未验证
 
 真实双端 Host/Client 的 U5 专项 smoke 尚未执行，因此不能声称网络实机已经观察到 forecast boundary。
 
-Vulnerable/attack、提前终局合法性不对称、共享生成 RNG/手牌后态、资源合法性四类顺序语义已经有 pinned production replay，不再要求用随机联机牌局重复证明。U6 最小 U5 实机补测收缩为一条网络链：让真实队友动作插入两个本地动作之间，确认远端 `WorldVersion` / live state 变化使旧条件后缀失效，部署不会跨过 forecast observation，并触发 fresh capture/search；同时确认旧 generation 不会继续提交。该链只验证离线无法提供的 ownership / network timing / observation→replan 层。
+Vulnerable/attack、提前终局合法性不对称、共享生成 RNG/手牌后态、资源合法性、抽牌/牌堆顶变化五类顺序语义已经有 pinned production replay，不再要求用随机联机牌局重复证明。U6 最小 U5 实机补测收缩为一条网络链：让真实队友动作插入两个本地动作之间，确认远端 `WorldVersion` / live state 变化使旧条件后缀失效，部署不会跨过 forecast observation，并触发 fresh capture/search；同时确认旧 generation 不会继续提交。该链只验证离线无法提供的 ownership / network timing / observation→replan 层。
 
 该 runtime debt 不阻止 U5 代码阶段收口；进入 U6 最终实机闭环时集中验证。
