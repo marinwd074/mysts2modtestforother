@@ -113,32 +113,4 @@ internal static class MultiplayerSafeLocalActionClassifier
             out stop);
     }
 
-    /// <summary>
-    /// Retained for the MP-2A validator's historical contract. New runtime deployments
-    /// use <see cref="TakeBoundedDeploymentSlice"/> and the explicit execution session.
-    /// </summary>
-    public static IReadOnlyList<PlanAction> TakeMp2ADeploymentSlice(
-        CombatState state,
-        IReadOnlyList<PlanAction> actions,
-        out SafeLocalActionDecision stop)
-    {
-        if (actions.Count == 0)
-        {
-            stop = SafeLocalActionDecision.Allow;
-            return [];
-        }
-
-        PlanAction first = actions[0];
-        SafeLocalActionDecision decision = Classify(state, first);
-        if (!decision.IsSafe)
-        {
-            stop = decision;
-            return [];
-        }
-
-        stop = actions.Count > 1
-            ? new(false, MultiplayerSafeExecutePolicy.SingleActionLimitReason)
-            : SafeLocalActionDecision.Allow;
-        return [first];
-    }
 }
