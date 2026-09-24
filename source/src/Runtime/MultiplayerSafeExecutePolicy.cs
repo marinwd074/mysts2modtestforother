@@ -302,13 +302,7 @@ internal sealed class MultiplayerSafeExecutionSession
 internal static class MultiplayerSafeExecutePolicy
 {
     // Safe Execute is bounded by the finite current-turn route selected by the search.
-    // Per-action live revalidation remains the actual safety boundary. The historical
-    // constant is retained only for source/evidence compatibility and is not used to size
-    // production execution sessions.
-    internal const int MaxActionsPerDeployment = 32;
-    internal const string SingleActionLimitReason = "mp2a_single_action_limit";
-    internal const string BoundedActionCeilingReason = "mp2c_action_ceiling";
-    internal const string TwoActionLimitReason = BoundedActionCeilingReason;
+    // Per-action live revalidation remains the actual safety boundary.
     internal const string ManualMultiplayerCardReason = "multiplayer_only_manual_play";
     internal const string TeammateForecastBoundaryReason = "kind_teammateforecast";
     internal const string FormalModeToken = "safe-execute";
@@ -370,7 +364,6 @@ internal static class MultiplayerSafeExecutePolicy
 
     internal static bool ShouldKeepSafeAutoAfterBoundary(SafeLocalActionDecision stop)
         => stop.IsSafe
-           || string.Equals(stop.Reason, BoundedActionCeilingReason, StringComparison.Ordinal)
            || string.Equals(stop.Reason, ManualMultiplayerCardReason, StringComparison.Ordinal)
            || string.Equals(
                stop.Reason,

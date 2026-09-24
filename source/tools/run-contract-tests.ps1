@@ -63,7 +63,6 @@ try {
     Invoke-DotnetContract 'Sts2LocalInspectorChecks' 'tools/Sts2LocalInspector/Sts2LocalInspector.csproj' -Arguments @('--self-test')
     Invoke-PowerShellContract 'MonsterTargetFanoutAuditChecks' 'tools/test-monster-target-fanout-audit.ps1'
     Invoke-DotnetContract 'AncillaryWorkChecks' 'tools/AncillaryWorkChecks/AncillaryWorkChecks.csproj'
-    Invoke-PowerShellContract 'MultiplayerSafeExecuteEvidenceChecks' 'tools/multiplayer-lab/test-mp2a-validator.ps1'
     Invoke-PowerShellContract 'MultiplayerSafeExecuteMp2BEvidenceChecks' 'tools/multiplayer-lab/test-mp2b-validator.ps1'
     Invoke-PowerShellContract 'MultiplayerSafeExecuteMp2BInterferenceChecks' 'tools/multiplayer-lab/test-mp2b-interference-validator.ps1'
     Invoke-PowerShellContract 'MultiplayerReactiveCarryEvidenceChecks' 'tools/multiplayer-lab/test-reactive-carry-validator.ps1'
@@ -71,6 +70,7 @@ try {
     Invoke-PowerShellContract 'MultiplayerCarryRankingEvidenceChecks' 'tools/multiplayer-lab/test-carry-ranking-validator.ps1'
     Invoke-PowerShellContract 'MultiplayerJointContinuationEvidenceChecks' 'tools/multiplayer-lab/test-joint-continuation-validator.ps1'
     Invoke-PowerShellContract 'MultiplayerU3ScenarioEvidenceChecks' 'tools/multiplayer-lab/test-u3-scenario-validator.ps1'
+    Invoke-PowerShellContract 'MultiplayerU6RuntimeClosureChecks' 'tools/multiplayer-lab/test-u6-runtime-closure-validator.ps1'
     Invoke-PowerShellContract 'P0BaselineClassifierChecks' 'tools/test-p0-baseline-classifier.ps1'
     Invoke-PowerShellContract 'P0BaselineManifestChecks' 'tools/test-p0-baseline-manifest.ps1'
     Invoke-PowerShellContract 'U0BaselineChecks' 'tools/test-u0-baseline.ps1'

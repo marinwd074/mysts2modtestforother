@@ -29,8 +29,8 @@ function Invoke-Case {
 
 try {
     $base = @(
-        '[CombatSolver/MultiplayerSafeExecute] FORMAL_CAPABILITY enabled=true scope=explicit_opt_in max_actions=2 automatic_end_turn=false custom_network_api=false',
-        '[CombatSolver/MultiplayerSafeExecute] MP2B_CAPABILITY enabled=true max_actions=2 attribution=revalidation automatic_end_turn=false custom_network_api=false',
+        '[CombatSolver/MultiplayerSafeExecute] FORMAL_CAPABILITY enabled=true scope=explicit_opt_in action_limit=selected_route automatic_end_turn=false custom_network_api=false',
+        '[CombatSolver/MultiplayerSafeExecute] MP2B_CAPABILITY enabled=true action_limit=selected_route attribution=revalidation automatic_end_turn=false custom_network_api=false',
         '[CombatSolver/Evidence] ROUTE_REPLAY {"actionCount":4}',
         '[CombatSolver/Evidence] ROUTE_ACTION {"index":3,"action":{"Kind":"EndTurn"}}',
         '[CombatSolver/Test] RESULT replays=2 choice_replay_attempts=0',
@@ -61,8 +61,8 @@ try {
     Invoke-Case -Name 'manual-end-turn-is-not-allowed-in-normal-smoke' -Lines $manualEndTurn -ExpectedExitCode 1
 
     $multiAction = @(
-        '[CombatSolver/MultiplayerSafeExecute] FORMAL_CAPABILITY enabled=true scope=explicit_opt_in max_actions=6 automatic_end_turn=false custom_network_api=false',
-        '[CombatSolver/MultiplayerSafeExecute] MP2B_CAPABILITY enabled=true max_actions=6 attribution=revalidation automatic_end_turn=false custom_network_api=false',
+        '[CombatSolver/MultiplayerSafeExecute] FORMAL_CAPABILITY enabled=true scope=explicit_opt_in action_limit=selected_route automatic_end_turn=false custom_network_api=false',
+        '[CombatSolver/MultiplayerSafeExecute] MP2B_CAPABILITY enabled=true action_limit=selected_route attribution=revalidation automatic_end_turn=false custom_network_api=false',
         '[CombatSolver/Evidence] ROUTE_REPLAY {"actionCount":6}',
         '[CombatSolver/Evidence] ROUTE_ACTION {"index":5,"action":{"Kind":"EndTurn"}}',
         '[CombatSolver/MultiplayerSafeExecute] MP2B_DEPLOY_START turn=1 request_id=19 route_generation=4 action_count=5 max_actions=6 search_world_version=4 stop_reason=safe_local_play_card'

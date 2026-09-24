@@ -1,86 +1,71 @@
 # Codex 当前交接
 
-> 只记录当前状态。历史批次、旧提交和旧测试流水账从 Git history 查，不在本文件累积。
-
-> 长期架构/执行计划：[`CombatSolver_GPT_Architecture_Plan.md`](CombatSolver_GPT_Architecture_Plan.md)。每轮先按当前 HEAD 核对计划；计划描述目标与执行卡，不代表对应阶段已经实现。
+> 只记录当前架构、已验证结果、未验证事项和下一任务。历史过程从 Git history 与阶段文档查。
 
 ## 基线
 
-- CombatSolver: `0.40.2`
-- STS2 / RitsuLib: pinned `0.107.1`
+- CombatSolver `0.40.2`
+- STS2 / RitsuLib pinned `0.107.1`
 - .NET 9 / Godot 4.5.1 / `STS2_01071`
-- 正确性优先；未知多人语义 fail closed。
-- `RootActionPlayers` 只允许本地玩家；不生成或执行队友动作。
+- 单人和多人共享生产搜索/模拟核心；多人额外叠加队友情景、团队目标与同步边界。
+- `RootActionPlayers` 只允许本地玩家；不会部署队友动作。
+- MultiplayerOnly 牌保留真实牌堆状态与抽牌距离，但不进入主动搜索/自动执行。
 
-## 当前已确认
+## 当前架构
 
-- **P0/P1 pinned runtime 检查点（2026-09-23）已完成确定性分层验证**：`tools/P0P1PinnedHarness`、历史 `P0HistoricalPinnedHarness` 与 `.github/workflows/pinned-release-build.yml` 直接使用 pinned 0.107.1 游戏 DLL、RitsuLib 兼容包和生产搜索/continuation 代码。最新 pinned run `35854877720` 在 commit `5f68abb79ae65f9414a6cc03392fb0ff293980fb` 全部 SUCCESS；同 commit 的 compatibility run `35854877666` 也 SUCCESS。主项目、U2 harness、P0/P1 harness、历史 P0 harness 均构建成功，U2 degenerate 与 P0 contracts 继续 PASS。固定 fixture 保持 NECROBINDER / A10 / PHROG_PARASITE_ELITE / GENERATED-COMBAT-001，并使用 0.107.1 实际存在的 `DEATH_MARCH`。
-- **P0 Joint gate 已由真实生产 continuation 验证 PASS**：从真实搜索产生的 T2 continuation 出发，完全相同的 local state + remote fingerprint 能 `ExactReuse=true`、`reason=none`、`ReusedFromTurn=1`；只修改 remote fingerprint 时 reuse 被拒绝并得到精确原因 `remote_public_mismatch`。这不再只是静态 validator 日志测试。
-- **P0 pinned 正确性基线已封口；5000 ms 只保留性能遥测**：原 unattended Search 与 pinned harness 口径已确认一致——Medium / Smart / fixed 5000 ms / DOP1，BeamWidthPortfolio 共享整个请求预算。历史 `380b0801` 与当前版本在正式 5 秒口径下都命中 `TimeLimit`；只关闭 BeamWidthPortfolio 后仍为 `P0_SINGLE_MEMBER_TIMED BOTH_TIME_BOUNDARY`，且两边都已找到 enemy HP 0 路线，所以 5 秒不是可用的历史正确性门。正式搜索语义回归门改为同 root、Beam 60、DOP1、单成员、固定 1200 expanded nodes 的历史 A/B；历史与当前完全一致——首动作 `PROWESS`、战损 0、final HP 66、enemy HP 4、1200 expanded，`P0_FIXED_WORK OBSERVED_EQUIVALENT`。这没有增加任一版本的相对工作预算，只移除了 runner wall-clock 噪声。结合 `P0_JOINT PASS` 与 classifier contracts，P0 pinned 正确性层停止继续扩测；5 秒结果只作为性能监控，真实 Host/Client Safe Execute 行为归 U1 runtime smoke。
-- **P1 runtime 语义已由确定性生产搜索验证 PASS；5000 ms 仅保留为性能边界**：AdaptiveLethalTempo 与 MinimizeTeamLoss 在正式 5 秒运行中都能找到 T5、team loss 0、all players alive、enemy HP 0 的胜利路线，但仍以 `TimeLimit` 返回；因此 wall-clock 状态记为 `FIXED_WORK_PASS_TIME_BOUNDARY`，不伪装成 5 秒性能 PASS。额外固定工作量验证保持同一生产搜索语义、Beam 60 / DOP1 / 单成员、不用 wall-clock 截断，各自精确运行 5000 expanded nodes；两种目标均 `Boundary=NodeLimit`、enemy HP 0、all players alive，`FixedWorkSemanticPass=true`。独立 `MultiplayerCombatObjectiveMath` 目标合同与 `AllPlayersAlive` 硬边界继续 PASS。P1 正确性层不再重复测试；若后续优化，只将 5 秒 TimeLimit 作为性能问题处理，不能靠增加预算解决。
+1. **共同搜索核心**
+   - `SinglePlayerFullRoute` 与 `MultiplayerLocalCrossTurn` 共用完整 Search/Beam/Novelty/Growth/Relic/长期收益基础。
+   - 无队友事件、相同目标和固定预算下已有 pinned 退化等价证据。
 
-- **U0/U1 pinned production replay 已新增并通过（2026-09-23）**：commit `3ee2a7a54b875a45c145f6fe8a187d5b34fbaad6` 的 pinned run `35857680737` SUCCESS，compatibility run `35857680764` SUCCESS。新 `tools/U0U1PinnedHarness` 直接使用 pinned 0.107.1 DLL 与生产 Search/replay：U0 在 IRONCLAD / FUZZY_WURM_CRAWLER_WEAK / U0U1PINNED1 上得到 BASH 首动作、220 expanded / 579 transitions、3 条 FINAL_CANDIDATE + 1 条 FINAL_SELECTION，并验证空队友事件生产 replay 指纹不变；U1 同一首动作双 replay 确定一致，legacy heuristic 冲突但 semantic match 时继续，remote mismatch → RemoteOrUnknownChange，semantic mismatch → ActionMismatch，WorldVersion 插入 → world_version_not_accepted，abort 后迟到重试 → session_state_Aborted。它把 U0/U1 从字符串门禁提升到 pinned 生产逻辑运行，但**不替代真实 TryManualPlay / Choice / ActionQueue / Host-Client timing smoke**。
-- **U1 代码/合同接线已完成（2026-09-23）**：Safe Execute 每张本地牌提交前先 `safe_execute_pre_action` fresh probe；随后从当前 live 根抓 `CombatRootSnapshot`，用生产 `CombatBeamSolver.ReplayDiagnosticPrefix([action])` 冻结 predicted `ContinuationStamp + MultiplayerContinuationRemoteFingerprint`。原生 action/Choice/队列稳定后再抓 live 同字段比较；`RevalidateAction` 只以 native attribution、真实 queue idle、稳定 WorldVersion、semantic continuation match、semantic remote match 作为继续依据。旧 `local_card_removed / energy_or_stars / target_identity / remote_public_state / enemy_state` 仅写 `legacy_mismatches`。新增 `U1_PRE_ACTION_PROBE`、`U1_EXPECTED_POST_STATE`、`U1_POST_STATE_COMPARE`，以及 `tools/test-u1-action-poststate.ps1`。这一步同时堵住“队友在两张本地牌之间变化但 tracker 尚未采样”的旧后缀竞态。真实重锤+Choice、连续祭品和 Host/Client 插入动作仍待新代码实机复测，不计 PASS。 GitHub 代码基线 `2e403c46a22470fb62e1266fdb9ecb500816542a` 的兼容工作流已成功：Safe Execute policy 59 PASS，U1 专项 PASS，总合同 `PASS: 30 / FAIL: 0 / SKIP: 0`。pinned Release 工作流在 `3ba64352d602d043a3edc389d46a0d6ce0a8c718` 使用 0.107.1 游戏引用与 RitsuLib 0.107.1/0.6.2 兼容包成功构建主项目：`0 Warning(s) / 0 Error(s)`；`.github/workflows/pinned-release-build.yml` 仅在自身修改或手动 dispatch 时运行。
-- **U2 搜索共核与退化等价已完成（2026-09-23）**：SinglePlayerFullRoute 与 MultiplayerLocalCrossTurn 共用完整搜索核、本地药水搜索策略、Novelty/Growth/Relic/长期收益；搜索能力与 Safe Execute 部署权限已经拆开。SearchPolicySnapshot.UseMultiplayerTeamObjective 将 route mechanics 与团队目标解耦；生产真实多人仍开启团队目标。历史 Anger 排序、current-turn playable tie-break 与 untrusted Shuffle 边界又进一步改成只有 MultiplayerLocalCrossTurn 且实际 playerCount>1 时才启用，避免 route 名字本身污染无队友退化情形。U2DegenerateHarness 在 pinned 0.107.1 同一单人 combat root、同 objective、DOP=1、同 Beam/节点预算下只切 route policy；commit 583cc63578032649c946d43f0f8a7be130ce9a9a 的 pinned workflow run 35840289311 实跑 PASS：两边首动作均 BASH，完整 18-action 序列一致，战损 2、final HP 78、enemy HP 0、T6 结束、score 10002279982，且都是 496 expanded / 1368 transitions / 0 choice branches。CombatSolver 与 U2 harness 均 0 warnings / 0 errors。兼容合同在 f44831350d7c0f2e2c283aa6d1ddf7bea7ccd6ce 为 31 PASS / 0 FAIL / 0 SKIP，U2SearchKernelChecks PASS。详细证据见 docs/U2_SEARCH_KERNEL.md。
-- **U0 已完成结构性收口并补 pinned 生产 Search/replay 证据（2026-09-23）**：`docs/U0_BASELINE.md` 冻结当前单人/多人差异、已失效兼容规则与五类故障分诊；`SearchPathObserver/PATH_TRACE_EVENT`、`[CombatSolver/U0] FINAL_CANDIDATE`、`FINAL_SELECTION`、`DEPLOY_ACTION/NATIVE_ACTION_CAPTURED/MP2B_ACTION_STATE_DIFF` 分别覆盖模型转移、候选、最终选择和实际执行四层。`tools/OfflineSearchHarness/U0BaselineFixture.cs` 提供空队友事件与固定 Shadow 动作脚本，固定脚本复用生产 `ReplayForecastActions`，没有第二套卡牌效果。`tools/test-u0-baseline.ps1` 已接入合同测试。固定 0.107.1 下的 production Search、路径观察、FINAL_CANDIDATE/FINAL_SELECTION 与空队友 replay 已 PASS；真实 Host+Client 中候选→选择→route identity→native execution→post-state compare→reconcile 的 correlation 也已由 request 8 PASS。重锤/祭品等具体卡牌链属于 U1 专项，不再作为 U0 缺口。
-- 单人 0.107.1 卡牌/怪物兼容审计已完成主要收口；Axebot `AXEBOTS_NORMAL` 旧 `RespawnCount` 崩溃已由用户实机确认解决。
-- pinned monster target fanout：63 个可确定 move 已建模；Knowledge Demon 的远端 Choice 继续 fail closed。
-- v0.14 已把多人怪物目标 dispatcher 从 64KB 主文件拆到独立 `MonsterMoveEffects.MultiplayerTargets.cs`；普通效果统一 per-player，9 个 mixed move 已明确拆成 target-effect × players + owner-effect × 1，2 个 RNG 特例保持显式实现。已有怪物 HP 直接使用 root snapshot，不做二次人数缩放。
-- v0.16 将 63 项多人怪物目标分类合并为一次 target-mode switch，避免每个模拟 Move 依次经过 3 套字符串分类器；支持范围不变。
-- Multiplayer MP-0 / Advisor / Safe Execute MP-2A/B/C / Reactive Carry 已有真实 Host/Client 基线。
-- Multiplayer Safe Auto 已完成真实 3 个本地回合 Smoke：每回合 fresh request/search、原生 PlayCardAction + EndPlayerTurnAction，无旧授权跨回合复用。
-- 2026-09-23 Safe Execute 连续执行不再由固定 6/32 action ceiling 截断；每次授权会话的 `MaxActions` 直接取当前搜索结果中可安全执行的有限本回合路线长度。本地 `Choice` / `NestedChoices` / 与结束回合动作绑定的 `TurnStartChoices` 统一复用单人 `NativeChoiceSession` 驱动，不再以 `choice_required` 作为多人前缀边界；多人专属牌、远端/未知目标、Replay 与真实状态偏离仍保持边界。逐动作 live gate、原生动作归因和 post-action revalidation 继续保留；revalidation abort 使用 `MP2B_ACTION_REVALIDATION_DIAGNOSTIC` 与 `MP2B_ACTION_STATE_DIFF` 区分 remote public、enemy、WorldVersion、手牌/牌堆、资源、Power、target/lifecycle 等变化。
-- Carry Ranking R1 已有 runtime 证据；R2 decisive runtime 仍 `UNVERIFIED`，不是当前 blocker。
-- 旧的 CombatSolver 单 Client Console Fixture 整组已删除。
-- 完整 `TheBookOfAges / GM Console` 作为 **test-only submodule** 保留在：
-  `source/tools/multiplayer-lab/MultiplayerTestTools/TheBookOfAges`
-  固定上游 commit `234a74ccbaf46d7e385ed318c64857f1f7a90cae`。它不进入 CombatSolver 正式构建/发布。
-- 2026-09-22 同构 GM Console 实机 Smoke 已通过：Host/Client 加载同一 DLL/PCK 与 BaseLib 构建，进入同一战斗且没有 game-data mismatch；Host 和 Client 各发起一次 `energy 1` 并在两端执行，Host 发放并实际打出原生 `CARD.TANK`，owner 为 Host player 1、无目标，动作在两端结算并生成 checksum。摘要见 `docs/multiplayer/evidence/gm-console-multiplayer-smoke-2026-09-22.json`。Client 反向打出本轮按用户要求未执行。
-- MultiplayerOnly 卡现在统一为**状态保留、搜索忽略**：它们仍真实存在于 Hand/Draw/Discard/Exhaust/Play，继续占手牌位并参与牌堆顺序，因此可以预测“是否已出现/还差多少张抽到”；但多人本地搜索、Opening Power、fixed-prefix/reuse 以及 Shadow teammate 主动动作枚举都不会把它们作为可出牌动作。单人搜索策略不受影响。
-- `AnyAlly` 空目标问题已从目标生成层修正，并补齐相同根因的 `AnyPlayer` 分支；卡牌/药水的玩家目标枚举使用预测态目标解析，不靠部署期判空或异常兜底。`RootActionPlayers` 仍只包含本地玩家。
-- 单人搜索算法向多人本地跨回合模式的第一批迁移已落地：`SinglePlayerFullRoute` 与 `MultiplayerLocalCrossTurn` 现在共用 full-search heuristics，因此 Novelty Portfolio、成长预算、遗物目标、成长机会目标和长期收益评估不再因多人能力表中的 `CanCrossTurnSearch=false` 被关闭；`MultiplayerCurrentTurnOnly` 仍保持精简。多人 Shuffle 不再使用“第几次洗牌”的人为阈值：完整 Joint/Shadow 世界线持有共享 Shuffle RNG 状态时可跨任意次数洗牌并继续搜索到终局；只有退化到无法证明共享 RNG 前置状态的本地-only 路径时，才在第一次未来洗牌处结束精确牌序预测。执行权限与 MultiplayerOnly 过滤规则不变。
-- 问题包 `25b905c1322b41e6b9a8e10baeae5606` 复现 0 费 Anger 被遗漏：T2 手牌含 `ANGER(0)`，Solver 选择 Tremble→Dismantle→Strike→EndTurn，并在 Shuffle 边界形成 `PartialLocalCrossTurnProjection`。已修正多人未完成路线的最终排序：确定的 Enemy HP 进展现在先于 Anger copy 长期惩罚；单人和完整胜利路线保持原排序。
-- 多人新基线改为“完整联合战斗预测 + 滚动重规划”：旧的 partial-route/Carry 补丁仅作为历史兼容层，不再作为目标架构。第一阶段已把预测根中现有的完整队友状态正式暴露为 `TeammateForecastStates`，包含 Hand/Draw/Discard/Exhaust/Play 的有序语义快照、Energy/Stars、HP/Block、Phase、Turn、Orbs；Root capture 同时逐玩家核对 live 与 detached prediction 的五牌堆顺序、资源和 Orb 状态。执行权限没有变化，`RootActionPlayers` 仍只有本地玩家。
-- 多人牌 UI 下一阶段只做**出现/抽牌距离窗口**：读取本地玩家当前有序 Hand + DrawPile；已在手牌显示“已在手牌”，DrawPile 使用 1-based 距离显示“再抽 N 张”。Discard/Exhaust 或跨洗牌边界时不伪造精确距离。该窗口不会把 MultiplayerOnly 重新加入搜索候选。
-- 新增多人专用“多人路线目标”设置：`MinimizeTeamLoss` 与默认 `AdaptiveLethalTempo`。第三阶段已移除旧的“敌方有效耐久 ≤35% 才启用、固定 5% 战损/回合”的硬切换；`AdaptiveLethalTempo` 现在始终使用连续目标。敌方剩余有效耐久通过 smoothstep 映射为 0～1 的斩杀紧迫度，最脆弱队友的 `WorstPlayerLossRatio` 再连续提高“避免再多吃一个敌方回合”的风险系数；`TeamLossRatio` 本身仍直接惩罚已经付出的 HP，因此更高战损不会因风险系数而变便宜。5% 只保留为理论上限，实际每回合 tempo 权重连续落在 0～5% 之间。敌人满耐久时 tempo 项严格为 0，因此回到最低团队战损；敌人越接近死亡、团队累计受损越重，提前结束战斗的价值越高。Snapshot 继续从所有 captured players 的 `GetCumulativeHpLost` 精确计算 `TeamLossRatio`、`WorstPlayerLossRatio`、`AllPlayersAlive`；分母通过 `CombatRootSnapshot.CapturedPlayerMaxHp` 只读取 root 冻结值。单人排序不读取这些团队键。
+2. **多人目标与情景**
+   - U3 使用固定 ScenarioSpec 做公平复评，缺失覆盖记 `Unknown`，不把漏评当优势。
+   - U4 生产默认仍为 Robust；NominalReference / BoundedRisk 只做同 Matrix、零额外 replay 的参考遥测。
+   - `NoAction` 只表示当前 forecast window 内队友不行动，不代表整场战斗不行动。
 
-## 当前未完成
+3. **本地/队友交错**
+   - U5 支持 `local A → forecast-only teammate B → local C` 的 detached 模拟。
+   - B 只属于预测环境，不获得 deployment authority。
+   - reverse-order probe 只有完整 `ShadowFutureStateFingerprint` 相同才允许 ExactEquivalent collapse。
+   - 每本地回合最多一个 teammate forecast observation；不主动等待理想队友行为。
 
-- **P0/P1 pinned 正确性测试已结束，不再是当前 blocker。** P0 固定工作量历史 A/B、Joint continuation、classifier 均通过；P1 固定工作量 runtime 语义与目标合同通过。两者的 5000 ms `TimeLimit` 只保留性能遥测，不通过扩大预算解决。
-- **U1-D cancellation / late callback 实机时序已 PASS（2026-09-23）**：commit `50f519f9868bcd7018b28b08195c3cdfb4740a3f` 的 request 10 在 OFFERING `NATIVE_ACTION_CAPTURED` 后 121 ms 关闭 Solver；随后仍有本地 world/state 变化，直到约 538 ms 后才 `DEPLOY_CANCELED`。期间没有 post-action reconcile、第二次 `DEPLOY_ACTION` / `NATIVE_ACTION_CAPTURED` 或旧 action 新授权。结合 `SetSolverDisabled(true) → CancelDeployment()` 与 Deployment 先等待已提交 native action 再进入 cancellation-aware queue-idle wait 的源码顺序，可确认在途动作可完成而旧 Safe Execute 后缀不会继续提交。问题包没有独立 native completion 时间戳，因此只按该生命周期边界记 PASS。
-- **U1 剩余真实运行证据与 U0 correlation 分开管理。** U0 real diagnostic correlation 仍为 NOT VERIFIED；request 10 不改变这个状态。U1-A/B/C 的状态继续以各自专用实机证据为准，不从 U1-D 推导。最小证据链仍是：`U1_PRE_ACTION_PROBE → U1_EXPECTED_POST_STATE → NATIVE_ACTION_CAPTURED → DEPLOY_ACTION_COMPLETE → U1_POST_STATE_COMPARE → MP2B_ACTION_RECONCILED`。
+4. **Safe Execute**
+   - 不再存在固定 1/2/6/32 张生产 action ceiling；session 容量来自当前有限 selected route。
+   - 每个本地动作走原生提交 → Choice/队列结算 → predicted/live semantic post-state 对照。
+   - forecast observation 前停止部署条件后缀并 fresh replan；旧 request/generation 不得复活。
+   - capability 记录为 `action_limit=selected_route`。
 
-- **U5 本地/队友关键顺序 COMPLETE（2026-09-23，真实 Host/Client 专项 smoke 仍 UNVERIFIED）。** 生产搜索新增 forecast-only `PlanActionKind.TeammateForecast` 与 `CombatBeamSolver.MultiplayerInterleaving`：本地 A 后可用 `ShadowTeammatePlanner.BuildTeamSingleActionRoutes` 在共享 simulator fork 中预测单个队友 B，再从 B 后真实状态继续本地 C。reverse-order probe 从 A 前状态先重放 B，再用生产 `Replay` 重放 A；只有两顺序的 `ShadowFutureStateFingerprint` 完全相同才允许 ExactEquivalent collapse，`OrderSensitive/ReverseUnavailable` 均不合并。部署在 forecast 前截断并 fresh replan，不跳过预测节点部署条件后缀；Safe Auto 不因该观察边界永久关闭。每回合最多 1 个 forecast observation、最多保留 4 条单观察路线，且 `AllowsProactiveWaitForTeammate=false`。compatibility `35890994702` SUCCESS；原 U5 pinned 0.107.1 `35890656903` SUCCESS。随后新增非实机生产顺序反例：固定 0.107.1 根直接 replay `BASH→STRIKE_IRONCLAD` 与 `STRIKE_IRONCLAD→BASH`，敌方 HP 分别为 39/42，完整 `ShadowFutureStateFingerprint` 分别为 `7D7857814B038E3D:4A6951B304DF0382` / `93D0F278205774EB:8DB470E2DA385E5E`，确认 OrderSensitive 不会 exact-collapse；pinned run `35892680392` SUCCESS，并继续通过 U0/U1、U2、P0/P1 runtime 与历史 A/B 分类；随后终局顺序反例也已非实机 PASS：compatibility `35893826085`、pinned `35893825974` 均 SUCCESS；敌人 HP=7 时 `BASH→STRIKE` 因 Bash 已结束战斗而拒绝旧后缀，`STRIKE→BASH` 则合法完成到 enemy HP 0 / energy 0，证明提前终局导致的动作合法性不对称不会被顺序合并；随后共享生成 RNG 反例也已非实机 PASS：compatibility `35935837095`、pinned `35935837066` 均 SUCCESS；`INFERNAL_BLADE→DISTRACTION` 生成 `DISMANTLE + TRUE_GRIT`，反向生成 `PRIMAL_FORCE + UNRELENTING`，两顺序完整 future fingerprint 与最终手牌 multiset 均不同，验证共同 `CombatCardGeneration` RNG / 牌堆顺序语义；随后资源顺序反例也已非实机 PASS：compatibility `35936767527`、pinned `35936767565` 均 SUCCESS；根能量=1 时 `OFFERING→BASH` 合法完成且最终 energy=1，反向 `BASH→OFFERING` 在第一步被生产 replay 明确以 `energy=1 cost=2` 拒绝，验证资源变化造成的动作合法性顺序依赖；随后抽牌/牌堆顺序反例也已非实机 PASS：compatibility `35937892578`、pinned `35937892644` 均 SUCCESS；固定 draw top `DEFEND_IRONCLAD, STRIKE_IRONCLAD` 下，`POMMEL_STRIKE→HAVOC` 为 Defend 留手 / Strike Exhaust，反向为 Strike 留手 / Defend Exhaust，两顺序完整 future fingerprint 也不同。该证据明确 `RealMultiplayerOwnershipVerified=false`。详细见 `docs/U5_LOCAL_TEAMMATE_INTERLEAVING.md`。上述五类顺序语义已由 pinned production replay 覆盖；U6 的 U5 最小实机债务只保留真实远端动作插入后的 ownership / WorldVersion / observation→fresh-replan 链。
-- **U4 风险与目标 A/B COMPLETE（2026-09-23）。** interim-risk 反例已修正：多人 Beam 的中途 progress credit 固定使用健康基线风险因子 0.5，终局 tempo 风险定价不变，脆弱队员不再带来隐性奖励。U3 同一四情景 Matrix 现在零额外 replay 同时报 `Robust / NominalReference / BoundedRisk` 赢家；Nominal 只是等权压力情景参考，不是概率期望，BoundedRisk 当前仅为 `mean + 0.5 × (worst - mean)` 实验标尺。生产仍固定 Robust，因为行为概率未校准且旧 U3 实机包早于 U4 指标，没有足够真实质量证据支持迁移。容差目标保持独立实验且无默认值。`MP_U4_RISK_AB / MP_U4_STRATEGY_RESULT / MP_U4_STRATEGY_AB` 报告保守差距、平均/最坏累计战损、团队/最差队员剩余 HP，以及合作相对 NoAction 的战损/进展收益；NoAction 明确只覆盖 current Joint forecast window，不代表整场队友不行动。单人目标未改。compatibility `35886546305` SUCCESS，pinned 0.107.1 `35886546204` SUCCESS（Release、U0/U1、U2、P0/P1 与历史分类全通过）。U5 随后已完成，当前下一张卡为 U6 实机闭环与清理。
-- **U3 公平情景复演 COMPLETE（2026-09-23）：代码/合同/pinned、真实双玩家 Matrix runtime、真实双玩家 Timeout fail-closed runtime 均 PASS。** source `3c990c61fa90343f7e4385cd2d490019553f7c89` 固定 Aggressive / Defensive / Conserve / NoAction 同一 ScenarioSpec 集合，只比较相同 `CurrentTurnDecisionKey`；最终选择对每个当前决策从 root 重放本地前缀，并只运行一次 bounded Shadow search，四情景共享该搜索后再走生产 Joint EndTurn replay。每个 cell 显式为 Completed / Terminal / Unknown；任一被比较决策缺情景时全体回到 U3 前基线排序，不再采用“漏评候选也可参加胜出”的旧 P3 语义。U3 reserve 从原 `MaxExpandedNodes` 中预留，内部 expansion worker 不二次扣预算；主搜索 NodeLimit 在复评前冻结，TimeLimit 后不再执行 U3。compatibility run `35878443605` SUCCESS，pinned 0.107.1 run `35878443497` SUCCESS；后者的 Release、U0/U1 production replay、U2 degenerate、P0/P1 pinned runtime 与历史 P0 A/B 分类全部通过。双玩家最小验收见 [U3_FAIR_SCENARIO_REEVALUATION.md](U3_FAIR_SCENARIO_REEVALUATION.md)。
-- **U3 双玩家 runtime 判定器已就绪（2026-09-23）。** 新增 `tools/multiplayer-lab/validate-u3-scenario-results.ps1`，支持 `Matrix / Timeout / All` 三种阶段，自动核对总预算守恒、四个固定 ScenarioSpec、coverage 数量、真实 replay work 对账、Unknown 全局 fallback、完整覆盖 robust rerank，以及 TimeLimit 后 `reevaluation_budget_unavailable` 不再执行 U3。对应 synthetic validator 只用于验证判定器本身，不计 runtime 证据；compatibility run `35880541738`（run 796）SUCCESS。真实 Host/Client `RUBY_RAIDERS_NORMAL` 问题包已完成 Matrix 验证：5 轮生产 U3 Matrix 均为 4 decisions × 4 ScenarioSpec，预算守恒、replay work 对账、完整 coverage 与 `scenario_rerank=true` 一致，因此 `-Phase Matrix` 证据记 PASS。随后真实双玩家 Client 又以 `500 ms` 搜索预算触发 `TimeLimit`：`MP_SCENARIO_RERANK enabled=false reason=reevaluation_budget_unavailable`、`FINAL_SELECTION scenario_rerank=false`，且同一 combat 日志没有 `MP_SCENARIO_BUDGET` / `MP_SCENARIO_COVERAGE`，证明超时后没有继续 U3 replay。Timeout runtime 因此 PASS。synthetic validator 仍只证明分类逻辑。U3 已整体收口；U4、U5 也已完成，当前下一张卡为 U6 实机闭环与清理。
-- **P3 保留为 Shadow 候选生成/预览层。** Aggressive / Defensive / Conserve / NoAction 仍用于行为压力路线保护，通用 behavior prior 仍保持 `ScenarioProbabilityTrusted=false`，概率加权 chance 代码继续关闭；正式 final selection 的公平覆盖与 fallback 由 U3 接管。
+## 已验证
 
-1. `ShadowTeammatePlanner` 的 Team Top-K 已取消“按 NetId 把某个队友整条路线跑完再轮到下一个”的执行语义，改为单 action 交错扩展：每个 shadow 搜索深度只执行 1 张队友牌，下一层可从任意仍可行动的队友继续，因此同一世界线可形成 A→B→A 等顺序；NetId 只保留为确定性的候选枚举顺序。共享 simulator fork 会按实际候选顺序推进效果与 RNG。强制结束自己出牌的 shadow 卡只把该队友加入 prediction-only ended-player 集合，其他队友仍可继续行动；精确回放同样按记录的 action 顺序逐张执行。第二阶段又把“路线质量”和“行为可信度”拆开：`ShadowTeammateBehaviorModel` 对每个决策的全部合法远端 action + stop 计算一个弱、可解释的通用行为先验，基于斩杀、即时敌方耐久下降、团队有效生命提升、Power setup 与资源花费生成归一化 log-probability；每条 route 分别保存累计与 per-decision likelihood。beam=4 不再只由质量摘要决定：至少一半席位先保护行为最可信路线，其余席位用于质量多样性。第四阶段进一步把 Shadow 剪枝拆成严格的两层：先由 `ShadowFutureStateFingerprint` 做 modeled-state Exact Dominance/去重，等价键覆盖所有 captured players 的 HP/Block/Turn/Phase/Energy/Stars/Gold/累计失血与回复、五牌堆与 Orb、敌人状态、9 路 RNG、Round/Shuffle/History 风险、processed deaths、每名队友已使用的 Shadow action budget 与 ended-player 集合，并额外覆盖全部场上 creature、KnownEnemies 与 Osty 的预测语义，再复用 `SimulatedCombatState.AppendFingerprint` 覆盖 Power/遗物/药水/怪物 AI/生命周期等分支状态；只有 Exact survivors **超过 beam** 时，才允许 `ShadowRoutePruningPolicy.HeuristicQualityDominates` 基于 EnemyDurability / TeamEffectiveHp / WorstPlayerEffectiveHpRatio / TeamEnergy / TeamStars / 动作数做近似 beam pruning。候选未溢出 beam 时，汇总指标不再删除任何非等价路线。因此旧 “Pareto dominance” 不再被当作未来优劣证明，只是显式命名的 heuristic quality relation。P3 仍负责非概率压力情景候选保护：Aggressive / Defensive / Conserve / NoAction 在 Shadow Top-K 中固定保留；正式 final selection 已由 U3 从各当前决策自己的状态重新生成同一情景集合。`ScenarioSetComplete` 现在表示 Shadow 情景搜索未被 Choice、动作深度或 expansion-work budget 截断。行为 likelihood / chance-node 概率代码继续作为实验代码关闭，因为通用 prior 尚未按真实队友历史校准。所有 shadow 候选仍只存在于 simulator fork，不生成可部署的队友 `PlanAction`；`RootActionPlayers` 仍只包含本地玩家。U5 已补上一个有界的本地/远端同回合 interleave lane：本地 PlayCard 后可插入 1 个 forecast-only 队友动作，再从该完整模拟后态继续本地搜索；A→B 与 B→A 都逐动作走生产 F，并仅在 ShadowFutureStateFingerprint 完全一致时标 ExactEquivalent。该 lane 不是全玩家自由 scheduler：每个本地回合最多 1 个 forecast observation，且不提供主动等待队友的动作；原 Joint EndTurn 预测仍保留用于完整回合边界。每条 Shadow route 继续携带独立 `ProcessedEnemyDeaths`。
-2. Joint EndTurn 主接线已落地，并补齐精确回放：每个 Joint EndTurn 都携带非执行的 `ShadowForecastPlan`，记录本次选中世界线的队友动作；即使队友 0-action，非 null metadata 也明确表示 Joint 世界。搜索/最终注释回放会按记录的 PlayerNetId + HandIndex + SemanticKey + TargetCombatId 在 detached simulator 中重放，再走全队 End → Enemy Side → 全队 Start；不重新跑 Top-K 猜一次。Deployment 不读取此字段，真实执行权限仍只有本地 EndTurn/本地牌。
-3. Team-Safety 中途保路已接入；Joint continuation 已保存“该预测节点”的队友语义指纹，不再错误复用搜索 root 的旧队友指纹。live/predicted 共用 MultiplayerContinuationRemoteFingerprint，覆盖队友 HP/Block/Gold、Turn/Phase/Energy/Stars、五牌堆语义、Orb、药水、遗物及遗物预测状态；Power 继续由 ContinuationStamp 的全局 Power 校验负责。Root capture 会直接校验 live/predicted 队友指纹一致。下一回合只有真实队友状态与 Shadow 世界一致才可 continuation reuse；任何可读语义偏离仍因 CanSoftReuseRemotePublicDelta=false 强制 Fresh Search。2026-09-22 又修正了一个生命周期问题：历史 EndTurn 节点的 simulator 会在最终 materialization 前主动释放，因此队友 continuation fingerprint 现在与 ContinuationStamp 一样，在节点存活时冻结到 SimulationSnapshot；fallback 则用同一次 replay simulator 同时生成 stamp + remote fingerprint，BuildContinuations 不再读取历史 node.Snapshot.Simulator。新增 MultiplayerContinuationLifecycleChecks，CI 已确认 26 PASS / 0 FAIL。P0 的静态基线、分类器和诊断字段已经落地；**2026-09-23 按用户要求暂时跳过本机 Release/SP/Joint Reuse/Joint Mismatch 验证，这些项目不计 PASS**，恢复入口仍是 `docs/P0_BASELINE.md`。**P1 统一目标已闭环并通过 CI**：`FinalPlanOrdering`、最终候选预筛、普通 Beam、同 `StateKey` 代表选择以及 Smart potion 的无药基线共享 `MultiplayerCombatObjectiveRank`；未结束路线使用 bounded progress credit，完整胜利继续使用连续 Team loss / lethal tempo。单人排序保持原逻辑，不扩大 Beam 或时间预算。本机验证仍按用户要求跳过且不计 PASS。
+- U0：搜索转移、候选、最终选择、实际执行四层诊断与 pinned production replay 已完成；历史 real correlation 已有通过记录。
+- U1：predicted/live post-state 主链、取消/迟到回调边界、pinned production replay 已完成；具体卡牌 Host/Client 专项链仍见“未验证”。
+- U2：**COMPLETE**。共享搜索核与 pinned degenerate equivalence PASS。
+- U3：**COMPLETE**。公平 Scenario Matrix 与 TimeLimit fail-closed 已有真实双端 PASS。
+- U4：**COMPLETE**。interim-risk 反例已修正；三种风险解释合同/回归 PASS，生产默认仍 Robust。
+- U5：**COMPLETE（算法/合同/pinned）**。Vulnerable/attack、提前终局、共享生成 RNG、资源合法性、抽牌/牌堆顶五类顺序反例均由 pinned production replay 覆盖。
+- U6：**COMPLETE（实现与清理）**。
+  - 删除固定 Safe Execute action ceiling 与旧 MP-2A 单动作兼容入口/limit aliases。
+  - 删除对应旧 validator 路径，保留历史 MP-2B/MP-2C 日志兼容解析。
+  - Pinned workflow 已覆盖 Safe Execute policy/classifier/controller 关键文件。
+  - 新增 `validate-u6-runtime-closure.ps1`，区分 PASS / FAIL / UNVERIFIED。
+  - U6 synthetic 合同覆盖：完整 PASS、无二次部署 PASS、旧 request 复用 FAIL、stale 新授权 FAIL、缺 remote delta UNVERIFIED。
+  - Pinned 0.107.1 Release run `35939029095` SUCCESS。
+  - compatibility run `35939790075` SUCCESS：`32 PASS / 0 FAIL / 0 SKIP`。
 
-## 当前开发 / 性能规则
+## 未验证 / 已知风险
 
-- 默认上下文只读本 handoff + 任务直接相关文件；不要批量加载 dated performance/audit/strategy 历史。
-- v0.15 起，上游 release notes 与一次性 performance/strategy JSON/patch 不再保留在当前树；追溯旧结果使用 Git history。
-- v0.17 又移除 dated performance/strategy/audit/issue/refactoring 历史报告；怪物 root capture 的空 static-int map 改为共享实例，减少无意义分配。
-- 主项目 Release 已排除 `src/Testing/**`；`tools/**` 和 test-only GM Console 不属于正式程序集。
-- 问题包的 Godot 游戏日志只在真正导出问题包时同步，不再在 Mod 初始化时复制。
-- 不通过增加搜索时间、Beam、内存或 GC 预算掩盖正确性问题。
-- v0.18 起 `SearchGcPolicy` 的测试暂停/故障注入/计数接口独立到 `SearchGcPolicy.TestHooks.cs`；主文件只维护真实 GC 策略。
-- v0.19 起高频 GC 详细追踪默认关闭；`COMBATSOLVER_GC_DIAGNOSTICS=1`、performance recording 或无人测试会重新开启，GC 行为不变。
-- v0.20 将 ordered-mutation retention 中 3 处只为选最佳项而产生的 List/排序改为稳定单遍扫描；排名和 tie-break 不变。
-- v0.21 继续把 continuation quality leader 与 admission claim coalesce 改为单遍扫描，减少排序、List 和重复枚举；优先级不变。
-- v0.22 将 3 处 outcome-group 的 `OrderBy(...).First()` 改为稳定单遍 representative 选择；组间排序不变。
-- v0.23 将 semantic companion 最终选择改为分组后单遍扫描，并把 coverage round-robin 的逐轮 `Any` 改为一次最大轮数计算；选择/tie-break/输出顺序不变。
+- **U6-C 真实 Host/Client runtime smoke 被用户于 2026-09-24 明确跳过。** 因此 U6 的实现阶段已关闭，但不能声称真实 forecast boundary → remote WorldVersion advance → fresh search → old request dormant 已在当前 HEAD 实机 PASS。
+- U5 的真实远端插入 ownership / WorldVersion / observation→fresh-replan 证据与上项相同，继续记为 `UNVERIFIED`。
+- U1 的具体重锤+Choice、连续 Offering/抽牌链等专项 Host/Client 行为不由 pinned replay 替代。
+- 这些项是已知运行证据缺口；除非后续改动触及对应边界或准备发布，不作为下一算法阶段 blocker。
 
-## 验证入口
+## 下一任务
 
-~~~powershell
-pwsh -NoLogo -NoProfile -File .\source\tools\verify-target-version.ps1
-pwsh -NoLogo -NoProfile -File .\source\tools\verify-refactor-boundaries.ps1
-pwsh -NoLogo -NoProfile -File .\source\tools\run-contract-tests.ps1
-~~~
+当前计划只定义到 U6。下一阶段先单独设计 **U7 — Local Exact Lethal**：
 
-真实多人运行前再读 `source/docs/multiplayer/RUNBOOK.md`。
+- 只在敌方接近斩杀且局部状态空间可控时启用 bounded exact search/DFS；
+- 用于补 Beam 可能漏掉的本回合/短窗口确定斩杀；
+- 不替换现有 Beam，不扩大普通局面的默认总预算；
+- 必须复用现有生产动作语义、Choice、RNG、状态指纹与终局判定；
+- 先做离线固定输入对照，再决定是否接入生产候选组合。
+
+之后再评估缓存、增量修补和更远期预测，避免一次同时改变搜索器与执行器。

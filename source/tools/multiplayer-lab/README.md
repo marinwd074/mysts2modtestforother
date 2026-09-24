@@ -88,12 +88,6 @@ Lobby、wire 或战斗证据。
   才报告 `PASS`，采样窗口不同报告 `UNVERIFIED`，且不会自动修改 Phase 0 矩阵。
   比较器优先使用 schema v2 的 `runSeed`/`combatSegmentId`，同时兼容旧的
   schema v1 归档。
-- `validate-mp2a-results.ps1` 保留并校验历史单牌 Safe Execute 日志：Safe Execute
-  capability、恰好一个原生 `PlayCardAction`、无药水/自动 EndTurn、动作后
-  WorldVersion 失效以及新的 debounce 搜索。它可输出机器 JSON 摘要；缺少真实运行
-  证据返回 `UNVERIFIED`，不会把静态合同推断成实机 PASS。
-- `test-mp2a-validator.ps1` 只测试上述验证器本身的 PASS/FAIL/UNVERIFIED
-  判定，并由 L1 CI 调用；合成日志绝不作为多人实机证据。
 - `validate-mp2b-results.ps1` 已泛化为 bounded N-action Safe Execute 校验器：用
   `-MinActions <n>` 要求最少动作数、`-MaxActions <ceiling>` 锁定有限上限，并按同一
   request/session 校验连续 action index、每个原生 `PlayCardAction`、每次重验证、单调
@@ -186,37 +180,6 @@ pwsh -NoLogo -NoProfile -File .\compare-probe-public-state.ps1 `
 ~~~
 
 比较报告是辅助证据，仍需人工确认 Host/Client 身份、生命周期和安全边界。
-
-## MP-2A 单牌 Smoke
-
-准备 Vanilla Host 与 CombatSolver Client 后，用 Lab-only 模式启动 Client：
-
-~~~powershell
-pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
-  -InstanceRoot "$labRoot\runtime-mp-client-solver" `
-  -ClientId 1000 `
-  -ForceSteamOff `
-  -MultiplayerMode safe-execute-lab
-~~~
-
-进入战斗后等待路线稳定，只点击一次“执行本回合”。MP-2A Runtime 会只取第一张
-通过安全分类的本地普通牌；即使路线后面还有动作，也不会在同一 deployment 继续。
-完成后继续保留进程数秒，让 Probe 观察动作后的世界变化并触发新搜索，再使用
-默认 `Graceful` 模式停止实例。若优雅退出失败，先保留现场排查；不要为了取得
-Smoke 证据直接改用强制结束，因为 `-Mode Force` 可能截断异步 journal。
-
-使用启动输出中的本轮 `logPath` 验证：
-
-~~~powershell
-pwsh -NoLogo -NoProfile -File .\validate-mp2a-results.ps1 `
-  -LogPath '<client-run.log>' `
-  -OutputPath '.\.local\multiplayer-lab\results\mp2a-summary.json'
-~~~
-
-只有验证器返回 `PASS`，并人工确认 Host/Client 身份与 UI 行为后，才可形成
-MP-2A 真实 Smoke 证据。`safe-execute-lab` 与正式 `safe-execute` 是两个独立
-token；正式 token 的一动作 Host/Client Smoke 已通过，证据摘要见
-`docs/multiplayer/evidence/mp2-safe-execute-formal-2026-09-20.json`。
 
 ## MP-2B 两动作 Smoke（历史实机；复验步骤）
 
