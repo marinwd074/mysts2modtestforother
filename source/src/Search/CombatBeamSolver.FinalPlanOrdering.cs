@@ -743,21 +743,13 @@ internal sealed partial class CombatBeamSolver
                     MultiplayerScenarioDecisionRank[] comparableRanks = comparable
                         .Select(summary => summary.Rank)
                         .ToArray();
-                    int robustIndex =
-                        MultiplayerScenarioReevaluationPolicy.SelectPreferredIndex(
-                            MultiplayerScenarioRiskStrategy.Robust,
-                            comparableRanks);
-                    int nominalIndex =
-                        MultiplayerScenarioReevaluationPolicy.SelectPreferredIndex(
-                            MultiplayerScenarioRiskStrategy.NominalReference,
-                            comparableRanks);
-                    int boundedRiskIndex =
-                        MultiplayerScenarioReevaluationPolicy.SelectPreferredIndex(
-                            MultiplayerScenarioRiskStrategy.BoundedRisk,
-                            comparableRanks);
-                    u4RobustDecision = comparable[robustIndex];
-                    u4NominalDecision = comparable[nominalIndex];
-                    u4BoundedRiskDecision = comparable[boundedRiskIndex];
+                    MultiplayerScenarioStrategySelection strategySelection =
+                        MultiplayerScenarioReevaluationPolicy.CompareStrategies(
+                            comparableRanks,
+                            baselineIndex: 0);
+                    u4RobustDecision = comparable[strategySelection.RobustIndex];
+                    u4NominalDecision = comparable[strategySelection.NominalReferenceIndex];
+                    u4BoundedRiskDecision = comparable[strategySelection.BoundedRiskIndex];
 
                     // U4 A/B is zero-extra-work: all three policies consume the exact same U3
                     // scenario matrix. Production remains the pre-U4 Robust selector until
@@ -973,6 +965,15 @@ internal sealed partial class CombatBeamSolver
                         $"nominal_ref_rank={u4NominalDecision.BaselineIndex + 1} " +
                         $"bounded_risk_rank={u4BoundedRiskDecision.BaselineIndex + 1} " +
                         $"all_agree={allAgree.ToString().ToLowerInvariant()}");
+                    bool robustOverridesBaseline = u4RobustDecision.BaselineIndex != 0;
+                    diagnostics.Info(
+                        $"[CombatSolver/Multiplayer] MP_QUALITY_SORTING " +
+                        $"baseline_winner_rank=1 " +
+                        $"production_selected_baseline_rank={u4RobustDecision.BaselineIndex + 1} " +
+                        $"override_layer={(robustOverridesBaseline ? "scenario_robust" : "baseline")} " +
+                        $"robust_overrode_baseline={robustOverridesBaseline.ToString().ToLowerInvariant()} " +
+                        $"robust_nominal_agree={(u4RobustDecision.BaselineIndex == u4NominalDecision.BaselineIndex).ToString().ToLowerInvariant()} " +
+                        $"robust_bounded_agree={(u4RobustDecision.BaselineIndex == u4BoundedRiskDecision.BaselineIndex).ToString().ToLowerInvariant()}");
                 }
 
                 if (selectedScenarioDecision != null)
