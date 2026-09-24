@@ -84,11 +84,12 @@
 
 ## Quality-first 第三项状态
 
-- **第一轮坏路线归因 / 排序可观测性：IMPLEMENTED；生产默认未迁移。**
+- **现有坏路线证据闭环：IMPLEMENTED；两个排序坏例均归因到基础最终排序，生产默认未迁移。**
 - 已恢复真实历史问题包 `25b905c1322b41e6b9a8e10baeae5606`：T2 手牌含 `ANGER(0)`，旧 Solver 路线 `Tremble → Dismantle → Strike → EndTurn`，在 Shuffle 边界形成 `PartialLocalCrossTurnProjection`。根因是未完成多人路线的最终基础排序过早惩罚 `AngerCopiesGenerated`；当前 HEAD 已保留 Enemy HP 优先的定向修复和合同。
+- 第二个独立坏路线是历史 X1 的 T3 空推荐：搜索里已有当前回合 `PlayCard` 候选，但局部质量相同/等价时被 `ActionCount` 短路线 tie-break 选成仅 `EndTurn`；当前 HEAD 已保留多人本地跨回合的 current-turn-card 平局优先，并在合同中绑定该坏例。
 - 重锤→烙印、连续 Offering 的既有坏体验属于 Safe Execute / deployment 截断，不是 Robust 情景排序证据；这些执行层边界由 U1/U6 负责。
-- 新增 `MultiplayerScenarioStrategySelection` 和 `MP_QUALITY_SORTING`。同一 U3 Matrix / 同一预算下现在能直接看到 baseline winner 是否被 Robust 覆盖，以及 Robust/NominalReference/BoundedRisk 是否一致；不增加 replay、不改变搜索预算。
-- 生产仍为 Robust。现有可复原坏路线没有证明修复后 HEAD 上是 U3/U4 Robust 推翻了更好的共同搜索核心路线，因此本轮不改风险权重、不把等权压力情景均值当概率期望。
+- 新增 `MultiplayerScenarioStrategySelection` 和 `MP_QUALITY_SORTING`。同一 U3 Matrix / 同一预算下现在能直接看到 baseline winner 是否被 Robust 覆盖、三策略是否一致，并给出 `quality_signal=scenario_override_disputed|none`；不增加 replay、不改变搜索预算。
+- 生产仍为 Robust。当前两个可复原排序坏例（ANGER、X1 T3）都属于“好候选已存在但基础最终排序曾选错”；重锤/Offering 属于执行层。没有证据证明修复后 HEAD 上是 U3/U4 Robust 推翻了更好的共同搜索核心路线，因此不改风险权重、不把等权压力情景均值当概率期望。
 - 当前验证：源码改动已推送；compatibility / pinned Release CI 正在运行。无新的真实 Host/Client 重放，因此不宣称当前实际出牌质量已实机改善。
 
 ## 下一任务
