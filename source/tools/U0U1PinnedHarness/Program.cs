@@ -13,6 +13,7 @@ using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Cards;
+using MegaCrit.Sts2.Core.Models.Powers;
 using OfflineSearchHarness;
 using U2DegenerateHarness;
 
@@ -51,6 +52,7 @@ internal static class Program
                 BudgetMilliseconds);
             Console.WriteLine($"search_patches={patchCount}");
             ValidateDarkEmbracePredictionCoverage();
+            ValidateViciousStrategicValue();
 
             HarnessScenario scenario = new(
                 "IRONCLAD",
@@ -126,6 +128,49 @@ internal static class Program
             Console.Error.WriteLine(error.StackTrace);
             return 1;
         }
+    }
+
+    private static void ValidateViciousStrategicValue()
+    {
+        PowerModel vicious =
+            (PowerModel)RuntimeHelpers.GetUninitializedObject(typeof(ViciousPower));
+        StrategicEffectRequirements requirements =
+            StrategicEffectModel.Requirements(vicious);
+        Require(
+            requirements.HasFlag(StrategicEffectRequirements.DebuffApplications)
+                && requirements.HasFlag(StrategicEffectRequirements.AverageCardValue),
+            "Vicious strategic value must inspect future Vulnerable opportunities and card value.");
+
+        StrategicEffectContext context = new(
+            EnemyHp: 200,
+            IncomingDamage: 0,
+            IncomingHitCount: 0,
+            RemainingTurns: 4,
+            UsefulCardPlays: 8,
+            AttackPlays: 4,
+            SkillPlays: 4,
+            BlockSkillPlays: 0,
+            PowerPlays: 1,
+            ExhaustPlays: 0,
+            ShivPlays: 0,
+            DebuffApplications: 3,
+            SkillEnergySpend: 0,
+            PowerEnergySpend: 1,
+            AverageCardValue: 6,
+            BestCardValue: 10,
+            AverageAttackValue: 8,
+            StatusDrawTriggers: 0)
+        {
+            VulnerableApplications = 2,
+        };
+        StrategicEffectVector value = StrategicEffectModel.Evaluate(vicious, context);
+        Require(
+            value.CardAccessPotential == 12
+                && value.DamagePotential == 0
+                && value.PreventionPotential == 0
+                && value.ResourcePotential == 0
+                && value.ScalingPotential == 0,
+            $"Vicious strategic value drifted: {value}.");
     }
 
     private static void ValidateDarkEmbracePredictionCoverage()
