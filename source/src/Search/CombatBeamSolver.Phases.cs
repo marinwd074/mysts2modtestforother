@@ -26,6 +26,7 @@ internal sealed partial class CombatBeamSolver
 {
     public SolverResult Solve()
     {
+        BeginSearchEfficiencyMember();
         SearchRequestWorkTotals? requestWorkTotals = policy.RequestWorkTotals;
         long startedTimestamp = requestWorkTotals == null ? 0 : Stopwatch.GetTimestamp();
         long allocatedBytesAtStart = requestWorkTotals == null
@@ -77,6 +78,7 @@ internal sealed partial class CombatBeamSolver
                     gen2AtStart,
                     gcPauseAtStart);
             }
+            CompleteSearchEfficiencyMember();
         }
     }
 
@@ -168,6 +170,8 @@ internal sealed partial class CombatBeamSolver
         IReadOnlyList<PlanAction>? publishedCurrentTurnActions = null;
         int currentTurnPreviewVersion = 0;
         SolverSpeculativeRoutePreview? speculativeRoutePreview = null;
+        CandidateOrigin? speculativeRouteOrigin = null;
+        string? speculativeRouteEvaluationContextId = null;
         SolverRouteAdoptionSeed? routeAdoptionSeed = null;
         SolverRouteAdoptionSeed? requestedRouteAdoptionSeed = null;
         IReadOnlyList<SearchNode>? interruptedActive = null;
@@ -324,6 +328,7 @@ internal sealed partial class CombatBeamSolver
             if (!IsEligibleCompleteVictory(node))
                 return;
 
+            EnsureCandidateOrigin(node);
             SolverInterimResult candidate = SummarizeCandidate(node, won: true);
             if (MeetsHpTarget(node))
             {
@@ -365,6 +370,7 @@ internal sealed partial class CombatBeamSolver
                 return;
             }
 
+            EnsureCandidateOrigin(boundary);
             SolverInterimResult candidate = SummarizeCandidate(
                 boundary,
                 boundary.Snapshot.AllEnemiesDead);
@@ -441,8 +447,11 @@ internal sealed partial class CombatBeamSolver
             int candidateSearchedTurnLayers,
             bool candidateTimeBudgetReached,
             bool candidateNodeBudgetReached,
+            string evaluationContextId,
             IReadOnlyList<PlanAction>? routeAdoptionActions = null)
         {
+            long e0MaterializationStarted = Stopwatch.GetTimestamp();
+            long e0FinalReplayTicks = 0;
             SearchMeasurement finalMeasurement = _run.Performance.Begin();
             FinalPlanCandidate publishedCandidate = ordering.Candidate;
             SearchNode materializedNode = publishedCandidate.Node.Snapshot.HasSimulator
@@ -459,6 +468,9 @@ internal sealed partial class CombatBeamSolver
                 materializedNode = blockPotionInsertion.Node;
                 materializedAnnotations = blockPotionInsertion.Annotations;
             }
+            EnsureCandidateOrigin(materializedNode);
+            RecordCandidateEvaluated(materializedNode, evaluationContextId);
+            RecordCandidateSelected(materializedNode, evaluationContextId);
             FinalPlanCandidate selectedCandidate = publishedCandidate with
             {
                 Node = materializedNode,
@@ -516,6 +528,7 @@ internal sealed partial class CombatBeamSolver
                 : null;
             SimulationSnapshot annotationReplay;
             bool replayFailed = true;
+            long e0FinalReplayStarted = Stopwatch.GetTimestamp();
             try
             {
                 annotationReplay = Replay(best.Actions, annotationRoot, _startTurnNumber,
@@ -524,6 +537,7 @@ internal sealed partial class CombatBeamSolver
             }
             finally
             {
+                e0FinalReplayTicks += Math.Max(0, Stopwatch.GetTimestamp() - e0FinalReplayStarted);
                 if (replayFailed)
                     replayEvidence.Publish(policy.Diagnostics,
                         cancellationToken.IsCancellationRequested ? "replay_cancelled" : "replay_failed", relicTriggerRecorder);
@@ -632,6 +646,8 @@ internal sealed partial class CombatBeamSolver
             SolverResult result = new()
             {
                 ResultScope = resultScope,
+                SearchEfficiencyOrigin = best.CandidateOrigin,
+                SearchEfficiencyEvaluationContextId = evaluationContextId,
                 MultiplayerScope = policy.RoutePolicy switch
                 {
                     SearchRoutePolicy.MultiplayerCurrentTurnOnly
@@ -829,6 +845,14 @@ internal sealed partial class CombatBeamSolver
                         : continuations,
             };
             finalSnapshot.ReleaseSimulator();
+            policy.PortfolioTelemetry?.RecordExclusivePhase(
+                _searchEfficiencyMemberId,
+                "materialization_replay",
+                e0FinalReplayTicks);
+            RecordSearchEfficiencyPhase(
+                "materialization",
+                e0MaterializationStarted,
+                e0FinalReplayTicks);
             return result;
         }
 
@@ -932,9 +956,14 @@ internal sealed partial class CombatBeamSolver
                 foreach ((SearchNode node, int retentionRank) in savedRanks)
                     node.RetentionRank = retentionRank;
             }
+            foreach (SearchNode candidate in candidates)
+                EnsureCandidateOrigin(candidate);
             List<(SearchNode Node, SimulationSnapshot Snapshot)> evaluated = candidates
                 .Select(node => (Node: node, Snapshot: node.Snapshot))
                 .ToList();
+            string evaluationContextId = SearchEfficiencyEvaluationContextId(
+                scenarioReevaluation: false,
+                completion: "preview");
             FinalPlanSelection ordering;
             try
             {
@@ -947,6 +976,10 @@ internal sealed partial class CombatBeamSolver
             {
                 return;
             }
+            RecordCandidateEvaluated(ordering.Candidate.Node, evaluationContextId);
+            RecordCandidateSelected(ordering.Candidate.Node, evaluationContextId);
+            speculativeRouteOrigin = EnsureCandidateOrigin(ordering.Candidate.Node);
+            speculativeRouteEvaluationContextId = evaluationContextId;
             bool onlyDeathRoutesFound = evaluated.All(candidate =>
                 candidate.Snapshot.PlayerDead || candidate.Snapshot.ProjectedPlayerHp <= 0);
             int candidateVersion = ++routePreviewVersion;
@@ -968,6 +1001,7 @@ internal sealed partial class CombatBeamSolver
                     candidateSearchedTurnLayers,
                     candidateTimeBudgetReached: false,
                     candidateNodeBudgetReached: false,
+                    evaluationContextId,
                     routeAdoptionActions: adoptionActions));
             lastRoutePreviewAt = System.Environment.TickCount64;
         }
@@ -985,7 +1019,12 @@ internal sealed partial class CombatBeamSolver
             if (!force && elapsedMs - lastProgressMs < 100)
                 return;
             lastProgressMs = elapsedMs;
-            progressCallback?.Invoke(new SolverProgress(
+            if (progressCallback == null)
+                return;
+            RecordCandidatePublished(
+                speculativeRouteOrigin,
+                speculativeRouteEvaluationContextId);
+            progressCallback(new SolverProgress(
                 _startTurnNumber,
                 currentTurn,
                 completedTurns,
@@ -1600,6 +1639,7 @@ internal sealed partial class CombatBeamSolver
                         fallback = child;
                     if (child.IsTerminal || child.Turn > node.Turn)
                     {
+                        EnsureCandidateOrigin(child);
                         int explicitPotionUses = ExplicitPotionUseCount(child);
                         if (explicitPotionUses == 0 && child.Score > potionFreeBoundaryFallbackScore)
                         {
@@ -2140,6 +2180,8 @@ internal sealed partial class CombatBeamSolver
         ValidateHistoricalSimulatorsReleased(finalCandidates);
         PublishProgress(_startTurnNumber + searchedTurnLayers, searchedTurnLayers, 0,
             finalCandidates.Count, completed.Count, "复核最终候选", force: true);
+        foreach (SearchNode candidate in finalCandidates)
+            EnsureCandidateOrigin(candidate);
         List<(SearchNode Node, SimulationSnapshot Snapshot)> evaluated = finalCandidates
             .Select(node => (Node: node, Snapshot: node.Snapshot))
             .ToList();
@@ -2150,12 +2192,21 @@ internal sealed partial class CombatBeamSolver
         // Whether the main search exhausted its allocation must not depend on how much of the
         // separate U3 reserve the final candidate matrix later consumes.
         bool nodeBudgetReached = _run.Expanded >= _profile.MaxExpandedNodes;
+        bool scenarioReevaluation = !timeBudgetReached
+            && policy.UseMultiplayerScenarioReevaluation
+            && policy.UseMultiplayerTeamObjective
+            && _useMultiplayerRouteSemantics;
+        string finalEvaluationContextId = SearchEfficiencyEvaluationContextId(
+            scenarioReevaluation,
+            timeBudgetReached ? "final_time_budget" : "final");
         FinalPlanSelection ordering = FinalOrdering.Select(
             evaluated,
             initialHp,
             emitDiagnostics: true,
             reevaluateScenarios: !timeBudgetReached,
             allowScenarioRerank: !timeBudgetReached);
+        RecordCandidateEvaluated(ordering.Candidate.Node, finalEvaluationContextId);
+        RecordCandidateSelected(ordering.Candidate.Node, finalEvaluationContextId);
         if (_run.Expanded > _totalExpandedNodeBudget)
         {
             throw new InvalidOperationException(
@@ -2170,7 +2221,8 @@ internal sealed partial class CombatBeamSolver
                 : SolverResultScope.SearchCompletion,
             searchedTurnLayers,
             timeBudgetReached,
-            nodeBudgetReached);
+            nodeBudgetReached,
+            finalEvaluationContextId);
         foreach (SearchNode candidate in finalCandidates)
             candidate.Snapshot.ReleaseSimulator();
         return result;

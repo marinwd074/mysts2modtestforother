@@ -62,6 +62,9 @@ internal static partial class CombatSearchCoordinator
             if (!promoted && summary != currentDisplayedResult)
                 return;
             currentCompleteAdoptableResult = result;
+            portfolioTelemetry.RecordCandidatePublished(
+                result.SearchEfficiencyOrigin,
+                result.SearchEfficiencyEvaluationContextId ?? string.Empty);
             currentTurnPreview = SolverCurrentTurnPreview.FromResult(
                 result,
                 ++currentTurnPreviewVersion);
@@ -149,8 +152,12 @@ internal static partial class CombatSearchCoordinator
             {
                 selected = currentCompleteAdoptableResult;
             }
+            portfolioTelemetry.RecordCandidatePublished(
+                selected.SearchEfficiencyOrigin,
+                selected.SearchEfficiencyEvaluationContextId ?? string.Empty);
             PopulateRequestWorkTotals(selected, requestWorkTotals);
             selected.PortfolioTelemetry = portfolioTelemetry;
+            LogSearchEfficiencySummary(policy.Diagnostics, selected, portfolioTelemetry);
             return selected;
         }
         catch (OperationCanceledException)
@@ -161,9 +168,67 @@ internal static partial class CombatSearchCoordinator
                 $"[CombatSolver/Test] SEARCH_INTERIM_ADOPTED " +
                 $"potions={currentCompleteAdoptableResult.ProjectedBattlePotionCount} " +
                 $"projected_battle_hp_lost={currentCompleteAdoptableResult.ProjectedBattleHpLost}");
+            portfolioTelemetry.RecordCandidatePublished(
+                currentCompleteAdoptableResult.SearchEfficiencyOrigin,
+                currentCompleteAdoptableResult.SearchEfficiencyEvaluationContextId ?? string.Empty);
             PopulateRequestWorkTotals(currentCompleteAdoptableResult, requestWorkTotals);
             currentCompleteAdoptableResult.PortfolioTelemetry = portfolioTelemetry;
+            LogSearchEfficiencySummary(
+                policy.Diagnostics,
+                currentCompleteAdoptableResult,
+                portfolioTelemetry);
             return currentCompleteAdoptableResult;
+        }
+    }
+
+    private static void LogSearchEfficiencySummary(
+        SearchDiagnosticsSink diagnostics,
+        SolverResult selected,
+        BeamWidthPortfolioTelemetry telemetry)
+    {
+        CandidateOrigin? origin = selected.SearchEfficiencyOrigin;
+        string? contextId = selected.SearchEfficiencyEvaluationContextId;
+        CandidateMilestones? milestones = telemetry.FindCandidateMilestones(origin, contextId);
+        if (origin != null && contextId != null && milestones != null)
+        {
+            SearchEfficiencyMemberReport? member = telemetry.FindSearchMember(origin.SearchMemberId);
+            string FormatTimestamp(long? ticks)
+                => ticks.HasValue
+                    ? telemetry.ToRequestMilliseconds(ticks.Value).ToString(
+                        "F3",
+                        System.Globalization.CultureInfo.InvariantCulture)
+                    : "-";
+            diagnostics.Info(
+                $"[CombatSolver/Test] SEARCH_E0_TIMELINE candidate_id={origin.CandidateId} " +
+                $"member_id={origin.SearchMemberId} member_kind={member?.Kind ?? "unknown"} " +
+                $"generated_ms={FormatTimestamp(origin.FirstGeneratedTicks)} " +
+                $"evaluated_ms={FormatTimestamp(milestones.EvaluatedTicks)} " +
+                $"selected_ms={FormatTimestamp(milestones.SelectedTicks)} " +
+                $"published_ms={FormatTimestamp(milestones.PublishedTicks)} " +
+                $"expanded_at_generation={origin.ExpandedAtGeneration} " +
+                $"turn_depth={origin.TurnDepth} context={contextId}");
+        }
+
+        foreach (SearchEfficiencyMemberReport member in telemetry.SearchMembers)
+        {
+            double elapsedMs = member.CompletedTicks.HasValue
+                ? BeamWidthPortfolioTelemetry.DurationMilliseconds(
+                    Math.Max(0, member.CompletedTicks.Value - member.StartedTicks))
+                : 0d;
+            diagnostics.Info(
+                $"[CombatSolver/Test] SEARCH_E0_MEMBER member_id={member.MemberId} " +
+                $"kind={member.Kind} beam={member.BeamWidth} " +
+                $"second_rank_band={member.SecondRankBand} base_score_only={member.BaseScoreOnly} " +
+                $"novelty={member.Novelty} elapsed_ms={elapsedMs.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)} " +
+                $"expanded={member.ExpandedNodes} transitions={member.TransitionCount}");
+        }
+        foreach (SearchEfficiencyPhaseReport phase in telemetry.SearchPhases)
+        {
+            double exclusiveMs = BeamWidthPortfolioTelemetry.DurationMilliseconds(phase.ExclusiveTicks);
+            diagnostics.Info(
+                $"[CombatSolver/Test] SEARCH_E0_PHASE member_id={phase.SearchMemberId} " +
+                $"phase={phase.Phase} calls={phase.CallCount} " +
+                $"exclusive_ms={exclusiveMs.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)}");
         }
     }
 

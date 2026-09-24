@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using CombatSolver.Engine.InCombat.Simulation;
 
 namespace CombatSolver;
@@ -55,12 +56,20 @@ internal sealed partial class CombatBeamSolver
         CombatPredictionSimulator source =
             (CombatPredictionSimulator)node.Snapshot.Simulator;
         int sourceShuffleEvents = source.ShuffleEventCount;
-        ShadowTeammatePlanResult forecast =
-            ShadowTeammatePlanner.BuildTeamSingleActionRoutes(
+        long e0ShadowStarted = Stopwatch.GetTimestamp();
+        ShadowTeammatePlanResult forecast;
+        try
+        {
+            forecast = ShadowTeammatePlanner.BuildTeamSingleActionRoutes(
                 source,
                 _player,
                 node.Snapshot.ProcessedEnemyDeaths,
                 MultiplayerInterleaveOrderPolicy.MaximumSingleObservationRoutes);
+        }
+        finally
+        {
+            RecordSearchEfficiencyPhase("shadow", e0ShadowStarted);
+        }
 
         foreach (ShadowTeammateRoute route in forecast.Routes)
         {

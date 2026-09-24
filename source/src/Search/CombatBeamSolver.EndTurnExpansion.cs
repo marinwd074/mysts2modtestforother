@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using CombatSolver.Engine.InCombat.Simulation;
 
 namespace CombatSolver;
@@ -63,10 +64,19 @@ internal sealed partial class CombatBeamSolver
         int sourceShuffleEvents = source.ShuffleEventCount;
         int roundHistoryEntryStart = source.History.Entries.Count;
 
-        ShadowTeammatePlanResult forecast = ShadowTeammatePlanner.BuildTeamTopKRoutes(
-            source,
-            _player,
-            node.Snapshot.ProcessedEnemyDeaths);
+        long e0ShadowStarted = Stopwatch.GetTimestamp();
+        ShadowTeammatePlanResult forecast;
+        try
+        {
+            forecast = ShadowTeammatePlanner.BuildTeamTopKRoutes(
+                source,
+                _player,
+                node.Snapshot.ProcessedEnemyDeaths);
+        }
+        finally
+        {
+            RecordSearchEfficiencyPhase("shadow", e0ShadowStarted);
+        }
 
         foreach (ShadowTeammateRoute route in forecast.Routes)
         {

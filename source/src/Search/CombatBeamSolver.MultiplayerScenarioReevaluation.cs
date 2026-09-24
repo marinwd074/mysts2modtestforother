@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using CombatSolver.Engine.InCombat.Simulation;
 
 namespace CombatSolver;
@@ -11,6 +12,10 @@ internal sealed partial class CombatBeamSolver
         if (decisionRepresentatives.Count == 0)
             return [];
 
+        long e0ScenarioStarted = Stopwatch.GetTimestamp();
+        long e0ShadowTicksBefore = SearchEfficiencyPhaseTicks("shadow");
+        try
+        {
         int expandedBefore = _run.Expanded;
         int transitionsBefore = _run.TransitionCount;
         int decisionCount = Math.Min(
@@ -50,6 +55,17 @@ internal sealed partial class CombatBeamSolver
             $"replay_expanded={replayExpanded} " +
             $"replay_transitions={replayTransitions}");
         return decisions;
+        }
+        finally
+        {
+            long e0NestedShadowTicks = Math.Max(
+                0,
+                SearchEfficiencyPhaseTicks("shadow") - e0ShadowTicksBefore);
+            RecordSearchEfficiencyPhase(
+                "scenario_matrix",
+                e0ScenarioStarted,
+                e0NestedShadowTicks);
+        }
     }
 
     private MultiplayerScenarioDecisionEvaluation EvaluateScenarioDecision(
@@ -157,8 +173,11 @@ internal sealed partial class CombatBeamSolver
             // One bounded teammate search produces all four fixed ScenarioSpec representatives.
             // Do not rerun the same Shadow tree once per stress lane.
             int plannerBudget = remainingBudget - scenarioCount;
-            ShadowTeammatePlanResult forecast =
-                ShadowTeammatePlanner.BuildTeamTopKRoutes(
+            long e0ShadowStarted = Stopwatch.GetTimestamp();
+            ShadowTeammatePlanResult forecast;
+            try
+            {
+                forecast = ShadowTeammatePlanner.BuildTeamTopKRoutes(
                     (global::CombatSolver.Engine.InCombat.Simulation.CombatPredictionSimulator)
                         preEndSnapshot.Simulator,
                     _player,
@@ -166,6 +185,11 @@ internal sealed partial class CombatBeamSolver
                     beamWidth: ShadowTeammateScenarioPolicy.DefaultScenarioCount,
                     maxActionsPerPlayer: ShadowTeammatePlanner.DefaultMaxActions,
                     maxExpandedBranches: plannerBudget);
+            }
+            finally
+            {
+                RecordSearchEfficiencyPhase("shadow", e0ShadowStarted);
+            }
             _run.Expanded += forecast.ExpandedBranches;
             _run.TransitionCount += forecast.ExpandedBranches;
             sharedWork += forecast.ExpandedBranches;

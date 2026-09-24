@@ -1121,6 +1121,10 @@ internal sealed record SearchNode(
 
     internal bool HasMaterializedActionsForTesting => _actions != null;
 
+    // E0 metadata is assigned only after a node first becomes a comparable route candidate.
+    // Record cloning used for annotations preserves it; newly constructed action nodes start null.
+    public CandidateOrigin? CandidateOrigin { get; set; }
+
     public int RetentionRank { get; set; } = int.MaxValue;
     public int LongTermResourceRetentionRank { get; set; } = int.MaxValue;
     public int CumulativeEnemyHpLost { get; init; }
@@ -1483,6 +1487,8 @@ internal sealed class SolverResult
     public SolverResultScope ResultScope { get; internal set; } = SolverResultScope.SearchCompletion;
     public MultiplayerSearchResultScope MultiplayerScope { get; internal set; }
     public string RouteIdentity { get; internal set; } = Guid.NewGuid().ToString("N");
+    public CandidateOrigin? SearchEfficiencyOrigin { get; internal set; }
+    public string? SearchEfficiencyEvaluationContextId { get; internal set; }
     public bool DeterministicBlockPotionInserted { get; internal set; }
     public bool SingleSessionSearch { get; internal set; }
     public IReadOnlyList<MultiplayerReplayCandidate> MultiplayerReplayCandidates { get; internal set; } = [];
