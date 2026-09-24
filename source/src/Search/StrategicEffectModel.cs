@@ -101,6 +101,7 @@ internal readonly record struct StrategicEffectContext(
     public int DemesneDrawGain { get; init; }
     public int FirstAttackDamage { get; init; }
     public int RecurringEnergyGain { get; init; }
+    public int VulnerableApplications { get; init; }
 
     internal StrategicEffectContext WithExhaustDrawTiming(IReadOnlyList<PowerModel> powers,
         IReadOnlyList<PredictedCard> hand, Creature owner)
@@ -201,6 +202,7 @@ internal readonly record struct StrategicEffectContext(
         int singleUseGeneratedShivs = 0;
         int singleUseShivGenerators = 0;
         int debuffCount = 0;
+        int vulnerableCount = 0;
         int statusCount = 0;
         int skillEnergy = 0;
         int powerEnergy = 0;
@@ -226,22 +228,26 @@ internal readonly record struct StrategicEffectContext(
 
             bool hasBlockDynamicVar = false;
             bool hasDebuffDynamicVar = false;
+            bool hasVulnerableDynamicVar = false;
             if ((needsBlockSkillCount && cardType == CardType.Skill) || needsDebuffCount)
             {
                 // DynamicVarSet 的 GetEnumerator 会把内部 Dictionary 的结构体枚举器装箱，
                 // 每张牌每次快照都要跑一遍；直接枚举其（已 publicize 的）内部字典。
                 foreach (KeyValuePair<string, MegaCrit.Sts2.Core.Localization.DynamicVars.DynamicVar> dynamicVar in card.DynamicVars._vars)
                 {
-                    if (ObserveDynamicVarKey(
-                            dynamicVar.Key,
-                            cardType,
-                            needsBlockSkillCount,
-                            needsDebuffCount,
-                            ref hasBlockDynamicVar,
-                            ref hasDebuffDynamicVar))
-                    {
+                    bool resolved = ObserveDynamicVarKey(
+                        dynamicVar.Key,
+                        cardType,
+                        needsBlockSkillCount,
+                        needsDebuffCount,
+                        ref hasBlockDynamicVar,
+                        ref hasDebuffDynamicVar);
+                    if (needsDebuffCount && IsVulnerableDynamicVar(dynamicVar.Key))
+                        hasVulnerableDynamicVar = true;
+                    // Vicious needs the exact vulnerable subset, so a generic Weak/Poison key
+                    // cannot end this scan before a later Vulnerable key is observed.
+                    if (resolved && (!needsDebuffCount || hasVulnerableDynamicVar))
                         break;
-                    }
                 }
             }
 
@@ -310,6 +316,8 @@ internal readonly record struct StrategicEffectContext(
             }
             if (needsDebuffCount && hasDebuffDynamicVar)
                 debuffCount++;
+            if (needsDebuffCount && hasVulnerableDynamicVar)
+                vulnerableCount++;
         }
 
         int actualDeckSize = liveCards.Count;
@@ -384,6 +392,9 @@ internal readonly record struct StrategicEffectContext(
                     shivGeneratorCount, deckSize, reachableCards, reusableShivCount,
                     singleUseGeneratedShivs, singleUseShivGenerators) : null,
             ReachableCards = reachableCards,
+            VulnerableApplications = requirements.HasFlag(StrategicEffectRequirements.DebuffApplications)
+                ? ReachablePlays(vulnerableCount, deckSize, reachableCards)
+                : 0,
         };
     }
 
@@ -422,6 +433,9 @@ internal readonly record struct StrategicEffectContext(
             || key.Contains("Debuff", StringComparison.OrdinalIgnoreCase)
             || key.Contains("StrengthLoss", StringComparison.OrdinalIgnoreCase);
 
+    private static bool IsVulnerableDynamicVar(string key)
+        => key.Contains("Vulnerable", StringComparison.OrdinalIgnoreCase);
+
     private static bool IsBlockDynamicVar(string key)
         => key.Contains("Block", StringComparison.OrdinalIgnoreCase);
 }
@@ -448,6 +462,8 @@ internal static class StrategicEffectModel
             StrengthPower => StrategicEffectRequirements.AttackHits,
             AccuracyPower => StrategicEffectRequirements.ShivPlays,
             SleightOfFleshPower => StrategicEffectRequirements.DebuffApplications,
+            ViciousPower => StrategicEffectRequirements.DebuffApplications
+                | StrategicEffectRequirements.AverageCardValue,
             LethalityPower or ReaperFormPower => StrategicEffectRequirements.AttackPlays
                 | StrategicEffectRequirements.AverageAttackValue,
             DexterityPower => StrategicEffectRequirements.BlockSkillPlays,
@@ -505,6 +521,8 @@ internal static class StrategicEffectModel
             EnvenomPower => Damage(amount * context.AttackPlays, enemyHp),
             AccuracyPower => Damage(amount * context.ShivPlays, enemyHp),
             SleightOfFleshPower => Damage(amount * context.DebuffApplications, enemyHp),
+            ViciousPower => CardAccess(
+                amount * context.VulnerableApplications * cardAccessUnit),
             StrengthPower => Damage(amount * (context.AttackHits ?? context.AttackPlays), enemyHp),
             LethalityPower when context.Act3BossInteractions && context.AttackPlays > 0 => Damage(
                 context.FirstAttackDamage * Math.Min(context.AttackPlays, context.RemainingTurns)
