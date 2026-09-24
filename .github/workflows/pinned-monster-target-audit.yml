@@ -55,7 +55,7 @@ jobs:
             --monster-static-source '.\source\src\Prediction\MonsterMoveEffects.StaticValues.cs'
 
       - name: Upload pinned monster IL evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: monster-moves-0.107.1
           path: .local/game-inspection/monster-moves-0.107.1.json
