@@ -303,6 +303,7 @@ internal static class MultiplayerSafeExecutePolicy
 {
     // Safe Execute is bounded by the finite current-turn route selected by the search.
     // Per-action live revalidation remains the actual safety boundary.
+    internal const string RouteBoundedActionLimitToken = "route_bounded";
     internal const string ManualMultiplayerCardReason = "multiplayer_only_manual_play";
     internal const string TeammateForecastBoundaryReason = "kind_teammateforecast";
     internal const string FormalModeToken = "safe-execute";
