@@ -209,7 +209,7 @@ F 必须执行每张牌与触发器，而不是先合并成“队友本回合打
 
 **状态（2026-09-24）：COMPLETE（实现与清理）。** 真实 Host/Client U6-C smoke 由用户明确跳过，因此当前 HEAD 的该网络时序链继续记为 `UNVERIFIED`，不冒充 runtime PASS。 详见 [U6_RUNTIME_CLOSURE.md](U6_RUNTIME_CLOSURE.md)。失效的固定 32-action ceiling、旧 MP-2A 单动作兼容入口/limit aliases 与对应 validator 已删除；Safe Execute capability 改为 `action_limit=selected_route`。Pinned Release 触发范围已覆盖 Safe Execute policy/classifier/controller。U6 新 validator 只接受真实 forecast boundary → remote readable delta → fresh search → old request dormant 链，缺证据返回 `UNVERIFIED`。
 
-小规模对照通过后再评估本地精确斩杀、缓存、增量修补和更远期预测。迁移成功后删除失效常数、历史别名与相应旧测试，不为了兼容测试保留虚假的生产边界。
+U6 实现与清理收口后即可独立评估本地精确斩杀、缓存、增量修补和更远期预测；已跳过的 U6-C 只保留为可选 runtime 补证，不阻塞这些后续实验。迁移成功后删除失效常数、历史别名与相应旧测试，不为了兼容测试保留虚假的生产边界。
 
 验收：已完成。交接已压缩为当前架构、已验证结果、未验证事项和下一任务；旧 MP-2A 路径在调用归零后删除；离线/pinned、构建/合同和真实 Host/Client 证据继续分层记录。U6-C 的最小实机步骤保留在 [U6_RUNTIME_CLOSURE.md](U6_RUNTIME_CLOSURE.md)，但因本轮明确跳过，不作为 U6 实现阶段继续阻塞项。
 
