@@ -143,7 +143,7 @@ F 必须执行每张牌与触发器，而不是先合并成“队友本回合打
 
 ### U0 — 建立当前差异图与最小质量基线
 
-**状态（2026-09-23）：结构性验收已完成。** 当前差异图、五类问题分诊、四层诊断入口与固定输入见 [`U0_BASELINE.md`](U0_BASELINE.md)。真实 Release / SP / Host+Client 行为样例仍按证据标为 `UNVERIFIED`，不由结构门禁冒充运行 PASS。下一张卡为 U1；不要在 U0 内继续扩大搜索/排序改动。
+**状态（2026-09-23）：COMPLETE。** 当前差异图、五类问题分诊、四层诊断入口与固定输入见 [`U0_BASELINE.md`](U0_BASELINE.md)。除结构与 pinned production Search/replay 外，真实多人 request 8 已完成 `FINAL_CANDIDATE → FINAL_SELECTION → route_identity → native execution → U1_POST_STATE_COMPARE → MP2B_ACTION_RECONCILED` correlation，因此 U0 不再保留 Host/Client correlation 债务。卡牌专项执行问题归 U1。
 
 读取 AGENTS.md、source/AGENTS.md、CODEX_HANDOFF.md，然后仅沿当前搜索/排序/执行调用链检查。输出：当前SHA、单人/多人差异表、每个差异的调用位置与目的、已失效兼容规则。
 
@@ -155,7 +155,7 @@ F 必须执行每张牌与触发器，而不是先合并成“队友本回合打
 
 ### U1 — 先修动作后态校验
 
-**状态（2026-09-23）：代码/合同/Release 构建已完成，真实多人验收仍 `UNVERIFIED`。** 当前实现见 [`U1_ACTION_POSTSTATE.md`](U1_ACTION_POSTSTATE.md)：每张动作前 fresh probe；每张动作提交前由生产 `CombatBeamSolver.ReplayDiagnosticPrefix` 冻结 predicted `ContinuationStamp + remote fingerprint`；原生队列稳定后与 live 精确比较。旧 `local_card_removed/energy/enemy_target/remote_unchanged` 只保留旁路诊断。重锤+Choice、连续祭品、真实队友插入和 cancellation 双端 timing 仍需实机复测；该 runtime debt 与已完成的 U2 搜索共核验收分开记录。
+**状态（2026-09-24）：代码/合同/pinned production replay 已完成；真实 cancellation / late callback 已 PASS；卡牌专项与远端插入仍部分 `UNVERIFIED`。** 当前实现见 [`U1_ACTION_POSTSTATE.md`](U1_ACTION_POSTSTATE.md)：每张动作前 fresh probe；每张动作提交前由生产 `CombatBeamSolver.ReplayDiagnosticPrefix` 冻结 predicted `ContinuationStamp + remote fingerprint`；原生队列稳定后与 live 精确比较。旧 `local_card_removed/energy/enemy_target/remote_unchanged` 只保留旁路诊断。真实 request 10 已证明取消期间在途 native 动作不会恢复旧后缀；剩余重锤+Choice、连续 Offering/抽牌链仍是卡牌专项实机债务。真实队友插入的 ownership / WorldVersion / fresh-replan 验收已合并到 U6，不再重复维护一套 U1 smoke。
 
 入口：MultiplayerSafeExecutePolicy、MultiplayerSafeLocalActionClassifier、SolverController.Deployment、现有native action/Choice与快照实现。
 
@@ -207,9 +207,13 @@ F 必须执行每张牌与触发器，而不是先合并成“队友本回合打
 
 ### U6 — 实机闭环与清理
 
-小规模对照通过后再评估本地精确斩杀、缓存、增量修补和更远期预测。迁移成功后删除失效常数、历史别名与相应旧测试，不为了兼容测试保留虚假的生产边界。
+**状态（2026-09-24）：IN PROGRESS。** 生产清理已开始：固定 Safe Execute 6/32-action ceiling 不再作为 capability；零生产调用的 `MaxActionsPerDeployment`、旧 MP-2A 单牌切片和 MP-2C ceiling reason 已从生产代码删除，能力日志改为 `action_limit=route_bounded`，具体有限 `max_actions` 只在每次授权 route 的 `MP2B_DEPLOY_START` 给出。历史 validator 仍可读取旧证据，但生产代码不再为它们保留假边界。当前交接已压缩为“当前架构 / 已验证 / 未验证 / 下一步”。
 
-验收：交接只保留当前架构、已验证结果、未验证事项和下一任务；旧路径调用为零才能删除。发布说明区分离线、构建和真实Host/Client测试。
+新增 `tools/multiplayer-lab/validate-u6-runtime-closure.ps1`：一次真实 Host/Client 远端插入即可同时验收 U1/U5 的剩余公共债务。合法路径可以是 post-action `remote_match=false`，也可以是下一动作 pre-action probe 发现 WorldVersion 变化；两者都必须证明旧 request 不再提交下一张 native action、所有已提交动作仍归本地 `local_net_id`、且随后 fresh search。
+
+旧 `P0HistoricalPinnedHarness` 与历史 MP2A/MP2B validator 目前仍被 workflow/contract suite 引用，因此不满足“旧路径调用为零”条件，暂不删除。小规模对照通过后再评估本地精确斩杀、缓存、增量修补和更远期预测。
+
+验收：交接只保留当前架构、已验证结果、未验证事项和下一任务；旧路径调用为零才能删除；最终必须把 compatibility / pinned 构建与真实 Host/Client 证据分层报告，不能用 synthetic validator 冒充实机 PASS。
 
 ## 8. 最小验证矩阵与停止条件
 
