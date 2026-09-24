@@ -113,14 +113,25 @@ GitHub Actions pinned run `35893825974`：**SUCCESS**；compatibility run `35893
 
 同一 pinned run 继续完整通过 Release、U0/U1、U2、P0/P1 runtime 与历史 P0 A/B 分类，且未扩大任何搜索预算。
 
+### U5 非实机共享生成 RNG pinned replay
+
+GitHub Actions pinned run `35935837066`：**SUCCESS**；compatibility run `35935837095`：**SUCCESS**。
+
+在同一固定 0.107.1 根中向手牌加入两张真实游戏卡，并分别通过生产 `ReplayDiagnosticPrefix` 执行：
+
+- `INFERNAL_BLADE → DISTRACTION`：最终额外生成 `DISMANTLE`、`TRUE_GRIT`，future fingerprint = `5EB1604F1125EBD8:7D84CF916EF7DFAB`；
+- `DISTRACTION → INFERNAL_BLADE`：最终额外生成 `PRIMAL_FORCE`、`UNRELENTING`，future fingerprint = `C1076280507FB268:9AC9FCA14C304F1F`。
+
+两张牌都通过生产镜像消费同一 `CombatCardGeneration` RNG 流；两顺序最终手牌 multiset 不同（`GenerationHandMultisetDifferent=true`），且完整 future fingerprint 不同。因此共享生成 RNG / 手牌后态的顺序影响已由 pinned 游戏 DLL + 生产模拟器直接验证，不能 exact-transposition 合并。
+
+该测试仍为 detached 单进程 simulation：它验证共同状态转移 F 中的 RNG 与牌堆语义，不验证真实远端玩家 ownership、网络事件到达顺序或 `WorldVersion`。
+
+同一 pinned run 完整通过 Release、U0/U1、U2、P0/P1 runtime 与历史 P0 A/B 分类，没有扩大 Beam、节点或时间预算。
+
 ## 仍未验证
 
 真实双端 Host/Client 的 U5 专项 smoke 尚未执行，因此不能声称网络实机已经观察到 forecast boundary。
 
-最小实机补测只需要三类：
+Vulnerable/attack、提前终局合法性不对称、共享生成 RNG/手牌后态三类顺序语义已经有 pinned production replay，不再要求用随机联机牌局重复证明。U6 最小 U5 实机补测收缩为一条网络链：让真实队友动作插入两个本地动作之间，确认远端 `WorldVersion` / live state 变化使旧条件后缀失效，部署不会跨过 forecast observation，并触发 fresh capture/search；同时确认旧 generation 不会继续提交。该链只验证离线无法提供的 ownership / network timing / observation→replan 层。
 
-1. 本地先施加 Vulnerable，队友攻击，再由本地继续攻击；确认远端动作出现时旧后缀不被直接部署，而是 fresh replan。
-2. 一个顺序会先击杀/触发死亡效果，另一个顺序不会；确认日志中的 `reverse_order` 为 `OrderSensitive` 或 `ReverseUnavailable`，不显示 `order_collapsible=true`。
-3. 能影响共享 RNG、抽牌或资源的等价测试对；确认不同后态不会被 exact transposition 合并。
-
-该 runtime debt 不阻止 U5 代码阶段收口；进入 U6 前做最终默认迁移/实机闭环时再集中验证。
+该 runtime debt 不阻止 U5 代码阶段收口；进入 U6 最终实机闭环时集中验证。
