@@ -186,10 +186,9 @@ internal static partial class SolverController
             bool prefixPreserved = refreshed.BestNode.Actions.Count >= selected.Candidate.Prefix.Count;
             for (int index = 0; prefixPreserved && index < selected.Candidate.Prefix.Count; index++)
             {
-                prefixPreserved = string.Equals(
-                    CombatBeamSolver.PolicyActionToken(refreshed.BestNode.Actions[index]),
-                    CombatBeamSolver.PolicyActionToken(selected.Candidate.Prefix[index]),
-                    StringComparison.Ordinal);
+                prefixPreserved = HasSameExecutionIdentity(
+                    refreshed.BestNode.Actions[index],
+                    selected.Candidate.Prefix[index]);
             }
             if (!prefixPreserved)
             {
@@ -257,6 +256,25 @@ internal static partial class SolverController
             return MultiplayerPlanRefreshDecision.FullRestart;
         }
     }
+
+    private static bool HasSameExecutionIdentity(
+        PlanAction actual,
+        PlanAction expected)
+        => actual.Kind == expected.Kind
+            && actual.Turn == expected.Turn
+            && string.Equals(actual.CardId, expected.CardId, StringComparison.Ordinal)
+            && actual.CardOccurrence == expected.CardOccurrence
+            && actual.TargetIndex == expected.TargetIndex
+            && actual.TargetCombatId == expected.TargetCombatId
+            && string.Equals(actual.CardStateKey, expected.CardStateKey, StringComparison.Ordinal)
+            && actual.CardStateOccurrence == expected.CardStateOccurrence
+            && actual.CardUpgradeLevel == expected.CardUpgradeLevel
+            && string.Equals(
+                actual.CardEnchantmentId,
+                expected.CardEnchantmentId,
+                StringComparison.Ordinal)
+            && Equals(actual.Choice, expected.Choice)
+            && Equals(actual.NestedChoices, expected.NestedChoices);
 
     private static void DropRetainedPlanForFullRestart()
     {
