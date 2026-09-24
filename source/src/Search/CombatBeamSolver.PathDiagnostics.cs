@@ -6,6 +6,7 @@ internal sealed partial class CombatBeamSolver
 {
     private const int MaximumBeamObjectiveAbLogs = 12;
     private int _beamObjectiveAbLogCount;
+    private bool _beamObjectiveAbStarted;
 
     // This transient, synchronous callback payload never crosses the Search boundary.
     // Its node lists are borrowed only until the callback returns; the sink receives copies.
@@ -220,6 +221,14 @@ internal sealed partial class CombatBeamSolver
 
     private void ObserveMultiplayerBeamObjectiveAb(GlobalRetentionDecision decision)
     {
+        if (!_beamObjectiveAbStarted)
+        {
+            _beamObjectiveAbStarted = true;
+            policy.Diagnostics.Info(
+                $"[CombatSolver/Multiplayer] MP_BEAM_RETENTION_AB_START " +
+                $"beam={decision.Limit} detailed=true");
+        }
+
         if (_beamObjectiveAbLogCount >= MaximumBeamObjectiveAbLogs
             || decision.OrderedPool.Count <= decision.Limit
             || decision.Limit <= 0)
