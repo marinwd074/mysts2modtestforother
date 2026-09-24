@@ -129,7 +129,10 @@ internal sealed class CombatDiagnosticJournal : IDisposable
             || message.StartsWith("[CombatSolver/Test] GC_FRAGMENTATION_COMPACTION ", StringComparison.Ordinal)
             || message.StartsWith("[CombatSolver/Test] POTION_GRADIENT_MEMORY_DECISION ", StringComparison.Ordinal)
             || message.StartsWith("[CombatSolver/Test] MAIN_THREAD_FRAMES ", StringComparison.Ordinal)
-            || message.StartsWith("[CombatSolver/Test] SEARCH_GC_LIFECYCLE ", StringComparison.Ordinal);
+            || message.StartsWith("[CombatSolver/Test] SEARCH_GC_LIFECYCLE ", StringComparison.Ordinal)
+            || message.StartsWith("[CombatSolver/Test] SEARCH_E0_TIMELINE ", StringComparison.Ordinal)
+            || message.StartsWith("[CombatSolver/Test] SEARCH_E0_MEMBER ", StringComparison.Ordinal)
+            || message.StartsWith("[CombatSolver/Test] SEARCH_E0_PHASE ", StringComparison.Ordinal);
     public Task<CombatLogArchive> CaptureAsync()
     {
         lock (_gate)

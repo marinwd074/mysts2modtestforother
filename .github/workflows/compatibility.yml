@@ -53,6 +53,10 @@ jobs:
         shell: pwsh
         run: ./source/tools/verify-repository-hygiene.ps1
 
+      - name: Validate E0 multiplayer evidence parser
+        shell: pwsh
+        run: ./source/tools/multiplayer-lab/test-e0-search-efficiency-validator.ps1
+
       - name: Validate target manifest and project XML
         shell: pwsh
         run: |

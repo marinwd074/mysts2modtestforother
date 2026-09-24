@@ -157,7 +157,7 @@ internal static partial class CombatSearchCoordinator
                 selected.SearchEfficiencyEvaluationContextId ?? string.Empty);
             PopulateRequestWorkTotals(selected, requestWorkTotals);
             selected.PortfolioTelemetry = portfolioTelemetry;
-            LogSearchEfficiencySummary(policy.Diagnostics, selected, portfolioTelemetry);
+            LogSearchEfficiencySummary(root, policy.Diagnostics, selected, portfolioTelemetry);
             return selected;
         }
         catch (OperationCanceledException)
@@ -174,6 +174,7 @@ internal static partial class CombatSearchCoordinator
             PopulateRequestWorkTotals(currentCompleteAdoptableResult, requestWorkTotals);
             currentCompleteAdoptableResult.PortfolioTelemetry = portfolioTelemetry;
             LogSearchEfficiencySummary(
+                root,
                 policy.Diagnostics,
                 currentCompleteAdoptableResult,
                 portfolioTelemetry);
@@ -182,6 +183,7 @@ internal static partial class CombatSearchCoordinator
     }
 
     private static void LogSearchEfficiencySummary(
+        CombatRootSnapshot root,
         SearchDiagnosticsSink diagnostics,
         SolverResult selected,
         BeamWidthPortfolioTelemetry telemetry)
@@ -200,6 +202,7 @@ internal static partial class CombatSearchCoordinator
                     : "-";
             diagnostics.Info(
                 $"[CombatSolver/Test] SEARCH_E0_TIMELINE candidate_id={origin.CandidateId} " +
+                $"player_count={root.PlayerCount} " +
                 $"member_id={origin.SearchMemberId} member_kind={member?.Kind ?? "unknown"} " +
                 $"generated_ms={FormatTimestamp(origin.FirstGeneratedTicks)} " +
                 $"evaluated_ms={FormatTimestamp(milestones.EvaluatedTicks)} " +

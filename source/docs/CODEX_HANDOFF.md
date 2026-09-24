@@ -58,6 +58,7 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - 同一 pinned run 已重跑 attempt 2，并且整条 Release/E0/U0-U1/U2/P0-P1/历史 A-B 链全部 PASS。第二次 E0 仍由 `potion_disabled#1` 产生最终赢家：简单攻防 `924.454 → 984.287 → 985.911 → 3102.190 ms`，抽牌/能量 `1740.239 → 1806.158 → 1807.911 → 1924.488 ms`。墙钟绝对值有明显波动，但“首成员早已生成/选中，发布更晚”的结构结论重复出现。
 - attempt 1 的 P0/P1 尾部曾在 5 秒墙钟边界失败；同一提交 attempt 2 通过，且固定工作量测试始终通过，因此归类为墙钟波动，不作为 E0 搜索语义回归。
 - E0 harness 还尝试了 detached 双玩家根；生产搜索按当前正式边界以 `NotSupportedException: 第一版只支持单人战斗。` fail closed，因此没有绕过保护伪造多人 PASS。Library 中可见历史真实多人问题包，但当前 Project 没有授权重新物化这些 ZIP 原始字节供 current HEAD 重放。严格 E0 验收仍缺一份当前 HEAD 的真实 Host/Client 或可访问的可重放 `PlayerCount=2` 问题包。
+- E0 实机闭环工具已补齐：`SEARCH_E0_*` 摘要会进入持久 process journal，timeline 显式记录 `player_count`；`source/tools/multiplayer-lab/validate-e0-search-efficiency-results.ps1` 可直接读取 JSONL/日志目录/ZIP，只在存在真实多人 runtime marker（或 Probe `PlayerCount=2`）且同一候选确实跑过 Shadow + Scenario Matrix 时输出 PASS。离线 detached harness 不满足该条件。
 
 ## 当前未验证边界
 
@@ -69,8 +70,8 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 
 继续 E0，不进入 E1：
 
-1. 获取一份 current HEAD 可访问的真实 Host/Client 或可重放 `PlayerCount=2` 问题包。
-2. 在不绕过正式多人边界的前提下，补第三个“队友配合”样本的生成→评估→选中→发布表，并记录 Shadow/Scenario Matrix 独占时间。
+1. 用 current HEAD 做一次真实 Host/Client 的 Advisor 或 Safe Execute 搜索并保留日志/问题包；不需要额外刷局，只要该次搜索实际进入 Shadow + Scenario Matrix。
+2. 对证据运行 `validate-e0-search-efficiency-results.ps1`；PASS 后把第三行生成→评估→选中→发布及 Shadow/Scenario Matrix/materialization 独占时间写回本表并关闭 E0。
 3. 三类样本齐全后关闭 E0；再依据当前证据优先进入 E1，验证“同标准候选能否更早发布”，保持总预算、目标和候选集不变。
 4. E1 前不修改 Beam/Robust/动作排序/预算，不用单人或 L1 合同冒充多人 E0 证据。
 
