@@ -309,13 +309,16 @@ internal sealed partial class CombatBeamSolver
 
     private void CompleteMultiplayerBeamObjectiveAb(
         int boundaryId,
-        IReadOnlyList<SearchNode> finalRetained)
+        IReadOnlyList<SearchNode> afterOuterPortfolios,
+        IReadOnlyList<SearchNode> afterIncumbent)
     {
         if (!_beamObjectiveAbPending.Remove(boundaryId, out BeamObjectiveAbPending pending))
             return;
 
-        int? finalRank = ObservedReferenceIndex(finalRetained, pending.Witness);
-        bool rescued = finalRank.HasValue;
+        int? portfolioRank = ObservedReferenceIndex(afterOuterPortfolios, pending.Witness);
+        int? finalRank = ObservedReferenceIndex(afterIncumbent, pending.Witness);
+        bool rescuedByOuterPortfolio = portfolioRank.HasValue;
+        bool survivedIncumbent = finalRank.HasValue;
         policy.Diagnostics.Info(
             $"[CombatSolver/Multiplayer] MP_BEAM_RETENTION_AB_FINAL " +
             $"sample={pending.Sample} boundary={boundaryId} " +
@@ -323,9 +326,12 @@ internal sealed partial class CombatBeamSolver
             $"legacy_only_selected={pending.LegacyOnlySelectedCount} " +
             $"legacy_rank={pending.LegacyRank + 1} " +
             $"production_raw_rank={pending.ProductionRawRank + 1} " +
+            $"portfolio_rank={(portfolioRank.HasValue ? portfolioRank.Value + 1 : 0)} " +
             $"final_rank={(finalRank.HasValue ? finalRank.Value + 1 : 0)} " +
-            $"rescued_by_outer_portfolio={rescued.ToString().ToLowerInvariant()} " +
-            $"beam_pruned={(!rescued).ToString().ToLowerInvariant()} " +
+            $"rescued_by_outer_portfolio={rescuedByOuterPortfolio.ToString().ToLowerInvariant()} " +
+            $"survived_incumbent={survivedIncumbent.ToString().ToLowerInvariant()} " +
+            $"beam_pruned={(!rescuedByOuterPortfolio).ToString().ToLowerInvariant()} " +
+            $"final_pruned={(!survivedIncumbent).ToString().ToLowerInvariant()} " +
             $"prefix={DescribeBeamObjectiveAbPrefix(pending.Witness)}");
     }
 
