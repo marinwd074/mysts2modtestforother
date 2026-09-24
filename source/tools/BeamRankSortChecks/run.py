@@ -43,6 +43,7 @@ classes = '''namespace CombatSolver;
 internal sealed record PredictionGap(string SourceId, string Method, string Reason, bool Compensated);
 internal sealed record CombatProgressState(int Stable);
 internal sealed class SearchNode {
+public string Label = string.Empty;
 public double Score;
 public int ActionCount;
 public required SimulationSnapshot Snapshot;
