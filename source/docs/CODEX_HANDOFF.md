@@ -90,7 +90,7 @@
 - 重锤→烙印、连续 Offering 的既有坏体验属于 Safe Execute / deployment 截断，不是 Robust 情景排序证据；这些执行层边界由 U1/U6 负责。
 - 新增 `MultiplayerScenarioStrategySelection` 和 `MP_QUALITY_SORTING`。同一 U3 Matrix / 同一预算下现在能直接看到 baseline winner 是否被 Robust 覆盖、三策略是否一致，并给出 `quality_signal=scenario_override_disputed|none`；不增加 replay、不改变搜索预算。
 - 生产仍为 Robust。当前两个可复原排序坏例（ANGER、X1 T3）都属于“好候选已存在但基础最终排序曾选错”；重锤/Offering 属于执行层。没有证据证明修复后 HEAD 上是 U3/U4 Robust 推翻了更好的共同搜索核心路线，因此不改风险权重、不把等权压力情景均值当概率期望。
-- 当前验证：源码改动已推送；compatibility / pinned Release CI 正在运行。无新的真实 Host/Client 重放，因此不宣称当前实际出牌质量已实机改善。
+- 当前验证：compatibility run `35985739446` **SUCCESS**；Pinned 0.107.1 Release run `35985739404` **SUCCESS**。后者的 Release、U0/U1 structural+pinned replay、U2 degenerate、P0/P1 pinned runtime 与历史分类链全部通过。无新的真实 Host/Client 重放，因此不宣称当前实际出牌质量已实机改善。
 
 ## 下一任务
 
