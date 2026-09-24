@@ -105,12 +105,12 @@ try {
                 # Godot/plain logs are valid evidence inputs too.
             }
 
-            if ($message -like '*[CombatSolver/MultiplayerAdvisor] SEARCH_DEBOUNCED_START*' -or
-                $message -like '*[CombatSolver/MultiplayerProbe] CAPABILITY_BOUNDARY entered=true*') {
+            if ($message.Contains('[CombatSolver/MultiplayerAdvisor] SEARCH_DEBOUNCED_START', [StringComparison]::Ordinal) -or
+                $message.Contains('[CombatSolver/MultiplayerProbe] CAPABILITY_BOUNDARY entered=true', [StringComparison]::Ordinal)) {
                 $runtimeMultiplayerObserved = $true
             }
 
-            if ($message -like '*[CombatSolver/Test] SEARCH_E0_TIMELINE *') {
+            if ($message.Contains('[CombatSolver/Test] SEARCH_E0_TIMELINE ', [StringComparison]::Ordinal)) {
                 $fields = Parse-KeyValues $message
                 $current = [pscustomobject]@{
                     sourceFile = $file.FullName
@@ -126,10 +126,10 @@ try {
             if ($null -eq $current) {
                 continue
             }
-            if ($message -like '*[CombatSolver/Test] SEARCH_E0_MEMBER *') {
+            if ($message.Contains('[CombatSolver/Test] SEARCH_E0_MEMBER ', [StringComparison]::Ordinal)) {
                 $current.members.Add([pscustomobject](Parse-KeyValues $message))
             }
-            elseif ($message -like '*[CombatSolver/Test] SEARCH_E0_PHASE *') {
+            elseif ($message.Contains('[CombatSolver/Test] SEARCH_E0_PHASE ', [StringComparison]::Ordinal)) {
                 $current.phases.Add([pscustomobject](Parse-KeyValues $message))
             }
         }
