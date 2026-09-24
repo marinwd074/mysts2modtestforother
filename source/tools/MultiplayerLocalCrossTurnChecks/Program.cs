@@ -76,7 +76,7 @@ Check(
         && MultiplayerLocalCrossTurnContracts.DelayAngerCopyPreferenceUntilAfterEnemyHp(
             multiplayerRouteSemanticsActive: true,
             completeVictory: false),
-    "The Anger ordering exception activates only for an actual multiplayer route and only on incomplete outcomes.");
+    "Quality bad-route 25b905c1322b41e6b9a8e10baeae5606 keeps deterministic enemy-HP progress ahead of Anger copy cost only for incomplete real multiplayer routes.");
 
 Check(
     MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
@@ -759,6 +759,26 @@ Check(
             MultiplayerScenarioRiskStrategy.BoundedRisk,
             u4RiskAbRanks) == 2,
     "U4 same-matrix selector can report distinct Robust, nominal-reference, and BoundedRisk winners without another search.");
+
+MultiplayerScenarioDecisionRank[] qualityScenarioOverrideRanks =
+[
+    u4NominalFavorite,
+    u4RobustFavorite,
+    u4BoundedFavorite,
+];
+MultiplayerScenarioStrategySelection qualityStrategySelection =
+    MultiplayerScenarioReevaluationPolicy.CompareStrategies(
+        qualityScenarioOverrideRanks,
+        baselineIndex: 0);
+Check(
+    qualityStrategySelection.BaselineIndex == 0
+        && qualityStrategySelection.RobustIndex == 1
+        && qualityStrategySelection.NominalReferenceIndex == 0
+        && qualityStrategySelection.BoundedRiskIndex == 2
+        && qualityStrategySelection.RobustOverridesBaseline
+        && !qualityStrategySelection.RobustAgreesWithNominal
+        && !qualityStrategySelection.RobustAgreesWithBoundedRisk,
+    "Quality-first attribution distinguishes a Robust scenario override from the shared-core baseline without changing any risk weight or search budget.");
 
 Check(
     MultiplayerScenarioReevaluationPolicy.SelectNominalToleranceExperimentIndex(
