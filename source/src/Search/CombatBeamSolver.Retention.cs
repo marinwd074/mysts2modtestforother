@@ -279,7 +279,7 @@ internal sealed partial class CombatBeamSolver
             // The paired value events avoid equating a `with` clone with a dropped route.
             ObserveSearchPathBoundary(
                 bounded, SearchPathObservationStage.PruneFinal, "after_incumbent", pathBoundaryId);
-            if (observeGlobalRetention != null)
+            if (WantsSearchPathRetentionPool(pool))
             {
                 ObserveSearchPathRetentionPool(
                     bounded, SearchPathObservationStage.RetentionPoolFinal, "outer_prune_final", pathBoundaryId);
