@@ -1,6 +1,6 @@
 # U6 — 实机闭环与清理
 
-状态：**代码清理与实机判定器已完成；真实 Host/Client U6 smoke 仍 UNVERIFIED。**
+状态：**COMPLETE（实现与清理）。真实 Host/Client U6-C smoke 已由用户明确跳过，证据状态保持 UNVERIFIED。**
 
 ## 已完成
 
@@ -15,7 +15,7 @@
   - `SolverController.Deployment.cs`
 - 新增 `validate-u6-runtime-closure.ps1`，只判定离线无法证明的网络链；synthetic 合同明确区分 PASS / FAIL / UNVERIFIED。
 
-## U6 实机唯一必补链
+## 保留的 U6-C 可选实机补证链
 
 不再重复实机验证 U5 已由 pinned production replay 覆盖的五类顺序语义。真实双端只需要一次可控场景：
 
@@ -46,10 +46,10 @@ pwsh -NoLogo -NoProfile -File .\source\tools\multiplayer-lab\validate-u6-runtime
 
 Pinned / compatibility 只能证明编译、合同与 detached production replay。U6 不把这些结果冒充真实 Host/Client ownership/network timing。
 
-真实 U6 smoke PASS 后，才把 U6 整体标记 COMPLETE。之后再讨论本地精确斩杀、缓存、增量修补或更远期预测；这些不是 U6 当前验收项。
+U6 的代码迁移、旧边界清理、validator 与合同回归已经完成，因此实现阶段关闭。U6-C 仅作为未来可选 runtime 补证，不执行时不得写成 PASS。后续可以进入本地精确斩杀、缓存、增量修补或更远期预测的独立阶段。
 
 
-## U6-C — 一次真实 Host/Client smoke
+## U6-C — 已跳过；保留的一次真实 Host/Client smoke
 
 本阶段只跑 **Vanilla Host + 1 个 CombatSolver Client**。Vanilla Host 同时充当真实队友，不再启动第三个 Client。
 
@@ -135,4 +135,4 @@ pwsh -NoLogo -NoProfile -File .\source\tools\multiplayer-lab\validate-u6-runtime
 - exit 1：U6-C FAIL；直接按 validator 的 FAIL evidence 修复，不换场景掩盖问题。
 - exit 2：U6-C UNVERIFIED；说明本次没有形成完整 forecast → remote delta → fresh search 证据，不把它写成 PASS。
 
-U6-C 不重复 U5 的 pinned 顺序语义测试，也不进入 U6-D handoff 清理。
+U6-C 不重复 U5 的 pinned 顺序语义测试。2026-09-24 本轮由用户明确跳过；本节仅保留未来补证步骤。
