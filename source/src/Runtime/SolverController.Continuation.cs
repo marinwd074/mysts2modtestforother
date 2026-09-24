@@ -181,11 +181,30 @@ internal static partial class SolverController
     {
         AssertMainThread();
         choices = null;
+        CachedContinuation? cached = null;
         if (!ReferenceEquals(_combat.State, state)
             || _combat.ContinuationSource is not { } source
             || _combat.LastSolverDeployedTurn != turn - 1
-            || !source.Continuations.Any(item => item.StartTurnNumber == turn))
+            || (cached = source.Continuations.FirstOrDefault(
+                item => item.StartTurnNumber == turn)) == null)
         {
+            return false;
+        }
+
+        // Multiplayer Safe Execute can reach this hook before the normal continuation
+        // reuse path validates the complete next-turn state. Do not replay a native
+        // turn-start choice across a monster lifecycle transition (revive, transform,
+        // move-state change, etc.). Test Subject keeps the same combat id while changing
+        // form, so combat identity alone is insufficient here.
+        if (SolverSessionCapabilities.Capture(state).IsMultiplayer
+            && !MatchesTurnSetupEnemyLifecycle(
+                cached.ExpectedState,
+                ContinuationStamp.CaptureLive(state),
+                out string lifecycleDifference))
+        {
+            Entry.Logger.Info(
+                $"[CombatSolver/MultiplayerSafeExecute] MP_TURN_SETUP_REPLAY_REJECT " +
+                $"turn={turn} reason=enemy_lifecycle_mismatch detail={lifecycleDifference}");
             return false;
         }
 
@@ -199,6 +218,73 @@ internal static partial class SolverController
             return false;
         choices = planned;
         return true;
+    }
+
+    private static bool MatchesTurnSetupEnemyLifecycle(
+        ContinuationStamp expected,
+        ContinuationStamp actual,
+        out string difference)
+    {
+        Dictionary<string, string> expectedFields = CaptureTurnSetupEnemyLifecycleFields(
+            expected.StateText);
+        Dictionary<string, string> actualFields = CaptureTurnSetupEnemyLifecycleFields(
+            actual.StateText);
+        if (expectedFields.Count != actualFields.Count)
+        {
+            difference = $"field_count expected={expectedFields.Count} actual={actualFields.Count}";
+            return false;
+        }
+
+        foreach ((string name, string expectedValue) in expectedFields)
+        {
+            if (!actualFields.TryGetValue(name, out string? actualValue))
+            {
+                difference = $"field={name} expected={expectedValue} actual=<missing>";
+                return false;
+            }
+            if (string.Equals(expectedValue, actualValue, StringComparison.Ordinal))
+                continue;
+            difference = $"field={name} expected={expectedValue} actual={actualValue}";
+            return false;
+        }
+
+        difference = "none";
+        return true;
+    }
+
+    private static Dictionary<string, string> CaptureTurnSetupEnemyLifecycleFields(
+        string stateText)
+    {
+        Dictionary<string, string> result = new(StringComparer.Ordinal);
+        foreach (string field in stateText.Split(';'))
+        {
+            int separator = field.IndexOf('=');
+            if (separator <= 0)
+                continue;
+            string name = field[..separator];
+            string value = field[(separator + 1)..];
+            if (name.StartsWith("AI", StringComparison.Ordinal)
+                || name.StartsWith("MS", StringComparison.Ordinal))
+            {
+                result[name] = value;
+                continue;
+            }
+            if (name.Length <= 1
+                || name[0] != 'E'
+                || !int.TryParse(name.AsSpan(1), out _))
+            {
+                continue;
+            }
+
+            string[] parts = value.Split('/');
+            // E fields are combat-id/monster/slot/hp/max-hp/block/move. HP and block may
+            // legitimately change during player turn-start effects; the other fields are
+            // the lifecycle/identity contract needed before replaying a cached choice.
+            result[name] = parts.Length == 7
+                ? $"{parts[0]}/{parts[1]}/{parts[2]}/{parts[4]}/{parts[6]}"
+                : value;
+        }
+        return result;
     }
 
     private static string DescribeReplanAudit()
