@@ -1395,12 +1395,18 @@ internal static partial class SolverController
         int currentTurn = LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0;
         LiveCombatStamp currentStamp = LiveCombatStamp.Capture(state);
         SolverResult? refreshSource = _combat.LatestResult;
+        string refreshCompatibilityReason = "source_or_stamp_missing";
+        bool replayCompatible = _combat.LatestStamp is { } previousStamp
+            && IsBoundedMultiplayerRefreshCompatible(
+                previousStamp,
+                currentStamp,
+                out refreshCompatibilityReason);
         bool canAttemptBoundedPlanRefresh =
             !preserveExpectedSafeDeployment
             && refreshSource != null
             && refreshSource.StartTurnNumber == currentTurn
             && refreshSource.MultiplayerReplayCandidates.Count > 0
-            && _combat.LatestStamp == currentStamp;
+            && replayCompatible;
         _combat.PendingMultiplayerPlanRefresh = canAttemptBoundedPlanRefresh;
         if (!canAttemptBoundedPlanRefresh)
             _combat.LastPlanRefreshDecisionTimestampMilliseconds = null;
@@ -1469,6 +1475,7 @@ internal static partial class SolverController
             $"turn={LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0} " +
             $"continuation_preserved={preservePendingContinuation.ToString().ToLowerInvariant()} " +
             $"bounded_refresh_pending={canAttemptBoundedPlanRefresh.ToString().ToLowerInvariant()} " +
+            $"refresh_compatibility={refreshCompatibilityReason} " +
             $"route_identity={(refreshSource?.RouteIdentity ?? _combat.ContinuationSource?.RouteIdentity) ?? "-"}");
     }
 
