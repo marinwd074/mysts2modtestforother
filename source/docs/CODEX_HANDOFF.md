@@ -93,6 +93,10 @@
 - 当前验证：compatibility run `35985739446` **SUCCESS**；Pinned 0.107.1 Release run `35985739404` **SUCCESS**。后者的 Release、U0/U1 structural+pinned replay、U2 degenerate、P0/P1 pinned runtime 与历史分类链全部通过。无新的真实 Host/Client 重放，因此不宣称当前实际出牌质量已实机改善。
 - Beam 排序 A/B 已加入 `BeamRankSortChecks`，直接提取当前生产 `SortByBeamRank / SortByLegacyBeamRank`。固定同一 3 候选池与相同 Beam top-2：单人 legacy 保留 `[A,B]`，多人 TeamObjective 保留 `[B,C]`，即 A 是“单人会保留、多人会在主 Beam 排掉”的候选；当三个候选的 TeamObjective 完全相同时，多人重新退化为 legacy `[A,B,C]`。这证明**主 Beam 的多人目标本身具备提前丢失单人强候选的机制**，但该输入是固定合成 rank，不是当前真实战斗根，因此暂不据此修改生产排序。
 - compatibility run `35986836489` **SUCCESS**：`BeamRankSortChecks` 输出 `single_top2=[A,B]`、`multiplayer_top2=[B,C]`、`single_only=[A]`；全套 L1 为 `32 PASS / 0 FAIL / 0 SKIP`。下一步应在一个当前 HEAD 的真实多人根上用相同候选池/预算做 legacy-vs-TeamObjective retention trace，确认用户认为更好的合法路线是否真的在 Beam 层丢失。
+- 已把真实多人根 A/B 接入生产诊断但不改变选择：详细诊断开启时，同一个实际 `RankBest` 候选池同时计算当前 TeamObjective 与 legacy 单人排序；`MP_BEAM_RETENTION_AB` 记录 raw/RankBest 差异，`MP_BEAM_RETENTION_AB_FINAL` 再区分外层 portfolio 是否救回以及 incumbent 是否随后裁掉。最多记录 12 个差异样本，不增加搜索节点/重放。
+- 新增 `validate-beam-retention-ab-results.ps1` 与 6-case 自测，输出 `no_difference_observed / raw_rank_difference_only / outer_portfolio_rescue_observed / incumbent_pruning_observed / beam_pruning_observed`。compatibility run `35988718963` **SUCCESS**，全套 `33 PASS / 0 FAIL / 0 SKIP`，其中 `MULTIPLAYER_BEAM_RETENTION_AB_VALIDATOR_PASS`。
+- Pinned 0.107.1 run `35988652044` 已通过 Release 编译、U0/U1、U2、P0 contracts 和 P0/P1 harness build；记录本检查点时仍在 P0/P1 pinned runtime。此前 A/B 接线的编译错误（外层字段/嵌套 private helper/未使用 boundary id）均已由 pinned 门禁暴露并修掉。
+
 
 ## 下一任务
 
@@ -100,7 +104,7 @@
 
 边界：
 
-1. 优先做真实多人根的 Beam retention A/B：同一候选池、同一 BeamWidth/节点/时间预算，只切换 legacy 单人排序与 TeamObjective 排序；记录每层 top-k 身份和首次丢失层。若手打前缀未进入 FINAL_CANDIDATE，再区分未枚举与 Beam 丢失；不要直接改 U4。
+1. **下一步已到真实 Host/Client 人工边界**：在 Solver 设置 → 问题反馈打开“搜索分支调试日志”，用当前 HEAD 复现一个明显不如手打的多人局面，记下更好的合法手打前缀并保留正式 Client journal/问题包。随后运行 `validate-beam-retention-ab-results.ps1`。若 `beam_pruned=true` 且对应 prefix 是更好的合法路线，才修改主 Beam；若被 portfolio 救回，则继续向 FINAL_CANDIDATE/U3/U4 追踪。
 2. 若 hand/baseline 候选仍在且 `robust_overrode_baseline=true`，再用同一 Matrix 的各情景指标判断是否确为 Robust 过度保守；没有证据不切默认。
 3. 若 FINAL_SELECTION 正确但实际动作缺失，回到 Safe Execute / Choice / continuation 处理，不污染排序目标。
 4. 比较生存、累计战损、最终 HP、结束轮数、药水支出与响应时间；保持总预算不变。
