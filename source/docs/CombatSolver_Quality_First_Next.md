@@ -109,14 +109,15 @@
 
 ### 第三项第一轮实施状态（2026-09-24）
 
-**已完成坏路线归因与生产排序可观测性切片；尚无证据支持切换默认 Robust。**
+**现有坏路线证据闭环完成：两个排序坏例均定位到基础最终排序；尚无证据支持切换默认 Robust。**
 
 - 真实历史问题包 `25b905c1322b41e6b9a8e10baeae5606`：T2 手牌包含 `ANGER(0)`，旧路线为 `Tremble → Dismantle → Strike → EndTurn`，在 Shuffle 边界形成 `PartialLocalCrossTurnProjection`，明显遗漏合法的 0 费即时伤害。该问题定位在**共同搜索后的最终基础排序**：未完成多人路线过早比较 `AngerCopiesGenerated`，压过了确定的 Enemy HP 进展。现 HEAD 已保留针对性修复：仅实际多人未完成路线把 Enemy HP 排到 Anger copy 长期成本之前；单人和完整胜利排序不变。
+- 历史 X1 的 **T3 空推荐** 是第二个独立坏路线样本：搜索中已经存在当前回合可出的 `PlayCard` 候选，但局部质量相同/等价时，最终基础排序被 `ActionCount` 的短路线 tie-break 选成仅 `T3:EndTurn`。当前 HEAD 已在多人本地跨回合的成员内排序与 Beam portfolio 选择中保留“当前回合有可出牌”平局优先；该规则不作用于单人退化夹具。
 - 重锤→烙印以及连续 Offering 的历史失败属于 **Safe Execute / deployment gate**：候选已经存在，但 Choice、action ceiling 或后态 continuation 曾截断后缀。这些不能作为“Robust 排序错误”的证据，相关执行边界已由 U1/U6 处理。
 - 新增 `MultiplayerScenarioStrategySelection`：在**同一 U3 情景 Matrix、同一预算、零额外 replay**下同时记录 baseline、Robust、NominalReference、BoundedRisk 的选择索引，并显式给出 Robust 是否覆盖 baseline。
-- 新增 `MP_QUALITY_SORTING`：直接输出 `production_selected_baseline_rank`、`override_layer=baseline|scenario_robust`、`robust_overrode_baseline` 以及 Robust 与两条参考策略是否一致。下一份当前版本坏路线不再需要靠人工猜测“是不是 U3/U4 推翻了共同搜索核心”。
+- 新增 `MP_QUALITY_SORTING`：直接输出 `production_selected_baseline_rank`、`override_layer=baseline|scenario_robust`、`robust_overrode_baseline`、Robust 与两条参考策略是否一致，以及 `quality_signal=scenario_override_disputed|none`。下一份当前版本坏路线不再需要靠人工猜测“是不是 U3/U4 推翻了共同搜索核心”。
 - 新合同用固定输入覆盖“baseline 由 Nominal 选择、Robust 在同 Matrix 改选另一决策、BoundedRisk 再选第三决策”的情况，确认归因层只测量已有选择，不改变风险权重和搜索预算；Anger 真实问题包 ID 也写入当前合同说明。
-- **生产行为刻意未变**：仍使用 Robust。当前真实坏路线证据只证明基础排序与执行层曾有缺陷，没有一条当前可复现样本证明 Robust 在修复后的 HEAD 上仍把合法、更优的手打路线推翻。没有该证据前，不把 `0.5` 换成别的任意常数，也不把压力情景均值冒充概率期望。
+- **生产行为刻意未变**：仍使用 Robust。两个可复原的“明显不如手打”排序样本（ANGER 与 X1 T3）都证明**好候选已经存在、基础最终排序曾选错**；重锤/Offering 则属于执行层。现有证据没有一条指向 U3/U4 Robust 推翻了更好的共同搜索核心路线，因此不把 `0.5` 换成别的任意常数，也不把压力情景均值冒充概率期望。
 - 下一步只需对**当前 HEAD 新出现的明显坏路线**保留问题包和明确手打前缀；先看 `FINAL_CANDIDATE → MP_QUALITY_SORTING → FINAL_SELECTION → Safe Execute` 即可定位枚举/Beam/基础排序/情景复评/执行中的哪一层。若 `robust_overrode_baseline=true` 且手打前缀在 baseline 中存活，再进入生产风险策略迁移；否则修实际丢失层。
 
 ## 第四项：最后再决定精确斩杀是否值得加
