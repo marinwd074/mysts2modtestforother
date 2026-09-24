@@ -1333,8 +1333,8 @@ internal static partial class SolverController
         string decisionReason)
     {
         List<string> failedChecks = [];
-        if (!facts.NativePlayCardCaptured)
-            failedChecks.Add("native_play_card");
+        if (!facts.NativeLocalActionCaptured)
+            failedChecks.Add("native_local_action");
         if (!facts.ActionQueueIdle)
             failedChecks.Add("action_queue_idle");
         if (!facts.ExpectedContinuationStateMatched)
