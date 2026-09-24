@@ -98,6 +98,17 @@
 - Pinned 0.107.1 run `35988652044` **SUCCESS**：Release、U0/U1 structural+pinned replay、U2 degenerate、P0 contracts 与 harness build 均通过；P0/P1 current runtime 的 timed lane 仍命中既有 time boundary，但历史 A/B 分类得到 `P0_FIXED_WORK OBSERVED_EQUIVALENT`、`P0_JOINT PASS`、`P1_OBJECTIVE_CONTRACTS PASS`、`P1_RUNTIME FIXED_WORK_PASS_TIME_BOUNDARY`，因此 workflow 按既有规则通过。此前 A/B 接线的编译错误（外层字段/嵌套 private helper/未使用 boundary id）均已由 pinned 门禁暴露并修掉。
 
 
+## 2026-09-24 CEREMONIAL_BEAST / Headbutt / Vicious 质量样本
+
+- CEREMONIAL_BEAST 问题包第 6 回合真实根：本地 `61/80 HP`、`3 Energy`，手牌 `FLAME_BARRIER / CRIMSON_MANTLE / JUGGLING / VICIOUS`，已有 `CORRUPTION / STRENGTH / HELLRAISER / RUPTURE`。多次 `POLICY_BASELINE / FINAL_SELECTION` 都在打完 0 费 Skill 后以 **1 Energy** 结束，且 `scenario_rerank=false`、`chance_rerank=false`，所以该遗漏发生在 U3/U4 之前。
+- 同一场战斗早期完整投影多次明确包含第 6 回合 `VICIOUS`，证明它不是不可枚举/不可播放；当前第 6 回合新根才把它丢掉。
+- 精确模拟原本已经实现：`CardPowerOnPlaySupport` 会施加 `ViciousPower`，`PowerLifecycleSupport` 在本人施加 `VulnerablePower` 时按 Vicious 层数抽牌。缺口在 Beam 战略估值：`StrategicEffectModel` 未识别 `ViciousPower`，旧代码仅落入 `Scaling(amount)` 的通用兜底，几乎看不到未来抽牌收益。
+- 现 HEAD 已把 Vicious 建模为**实际可达 Vulnerable 施加次数 × 平均卡牌价值**的 `CardAccessPotential`，使用既有 reachable-play / horizon 口径，不加“剩余 1 费必打能力牌”规则，也没有新任意权重。弱化/中毒等普通 debuff 不会误计为 Vicious 触发。
+- 提交：`750d146`（Vicious strategic value）、`4f60da7`（Vulnerable subset contract）、`e08f21d`（pinned actual `ViciousPower` valuation guard）。
+- 验证：compatibility run `35999711938` **SUCCESS**，`33 PASS / 0 FAIL / 0 SKIP`；Pinned 0.107.1 Release run `35999711924` **SUCCESS**，Release、U0/U1 pinned、U2、P0/P1 与历史分类链全部通过。真实多人上“第 6 回合现在一定会打 Vicious”仍需新包验证，不能仅凭离线估值合同宣称。
+- Headbutt 不应再造第二套“多人自动选牌”实现。当前 `SolverController.Deployment` 已让单人和 Multiplayer Safe Execute 共用 `NativeChoiceRuntime`。本次 CEREMONIAL_BEAST 实机日志中 `HEADBUTT[UNRELENTING]` 有完整链：`DEPLOY_CHOICE_PLAN → NATIVE_CHOICE_REQUEST → NATIVE_CHOICE_SELECTED → U1_POST_STATE_COMPARE continuation_match=true → SafeToContinue`，并且后态 draw top 为 `UNRELENTING`。此前 MAWLER 包只出现未来路线里的 Headbutt，没有实际 `DEPLOY_ACTION card=HEADBUTT`，不能作为“自动选择失败”的复现证据。
+- 与 Headbutt immediate Choice 不同，上一 MAWLER/Stampede 暴露的是**跨回合 TurnStart Choice 未重放**；该独立缺口已由 `f4b613e / 2cd14e5 / 1ece76e` 增加 Safe Execute 对已接受路线的 planned turn-start choice replay，仍不开放多人首回合新 TurnSetup 搜索。
+
 ## 下一任务
 
 继续第三项，只处理**当前 HEAD 新出现的明显坏路线**。优先保留问题包和用户明确更好的合法手打前缀，并用 `FINAL_CANDIDATE → MP_QUALITY_SORTING → FINAL_SELECTION → Safe Execute` 定位丢失层。
