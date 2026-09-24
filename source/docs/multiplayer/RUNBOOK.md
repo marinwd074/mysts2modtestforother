@@ -136,6 +136,59 @@ git submodule update --init --recursive -- source/tools/multiplayer-lab/Multipla
 - 测试工具只用于 Multiplayer Lab，不进入 CombatSolver 正式发布包。
 - pinned 0.107.1 的一次最小 Host/Client Smoke 已确认同构 DLL/PCK 正常进战斗、双向 `energy 1` 与单张原生加牌同步；见 [`evidence/gm-console-multiplayer-smoke-2026-09-22.json`](evidence/gm-console-multiplayer-smoke-2026-09-22.json)。Tag Team 实际出牌语义仍未验证。
 
+## Quality-first 主 Beam A/B 实机诊断
+
+用于判断当前多人 `TeamObjective` 是否在**主 Beam 保留阶段**提前丢掉单人 legacy Beam
+会保留的候选。该诊断不改变生产路线、不增加搜索节点，只在同一候选池上额外计算 legacy
+排序；最多记录 12 个差异样本。
+
+前置：
+
+- Solver 设置 → 问题反馈 → 打开 **“搜索分支调试日志”**。该开关本来就只建议排查时开启，
+  会增加日志开销并将并行搜索切为单线程。
+- 继续使用本手册的正式 `HostVanilla + ClientCombatSolver`、warm-up 后第二次启动和
+  `-MultiplayerMode safe-execute`。
+- 优先复现一个“Solver 明显不如手打”的局面，并记下当时认为更好的合法手打前缀。
+  不需要真的手动打出该前缀；先保留 Solver 完成搜索后的 journal / 问题包。
+
+有效日志至少应出现：
+
+~~~text
+MP_BEAM_RETENTION_AB_START
+~~~
+
+出现差异时还会记录：
+
+~~~text
+MP_BEAM_RETENTION_AB
+MP_BEAM_RETENTION_AB_FINAL
+~~~
+
+`FINAL` 的关键分类：
+
+- `beam_pruned=true`：单人 legacy top-k 候选在 RankBest 后也没被外层 portfolio 救回，
+  可以归因到主 Beam retention；
+- `rescued_by_outer_portfolio=true`：虽然 TeamObjective 改了普通 Beam 排名，但最终保路
+  portfolio 把候选救回，不能称为真正 Beam 丢失；
+- `beam_pruned=false final_pruned=true`：候选先被 portfolio 救回，随后被 incumbent
+  bound 去掉，应查 incumbent，不应改 TeamObjective；
+- 只有 `MP_BEAM_RETENTION_AB_START` 而没有差异行：本次真实根上未观察到 legacy 与当前
+  多人 Beam 的 top-k 差异。
+
+验证命令：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-beam-retention-ab-results.ps1 `
+  -LogPath '<post-restart-client-combat-journal.jsonl>' `
+  -OutputPath '.\.local\multiplayer-lab\results\beam-retention-ab-summary.json'
+~~~
+
+验证器返回 `PASS` 只说明 A/B 证据内部一致，并给出
+`no_difference_observed / raw_rank_difference_only / outer_portfolio_rescue_observed /
+incumbent_pruning_observed / beam_pruning_observed` 分类。它**不会**自动断言 legacy 路线
+战略上更好；质量结论仍需要把对应 `prefix` 与用户明确的更优合法手打前缀、最终战损 /
+HP / 结束轮数一起对照。
+
 ## MP-2 Safe Execute 正式 token Smoke
 
 正式 token 只接受明确的 `COMBATSOLVER_MULTIPLAYER_MODE=safe-execute` opt-in，
