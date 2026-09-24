@@ -469,10 +469,28 @@ internal static partial class SolverController
                             && usePotion.PotionIndex == (uint)action.PotionSlot,
                         () => potion.EnqueueManualUse(target),
                         token);
+                    capturedAction = queuedAction;
                     actionCompletion = queuedAction.CompletionTask;
                     LastDeployedActionStartedAtMillisecondsForTesting = System.Environment.TickCount64;
                     DeployedPotionIdsForTesting.Add(action.PotionId);
                     Entry.Logger.Info($"[CombatSolver/Test] DEPLOY_ACTION turn={turn} potion={action.PotionId} slot={action.PotionSlot} target_index={action.TargetIndex} target_combat_id={action.TargetCombatId?.ToString() ?? "-"}");
+                    if (safeExecute)
+                    {
+                        long nativeCapturedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                        long refreshToNativeSubmitMs =
+                            _combat.LastPlanRefreshDecisionTimestampMilliseconds is { } refreshAt
+                                ? Math.Max(0, nativeCapturedAt - refreshAt)
+                                : -1;
+                        Entry.Logger.Info(
+                            $"[CombatSolver/MultiplayerSafeExecute] NATIVE_ACTION_CAPTURED " +
+                            $"timestamp_ms={nativeCapturedAt} " +
+                            $"request_id={safeSession?.RequestId ?? 0} action_index={actionIndex} " +
+                            $"type={queuedAction.GetType().Name} turn={turn} card=- " +
+                            $"potion={action.PotionId} slot={action.PotionSlot} " +
+                            $"refresh_to_native_submit_ms={refreshToNativeSubmitMs} " +
+                            $"local_net_id={player.NetId} custom_network_api_used=false");
+                        _combat.LastPlanRefreshDecisionTimestampMilliseconds = null;
+                    }
                 }
                 else
                 {
@@ -520,12 +538,19 @@ internal static partial class SolverController
                     Entry.Logger.Info($"[CombatSolver/Test] DEPLOY_ACTION turn={turn} card={action.CardId} target_index={action.TargetIndex} target_combat_id={action.TargetCombatId?.ToString() ?? "-"} choice={action.Choice?.Effect.ToString() ?? "-"}");
                     if (safeExecute)
                     {
+                        long nativeCapturedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                        long refreshToNativeSubmitMs =
+                            _combat.LastPlanRefreshDecisionTimestampMilliseconds is { } refreshAt
+                                ? Math.Max(0, nativeCapturedAt - refreshAt)
+                                : -1;
                         Entry.Logger.Info(
                             $"[CombatSolver/MultiplayerSafeExecute] NATIVE_ACTION_CAPTURED " +
-                            $"timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
+                            $"timestamp_ms={nativeCapturedAt} " +
                             $"request_id={safeSession?.RequestId ?? 0} action_index={actionIndex} " +
                             $"type={queuedAction.GetType().Name} turn={turn} card={action.CardId} " +
+                            $"refresh_to_native_submit_ms={refreshToNativeSubmitMs} " +
                             $"local_net_id={player.NetId} custom_network_api_used=false");
+                        _combat.LastPlanRefreshDecisionTimestampMilliseconds = null;
                     }
                 }
                 try
@@ -1223,7 +1248,12 @@ internal static partial class SolverController
             && actionExecutor.FinishedExecutingActions().IsCompleted;
 
         return new(
-            NativePlayCardCaptured: capturedAction is PlayCardAction,
+            NativeLocalActionCaptured: action.Kind switch
+            {
+                PlanActionKind.PlayCard => capturedAction is PlayCardAction,
+                PlanActionKind.UsePotion => capturedAction is UsePotionAction,
+                _ => false,
+            },
             ActionQueueIdle: actionQueueIdle,
             ExpectedContinuationStateMatched: semanticComparison.ContinuationMatched,
             ExpectedRemoteStateMatched: semanticComparison.RemoteMatched,
@@ -1303,8 +1333,8 @@ internal static partial class SolverController
         string decisionReason)
     {
         List<string> failedChecks = [];
-        if (!facts.NativePlayCardCaptured)
-            failedChecks.Add("native_play_card");
+        if (!facts.NativeLocalActionCaptured)
+            failedChecks.Add("native_local_action");
         if (!facts.ActionQueueIdle)
             failedChecks.Add("action_queue_idle");
         if (!facts.ExpectedContinuationStateMatched)
@@ -1421,8 +1451,11 @@ internal static partial class SolverController
     }
 
     private static string DescribeSafeExecutionAction(PlanAction action)
-        => $"{action.Kind}:{action.CardId}:{action.CardOccurrence}:" +
-           $"target={action.TargetCombatId?.ToString() ?? "-"}";
+        => action.Kind == PlanActionKind.UsePotion
+            ? $"{action.Kind}:{action.PotionId}:slot={action.PotionSlot}:" +
+              $"target={action.TargetCombatId?.ToString() ?? "-"}"
+            : $"{action.Kind}:{action.CardId}:{action.CardOccurrence}:" +
+              $"target={action.TargetCombatId?.ToString() ?? "-"}";
 
     private static void AbortSafeExecution(
         NGame host,

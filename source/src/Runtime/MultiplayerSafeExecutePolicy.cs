@@ -13,7 +13,10 @@ internal readonly record struct MultiplayerSafeActionStructuralFacts(
     bool HasCardIdentity,
     bool EndsPlayerTurn,
     bool HasReplaySemantics,
-    bool RequiresChoice);
+    bool RequiresChoice,
+    bool IsUsePotion = false,
+    bool HasPotionIdentity = false,
+    bool HasPotionSlot = false);
 
 internal readonly record struct MultiplayerSafeActionResolvedFacts(
     bool HasLocalPlayer,
@@ -22,7 +25,11 @@ internal readonly record struct MultiplayerSafeActionResolvedFacts(
     bool HasTarget,
     bool TargetExists,
     bool IsAllowedTarget,
-    bool HasIncompleteTargetIdentity);
+    bool HasIncompleteTargetIdentity,
+    bool IsUsePotion = false,
+    bool HasLocalPotion = false,
+    bool PotionIdentityMatches = false,
+    bool PotionTargetValid = true);
 
 internal readonly record struct MultiplayerSafeExecuteLabFacts(
     string? ModeToken,
@@ -50,7 +57,7 @@ internal enum MultiplayerSafeActionRevalidationDecision
 }
 
 internal readonly record struct MultiplayerSafeActionRevalidationFacts(
-    bool NativePlayCardCaptured,
+    bool NativeLocalActionCaptured,
     bool ActionQueueIdle,
     bool ExpectedContinuationStateMatched,
     bool ExpectedRemoteStateMatched,
@@ -311,10 +318,16 @@ internal static class MultiplayerSafeExecutePolicy
     internal static SafeLocalActionDecision ClassifyStructural(
         MultiplayerSafeActionStructuralFacts facts)
     {
-        if (!facts.IsPlayCard)
+        if (!facts.IsPlayCard && !facts.IsUsePotion)
             return new(false, $"kind_{facts.KindToken}");
-        if (!facts.HasCardIdentity)
+        if (facts.IsPlayCard && facts.IsUsePotion)
+            return new(false, "action_kind_ambiguous");
+        if (facts.IsPlayCard && !facts.HasCardIdentity)
             return new(false, "card_identity_missing");
+        if (facts.IsUsePotion && !facts.HasPotionIdentity)
+            return new(false, "potion_identity_missing");
+        if (facts.IsUsePotion && !facts.HasPotionSlot)
+            return new(false, "potion_slot_missing");
         if (facts.EndsPlayerTurn)
             return new(false, "ends_player_turn");
         if (facts.HasReplaySemantics)
@@ -330,10 +343,20 @@ internal static class MultiplayerSafeExecutePolicy
     {
         if (!facts.HasLocalPlayer)
             return new(false, "local_player_missing");
-        if (!facts.HasLocalCard)
-            return new(false, "local_card_missing");
-        if (facts.IsMultiplayerOnlyCard)
-            return new(false, ManualMultiplayerCardReason);
+        if (facts.IsUsePotion)
+        {
+            if (!facts.HasLocalPotion)
+                return new(false, "local_potion_missing");
+            if (!facts.PotionIdentityMatches)
+                return new(false, "local_potion_mismatch");
+        }
+        else
+        {
+            if (!facts.HasLocalCard)
+                return new(false, "local_card_missing");
+            if (facts.IsMultiplayerOnlyCard)
+                return new(false, ManualMultiplayerCardReason);
+        }
         if (facts.HasTarget)
         {
             if (!facts.TargetExists)
@@ -345,6 +368,8 @@ internal static class MultiplayerSafeExecutePolicy
         {
             return new(false, "target_identity_incomplete");
         }
+        if (facts.IsUsePotion && !facts.PotionTargetValid)
+            return new(false, "potion_target_invalid");
         return SafeLocalActionDecision.Allow;
     }
 
@@ -453,7 +478,7 @@ internal static class MultiplayerSafeExecutePolicy
     internal static MultiplayerSafeActionRevalidationDecision RevalidateAction(
         MultiplayerSafeActionRevalidationFacts facts)
     {
-        if (!facts.NativePlayCardCaptured || !facts.ActionQueueIdle)
+        if (!facts.NativeLocalActionCaptured || !facts.ActionQueueIdle)
             return MultiplayerSafeActionRevalidationDecision.ActionMismatch;
         if (!facts.WorldVersionAdvanced || !facts.WorldVersionStable)
             return MultiplayerSafeActionRevalidationDecision.WorldUnstable;

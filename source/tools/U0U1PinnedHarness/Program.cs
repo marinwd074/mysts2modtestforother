@@ -1056,7 +1056,7 @@ internal static class Program
 
     private static MultiplayerSafeActionRevalidationFacts RevalidationFacts()
         => new(
-            NativePlayCardCaptured: true,
+            NativeLocalActionCaptured: true,
             ActionQueueIdle: true,
             ExpectedContinuationStateMatched: true,
             ExpectedRemoteStateMatched: true,

@@ -24,6 +24,7 @@ on:
       - 'source/src/Runtime/MultiplayerSafeExecutePolicy.cs'
       - 'source/src/Runtime/MultiplayerSafeLocalActionClassifier.cs'
       - 'source/src/Runtime/SolverController.cs'
+      - 'source/src/Runtime/SolverController.MultiplayerPlanRefresh.cs'
       - 'source/src/Runtime/SolverController.Deployment.cs'
       - 'source/src/Search/CombatBeamSolver.MultiplayerScenarioReevaluation.cs'
       - 'source/src/Search/CombatBeamSolver.FinalPlanOrdering.cs'

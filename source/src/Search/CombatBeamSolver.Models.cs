@@ -433,7 +433,8 @@ internal sealed partial class CombatBeamSolver
         FinalPlanCandidate Candidate,
         int PotionBranchesRejected,
         int PotionHpSaved,
-        int PotionHpRequired);
+        int PotionHpRequired,
+        IReadOnlyList<MultiplayerReplayCandidate> ReplayCandidates);
 
     private sealed record PendingTurnOutcome(
         SearchNode Node,

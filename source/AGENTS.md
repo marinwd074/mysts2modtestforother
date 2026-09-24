@@ -50,7 +50,8 @@ Agent 可以在当前目标需要时自主：
 
 默认真源只读最小集合：
 
-- `docs/CODEX_HANDOFF.md`：当前状态、未完成项和下一步。
+- `docs/CombatSolver_Quality_First_Next.md`：当前多人求解器主执行目标与优先级；未被用户明确替换或完成前，相关实现按它推进。
+- `docs/CODEX_HANDOFF.md`：当前状态、未完成项和下一步；若仍残留与质量优先文档冲突的旧阶段描述，以质量优先文档为准并修正 handoff。
 - `docs/ARCHITECTURE.md`：只有涉及职责/状态所有权/依赖边界时读取。
 - `docs/TEST_MATRIX.md`：只有需要决定验证层级或入口时读取。
 - `docs/compat/0.107.1/README.md`：只有版本语义/兼容问题时读取。

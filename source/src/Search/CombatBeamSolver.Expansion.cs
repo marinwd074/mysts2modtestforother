@@ -4144,7 +4144,18 @@ internal sealed partial class CombatBeamSolver
                 potion.Owner.Creature,
                 targetType);
             for (int index = 0; index < targets.Count; index++)
-                yield return (index, targets[index]);
+            {
+                Creature target = targets[index];
+                // Quality-first item 2 initially closes only local-owned potion actions
+                // targeting self or enemies. Teammate-target potion semantics stay excluded
+                // until the pinned 0.107.1 native API is verified for each supported potion.
+                if (_useMultiplayerRouteSemantics
+                    && target.CombatId != _player.Creature.CombatId)
+                {
+                    continue;
+                }
+                yield return (index, target);
+            }
             yield break;
         }
 

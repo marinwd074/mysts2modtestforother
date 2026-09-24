@@ -76,7 +76,7 @@ Check(
         && MultiplayerLocalCrossTurnContracts.DelayAngerCopyPreferenceUntilAfterEnemyHp(
             multiplayerRouteSemanticsActive: true,
             completeVictory: false),
-    "The Anger ordering exception activates only for an actual multiplayer route and only on incomplete outcomes.");
+    "Quality bad-route 25b905c1322b41e6b9a8e10baeae5606 keeps deterministic enemy-HP progress ahead of Anger copy cost only for incomplete real multiplayer routes.");
 
 Check(
     MultiplayerLocalCrossTurnContracts.ShouldStopBeforeSharedRngShuffle(
@@ -170,6 +170,63 @@ Check(
             Match(remote: Fingerprint(2), combatIdentity: "combat-b")),
     "A locally readable teammate-state delta always rejects soft reuse and requires a fresh search.");
 
+string refreshBase =
+    "combat_identity=seed=s;players=1,2;enemies=10:A;local_net_id=1;round=1;side=Player;phase=Play;turn=1;" +
+    "hp=80;max_hp=80;block=0;energy=3;stars=0;gold=10;" +
+    "E0=10/A/front/40/50/0/ATTACK;H=A+0;D=B+0;C=;X=;P=;R=1:2:3:4:5/1:2:3:4:5";
+string refreshEnemyDamage = refreshBase.Replace(
+    "E0=10/A/front/40/50/0/ATTACK",
+    "E0=10/A/front/31/50/0/ATTACK",
+    StringComparison.Ordinal);
+string refreshEnemyBlock = refreshBase.Replace(
+    "E0=10/A/front/40/50/0/ATTACK",
+    "E0=10/A/front/40/50/7/ATTACK",
+    StringComparison.Ordinal);
+string refreshTargetDeath = refreshBase.Replace(
+    "E0=10/A/front/40/50/0/ATTACK",
+    "E0=10/A/front/0/50/0/ATTACK",
+    StringComparison.Ordinal);
+string refreshEnergy = refreshBase.Replace("energy=3", "energy=2", StringComparison.Ordinal);
+string refreshRng = refreshBase.Replace(
+    "R=1:2:3:4:5/1:2:3:4:5",
+    "R=2:2:3:4:5/1:2:3:4:5",
+    StringComparison.Ordinal);
+Check(
+    MultiplayerPlanRefreshContracts.IsReplayCompatible(
+        refreshBase,
+        refreshBase,
+        out string exactRefreshReason)
+        && exactRefreshReason == "exact_local_root"
+        && MultiplayerPlanRefreshContracts.IsReplayCompatible(
+            refreshBase,
+            refreshEnemyDamage,
+            out string damageRefreshReason)
+        && damageRefreshReason == "living_enemy_hp_or_block_only"
+        && MultiplayerPlanRefreshContracts.IsReplayCompatible(
+            refreshBase,
+            refreshEnemyBlock,
+            out string blockRefreshReason)
+        && blockRefreshReason == "living_enemy_hp_or_block_only",
+    "Quality-first bounded refresh admits an exact root and nonlethal living-enemy HP/block drift.");
+
+Check(
+    !MultiplayerPlanRefreshContracts.IsReplayCompatible(
+        refreshBase,
+        refreshTargetDeath,
+        out string deathRefreshReason)
+        && deathRefreshReason == "strong_field_change:E0"
+        && !MultiplayerPlanRefreshContracts.IsReplayCompatible(
+            refreshBase,
+            refreshEnergy,
+            out string energyRefreshReason)
+        && energyRefreshReason == "strong_field_change:energy"
+        && !MultiplayerPlanRefreshContracts.IsReplayCompatible(
+            refreshBase,
+            refreshRng,
+            out string rngRefreshReason)
+        && rngRefreshReason == "strong_field_change:R",
+    "Quality-first bounded refresh rejects target death, local resource drift and RNG drift as full-search signals.");
+
 Check(
     !MultiplayerLocalCrossTurnContracts.IsExactContinuation(Match(combatIdentity: "combat-without-target"))
         && MultiplayerLocalCrossTurnContracts.DescribeContinuationMismatch(
@@ -247,7 +304,7 @@ Check(
             multiplayerRouteSemanticsActive: false,
             candidateHasCurrentTurnCard: true,
             currentHasCurrentTurnCard: false),
-    "Current-turn-card preference is a real multiplayer deployment tie-break and stays inactive in the U2 single-player degenerate fixture.");
+    "Quality bad-route X1 T3 keeps a playable current-turn card over an equivalent EndTurn-only route; the tie-break stays inactive in the U2 single-player degenerate fixture.");
 
 
 MultiplayerRetentionObservation[] diversityObservations =
@@ -702,6 +759,27 @@ Check(
             MultiplayerScenarioRiskStrategy.BoundedRisk,
             u4RiskAbRanks) == 2,
     "U4 same-matrix selector can report distinct Robust, nominal-reference, and BoundedRisk winners without another search.");
+
+MultiplayerScenarioDecisionRank[] qualityScenarioOverrideRanks =
+[
+    u4NominalFavorite,
+    u4RobustFavorite,
+    u4BoundedFavorite,
+];
+MultiplayerScenarioStrategySelection qualityStrategySelection =
+    MultiplayerScenarioReevaluationPolicy.CompareStrategies(
+        qualityScenarioOverrideRanks,
+        baselineIndex: 0);
+Check(
+    qualityStrategySelection.BaselineIndex == 0
+        && qualityStrategySelection.RobustIndex == 1
+        && qualityStrategySelection.NominalReferenceIndex == 0
+        && qualityStrategySelection.BoundedRiskIndex == 2
+        && qualityStrategySelection.RobustOverridesBaseline
+        && !qualityStrategySelection.RobustAgreesWithNominal
+        && !qualityStrategySelection.RobustAgreesWithBoundedRisk
+        && qualityStrategySelection.HasDisputedRobustOverride,
+    "Quality-first attribution distinguishes a disputed Robust scenario override from the shared-core baseline without changing any risk weight or search budget.");
 
 Check(
     MultiplayerScenarioReevaluationPolicy.SelectNominalToleranceExperimentIndex(

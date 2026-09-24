@@ -239,7 +239,7 @@ internal static class SolverSessionCapabilities
         CanPlanLocalCrossTurn: true,
         CanCrossTurnReuse: true,
         CanFullAuto: false,
-        CanUsePotionsAutomatically: false,
+        CanUsePotionsAutomatically: true,
         CanUseFastDeployment: false,
         CanUseInstantDeployment: false,
         CanShowcase: false,

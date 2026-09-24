@@ -58,14 +58,49 @@
 - U1 的具体重锤+Choice、连续 Offering/抽牌链等专项 Host/Client 行为不由 pinned replay 替代。
 - 这些项是已知运行证据缺口；除非后续改动触及对应边界或准备发布，不作为下一算法阶段 blocker。
 
+## Quality-first 第一项状态
+
+- **第一项最小可工作切片：IMPLEMENTED / PINNED PASS / REAL MP UNVERIFIED。**
+- 多人最终结果保留最多 3 个不同首动作候选，每个最多 2 个当前回合普通 PlayCard；单人路径不承担候选保留开销。
+- 轻量变化仅允许 exact root 或仍存活敌人的 HP/Block drift 进入 bounded refresh；目标死亡、资源、Power、牌堆/RNG 等强变化仍 fresh search。
+- bounded refresh 在新根重放候选并区分 Continue / Reselect / FullRestart；Continue/Reselect 均通过固定前缀小搜索重新物化为新的 SolverResult，再进入现有 Safe Execute。
+- 小搜索硬上限：beam 24 / 192 expanded nodes / 60 ms；Unknown 或无法物化一律 FullRestart。
+- 日志：`MP_PLAN_REFRESH` + `refresh_to_native_submit_ms` 已接通。
+- compatibility static/L1 PASS；Pinned Release run `35974977137` SUCCESS。historical classifier 未出现 current-only regression：P0 timed=`BOTH_TIME_BOUNDARY`，fixed-work=`OBSERVED_EQUIVALENT`，P1=`FIXED_WORK_PASS_TIME_BOUNDARY`。
+- 真实 Host/Client 正反例尚未跑：普通队友非致死伤害应出现 Continue/Reselect；目标死亡等强变化应出现 FullRestart。此项继续记为 UNVERIFIED，不阻止进入下一实现项。
+
+## Quality-first 第二项状态
+
+- **第二项本地药水执行闭环：IMPLEMENTED / PINNED PASS / REAL MP UNVERIFIED。**
+- `MultiplayerSafeExecute` 只有在实际 admission/native/revalidation 链接通后才启用 `CanUsePotionsAutomatically=true`；不是单独翻 capability 开关。
+- Safe Execute structural/resolved gate 现支持本地 `UsePotion`：要求明确槽位与 PotionId，并在提交前重新核对本地槽位实例、PotionId 与 live `IsValidTarget`。
+- 多人搜索中的 `AnyPlayer/AnyAlly` 药水首版只保留本地玩家目标；敌人目标与 Self/AllEnemies/TargetedNoCreature 继续使用已有 0.107.1 模拟语义。队友目标仍关闭，未扩展为控制队友药水。
+- 原生执行复用现有 `potion.EnqueueManualUse(target)` / `UsePotionAction` 与 `NativeChoiceRuntime`；Safe Execute 现在会捕获并归因 `UsePotionAction`，随后复用 U1 one-action predicted/live semantic post-state 校验。
+- `ContinuationStamp` 与 multiplayer compact/local fingerprint 原本已包含药水槽位，因此成功动作必须同时满足槽位消费/身份变化、WorldVersion advance、稳定后态与 continuation 一致；不新造药水专用执行器。
+- Smart / Disabled / RequireAtLeastOne 与 potion-free baseline 未改；`PotionStrategyChecks` 继续约束“无收益不浪费药水”等策略语义。
+- 第一项 bounded refresh 仍故意只重放普通 `PlayCard` 前缀；路线遇到药水不会删掉药水再把后续牌伪装为原路线。无可重放候选时直接 `FullRestart`。
+- compatibility run `35983184607` **SUCCESS**；Pinned 0.107.1 Release run `35983115684` **SUCCESS**。中途两个失败只暴露字段从 `NativePlayCardCaptured` 泛化为 `NativeLocalActionCaptured` 后的测试/诊断残留，均已修正。
+- 现有 potion differential / potion continuation runtime fixtures 继续覆盖资源、伤害/状态、Choice、原生 `UsePotionAction` 与槽位消费语义；本轮没有在真实 Host/Client 多人局重新跑这些 fixture，因此实际多人自动喝药仍记为 `UNVERIFIED`。
+
+## Quality-first 第三项状态
+
+- **现有坏路线证据闭环：IMPLEMENTED；两个排序坏例均归因到基础最终排序，生产默认未迁移。**
+- 已恢复真实历史问题包 `25b905c1322b41e6b9a8e10baeae5606`：T2 手牌含 `ANGER(0)`，旧 Solver 路线 `Tremble → Dismantle → Strike → EndTurn`，在 Shuffle 边界形成 `PartialLocalCrossTurnProjection`。根因是未完成多人路线的最终基础排序过早惩罚 `AngerCopiesGenerated`；当前 HEAD 已保留 Enemy HP 优先的定向修复和合同。
+- 第二个独立坏路线是历史 X1 的 T3 空推荐：搜索里已有当前回合 `PlayCard` 候选，但局部质量相同/等价时被 `ActionCount` 短路线 tie-break 选成仅 `EndTurn`；当前 HEAD 已保留多人本地跨回合的 current-turn-card 平局优先，并在合同中绑定该坏例。
+- 重锤→烙印、连续 Offering 的既有坏体验属于 Safe Execute / deployment 截断，不是 Robust 情景排序证据；这些执行层边界由 U1/U6 负责。
+- 新增 `MultiplayerScenarioStrategySelection` 和 `MP_QUALITY_SORTING`。同一 U3 Matrix / 同一预算下现在能直接看到 baseline winner 是否被 Robust 覆盖、三策略是否一致，并给出 `quality_signal=scenario_override_disputed|none`；不增加 replay、不改变搜索预算。
+- 生产仍为 Robust。当前两个可复原排序坏例（ANGER、X1 T3）都属于“好候选已存在但基础最终排序曾选错”；重锤/Offering 属于执行层。没有证据证明修复后 HEAD 上是 U3/U4 Robust 推翻了更好的共同搜索核心路线，因此不改风险权重、不把等权压力情景均值当概率期望。
+- 当前验证：compatibility run `35985739446` **SUCCESS**；Pinned 0.107.1 Release run `35985739404` **SUCCESS**。后者的 Release、U0/U1 structural+pinned replay、U2 degenerate、P0/P1 pinned runtime 与历史分类链全部通过。无新的真实 Host/Client 重放，因此不宣称当前实际出牌质量已实机改善。
+
 ## 下一任务
 
-当前计划只定义到 U6。下一阶段先单独设计 **U7 — Local Exact Lethal**：
+继续第三项，只处理**当前 HEAD 新出现的明显坏路线**。优先保留问题包和用户明确更好的合法手打前缀，并用 `FINAL_CANDIDATE → MP_QUALITY_SORTING → FINAL_SELECTION → Safe Execute` 定位丢失层。
 
-- 只在敌方接近斩杀且局部状态空间可控时启用 bounded exact search/DFS；
-- 用于补 Beam 可能漏掉的本回合/短窗口确定斩杀；
-- 不替换现有 Beam，不扩大普通局面的默认总预算；
-- 必须复用现有生产动作语义、Choice、RNG、状态指纹与终局判定；
-- 先做离线固定输入对照，再决定是否接入生产候选组合。
+边界：
 
-之后再评估缓存、增量修补和更远期预测，避免一次同时改变搜索器与执行器。
+1. 若手打前缀未进入 FINAL_CANDIDATE，继续区分未枚举与 Beam 丢失；不要直接改 U4。
+2. 若 hand/baseline 候选仍在且 `robust_overrode_baseline=true`，再用同一 Matrix 的各情景指标判断是否确为 Robust 过度保守；没有证据不切默认。
+3. 若 FINAL_SELECTION 正确但实际动作缺失，回到 Safe Execute / Choice / continuation 处理，不污染排序目标。
+4. 比较生存、累计战损、最终 HP、结束轮数、药水支出与响应时间；保持总预算不变。
+
+仍按小阶段推进。

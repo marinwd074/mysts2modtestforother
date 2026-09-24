@@ -22,7 +22,8 @@
 
 ## 默认上下文纪律
 
-- 新任务默认先读取：本文件、`source/AGENTS.md`、`source/docs/CODEX_HANDOFF.md`、`source/docs/CombatSolver_GPT_Architecture_Plan.md`，再读取任务直接涉及的源码/文档。
+- 新任务默认先读取：本文件、`source/AGENTS.md`、`source/docs/CODEX_HANDOFF.md`、`source/docs/CombatSolver_Quality_First_Next.md`、`source/docs/CombatSolver_GPT_Architecture_Plan.md`，再读取任务直接涉及的源码/文档。
+- `source/docs/CombatSolver_Quality_First_Next.md` 是当前多人求解器的主执行目标。未被用户明确替换或文档自身完成前，后续实现必须按其中的优先级推进；与旧 handoff、旧 U7 或长期架构计划冲突时，以该文档的当前任务优先级为准，同时仍以当前代码和新验证证据校正实现细节。
 - `source/docs/CombatSolver_GPT_Architecture_Plan.md` 是长期架构与执行计划，不等于当前实现事实；每轮必须先核对当前 HEAD、handoff 和实际调用链，已完成阶段不得重复施工。若计划与当前代码/新验证证据冲突，以当前代码和最新证据为准，并按需更新计划。
 - 不得为了“了解完整历史”自动批量读取 `source/docs/performance/`、`strategy/`、`audits/`、`issues/`、`releases/`、`history/`、`runtime-evidence/` 或 test-only submodule；只有定位特定回归、比较指定基线或用户明确要求时才定向读取。
 - `source/docs/TEST_MATRIX.md` 只在决定验证范围时读取；`source/docs/multiplayer/RUNBOOK.md` 只在真实 Host/Client Lab 操作前读取。

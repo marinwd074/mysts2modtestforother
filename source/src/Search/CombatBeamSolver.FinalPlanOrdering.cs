@@ -546,6 +546,7 @@ internal sealed partial class CombatBeamSolver
             ScenarioDecisionSummary? u4RobustDecision = null;
             ScenarioDecisionSummary? u4NominalDecision = null;
             ScenarioDecisionSummary? u4BoundedRiskDecision = null;
+            MultiplayerScenarioStrategySelection? u4StrategySelection = null;
             List<ScenarioDecisionSummary> scenarioSummaries = [];
             bool scenarioReevaluationEnabled = false;
             if (EnableMultiplayerScenarioReevaluation
@@ -743,21 +744,14 @@ internal sealed partial class CombatBeamSolver
                     MultiplayerScenarioDecisionRank[] comparableRanks = comparable
                         .Select(summary => summary.Rank)
                         .ToArray();
-                    int robustIndex =
-                        MultiplayerScenarioReevaluationPolicy.SelectPreferredIndex(
-                            MultiplayerScenarioRiskStrategy.Robust,
-                            comparableRanks);
-                    int nominalIndex =
-                        MultiplayerScenarioReevaluationPolicy.SelectPreferredIndex(
-                            MultiplayerScenarioRiskStrategy.NominalReference,
-                            comparableRanks);
-                    int boundedRiskIndex =
-                        MultiplayerScenarioReevaluationPolicy.SelectPreferredIndex(
-                            MultiplayerScenarioRiskStrategy.BoundedRisk,
-                            comparableRanks);
-                    u4RobustDecision = comparable[robustIndex];
-                    u4NominalDecision = comparable[nominalIndex];
-                    u4BoundedRiskDecision = comparable[boundedRiskIndex];
+                    MultiplayerScenarioStrategySelection strategySelection =
+                        MultiplayerScenarioReevaluationPolicy.CompareStrategies(
+                            comparableRanks,
+                            baselineIndex: 0);
+                    u4StrategySelection = strategySelection;
+                    u4RobustDecision = comparable[strategySelection.RobustIndex];
+                    u4NominalDecision = comparable[strategySelection.NominalReferenceIndex];
+                    u4BoundedRiskDecision = comparable[strategySelection.BoundedRiskIndex];
 
                     // U4 A/B is zero-extra-work: all three policies consume the exact same U3
                     // scenario matrix. Production remains the pre-U4 Robust selector until
@@ -973,6 +967,19 @@ internal sealed partial class CombatBeamSolver
                         $"nominal_ref_rank={u4NominalDecision.BaselineIndex + 1} " +
                         $"bounded_risk_rank={u4BoundedRiskDecision.BaselineIndex + 1} " +
                         $"all_agree={allAgree.ToString().ToLowerInvariant()}");
+                    MultiplayerScenarioStrategySelection qualitySelection =
+                        u4StrategySelection
+                        ?? throw new InvalidOperationException(
+                            "Complete U4 strategy diagnostics require a strategy selection summary.");
+                    diagnostics.Info(
+                        $"[CombatSolver/Multiplayer] MP_QUALITY_SORTING " +
+                        $"baseline_winner_rank={qualitySelection.BaselineIndex + 1} " +
+                        $"production_selected_baseline_rank={u4RobustDecision.BaselineIndex + 1} " +
+                        $"override_layer={(qualitySelection.RobustOverridesBaseline ? "scenario_robust" : "baseline")} " +
+                        $"robust_overrode_baseline={qualitySelection.RobustOverridesBaseline.ToString().ToLowerInvariant()} " +
+                        $"robust_nominal_agree={qualitySelection.RobustAgreesWithNominal.ToString().ToLowerInvariant()} " +
+                        $"robust_bounded_agree={qualitySelection.RobustAgreesWithBoundedRisk.ToString().ToLowerInvariant()} " +
+                        $"quality_signal={(qualitySelection.HasDisputedRobustOverride ? "scenario_override_disputed" : "none")}");
                 }
 
                 if (selectedScenarioDecision != null)
@@ -1165,6 +1172,38 @@ internal sealed partial class CombatBeamSolver
                 potionHpRequired = PotionUsePolicy.AdditionalRequiredUseStrategicHpCost(
                     potionHpRequired);
             }
+            List<MultiplayerReplayCandidate> replayCandidates = [];
+            if (routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn)
+            {
+                HashSet<string> retainedFirstActions = [];
+                for (int index = 0; index < selected.Count && replayCandidates.Count < 3; index++)
+                {
+                    List<PlanAction> prefix = [];
+                    foreach (PlanAction action in selected[index].Node.Actions)
+                    {
+                        if (action.Turn < startTurnNumber)
+                            continue;
+                        if (action.Turn != startTurnNumber
+                            || action.IsForecastOnlyObservation
+                            || action.Kind != PlanActionKind.PlayCard
+                            || action.EndsPlayerTurn
+                            || !action.IsExecutable)
+                        {
+                            break;
+                        }
+                        prefix.Add(action);
+                        if (prefix.Count >= 2)
+                            break;
+                    }
+                    if (prefix.Count == 0)
+                        continue;
+                    string firstAction = CombatBeamSolver.PolicyActionToken(prefix[0]);
+                    if (!retainedFirstActions.Add(firstAction))
+                        continue;
+                    replayCandidates.Add(new MultiplayerReplayCandidate(index, prefix.ToArray()));
+                }
+            }
+
             return new FinalPlanSelection(
                 new FinalPlanCandidate(
                     selectedCandidate.Node,
@@ -1176,7 +1215,8 @@ internal sealed partial class CombatBeamSolver
                     selectedCandidate.Score),
                 potionBranchesRejected,
                 potionHpSaved,
-                potionHpRequired);
+                potionHpRequired,
+                replayCandidates);
         }
     }
 
