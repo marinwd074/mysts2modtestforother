@@ -10,5 +10,5 @@ the native turn-2 hand surface, drove the planned choice, and returned to the
 play phase. This is the direct runtime evidence for the 0.107.1 coordinator
 signature adaptation.
 
-Evidence: [`20260918-compatibility-turn-setup-d`](../../../../runtime-evidence/20260918-compatibility-turn-setup-d/).
+Historical raw runtime evidence is available from Git history; this file retains the durable verification conclusion.
 

@@ -50,4 +50,4 @@ CI 只能证明其实际执行的层级；没有日志/steps 的 runner 失败�
 
 ## 证据读取原则
 
-只在核验具体结论时读取对应 `docs/multiplayer/evidence/` 文件。不要为了普通开发把整套 evidence、performance 或历史报告加载进上下文。
+只在核验具体结论时读取对应本地问题包、运行日志或 Git history。不要为了普通开发把历史 evidence、performance 或旧报告批量加载进上下文。

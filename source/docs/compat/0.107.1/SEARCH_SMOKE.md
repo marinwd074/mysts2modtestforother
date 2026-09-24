@@ -8,7 +8,7 @@ The first-turn smoke passed at source commit `bdbf51c`:
 - incremental verification was enabled;
 - live and predicted RNG stream counters matched.
 
-Evidence: [`20260918-compatibility-smoke-rerun`](../../../../runtime-evidence/20260918-compatibility-smoke-rerun/).
+Historical raw runtime evidence is available from Git history; this file retains the durable verification conclusion.
 
 The outer launcher status in that directory is `launcher_failed` because this
 special smoke writes its own result and intentionally quits the game. The

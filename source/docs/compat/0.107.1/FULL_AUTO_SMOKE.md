@@ -10,7 +10,7 @@ deployment, continuation into turn 3, and route reuse. It deliberately stops
 after route reuse is observed; it does not claim a complete battle victory or
 a visible Steam layout result.
 
-Evidence: [`20260918-compatibility-fullauto`](../../../../runtime-evidence/20260918-compatibility-fullauto/).
+Historical raw runtime evidence is available from Git history; this file retains the durable verification conclusion.
 
 The complete battle lifecycle is covered separately by
 [`COMPAT1071_FULL_BATTLE`](FULL_BATTLE_SMOKE.md).
