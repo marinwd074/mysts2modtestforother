@@ -302,6 +302,8 @@ internal sealed class MultiplayerSafeExecutionSession
 internal static class MultiplayerSafeExecutePolicy
 {
     // Safe Execute is bounded by the finite current-turn route selected by the search.
+    // The capability token declares that policy; each deployment records its concrete
+    // finite capacity in MultiplayerSafeExecutionSession.MaxActions.
     // Per-action live revalidation remains the actual safety boundary.
     internal const string RouteBoundedActionLimitToken = "route_bounded";
     internal const string ManualMultiplayerCardReason = "multiplayer_only_manual_play";
