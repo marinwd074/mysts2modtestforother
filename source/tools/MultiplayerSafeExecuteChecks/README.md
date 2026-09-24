@@ -4,7 +4,7 @@ Run `dotnet run --project tools/MultiplayerSafeExecuteChecks/MultiplayerSafeExec
 
 This is a pure L1 contract project for the MP-2 Safe Execute boundary. It pins the
 fail-closed reasons for non-card actions, missing/local ownership, replay/choice/end-turn
-semantics, remote or unknown targets, and the one-action-per-deployment cap.
+semantics, remote or unknown targets, and finite route/session boundaries.
 
 Passing this project does not make Safe Execute the multiplayer default. The explicit
 `safe-execute` token opts into the conservative formal capability; the separate
