@@ -503,7 +503,11 @@ internal static partial class SolverController
             // 免得两边各判一次而走岔。问题包里两样都在，方便看出当时是填了额度还是开了开关。
             GrowthBudgets = useFullSearchKernel ? settings.GrowthBudgets : default,
             RelicTargets = useFullSearchKernel
-                ? RelicCounterCatalog.Capture(state, settings.RelicStrategyEnabled, settings.RelicCounterRules)
+                ? RelicCounterCatalog.Capture(
+                    LocalContext.GetMe(state)
+                        ?? throw new InvalidOperationException("当前战斗找不到本地玩家。"),
+                    settings.RelicStrategyEnabled,
+                    settings.RelicCounterRules)
                 : [],
             StopAtAcceptableBattleHpLoss = settings.StopAtAcceptableBattleHpLoss,
             BrightestFlameMaxHpLossLimit = settings.BrightestFlameMaxHpLossLimit,

@@ -1,4 +1,4 @@
-using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Relics;
 
@@ -56,11 +56,21 @@ internal static class RelicCounterCatalog
         _ => "尚未适配计数语义。",
     };
 
-    public static IReadOnlyList<RelicCounterTarget> Capture(ICombatState combat, bool enabled, IEnumerable<RelicCounterRule> rules)
+    public static bool IsOwnedBy(Player player, RelicCounterId id)
+        => player.Relics.Any(relic =>
+            !relic.IsMelted && Identify(relic) == id);
+
+    public static IReadOnlyList<RelicCounterTarget> Capture(
+        Player player,
+        bool enabled,
+        IEnumerable<RelicCounterRule> rules)
     {
         if (!enabled) return Array.Empty<RelicCounterTarget>();
-        var owned = combat.Players.SelectMany(player => player.Relics).Where(relic => !relic.IsMelted)
-            .Select(Identify).OfType<RelicCounterId>().ToHashSet();
+        HashSet<RelicCounterId> owned = player.Relics
+            .Where(relic => !relic.IsMelted)
+            .Select(Identify)
+            .OfType<RelicCounterId>()
+            .ToHashSet();
         return Array.AsReadOnly(rules.Where(rule => rule.Enabled && owned.Contains(rule.Id))
             .Select(rule =>
             {

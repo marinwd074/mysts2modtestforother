@@ -43,9 +43,13 @@ internal sealed partial class UnattendedTestRunner
             using (var panel = new SolverRelicStrategyPanel())
                 Check(panel.ExerciseControlsForTesting(), "independent UI switches preserve other entries and saved values");
             Check(await SolverOverlay.ExerciseRelicPanelForTesting(), "header order, sidebar bounds and mutual exclusion");
-            var targets = RelicCounterCatalog.Capture(combat, true, rules);
-            Check(targets.Count == 10 && RelicCounterCatalog.Capture(combat, false, rules).Count == 0, "master switch");
-            Check(RelicCounterCatalog.Capture(combat, true, rules.Select(rule => rule with { Enabled = false })).Count == 0, "per-relic switches");
+            var targets = RelicCounterCatalog.Capture(player, true, rules);
+            Check(RelicCounterCatalog.All
+                .Where(entry => entry.Id != RelicCounterId.MeatOnTheBone)
+                .All(entry => RelicCounterCatalog.IsOwnedBy(player, entry.Id)),
+                "strategy ownership is scoped to the supplied player");
+            Check(targets.Count == 10 && RelicCounterCatalog.Capture(player, false, rules).Count == 0, "master switch");
+            Check(RelicCounterCatalog.Capture(player, true, rules.Select(rule => rule with { Enabled = false })).Count == 0, "per-relic switches");
             using (SimulationNotificationIsolation.Enter())
             {
                 var simulator = new CombatPredictionSimulator(new SimulatedCombatState(combat));
