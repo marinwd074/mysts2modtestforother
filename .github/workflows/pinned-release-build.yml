@@ -45,6 +45,9 @@ on:
       - 'source/src/Search/CombatBeamSolver.Terminal.cs'
       - 'source/src/Search/CombatSearchCoordinator.cs'
       - 'source/src/Search/CombatBeamSolver.EndTurnExpansion.cs'
+      - 'source/tools/OfflineSearchHarness/ModRuntime.cs'
+      - 'source/tools/OfflineSearchHarness/Program.cs'
+      - 'source/tools/test-e0-search-efficiency.ps1'
       - 'source/src/Search/CombatBeamSolver.BeamRetentionPolicy.cs'
       - 'source/src/Search/CombatBeamSolver.Retention.cs'
       - 'source/src/Search/CombatBeamSolver.BeamRanking.cs'
@@ -109,6 +112,14 @@ jobs:
         run: |
           $gameData = (Resolve-Path '.\game-body\data_sts2_windows_x86_64').Path
           dotnet build '.\source\CombatSolver.csproj' -c Release -p:CopyModOnBuild=false -p:Sts2DataDir="$gameData" -p:RitsuLibReferencesProps="$env:RITSU_PROPS" -p:RitsuLibReferenceTarget='0.107.1' -p:TreatWarningsAsErrors=true --nologo
+
+      - name: Run E0 search-efficiency representative roots
+        shell: pwsh
+        run: |
+          $gameData = (Resolve-Path '.\game-body\data_sts2_windows_x86_64').Path
+          $workspace = Join-Path $env:RUNNER_TEMP 'e0-search-efficiency'
+          pwsh -NoLogo -NoProfile -File '.\source\tools\test-e0-search-efficiency.ps1' -GameData $gameData -RitsuProps $env:RITSU_PROPS -RitsuRoot $env:RITSU_ROOT -Workspace $workspace
+          Get-Content -LiteralPath (Join-Path $workspace 'e0-search-efficiency-evidence.json')
 
       - name: Run U0 U1 structural contracts
         shell: pwsh
