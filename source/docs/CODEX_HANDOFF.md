@@ -46,7 +46,16 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - 请求级遥测复用既有 `BeamWidthPortfolioTelemetry`，给每次实际 Solver 成员分配 member id，并记录 Beam 宽度、SecondRankBand/BaseScoreOnly、Novelty、真实展开/转移和成员耗时。
 - Shadow、Scenario Matrix、最终 materialization 与 annotation replay 记录调用次数和独占时间；Scenario Matrix 统计显式扣除嵌套 Shadow 时间，避免父子计时相加造成双算。
 - 热路径不为每个节点写日志/格式化路线/做文本哈希；只有节点第一次进入可比较候选边界时才建立 `CandidateOrigin`。origin 存在 Solver 私有 `ConditionalWeakTable`，不进入 `SearchNode` record 的 equality/hash；同动作的 materialization/注释 clone 显式沿用 identity，新增动作则建立新 identity。
-- 最终请求会输出 `SEARCH_E0_TIMELINE`、`SEARCH_E0_MEMBER`、`SEARCH_E0_PHASE`；OfflineSearchHarness 同时把同一数据写入 `searchEfficiency` JSON。Pinned CI 已加入两个当前 HEAD 固定样本：简单攻防、抽牌/能量组合，并验证四个时间点非空且单调。第三个“队友配合”样本必须来自真实 `PlayerCount=2` 可重放根；当前仓库/CI 没有这样的当前 HEAD 问题包，因此明确记为 **UNVERIFIED_NO_REPLAYABLE_MULTIPLAYER_ROOT**，不拿 L1 合同或单人根冒充。E0 在该样本补证据前不进入 E1。
+- 最终请求会输出 `SEARCH_E0_TIMELINE`、`SEARCH_E0_MEMBER`、`SEARCH_E0_PHASE`；Pinned 0.107.1 生产协调器采样 run `36031790808` 已得到下表。两个可离线复现样本的最终赢家都来自第一个 `potion_disabled#1` 成员，而不是后续 Beam 宽度精炼成员：
+
+| 样本 | 来源成员 | 生成 ms | 评估 ms | 选中 ms | 发布 ms | 状态 |
+|---|---|---:|---:|---:|---:|---|
+| 简单攻防 | `potion_disabled#1` | 778.718 | 815.425 | 816.561 | 2023.430 | PASS |
+| 抽牌/能量（含 Offering） | `potion_disabled#1` | 1157.420 | 1213.259 | 1214.584 | 1308.441 | PASS |
+| 队友配合 | - | - | - | - | - | UNVERIFIED_NO_REPLAYABLE_MULTIPLAYER_ROOT |
+
+- 简单攻防从“已选中”到“首次发布”额外等待 **1206.869 ms**；抽牌/能量样本为 **93.857 ms**。现有证据首先支持“好路线已经生成/选中，但部分请求在后续工作结束前没有及时发布”，而不是“必须等后续 portfolio 成员才能找到好路线”。这是 E1 的触发条件，但本轮不进入 E1。
+- E0 harness 还尝试了 detached 双玩家根；生产搜索按当前正式边界以 `NotSupportedException: 第一版只支持单人战斗。` fail closed，因此没有绕过保护伪造多人 PASS。严格 E0 验收仍缺一份当前 HEAD 的真实 Host/Client 或可重放 `PlayerCount=2` 问题包。
 
 ## 当前未验证边界
 

@@ -2217,8 +2217,8 @@ if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/Comb
     $violations.Add('History key must consume incremental totals')
 }
 $historySolverPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.cs'
-if (-not (Select-String -LiteralPath $historySolverPath -SimpleMatch 'root.PlayerCount == 1' -Quiet)) {
-    $violations.Add('History-sensitive transposition key lost the single-player gate')
+if (Select-String -LiteralPath $historySolverPath -SimpleMatch 'root.PlayerCount == 1' -Quiet) {
+    $violations.Add('History-sensitive transposition key reintroduced the obsolete single-player gate')
 }
 if (-not (Select-String -LiteralPath $historySolverPath -SimpleMatch 'CombatHistoryCounterKey.AppliesTo(root.PlayerCardIds)' -Quiet)) {
     $violations.Add('History-sensitive transposition key lost the reader-card gate')
