@@ -154,8 +154,15 @@ internal sealed partial class CombatBeamSolver
             List<SearchNode> pool = nodes as List<SearchNode> ?? nodes.ToList();
             int pathBoundaryId = ObserveSearchPathBoundaryInput(
                 pool, SearchPathObservationStage.PruneInput, "prune_input");
+            int retentionBoundaryId = pathBoundaryId != 0
+                ? pathBoundaryId
+                : _detailedDiagnostics
+                    && policy.UseMultiplayerTeamObjective
+                    && _useMultiplayerRouteSemantics
+                        ? ++_beamObjectiveAbBoundaryId
+                        : 0;
             Action<GlobalRetentionDecision>? observeGlobalRetention =
-                CreateGlobalRetentionObserver(pool, pathBoundaryId);
+                CreateGlobalRetentionObserver(pool, retentionBoundaryId);
             List<SearchNode> global = Retention.RankBest(
                 pool,
                 _profile.BeamWidth,
@@ -275,6 +282,7 @@ internal sealed partial class CombatBeamSolver
                 hasCycleExitWork,
                 cycleRegionTransaction);
             List<SearchNode> bounded = ApplyPrimaryIncumbentBound(finalized);
+            CompleteMultiplayerBeamObjectiveAb(retentionBoundaryId, finalized, bounded);
             // Emit all watched final aliases, after every portfolio and the incumbent.
             // The paired value events avoid equating a `with` clone with a dropped route.
             ObserveSearchPathBoundary(
