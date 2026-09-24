@@ -322,7 +322,7 @@ Check(
     "A settled local/enemy/RNG state that differs from production replay fails closed.");
 Check(
     MultiplayerSafeExecutePolicy.RevalidateAction(
-        RevalidationFacts() with { NativePlayCardCaptured = false })
+        RevalidationFacts() with { NativeLocalActionCaptured = false })
         == MultiplayerSafeActionRevalidationDecision.ActionMismatch,
     "A missing expected native local-action attribution fails closed.");
 
