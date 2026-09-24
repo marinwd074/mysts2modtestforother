@@ -61,3 +61,4 @@ Invoke-Case -Name 'fail' -ExpectedExit 1 -ExpectedStatus 'FAIL' -Messages @(
 
 Remove-Item -LiteralPath $temp -Recurse -Force
 Write-Host 'E0_MULTIPLAYER_VALIDATOR_TEST PASS cases=3'
+exit 0
