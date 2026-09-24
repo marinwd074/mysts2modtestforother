@@ -37,7 +37,9 @@ jobs:
           $version = $Matches.version
           $manifest = Get-Content -LiteralPath '.\source\CombatSolver.json' -Raw | ConvertFrom-Json
           [xml]$project = Get-Content -LiteralPath '.\source\CombatSolver.csproj' -Raw
-          $projectVersion = [string](@($project.Project.PropertyGroup.Version) | Where-Object { $_ } | Select-Object -First 1)
+          $versionNode = $project.SelectSingleNode('/Project/PropertyGroup/Version')
+          if ($null -eq $versionNode) { throw 'CombatSolver.csproj has no Version element.' }
+          $projectVersion = [string]$versionNode.InnerText
           if ([string]$manifest.version -cne $version -or $projectVersion -cne $version) {
             throw "Tag/version mismatch: tag=$version manifest=$($manifest.version) project=$projectVersion"
           }

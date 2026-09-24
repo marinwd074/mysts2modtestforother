@@ -68,7 +68,11 @@ if (-not $attributes.Contains('game-body/** filter=lfs diff=lfs merge=lfs -text'
 $target = Get-Content -LiteralPath 'source/build-target.json' -Raw | ConvertFrom-Json
 $manifest = Get-Content -LiteralPath 'source/CombatSolver.json' -Raw | ConvertFrom-Json
 [xml]$project = Get-Content -LiteralPath 'source/CombatSolver.csproj' -Raw
-$projectVersion = [string](@($project.Project.PropertyGroup.Version) | Where-Object { $_ } | Select-Object -First 1)
+$versionNode = $project.SelectSingleNode('/Project/PropertyGroup/Version')
+if ($null -eq $versionNode) {
+    throw 'CombatSolver.csproj has no Version element.'
+}
+$projectVersion = [string]$versionNode.InnerText
 
 if ([string]$manifest.version -cne $projectVersion) {
     throw "Version drift: manifest=$($manifest.version) project=$projectVersion"
