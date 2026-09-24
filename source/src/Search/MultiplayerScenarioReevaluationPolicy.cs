@@ -65,6 +65,22 @@ internal readonly record struct MultiplayerScenarioDecisionRank(
     double WorstTeamLossRatio,
     double WorstEnemyDurabilityRatio);
 
+internal readonly record struct MultiplayerScenarioSelectionTrace(
+    int BaselineIndex,
+    int RobustIndex,
+    int NominalReferenceIndex,
+    int BoundedRiskIndex)
+{
+    internal bool RobustOverridesBaseline =>
+        BaselineIndex >= 0 && RobustIndex >= 0 && RobustIndex != BaselineIndex;
+
+    internal bool NominalMatchesBaseline =>
+        BaselineIndex >= 0 && NominalReferenceIndex == BaselineIndex;
+
+    internal bool BoundedRiskMatchesBaseline =>
+        BaselineIndex >= 0 && BoundedRiskIndex == BaselineIndex;
+}
+
 internal readonly record struct MultiplayerScenarioStrategySelection(
     int BaselineIndex,
     int RobustIndex,
@@ -372,6 +388,22 @@ internal static class MultiplayerScenarioReevaluationPolicy
                 bestIndex = index;
         }
         return bestIndex;
+    }
+
+    internal static MultiplayerScenarioSelectionTrace BuildSelectionTrace(
+        IReadOnlyList<MultiplayerScenarioDecisionRank> ranks,
+        int baselineIndex = 0)
+    {
+        if (ranks.Count == 0)
+            return new(-1, -1, -1, -1);
+        if (baselineIndex < 0 || baselineIndex >= ranks.Count)
+            throw new ArgumentOutOfRangeException(nameof(baselineIndex));
+
+        return new MultiplayerScenarioSelectionTrace(
+            baselineIndex,
+            SelectPreferredIndex(MultiplayerScenarioRiskStrategy.Robust, ranks),
+            SelectPreferredIndex(MultiplayerScenarioRiskStrategy.NominalReference, ranks),
+            SelectPreferredIndex(MultiplayerScenarioRiskStrategy.BoundedRisk, ranks));
     }
 
     /// <summary>
