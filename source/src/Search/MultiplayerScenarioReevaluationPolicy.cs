@@ -74,6 +74,9 @@ internal readonly record struct MultiplayerScenarioStrategySelection(
     internal bool RobustOverridesBaseline => RobustIndex != BaselineIndex;
     internal bool RobustAgreesWithNominal => RobustIndex == NominalReferenceIndex;
     internal bool RobustAgreesWithBoundedRisk => RobustIndex == BoundedRiskIndex;
+    internal bool HasDisputedRobustOverride =>
+        RobustOverridesBaseline
+        && (!RobustAgreesWithNominal || !RobustAgreesWithBoundedRisk);
 }
 
 internal readonly record struct MultiplayerScenarioRiskMetrics(
