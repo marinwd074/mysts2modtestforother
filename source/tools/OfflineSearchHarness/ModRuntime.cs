@@ -268,6 +268,7 @@ internal static class ModRuntime
         string RootLiveStamp,
         object[] RouteActions,
         string[] PlanActions,
+        object? SearchEfficiency,
         bool TimeBoundaryObserved,
         double WallSeconds);
 
@@ -379,8 +380,72 @@ internal static class ModRuntime
                 .Select(action => $"{action.Turn}:{action.Kind}:{action.CardId ?? action.PotionId ?? "-"}"
                     + $":target={action.TargetCombatId?.ToString() ?? "-"}:key={action.CardStateKey}")
                 .ToArray(),
+            DescribeSearchEfficiency(result),
             timeBoundary,
             watch.Elapsed.TotalSeconds);
+    }
+
+    private static object? DescribeSearchEfficiency(SolverResult result)
+    {
+        BeamWidthPortfolioTelemetry? telemetry = result.PortfolioTelemetry;
+        if (telemetry == null)
+            return null;
+
+        CandidateOrigin? origin = result.SearchEfficiencyOrigin;
+        string? contextId = result.SearchEfficiencyEvaluationContextId;
+        CandidateMilestones? milestones = telemetry.FindCandidateMilestones(origin, contextId);
+        SearchEfficiencyMemberReport? selectedMember = origin == null
+            ? null
+            : telemetry.FindSearchMember(origin.SearchMemberId);
+
+        static double? DurationMs(long? start, long? end)
+            => start.HasValue && end.HasValue && end.Value >= start.Value
+                ? BeamWidthPortfolioTelemetry.DurationMilliseconds(end.Value - start.Value)
+                : null;
+
+        return new
+        {
+            selected = origin == null
+                ? null
+                : new
+                {
+                    origin.CandidateId,
+                    origin.SearchMemberId,
+                    memberKind = selectedMember?.Kind,
+                    generatedMs = telemetry.ToRequestMilliseconds(origin.FirstGeneratedTicks),
+                    evaluatedMs = milestones?.EvaluatedTicks is { } evaluated
+                        ? telemetry.ToRequestMilliseconds(evaluated)
+                        : (double?)null,
+                    selectedMs = milestones?.SelectedTicks is { } selected
+                        ? telemetry.ToRequestMilliseconds(selected)
+                        : (double?)null,
+                    publishedMs = milestones?.PublishedTicks is { } published
+                        ? telemetry.ToRequestMilliseconds(published)
+                        : (double?)null,
+                    origin.ExpandedAtGeneration,
+                    origin.TurnDepth,
+                    evaluationContextId = contextId,
+                },
+            members = telemetry.SearchMembers.Select(member => new
+            {
+                member.MemberId,
+                member.Kind,
+                member.BeamWidth,
+                member.SecondRankBand,
+                member.BaseScoreOnly,
+                member.Novelty,
+                elapsedMs = DurationMs(member.StartedTicks, member.CompletedTicks),
+                member.ExpandedNodes,
+                member.TransitionCount,
+            }).ToArray(),
+            phases = telemetry.SearchPhases.Select(phase => new
+            {
+                phase.SearchMemberId,
+                phase.Phase,
+                phase.CallCount,
+                exclusiveMs = BeamWidthPortfolioTelemetry.DurationMilliseconds(phase.ExclusiveTicks),
+            }).ToArray(),
+        };
     }
 
     private static Dictionary<string, object?> BuildLegacyMetrics(SolverResult result)
