@@ -67,6 +67,8 @@ Changes to search, runtime multiplayer behavior, pinned compatibility, or deploy
 
 A pull request should explain the problem, the behavioral change, evidence, and remaining unverified boundaries. Do not attach generated evidence to the Git tree; link or attach it to the PR/issue instead.
 
+Prefer **squash merge** for focused pull requests so `main` records one durable change rather than every exploratory commit. Keep separate commits only when their separation has lasting review or bisect value.
+
 ## Upstream and third-party code
 
 Read [UPSTREAM.md](UPSTREAM.md) before importing upstream changes. This fork does not bulk-merge newer CombatSolver game-version assumptions into the 0.107.1 branch.
