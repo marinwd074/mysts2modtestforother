@@ -170,18 +170,7 @@ internal sealed partial class CombatBeamSolver
         IReadOnlyList<SearchNode> pool,
         int boundaryId)
     {
-        SearchPathObserver? observer = policy.Diagnostics.PathObserver;
-        bool observePathPool = false;
-        if (observer?.ObservesRetentionPools == true)
-        {
-            foreach (SearchNode node in pool)
-            {
-                if (!observer.WantsRetentionPool(node.StateKey))
-                    continue;
-                observePathPool = true;
-                break;
-            }
-        }
+        bool observePathPool = WantsSearchPathRetentionPool(pool);
 
         bool observeBeamObjectiveAb =
             policy.DetailedDiagnostics
@@ -200,6 +189,19 @@ internal sealed partial class CombatBeamSolver
             boundaryId,
             observePathPool,
             observeBeamObjectiveAb);
+    }
+
+    private bool WantsSearchPathRetentionPool(IReadOnlyList<SearchNode> pool)
+    {
+        SearchPathObserver? observer = policy.Diagnostics.PathObserver;
+        if (observer?.ObservesRetentionPools != true)
+            return false;
+        foreach (SearchNode node in pool)
+        {
+            if (observer.WantsRetentionPool(node.StateKey))
+                return true;
+        }
+        return false;
     }
 
     // Keep the capturing lambda out of the null/miss path, so disabled observation does
