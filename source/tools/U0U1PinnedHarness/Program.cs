@@ -6,6 +6,9 @@ using CombatSolver.Engine.Common;
 using CombatSolver.Engine.InCombat.Simulation;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
+using MegaCrit.Sts2.Core.Entities.Cards;
+using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Models;
 using OfflineSearchHarness;
 using U2DegenerateHarness;
 
@@ -461,6 +464,11 @@ internal static class Program
             profile,
             bash,
             strike);
+        U5GenerationOrderEvidence generationOrder = RunU5GenerationOrder(
+            combat,
+            names,
+            replayPolicy,
+            profile);
 
         return new U5Evidence(
             Status: "PASS",
@@ -477,6 +485,11 @@ internal static class Program
             TerminalReverseCompleted: terminalOrder.ReverseCompleted,
             TerminalReverseEnemyHp: terminalOrder.ReverseEnemyHp,
             TerminalReverseEnergy: terminalOrder.ReverseEnergy,
+            GenerationForwardFingerprint: Format(generationOrder.ForwardFingerprint),
+            GenerationReverseFingerprint: Format(generationOrder.ReverseFingerprint),
+            GenerationForwardHand: generationOrder.ForwardHand,
+            GenerationReverseHand: generationOrder.ReverseHand,
+            GenerationHandMultisetDifferent: generationOrder.HandMultisetDifferent,
             RealMultiplayerOwnershipVerified: false);
     }
 
@@ -564,6 +577,132 @@ internal static class Program
         {
             enemy.SetCurrentHpInternal(originalHp);
         }
+    }
+
+    private static U5GenerationOrderEvidence RunU5GenerationOrder(
+        CombatState combat,
+        SolverDisplayNames names,
+        SearchPolicySnapshot policy,
+        SolverSearchProfile profile)
+    {
+        Player player = LocalContext.GetMe(combat)
+            ?? throw new InvalidOperationException("U5 generation fixture has no local player.");
+        var hand = player.PlayerCombatState?.Hand
+            ?? throw new InvalidOperationException("U5 generation fixture has no local hand.");
+
+        CardModel infernalBlade = combat.CreateCard(
+            ResolveCard("INFERNAL_BLADE"),
+            player);
+        CardModel distraction = combat.CreateCard(
+            ResolveCard("DISTRACTION"),
+            player);
+        hand.AddInternal(infernalBlade, -1);
+        hand.AddInternal(distraction, -1);
+
+        int turn = player.PlayerCombatState!.TurnNumber;
+        PlanAction infernalAction = new(
+            PlanActionKind.PlayCard,
+            turn,
+            CardId: "INFERNAL_BLADE",
+            CardOccurrence: 0,
+            CardTitle: "Infernal Blade");
+        PlanAction distractionAction = new(
+            PlanActionKind.PlayCard,
+            turn,
+            CardId: "DISTRACTION",
+            CardOccurrence: 0,
+            CardTitle: "Distraction");
+
+        BattleDamageSnapshot damage = BattleDamageTracker.Observe(combat);
+        U5GeneratedReplay forward = ReplayU5GeneratedOrder(
+            combat,
+            names,
+            damage,
+            policy,
+            profile,
+            player,
+            [infernalAction, distractionAction]);
+        U5GeneratedReplay reverse = ReplayU5GeneratedOrder(
+            combat,
+            names,
+            damage,
+            policy,
+            profile,
+            player,
+            [distractionAction, infernalAction]);
+
+        Require(
+            forward.FutureFingerprint != reverse.FutureFingerprint,
+            "U5 generation-order pair collapsed to the same complete future fingerprint.");
+
+        string[] forwardSorted = forward.Hand.OrderBy(static id => id, StringComparer.Ordinal).ToArray();
+        string[] reverseSorted = reverse.Hand.OrderBy(static id => id, StringComparer.Ordinal).ToArray();
+        bool handMultisetDifferent = !forwardSorted.SequenceEqual(reverseSorted);
+        Require(
+            handMultisetDifferent,
+            "U5 generation-order fixture was not decisive: both orders produced the same hand multiset.");
+
+        return new U5GenerationOrderEvidence(
+            ForwardFingerprint: forward.FutureFingerprint,
+            ReverseFingerprint: reverse.FutureFingerprint,
+            ForwardHand: forward.Hand,
+            ReverseHand: reverse.Hand,
+            HandMultisetDifferent: true);
+    }
+
+    private static U5GeneratedReplay ReplayU5GeneratedOrder(
+        CombatState combat,
+        SolverDisplayNames names,
+        BattleDamageSnapshot damage,
+        SearchPolicySnapshot policy,
+        SolverSearchProfile profile,
+        Player player,
+        IReadOnlyList<PlanAction> actions)
+    {
+        CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
+        CombatBeamSolver replay = new(
+            root,
+            names,
+            damage,
+            policy,
+            searchProfile: profile);
+        SimulationSnapshot snapshot = replay.ReplayDiagnosticPrefix(actions);
+        try
+        {
+            Require(
+                snapshot.BoundaryReason == SearchBoundaryReason.None,
+                $"U5 generation replay {string.Join("->", actions.Select(action => action.CardId))} " +
+                $"reached {snapshot.BoundaryReason}.");
+            StateFingerprint future = ShadowFutureStateFingerprint.Capture(
+                snapshot.Simulator,
+                snapshot.ProcessedEnemyDeaths,
+                new HashSet<string>(StringComparer.Ordinal),
+                Array.Empty<ShadowTeammateActionCandidate>());
+            string[] hand = snapshot.Simulator.State
+                .GetPlayerCombatState(player)
+                .Hand.Cards
+                .Select(card => card.Preview.Id.Entry)
+                .ToArray();
+            return new U5GeneratedReplay(future, hand);
+        }
+        finally
+        {
+            snapshot.ReleaseSimulator();
+        }
+    }
+
+    private static CardModel ResolveCard(string cardId)
+    {
+        CardModel[] matches = ModelDb.AllCards
+            .Where(card => card.Id.Entry.Equals(cardId, StringComparison.OrdinalIgnoreCase))
+            .Take(2)
+            .ToArray();
+        return matches.Length switch
+        {
+            1 => matches[0],
+            0 => throw new InvalidOperationException($"U5 generation fixture cannot find card {cardId}."),
+            _ => throw new InvalidOperationException($"U5 generation fixture card {cardId} is ambiguous."),
+        };
     }
 
     private static U5OrderReplay ReplayU5Order(
@@ -744,7 +883,23 @@ internal static class Program
         bool TerminalReverseCompleted,
         int TerminalReverseEnemyHp,
         int TerminalReverseEnergy,
+        string GenerationForwardFingerprint,
+        string GenerationReverseFingerprint,
+        string[] GenerationForwardHand,
+        string[] GenerationReverseHand,
+        bool GenerationHandMultisetDifferent,
         bool RealMultiplayerOwnershipVerified);
+
+    private sealed record U5GenerationOrderEvidence(
+        StateFingerprint ForwardFingerprint,
+        StateFingerprint ReverseFingerprint,
+        string[] ForwardHand,
+        string[] ReverseHand,
+        bool HandMultisetDifferent);
+
+    private sealed record U5GeneratedReplay(
+        StateFingerprint FutureFingerprint,
+        string[] Hand);
 
     private sealed record U5TerminalOrderEvidence(
         bool ForwardRejected,
