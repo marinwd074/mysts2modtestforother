@@ -164,4 +164,4 @@ GitHub Actions pinned run `35937892644`：**SUCCESS**；compatibility run `35937
 
 Vulnerable/attack、提前终局合法性不对称、共享生成 RNG/手牌后态、资源合法性、抽牌/牌堆顶变化五类顺序语义已经有 pinned production replay，不再要求用随机联机牌局重复证明。U6 最小 U5 实机补测收缩为一条网络链：让真实队友动作插入两个本地动作之间，确认远端 `WorldVersion` / live state 变化使旧条件后缀失效，部署不会跨过 forecast observation，并触发 fresh capture/search；同时确认旧 generation 不会继续提交。该链只验证离线无法提供的 ownership / network timing / observation→replan 层。
 
-该 runtime debt 不阻止 U5 代码阶段收口；进入 U6 最终实机闭环时集中验证。
+该 runtime debt 不阻止 U5 代码阶段收口；进入 U6 最终实机闭环时集中验证。 U6 已提供 `tools/multiplayer-lab/validate-u6-runtime-closure.ps1` 自动判定该链，执行步骤见 [`U6_RUNTIME_CLOSURE.md`](U6_RUNTIME_CLOSURE.md)。
