@@ -15,6 +15,7 @@ on:
       - 'source/src/UI/SolverOverlay.cs'
       - 'source/src/UI/SolverSettingsPanel.General.cs'
       - 'source/src/Replay/CombatShowcaseRuntime.cs'
+      - 'source/src/Diagnostics/**'
       - 'source/tools/P0P1PinnedHarness/**'
       - 'source/tools/U0U1PinnedHarness/**'
       - 'source/tools/OfflineSearchHarness/U0BaselineFixture.cs'

@@ -53,7 +53,7 @@ internal static class CombatBugReportMetadata
             playerDescription = description ?? string.Empty,
             submitterName = PlatformUtil.GetPlayerNameRaw(PlatformUtil.PrimaryPlatform,
                 PlatformUtil.GetLocalPlayerId(PlatformUtil.PrimaryPlatform)),
-            runStatistics = RunStatistics.Snapshot,
+            runStatistics = (object?)null,
             combat,
             classification,
             comparisonKind = comparison == null ? null : "projected_comparison",
