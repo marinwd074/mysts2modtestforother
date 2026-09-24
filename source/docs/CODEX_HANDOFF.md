@@ -58,15 +58,27 @@
 - U1 的具体重锤+Choice、连续 Offering/抽牌链等专项 Host/Client 行为不由 pinned replay 替代。
 - 这些项是已知运行证据缺口；除非后续改动触及对应边界或准备发布，不作为下一算法阶段 blocker。
 
+## Quality-first 第一项状态
+
+- **第一项最小可工作切片：IMPLEMENTED / PINNED PASS / REAL MP UNVERIFIED。**
+- 多人最终结果保留最多 3 个不同首动作候选，每个最多 2 个当前回合普通 PlayCard；单人路径不承担候选保留开销。
+- 轻量变化仅允许 exact root 或仍存活敌人的 HP/Block drift 进入 bounded refresh；目标死亡、资源、Power、牌堆/RNG 等强变化仍 fresh search。
+- bounded refresh 在新根重放候选并区分 Continue / Reselect / FullRestart；Continue/Reselect 均通过固定前缀小搜索重新物化为新的 SolverResult，再进入现有 Safe Execute。
+- 小搜索硬上限：beam 24 / 192 expanded nodes / 60 ms；Unknown 或无法物化一律 FullRestart。
+- 日志：`MP_PLAN_REFRESH` + `refresh_to_native_submit_ms` 已接通。
+- compatibility static/L1 PASS；Pinned Release run `35974977137` SUCCESS。historical classifier 未出现 current-only regression：P0 timed=`BOTH_TIME_BOUNDARY`，fixed-work=`OBSERVED_EQUIVALENT`，P1=`FIXED_WORK_PASS_TIME_BOUNDARY`。
+- 真实 Host/Client 正反例尚未跑：普通队友非致死伤害应出现 Continue/Reselect；目标死亡等强变化应出现 FullRestart。此项继续记为 UNVERIFIED，不阻止进入下一实现项。
+
 ## 下一任务
 
-当前主执行目标改为 [`CombatSolver_Quality_First_Next.md`](CombatSolver_Quality_First_Next.md)。原 U7 — Local Exact Lethal 暂停优先级，不直接进入实现。
+按照 `CombatSolver_Quality_First_Next.md` 进入**第二项：本地药水执行闭环**。
 
-按该文档依次推进：
+边界：
 
-1. **先完成第一项的最小可工作切片**：保留少量旧本地候选，在新根上有界重放，区分 Continue / Reselect / Full Restart，优先减少普通队友变化导致的无意义完整重搜。
-2. **然后贯通本地药水执行闭环**：候选枚举 → 目标解析 → 原生 UsePotionAction → Choice → 稳定后态校验 → continuation；不把单纯打开 capability 当完成。
-3. **再用真实坏路线做生产排序对照**：Robust、本地基线、合作名义路线、已知手打前缀使用相同初态/队友脚本/总预算，只修有证据的丢失层。
-4. **最后再决定是否恢复 U7 精确斩杀**：只有证据表明候选阶段确实漏掉可行斩杀时，才把 bounded exact search / DFS 提回优先级。
+1. 只贯通本地持有、当前 0.107.1 已正确模拟的药水：候选枚举 → 目标解析 → 原生 `UsePotionAction` → Choice → 稳定后态校验 → continuation。
+2. 不直接把 `CanUsePotionsAutomatically=true` 当完成；先查清 Safe Execute 前置 gate 与 `UsePotionAction` 现有 native deployment 路径。
+3. 保留 Smart/Disabled/RequireAtLeastOne 语义和无药备选；队友目标药水按 pinned 0.107.1 API 单独确认，不扩大到控制队友药水。
+4. 复用 U1 predicted/live 后态校验，不新造执行器；失败/Unknown 必须 fail closed。
+5. 第一项 refresh 快路当前故意只保留 PlayCard 候选；药水闭环完成后再决定是否让可自动执行的本地药水进入 bounded refresh 候选。
 
-执行要求：先刷新当前 HEAD；保留 U0–U6 已完成的共同模拟、后态校验、情景矩阵与顺序语义，不重复施工。每轮报告实际用户行为变化、旧新对照、修改函数、验证结果与未验证项；没有实机证据时不宣称体验已改善。
+仍按小阶段推进；没有实机证据时不宣称真实体验改善。

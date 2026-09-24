@@ -45,6 +45,20 @@
 
 验收用两个正反例：无关队友变化后保留当前动作，避免完整重搜；队友击杀目标/改变斩杀机会后及时换路线。记录full_restart、prefix_replay、首动作改变、原生提交耗时。单纯“重算后首动作相同”不能证明重算无价值，还应比较后缀、目标、药水和终局预测。
 
+### 第一项实施状态（2026-09-24）
+
+**实现与 pinned 门禁完成；真实 Host/Client 正反例仍为 UNVERIFIED。**
+
+- 最终排序只在 `MultiplayerLocalCrossTurn` 保留最多 3 个不可变候选；候选首动作互异，每个只保留当前回合最多 2 个普通 `PlayCard` 动作，不持有 simulator。药水候选暂不进入这条 refresh 快路，留给第二项闭环。
+- WorldVersion 变化后不再无条件清空路线。旧根与新根完全一致，或唯一变化是**仍存活敌人的 HP/Block** 时，进入 bounded refresh；目标死亡、本地资源、牌堆/Power/RNG/行动等强变化继续完整搜索。
+- bounded refresh 在新根重放当前候选和备选前缀；比较后区分 `Continue` / `Reselect` / `FullRestart`。Unknown、当前候选不可重放、固定前缀无法重新物化时一律 `FullRestart`。
+- `Continue` 与 `Reselect` 都会用胜出前缀在**新根**做一次小预算固定前缀搜索，生成新的 `SolverResult` 后才显示/授权/执行；不是只更新 WorldVersion 或继续部署旧结果。当前上限：beam 24、192 expanded nodes、60 ms，且不为该小搜索额外预留 U3 scenario reevaluation 预算。
+- Safe Execute 仍沿用 U1/U6 的原生动作提交与逐动作 predicted/live 后态校验；bounded refresh 不增加队友动作权限。若新计划被采用，Safe Auto 会创建新的 deployment/session。
+- 诊断新增 `MP_PLAN_REFRESH`：`full_restart`、`prefix_replay`、`first_action_changed`、源/新 route identity、bounded nodes/boundary、`replay_latency_ms`；`NATIVE_ACTION_CAPTURED` 额外记录 `refresh_to_native_submit_ms`。
+- 纯合同覆盖：exact root 与存活敌人 HP/Block 变化允许 bounded refresh；目标死亡、能量变化、RNG 变化强制 fresh search。
+- 最终验证：compatibility static/L1 **PASS**；Pinned 0.107.1 Release run `35974977137` **SUCCESS**。P0 timed 仍为历史共同的 TimeLimit 边界，classifier 为 `INCONCLUSIVE_TIME_BOUNDARY / BOTH_TIME_BOUNDARY`；固定工作量语义保持 `OBSERVED_EQUIVALENT`，P1 为 `FIXED_WORK_PASS_TIME_BOUNDARY`，没有出现 current-only regression。
+- **未验证**：真实多人“队友只打伤存活目标 → Continue/Reselect 且少一次完整等待”和“队友击杀目标 → FullRestart/换目标”的 Host/Client 事件序列；没有这两条实机证据前不宣称实际体验已改善。
+
 ## 第二项：让本地药水能力形成闭环
 
 不是单改CanUsePotionsAutomatically=true。贯通：候选枚举→目标解析→原生UsePotionAction→Choice→稳定后态校验→continuation。
