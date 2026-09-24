@@ -6,7 +6,4 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
-  <ItemGroup>
-    <Compile Include="../ExperimentalListenerSlots/ImmutableListenerList.cs" Link="ImmutableListenerList.cs" />
-  </ItemGroup>
 </Project>

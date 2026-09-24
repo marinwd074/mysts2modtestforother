@@ -77,7 +77,6 @@ internal sealed record SolverSettingsData
     public bool SolverDisabled { get; init; }
     public bool AutomaticCalculationEnabled { get; init; } = true;
     public bool AutoEnableFullAuto { get; init; }
-    public bool OnlineStatisticsEnabled { get; init; } = true;
     public bool StopFullAutoOnCombatEnd { get; init; }
     public bool StopFullAutoOnDeathTurn { get; init; } = true;
     public bool StopFullAutoOnWorseRecalculation { get; init; } = true;

@@ -50,7 +50,7 @@ public static class Entry
         SolverUiTokens.ConfigureTheme(SolverSettings.Current.OverlayTheme);
         SolverController.ApplyPersistentSettings(SolverSettings.Capture());
         ModTypeDiscoveryHub.RegisterModAssembly(ModId, Assembly.GetExecutingAssembly());
-        RitsuLibFramework.SubscribeLifecycle<CombatStartingEvent>(evt => { RunStatistics.Battle(evt.CombatState); SolverController.BeginCombat(evt.CombatState); });
+        RitsuLibFramework.SubscribeLifecycle<CombatStartingEvent>(evt => SolverController.BeginCombat(evt.CombatState));
         RitsuLibFramework.SubscribeLifecycle<CombatEndedEvent>(_ => SolverController.Reset("combat_ended"));
         CombatManager.Instance.TurnStarted += OnTurnStarted;
 
@@ -76,7 +76,6 @@ public static class Entry
             if (host != null)
             {
                 SolverDispatcher.Ensure(host);
-                host.AddChild(new CombatShowcaseUploadNode());
                 host.TreeExiting += PreCombatForecastWorker.StopSessionAtProcessExit;
                 host.TreeExiting += Logger.Journal.Dispose;
                 host.TreeExiting += MultiplayerClientProbe.Dispose;

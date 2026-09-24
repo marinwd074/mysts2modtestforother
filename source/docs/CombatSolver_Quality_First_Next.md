@@ -124,6 +124,14 @@
 - 唯一实机判定入口为 `source/tools/multiplayer-lab/validate-beam-retention-ab-results.ps1`，6-case 合同已覆盖 `no_difference_observed / raw_rank_difference_only / outer_portfolio_rescue_observed / incumbent_pruning_observed / beam_pruning_observed`。Pinned 0.107.1 run `35988652044` SUCCESS；compatibility run `35989267050` SUCCESS（33 PASS / 0 FAIL / 0 SKIP）。
 - 因此第三项下一步已经到**真实 Host/Client 人工边界**：当前 HEAD 复现一个“明显不如手打”的多人局面，记录更好的合法手打前缀，并保留正式 Client journal/问题包。只有当 validator 给出 `beam_pruning_observed`，且对应 prefix 确实是更好的合法路线，才修改主 Beam；若被 portfolio 救回，则继续向 FINAL_CANDIDATE/U3/U4 追踪。
 
+### 第三项新增真实样本：CEREMONIAL_BEAST T6
+
+- T6 真实根手牌含 `VICIOUS` 且最终路线留 1 Energy，但多个 baseline/final route 都不打；`scenario_rerank=false` / `chance_rerank=false`，所以不是 Robust/U3/U4 覆盖。
+- 同一战斗更早的完整投影曾多次把 `VICIOUS` 放进 T6，排除“完全未枚举/完全不支持”。
+- 精确 Vicious 触发语义已存在，实际缺口是战略保留估值：旧 `StrategicEffectModel` 将 `ViciousPower` 当普通 `Scaling(1)`。现改为按同一可达牌窗口中的 Vulnerable 施加次数计 `CardAccessPotential`，不新增全局必打规则或权重。
+- compatibility `35999711938` SUCCESS；Pinned 0.107.1 `35999711924` SUCCESS。仍需当前 HEAD 实机复现确认 T6 路线是否因此保住 Vicious。
+- Headbutt immediate `MoveToDrawTop` 已在真实 CEREMONIAL_BEAST 日志通过现有单人/多人共用 `NativeChoiceRuntime` 自动选中 `UNRELENTING`；不要为它复制执行器。跨回合 Stampede/TurnStart choice 是另一个已修的执行边界。
+
 ## 第四项：最后再决定精确斩杀是否值得加
 
 只有对照证明“候选里确实没找到可行斩杀”时，才恢复局部DFS优先级；若斩杀已找到却被Robust排序淘汰，加DFS无效。总预算包括队友搜索、复评、快照与重放，不隐藏开销。

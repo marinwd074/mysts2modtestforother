@@ -260,22 +260,6 @@ internal sealed partial class SolverSettingsPanel
             SolverText.Get("搜索成功、失败、停止或结果过期时发送 Windows 系统通知和提示音。可关闭、仅在游戏不处于前台时通知，或始终通知；其他平台不会调用 Windows 接口。"));
         AddSettingsSection(content, SolverText.Get("显示与通知"),
             SolverText.Get("设置主题、透明度与系统通知。"), interfaceGrid);
-        GridContainer statisticsGrid = CreateSettingsGrid();
-        CheckButton statistics = CreateToggle();
-        _reloadInputs.Add(data => statistics.SetPressedNoSignal(data.OnlineStatisticsEnabled));
-        statistics.Toggled += enabled =>
-        {
-            if (_loading) return;
-            SolverSettings.Update(SolverSettings.Current with { OnlineStatisticsEnabled = enabled });
-            OnlinePresence.SettingsChanged();
-            RunStatistics.SettingsChanged();
-            CombatShowcaseCollector.SettingsChanged();
-            SetStatus(enabled ? SolverText.Get("在线统计已开启") : SolverText.Get("在线统计已关闭"), SolverUiTokens.Palette.Success);
-        };
-        AddBasicRow(statisticsGrid, SolverText.Get("向统计服务发送在线状态（默认开启）"), statistics,
-            SolverText.Get("每 30 秒发送在线状态，并同步本档案的跑局统计；符合条件的进阶 10 第三幕 Boss 无伤路线会上传到私用录像库。关闭后停止上传、清除待上传录像包，并最迟 90 秒从在线列表移除。"));
-        AddSettingsSection(content, SolverText.Get("在线统计"),
-            SolverText.Get("管理在线状态和跑局统计的自动上传。"), statisticsGrid);
         return CreatePageScroll(content);
     }
 

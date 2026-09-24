@@ -21,6 +21,6 @@ not silently reinterpreted as 0.107.1 results.
 | Known limitations and unrun claims | [KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md) |
 
 Runtime evidence is stored under the repository root's
-[`runtime-evidence/`](../../../../runtime-evidence/) directory. Each run keeps
+Git history or local sanitized evidence storage. Historical runs kept
 the source commit, game/RitsuLib versions, context, result, and sanitized
 startup/error excerpts together.

@@ -1,0 +1,44 @@
+name: Feature / 改进建议
+description: Propose a solver, multiplayer, tooling, UI, or repository improvement.
+title: "[Feature] "
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area / 范围
+      options:
+        - Search quality
+        - Simulation coverage
+        - Multiplayer
+        - Automation / execution
+        - Performance
+        - UI / diagnostics
+        - Build / testing
+        - Repository / workflow
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / 使用场景
+      description: Describe the concrete limitation or workflow you want to improve.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the desired behavior, not only an implementation detail.
+    validations:
+      required: true
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints / trade-offs
+      description: Include compatibility, multiplayer authority, performance, or testing constraints if relevant.
+    validations:
+      required: false

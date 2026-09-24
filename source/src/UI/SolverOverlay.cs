@@ -2036,13 +2036,6 @@ internal static partial class SolverOverlay
             tone = TextMuted;
         }
 
-        if (OnlinePresence.AvailableUpdateVersion is { } latestVersion)
-        {
-            string notice = SolverText.Format($"求解器新版本 {latestVersion} 已发布，请更新 Mod 后重启游戏。");
-            text = text == null ? notice : notice + "\n" + text;
-            if (tone != Danger)
-                tone = Warning;
-        }
 
         bool visibilityChanged = _feedbackBanner.Visible != (text != null);
         _feedbackBanner.Visible = text != null;

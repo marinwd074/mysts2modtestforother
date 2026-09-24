@@ -98,7 +98,6 @@ internal sealed partial class PerformanceRecording : Node
                 config.SourceRevision, config.SegmentSeconds, config.HandleWindowSeconds, version = typeof(Entry).Assembly.GetName().Version?.ToString(),
                 runtime = RuntimeInformation.FrameworkDescription, os = RuntimeInformation.OSDescription,
                 assemblySha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(typeof(Entry).Assembly.Location))),
-                onlineStatistics = SolverSettings.Current.OnlineStatisticsEnabled,
                 cpus = System.Environment.ProcessorCount, stopwatchFrequency = Stopwatch.Frequency,
                 settings = SolverSettings.Capture(), diagnosticOnly = true });
             File.WriteAllText(Path.Combine(_directory, "configuration.json"), JsonSerializer.Serialize(config));
@@ -188,7 +187,7 @@ internal sealed partial class PerformanceRecording : Node
             deploying = SolverController.IsDeploying, fullAuto = SolverController.FullAutoEnabled,
             focused = GetWindow().HasFocus(), paused = GetTree().Paused,
             timeScale = Godot.Engine.TimeScale, maxFps = Godot.Engine.MaxFps,
-            onlineStatistics = SolverSettings.Current.OnlineStatisticsEnabled });
+            });
         if (context != _lastContext) _session.Write(new { kind = "context", utcMs = PerformanceSession.Now, context });
         _lastContext = context;
         long allocated = GC.GetAllocatedBytesForCurrentThread();

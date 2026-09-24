@@ -54,7 +54,6 @@ internal static class U2Runtime
             SearchMaxHandChoiceBranchesPerAction = 24,
             EnableNoGcRegion = false,
             StopAtAcceptableBattleHpLoss = false,
-            OnlineStatisticsEnabled = false,
             SearchCompletionNotificationsEnabled = false,
             PotionPolicy = SolverPotionPolicy.Smart,
         });

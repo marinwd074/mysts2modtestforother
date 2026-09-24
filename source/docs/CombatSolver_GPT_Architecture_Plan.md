@@ -143,7 +143,7 @@ F 必须执行每张牌与触发器，而不是先合并成“队友本回合打
 
 ### U0 — 建立当前差异图与最小质量基线
 
-**状态（2026-09-23）：结构性验收已完成。** 当前差异图、五类问题分诊、四层诊断入口与固定输入见 [`U0_BASELINE.md`](U0_BASELINE.md)。真实 Release / SP / Host+Client 行为样例仍按证据标为 `UNVERIFIED`，不由结构门禁冒充运行 PASS。下一张卡为 U1；不要在 U0 内继续扩大搜索/排序改动。
+**状态（2026-09-23）：结构性验收已完成。** 当前差异图、五类问题分诊、四层诊断入口与固定输入见 Git history 中的 U0 完成记录。真实 Release / SP / Host+Client 行为样例仍按证据标为 `UNVERIFIED`，不由结构门禁冒充运行 PASS。下一张卡为 U1；不要在 U0 内继续扩大搜索/排序改动。
 
 读取 AGENTS.md、source/AGENTS.md、CODEX_HANDOFF.md，然后仅沿当前搜索/排序/执行调用链检查。输出：当前SHA、单人/多人差异表、每个差异的调用位置与目的、已失效兼容规则。
 
@@ -155,7 +155,7 @@ F 必须执行每张牌与触发器，而不是先合并成“队友本回合打
 
 ### U1 — 先修动作后态校验
 
-**状态（2026-09-23）：代码/合同/Release 构建已完成，真实多人验收仍 `UNVERIFIED`。** 当前实现见 [`U1_ACTION_POSTSTATE.md`](U1_ACTION_POSTSTATE.md)：每张动作前 fresh probe；每张动作提交前由生产 `CombatBeamSolver.ReplayDiagnosticPrefix` 冻结 predicted `ContinuationStamp + remote fingerprint`；原生队列稳定后与 live 精确比较。旧 `local_card_removed/energy/enemy_target/remote_unchanged` 只保留旁路诊断。重锤+Choice、连续祭品、真实队友插入和 cancellation 双端 timing 仍需实机复测；该 runtime debt 与已完成的 U2 搜索共核验收分开记录。
+**状态（2026-09-23）：代码/合同/Release 构建已完成，真实多人验收仍 `UNVERIFIED`。** 当前实现见 Git history 中的 U1 完成记录：每张动作前 fresh probe；每张动作提交前由生产 `CombatBeamSolver.ReplayDiagnosticPrefix` 冻结 predicted `ContinuationStamp + remote fingerprint`；原生队列稳定后与 live 精确比较。旧 `local_card_removed/energy/enemy_target/remote_unchanged` 只保留旁路诊断。重锤+Choice、连续祭品、真实队友插入和 cancellation 双端 timing 仍需实机复测；该 runtime debt 与已完成的 U2 搜索共核验收分开记录。
 
 入口：MultiplayerSafeExecutePolicy、MultiplayerSafeLocalActionClassifier、SolverController.Deployment、现有native action/Choice与快照实现。
 
@@ -165,7 +165,7 @@ F 必须执行每张牌与触发器，而不是先合并成“队友本回合打
 
 ### U2 — 搜索共核与退化等价
 
-**状态（2026-09-23）：COMPLETE。** 详细实现与证据见 [U2_SEARCH_KERNEL.md](U2_SEARCH_KERNEL.md)。SinglePlayerFullRoute 与 MultiplayerLocalCrossTurn 已共用完整搜索核；搜索能力与部署权限、route mechanics 与 team objective 分离。历史多人 Anger/current-turn/Shuffle 例外仅在实际多人根启用。pinned 0.107.1 的同根 differential 在相同 objective、DOP=1 与固定预算下实跑通过：首动作、完整 18-action 固定 tie-break 序列、终局值、score、expanded nodes 和 transitions 全部一致。真实多人 Joint/Shadow、MultiplayerOnly、网络/revalidation 与共享 RNG 边界均保留。
+**状态（2026-09-23）：COMPLETE。** 详细实现与证据见 Git history 中的 U2 完成记录。SinglePlayerFullRoute 与 MultiplayerLocalCrossTurn 已共用完整搜索核；搜索能力与部署权限、route mechanics 与 team objective 分离。历史多人 Anger/current-turn/Shuffle 例外仅在实际多人根启用。pinned 0.107.1 的同根 differential 在相同 objective、DOP=1 与固定预算下实跑通过：首动作、完整 18-action 固定 tie-break 序列、终局值、score、expanded nodes 和 transitions 全部一致。真实多人 Joint/Shadow、MultiplayerOnly、网络/revalidation 与共享 RNG 边界均保留。
 
 只消除有证据的单多人能力差异；保持单人默认目标和路线。队友模型先用确定性脚本；无队友事件时共用同一候选生成、预算和排序配置。
 
@@ -199,7 +199,7 @@ F 必须执行每张牌与触发器，而不是先合并成“队友本回合打
 
 ### U5 — 本地与队友的关键顺序
 
-**状态（2026-09-23）：COMPLETE（代码/合同/pinned 0.107.1 回归完成；真实 Host/Client U5 专项 smoke 仍 `UNVERIFIED`）。** 详细实现与证据见 [U5_LOCAL_TEAMMATE_INTERLEAVING.md](U5_LOCAL_TEAMMATE_INTERLEAVING.md)。多人本地搜索现在可形成“本地 A → forecast-only 队友 B → 从 B 后真实模拟状态继续本地 C”；B 始终只存在于 detached simulator，不获得部署权限。A→B 前向路线与 B→A reverse-order probe 都逐动作走生产 F；reverse 顺序若导致牌身份、合法性、目标、牌堆/RNG/History/死亡处理等变化，会标为 `OrderSensitive` 或 `ReverseUnavailable`。只有两顺序的 `ShadowFutureStateFingerprint` 完全相同才允许 `ExactEquivalent` collapse；仅“不同怪物”不构成可交换证明。
+**状态（2026-09-23）：COMPLETE（代码/合同/pinned 0.107.1 回归完成；真实 Host/Client U5 专项 smoke 仍 `UNVERIFIED`）。** 详细实现与证据见 Git history 中的 U5 完成记录。多人本地搜索现在可形成“本地 A → forecast-only 队友 B → 从 B 后真实模拟状态继续本地 C”；B 始终只存在于 detached simulator，不获得部署权限。A→B 前向路线与 B→A reverse-order probe 都逐动作走生产 F；reverse 顺序若导致牌身份、合法性、目标、牌堆/RNG/History/死亡处理等变化，会标为 `OrderSensitive` 或 `ReverseUnavailable`。只有两顺序的 `ShadowFutureStateFingerprint` 完全相同才允许 `ExactEquivalent` collapse；仅“不同怪物”不构成可交换证明。
 
 调度保持有界：每个本地回合最多一个 teammate forecast observation、每个观察最多保留 4 条路线；`AllowsProactiveWaitForTeammate=false`，没有“等待理想队友行动”的无限等待动作。真实部署在 forecast observation 前截断；Safe Auto 保持 fresh-search 资格并重新观察/规划，绝不会跳过 forecast 节点继续部署条件后缀。U3 当前决策身份和情景复评同样在 forecast 边界 fail closed，避免预知队友选择。
 
@@ -207,11 +207,11 @@ F 必须执行每张牌与触发器，而不是先合并成“队友本回合打
 
 ### U6 — 实机闭环与清理
 
-**状态（2026-09-24）：COMPLETE（实现与清理）。** 真实 Host/Client U6-C smoke 由用户明确跳过，因此当前 HEAD 的该网络时序链继续记为 `UNVERIFIED`，不冒充 runtime PASS。 详见 [U6_RUNTIME_CLOSURE.md](U6_RUNTIME_CLOSURE.md)。失效的固定 32-action ceiling、旧 MP-2A 单动作兼容入口/limit aliases 与对应 validator 已删除；Safe Execute capability 改为 `action_limit=selected_route`。Pinned Release 触发范围已覆盖 Safe Execute policy/classifier/controller。U6 新 validator 只接受真实 forecast boundary → remote readable delta → fresh search → old request dormant 链，缺证据返回 `UNVERIFIED`。
+**状态（2026-09-24）：COMPLETE（实现与清理）。** 真实 Host/Client U6-C smoke 由用户明确跳过，因此当前 HEAD 的该网络时序链继续记为 `UNVERIFIED`，不冒充 runtime PASS。 详见 Git history 中的 U6 完成记录。失效的固定 32-action ceiling、旧 MP-2A 单动作兼容入口/limit aliases 与对应 validator 已删除；Safe Execute capability 改为 `action_limit=selected_route`。Pinned Release 触发范围已覆盖 Safe Execute policy/classifier/controller。U6 新 validator 只接受真实 forecast boundary → remote readable delta → fresh search → old request dormant 链，缺证据返回 `UNVERIFIED`。
 
 U6 实现与清理收口后即可独立评估本地精确斩杀、缓存、增量修补和更远期预测；已跳过的 U6-C 只保留为可选 runtime 补证，不阻塞这些后续实验。迁移成功后删除失效常数、历史别名与相应旧测试，不为了兼容测试保留虚假的生产边界。
 
-验收：已完成。交接已压缩为当前架构、已验证结果、未验证事项和下一任务；旧 MP-2A 路径在调用归零后删除；离线/pinned、构建/合同和真实 Host/Client 证据继续分层记录。U6-C 的最小实机步骤保留在 [U6_RUNTIME_CLOSURE.md](U6_RUNTIME_CLOSURE.md)，但因本轮明确跳过，不作为 U6 实现阶段继续阻塞项。
+验收：已完成。交接已压缩为当前架构、已验证结果、未验证事项和下一任务；旧 MP-2A 路径在调用归零后删除；离线/pinned、构建/合同和真实 Host/Client 证据继续分层记录。U6-C 的最小实机步骤保留在 Git history 中的 U6 完成记录，但因本轮明确跳过，不作为 U6 实现阶段继续阻塞项。
 
 ## 8. 最小验证矩阵与停止条件
 

@@ -538,7 +538,6 @@ internal static partial class SolverController
         LastReusedProjectedBattleHpLostForTesting = null;
         SearchGcPolicy.ResetCountersForTesting();
         BattleDamageTracker.Begin(state);
-        CombatShowcaseCollector.BeginCombat();
         CombatBugReportExporter.BeginCombat(state);
         _combat.TheftPolicy = state is CombatState combat && TheftEncounterStrategy.IsApplicable(combat)
             ? SolverTheftPolicy.PreserveResources

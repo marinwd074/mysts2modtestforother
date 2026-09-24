@@ -23,7 +23,6 @@ $forbiddenSearchReferences = @(
     "SolverActionTextIdentity",
     "SolverLocaleRefresh",
     "SolvedRouteCache",
-    "RunStatistics",
     "UnattendedTestRunner"
 )
 
@@ -1138,14 +1137,6 @@ $preCombatApiChecks = @(
     @{
         Path = Join-Path $repositoryRoot "src\Replay\CombatShowcaseRuntime.cs"
         Text = "SolverController.AcceptShowcaseRoute"
-    },
-    @{
-        Path = Join-Path $repositoryRoot "src\Replay\CombatShowcaseCollector.cs"
-        Text = "CombatShowcaseCollector.FlushPendingAsync"
-    },
-    @{
-        Path = Join-Path $repositoryRoot "src\Replay\CombatShowcaseModEligibility.cs"
-        Text = "FindGameplayModificationNames"
     },
     @{
         Path = Join-Path $repositoryRoot "src\Api\PreCombatLiveStateSnapshot.cs"
