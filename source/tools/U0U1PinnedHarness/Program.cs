@@ -476,6 +476,11 @@ internal static class Program
             replayPolicy,
             profile,
             bash);
+        U5DrawOrderEvidence drawOrder = RunU5DrawOrder(
+            combat,
+            names,
+            replayPolicy,
+            profile);
 
         return new U5Evidence(
             Status: "PASS",
@@ -501,7 +506,130 @@ internal static class Program
             ResourceForwardEnergy: resourceOrder.ForwardEnergy,
             ResourceReverseRejected: resourceOrder.ReverseRejected,
             ResourceReverseReason: resourceOrder.ReverseReason,
+            DrawInitialTopTwo: drawOrder.InitialTopTwo,
+            DrawForwardFingerprint: Format(drawOrder.ForwardFingerprint),
+            DrawReverseFingerprint: Format(drawOrder.ReverseFingerprint),
+            DrawForwardHand: drawOrder.ForwardHand,
+            DrawReverseHand: drawOrder.ReverseHand,
+            DrawForwardExhaust: drawOrder.ForwardExhaust,
+            DrawReverseExhaust: drawOrder.ReverseExhaust,
+            DrawPileStateDifferent: drawOrder.PileStateDifferent,
             RealMultiplayerOwnershipVerified: false);
+    }
+
+    private static U5DrawOrderEvidence RunU5DrawOrder(
+        CombatState combat,
+        SolverDisplayNames names,
+        SearchPolicySnapshot policy,
+        SolverSearchProfile profile)
+    {
+        Player player = LocalContext.GetMe(combat)
+            ?? throw new InvalidOperationException("U5 draw fixture has no local player.");
+        var playerState = player.PlayerCombatState
+            ?? throw new InvalidOperationException("U5 draw fixture has no local combat state.");
+        Require(
+            playerState.DrawPile.Cards.Count >= 2,
+            $"U5 draw fixture requires at least two draw-pile cards, got {playerState.DrawPile.Cards.Count}.");
+
+        string[] initialTopTwo = playerState.DrawPile.Cards
+            .Take(2)
+            .Select(card => card.Id.Entry)
+            .ToArray();
+        Require(
+            !string.Equals(initialTopTwo[0], initialTopTwo[1], StringComparison.Ordinal),
+            $"U5 draw fixture top two cards are not decisive: {initialTopTwo[0]},{initialTopTwo[1]}.");
+
+        playerState.Hand.AddInternal(combat.CreateCard(ResolveCard("POMMEL_STRIKE"), player), -1);
+        playerState.Hand.AddInternal(combat.CreateCard(ResolveCard("HAVOC"), player), -1);
+        SetLiveEnergyForU5(player, 3);
+
+        int turn = playerState.TurnNumber;
+        uint enemyCombatId = combat.Enemies.Single().CombatId
+            ?? throw new InvalidOperationException("U5 draw fixture enemy has no CombatId.");
+        PlanAction pommel = new(
+            PlanActionKind.PlayCard,
+            turn,
+            CardId: "POMMEL_STRIKE",
+            CardOccurrence: 0,
+            TargetIndex: 0,
+            TargetCombatId: enemyCombatId,
+            CardTitle: "Pommel Strike");
+        PlanAction havoc = new(
+            PlanActionKind.PlayCard,
+            turn,
+            CardId: "HAVOC",
+            CardOccurrence: 0,
+            CardTitle: "Havoc");
+
+        BattleDamageSnapshot damage = BattleDamageTracker.Observe(combat);
+        U5DrawReplay forward = ReplayU5DrawOrder(
+            combat, names, damage, policy, profile, player, [pommel, havoc]);
+        U5DrawReplay reverse = ReplayU5DrawOrder(
+            combat, names, damage, policy, profile, player, [havoc, pommel]);
+
+        Require(
+            forward.FutureFingerprint != reverse.FutureFingerprint,
+            "U5 draw-order pair collapsed to the same complete future fingerprint.");
+
+        bool pileStateDifferent =
+            !forward.Hand.SequenceEqual(reverse.Hand)
+            || !forward.Exhaust.SequenceEqual(reverse.Exhaust)
+            || !forward.Draw.SequenceEqual(reverse.Draw);
+        Require(
+            pileStateDifferent,
+            "U5 draw-order fixture produced identical hand/exhaust/draw pile states.");
+
+        return new U5DrawOrderEvidence(
+            InitialTopTwo: initialTopTwo,
+            ForwardFingerprint: forward.FutureFingerprint,
+            ReverseFingerprint: reverse.FutureFingerprint,
+            ForwardHand: forward.Hand,
+            ReverseHand: reverse.Hand,
+            ForwardExhaust: forward.Exhaust,
+            ReverseExhaust: reverse.Exhaust,
+            PileStateDifferent: true);
+    }
+
+    private static U5DrawReplay ReplayU5DrawOrder(
+        CombatState combat,
+        SolverDisplayNames names,
+        BattleDamageSnapshot damage,
+        SearchPolicySnapshot policy,
+        SolverSearchProfile profile,
+        Player player,
+        IReadOnlyList<PlanAction> actions)
+    {
+        CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
+        CombatBeamSolver replay = new(
+            root,
+            names,
+            damage,
+            policy,
+            searchProfile: profile);
+        SimulationSnapshot snapshot = replay.ReplayDiagnosticPrefix(actions);
+        try
+        {
+            Require(
+                snapshot.BoundaryReason == SearchBoundaryReason.None,
+                $"U5 draw replay {string.Join("->", actions.Select(action => action.CardId))} " +
+                $"reached {snapshot.BoundaryReason}.");
+
+            StateFingerprint future = ShadowFutureStateFingerprint.Capture(
+                snapshot.Simulator,
+                snapshot.ProcessedEnemyDeaths,
+                new HashSet<string>(StringComparer.Ordinal),
+                Array.Empty<ShadowTeammateActionCandidate>());
+            SimPlayerCombatState state = snapshot.Simulator.State.GetPlayerCombatState(player);
+            return new U5DrawReplay(
+                FutureFingerprint: future,
+                Hand: state.Hand.Cards.Select(card => card.Preview.Id.Entry).ToArray(),
+                Exhaust: state.ExhaustPile.Cards.Select(card => card.Preview.Id.Entry).ToArray(),
+                Draw: state.DrawPile.Cards.Select(card => card.Preview.Id.Entry).ToArray());
+        }
+        finally
+        {
+            snapshot.ReleaseSimulator();
+        }
     }
 
     private static U5ResourceOrderEvidence RunU5ResourceOrder(
@@ -1009,7 +1137,31 @@ internal static class Program
         int ResourceForwardEnergy,
         bool ResourceReverseRejected,
         string ResourceReverseReason,
+        string[] DrawInitialTopTwo,
+        string DrawForwardFingerprint,
+        string DrawReverseFingerprint,
+        string[] DrawForwardHand,
+        string[] DrawReverseHand,
+        string[] DrawForwardExhaust,
+        string[] DrawReverseExhaust,
+        bool DrawPileStateDifferent,
         bool RealMultiplayerOwnershipVerified);
+
+    private sealed record U5DrawOrderEvidence(
+        string[] InitialTopTwo,
+        StateFingerprint ForwardFingerprint,
+        StateFingerprint ReverseFingerprint,
+        string[] ForwardHand,
+        string[] ReverseHand,
+        string[] ForwardExhaust,
+        string[] ReverseExhaust,
+        bool PileStateDifferent);
+
+    private sealed record U5DrawReplay(
+        StateFingerprint FutureFingerprint,
+        string[] Hand,
+        string[] Exhaust,
+        string[] Draw);
 
     private sealed record U5ResourceOrderEvidence(
         bool ForwardCompleted,
