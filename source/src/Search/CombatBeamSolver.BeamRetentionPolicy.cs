@@ -623,6 +623,13 @@ internal sealed partial class CombatBeamSolver
                 ranked[index] = scored[index].Node;
         }
 
+        public void SortByLegacyBeamRankForDiagnostics(List<SearchNode> ranked)
+            => SortByLegacyBeamRank(ranked);
+
+        public MultiplayerCombatObjectiveRank BuildMultiplayerObjectiveRankForDiagnostics(
+            SearchNode node)
+            => BuildMultiplayerObjectiveRank(node);
+
         private Comparison<SearchNode> FinalCandidateComparison
             => _finalCandidateComparison ??= CompareFinalCandidates;
         /// <summary>

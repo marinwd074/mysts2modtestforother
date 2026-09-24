@@ -4,6 +4,20 @@ namespace CombatSolver;
 
 internal sealed partial class CombatBeamSolver
 {
+    private const int MaximumBeamObjectiveAbLogs = 12;
+    private int _beamObjectiveAbLogCount;
+    private int _beamObjectiveAbBoundaryId;
+    private bool _beamObjectiveAbStarted;
+    private readonly Dictionary<int, BeamObjectiveAbPending> _beamObjectiveAbPending = [];
+
+    private readonly record struct BeamObjectiveAbPending(
+        int Sample,
+        SearchNode Witness,
+        int LegacyRank,
+        int ProductionRawRank,
+        int LegacyOnlyRawCount,
+        int LegacyOnlySelectedCount);
+
     // This transient, synchronous callback payload never crosses the Search boundary.
     // Its node lists are borrowed only until the callback returns; the sink receives copies.
     private readonly record struct GlobalRetentionDecision(
@@ -167,29 +181,174 @@ internal sealed partial class CombatBeamSolver
         IReadOnlyList<SearchNode> pool,
         int boundaryId)
     {
-        SearchPathObserver? observer = policy.Diagnostics.PathObserver;
-        if (observer == null || !observer.ObservesRetentionPools)
-            return null;
-        bool matched = false;
-        foreach (SearchNode node in pool)
-        {
-            if (!observer.WantsRetentionPool(node.StateKey))
-                continue;
-            matched = true;
-            break;
-        }
-        if (!matched)
+        bool observePathPool = WantsSearchPathRetentionPool(pool);
+
+        bool observeBeamObjectiveAb =
+            policy.DetailedDiagnostics
+            && policy.UseMultiplayerTeamObjective
+            && _useMultiplayerRouteSemantics
+            && _beamObjectiveAbLogCount < MaximumBeamObjectiveAbLogs;
+        if (!observePathPool && !observeBeamObjectiveAb)
             return null;
 
-        ObserveSearchPathRetentionPool(
-            pool, SearchPathObservationStage.RetentionPoolInput, "outer_prune_pool", boundaryId);
-        return CreateMatchedGlobalRetentionCallback(boundaryId);
+        if (observePathPool)
+        {
+            ObserveSearchPathRetentionPool(
+                pool, SearchPathObservationStage.RetentionPoolInput, "outer_prune_pool", boundaryId);
+        }
+        return CreateMatchedGlobalRetentionCallback(
+            boundaryId,
+            observePathPool,
+            observeBeamObjectiveAb);
+    }
+
+    private bool WantsSearchPathRetentionPool(IReadOnlyList<SearchNode> pool)
+    {
+        SearchPathObserver? observer = policy.Diagnostics.PathObserver;
+        if (observer?.ObservesRetentionPools != true)
+            return false;
+        foreach (SearchNode node in pool)
+        {
+            if (observer.WantsRetentionPool(node.StateKey))
+                return true;
+        }
+        return false;
     }
 
     // Keep the capturing lambda out of the null/miss path, so disabled observation does
     // not allocate a closure merely by entering the outer Prune boundary.
-    private Action<GlobalRetentionDecision> CreateMatchedGlobalRetentionCallback(int boundaryId)
-        => decision => ObserveGlobalRetentionDecision(decision, boundaryId);
+    private Action<GlobalRetentionDecision> CreateMatchedGlobalRetentionCallback(
+        int boundaryId,
+        bool observePathPool,
+        bool observeBeamObjectiveAb)
+        => decision =>
+        {
+            if (observePathPool)
+                ObserveGlobalRetentionDecision(decision, boundaryId);
+            if (observeBeamObjectiveAb)
+                ObserveMultiplayerBeamObjectiveAb(decision, boundaryId);
+        };
+
+    private void ObserveMultiplayerBeamObjectiveAb(
+        GlobalRetentionDecision decision,
+        int boundaryId)
+    {
+        if (!_beamObjectiveAbStarted)
+        {
+            _beamObjectiveAbStarted = true;
+            policy.Diagnostics.Info(
+                $"[CombatSolver/Multiplayer] MP_BEAM_RETENTION_AB_START " +
+                $"beam={decision.Limit} detailed=true");
+        }
+
+        if (_beamObjectiveAbLogCount >= MaximumBeamObjectiveAbLogs
+            || decision.OrderedPool.Count <= decision.Limit
+            || decision.Limit <= 0)
+        {
+            return;
+        }
+
+        List<SearchNode> legacyOrder = [.. decision.OrderedPool];
+        Retention.SortByLegacyBeamRankForDiagnostics(legacyOrder);
+
+        int topCount = Math.Min(decision.Limit, decision.OrderedPool.Count);
+        HashSet<SearchNode> productionRawTop = new(
+            decision.OrderedPool.Take(topCount),
+            ReferenceEqualityComparer.Instance);
+        HashSet<SearchNode> productionSelected = new(
+            decision.Selected,
+            ReferenceEqualityComparer.Instance);
+
+        List<SearchNode> legacyOnlyRaw = legacyOrder
+            .Take(topCount)
+            .Where(node => !productionRawTop.Contains(node))
+            .ToList();
+        List<SearchNode> legacyOnlySelected = legacyOrder
+            .Take(topCount)
+            .Where(node => !productionSelected.Contains(node))
+            .ToList();
+
+        if (legacyOnlyRaw.Count == 0 && legacyOnlySelected.Count == 0)
+            return;
+
+        _beamObjectiveAbLogCount++;
+        int sample = _beamObjectiveAbLogCount;
+        SearchNode witness = legacyOnlySelected.FirstOrDefault()
+            ?? legacyOnlyRaw[0];
+        int legacyRank = ObservedReferenceIndex(legacyOrder, witness) ?? -1;
+        int productionRawRank = ObservedReferenceIndex(decision.OrderedPool, witness) ?? -1;
+        int? productionSelectedRank = ObservedReferenceIndex(decision.Selected, witness);
+        MultiplayerCombatObjectiveRank objective = Retention.BuildMultiplayerObjectiveRankForDiagnostics(witness);
+
+        if (legacyOnlySelected.Count > 0)
+        {
+            _beamObjectiveAbPending[boundaryId] = new BeamObjectiveAbPending(
+                sample,
+                witness,
+                legacyRank,
+                productionRawRank,
+                legacyOnlyRaw.Count,
+                legacyOnlySelected.Count);
+        }
+
+        policy.Diagnostics.Info(
+            $"[CombatSolver/Multiplayer] MP_BEAM_RETENTION_AB " +
+            $"sample={sample} boundary={boundaryId} " +
+            $"turn={witness.Turn} pool={decision.OrderedPool.Count} limit={decision.Limit} " +
+            $"legacy_only_raw={legacyOnlyRaw.Count} " +
+            $"legacy_only_selected={legacyOnlySelected.Count} " +
+            $"legacy_rank={legacyRank + 1} production_raw_rank={productionRawRank + 1} " +
+            $"production_selected_rank={(productionSelectedRank.HasValue ? productionSelectedRank.Value + 1 : 0)} " +
+            $"all_alive={objective.AllPlayersAlive.ToString().ToLowerInvariant()} " +
+            $"loss_eq={objective.LossEquivalent:F6} " +
+            $"worst_player_loss={objective.WorstPlayerLossRatio:F6} " +
+            $"team_loss={objective.TeamLossRatio:F6} " +
+            $"enemy_durability={objective.EnemyDurabilityRatio:F6} " +
+            $"prefix={DescribeBeamObjectiveAbPrefix(witness)}");
+    }
+
+    private void CompleteMultiplayerBeamObjectiveAb(
+        int boundaryId,
+        IReadOnlyList<SearchNode> afterOuterPortfolios,
+        IReadOnlyList<SearchNode> afterIncumbent)
+    {
+        if (!_beamObjectiveAbPending.Remove(boundaryId, out BeamObjectiveAbPending pending))
+            return;
+
+        int? portfolioRank = ObservedReferenceIndex(afterOuterPortfolios, pending.Witness);
+        int? finalRank = ObservedReferenceIndex(afterIncumbent, pending.Witness);
+        bool rescuedByOuterPortfolio = portfolioRank.HasValue;
+        bool survivedIncumbent = finalRank.HasValue;
+        policy.Diagnostics.Info(
+            $"[CombatSolver/Multiplayer] MP_BEAM_RETENTION_AB_FINAL " +
+            $"sample={pending.Sample} boundary={boundaryId} " +
+            $"legacy_only_raw={pending.LegacyOnlyRawCount} " +
+            $"legacy_only_selected={pending.LegacyOnlySelectedCount} " +
+            $"legacy_rank={pending.LegacyRank + 1} " +
+            $"production_raw_rank={pending.ProductionRawRank + 1} " +
+            $"portfolio_rank={(portfolioRank.HasValue ? portfolioRank.Value + 1 : 0)} " +
+            $"final_rank={(finalRank.HasValue ? finalRank.Value + 1 : 0)} " +
+            $"rescued_by_outer_portfolio={rescuedByOuterPortfolio.ToString().ToLowerInvariant()} " +
+            $"survived_incumbent={survivedIncumbent.ToString().ToLowerInvariant()} " +
+            $"beam_pruned={(!rescuedByOuterPortfolio).ToString().ToLowerInvariant()} " +
+            $"final_pruned={(!survivedIncumbent).ToString().ToLowerInvariant()} " +
+            $"prefix={DescribeBeamObjectiveAbPrefix(pending.Witness)}");
+    }
+
+    private static string DescribeBeamObjectiveAbPrefix(SearchNode node)
+    {
+        List<string> reversed = [];
+        for (SearchNode? cursor = node; cursor?.Action is { } action; cursor = cursor.Parent)
+        {
+            string id = action.CardId ?? action.PotionId ?? "-";
+            reversed.Add($"{action.Turn}:{action.Kind}:{id}");
+        }
+        reversed.Reverse();
+        const int maximumTokens = 6;
+        if (reversed.Count <= maximumTokens)
+            return string.Join(",", reversed);
+        return string.Join(",", reversed.Take(maximumTokens)) + ",...";
+    }
 
     private void ObserveSearchPathRetentionPool(
         IReadOnlyList<SearchNode> nodes,
