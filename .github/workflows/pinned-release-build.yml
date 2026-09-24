@@ -28,6 +28,7 @@ on:
       - 'source/src/Runtime/SolverController.Deployment.cs'
       - 'source/src/Search/CombatBeamSolver.MultiplayerScenarioReevaluation.cs'
       - 'source/src/Search/CombatBeamSolver.BeamRetentionPolicy.cs'
+      - 'source/src/Search/CombatBeamSolver.Retention.cs'
       - 'source/src/Search/CombatBeamSolver.BeamRanking.cs'
       - 'source/src/Search/CombatBeamSolver.PathDiagnostics.cs'
       - 'source/tools/BeamRankSortChecks/**'
