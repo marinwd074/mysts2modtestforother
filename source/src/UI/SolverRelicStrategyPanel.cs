@@ -1,5 +1,6 @@
 using Godot;
 using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Relics;
 
@@ -186,6 +187,7 @@ internal sealed partial class SolverRelicStrategyPanel : PanelContainer
             _enabled.Disabled = disabled;
             _enabled.SetPressedNoSignal(settings.RelicStrategyEnabled);
             var state = CombatManager.Instance.DebugOnlyGetState();
+            var localPlayer = state == null ? null : LocalContext.GetMe(state);
             ulong ownedMask = 0;
             foreach (Row row in _rows)
             {
@@ -199,7 +201,7 @@ internal sealed partial class SolverRelicStrategyPanel : PanelContainer
                     pair.Item1.Editable = editable;
                     if (!pair.Item1.GetLineEdit().HasFocus()) pair.Item1.SetValueNoSignal(pair.Item2);
                 }
-                bool owned = state?.Players.SelectMany(player => player.Relics).Any(relic => !relic.IsMelted && RelicCounterCatalog.Identify(relic) == row.Entry.Id) == true;
+                bool owned = localPlayer != null && RelicCounterCatalog.IsOwnedBy(localPlayer, row.Entry.Id);
                 row.Status.Text = SolverText.Get(owned ? "已持有" : "未持有");
                 row.Card.Visible = owned || _showUnowned.ButtonPressed;
                 if (owned) ownedMask |= 1UL << (int)row.Entry.Id;

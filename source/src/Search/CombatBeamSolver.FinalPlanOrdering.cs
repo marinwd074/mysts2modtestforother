@@ -2,9 +2,8 @@ namespace CombatSolver;
 
 internal sealed partial class CombatBeamSolver
 {
-    // P3 robust stress-scenario reranking is active. Probability-weighted aggregation remains
-    // disabled until teammate behavior priors are empirically calibrated.
-    private const bool EnableMultiplayerScenarioReevaluation = true;
+    // Probability-weighted aggregation remains disabled until teammate behavior priors are
+    // empirically calibrated. Robust scenario reranking is controlled by the per-search policy.
     private const bool EnableMultiplayerChanceAggregation = false;
 
     private sealed class FinalPlanOrdering(
@@ -29,6 +28,7 @@ internal sealed partial class CombatBeamSolver
         int startTurnNumber,
         MultiplayerCarryRankingContext carryRankingContext,
         BattleDamageSnapshot battleDamage,
+        bool enableMultiplayerScenarioReevaluation,
         Func<IReadOnlyList<SearchNode>, IReadOnlyList<MultiplayerScenarioDecisionEvaluation>>?
             scenarioReevaluator,
         PotionStrategicCostLookup? potionStrategicCosts = null)
@@ -358,12 +358,7 @@ internal sealed partial class CombatBeamSolver
                             bossHpRelief,
                             postCombatRelicHeal,
                             theftPolicy,
-                            useMultiplayerRouteSemantics,
-                            useMultiplayerTeamObjective,
-                            multiplayerCombatObjectiveStrategy,
-                            multiplayerEnemyDurabilityRatio,
-                            multiplayerEnemyMaximumHp,
-                            startTurnNumber) >= 0)
+                            useMultiplayerRouteSemantics) >= 0)
                 {
                     continue;
                 }
@@ -404,7 +399,7 @@ internal sealed partial class CombatBeamSolver
                 {
                     var potionFreeBaseline = policyCandidates[potionFreeBaselineIndex];
                     diagnostics.Info(
-                        $"[CombatSolver/Test] POLICY_BASELINE kind=potion_free " +
+                        $"[CombatSolver/Test] POLICY_BASELINE kind=potion_free scope=local_player " +
                         $"won={potionFreeWon} hp_deficit={potionFreeBaseline.HpDeficit} " +
                         $"enemy_hp={potionFreeBaseline.Features.EnemyHp} " +
                         $"boundary={potionFreeBaseline.Features.BoundaryReason} " +
@@ -413,7 +408,7 @@ internal sealed partial class CombatBeamSolver
                 else
                 {
                     diagnostics.Info(
-                        $"[CombatSolver/Test] POLICY_BASELINE kind=potion_free missing=true " +
+                        $"[CombatSolver/Test] POLICY_BASELINE kind=potion_free scope=local_player missing=true " +
                         $"won=false hp_deficit={initialHp}");
                 }
                 if (potionFreePolicyBaseline is { } baselineOverride)
@@ -549,7 +544,7 @@ internal sealed partial class CombatBeamSolver
             MultiplayerScenarioStrategySelection? u4StrategySelection = null;
             List<ScenarioDecisionSummary> scenarioSummaries = [];
             bool scenarioReevaluationEnabled = false;
-            if (EnableMultiplayerScenarioReevaluation
+            if (enableMultiplayerScenarioReevaluation
                 && allowScenarioRerank
                 && useTeamObjective
                 && selected.Count > 0)
@@ -1228,12 +1223,7 @@ internal sealed partial class CombatBeamSolver
         BossHpRelief bossHpRelief,
         PostCombatRelicHealProfile postCombatRelicHeal,
         SolverTheftPolicy? theftPolicy,
-        bool useMultiplayerRouteSemantics,
-        bool useMultiplayerTeamObjective,
-        MultiplayerCombatObjectiveStrategy multiplayerCombatObjectiveStrategy,
-        double multiplayerEnemyDurabilityRatio,
-        int multiplayerEnemyMaximumHp,
-        int startTurnNumber)
+        bool useMultiplayerRouteSemantics)
     {
         SimulationSnapshot leftSnapshot = left.Snapshot;
         SimulationSnapshot rightSnapshot = right.Snapshot;
@@ -1247,46 +1237,10 @@ internal sealed partial class CombatBeamSolver
             rightSnapshot.AllEnemiesDead,
             rightSnapshot.PlayerDead,
             rightSnapshot.ProjectedPlayerHp);
-        int comparison;
-        if (useMultiplayerTeamObjective)
-        {
-            double leftEnemyDurabilityRatio =
-                MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(
-                    leftSnapshot.EnemyDurabilityByCombatId,
-                    multiplayerEnemyMaximumHp);
-            double rightEnemyDurabilityRatio =
-                MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(
-                    rightSnapshot.EnemyDurabilityByCombatId,
-                    multiplayerEnemyMaximumHp);
-            MultiplayerCombatObjectiveRank leftObjective =
-                MultiplayerCombatObjectiveMath.BuildRank(
-                    multiplayerCombatObjectiveStrategy,
-                    leftWon,
-                    leftSnapshot.AllPlayersAlive,
-                    leftSnapshot.TeamLossRatio,
-                    leftSnapshot.WorstPlayerLossRatio,
-                    leftEnemyDurabilityRatio,
-                    multiplayerEnemyDurabilityRatio,
-                    leftWon ? leftSnapshot.CombatEndedTurn : null,
-                    startTurnNumber);
-            MultiplayerCombatObjectiveRank rightObjective =
-                MultiplayerCombatObjectiveMath.BuildRank(
-                    multiplayerCombatObjectiveStrategy,
-                    rightWon,
-                    rightSnapshot.AllPlayersAlive,
-                    rightSnapshot.TeamLossRatio,
-                    rightSnapshot.WorstPlayerLossRatio,
-                    rightEnemyDurabilityRatio,
-                    multiplayerEnemyDurabilityRatio,
-                    rightWon ? rightSnapshot.CombatEndedTurn : null,
-                    startTurnNumber);
-            comparison = MultiplayerCombatObjectiveMath.Compare(
-                leftObjective,
-                rightObjective);
-            if (comparison != 0)
-                return comparison;
-        }
-        comparison = rightWon.CompareTo(leftWon);
+        // Potion spending is always a local-player resource decision. Multiplayer team
+        // objectives may rank routes only after the single-player potion policy admits them;
+        // teammate HP/loss never redefines the potion-free baseline.
+        int comparison = rightWon.CompareTo(leftWon);
         if (comparison != 0)
             return comparison;
         if (!leftWon && !rightWon)

@@ -113,33 +113,6 @@ internal static partial class SolverOverlay
         return _searchLimitHint;
     }
 
-    private static Control CreateMultiplayerModeBanner()
-    {
-        _multiplayerModeBanner = new PanelContainer
-        {
-            Name = "MultiplayerModeBanner",
-            Visible = false,
-            MouseFilter = Control.MouseFilterEnum.Ignore,
-            SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-            CustomMinimumSize = new Vector2(0, 44),
-        };
-        _multiplayerModeBanner.AddThemeStyleboxOverride("panel", SolverUiTokens.CreateBox(
-            SolverUiTokens.IsLightTheme ? Warning.Lightened(0.86f) : Warning.Darkened(0.78f),
-            SolverUiTokens.IsLightTheme ? new Color(Warning, 0.45f) : Warning.Darkened(0.12f),
-            SolverUiTokens.Radius.Medium,
-            SolverUiTokens.Spacing.Md,
-            SolverUiTokens.Spacing.Sm));
-        _multiplayerModeBannerLabel = CreateTextLabel(
-            string.Empty,
-            SolverUiTokens.Type.Body,
-            Warning,
-            FontType.Bold);
-        _multiplayerModeBannerLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-        _multiplayerModeBannerLabel.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        _multiplayerModeBanner.AddChild(_multiplayerModeBannerLabel);
-        return _multiplayerModeBanner;
-    }
-
     private static Control CreateBossHpStrategyHint()
     {
         _bossHpStrategyHintButton = SolverUiTokens.CreateButton(

@@ -428,6 +428,8 @@ internal static partial class SolverController
         SearchInteractionState? interaction = null)
     {
         SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
+        Player localPlayer = LocalContext.GetMe(state)
+            ?? throw new InvalidOperationException("当前战斗找不到本地玩家。");
         SearchRoutePolicy routePolicy = capabilities.Kind switch
         {
             SolverSessionKind.Singleplayer => SearchRoutePolicy.SinglePlayerFullRoute,
@@ -491,6 +493,10 @@ internal static partial class SolverController
             MultiplayerEnemyDurabilityRatio = capabilities.IsMultiplayer
                 ? MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(state.Enemies)
                 : 1d,
+            UseMultiplayerTeammateForecast =
+                capabilities.IsMultiplayer && settings.UseMultiplayerTeammateForecast,
+            UseMultiplayerScenarioReevaluation =
+                capabilities.IsMultiplayer && settings.UseMultiplayerScenarioReevaluation,
             UseNoveltyPortfolio = (settings.UseNoveltyPortfolio
                 || UnattendedTestRunner.UseNoveltyPortfolioOverride)
                 && useFullSearchKernel,
@@ -503,12 +509,15 @@ internal static partial class SolverController
             // 免得两边各判一次而走岔。问题包里两样都在，方便看出当时是填了额度还是开了开关。
             GrowthBudgets = useFullSearchKernel ? settings.GrowthBudgets : default,
             RelicTargets = useFullSearchKernel
-                ? RelicCounterCatalog.Capture(state, settings.RelicStrategyEnabled, settings.RelicCounterRules)
+                ? RelicCounterCatalog.Capture(
+                    localPlayer,
+                    settings.RelicStrategyEnabled,
+                    settings.RelicCounterRules)
                 : [],
             StopAtAcceptableBattleHpLoss = settings.StopAtAcceptableBattleHpLoss,
             BrightestFlameMaxHpLossLimit = settings.BrightestFlameMaxHpLossLimit,
             GrowthOpportunityTargets = useFullSearchKernel
-                ? GrowthOpportunityPolicy.Capture(state)
+                ? GrowthOpportunityPolicy.Capture(state, localPlayer)
                 : GrowthOpportunityTargets.Empty,
             IgnoreLongTermRewards = settings.IgnoreLongTermRewards || !useFullSearchKernel,
         };

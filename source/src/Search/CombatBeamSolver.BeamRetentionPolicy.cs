@@ -156,12 +156,7 @@ internal sealed partial class CombatBeamSolver
                             _bossHpRelief,
                             _postCombatRelicHeal,
                             _theftPolicy,
-                            _useMultiplayerRouteSemantics,
-                            _useMultiplayerTeamObjective,
-                            _multiplayerCombatObjectiveStrategy,
-                            _multiplayerEnemyDurabilityRatio,
-                            _multiplayerEnemyMaximumHp,
-                            _startTurnNumber) < 0))
+                            _useMultiplayerRouteSemantics) < 0))
                 {
                     potionFreeBaseline = candidate;
                 }

@@ -1,5 +1,7 @@
 using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Cards;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.Models.Enchantments;
@@ -68,15 +70,22 @@ internal sealed record GrowthOpportunityTargets(
 internal static class GrowthOpportunityPolicy
 {
     public static GrowthOpportunityTargets Capture(CombatState state)
+        => Capture(
+            state,
+            LocalContext.GetMe(state)
+                ?? throw new InvalidOperationException("当前战斗找不到本地玩家。"));
+
+    public static GrowthOpportunityTargets Capture(CombatState state, Player player)
     {
-        CardModel[] availableCards = state.Players
-            .SelectMany(player => player.PlayerCombatState!.AllCards)
+        CardModel[] availableCards = (player.PlayerCombatState
+                ?? throw new InvalidOperationException("本地玩家没有战斗状态。"))
+            .AllCards
             .Where(IsAvailable)
             .ToArray();
         bool hasAnyTargets = availableCards.Any(GrowthValues.HasTarget);
         string? dynamicRisk = null;
         if (hasAnyTargets)
-            HasDynamicCardCountRisk(state, availableCards, out dynamicRisk);
+            HasDynamicCardCountRisk(player, availableCards, out dynamicRisk);
         return CaptureTargets(availableCards, state.Enemies.Count, dynamicRisk);
     }
 
@@ -258,7 +267,7 @@ internal static class GrowthOpportunityPolicy
             && card.Pile is { Type: not PileType.Exhaust };
 
     private static bool HasDynamicCardCountRisk(
-        CombatState state,
+        Player player,
         IReadOnlyList<CardModel> cards,
         out string? reason)
     {
@@ -272,7 +281,7 @@ internal static class GrowthOpportunityPolicy
             reason = "built_in:reachable_replay_or_copy_card";
             return true;
         }
-        if (state.Players.SelectMany(player => player.Creature.Powers).Any(power => power.Amount > 0m
+        if (player.Creature.Powers.Any(power => power.Amount > 0m
                 && power is BurstPower or DuplicationPower or EchoFormPower or OneTwoPunchPower
                     or SignalBoostPower or TagTeamPower or JugglingPower
 #if !STS2_01071
@@ -283,13 +292,13 @@ internal static class GrowthOpportunityPolicy
             reason = "built_in:active_replay_or_copy_power";
             return true;
         }
-        if (state.Players.SelectMany(player => player.Relics).Any(relic => !relic.IsMelted
+        if (player.Relics.Any(relic => !relic.IsMelted
                 && relic is ThrowingAxe or BurningSticks))
         {
             reason = "built_in:active_replay_or_copy_relic";
             return true;
         }
-        if (state.Players.SelectMany(player => player.PotionSlots).Any(potion => potion?.Id.Entry == "DUPLICATOR"))
+        if (player.PotionSlots.Any(potion => potion?.Id.Entry == "DUPLICATOR"))
         {
             reason = "built_in:available_duplication_potion";
             return true;

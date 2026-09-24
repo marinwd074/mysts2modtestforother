@@ -365,22 +365,42 @@ internal static class ShadowTeammatePlanner
                 HitActionDepthLimit: false);
         }
 
+        // Candidate enumeration is read-only. Do it against the source first so the common
+        // "teammate cannot currently act" case returns without cloning the full simulator.
+        // When candidates exist, TryPlayCandidate forks per candidate before mutating anything,
+        // so the seed itself does not need its own clone.
+        List<(Player Teammate, IReadOnlyList<ShadowTeammateActionCandidate> Candidates)> candidateSets = [];
+        int expandedBranches = 0;
+        foreach (Player teammate in teammates)
+        {
+            IReadOnlyList<ShadowTeammateActionCandidate> candidates =
+                EnumerateLegalActions(source, teammate);
+            if (candidates.Count == 0)
+                continue;
+            candidateSets.Add((teammate, candidates));
+            expandedBranches = checked(expandedBranches + candidates.Count);
+        }
+        if (candidateSets.Count == 0)
+        {
+            return new ShadowTeammatePlanResult(
+                Array.Empty<ShadowTeammateRoute>(),
+                ExpandedBranches: 0,
+                PendingChoiceBranches: 0,
+                HitActionDepthLimit: false);
+        }
+
         ShadowTeammateRoute seed = CaptureRoute(
-            source.Fork(),
+            source,
             Array.Empty<ShadowTeammateActionCandidate>(),
             CaptureProcessedEnemyDeaths(source, processedEnemyDeaths));
         List<(ShadowTeammateRoute Route, ShadowBehaviorActionObservation Observation)> choices = [];
-        int expandedBranches = 0;
         int pendingChoiceBranches = 0;
 
-        foreach (Player teammate in teammates)
+        foreach ((Player teammate, IReadOnlyList<ShadowTeammateActionCandidate> candidates) in candidateSets)
         {
             string playerNetId = teammate.NetId.ToString();
-            IReadOnlyList<ShadowTeammateActionCandidate> candidates =
-                EnumerateLegalActions(seed.Simulator, teammate);
             foreach (ShadowTeammateActionCandidate candidate in candidates)
             {
-                expandedBranches++;
                 if (!TryPlayCandidate(seed, teammate, candidate, out ShadowTeammateRoute? child))
                 {
                     pendingChoiceBranches++;

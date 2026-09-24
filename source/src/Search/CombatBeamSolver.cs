@@ -47,6 +47,7 @@ internal sealed partial class CombatBeamSolver(
         MultiplayerScenarioReevaluationPolicy.ReserveExpandedBranchBudget(
             (searchProfile ?? SolverSearchProfile.Default).MaxExpandedNodes,
             reserveScenarioReevaluationBudget
+            && policy.UseMultiplayerScenarioReevaluation
             && MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(
                 policy.RoutePolicy,
                 root.PlayerCount)
@@ -58,6 +59,7 @@ internal sealed partial class CombatBeamSolver(
                 MultiplayerScenarioReevaluationPolicy.MainSearchExpandedNodeBudget(
                     (searchProfile ?? SolverSearchProfile.Default).MaxExpandedNodes,
                     reserveScenarioReevaluationBudget
+                    && policy.UseMultiplayerScenarioReevaluation
                     && MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(
                         policy.RoutePolicy,
                         root.PlayerCount)
@@ -78,8 +80,11 @@ internal sealed partial class CombatBeamSolver(
     private readonly int _initialEnemyCount = root.Enemies.Count;
     private readonly int _initialEnemyMaximumHp = root.Enemies.Sum(enemy =>
         Math.Max(0, enemy.MaxHp));
+    // These calculated-card counters belong to the local searcher's cards. Multiplayer
+    // does not invalidate them: owner-scoped counters still follow the local player, while
+    // Gold Axe intentionally observes the shared finished-play history.
     private readonly bool _keysCombatHistoryCounters =
-        root.PlayerCount == 1 && CombatHistoryCounterKey.AppliesTo(root.PlayerCardIds);
+        CombatHistoryCounterKey.AppliesTo(root.PlayerCardIds);
     private readonly bool _isActEndingBoss = root.IsActEndingBoss;
     private readonly BossHpRelief _bossHpRelief = root.BossHpRelief;
     private readonly BossHpRelief _strategicBossHpRelief = ActEndingBossPolicy.ResolveStrategicHpRelief(
@@ -162,7 +167,10 @@ internal sealed partial class CombatBeamSolver(
         _startTurnNumber,
         root.CarryRankingContext,
         battleDamage,
-        ReevaluateCurrentDecisionsAcrossScenarios,
+        policy.UseMultiplayerScenarioReevaluation,
+        policy.UseMultiplayerScenarioReevaluation
+            ? ReevaluateCurrentDecisionsAcrossScenarios
+            : null,
         _run.PotionStrategicCosts);
 
     private bool CanConsiderCardAction(PredictedCard card)

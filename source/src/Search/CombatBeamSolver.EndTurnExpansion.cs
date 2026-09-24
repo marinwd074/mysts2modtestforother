@@ -38,6 +38,8 @@ internal sealed partial class CombatBeamSolver
 
     private bool CanUseJointForecastEndTurn(SearchNode node)
     {
+        if (!policy.UseMultiplayerTeammateForecast)
+            return false;
         if (policy.RoutePolicy != SearchRoutePolicy.MultiplayerLocalCrossTurn)
             return false;
         CombatPredictionSimulator simulator =

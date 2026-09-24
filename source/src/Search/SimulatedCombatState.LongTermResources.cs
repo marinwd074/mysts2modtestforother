@@ -1,3 +1,5 @@
+using MegaCrit.Sts2.Core.Entities.Players;
+
 namespace CombatSolver;
 
 internal sealed partial class SimulatedCombatState
@@ -11,8 +13,12 @@ internal sealed partial class SimulatedCombatState
     private int _brightestFlameMaxHpSpent;
     public int BrightestFlameMaxHpSpent => _brightestFlameMaxHpSpent;
 
-    public void RecordBrightestFlameMaxHpLoss(int amount)
-        => _brightestFlameMaxHpSpent = checked(_brightestFlameMaxHpSpent + amount);
+    public void RecordBrightestFlameMaxHpLoss(Player owner, int amount)
+    {
+        if (!_rootActionPlayers.Contains(owner))
+            return;
+        _brightestFlameMaxHpSpent = checked(_brightestFlameMaxHpSpent + amount);
+    }
 
     public GrowthValues GrowthRewards => _growthRewards;
 

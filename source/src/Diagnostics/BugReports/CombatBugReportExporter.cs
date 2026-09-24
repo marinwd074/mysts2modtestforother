@@ -1373,6 +1373,8 @@ internal static class CombatBugReportExporter
             settings.RelicCounterRules,
             settings.BrightestFlameMaxHpLossLimit,
             settings.IgnoreLongTermRewards,
+            settings.UseMultiplayerTeammateForecast,
+            settings.UseMultiplayerScenarioReevaluation,
             useNoveltyPortfolio = settings.UseNoveltyPortfolio
                 || UnattendedTestRunner.UseNoveltyPortfolioOverride,
             useBeamWidthPortfolio = settings.UseBeamWidthPortfolio
@@ -1421,6 +1423,9 @@ internal static class CombatBugReportExporter
         captured["act3BossStrategy"] = policy.Act3BossStrategy;
         captured["useBeamWidthPortfolio"] = policy.UseBeamWidthPortfolio;
         captured["useNoveltyPortfolio"] = policy.UseNoveltyPortfolio;
+        captured["useMultiplayerTeammateForecast"] = policy.UseMultiplayerTeammateForecast;
+        captured["useMultiplayerScenarioReevaluation"] =
+            policy.UseMultiplayerScenarioReevaluation;
         captured["noveltyBudget"] = JsonSerializer.SerializeToNode(policy.NoveltyBudget, JsonOptions);
         captured["beamWidthPortfolioWidths"] = JsonSerializer.SerializeToNode(
             policy.BeamWidthPortfolioWidths,
@@ -1477,7 +1482,7 @@ internal static class CombatBugReportExporter
             "solverDisabled", "automaticCalculationEnabled", "stopFullAutoOnCombatEnd", "stopFullAutoOnDeathTurn", "relicStrategyEnabled", "relicCounterRules",
             "stopFullAutoOnWorseRecalculation", "enableDetailedDiagnosticLogs", "potionDirectives",
             "actTransitionBossHpStrategy", "finalBossHpStrategy", "acceptableBattleHpLoss", "stopAtAcceptableBattleHpLoss", "growthBudgets", "brightestFlameMaxHpLossLimit", "performancePreset",
-            "searchMaxDegreeOfParallelism", "useBeamWidthPortfolio", "useNoveltyPortfolio", "showNoveltyPortfolioHint", "showSpeedXWarning", "shortTimeLimitSeconds", "deepTimeLimitSeconds", "enableNoGcRegion",
+            "searchMaxDegreeOfParallelism", "useBeamWidthPortfolio", "useNoveltyPortfolio", "useMultiplayerTeammateForecast", "useMultiplayerScenarioReevaluation", "showNoveltyPortfolioHint", "showSpeedXWarning", "shortTimeLimitSeconds", "deepTimeLimitSeconds", "enableNoGcRegion",
             "noGcRegionBudgetGigabytes", "shortBeamWidth", "deepBeamWidth", "shortMaxExpandedNodes", "deepMaxExpandedNodes",
             "shortMaxCardBranchesPerNode", "deepMaxCardBranchesPerNode", "shortMaxPileChoiceBranchesPerAction",
             "deepMaxPileChoiceBranchesPerAction", "shortMaxHandChoiceBranchesPerAction", "deepMaxHandChoiceBranchesPerAction",

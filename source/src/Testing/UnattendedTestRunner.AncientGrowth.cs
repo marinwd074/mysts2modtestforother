@@ -58,7 +58,7 @@ internal sealed partial class UnattendedTestRunner
                 var child = (SimulatedCombatState)fork.State.CombatState;
                 child.BeginSideTurn(player.Creature);
                 Check(child.BrightestFlameMaxHpSpent == 4, "turn boundary keeps spent budget");
-                child.RecordBrightestFlameMaxHpLoss(2);
+                child.RecordBrightestFlameMaxHpLoss(player, 2);
                 child.RecordGrowthReward(GrowthSource.ForbiddenGrimoire);
                 Check(child.BrightestFlameMaxHpSpent == 6 && shadow.BrightestFlameMaxHpSpent == 4
                     && child.GrowthRewards.ForbiddenGrimoire == 2 && shadow.GrowthRewards.ForbiddenGrimoire == 1, "fork isolation");
