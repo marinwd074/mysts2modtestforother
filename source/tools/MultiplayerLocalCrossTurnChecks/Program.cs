@@ -1292,3 +1292,8 @@ Check(
         && !MultiplayerInterleaveOrderPolicy.CanCollapseOrder(
             MultiplayerInterleaveOrderRelation.ReverseUnavailable),
     "U5 order collapse is allowed only after both A->B and B->A replay to the same conservative complete future-state identity.");
+
+Check(
+    MultiplayerInterleaveOrderPolicy.CanProbeReverseOrder(parentSimulatorAvailable: true)
+        && !MultiplayerInterleaveOrderPolicy.CanProbeReverseOrder(parentSimulatorAvailable: false),
+    "U5 reverse-order equivalence probing fails closed when the historical parent simulator has already been released.");
