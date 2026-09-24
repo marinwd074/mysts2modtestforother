@@ -128,10 +128,25 @@ GitHub Actions pinned run `35935837066`：**SUCCESS**；compatibility run `35935
 
 同一 pinned run 完整通过 Release、U0/U1、U2、P0/P1 runtime 与历史 P0 A/B 分类，没有扩大 Beam、节点或时间预算。
 
+### U5 非实机资源顺序 pinned replay
+
+GitHub Actions pinned run `35936767565`：**SUCCESS**；compatibility run `35936767527`：**SUCCESS**。
+
+在同一固定 0.107.1 根中把本地能量设为 1，并注入真实 `OFFERING`：
+
+- `OFFERING → BASH`：生产 replay 合法完成，Offering 先改变资源状态，使后续 Bash 可执行；最终 energy = 1，`ResourceForwardCompleted=true`；
+- `BASH → OFFERING`：生产 replay 在第一动作直接拒绝 Bash，诊断明确为 `energy=1 cost=2`，`ResourceReverseRejected=true`。
+
+因此资源变化造成的动作合法性顺序依赖也已由 pinned 游戏 DLL + 生产 replay 直接验证。一个顺序中先获得资源后可继续，反向顺序则连第一步都不合法，不能视为可交换路线。
+
+该测试仍为 detached 单进程 simulation；它验证资源状态与出牌合法性，不验证真实远端 ownership、网络时序或 `WorldVersion`。
+
+同一 pinned run 完整通过 Release、U0/U1、U2、P0/P1 runtime 与历史 P0 A/B 分类，没有扩大搜索预算。
+
 ## 仍未验证
 
 真实双端 Host/Client 的 U5 专项 smoke 尚未执行，因此不能声称网络实机已经观察到 forecast boundary。
 
-Vulnerable/attack、提前终局合法性不对称、共享生成 RNG/手牌后态三类顺序语义已经有 pinned production replay，不再要求用随机联机牌局重复证明。U6 最小 U5 实机补测收缩为一条网络链：让真实队友动作插入两个本地动作之间，确认远端 `WorldVersion` / live state 变化使旧条件后缀失效，部署不会跨过 forecast observation，并触发 fresh capture/search；同时确认旧 generation 不会继续提交。该链只验证离线无法提供的 ownership / network timing / observation→replan 层。
+Vulnerable/attack、提前终局合法性不对称、共享生成 RNG/手牌后态、资源合法性四类顺序语义已经有 pinned production replay，不再要求用随机联机牌局重复证明。U6 最小 U5 实机补测收缩为一条网络链：让真实队友动作插入两个本地动作之间，确认远端 `WorldVersion` / live state 变化使旧条件后缀失效，部署不会跨过 forecast observation，并触发 fresh capture/search；同时确认旧 generation 不会继续提交。该链只验证离线无法提供的 ownership / network timing / observation→replan 层。
 
 该 runtime debt 不阻止 U5 代码阶段收口；进入 U6 最终实机闭环时集中验证。
