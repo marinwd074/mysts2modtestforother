@@ -1178,14 +1178,14 @@ internal sealed partial class CombatBeamSolver
                             continue;
                         if (action.Turn != startTurnNumber
                             || action.IsForecastOnlyObservation
-                            || action.Kind == PlanActionKind.EndTurn)
+                            || action.Kind != PlanActionKind.PlayCard
+                            || action.EndsPlayerTurn
+                            || !action.IsExecutable)
                         {
                             break;
                         }
-                        if (!action.IsExecutable)
-                            continue;
                         prefix.Add(action);
-                        if (action.EndsPlayerTurn || prefix.Count >= 2)
+                        if (prefix.Count >= 2)
                             break;
                     }
                     if (prefix.Count == 0)
