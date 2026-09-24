@@ -546,6 +546,7 @@ internal sealed partial class CombatBeamSolver
             ScenarioDecisionSummary? u4RobustDecision = null;
             ScenarioDecisionSummary? u4NominalDecision = null;
             ScenarioDecisionSummary? u4BoundedRiskDecision = null;
+            MultiplayerScenarioStrategySelection? u4StrategySelection = null;
             List<ScenarioDecisionSummary> scenarioSummaries = [];
             bool scenarioReevaluationEnabled = false;
             if (EnableMultiplayerScenarioReevaluation
@@ -747,6 +748,7 @@ internal sealed partial class CombatBeamSolver
                         MultiplayerScenarioReevaluationPolicy.CompareStrategies(
                             comparableRanks,
                             baselineIndex: 0);
+                    u4StrategySelection = strategySelection;
                     u4RobustDecision = comparable[strategySelection.RobustIndex];
                     u4NominalDecision = comparable[strategySelection.NominalReferenceIndex];
                     u4BoundedRiskDecision = comparable[strategySelection.BoundedRiskIndex];
@@ -965,15 +967,19 @@ internal sealed partial class CombatBeamSolver
                         $"nominal_ref_rank={u4NominalDecision.BaselineIndex + 1} " +
                         $"bounded_risk_rank={u4BoundedRiskDecision.BaselineIndex + 1} " +
                         $"all_agree={allAgree.ToString().ToLowerInvariant()}");
-                    bool robustOverridesBaseline = u4RobustDecision.BaselineIndex != 0;
+                    MultiplayerScenarioStrategySelection qualitySelection =
+                        u4StrategySelection
+                        ?? throw new InvalidOperationException(
+                            "Complete U4 strategy diagnostics require a strategy selection summary.");
                     diagnostics.Info(
                         $"[CombatSolver/Multiplayer] MP_QUALITY_SORTING " +
-                        $"baseline_winner_rank=1 " +
+                        $"baseline_winner_rank={qualitySelection.BaselineIndex + 1} " +
                         $"production_selected_baseline_rank={u4RobustDecision.BaselineIndex + 1} " +
-                        $"override_layer={(robustOverridesBaseline ? "scenario_robust" : "baseline")} " +
-                        $"robust_overrode_baseline={robustOverridesBaseline.ToString().ToLowerInvariant()} " +
-                        $"robust_nominal_agree={(u4RobustDecision.BaselineIndex == u4NominalDecision.BaselineIndex).ToString().ToLowerInvariant()} " +
-                        $"robust_bounded_agree={(u4RobustDecision.BaselineIndex == u4BoundedRiskDecision.BaselineIndex).ToString().ToLowerInvariant()}");
+                        $"override_layer={(qualitySelection.RobustOverridesBaseline ? "scenario_robust" : "baseline")} " +
+                        $"robust_overrode_baseline={qualitySelection.RobustOverridesBaseline.ToString().ToLowerInvariant()} " +
+                        $"robust_nominal_agree={qualitySelection.RobustAgreesWithNominal.ToString().ToLowerInvariant()} " +
+                        $"robust_bounded_agree={qualitySelection.RobustAgreesWithBoundedRisk.ToString().ToLowerInvariant()} " +
+                        $"quality_signal={(qualitySelection.HasDisputedRobustOverride ? "scenario_override_disputed" : "none")}");
                 }
 
                 if (selectedScenarioDecision != null)
