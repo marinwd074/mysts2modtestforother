@@ -91,6 +91,8 @@
 - 新增 `MultiplayerScenarioStrategySelection` 和 `MP_QUALITY_SORTING`。同一 U3 Matrix / 同一预算下现在能直接看到 baseline winner 是否被 Robust 覆盖、三策略是否一致，并给出 `quality_signal=scenario_override_disputed|none`；不增加 replay、不改变搜索预算。
 - 生产仍为 Robust。当前两个可复原排序坏例（ANGER、X1 T3）都属于“好候选已存在但基础最终排序曾选错”；重锤/Offering 属于执行层。没有证据证明修复后 HEAD 上是 U3/U4 Robust 推翻了更好的共同搜索核心路线，因此不改风险权重、不把等权压力情景均值当概率期望。
 - 当前验证：compatibility run `35985739446` **SUCCESS**；Pinned 0.107.1 Release run `35985739404` **SUCCESS**。后者的 Release、U0/U1 structural+pinned replay、U2 degenerate、P0/P1 pinned runtime 与历史分类链全部通过。无新的真实 Host/Client 重放，因此不宣称当前实际出牌质量已实机改善。
+- Beam 排序 A/B 已加入 `BeamRankSortChecks`，直接提取当前生产 `SortByBeamRank / SortByLegacyBeamRank`。固定同一 3 候选池与相同 Beam top-2：单人 legacy 保留 `[A,B]`，多人 TeamObjective 保留 `[B,C]`，即 A 是“单人会保留、多人会在主 Beam 排掉”的候选；当三个候选的 TeamObjective 完全相同时，多人重新退化为 legacy `[A,B,C]`。这证明**主 Beam 的多人目标本身具备提前丢失单人强候选的机制**，但该输入是固定合成 rank，不是当前真实战斗根，因此暂不据此修改生产排序。
+- compatibility run `35986836489` **SUCCESS**：`BeamRankSortChecks` 输出 `single_top2=[A,B]`、`multiplayer_top2=[B,C]`、`single_only=[A]`；全套 L1 为 `32 PASS / 0 FAIL / 0 SKIP`。下一步应在一个当前 HEAD 的真实多人根上用相同候选池/预算做 legacy-vs-TeamObjective retention trace，确认用户认为更好的合法路线是否真的在 Beam 层丢失。
 
 ## 下一任务
 
@@ -98,7 +100,7 @@
 
 边界：
 
-1. 若手打前缀未进入 FINAL_CANDIDATE，继续区分未枚举与 Beam 丢失；不要直接改 U4。
+1. 优先做真实多人根的 Beam retention A/B：同一候选池、同一 BeamWidth/节点/时间预算，只切换 legacy 单人排序与 TeamObjective 排序；记录每层 top-k 身份和首次丢失层。若手打前缀未进入 FINAL_CANDIDATE，再区分未枚举与 Beam 丢失；不要直接改 U4。
 2. 若 hand/baseline 候选仍在且 `robust_overrode_baseline=true`，再用同一 Matrix 的各情景指标判断是否确为 Robust 过度保守；没有证据不切默认。
 3. 若 FINAL_SELECTION 正确但实际动作缺失，回到 Safe Execute / Choice / continuation 处理，不污染排序目标。
 4. 比较生存、累计战损、最终 HP、结束轮数、药水支出与响应时间；保持总预算不变。
