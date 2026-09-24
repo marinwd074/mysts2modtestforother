@@ -1,9 +1,18 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 namespace CombatSolver;
 
 internal sealed partial class CombatBeamSolver
 {
+    private sealed class CandidateOriginBox(CandidateOrigin origin)
+    {
+        public CandidateOrigin Origin { get; } = origin;
+    }
+
+    // Keep E0 identity outside SearchNode: SearchNode is a record and diagnostics must not enter
+    // its synthesized equality/hash semantics.
+    private readonly ConditionalWeakTable<SearchNode, CandidateOriginBox> _searchEfficiencyOrigins = new();
     private int _searchEfficiencyMemberId;
 
     private void BeginSearchEfficiencyMember()
@@ -36,16 +45,30 @@ internal sealed partial class CombatBeamSolver
 
     private CandidateOrigin? EnsureCandidateOrigin(SearchNode node)
     {
-        if (node.CandidateOrigin != null)
-            return node.CandidateOrigin;
         BeamWidthPortfolioTelemetry? telemetry = policy.PortfolioTelemetry;
         if (telemetry == null || _searchEfficiencyMemberId <= 0)
             return null;
-        node.CandidateOrigin = telemetry.CreateCandidateOrigin(
-            _searchEfficiencyMemberId,
-            _run.Expanded,
-            Math.Max(0, node.Turn - _startTurnNumber));
-        return node.CandidateOrigin;
+        return _searchEfficiencyOrigins.GetValue(
+            node,
+            _ => new CandidateOriginBox(telemetry.CreateCandidateOrigin(
+                _searchEfficiencyMemberId,
+                _run.Expanded,
+                Math.Max(0, node.Turn - _startTurnNumber)))).Origin;
+    }
+
+    private CandidateOrigin? TryGetCandidateOrigin(SearchNode node)
+        => _searchEfficiencyOrigins.TryGetValue(node, out CandidateOriginBox? box)
+            ? box.Origin
+            : null;
+
+    private void PropagateCandidateOrigin(SearchNode source, SearchNode target)
+    {
+        if (ReferenceEquals(source, target)
+            || !_searchEfficiencyOrigins.TryGetValue(source, out CandidateOriginBox? box))
+        {
+            return;
+        }
+        _ = _searchEfficiencyOrigins.GetValue(target, _ => box);
     }
 
     private string SearchEfficiencyEvaluationContextId(

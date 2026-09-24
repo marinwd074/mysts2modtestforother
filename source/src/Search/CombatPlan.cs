@@ -1121,10 +1121,6 @@ internal sealed record SearchNode(
 
     internal bool HasMaterializedActionsForTesting => _actions != null;
 
-    // E0 metadata is assigned only after a node first becomes a comparable route candidate.
-    // Record cloning used for annotations preserves it; newly constructed action nodes start null.
-    public CandidateOrigin? CandidateOrigin { get; set; }
-
     public int RetentionRank { get; set; } = int.MaxValue;
     public int LongTermResourceRetentionRank { get; set; } = int.MaxValue;
     public int CumulativeEnemyHpLost { get; init; }

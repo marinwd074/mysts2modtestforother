@@ -454,9 +454,11 @@ internal sealed partial class CombatBeamSolver
             long e0FinalReplayTicks = 0;
             SearchMeasurement finalMeasurement = _run.Performance.Begin();
             FinalPlanCandidate publishedCandidate = ordering.Candidate;
+            EnsureCandidateOrigin(publishedCandidate.Node);
             SearchNode materializedNode = publishedCandidate.Node.Snapshot.HasSimulator
                 ? publishedCandidate.Node
                 : RefreshReleasedFallback(publishedCandidate.Node);
+            PropagateCandidateOrigin(publishedCandidate.Node, materializedNode);
             RouteAnnotations materializedAnnotations = BuildRouteAnnotations(materializedNode);
             BlockPotionInsertion? blockPotionInsertion = TryInsertBlockPotion(
                 materializedNode,
@@ -495,6 +497,7 @@ internal sealed partial class CombatBeamSolver
                     $"卖血路径状态不一致：节点累计 {selectedCandidate.FutureSold}，逐回合累计 {annotatedFutureSold}。");
             }
             SearchNode best = selectedCandidate.Node with { Score = selectedCandidate.Score };
+            PropagateCandidateOrigin(selectedCandidate.Node, best);
 
             SimulationSnapshot finalSnapshot = selectedCandidate.Snapshot;
             RouteAnnotations annotations = materializedAnnotations;
@@ -646,7 +649,7 @@ internal sealed partial class CombatBeamSolver
             SolverResult result = new()
             {
                 ResultScope = resultScope,
-                SearchEfficiencyOrigin = best.CandidateOrigin,
+                SearchEfficiencyOrigin = TryGetCandidateOrigin(best),
                 SearchEfficiencyEvaluationContextId = evaluationContextId,
                 MultiplayerScope = policy.RoutePolicy switch
                 {
@@ -1639,7 +1642,6 @@ internal sealed partial class CombatBeamSolver
                         fallback = child;
                     if (child.IsTerminal || child.Turn > node.Turn)
                     {
-                        EnsureCandidateOrigin(child);
                         int explicitPotionUses = ExplicitPotionUseCount(child);
                         if (explicitPotionUses == 0 && child.Score > potionFreeBoundaryFallbackScore)
                         {

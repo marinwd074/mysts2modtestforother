@@ -138,7 +138,7 @@ internal sealed partial class CombatBeamSolver
     {
         double scoreWithoutSoldPenalty = outcome.Node.Score
             - outcome.Node.FutureSoldHp * SoldHpPenalty();
-        return outcome.Node with
+        SearchNode annotated = outcome.Node with
         {
             FutureSoldHp = futureSold,
             Score = ApplySoldHpPenalty(scoreWithoutSoldPenalty, futureSold),
@@ -156,6 +156,8 @@ internal sealed partial class CombatBeamSolver
                 outcome.ActualBlock,
                 outcome.EnergyLeft),
         };
+        EnsureCandidateOrigin(annotated);
+        return annotated;
     }
 
     private static ulong CurrentTurnPotionSlotsUsed(SearchNode turnStart, SearchNode outcome)
