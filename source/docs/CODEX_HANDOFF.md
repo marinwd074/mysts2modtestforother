@@ -95,7 +95,7 @@
 - compatibility run `35986836489` **SUCCESS**：`BeamRankSortChecks` 输出 `single_top2=[A,B]`、`multiplayer_top2=[B,C]`、`single_only=[A]`；全套 L1 为 `32 PASS / 0 FAIL / 0 SKIP`。下一步应在一个当前 HEAD 的真实多人根上用相同候选池/预算做 legacy-vs-TeamObjective retention trace，确认用户认为更好的合法路线是否真的在 Beam 层丢失。
 - 已把真实多人根 A/B 接入生产诊断但不改变选择：详细诊断开启时，同一个实际 `RankBest` 候选池同时计算当前 TeamObjective 与 legacy 单人排序；`MP_BEAM_RETENTION_AB` 记录 raw/RankBest 差异，`MP_BEAM_RETENTION_AB_FINAL` 再区分外层 portfolio 是否救回以及 incumbent 是否随后裁掉。最多记录 12 个差异样本，不增加搜索节点/重放。
 - 新增 `validate-beam-retention-ab-results.ps1` 与 6-case 自测，输出 `no_difference_observed / raw_rank_difference_only / outer_portfolio_rescue_observed / incumbent_pruning_observed / beam_pruning_observed`。compatibility run `35988718963` **SUCCESS**，全套 `33 PASS / 0 FAIL / 0 SKIP`，其中 `MULTIPLAYER_BEAM_RETENTION_AB_VALIDATOR_PASS`。
-- Pinned 0.107.1 run `35988652044` 已通过 Release 编译、U0/U1、U2、P0 contracts 和 P0/P1 harness build；记录本检查点时仍在 P0/P1 pinned runtime。此前 A/B 接线的编译错误（外层字段/嵌套 private helper/未使用 boundary id）均已由 pinned 门禁暴露并修掉。
+- Pinned 0.107.1 run `35988652044` **SUCCESS**：Release、U0/U1 structural+pinned replay、U2 degenerate、P0 contracts 与 harness build 均通过；P0/P1 current runtime 的 timed lane 仍命中既有 time boundary，但历史 A/B 分类得到 `P0_FIXED_WORK OBSERVED_EQUIVALENT`、`P0_JOINT PASS`、`P1_OBJECTIVE_CONTRACTS PASS`、`P1_RUNTIME FIXED_WORK_PASS_TIME_BOUNDARY`，因此 workflow 按既有规则通过。此前 A/B 接线的编译错误（外层字段/嵌套 private helper/未使用 boundary id）均已由 pinned 门禁暴露并修掉。
 
 
 ## 下一任务
