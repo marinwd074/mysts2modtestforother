@@ -71,6 +71,7 @@ try {
     Invoke-PowerShellContract 'MultiplayerCarryRankingEvidenceChecks' 'tools/multiplayer-lab/test-carry-ranking-validator.ps1'
     Invoke-PowerShellContract 'MultiplayerJointContinuationEvidenceChecks' 'tools/multiplayer-lab/test-joint-continuation-validator.ps1'
     Invoke-PowerShellContract 'MultiplayerU3ScenarioEvidenceChecks' 'tools/multiplayer-lab/test-u3-scenario-validator.ps1'
+    Invoke-PowerShellContract 'MultiplayerU6RuntimeClosureChecks' 'tools/multiplayer-lab/test-u6-runtime-closure-validator.ps1'
     Invoke-PowerShellContract 'P0BaselineClassifierChecks' 'tools/test-p0-baseline-classifier.ps1'
     Invoke-PowerShellContract 'P0BaselineManifestChecks' 'tools/test-p0-baseline-manifest.ps1'
     Invoke-PowerShellContract 'U0BaselineChecks' 'tools/test-u0-baseline.ps1'
