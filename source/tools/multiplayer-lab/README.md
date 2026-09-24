@@ -346,3 +346,24 @@ Host/Client 运行证据必须带可审查的日志位置；单进程模拟和�
 
 当前能力边界与未验证事实以
 `source/docs/multiplayer/LIMITATIONS.md` 和 `source/docs/CODEX_HANDOFF.md` 为准。
+
+## U6 runtime closure
+
+U6 no longer treats a fixed Safe Execute action ceiling as a capability. Current production
+logs `action_limit=route_bounded`; the concrete finite `max_actions` is emitted only when a
+route is authorized at `MP2B_DEPLOY_START`.
+
+After a controlled Host/Client run where the remote player changes state while the local
+client still has a planned suffix, validate the **local client log** with:
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\validate-u6-runtime-closure.ps1 `
+  -LogPath '<client-log-path>' `
+  -OutputPath '.\.local\multiplayer-lab\results\u6-runtime-closure.json'
+~~~
+
+PASS requires the current U1 semantic chain for every completed local action, one stable local
+`local_net_id`, no custom network action path, detection by either post-action remote mismatch
+or the next pre-action WorldVersion probe, no stale native suffix submission, and a fresh search
+after invalidation. The validator does not replace card-specific Choice/draw-chain smoke.
+
