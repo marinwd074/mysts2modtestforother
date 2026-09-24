@@ -5,6 +5,16 @@ on:
   push:
     paths:
       - '.github/workflows/pinned-release-build.yml'
+      - 'source/CombatSolver.csproj'
+      - 'source/src/Runtime/Entry.cs'
+      - 'source/src/Runtime/SolverDispatcher.cs'
+      - 'source/src/Runtime/PatchRegistration.cs'
+      - 'source/src/Runtime/SolverSessionCapabilities.cs'
+      - 'source/src/Runtime/SolverSettings.cs'
+      - 'source/src/Runtime/SolverController.SearchLifecycle.cs'
+      - 'source/src/UI/SolverOverlay.cs'
+      - 'source/src/UI/SolverSettingsPanel.General.cs'
+      - 'source/src/Replay/CombatShowcaseRuntime.cs'
       - 'source/tools/P0P1PinnedHarness/**'
       - 'source/tools/U0U1PinnedHarness/**'
       - 'source/tools/OfflineSearchHarness/U0BaselineFixture.cs'
