@@ -39,6 +39,14 @@ pwsh -NoLogo -NoProfile -File source/tools/verify-repository-hygiene.ps1
 
 The pinned Release workflow builds against the checked-in 0.107.1 game snapshot plus the pinned RitsuLib compatibility package.
 
+## Installation / compatibility
+
+This fork is **not a latest-game build**. Use it only with the pinned STS2 `0.107.1` environment and the compatible RitsuLib target.
+
+For a GitHub Release build, extract the release contents into the game's `mods/CombatSolver/` directory and ensure the matching RitsuLib compatibility runtime is installed. Do not mix the 0.107.1 fork DLL with a newer-game CombatSolver/RitsuLib installation.
+
+If you are running the current retail game rather than 0.107.1, use the primary upstream CombatSolver instead of assuming this fork is compatible.
+
 ## Reporting bugs
 
 For wrong routes, unexpected recalculation, Choice failures, multiplayer execution issues, or crashes, use the structured GitHub bug template. Route-quality reports are most useful when they include:
