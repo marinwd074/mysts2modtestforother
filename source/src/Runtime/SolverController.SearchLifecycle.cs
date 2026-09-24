@@ -909,8 +909,6 @@ internal static partial class SolverController
         else if (_combat.FullAutoEnabled)
             StartFullAutoDeployment(host, searchedState, result);
 
-        // Optional archive work happens after route delivery/deployment admission.
-        if (!currentTurnAdopted && !routeAdopted)
     }
 
     private static void ApplyProjectionBaselines(SolverResult result)
