@@ -6,7 +6,17 @@ internal sealed partial class CombatBeamSolver
 {
     private const int MaximumBeamObjectiveAbLogs = 12;
     private int _beamObjectiveAbLogCount;
+    private int _beamObjectiveAbBoundaryId;
     private bool _beamObjectiveAbStarted;
+    private readonly Dictionary<int, BeamObjectiveAbPending> _beamObjectiveAbPending = [];
+
+    private readonly record struct BeamObjectiveAbPending(
+        int Sample,
+        SearchNode Witness,
+        int LegacyRank,
+        int ProductionRawRank,
+        int LegacyOnlyRawCount,
+        int LegacyOnlySelectedCount);
 
     // This transient, synchronous callback payload never crosses the Search boundary.
     // Its node lists are borrowed only until the callback returns; the sink receives copies.
@@ -216,10 +226,12 @@ internal sealed partial class CombatBeamSolver
             if (observePathPool)
                 ObserveGlobalRetentionDecision(decision, boundaryId);
             if (observeBeamObjectiveAb)
-                ObserveMultiplayerBeamObjectiveAb(decision);
+                ObserveMultiplayerBeamObjectiveAb(decision, boundaryId);
         };
 
-    private void ObserveMultiplayerBeamObjectiveAb(GlobalRetentionDecision decision)
+    private void ObserveMultiplayerBeamObjectiveAb(
+        GlobalRetentionDecision decision,
+        int boundaryId)
     {
         if (!_beamObjectiveAbStarted)
         {
@@ -260,6 +272,7 @@ internal sealed partial class CombatBeamSolver
             return;
 
         _beamObjectiveAbLogCount++;
+        int sample = _beamObjectiveAbLogCount;
         SearchNode witness = legacyOnlySelected.FirstOrDefault()
             ?? legacyOnlyRaw[0];
         int legacyRank = ObservedReferenceIndex(legacyOrder, witness) ?? -1;
@@ -267,9 +280,20 @@ internal sealed partial class CombatBeamSolver
         int? productionSelectedRank = ObservedReferenceIndex(decision.Selected, witness);
         MultiplayerCombatObjectiveRank objective = Retention.BuildMultiplayerObjectiveRankForDiagnostics(witness);
 
+        if (legacyOnlySelected.Count > 0)
+        {
+            _beamObjectiveAbPending[boundaryId] = new BeamObjectiveAbPending(
+                sample,
+                witness,
+                legacyRank,
+                productionRawRank,
+                legacyOnlyRaw.Count,
+                legacyOnlySelected.Count);
+        }
+
         policy.Diagnostics.Info(
             $"[CombatSolver/Multiplayer] MP_BEAM_RETENTION_AB " +
-            $"sample={_beamObjectiveAbLogCount} " +
+            $"sample={sample} boundary={boundaryId} " +
             $"turn={witness.Turn} pool={decision.OrderedPool.Count} limit={decision.Limit} " +
             $"legacy_only_raw={legacyOnlyRaw.Count} " +
             $"legacy_only_selected={legacyOnlySelected.Count} " +
@@ -281,6 +305,28 @@ internal sealed partial class CombatBeamSolver
             $"team_loss={objective.TeamLossRatio:F6} " +
             $"enemy_durability={objective.EnemyDurabilityRatio:F6} " +
             $"prefix={DescribeBeamObjectiveAbPrefix(witness)}");
+    }
+
+    private void CompleteMultiplayerBeamObjectiveAb(
+        int boundaryId,
+        IReadOnlyList<SearchNode> finalRetained)
+    {
+        if (!_beamObjectiveAbPending.Remove(boundaryId, out BeamObjectiveAbPending pending))
+            return;
+
+        int? finalRank = ObservedReferenceIndex(finalRetained, pending.Witness);
+        bool rescued = finalRank.HasValue;
+        policy.Diagnostics.Info(
+            $"[CombatSolver/Multiplayer] MP_BEAM_RETENTION_AB_FINAL " +
+            $"sample={pending.Sample} boundary={boundaryId} " +
+            $"legacy_only_raw={pending.LegacyOnlyRawCount} " +
+            $"legacy_only_selected={pending.LegacyOnlySelectedCount} " +
+            $"legacy_rank={pending.LegacyRank + 1} " +
+            $"production_raw_rank={pending.ProductionRawRank + 1} " +
+            $"final_rank={(finalRank.HasValue ? finalRank.Value + 1 : 0)} " +
+            $"rescued_by_outer_portfolio={rescued.ToString().ToLowerInvariant()} " +
+            $"beam_pruned={(!rescued).ToString().ToLowerInvariant()} " +
+            $"prefix={DescribeBeamObjectiveAbPrefix(pending.Witness)}");
     }
 
     private static string DescribeBeamObjectiveAbPrefix(SearchNode node)
