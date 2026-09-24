@@ -84,23 +84,25 @@ function Test-ContiguousActionIndices {
 }
 
 $capability = @($records | Where-Object {
-        $_.Text -match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_CAPABILITY .*enabled=true .*max_actions=(\d+)'
+        $_.Text -match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_CAPABILITY .*enabled=true' -and
+        ($_.Text -match 'action_limit=route_bounded\b' -or $_.Text -match 'max_actions=(\d+)')
     })
-$capabilityMaxActions = 0
 $capabilityValid = $false
 if ($capability.Count -eq 1) {
-    if ($capability[0].Text -match 'max_actions=(\d+)') {
-        $capabilityMaxActions = [int]$Matches[1]
+    if ($capability[0].Text -match 'action_limit=route_bounded\b') {
+        $capabilityValid = $true
+    } elseif ($capability[0].Text -match 'max_actions=(\d+)') {
+        # Historical evidence used a fixed capability ceiling. Current production reports
+        # route_bounded here and the concrete finite capacity at MP2B_DEPLOY_START.
+        $capabilityValid = [int]$Matches[1] -gt 0
     }
-    $capabilityValid = $capabilityMaxActions -gt 0 -and
-        ($MaxActions -eq 0 -or $capabilityMaxActions -eq $MaxActions)
 }
 if ($capability.Count -eq 1 -and $capabilityValid) {
     Add-Check 'boundedCapability' PASS (Format-Evidence $capability[0])
 } elseif ($capability.Count -eq 0) {
-    Add-Check 'boundedCapability' UNVERIFIED '' 'No bounded Safe Execute capability marker was observed.'
+    Add-Check 'boundedCapability' UNVERIFIED '' 'No route-bounded Safe Execute capability marker was observed.'
 } else {
-    Add-Check 'boundedCapability' FAIL (Join-Evidence $capability) 'A single capability marker with the requested finite ceiling is required.'
+    Add-Check 'boundedCapability' FAIL (Join-Evidence $capability) 'A single route-bounded Safe Execute capability marker is required.'
 }
 
 $startPattern = '\[CombatSolver/MultiplayerSafeExecute\] MP2B_DEPLOY_START\b'
