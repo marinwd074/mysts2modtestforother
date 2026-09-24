@@ -46,6 +46,7 @@
     <InternalsVisibleTo Include="OfflineSearchHarness" />
     <InternalsVisibleTo Include="U2DegenerateHarness" />
     <InternalsVisibleTo Include="P0P1PinnedHarness" />
+    <InternalsVisibleTo Include="E0PinnedHarness" />
     <InternalsVisibleTo Include="U0U1PinnedHarness" />
   </ItemGroup>
 
