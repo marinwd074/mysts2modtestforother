@@ -544,7 +544,8 @@ internal static class Program
         SetLiveEnergyForU5(player, 3);
 
         int turn = playerState.TurnNumber;
-        uint enemyCombatId = combat.Enemies.Single().CombatId;
+        uint enemyCombatId = combat.Enemies.Single().CombatId
+            ?? throw new InvalidOperationException("U5 draw fixture enemy has no CombatId.");
         PlanAction pommel = new(
             PlanActionKind.PlayCard,
             turn,
