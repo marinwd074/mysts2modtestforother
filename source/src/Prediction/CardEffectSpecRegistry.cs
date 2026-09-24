@@ -41,6 +41,7 @@ internal static class CardEffectSpecRegistry
         [typeof(Coordinate)] = [Target<CoordinatePower>(card => card.DynamicVars.Strength.IntValue)],
         [typeof(CrushUnder)] = [AllEnemies<CrushUnderPower>("StrengthLoss")],
         [typeof(Debilitate)] = [Target<DebilitatePower>("DebilitatePower")],
+        [typeof(DarkEmbrace)] = [Owner<DarkEmbracePower>(_ => 1)],
         [typeof(Defy)] = [Target<WeakPower>(card => card.DynamicVars.Weak.IntValue)],
         [typeof(Delay)] = [Owner<EnergyNextTurnPower>(card => card.DynamicVars.Energy.IntValue)],
         [typeof(DyingStar)] = [AllEnemies<DyingStarPower>("StrengthLoss")],
