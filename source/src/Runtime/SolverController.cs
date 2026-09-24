@@ -1314,12 +1314,12 @@ internal static partial class SolverController
                         Entry.Logger.Info(
                             $"[CombatSolver/MultiplayerSafeExecute] {capabilityMarker} " +
                             $"enabled=true scope={capabilityScope} " +
-                            "action_limit=route_bounded " +
+                            $"action_limit={MultiplayerSafeExecutePolicy.RouteBoundedActionLimitToken} " +
                             $"automatic_end_turn={capabilities.CanEndTurnAutomatically.ToString().ToLowerInvariant()} " +
                             "custom_network_api=false");
                         Entry.Logger.Info(
                             $"[CombatSolver/MultiplayerSafeExecute] MP2B_CAPABILITY " +
-                            "enabled=true action_limit=route_bounded " +
+                            $"enabled=true action_limit={MultiplayerSafeExecutePolicy.RouteBoundedActionLimitToken} " +
                             $"attribution=revalidation automatic_end_turn={capabilities.CanEndTurnAutomatically.ToString().ToLowerInvariant()} " +
                             "custom_network_api=false");
                     }
