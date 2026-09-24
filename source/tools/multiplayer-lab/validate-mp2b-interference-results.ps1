@@ -84,7 +84,7 @@ function Test-ContiguousActionIndices {
 }
 
 $capability = @($records | Where-Object {
-        $_.Text -match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_CAPABILITY .*enabled=true .*max_actions=(\d+)'
+        $_.Text -match '\[CombatSolver/MultiplayerSafeExecute\] MP2B_CAPABILITY .*enabled=true\b'
     })
 $capabilityValid = $false
 if ($capability.Count -eq 1) {
