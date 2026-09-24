@@ -68,8 +68,6 @@ MP-0 Core 的多人只读证据已通过；退出/重新加入生命周期仍属
 | `src/Runtime/PatchRegistration.cs` | 创建、注册并应用 RitsuLib 必需补丁；保留版本条件与注册顺序 | Mod 生命周期、搜索策略和战斗语义 |
 | `src/Runtime/TestingBridge/*` | 生产运行时所需的最小战前协议 DTO、路径/JSON 选项与空闲活动桥；不拥有测试协议 | 测试请求预期字段、fixture、断言、协议 host 和测试 tracker |
 | `src/Runtime/CombatSolverLog.cs` / `CombatDiagnosticJournal.cs` | 独立日志入口；生产线程入队不可变消息，复用后台事件文件；战斗切换摘要化、搜索日志绑定所属战斗、提交前缀冻结 | Godot 全局日志收集、搜索候选判定、后台读取 live 状态 |
-| `src/Diagnostics/Telemetry/OnlinePresence.cs` | 主线程在线标量采样、共享持久安装标识和证书固定的 HTTPS 客户端；无头和多人隔离 | 搜索策略、完整路线上传、服务端历史存储 |
-| `src/Diagnostics/Telemetry/RunStatistics.cs` / `src/Diagnostics/Telemetry/RunStatisticsStore.cs` | 主线程跑局/战斗/设置/实际操作标量事件；独立有界队列，后台持久化、原生结算恢复与幂等补传；不可变提交时战绩快照 | 搜索状态键、模拟、游戏存档修改、历史求解器参与推断 |
 | `src/Runtime/SolverController.cs` | 主线程高层搜索/续用/部署/全自动编排入口、共享状态与 facade | Beam 内部算法和 UI 布局、搜索 worker 生命周期细节 |
 | `src/Runtime/SolverSessionCapabilities.cs` | 集中声明单人、默认多人 Probe、显式 Advisor 与 Safe Execute 的能力边界；Safe Execute 仅由精确环境变量 opt-in | 实机多人证据、网络协议、队友规划和动作分类器 |
 | `src/Runtime/SolverPerspective.cs` | 区分本地可知状态、远端公开状态、远端私有 `Unknown` 与可授权能力；坚持 Knowledge != Authority | 读取 live 网络状态、推断或代替队友意图 |
@@ -99,19 +97,16 @@ MP-0 Core 的多人只读证据已通过；退出/重新加入生命周期仍属
 | `src/Runtime/SolverSettings.cs` | 持久化性能、执行、搜索并行度、NoGC 开关与独立预算、逐槽药水策略和搜索结束通知设置，并在主线程捕获不可变搜索 snapshot | 搜索期读取全局设置 |
 | `src/Runtime/PlayerTurnSetupPatches.cs` | 准备阶段稳定根搜索与既有选择重放；原生会话独占生命周期，每次搜索独立取消并排空，页面等待后原子确定唯一 worker 所有者；结果发布结束接管标志，手动提交淘汰旧根；后续回合无既有选择时捕获准备根；进入 Play 后交给 continuation 核对 | 普通 Play 阶段搜索与动作部署 |
 | `src/Runtime/NativeChoiceRuntime.cs` | 观测原生选择 Task 完成及页面序号，按卡牌语义状态匹配计划实例；搜索期间保留手动输入，实际驱动期间持有页面锁，清除尚未提交的手动勾选后选择计划实例 | 选择分支枚举和战斗结算 |
-| `src/Diagnostics/Telemetry/ClientUpdateNotice.cs` | 解析现有心跳响应、严格比较三段版本、发布线程安全纯值提醒；OnlinePresence 在主线程通知 Overlay 刷新 | 网络请求调度、安装更新或战斗操作 |
 | `src/Diagnostics/BugReports/CombatBugReportExporter.cs` | 主线程冻结当前/最近战斗的实机取证状态；单消费者后台 FIFO 按检查点顺序整理并一次序列化为 UTF-8 字节，导出任务作为队列屏障等待此前记录完成 | 后台读取 live 战斗、通用 replay/native-state 导入 |
 | `src/Diagnostics/BugReports/CombatBugReportDescription.cs` | 汇总本场结构化异常、重算和战损信号，提供诊断文字与标签 | 网络字段拼装、搜索决策 |
 | `src/Diagnostics/BugReports/CombatBugReportMetadata.cs` | 主线程冻结战斗、角色及已观察怪物的稳定 ID 和显示名称；序列化 report.json v2 的身份、分类及预测战损比较 | 网络请求、搜索策略、后台读取 live 状态 |
 | `src/Diagnostics/BugReports/CombatBugReportUploader.cs` | 通过不继承游戏进程代理的专用客户端直连接收服务；校验问题包与文本上限，以 multipart 流式上传并传播取消，限制服务端响应，并以反馈编号和实收字节数确认完整接收 | 问题包内容生成、隐私脱敏、UI 单实例与确认流程 |
-| `src/Replay/CombatShowcaseCollector.cs` | 在严格合格的首个 Boss 搜索根冻结值材料，完整胜利后生成五文件录像包，并由在线统计同意状态控制待上传队列；逐阶段记录未收录原因 | 搜索策略、后台读取 live 状态、监控后台 |
-| `src/Replay/CombatShowcaseModEligibility.cs` | 依据 Mod 的玩法声明筛除新角色、新机制和数值修改，并集中登记效果已冻结进根或只在指定复现流程生效的建局工具 | 按当前加载数量设置白名单、搜索兼容性判定 |
 | `src/Replay/CombatShowcaseRuntime.cs` | 校验录像协议与文件摘要，从主菜单建立不保存跑局、恢复精确战斗根，并把预计算结果交给 Controller | 远端目录 UI、重新搜索、正式存档与统计写入 |
 | `src/Runtime/SearchCompletionNotifier.cs` | 搜索成功、失败、停止或过期后按设置决定是否通知；Windows 使用原生通知和系统提示音，先核对前台进程并在非 Windows/headless 环境停止 | 搜索生命周期、跨平台伪通知和自定义声音播放 |
 
 `SolverCombatSession` 持有本场路线、续用和重算状态；`SolverSearchSession` 持有 generation、取消、进度和帧观测；`SolverDeploymentSession` 持有部署取消。旧回调只能写回创建它的 search session。
 
-`src/Api/CombatShowcaseApi.cs` 是私用录像 Mod 的公开入口，只暴露协议兼容信息和按本地包路径进入临时对局的异步调用。API 不直接操作 Controller 或 CombatManager；Runtime 完成建局与恢复。录像会话使用既有精确 continuation 续接和部署入口，任何失配都停止会话，禁止调用重算。
+`src/Api/CombatShowcaseApi.cs` 是本地录像/复现工具的公开入口，只暴露协议兼容信息和按本地包路径进入临时对局的异步调用。API 不直接操作 Controller 或 CombatManager；Runtime 完成建局与恢复。后台自动采集、私有上传 transport 和服务器元数据已删除。录像会话使用既有精确 continuation 续接和部署入口，任何失配都停止会话，禁止调用重算。
 
 `SearchGcPolicy` 将活动搜索期间收到的后台回收请求保存在独立的 deferred 完成链中，所有搜索退出后才提升为实际后台回收。搜索内内存检查点只等待自己能够完成的回收，不能等待以该搜索退出为前提的任务；手动工作集释放继续等待搜索后的回收链。已覆盖的取消及 GC 转换后注入失败路径会协调 CLR 实际模式与内部所有权，并落定对应完成链、释放等待屏障；这些断言不穷举 CLR 转换前失败、OOM 或日志系统异常。搜索账本的存活与运行时 GC 模式互不混用。
 
