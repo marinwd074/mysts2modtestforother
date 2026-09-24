@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CombatSolver;
@@ -469,6 +470,12 @@ internal static class Program
             names,
             replayPolicy,
             profile);
+        U5ResourceOrderEvidence resourceOrder = RunU5ResourceOrder(
+            combat,
+            names,
+            replayPolicy,
+            profile,
+            bash);
 
         return new U5Evidence(
             Status: "PASS",
@@ -490,7 +497,117 @@ internal static class Program
             GenerationForwardHand: generationOrder.ForwardHand,
             GenerationReverseHand: generationOrder.ReverseHand,
             GenerationHandMultisetDifferent: generationOrder.HandMultisetDifferent,
+            ResourceForwardCompleted: resourceOrder.ForwardCompleted,
+            ResourceForwardEnergy: resourceOrder.ForwardEnergy,
+            ResourceReverseRejected: resourceOrder.ReverseRejected,
+            ResourceReverseReason: resourceOrder.ReverseReason,
             RealMultiplayerOwnershipVerified: false);
+    }
+
+    private static U5ResourceOrderEvidence RunU5ResourceOrder(
+        CombatState combat,
+        SolverDisplayNames names,
+        SearchPolicySnapshot policy,
+        SolverSearchProfile profile,
+        PlanAction bash)
+    {
+        Player player = LocalContext.GetMe(combat)
+            ?? throw new InvalidOperationException("U5 resource fixture has no local player.");
+        var playerState = player.PlayerCombatState
+            ?? throw new InvalidOperationException("U5 resource fixture has no local combat state.");
+        CardModel offering = combat.CreateCard(ResolveCard("OFFERING"), player);
+        playerState.Hand.AddInternal(offering, -1);
+
+        SetLiveEnergyForU5(player, 1);
+        Require(
+            playerState.Energy == 1,
+            $"U5 resource fixture could not set live energy to 1; actual={playerState.Energy}.");
+
+        int turn = playerState.TurnNumber;
+        PlanAction offeringAction = new(
+            PlanActionKind.PlayCard,
+            turn,
+            CardId: "OFFERING",
+            CardOccurrence: 0,
+            CardTitle: "Offering");
+        BattleDamageSnapshot damage = BattleDamageTracker.Observe(combat);
+
+        U5OrderReplay forward = ReplayU5Order(
+            combat,
+            names,
+            damage,
+            policy,
+            profile,
+            [offeringAction, bash]);
+        Require(
+            forward.Energy == 1,
+            $"U5 resource forward order should end at 1 energy, got {forward.Energy}.");
+
+        bool reverseRejected = false;
+        string reverseReason = "-";
+        try
+        {
+            _ = ReplayU5Order(
+                combat,
+                names,
+                damage,
+                policy,
+                profile,
+                [bash, offeringAction]);
+        }
+        catch (InvalidOperationException ex)
+            when (ex.Message.Contains("BASH", StringComparison.Ordinal)
+                && ex.Message.Contains("energy=1", StringComparison.Ordinal)
+                && ex.Message.Contains("cost=2", StringComparison.Ordinal))
+        {
+            reverseRejected = true;
+            reverseReason = ex.Message;
+        }
+
+        Require(
+            reverseRejected,
+            "U5 resource reverse order did not reject Bash at energy=1/cost=2.");
+
+        return new U5ResourceOrderEvidence(
+            ForwardCompleted: true,
+            ForwardEnergy: forward.Energy,
+            ReverseRejected: true,
+            ReverseReason: reverseReason);
+    }
+
+    private static void SetLiveEnergyForU5(Player player, int value)
+    {
+        object state = player.PlayerCombatState
+            ?? throw new InvalidOperationException("U5 resource fixture has no player combat state.");
+        const BindingFlags flags =
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+
+        PropertyInfo? energyProperty = state.GetType().GetProperty("Energy", flags);
+        MethodInfo? setter = energyProperty?.GetSetMethod(nonPublic: true);
+        if (setter != null)
+        {
+            setter.Invoke(state, [value]);
+        }
+        else
+        {
+            FieldInfo? field = state.GetType().GetField("<Energy>k__BackingField", flags)
+                ?? state.GetType().GetField("_energy", flags);
+            if (field == null)
+            {
+                throw new MissingMemberException(
+                    state.GetType().FullName,
+                    "Energy setter/backing field");
+            }
+            field.SetValue(state, value);
+        }
+
+        int actual = (int)(energyProperty?.GetValue(state)
+            ?? throw new InvalidOperationException("U5 resource fixture cannot read Energy."));
+        if (actual != value)
+        {
+            throw new InvalidOperationException(
+                $"U5 resource fixture energy write failed: expected={value} actual={actual}.");
+        }
     }
 
     private static U5TerminalOrderEvidence RunU5TerminalOrder(
@@ -888,7 +1005,17 @@ internal static class Program
         string[] GenerationForwardHand,
         string[] GenerationReverseHand,
         bool GenerationHandMultisetDifferent,
+        bool ResourceForwardCompleted,
+        int ResourceForwardEnergy,
+        bool ResourceReverseRejected,
+        string ResourceReverseReason,
         bool RealMultiplayerOwnershipVerified);
+
+    private sealed record U5ResourceOrderEvidence(
+        bool ForwardCompleted,
+        int ForwardEnergy,
+        bool ReverseRejected,
+        string ReverseReason);
 
     private sealed record U5GenerationOrderEvidence(
         StateFingerprint ForwardFingerprint,
