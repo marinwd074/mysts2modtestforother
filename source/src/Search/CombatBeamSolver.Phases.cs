@@ -31,18 +31,25 @@ internal enum SearchStepStatus
 
 internal readonly record struct SearchWorkAllowance
 {
-    public SearchWorkAllowance(int maxParentCommits)
+    public SearchWorkAllowance(
+        int maxParentCommits,
+        long maxTransitions = long.MaxValue)
     {
         if (maxParentCommits <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxParentCommits));
+        if (maxTransitions <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxTransitions));
         MaxParentCommits = maxParentCommits;
+        MaxTransitions = maxTransitions;
     }
 
     public int MaxParentCommits { get; }
+    public long MaxTransitions { get; }
 
     public static SearchWorkAllowance SingleParent { get; } = new(1);
 
-    public static SearchWorkAllowance Unlimited { get; } = new(int.MaxValue);
+    public static SearchWorkAllowance Unlimited { get; } =
+        new(int.MaxValue, long.MaxValue);
 }
 
 internal readonly record struct SearchStepResult(
@@ -1793,7 +1800,7 @@ internal sealed partial class CombatBeamSolver
                     {
                         member.StepCancellationToken.ThrowIfCancellationRequested();
                         ExpandNextSerially();
-                        if (member.ObserveCommittedParents(1))
+                        if (member.ObserveCommittedParents(1, _run.TransitionCount))
                         {
                             stopwatch.Stop();
                             yield return new SearchStepResult(
@@ -1820,7 +1827,7 @@ internal sealed partial class CombatBeamSolver
                             {
                                 member.StepCancellationToken.ThrowIfCancellationRequested();
                                 ExpandNextSerially();
-                                if (member.ObserveCommittedParents(1))
+                                if (member.ObserveCommittedParents(1, _run.TransitionCount))
                                 {
                                     stopwatch.Stop();
                                     yield return new SearchStepResult(
@@ -1852,7 +1859,7 @@ internal sealed partial class CombatBeamSolver
                         {
                             member.StepCancellationToken.ThrowIfCancellationRequested();
                             ExpandNextSerially();
-                            if (member.ObserveCommittedParents(1))
+                            if (member.ObserveCommittedParents(1, _run.TransitionCount))
                             {
                                 stopwatch.Stop();
                                 yield return new SearchStepResult(
@@ -1870,7 +1877,7 @@ internal sealed partial class CombatBeamSolver
                             // The serial path rechecks one parent at its own committed boundary.
                             member.StepCancellationToken.ThrowIfCancellationRequested();
                             ExpandNextSerially();
-                            if (member.ObserveCommittedParents(1))
+                            if (member.ObserveCommittedParents(1, _run.TransitionCount))
                             {
                                 stopwatch.Stop();
                                 yield return new SearchStepResult(
@@ -1982,7 +1989,7 @@ internal sealed partial class CombatBeamSolver
                                 $"gc_pause_ms={(GC.GetTotalPauseDuration() - wavePauseBefore).TotalMilliseconds:F3}");
                         }
                         ReclaimAfterCommittedWork("after_parallel_wave");
-                        if (member.ObserveCommittedParents(entries.Count))
+                        if (member.ObserveCommittedParents(entries.Count, _run.TransitionCount))
                         {
                             stopwatch.Stop();
                             yield return new SearchStepResult(
@@ -2483,32 +2490,47 @@ internal sealed partial class CombatBeamSolver
         public SearchMemberExecutionPhase Phase { get; set; } = SearchMemberExecutionPhase.Created;
         public CancellationToken StepCancellationToken { get; set; }
         public int RemainingParentCommitsBeforeYield { get; private set; } = int.MaxValue;
+        public long MaxTransitionsBeforeYield { get; private set; } = long.MaxValue;
+        public long TransitionCountAtStepStart { get; private set; }
         public int CommittedParentsInCurrentStep { get; private set; }
         public int TotalCommittedParents { get; private set; }
 
-        public void BeginStep(SearchWorkAllowance allowance, CancellationToken token)
+        public void BeginStep(
+            SearchWorkAllowance allowance,
+            CancellationToken token,
+            long currentTransitionCount)
         {
+            if (currentTransitionCount < 0)
+                throw new ArgumentOutOfRangeException(nameof(currentTransitionCount));
             StepCancellationToken = token;
             RemainingParentCommitsBeforeYield = allowance.MaxParentCommits;
+            MaxTransitionsBeforeYield = allowance.MaxTransitions;
+            TransitionCountAtStepStart = currentTransitionCount;
             CommittedParentsInCurrentStep = 0;
             Phase = SearchMemberExecutionPhase.Running;
         }
 
-        public bool ObserveCommittedParents(int count)
+        public bool ObserveCommittedParents(int count, long currentTransitionCount)
         {
             if (count <= 0)
                 throw new ArgumentOutOfRangeException(nameof(count));
+            if (currentTransitionCount < TransitionCountAtStepStart)
+                throw new ArgumentOutOfRangeException(nameof(currentTransitionCount));
             checked
             {
                 TotalCommittedParents += count;
                 CommittedParentsInCurrentStep += count;
             }
-            if (RemainingParentCommitsBeforeYield == int.MaxValue)
-                return false;
-            RemainingParentCommitsBeforeYield = Math.Max(
-                0,
-                RemainingParentCommitsBeforeYield - count);
-            return RemainingParentCommitsBeforeYield == 0;
+            if (RemainingParentCommitsBeforeYield != int.MaxValue)
+            {
+                RemainingParentCommitsBeforeYield = Math.Max(
+                    0,
+                    RemainingParentCommitsBeforeYield - count);
+            }
+            bool parentBudgetReached = RemainingParentCommitsBeforeYield == 0;
+            bool transitionBudgetReached = MaxTransitionsBeforeYield != long.MaxValue
+                && currentTransitionCount - TransitionCountAtStepStart >= MaxTransitionsBeforeYield;
+            return parentBudgetReached || transitionBudgetReached;
         }
 
         public SolverInterimResult? CurrentBestResult { get; set; }
@@ -2657,7 +2679,10 @@ internal sealed partial class CombatBeamSolver
                     _state.TotalCommittedParents);
             }
 
-            _state.BeginStep(allowance, token);
+            _state.BeginStep(
+                allowance,
+                token,
+                _owner._run.TransitionCount);
             try
             {
                 bool yielded = MoveNextMeasured();

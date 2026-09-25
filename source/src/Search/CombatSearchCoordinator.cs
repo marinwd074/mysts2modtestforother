@@ -6,6 +6,9 @@ namespace CombatSolver;
 internal static partial class CombatSearchCoordinator
 {
     private static readonly SearchWorkAllowance ResumableMemberAllowance = new(256);
+    private static readonly SearchWorkAllowance E3FixedMemberAllowance = new(
+        maxParentCommits: 256,
+        maxTransitions: 1_024);
 
     private static SolverResult RunResumableMemberToCompletion(
         CombatBeamSolver solver,
@@ -1609,7 +1612,8 @@ internal static partial class CombatSearchCoordinator
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] E3_PORTFOLIO_MEMBER_START kind=smart_potion " +
                 $"potion_count={potionCount} resident={active.Count}/{residentLimit} " +
-                $"slice_parents={ResumableMemberAllowance.MaxParentCommits}");
+                $"slice_parents={E3FixedMemberAllowance.MaxParentCommits} " +
+                $"slice_transitions={E3FixedMemberAllowance.MaxTransitions}");
         }
 
         void FillResidentSet()
@@ -1655,7 +1659,7 @@ internal static partial class CombatSearchCoordinator
                     SearchStepResult step;
                     try
                     {
-                        step = session.Step(ResumableMemberAllowance, searchCancellationToken);
+                        step = session.Step(E3FixedMemberAllowance, searchCancellationToken);
                     }
                     catch (PotionPolicyUnsatisfiedException)
                     {
