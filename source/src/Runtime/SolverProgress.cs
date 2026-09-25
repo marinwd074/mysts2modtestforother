@@ -271,4 +271,12 @@ internal sealed record SolverProgress(
     SolverCurrentTurnPreview? CurrentTurnPreview = null,
     SolverSpeculativeRoutePreview? SpeculativeRoutePreview = null,
     SolverRouteAdoptionSeed? RouteAdoptionSeed = null,
-    int RequestBudgetMilliseconds = 0);
+    int RequestBudgetMilliseconds = 0)
+{
+    // Set only when a member has finished the full production final ordering (including
+    // scenario rerank and deterministic block-potion insertion) but is still flattening
+    // replay/annotation data. The coordinator records Published only if this route actually
+    // wins the global displayed-result ordering.
+    public CandidateOrigin? OfficialPublishedOrigin { get; init; }
+    public string? OfficialPublishedEvaluationContextId { get; init; }
+}
