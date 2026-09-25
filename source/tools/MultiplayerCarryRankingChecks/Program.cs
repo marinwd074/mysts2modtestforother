@@ -31,12 +31,10 @@ MultiplayerCarryEnemyPublicState RemoteThreat(
         threatTarget: target);
 
 MultiplayerCarryRankingContext Context(
-    MultiplayerCarryThreatTarget target = MultiplayerCarryThreatTarget.RemotePlayer,
-    string fingerprint = "public-v1")
+    MultiplayerCarryThreatTarget target = MultiplayerCarryThreatTarget.RemotePlayer)
     => MultiplayerCarryRankingContext.Create(
         enabled: true,
         worldVersion: 10,
-        publicFingerprint: fingerprint,
         remotePlayers: [LowHpTeammate()],
         enemies: [RemoteThreat(target)],
         multiplayerScalingHooks: true,
@@ -94,7 +92,6 @@ Check(
 MultiplayerCarryRankingContext localOnly = MultiplayerCarryRankingContext.Create(
     enabled: true,
     worldVersion: 10,
-    publicFingerprint: "local-only",
     remotePlayers: [LowHpTeammate()],
     enemies: [new MultiplayerCarryEnemyPublicState(
         8, "LOCAL_THREAT", 10, 10, 0, "ATTACK",
@@ -124,15 +121,6 @@ Check(
                 || property.Name.Contains("Private", StringComparison.OrdinalIgnoreCase)
                 || property.Name.Contains("CombatState", StringComparison.OrdinalIgnoreCase)),
     "Remote public context copies its inputs and exposes no private hand/potion/energy/relic state.");
-
-MultiplayerCarryRankingContext oldContext = Context(fingerprint: "public-v1");
-MultiplayerCarryRankingContext freshContext = Context(fingerprint: "public-v2");
-Check(
-    oldContext.IsFreshFor(10, "public-v1")
-        && !oldContext.IsFreshFor(11, "public-v1")
-        && !oldContext.IsFreshFor(10, "public-v2")
-        && freshContext.IsFreshFor(10, "public-v2"),
-    "A world-version or public-fingerprint change invalidates the old ranking context.");
 
 Check(
     MultiplayerCarryThreatTargetContracts.ClassifyBaseGameMove(

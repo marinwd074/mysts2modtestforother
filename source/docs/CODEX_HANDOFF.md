@@ -236,3 +236,11 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - Continuation reuse still requires the existing ContinuationStamp plus combat/local-player identity, multiplayer scaling/card rules, and an advanced WorldVersion.
 - Search retention no longer computes a teammate-state fingerprint at every future turn boundary, and terminal continuation building no longer replays solely to recover that fingerprint.
 - The carry-ranking fingerprint is intentionally left separate for now; it is not a continuation admission gate.
+
+## 2026-09-25 probe and carry fingerprint cleanup
+
+- Multiplayer probe now computes only the compact fingerprint that actually advances WorldVersion; the extra reactive-public and local-boundary fingerprints and their delta log were removed.
+- The compact fingerprint value is no longer printed in the normal OBSERVED log; only the fact that WorldVersion advanced is logged.
+- Carry Ranking no longer stores or computes duplicate PublicFingerprint / RemotePublicFingerprint values. It uses its captured immutable player/enemy arrays plus WorldVersion.
+- The old MultiplayerContinuationRemoteFingerprint implementation and its probe wrapper were removed after continuation admission stopped consuming them.
+- Evidence validators now key off compact WorldVersion advancement rather than the removed remote-public diagnostic hash.

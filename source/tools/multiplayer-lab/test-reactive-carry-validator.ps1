@@ -23,7 +23,7 @@ function Write-Fixture {
         $lines.Add("[CombatSolver/MultiplayerSafeExecute] NATIVE_ACTION_CAPTURED request_id=$request action_index=2 type=EndPlayerTurnAction turn=$turn card=- local_net_id=1000 custom_network_api_used=false")
         $lines.Add("[CombatSolver/MultiplayerSafeExecute] MP2B_SAFE_END_TURN_ACCEPTED request_id=$request turn=$turn action_count=2 route_generation=$route before_world_version=$worldAfter after_world_version=$($worldAfter + 1) next_local_turn=$($turn + 1) session_cleared=true authorization_cleared=true automatic_end_turn=true custom_network_api_used=false")
         if ($Smoke -eq 'B') {
-            $lines.Add("[CombatSolver/MultiplayerProbe] MP_REACTIVE_WORLD_DELTA world_version=$($worldAfter + 2) reason=main_thread_monitor remote_public_changed=true local_private_changed=false fresh_probe=true")
+            $lines.Add("[CombatSolver/MultiplayerProbe] OBSERVED sequence=$turn world_version=$($worldAfter + 2) reason=main_thread_monitor compact_changed=true")
         }
         $lines.Add("[CombatSolver/MultiplayerProbe] MP_REACTIVE_TURN_BOUNDARY previous=round=1;side=Player;local_net_id=1000;turn=$turn;phase=Play current=round=1;side=Player;local_net_id=1000;turn=$($turn + 1);phase=Play world_version=$($worldAfter + 2) observation_sequence=$turn fresh_probe=true fresh_capture=true")
         $lines.Add("[CombatSolver/MultiplayerSafeExecute] MP_REACTIVE_FRESH_SEARCH generation=$search route_generation=$($route + 1) world_version=$($worldAfter + 2) turn=$($turn + 1) reason=AutoTurnStart fresh_probe=true fresh_capture=true after_safe_end_turn=true previous_end_turn_request_id=$request previous_end_turn_turn=$turn cross_turn_reuse=false")

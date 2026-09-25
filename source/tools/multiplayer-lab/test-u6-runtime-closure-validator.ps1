@@ -33,7 +33,7 @@ $base = @(
     '[CombatSolver/MultiplayerSafeExecute] NATIVE_ACTION_CAPTURED request_id=31 action_index=0 type=PlayCardAction turn=1 card=BASH local_net_id=1 custom_network_api_used=false',
     '[CombatSolver/MultiplayerSafeExecute] MP2B_DEPLOY_END request_id=31 turn=1 action_count=1 end_turn=false stop_reason=kind_teammateforecast search_world_version=8 last_accepted_world_version=9 automatic_end_turn=false custom_network_api_used=false',
     '[CombatSolver/Multiplayer] MP_U5_OBSERVE turn=1 executed_actions=1 boundary=teammate_forecast proactive_wait=false timeout_ms=0 replan=true',
-    '[CombatSolver/MultiplayerProbe] MP_REACTIVE_WORLD_DELTA world_version=10 reason=auto_turn_update remote_public_changed=true remote_readable_changed=true local_private_changed=false fresh_probe=true',
+    '[CombatSolver/MultiplayerProbe] OBSERVED sequence=8 world_version=10 reason=auto_turn_update compact_changed=true',
     '[CombatSolver/MultiplayerAdvisor] SEARCH_DEBOUNCED_START world_version=10 request_id=77',
     '[CombatSolver/MultiplayerSafeExecute] MP2B_DEPLOY_START turn=1 request_id=32 route_generation=8 route_identity=def new_authorization=true action_count=1 max_actions=1 search_world_version=10 stop_reason=safe_local_play_card'
 )

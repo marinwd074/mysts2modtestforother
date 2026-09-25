@@ -298,8 +298,7 @@ internal sealed class CombatRootSnapshot
                 $"remote_players={carryRankingContext.RemotePlayers.Count} " +
                 $"enemies={carryRankingContext.Enemies.Count} " +
                 $"all_player_threats={allPlayerThreats} unknown_threats={unknownThreats} " +
-                "remote_private_read=true context_reused=false " +
-                $"public_fingerprint={carryRankingContext.PublicFingerprint}");
+                "remote_private_read=true context_reused=false");
         }
 
         return new CombatRootSnapshot(

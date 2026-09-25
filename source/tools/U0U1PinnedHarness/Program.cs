@@ -337,9 +337,6 @@ internal static class Program
         Require(
             replayA.ContinuationStateText == replayB.ContinuationStateText,
             "U1 production one-action replay is not deterministic.");
-        Require(
-            replayA.RemoteFingerprint == replayB.RemoteFingerprint,
-            "U1 production remote fingerprint is not deterministic.");
 
         MultiplayerSafeActionRevalidationFacts matchedWithLegacyDisagreement =
             RevalidationFacts() with
@@ -427,8 +424,6 @@ internal static class Program
             EvidenceLevel: "pinned_world_version_revalidation_plus_diagnostic_replay",
             FirstAction: ActionToken(action),
             ReplayDeterministic: true,
-            ContinuationFingerprint: replayA.ContinuationFingerprint,
-            RemoteFingerprint: replayA.RemoteFingerprint,
             MatchedLegacyDisagreementDecision: matchedDecision.ToString(),
             RemoteMismatchDecision: remoteMismatchDecision.ToString(),
             SemanticMismatchDecision: semanticMismatchDecision.ToString(),
@@ -1096,17 +1091,7 @@ internal static class Program
                 snapshot.BoundaryReason == SearchBoundaryReason.None,
                 $"U1 one-action replay reached {snapshot.BoundaryReason}.");
             ContinuationStamp continuation = replay.CaptureDiagnosticContinuation(snapshot);
-            StateFingerprint remote =
-                MultiplayerContinuationRemoteFingerprint.CapturePredicted(
-                    snapshot.Simulator,
-                    root.PlayerIdentity);
-            StateFingerprintBuilder builder = new();
-            builder.Add(continuation.StateText);
-            StateFingerprint continuationFingerprint = builder.Finish();
-            return new ReplayEvidence(
-                continuation.StateText,
-                Format(continuationFingerprint),
-                Format(remote));
+            return new ReplayEvidence(continuation.StateText);
         }
         finally
         {
@@ -1259,8 +1244,6 @@ internal static class Program
         string EvidenceLevel,
         string FirstAction,
         bool ReplayDeterministic,
-        string ContinuationFingerprint,
-        string RemoteFingerprint,
         string MatchedLegacyDisagreementDecision,
         string RemoteMismatchDecision,
         string SemanticMismatchDecision,
@@ -1268,8 +1251,5 @@ internal static class Program
         string RemoteInsertionRejectedReason,
         string CancelledRetryRejectedReason);
 
-    private sealed record ReplayEvidence(
-        string ContinuationStateText,
-        string ContinuationFingerprint,
-        string RemoteFingerprint);
+    private sealed record ReplayEvidence(string ContinuationStateText);
 }
