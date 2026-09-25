@@ -689,7 +689,9 @@ internal static class Program
         SolverSearchProfile profile = settings.Profile with
         {
             BeamWidth = BeamWidth,
-            MaxExpandedNodes = P0FixedWorkNodeBudget,
+            // E3 only needs enough deterministic work to prove real interleaving and
+            // serial/fixed semantic equivalence; keep it smaller than the P0 quality probe.
+            MaxExpandedNodes = 256,
             SoftTimeBudgetMilliseconds = 120_000,
         };
 
