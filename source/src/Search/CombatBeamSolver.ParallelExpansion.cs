@@ -26,14 +26,6 @@ internal sealed partial class CombatBeamSolver
         CardType CardType,
         uint? TargetCombatId);
 
-    private readonly record struct ActionSearchOrderHint(
-        bool EstimatedLethal,
-        bool UrgentDefense,
-        double StrategicValuePerResource,
-        double StrategicValue,
-        int ResourceCost,
-        int StableOrdinal);
-
     private readonly record struct PreparedCardAction(
         PlanAction Action,
         CardType CardType,
@@ -48,44 +40,6 @@ internal sealed partial class CombatBeamSolver
 
     internal static void UseLegacyActionSearchOrderForTesting(bool enabled)
         => Volatile.Write(ref _legacyActionSearchOrderForTesting, enabled ? 1 : 0);
-
-    private static int CompareActionSearchOrder(
-        ActionSearchOrderHint left,
-        ActionSearchOrderHint right)
-    {
-        int comparison = right.EstimatedLethal.CompareTo(left.EstimatedLethal);
-        if (comparison != 0)
-            return comparison;
-        comparison = right.UrgentDefense.CompareTo(left.UrgentDefense);
-        if (comparison != 0)
-            return comparison;
-        comparison = right.StrategicValuePerResource.CompareTo(left.StrategicValuePerResource);
-        if (comparison != 0)
-            return comparison;
-        comparison = right.StrategicValue.CompareTo(left.StrategicValue);
-        if (comparison != 0)
-            return comparison;
-        comparison = left.ResourceCost.CompareTo(right.ResourceCost);
-        return comparison != 0
-            ? comparison
-            : left.StableOrdinal.CompareTo(right.StableOrdinal);
-    }
-
-    internal static bool VerifyActionSearchOrderingForTesting()
-    {
-        ActionSearchOrderHint[] values =
-        [
-            new(false, false, 4d, 8d, 2, 0),
-            new(false, true, 2d, 5d, 1, 1),
-            new(true, false, 1d, 3d, 1, 2),
-            new(false, false, 4d, 8d, 2, 3),
-        ];
-        Array.Sort(values, CompareActionSearchOrder);
-        return values[0].EstimatedLethal
-            && values[1].UrgentDefense
-            && values[2].StableOrdinal == 0
-            && values[3].StableOrdinal == 3;
-    }
 
     private sealed class DeferredCardActionProbe(
         PreparedCardAction action,
@@ -596,7 +550,7 @@ internal sealed partial class CombatBeamSolver
         if (Volatile.Read(ref _legacyActionSearchOrderForTesting) == 0)
         {
             actions.Sort(static (left, right) =>
-                CompareActionSearchOrder(left.SearchOrder, right.SearchOrder));
+                ActionSearchOrderingPolicy.Compare(left.SearchOrder, right.SearchOrder));
         }
         return actions;
     }
