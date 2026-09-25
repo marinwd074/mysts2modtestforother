@@ -170,7 +170,6 @@ internal sealed partial class CombatBeamSolver
     private IEnumerable<SearchStepResult> SolveCoreSteps(SearchMemberExecutionState execution)
     {
         SearchMemberExecutionState member = execution;
-        using IDisposable notificationIsolation = SimulationNotificationIsolation.Enter();
         cancellationToken.ThrowIfCancellationRequested();
         if (policy.VerifyIncrementalSearch)
             VerifyResumableParentExpansionSessionForTesting();
@@ -2678,6 +2677,7 @@ internal sealed partial class CombatBeamSolver
             _state.BeginStep(allowance, token);
             try
             {
+                using IDisposable notificationIsolation = SimulationNotificationIsolation.Enter();
                 bool yielded = _steps.MoveNext();
                 if (!yielded)
                 {
