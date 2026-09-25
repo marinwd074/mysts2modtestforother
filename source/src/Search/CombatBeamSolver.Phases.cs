@@ -21,6 +21,39 @@ using BufferCard = MegaCrit.Sts2.Core.Models.Cards.Buffer;
 
 namespace CombatSolver;
 
+internal enum SearchStepStatus
+{
+    Yielded,
+    Completed,
+    Canceled,
+    BudgetExhausted,
+}
+
+internal readonly record struct SearchWorkAllowance
+{
+    public SearchWorkAllowance(int maxParentCommits)
+    {
+        if (maxParentCommits <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxParentCommits));
+        MaxParentCommits = maxParentCommits;
+    }
+
+    public int MaxParentCommits { get; }
+
+    public static SearchWorkAllowance SingleParent { get; } = new(1);
+
+    public static SearchWorkAllowance Unlimited { get; } = new(int.MaxValue);
+}
+
+internal readonly record struct SearchStepResult(
+    SearchStepStatus Status,
+    int CommittedParents,
+    int TotalCommittedParents);
+
+internal interface IResumableSearch : IDisposable
+{
+    SearchStepResult Step(SearchWorkAllowance allowance, CancellationToken token);
+}
 
 internal sealed partial class CombatBeamSolver
 {
@@ -111,6 +144,8 @@ internal sealed partial class CombatBeamSolver
     {
         using IDisposable notificationIsolation = SimulationNotificationIsolation.Enter();
         cancellationToken.ThrowIfCancellationRequested();
+        if (policy.VerifyIncrementalSearch)
+            VerifyResumableParentExpansionSessionForTesting();
         if (policy.Diagnostics.PathObserver != null)
             _run.PathDiagnosticsSolverId = Guid.NewGuid();
         if (_minimumPotionUses < 0
@@ -1757,11 +1792,33 @@ internal sealed partial class CombatBeamSolver
 
                 if (expansionParallelism == 1)
                 {
-                    while (activeIndex < active.Count && !acceptableBattleHpLossReached)
+                    using ParentExpansionSession parentSession = new(
+                        active.Count,
+                        index => !acceptableBattleHpLossReached
+                            && _run.Expanded < _profile.MaxExpandedNodes,
+                        index =>
+                        {
+                            activeIndex = index;
+                            ExpandNextSerially();
+                            if (activeIndex != index + 1)
+                            {
+                                throw new InvalidOperationException(
+                                    "可恢复父节点会话与串行展开游标不同步。");
+                            }
+                        });
+                    SearchWorkAllowance allowance = policy.VerifyIncrementalSearch
+                        ? SearchWorkAllowance.SingleParent
+                        : SearchWorkAllowance.Unlimited;
+                    while (true)
                     {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        ExpandNextSerially();
-                        if (_run.Expanded >= _profile.MaxExpandedNodes)
+                        SearchStepResult step = parentSession.Step(allowance, cancellationToken);
+                        activeIndex = step.TotalCommittedParents;
+                        if (step.Status == SearchStepStatus.Canceled)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            throw new OperationCanceledException(cancellationToken);
+                        }
+                        if (step.Status != SearchStepStatus.Yielded)
                             break;
                     }
                 }
@@ -2380,6 +2437,180 @@ internal sealed partial class CombatBeamSolver
                 : bytesPerInputHighWater * inputCount;
         long predictedBytes = Math.Max(fixedFloorBytes, scaledBytes);
         return BufferedAllocationReserve(predictedBytes);
+    }
+
+    private sealed class ParentExpansionSession : IResumableSearch
+    {
+        private readonly int _parentCount;
+        private readonly Func<int, bool> _canCommitParent;
+        private readonly Action<int> _commitParent;
+        private bool _disposed;
+
+        public ParentExpansionSession(
+            int parentCount,
+            Func<int, bool> canCommitParent,
+            Action<int> commitParent)
+        {
+            if (parentCount < 0)
+                throw new ArgumentOutOfRangeException(nameof(parentCount));
+            ArgumentNullException.ThrowIfNull(canCommitParent);
+            ArgumentNullException.ThrowIfNull(commitParent);
+            _parentCount = parentCount;
+            _canCommitParent = canCommitParent;
+            _commitParent = commitParent;
+        }
+
+        public int NextParentIndex { get; private set; }
+
+        public SearchStepResult Step(SearchWorkAllowance allowance, CancellationToken token)
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(ParentExpansionSession));
+
+            int committed = 0;
+            while (NextParentIndex < _parentCount)
+            {
+                if (token.IsCancellationRequested)
+                {
+                    return new SearchStepResult(
+                        SearchStepStatus.Canceled,
+                        committed,
+                        NextParentIndex);
+                }
+                if (!_canCommitParent(NextParentIndex))
+                {
+                    return new SearchStepResult(
+                        SearchStepStatus.BudgetExhausted,
+                        committed,
+                        NextParentIndex);
+                }
+
+                int parentIndex = NextParentIndex;
+                _commitParent(parentIndex);
+                NextParentIndex++;
+                committed++;
+
+                if (NextParentIndex >= _parentCount)
+                {
+                    return new SearchStepResult(
+                        SearchStepStatus.Completed,
+                        committed,
+                        NextParentIndex);
+                }
+                if (committed >= allowance.MaxParentCommits)
+                {
+                    return new SearchStepResult(
+                        SearchStepStatus.Yielded,
+                        committed,
+                        NextParentIndex);
+                }
+            }
+
+            return new SearchStepResult(
+                SearchStepStatus.Completed,
+                committed,
+                NextParentIndex);
+        }
+
+        public void Dispose()
+        {
+            _disposed = true;
+        }
+    }
+
+    private static void VerifyResumableParentExpansionSessionForTesting()
+    {
+        const int parentCount = 5;
+        List<int> continuousOrder = [];
+        using (ParentExpansionSession continuous = new(
+                   parentCount,
+                   _ => true,
+                   index => continuousOrder.Add(index)))
+        {
+            SearchStepResult result = continuous.Step(
+                SearchWorkAllowance.Unlimited,
+                CancellationToken.None);
+            if (result.Status != SearchStepStatus.Completed
+                || result.CommittedParents != parentCount
+                || result.TotalCommittedParents != parentCount)
+            {
+                throw new InvalidOperationException(
+                    "连续父节点会话没有一次完成固定工作量。");
+            }
+        }
+
+        List<int> resumedOrder = [];
+        using (ParentExpansionSession resumed = new(
+                   parentCount,
+                   _ => true,
+                   index => resumedOrder.Add(index)))
+        {
+            for (int expectedTotal = 1; expectedTotal <= parentCount; expectedTotal++)
+            {
+                SearchStepResult result = resumed.Step(
+                    SearchWorkAllowance.SingleParent,
+                    CancellationToken.None);
+                SearchStepStatus expectedStatus = expectedTotal == parentCount
+                    ? SearchStepStatus.Completed
+                    : SearchStepStatus.Yielded;
+                if (result.Status != expectedStatus
+                    || result.CommittedParents != 1
+                    || result.TotalCommittedParents != expectedTotal)
+                {
+                    throw new InvalidOperationException(
+                        "暂停恢复父节点会话重置了累计工作量或越过安全点。");
+                }
+            }
+        }
+        if (!continuousOrder.SequenceEqual(resumedOrder))
+        {
+            throw new InvalidOperationException(
+                "暂停恢复父节点会话改变了确定性父节点顺序。");
+        }
+
+        int budgetedCommits = 0;
+        using (ParentExpansionSession budgeted = new(
+                   parentCount,
+                   index => index < 2,
+                   _ => budgetedCommits++))
+        {
+            SearchStepResult first = budgeted.Step(
+                SearchWorkAllowance.SingleParent,
+                CancellationToken.None);
+            SearchStepResult second = budgeted.Step(
+                SearchWorkAllowance.SingleParent,
+                CancellationToken.None);
+            SearchStepResult exhausted = budgeted.Step(
+                SearchWorkAllowance.SingleParent,
+                CancellationToken.None);
+            if (first.Status != SearchStepStatus.Yielded
+                || second.Status != SearchStepStatus.Yielded
+                || exhausted.Status != SearchStepStatus.BudgetExhausted
+                || exhausted.TotalCommittedParents != 2
+                || budgetedCommits != 2)
+            {
+                throw new InvalidOperationException(
+                    "暂停恢复父节点会话在分片之间重置了工作预算。");
+            }
+        }
+
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+        int canceledCommits = 0;
+        using ParentExpansionSession canceled = new(
+            parentCount,
+            _ => true,
+            _ => canceledCommits++);
+        SearchStepResult canceledResult = canceled.Step(
+            SearchWorkAllowance.SingleParent,
+            cancellation.Token);
+        if (canceledResult.Status != SearchStepStatus.Canceled
+            || canceledResult.TotalCommittedParents != 0
+            || canceledCommits != 0)
+        {
+            throw new InvalidOperationException(
+                "取消的可恢复父节点会话仍提交了新工作。");
+        }
     }
 
     private enum MemoryCommitPreparation
