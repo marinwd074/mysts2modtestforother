@@ -128,6 +128,15 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - 合同增加纯排序门禁，覆盖斩杀、防御、价值效率和完全平手时的稳定原顺序。最终验证：compatibility PR run **36106409949** 的 static-consistency / contract-tests 全 PASS；Pinned run **36106327175** 的 Release、E0/E1/E5 A/B、U0/U1、U2、P0/P1 与历史分类链全 PASS。
 - **E5 已关闭。** 后续只有新的真实坏路线证据明确显示“目标动作已经生成，但在中途评分/Beam 保留处被淘汰”时，才单独重开中途估值工作。
 
+## 搜索效率 E6（2026-09-25，已关闭）
+
+- **E6A 不启用新的 pre-replay 可交换顺序剪枝。** 当前生产模型没有一份已证明完备、同时覆盖 Hook、战斗历史、RNG、死亡/复活、Choice/调度以及多人观察机会的动作读写集；按原计划，未知 Hook 必须视为全局依赖。仅凭卡牌类型、目标或现有 `IsPure` 历史分类不足以证明 `F_B(F_A(s)) = F_A(F_B(s))`，因此不把经验性“看起来可交换”升级成硬剪枝。
+- 生产继续保留现有 **完整 replay 后的精确状态去重**：`ExactTranspositionKey` 固定建模战斗状态，`TranspositionFrontier` 再以保守 Pareto label 区分药水/卖血/累计战损、团队与最弱队友损失、ActionCount/Score、路线 traits、边界/死亡/胜利、PredictionGaps 与 CombatProgress。它不能省掉首次 replay，但不会为了 E6 把未知副作用当作等价。
+- 重新接通并修复 `TranspositionFrontierChecks`：合同现在跟随 current label 结构，验证完整等价 label 会合并；Boundary、PlayerDead、AllEnemiesDead、PredictionGaps、CombatProgress 不同不会被误并；同时用独立 comparator 做随机决策对照，并保留 singleton frontier 分配回归检查。该检查已加入 PowerShell/Bash contract 入口。
+- **E6B 不启用局部 exact-kill DFS。** E0/E5 当前证据没有出现“主 Beam 候选池漏掉一条已知合法斩杀”：E0 的多人慢例是最终赢家直到后置 portfolio 成员才生成，E5 只证明动作顺序可让部分赢家更早出现。原计划明确要求只有 E0 证明 Beam 漏斩杀时才启动 DFS；现在加入会成为没有证据支持的额外搜索成本，并破坏“同一请求总预算”约束。
+- 本阶段因此**不改变生产搜索行为、Beam/Robust/Smart 药水/遗物/特殊牌语义，也不增加默认节点、时间或情景预算**。E6 的交付是把两类高风险优化的启用条件锁死，而不是为了阶段编号强行加入近似剪枝。
+- **E6 已关闭。** 未来只有新的 current-HEAD 问题包能证明“存在合法短窗口斩杀，但完整候选池没有生成它”时，才重开 E6B，并限定为共享现有请求预算的当回合/短窗口 DFS；若要重开 E6A，则必须先有覆盖相关 Hook/历史/RNG/死亡/调度语义的完备读写契约与反例门禁。
+
 ## 当前未验证边界
 
 - 当前 HEAD 的真实多人 Beam retention A/B：需要在“明显不如手打”的合法局面上确认更好路线究竟在 Beam、portfolio、U3/U4 还是执行层丢失。
@@ -136,5 +145,5 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 
 ## 下一任务
 
-按总计划进入 **E6：可证明等价的顺序消除与局部精确斩杀**。优先找能用严格状态等价证明安全合并的动作排列；局部 exact kill 只对小规模、可界定的近斩杀状态启用，继续保持默认总预算不增加。
+搜索效率 **E0–E6 已按证据全部关闭**。下一任务回到 Quality-first 第三项：只处理 current HEAD 新出现、且有问题包与合法手打前缀证明的明显坏路线；先沿 `FINAL_CANDIDATE → MP_QUALITY_SORTING → FINAL_SELECTION → Safe Execute` 定位丢失层，再只修改有证据的那一层。
 
