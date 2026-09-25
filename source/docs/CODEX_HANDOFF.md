@@ -207,3 +207,9 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - Null and exception behavior stays on the native path; no ModelDb content or model instance is cached.
 - Registered in the normal RitsuLib patch set and the OfflineSearchHarness patch inventory.
 - No transposition-table limits, learned portfolio experiments, GC truncation, or other decision-changing PR #114 changes were imported.
+
+## 2026-09-25 Crossbow generation cache backport
+
+- Backported the measured Crossbow-only part of upstream PR #114.
+- Crossbow now reuses the existing root-captured character attack pool through GetDistinctUnlockedCharacterAttacksForCombat; RNG selection, card instance creation, add-to-hand, and free-this-turn semantics are unchanged.
+- The five turn<=1 relic generation sites remain on their existing code because upstream measured no meaningful search-path benefit there.
