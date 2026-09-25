@@ -66,6 +66,19 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - 2026-09-25 收到真实双人问题包 `THIEVING_HOPPER_WEAK-9df3f90a...`：Client Probe 明确记录 `players=2`，且 Scenario Matrix 已实际运行两轮；但最终候选排序在 `PolicyActionToken(TeammateForecast)` 抛 `ArgumentOutOfRangeException`，因此本次没有形成完整 E0 selected/published 时间线，不能计为第三个 PASS。根因是通用动作 token 只处理 PlayCard/UsePotion/EndTurn；现已为 `TeammateForecast` 增加稳定 token（含远端玩家、牌、目标），不改排序或搜索语义。
 - **E0 已关闭（2026-09-25）**：三类样本齐全，且第三类为 current HEAD 的真实双人 Host/Client 运行证据。后续不再为了 E0 继续采样，除非改动再次触及搜索成员顺序、候选生成/评估/发布遥测或 E0 validator 语义。
 
+## 搜索效率 E1（2026-09-25，已关闭）
+
+- E0 已确认两个可离线复现单人样本存在“正式终局候选已选中，但仍等待 materialization / annotation replay 才首次发布”的真实延迟；E1 只修这个已证明的发布缺口，没有提前采用未完成 Scenario 复评的候选。
+- 当前实现只在 production `FinalOrdering.Select` 已完成、Scenario rerank（若启用）与 deterministic block-potion insertion 已确定后，生成不持有 simulator 的正式路线预览并通过既有 `SolverProgress` 发布；完整 `SolverResult` 仍继续完成 replay、遗物标注和压平。
+- 早发布的正式预览不会携带 `SolverRouteAdoptionSeed`，因此不会留下闭包访问仍存活或随后释放的 `SearchNode/SimulationSnapshot`。Coordinator 只有在该候选通过现有全局 `SolverInterimResultOrdering` 展示准入后，才记录 `Published` milestone。
+- 固定 0.107.1 A/B（run `36102487372`）：
+  - 简单攻防：baseline selected→published **2195.050 ms** → E1 **7.592 ms**。
+  - 抽牌/能量：baseline **124.567 ms** → E1 **6.805 ms**。
+  - 两个样本均 `sameRoute=true`、`sameQuality=true`、`sameWork=true`；最终动作、战损/药水/结束边界，以及 expanded / transitions 都未改变。
+- E1 计划中的“消除重复评估”按证据条件处理：当前没有确认到同一正式 evaluation context 下 Scenario Matrix / final ordering 被重复复评的生产缺口，因此没有为了完成阶段引入跨候选/跨根缓存，也没有缓存可变 simulator。现有请求内缓存继续沿用。
+- 最终验证：compatibility run `36102487522` 全 PASS；Pinned run `36102487372` 的 Release、E0/E1 A/B、U0/U1、U2、P0 contracts、P0/P1 runtime 与历史 P0 A/B 分类链全部 PASS。
+- **E1 已关闭。** 后续若出现“同一正式上下文重复复评”的新证据，再单独加入严格键控的请求内不可变结果缓存；当前不扩大缓存面。
+
 ## 搜索效率 E2（2026-09-25，已关闭）
 
 - 第一切片 `d92d25bb` 建立 `SearchStepStatus` / `SearchWorkAllowance` / `SearchStepResult` / `IResumableSearch` 与完整父节点安全点；第二切片把 incumbent、frontier/completed、active/ended/nextPlays、fallback、父节点游标和内存高水位集中进成员状态。
