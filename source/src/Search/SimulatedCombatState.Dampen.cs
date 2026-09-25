@@ -16,6 +16,8 @@ internal sealed partial class SimulatedCombatState
         Creature target,
         Creature caster)
     {
+        if (target.Player is { } targetPlayer && !IsRootCapturedPlayer(targetPlayer))
+            return;
         if ((_dampenCasters ??= []).Contains((target, caster)))
             return;
         bool firstCaster = !_dampenCasters.Any(entry => entry.Target == target);
@@ -94,13 +96,16 @@ internal sealed partial class SimulatedCombatState
             : livePower.Applier is { } applier && applier.CurrentHp > 0
                 ? [applier]
                 : throw new InvalidOperationException("压制存在但没有存活的施法者。");
+        Player owner = livePower.Owner.Player
+            ?? throw new InvalidOperationException("压制目标不是玩家。");
+        if (!IsRootCapturedPlayer(owner))
+            return;
+
         foreach (Creature caster in capturedCasters)
             (_dampenCasters ??= []).Add((livePower.Owner, caster));
 
-        SimPlayerCombatState playerState = simulator.State.GetPlayerCombatState(
-            livePower.Owner.Player
-            ?? throw new InvalidOperationException("压制目标不是玩家。"));
-        HashSet<CardModel> liveCards = livePower.Owner.Player.PlayerCombatState?.AllCards.ToHashSet()
+        SimPlayerCombatState playerState = simulator.State.GetPlayerCombatState(owner);
+        HashSet<CardModel> liveCards = owner.PlayerCombatState?.AllCards.ToHashSet()
             ?? throw new InvalidOperationException("压制目标没有实机战斗牌堆。");
         foreach ((CardModel liveCard, int level) in originalUpgrades)
         {

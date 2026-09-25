@@ -93,6 +93,26 @@ internal static class Program
                         $"prediction={multiplayerPrediction}.");
                 }
 
+                Player remote = combat.Players.Single(player => !ReferenceEquals(player, local));
+                SimulatedCombatState capturedCombat =
+                    (SimulatedCombatState)captureProbe.State.CombatState;
+                bool remoteRootTurnReadable;
+                try
+                {
+                    _ = capturedCombat.GetRootPlayerTurnNumber(remote);
+                    remoteRootTurnReadable = true;
+                }
+                catch (InvalidOperationException)
+                {
+                    remoteRootTurnReadable = false;
+                }
+                if (remoteRootTurnReadable != multiplayerPrediction)
+                {
+                    throw new InvalidOperationException(
+                        $"Multiplayer remote root-turn boundary mismatch: readable={remoteRootTurnReadable} " +
+                        $"prediction={multiplayerPrediction}.");
+                }
+
                 var deathProbe = root.ForkSimulator();
                 if (!deathProbe.Kill(local.Creature, force: true))
                     throw new InvalidOperationException("Multiplayer death-boundary probe did not complete.");

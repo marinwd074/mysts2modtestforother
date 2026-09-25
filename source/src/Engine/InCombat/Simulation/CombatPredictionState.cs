@@ -116,6 +116,9 @@ internal sealed class CombatPredictionState
             ? boundary.RootActionPlayers
             : Players;
 
+    internal bool IsRootCapturedPlayer(Player player)
+        => MultiplayerAdvisorBoundaryContracts.IsCapturedPlayer(RootCapturedPlayers, player);
+
     private IReadOnlyList<Creature>? _rootCapturedPlayerCreatures;
 
     /// <summary>

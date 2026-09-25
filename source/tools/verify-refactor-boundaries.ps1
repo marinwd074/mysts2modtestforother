@@ -143,6 +143,90 @@ foreach ($capturedDeathRule in @(
 
 $simulatedCombatStatePath = Join-Path $repositoryRoot 'src/Search/SimulatedCombatState.cs'
 $simulatedCombatStateText = [IO.File]::ReadAllText($simulatedCombatStatePath)
+foreach ($localSingleCorePrivateRule in @(
+    '_rootPlayerTurnNumbers = _rootCapturedPlayers.ToDictionary(',
+    'listener is not PowerModel power',
+    'IsCapturedPlayerOwnedCreature(power.Owner)',
+    'monster.Creature.Side != CombatSide.Player',
+    'IsCapturedPlayerOwnedCreature(monster.Creature)',
+    'creature.Side == CombatSide.Player && !IsCapturedPlayerOwnedCreature(creature)')) {
+    if (-not $simulatedCombatStateText.Contains($localSingleCorePrivateRule)) {
+        $violations.Add("${simulatedCombatStatePath}: local-single-core private-state boundary drifted '$localSingleCorePrivateRule'")
+    }
+}
+
+$dampenPath = Join-Path $repositoryRoot 'src/Search/SimulatedCombatState.Dampen.cs'
+$dampenText = [IO.File]::ReadAllText($dampenPath)
+foreach ($dampenBoundaryRule in @(
+    'target.Player is { } targetPlayer && !IsRootCapturedPlayer(targetPlayer)',
+    'if (!IsRootCapturedPlayer(owner))')) {
+    if (-not $dampenText.Contains($dampenBoundaryRule)) {
+        $violations.Add("${dampenPath}: remote Dampen private-state boundary drifted '$dampenBoundaryRule'")
+    }
+}
+
+$cardLifecyclePath = Join-Path $repositoryRoot 'src/Search/SimulatedCombatState.CardLifecycle.cs'
+$cardLifecycleText = [IO.File]::ReadAllText($cardLifecyclePath)
+if (-not $cardLifecycleText.Contains('if (!IsRootCapturedPlayer(owner))')) {
+    $violations.Add("${cardLifecyclePath}: remote history card must not enter local return-to-hand state")
+}
+
+$predictionStatePath = Join-Path $repositoryRoot 'src/Engine/InCombat/Simulation/CombatPredictionState.cs'
+$predictionStateText = [IO.File]::ReadAllText($predictionStatePath)
+if (-not $predictionStateText.Contains('internal bool IsRootCapturedPlayer(Player player)')) {
+    $violations.Add("${predictionStatePath}: prediction state lost captured-player predicate")
+}
+
+$deathLifecyclePath = Join-Path $repositoryRoot 'src/Search/SimulatedCombatState.DeathLifecycle.cs'
+$deathLifecycleText = [IO.File]::ReadAllText($deathLifecyclePath)
+foreach ($privatePowerRule in @(
+    'Player? privateOwner = creature.Player ?? creature.PetOwner;',
+    'privateOwner != null && !IsRootCapturedPlayer(privateOwner)')) {
+    if (-not $deathLifecycleText.Contains($privatePowerRule)) {
+        $violations.Add("${deathLifecyclePath}: uncaptured player/pet Power target boundary drifted '$privatePowerRule'")
+    }
+}
+
+$energyPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.Energy.cs'
+$energyText = [IO.File]::ReadAllText($energyPath)
+if (($energyText.Split('!State.IsRootCapturedPlayer(player)').Count - 1) -lt 3) {
+    $violations.Add("${energyPath}: energy/stars private-state writes must reject uncaptured players")
+}
+
+$cardPilePrivatePath = Join-Path $repositoryRoot 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.CardPile.cs'
+$cardPilePrivateText = [IO.File]::ReadAllText($cardPilePrivatePath)
+foreach ($cardPilePrivateRule in @(
+    'if (!State.IsRootCapturedPlayer(player))',
+    'cards.Any(card => !State.IsRootCapturedPlayer(card.Preview.Owner))',
+    'if (!State.IsRootCapturedPlayer(card.Preview.Owner))',
+    'if (!State.IsRootCapturedPlayer(owner))')) {
+    if (-not $cardPilePrivateText.Contains($cardPilePrivateRule)) {
+        $violations.Add("${cardPilePrivatePath}: card-pile private-state boundary drifted '$cardPilePrivateRule'")
+    }
+}
+
+$orbPrivatePath = Join-Path $repositoryRoot 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.Orb.cs'
+$orbPrivateText = [IO.File]::ReadAllText($orbPrivatePath)
+foreach ($orbPrivateRule in @(
+    '!State.IsRootCapturedPlayer(player)',
+    '!State.IsRootCapturedPlayer(orb.Owner)')) {
+    if (-not $orbPrivateText.Contains($orbPrivateRule)) {
+        $violations.Add("${orbPrivatePath}: orb private-state boundary drifted '$orbPrivateRule'")
+    }
+}
+
+$simulatorExtensionsPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Simulation/CombatPredictionSimulatorExtensions.cs'
+$simulatorExtensionsText = [IO.File]::ReadAllText($simulatorExtensionsPath)
+if (($simulatorExtensionsText.Split('!simulator.State.IsRootCapturedPlayer(player)').Count - 1) -lt 2) {
+    $violations.Add("${simulatorExtensionsPath}: hand-wide private-state helpers must reject uncaptured players")
+}
+
+$relicResourcesPath = Join-Path $repositoryRoot 'src/Search/SimulatedCombatState.RelicResources.cs'
+$relicResourcesText = [IO.File]::ReadAllText($relicResourcesPath)
+if (($relicResourcesText.Split('!IsRootCapturedPlayer(player)').Count - 1) -lt 2) {
+    $violations.Add("${relicResourcesPath}: gold mutation must reject uncaptured players")
+}
+
 foreach ($deadPlayerHookRule in @(
     'private bool HasInactiveCapturedPlayer()',
     'private bool IsOwnedByInactivePlayer(AbstractModel listener)',

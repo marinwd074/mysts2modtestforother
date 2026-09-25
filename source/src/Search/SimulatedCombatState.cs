@@ -338,7 +338,7 @@ internal sealed partial class SimulatedCombatState
         _rootPotionSlotCounts = _rootCapturedPlayers.ToDictionary(
             player => player,
             player => player.PotionSlots.Count);
-        _rootPlayerTurnNumbers = inner.Players.ToDictionary(
+        _rootPlayerTurnNumbers = _rootCapturedPlayers.ToDictionary(
             player => player,
             player => player.PlayerCombatState is { } state
                 ? state.TurnNumber
@@ -411,6 +411,13 @@ internal sealed partial class SimulatedCombatState
             .Where(listener => listener is not RelicModel relic
                 || relic.Owner is not Player owner
                 || _rootCapturedPlayers.Contains(owner))
+            // Player-owned powers and player-side summons can carry hidden card/orb/turn
+            // state. Local-single-core keeps only listeners owned by captured players.
+            .Where(listener => listener is not PowerModel power
+                || IsCapturedPlayerOwnedCreature(power.Owner))
+            .Where(listener => listener is not MonsterModel monster
+                || monster.Creature.Side != CombatSide.Player
+                || IsCapturedPlayerOwnedCreature(monster.Creature))
             // Local-single-core multiplayer deliberately does not capture teammate potion
             // inventories. Remove their live potion listeners at the same root boundary so
             // hook materialization never tries to resolve an out-of-scope private inventory.
@@ -2088,6 +2095,8 @@ internal sealed partial class SimulatedCombatState
             Creature creature = creatures[creatureIndex];
             if (_rootCreatures.Contains(creature))
                 continue;
+            if (creature.Side == CombatSide.Player && !IsCapturedPlayerOwnedCreature(creature))
+                continue;
             List<AbstractModel> target;
             if (creature.Side == CombatSide.Enemy)
             {
@@ -2132,6 +2141,12 @@ internal sealed partial class SimulatedCombatState
                 return true;
         }
         return false;
+    }
+
+    private bool IsCapturedPlayerOwnedCreature(Creature creature)
+    {
+        Player? owner = creature.Player ?? creature.PetOwner;
+        return owner == null || IsRootCapturedPlayer(owner);
     }
 
     internal void MaterializeRoot(CombatPredictionSimulator simulator)
