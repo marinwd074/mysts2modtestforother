@@ -5,6 +5,43 @@ namespace CombatSolver;
 
 internal static partial class CombatSearchCoordinator
 {
+    private static readonly SearchWorkAllowance ResumableMemberAllowance = new(256);
+
+    private static SolverResult RunResumableMemberToCompletion(
+        CombatBeamSolver solver,
+        CancellationToken cancellationToken,
+        SearchDiagnosticsSink diagnostics)
+    {
+        using CombatBeamSolver.SearchMemberExecutionSession session = solver.CreateExecutionSession();
+        int yields = 0;
+        while (true)
+        {
+            SearchStepResult step = session.Step(ResumableMemberAllowance, cancellationToken);
+            if (step.Status == SearchStepStatus.Yielded)
+            {
+                yields++;
+                continue;
+            }
+            if (step.Status == SearchStepStatus.Canceled)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                throw new OperationCanceledException(cancellationToken);
+            }
+            if (step.Status != SearchStepStatus.Completed || session.Result == null)
+            {
+                throw new InvalidOperationException(
+                    $"成员级搜索会话异常结束：status={step.Status} result={session.Result != null}。");
+            }
+            if (yields > 0)
+            {
+                diagnostics.Info(
+                    $"[CombatSolver/Test] SEARCH_MEMBER_RESUME yields={yields} " +
+                    $"committed_parents={step.TotalCommittedParents}");
+            }
+            return session.Result;
+        }
+    }
+
     public static SolverResult Solve(
         CombatRootSnapshot root,
         SolverDisplayNames displayNames,
@@ -345,7 +382,7 @@ internal static partial class CombatSearchCoordinator
                 Action<SolverProgress>? memberProgressCallback = refinement && progressCallback != null
                     ? progress => progressCallback(progress with { Phase = "正在精炼路线" })
                     : progressCallback;
-                return new CombatBeamSolver(
+                CombatBeamSolver solver = new(
                     root,
                     displayNames,
                     battleDamage,
@@ -353,7 +390,11 @@ internal static partial class CombatSearchCoordinator
                     cancellationToken,
                     memberProgressCallback,
                     memberProfile,
-                    potionPolicyOverride: initialPotionPolicyOverride).Solve();
+                    potionPolicyOverride: initialPotionPolicyOverride);
+                return RunResumableMemberToCompletion(
+                    solver,
+                    cancellationToken,
+                    beamPolicy.Diagnostics);
             }
             // 基线成员一跑完就按今天的方式把完整结果发布给覆盖层（覆盖层的中途路线走
             // SolverProgress，见 RunBeamWidthPortfolioPass 的注释）；精炼成员只有更优时才会

@@ -57,62 +57,89 @@ internal interface IResumableSearch : IDisposable
 
 internal sealed partial class CombatBeamSolver
 {
+    private bool _executionSessionCreated;
+
     public SolverResult Solve()
     {
-        BeginSearchEfficiencyMember();
-        SearchRequestWorkTotals? requestWorkTotals = policy.RequestWorkTotals;
-        long startedTimestamp = requestWorkTotals == null ? 0 : Stopwatch.GetTimestamp();
-        long allocatedBytesAtStart = requestWorkTotals == null
-            ? 0
-            : GC.GetAllocatedBytesForCurrentThread();
-        int gen0AtStart = requestWorkTotals == null ? 0 : GC.CollectionCount(0);
-        int gen1AtStart = requestWorkTotals == null ? 0 : GC.CollectionCount(1);
-        int gen2AtStart = requestWorkTotals == null ? 0 : GC.CollectionCount(2);
-        TimeSpan gcPauseAtStart = requestWorkTotals == null
-            ? TimeSpan.Zero
-            : GC.GetTotalPauseDuration();
-        try
+        using SearchMemberExecutionSession session = CreateExecutionSession();
+        while (true)
         {
-            return SolveCore();
+            SearchStepResult step = session.Step(
+                SearchWorkAllowance.Unlimited,
+                cancellationToken);
+            if (step.Status == SearchStepStatus.Completed)
+            {
+                return session.Result
+                    ?? throw new InvalidOperationException("搜索成员已完成但没有结果。");
+            }
+            if (step.Status == SearchStepStatus.Canceled)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                throw new OperationCanceledException(cancellationToken);
+            }
+            if (step.Status == SearchStepStatus.BudgetExhausted)
+            {
+                throw new InvalidOperationException(
+                    "成员级搜索会话不应在没有最终结果时报告 BudgetExhausted。");
+            }
         }
-        finally
+    }
+
+    internal SearchMemberExecutionSession CreateExecutionSession()
+    {
+        if (_executionSessionCreated)
+            throw new InvalidOperationException("同一个 CombatBeamSolver 只能建立一个成员执行会话。");
+        _executionSessionCreated = true;
+        return new SearchMemberExecutionSession(
+            this,
+            policy.RequestWorkTotals,
+            cancellationToken);
+    }
+
+    private void CompleteExecutionLifecycle(
+        SearchRequestWorkTotals? requestWorkTotals,
+        long startedTimestamp,
+        long allocatedBytesAtStart,
+        int gen0AtStart,
+        int gen1AtStart,
+        int gen2AtStart,
+        TimeSpan gcPauseAtStart)
+    {
+        policy.Diagnostics.Info(
+            $"[CombatSolver/Test] ROUTING_CHOICE_SUMMARIES scope=solver " +
+            $"builds={_run.RoutingChoiceSummaryBuilds} hits={_run.RoutingChoiceSummaryHits} " +
+            $"bypasses={_run.RoutingChoiceSummaryBypasses}");
+        HookLayoutCacheStatistics hookLayouts = root.HookLayoutCacheStatistics;
+        HookListenerSegmentStatistics hookSegments = root.HookListenerSegmentStatistics;
+        policy.Diagnostics.Info(
+            $"[CombatSolver/Test] HOOK_LISTENER_SEGMENTS scope=root_cumulative " +
+            $"prefix_reuses={hookSegments.PrefixReuses} prefix_builds={hookSegments.PrefixBuilds} " +
+            $"split_builds={hookSegments.SplitBuilds} whole_builds={hookSegments.WholeBuilds} " +
+            $"effective_prefix_reuses={hookSegments.EffectivePrefixReuses} " +
+            $"effective_prefix_builds={hookSegments.EffectivePrefixBuilds}");
+        policy.Diagnostics.Info(
+            $"[CombatSolver/Test] HOOK_LAYOUT_CACHE scope=root_cumulative " +
+            $"hits={hookLayouts.Hits} misses={hookLayouts.Misses} " +
+            $"collisions={hookLayouts.Collisions} bypasses={hookLayouts.Bypasses}");
+        if (_run.PotionStrategicCosts.Misses > 0)
         {
             policy.Diagnostics.Info(
-                $"[CombatSolver/Test] ROUTING_CHOICE_SUMMARIES scope=solver " +
-                $"builds={_run.RoutingChoiceSummaryBuilds} hits={_run.RoutingChoiceSummaryHits} " +
-                $"bypasses={_run.RoutingChoiceSummaryBypasses}");
-            HookLayoutCacheStatistics hookLayouts = root.HookLayoutCacheStatistics;
-            HookListenerSegmentStatistics hookSegments = root.HookListenerSegmentStatistics;
-            policy.Diagnostics.Info(
-                $"[CombatSolver/Test] HOOK_LISTENER_SEGMENTS scope=root_cumulative " +
-                $"prefix_reuses={hookSegments.PrefixReuses} prefix_builds={hookSegments.PrefixBuilds} " +
-                $"split_builds={hookSegments.SplitBuilds} whole_builds={hookSegments.WholeBuilds} " +
-                $"effective_prefix_reuses={hookSegments.EffectivePrefixReuses} " +
-                $"effective_prefix_builds={hookSegments.EffectivePrefixBuilds}");
-            policy.Diagnostics.Info(
-                $"[CombatSolver/Test] HOOK_LAYOUT_CACHE scope=root_cumulative " +
-                $"hits={hookLayouts.Hits} misses={hookLayouts.Misses} " +
-                $"collisions={hookLayouts.Collisions} bypasses={hookLayouts.Bypasses}");
-            if (_run.PotionStrategicCosts.Misses > 0)
-            {
-                policy.Diagnostics.Info(
-                    $"[CombatSolver/Test] POTION_POLICY_LOOKUP " +
-                    $"hits={_run.PotionStrategicCosts.Hits} misses={_run.PotionStrategicCosts.Misses} " +
-                    $"entries={_run.PotionStrategicCosts.Count}");
-            }
-            if (requestWorkTotals != null)
-            {
-                RecordRequestWork(
-                    requestWorkTotals,
-                    startedTimestamp,
-                    allocatedBytesAtStart,
-                    gen0AtStart,
-                    gen1AtStart,
-                    gen2AtStart,
-                    gcPauseAtStart);
-            }
-            CompleteSearchEfficiencyMember();
+                $"[CombatSolver/Test] POTION_POLICY_LOOKUP " +
+                $"hits={_run.PotionStrategicCosts.Hits} misses={_run.PotionStrategicCosts.Misses} " +
+                $"entries={_run.PotionStrategicCosts.Count}");
         }
+        if (requestWorkTotals != null)
+        {
+            RecordRequestWork(
+                requestWorkTotals,
+                startedTimestamp,
+                allocatedBytesAtStart,
+                gen0AtStart,
+                gen1AtStart,
+                gen2AtStart,
+                gcPauseAtStart);
+        }
+        CompleteSearchEfficiencyMember();
     }
 
     private void RecordRequestWork(
@@ -140,18 +167,13 @@ internal sealed partial class CombatBeamSolver
             _run.WorkPacer.MaxObservedGcPause));
     }
 
-    private SolverResult SolveCore()
+    private IEnumerable<SearchStepResult> SolveCoreSteps(SearchMemberExecutionState execution)
     {
+        SearchMemberExecutionState member = execution;
         using IDisposable notificationIsolation = SimulationNotificationIsolation.Enter();
         cancellationToken.ThrowIfCancellationRequested();
         if (policy.VerifyIncrementalSearch)
             VerifyResumableParentExpansionSessionForTesting();
-        if (policy.ResumableParentCommitSliceForTesting is <= 0)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(policy.ResumableParentCommitSliceForTesting),
-                "可恢复搜索父节点切片必须为正数。");
-        }
         if (policy.Diagnostics.PathObserver != null)
             _run.PathDiagnosticsSolverId = Guid.NewGuid();
         if (_minimumPotionUses < 0
@@ -202,11 +224,8 @@ internal sealed partial class CombatBeamSolver
             ? new ParallelExpansionExecutor(this, expansionParallelism)
             : null;
         long lastProgressMs = -100;
-        SearchMemberSessionState member = new()
-        {
-            LastRoutePreviewAt =
-                System.Environment.TickCount64 - SolverWeights.ProgressUiIntervalMilliseconds,
-        };
+        member.LastRoutePreviewAt =
+            System.Environment.TickCount64 - SolverWeights.ProgressUiIntervalMilliseconds;
         int initialHp = root.InitialPlayerHp;
 
         SolverInterimResult SummarizeCandidate(SearchNode node, bool won)
@@ -1515,12 +1534,12 @@ internal sealed partial class CombatBeamSolver
             }
 
             member.Ended = [];
-            long turnLayerStartedMs = stopwatch.ElapsedMilliseconds;
+            member.TurnLayerStartedMs = stopwatch.ElapsedMilliseconds;
             int remainingReservedLayers = Math.Max(1, reservedTurnLayers - member.SearchedTurnLayers);
             long remainingSearchMs = Math.Max(
                 1,
-                _profile.SoftTimeBudgetMilliseconds - turnLayerStartedMs);
-            long turnLayerBudgetMs = Math.Max(250, remainingSearchMs / remainingReservedLayers);
+                _profile.SoftTimeBudgetMilliseconds - member.TurnLayerStartedMs);
+            member.TurnLayerBudgetMs = Math.Max(250, remainingSearchMs / remainingReservedLayers);
             // 节点预算按回合层分配，口径和上面的时间预算一样。
             //
             // 以前只有时间按层分，节点是全局的，于是一个回合层可以合法地把整份节点预算吃光：
@@ -1531,18 +1550,18 @@ internal sealed partial class CombatBeamSolver
             //
             // 时间那一侧之所以没兜住：deep 软预算 180 秒、保留 4 层，一层能分到 90 秒，而节点
             // 上限早在那之前就到了，for 循环直接退出、走不到下面这个切层分支。
-            int turnLayerStartedExpanded = _run.Expanded;
+            member.TurnLayerStartedExpanded = _run.Expanded;
             int remainingExpandedNodes = Math.Max(
                 1,
-                _profile.MaxExpandedNodes - turnLayerStartedExpanded);
-            int turnLayerNodeBudget = Math.Max(
+                _profile.MaxExpandedNodes - member.TurnLayerStartedExpanded);
+            member.TurnLayerNodeBudget = Math.Max(
                 SolverWeights.MinimumTurnLayerExpandedNodes,
                 remainingExpandedNodes / remainingReservedLayers);
             PublishProgress(member.Active.Min(node => node.Turn), member.SearchedTurnLayers, 0, member.Active.Count, 0,
                 "展开回合", force: true);
-            for (int playDepth = 0;
+            for (member.PlayDepth = 0;
                  member.Active.Count > 0 && _run.Expanded < _profile.MaxExpandedNodes;
-                 playDepth++)
+                 member.PlayDepth++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 BeginCyclePlanningLayer();
@@ -1563,17 +1582,17 @@ internal sealed partial class CombatBeamSolver
                     member.TimeBudgetReached = true;
                     break;
                 }
-                long turnLayerElapsedMs = stopwatch.ElapsedMilliseconds - turnLayerStartedMs;
-                int turnLayerExpanded = _run.Expanded - turnLayerStartedExpanded;
+                long turnLayerElapsedMs = stopwatch.ElapsedMilliseconds - member.TurnLayerStartedMs;
+                int turnLayerExpanded = _run.Expanded - member.TurnLayerStartedExpanded;
                 // Boss setup chains use the existing per-layer node share. A local wall-clock
                 // slice otherwise cuts different action depths under JIT/GC load, even when
                 // the request has ample time left. The global time and node limits still apply.
                 bool turnLayerTimeSpent = !policy.Act3BossStrategy
-                    && turnLayerElapsedMs >= turnLayerBudgetMs;
-                bool turnLayerNodesSpent = turnLayerExpanded >= turnLayerNodeBudget;
+                    && turnLayerElapsedMs >= member.TurnLayerBudgetMs;
+                bool turnLayerNodesSpent = turnLayerExpanded >= member.TurnLayerNodeBudget;
                 if (!policy.VerifyIncrementalSearch
                     && member.SearchedTurnLayers < reservedTurnLayers - 1
-                    && playDepth > 0
+                    && member.PlayDepth > 0
                     && member.Ended.Count > 0
                     && (turnLayerTimeSpent || turnLayerNodesSpent))
                 {
@@ -1590,9 +1609,9 @@ internal sealed partial class CombatBeamSolver
                     policy.Diagnostics.Info(
                         $"[CombatSolver/Test] TURN_LAYER_BUDGET " +
                         $"reason={(turnLayerTimeSpent ? "time" : "nodes")} " +
-                        $"completed_turns={member.SearchedTurnLayers} play_depth={playDepth} " +
-                        $"elapsed_ms={turnLayerElapsedMs} budget_ms={turnLayerBudgetMs} " +
-                        $"expanded={turnLayerExpanded} node_budget={turnLayerNodeBudget} " +
+                        $"completed_turns={member.SearchedTurnLayers} play_depth={member.PlayDepth} " +
+                        $"elapsed_ms={turnLayerElapsedMs} budget_ms={member.TurnLayerBudgetMs} " +
+                        $"expanded={turnLayerExpanded} node_budget={member.TurnLayerNodeBudget} " +
                         $"forced_end_turn={forcedEndTurnCandidates}");
                     member.Active = [];
                     break;
@@ -1608,11 +1627,11 @@ internal sealed partial class CombatBeamSolver
                         $"projected_memory_load={policy.MemoryPressureSignal.ProjectedMemoryLoadBytes} " +
                         $"system_memory_limit={policy.MemoryPressureSignal.SystemMemoryLimitBytes} " +
                         $"system_pressure_dominates={policy.MemoryPressureSignal.SystemPressureDominates.ToString().ToLowerInvariant()} " +
-                        $"expanded={_run.Expanded} turn_layer={member.SearchedTurnLayers} play_depth={playDepth}");
+                        $"expanded={_run.Expanded} turn_layer={member.SearchedTurnLayers} play_depth={member.PlayDepth}");
                     PublishProgress(
                         _startTurnNumber + member.SearchedTurnLayers,
                         member.SearchedTurnLayers,
-                        playDepth,
+                        member.PlayDepth,
                         member.Active.Count,
                         member.Ended.Count,
                         "内存压力较高，正在整理内存",
@@ -1634,18 +1653,18 @@ internal sealed partial class CombatBeamSolver
                         $"[CombatSolver/Test] SEARCH_MEMORY_RESUMED " +
                         $"checkpoint={policy.MemoryPressureSignal.ReclaimCount} " +
                         $"frontier={member.Active.Count} member.Ended={member.Ended.Count} expanded={_run.Expanded} " +
-                        $"turn_layer={member.SearchedTurnLayers} play_depth={playDepth}");
+                        $"turn_layer={member.SearchedTurnLayers} play_depth={member.PlayDepth}");
                     PublishProgress(
                         _startTurnNumber + member.SearchedTurnLayers,
                         member.SearchedTurnLayers,
-                        playDepth,
+                        member.PlayDepth,
                         member.Active.Count,
                         member.Ended.Count,
                         "继续搜索",
                         force: true);
                 }
                 if (!policy.VerifyIncrementalSearch
-                    && playDepth > 0
+                    && member.PlayDepth > 0
                     && stopwatch.ElapsedMilliseconds >= _profile.SoftTimeBudgetMilliseconds)
                 {
                     member.TimeBudgetReached = true;
@@ -1661,7 +1680,7 @@ internal sealed partial class CombatBeamSolver
                     }
                     policy.Diagnostics.Info(
                         $"[CombatSolver/Test] SEARCH_TIME_BUDGET " +
-                        $"completed_turns={member.SearchedTurnLayers} play_depth={playDepth} " +
+                        $"completed_turns={member.SearchedTurnLayers} play_depth={member.PlayDepth} " +
                         $"elapsed_ms={stopwatch.ElapsedMilliseconds} " +
                         $"budget_ms={_profile.SoftTimeBudgetMilliseconds} " +
                         $"forced_end_turn={forcedEndTurnCandidates}");
@@ -1697,7 +1716,7 @@ internal sealed partial class CombatBeamSolver
                 void FinishExpandedParent(SearchNode node)
                 {
                     node.Snapshot.ReleaseSimulator();
-                    PublishProgress(node.Turn, member.SearchedTurnLayers, playDepth, member.Active.Count + member.NextPlays.Count,
+                    PublishProgress(node.Turn, member.SearchedTurnLayers, member.PlayDepth, member.Active.Count + member.NextPlays.Count,
                         member.Ended.Count, "展开出牌序列");
                 }
 
@@ -1746,7 +1765,7 @@ internal sealed partial class CombatBeamSolver
                     {
                         ReclaimAtCommittedBoundary(
                             "unexpected_no_gc_loss",
-                            playDepth,
+                            member.PlayDepth,
                             Math.Max(0, member.Active.Count - member.ActiveIndex) + member.NextPlays.Count,
                             member.Ended.Count);
                         return;
@@ -1760,7 +1779,7 @@ internal sealed partial class CombatBeamSolver
                     {
                         ReclaimAtCommittedBoundary(
                             reason,
-                            playDepth,
+                            member.PlayDepth,
                             Math.Max(0, member.Active.Count - member.ActiveIndex) + member.NextPlays.Count,
                             member.Ended.Count);
                     }
@@ -1772,7 +1791,7 @@ internal sealed partial class CombatBeamSolver
                     EnsureMemoryForIndivisibleCommit(
                         ParentAllocationReserve(),
                         "before_serial_parent",
-                        playDepth,
+                        member.PlayDepth,
                         Math.Max(0, member.Active.Count - member.ActiveIndex) + member.NextPlays.Count,
                         member.Ended.Count);
                     long allocatedBefore = signal.AllocatedBytes;
@@ -1791,36 +1810,19 @@ internal sealed partial class CombatBeamSolver
 
                 if (expansionParallelism == 1)
                 {
-                    using ParentExpansionSession parentSession = new(
-                        member.Active.Count,
-                        index => !member.AcceptableBattleHpLossReached
-                            && _run.Expanded < _profile.MaxExpandedNodes,
-                        index =>
-                        {
-                            member.ActiveIndex = index;
-                            ExpandNextSerially();
-                            if (member.ActiveIndex != index + 1)
-                            {
-                                throw new InvalidOperationException(
-                                    "可恢复父节点会话与串行展开游标不同步。");
-                            }
-                        });
-                    SearchWorkAllowance allowance =
-                        policy.ResumableParentCommitSliceForTesting is { } parentCommitSlice
-                            ? new SearchWorkAllowance(parentCommitSlice)
-                            : SearchWorkAllowance.Unlimited;
-                    while (true)
+                    while (member.ActiveIndex < member.Active.Count
+                           && !member.AcceptableBattleHpLossReached
+                           && _run.Expanded < _profile.MaxExpandedNodes)
                     {
-                        SearchStepResult step = parentSession.Step(allowance, cancellationToken);
-                        member.ActiveIndex = step.TotalCommittedParents;
-                        if (step.Status == SearchStepStatus.Canceled)
+                        member.StepCancellationToken.ThrowIfCancellationRequested();
+                        ExpandNextSerially();
+                        if (member.ObserveCommittedParents(1))
                         {
-                            member.ReleaseLiveSimulators();
-                            cancellationToken.ThrowIfCancellationRequested();
-                            throw new OperationCanceledException(cancellationToken);
+                            yield return new SearchStepResult(
+                                SearchStepStatus.Yielded,
+                                member.CommittedParentsInCurrentStep,
+                                member.TotalCommittedParents);
                         }
-                        if (step.Status != SearchStepStatus.Yielded)
-                            break;
                     }
                 }
                 else
@@ -1837,7 +1839,15 @@ internal sealed partial class CombatBeamSolver
                             // final budget slot. Keep that edge case out of the materialized worker path.
                             while (member.ActiveIndex < member.Active.Count)
                             {
+                                member.StepCancellationToken.ThrowIfCancellationRequested();
                                 ExpandNextSerially();
+                                if (member.ObserveCommittedParents(1))
+                                {
+                                    yield return new SearchStepResult(
+                                        SearchStepStatus.Yielded,
+                                        member.CommittedParentsInCurrentStep,
+                                        member.TotalCommittedParents);
+                                }
                                 if (_run.Expanded >= _profile.MaxExpandedNodes)
                                     break;
                             }
@@ -1846,17 +1856,28 @@ internal sealed partial class CombatBeamSolver
                         int desiredCapacity = Math.Min(
                             parallelWaveCapacity,
                             Math.Min(remainingBudget - 1, member.Active.Count - member.ActiveIndex));
+                        desiredCapacity = Math.Min(
+                            desiredCapacity,
+                            member.RemainingParentCommitsBeforeYield);
                         // Reserve only one parent before considering a reclaim. A smaller wave
                         // can use the tail of this region without collecting a full candidate graph.
                         bool materializedParentFits = EnsureMemoryForNextCommit(
                             ParentAllocationReserve(),
                             "before_parallel_parent",
-                            playDepth,
+                            member.PlayDepth,
                             Math.Max(0, member.Active.Count - member.ActiveIndex) + member.NextPlays.Count,
                             member.Ended.Count);
                         if (!materializedParentFits)
                         {
+                            member.StepCancellationToken.ThrowIfCancellationRequested();
                             ExpandNextSerially();
+                            if (member.ObserveCommittedParents(1))
+                            {
+                                yield return new SearchStepResult(
+                                    SearchStepStatus.Yielded,
+                                    member.CommittedParentsInCurrentStep,
+                                    member.TotalCommittedParents);
+                            }
                             continue;
                         }
                         int acceptedCapacity = MemorySafeParallelWaveCapacity(desiredCapacity);
@@ -1864,13 +1885,23 @@ internal sealed partial class CombatBeamSolver
                         {
                             // Other process threads can allocate between the admission samples.
                             // The serial path rechecks one parent at its own committed boundary.
+                            member.StepCancellationToken.ThrowIfCancellationRequested();
                             ExpandNextSerially();
+                            if (member.ObserveCommittedParents(1))
+                            {
+                                yield return new SearchStepResult(
+                                    SearchStepStatus.Yielded,
+                                    member.CommittedParentsInCurrentStep,
+                                    member.TotalCommittedParents);
+                            }
                             continue;
                         }
 
                         List<(SearchNode Node, int WorkerIndex)> entries = [];
                         List<SearchNode> workerNodes = new(acceptedCapacity);
-                        while (member.ActiveIndex < member.Active.Count && workerNodes.Count < acceptedCapacity)
+                        while (member.ActiveIndex < member.Active.Count
+                               && workerNodes.Count < acceptedCapacity
+                               && entries.Count < member.RemainingParentCommitsBeforeYield)
                         {
                             SearchNode node = member.Active[member.ActiveIndex];
                             member.ActiveIndex++;
@@ -1957,7 +1988,7 @@ internal sealed partial class CombatBeamSolver
                         {
                             policy.Diagnostics.Info(
                                 $"[CombatSolver/Test] SEARCH_WAVE_MEMORY " +
-                                $"turn_layer={member.SearchedTurnLayers} play_depth={playDepth} " +
+                                $"turn_layer={member.SearchedTurnLayers} play_depth={member.PlayDepth} " +
                                 $"desired_parents={desiredCapacity} admitted_parents={workerNodes.Count} " +
                                 $"signal_enabled={policy.MemoryPressureSignal.IsEnabled.ToString().ToLowerInvariant()} " +
                                 $"remaining_before={waveRemainingBefore} process_allocated_bytes={waveAllocated} " +
@@ -1966,6 +1997,13 @@ internal sealed partial class CombatBeamSolver
                                 $"gc_pause_ms={(GC.GetTotalPauseDuration() - wavePauseBefore).TotalMilliseconds:F3}");
                         }
                         ReclaimAfterCommittedWork("after_parallel_wave");
+                        if (member.ObserveCommittedParents(entries.Count))
+                        {
+                            yield return new SearchStepResult(
+                                SearchStepStatus.Yielded,
+                                member.CommittedParentsInCurrentStep,
+                                member.TotalCommittedParents);
+                        }
                     }
                 }
                 for (; member.ActiveIndex < member.Active.Count; member.ActiveIndex++)
@@ -1988,7 +2026,7 @@ internal sealed partial class CombatBeamSolver
                                 && stopwatch.ElapsedMilliseconds >= _profile.SoftTimeBudgetMilliseconds)
                             break;
                         EnsureMemoryForIndivisibleCommit(ParentAllocationReserve(),
-                            "before_fetched_power_followup", playDepth, member.NextPlays.Count, member.Ended.Count);
+                            "before_fetched_power_followup", member.PlayDepth, member.NextPlays.Count, member.Ended.Count);
                         long allocatedBefore = policy.MemoryPressureSignal.AllocatedBytes;
                         foreach (SearchNode successor in Expand(commitment))
                         {
@@ -2010,7 +2048,7 @@ internal sealed partial class CombatBeamSolver
                     break;
                 }
                 List<SearchNode> prunedPlays = PruneAtMemoryBoundary(
-                    member.NextPlays, member.NextPlays.Count, "before_play_prune", playDepth, member.Ended.Count);
+                    member.NextPlays, member.NextPlays.Count, "before_play_prune", member.PlayDepth, member.Ended.Count);
                 ReleaseDroppedSnapshots(member.NextPlays, prunedPlays);
                 member.NextPlays.Clear();
                 member.Active = prunedPlays;
@@ -2020,16 +2058,16 @@ internal sealed partial class CombatBeamSolver
                     && _run.Expanded < _profile.MaxExpandedNodes
                     && (policy.MemoryPressureSignal.HasUnexpectedNoGcLoss()
                         || policy.MemoryPressureSignal.IsLimitReached()))
-                    ReclaimAtCommittedBoundary("after_prune", playDepth, member.Active.Count, member.Ended.Count);
+                    ReclaimAtCommittedBoundary("after_prune", member.PlayDepth, member.Active.Count, member.Ended.Count);
                 PublishRoutePreview(member.Completed, member.Active);
                 if (_detailedDiagnostics && member.SearchedTurnLayers == 0)
                 {
                     policy.Diagnostics.Info(
-                        $"[CombatSolver/Debug] ROOT_DEPTH_POTIONS depth={playDepth + 1} " +
+                        $"[CombatSolver/Debug] ROOT_DEPTH_POTIONS depth={member.PlayDepth + 1} " +
                         $"frontier={SummarizePotionCandidates(member.Active)} " +
                         $"routes={SummarizeDiagnosticRoutes(member.Active, 24)}");
                 }
-                PublishProgress(_startTurnNumber + member.SearchedTurnLayers, member.SearchedTurnLayers, playDepth,
+                PublishProgress(_startTurnNumber + member.SearchedTurnLayers, member.SearchedTurnLayers, member.PlayDepth,
                     member.Active.Count, member.Ended.Count, "剪枝候选", force: true);
             }
             if (member.AdoptionReached || member.RequestedRouteAdoptionSeed != null)
@@ -2179,7 +2217,8 @@ internal sealed partial class CombatBeamSolver
                 $"[CombatSolver/Test] SEARCH_ROUTE_ADOPTION_CHECKPOINT " +
                 $"candidate_version={member.RequestedRouteAdoptionSeed.CandidateVersion} " +
                 $"expanded={_run.Expanded}");
-            return member.RequestedRouteAdoptionSeed.Materialize();
+            execution.Result = member.RequestedRouteAdoptionSeed.Materialize();
+            yield break;
         }
 
         List<SearchNode> finalPool;
@@ -2285,7 +2324,8 @@ internal sealed partial class CombatBeamSolver
             finalEvaluationContextId);
         foreach (SearchNode candidate in finalCandidates)
             candidate.Snapshot.ReleaseSimulator();
-        return result;
+        execution.Result = result;
+        yield break;
     }
 
     private SearchNode? ApplyFixedPrefix(SearchNode seed)
@@ -2440,8 +2480,50 @@ internal sealed partial class CombatBeamSolver
         return BufferedAllocationReserve(predictedBytes);
     }
 
-    private sealed class SearchMemberSessionState
+    private enum SearchMemberExecutionPhase
     {
+        Created,
+        Running,
+        Yielded,
+        Completed,
+        Canceled,
+        Disposed,
+    }
+
+    private sealed class SearchMemberExecutionState
+    {
+        public SolverResult? Result { get; set; }
+        public SearchMemberExecutionPhase Phase { get; set; } = SearchMemberExecutionPhase.Created;
+        public CancellationToken StepCancellationToken { get; set; }
+        public int RemainingParentCommitsBeforeYield { get; private set; } = int.MaxValue;
+        public int CommittedParentsInCurrentStep { get; private set; }
+        public int TotalCommittedParents { get; private set; }
+
+        public void BeginStep(SearchWorkAllowance allowance, CancellationToken token)
+        {
+            StepCancellationToken = token;
+            RemainingParentCommitsBeforeYield = allowance.MaxParentCommits;
+            CommittedParentsInCurrentStep = 0;
+            Phase = SearchMemberExecutionPhase.Running;
+        }
+
+        public bool ObserveCommittedParents(int count)
+        {
+            if (count <= 0)
+                throw new ArgumentOutOfRangeException(nameof(count));
+            checked
+            {
+                TotalCommittedParents += count;
+                CommittedParentsInCurrentStep += count;
+            }
+            if (RemainingParentCommitsBeforeYield == int.MaxValue)
+                return false;
+            RemainingParentCommitsBeforeYield = Math.Max(
+                0,
+                RemainingParentCommitsBeforeYield - count);
+            return RemainingParentCommitsBeforeYield == 0;
+        }
+
         public SolverInterimResult? CurrentBestResult { get; set; }
         public SearchNode? CurrentBestNode { get; set; }
         public SolverInterimResult? CurrentTurnCandidateResult { get; set; }
@@ -2463,6 +2545,11 @@ internal sealed partial class CombatBeamSolver
         public int SearchedTurnLayers { get; set; }
         public bool TimeBudgetReached { get; set; }
         public bool AcceptableBattleHpLossReached { get; set; }
+        public long TurnLayerStartedMs { get; set; }
+        public int TurnLayerStartedExpanded { get; set; }
+        public long TurnLayerBudgetMs { get; set; }
+        public int TurnLayerNodeBudget { get; set; }
+        public int PlayDepth { get; set; }
 
         public List<SearchNode> Frontier { get; set; } = [];
         public List<SearchNode> Completed { get; set; } = [];
@@ -2471,19 +2558,29 @@ internal sealed partial class CombatBeamSolver
         public double PotionFreeBoundaryFallbackScore { get; set; } = double.NegativeInfinity;
         public SearchNode? PotionBoundaryFallback { get; set; }
         public double PotionBoundaryFallbackScore { get; set; } = double.NegativeInfinity;
-
         public long ParentAllocatedHighWater { get; set; }
         public long PruneAllocatedBytesPerInputHighWater { get; set; }
         public string PruneHighWaterInterval { get; set; } = "cold";
         public int PruneHighWaterInputCount { get; set; }
         public long PruneHighWaterAllocatedBytes { get; set; }
-
         public List<SearchNode> Active { get; set; } = [];
         public List<SearchNode> Ended { get; set; } = [];
         public List<SearchNode> NextPlays { get; set; } = [];
         public int ActiveIndex { get; set; }
 
+        public bool HasLiveSimulators()
+            => CollectOwnedNodes().Any(node => node.Snapshot.HasSimulator);
+
         public void ReleaseLiveSimulators()
+        {
+            foreach (SearchNode node in CollectOwnedNodes())
+            {
+                if (node.Snapshot.HasSimulator)
+                    node.Snapshot.ReleaseSimulator();
+            }
+        }
+
+        private HashSet<SearchNode> CollectOwnedNodes()
         {
             HashSet<SearchNode> nodes = new(ReferenceEqualityComparer.Instance);
             void Add(IEnumerable<SearchNode>? source)
@@ -2512,12 +2609,151 @@ internal sealed partial class CombatBeamSolver
                 nodes.Add(CurrentTurnCandidateNode);
             if (CurrentTurnPreviewNode != null)
                 nodes.Add(CurrentTurnPreviewNode);
+            return nodes;
+        }
+    }
 
-            foreach (SearchNode node in nodes)
+    internal sealed class SearchMemberExecutionSession : IResumableSearch
+    {
+        private readonly CombatBeamSolver _owner;
+        private readonly CancellationToken _ownerCancellationToken;
+        private readonly SearchMemberExecutionState _state = new();
+        private readonly IEnumerator<SearchStepResult> _steps;
+        private readonly SearchRequestWorkTotals? _requestWorkTotals;
+        private readonly long _startedTimestamp;
+        private readonly long _allocatedBytesAtStart;
+        private readonly int _gen0AtStart;
+        private readonly int _gen1AtStart;
+        private readonly int _gen2AtStart;
+        private readonly TimeSpan _gcPauseAtStart;
+        private bool _finalized;
+        private bool _disposed;
+
+        internal SearchMemberExecutionSession(
+            CombatBeamSolver owner,
+            SearchRequestWorkTotals? requestWorkTotals,
+            CancellationToken ownerCancellationToken)
+        {
+            _owner = owner;
+            _ownerCancellationToken = ownerCancellationToken;
+            _owner.BeginSearchEfficiencyMember();
+            _requestWorkTotals = requestWorkTotals;
+            _startedTimestamp = _requestWorkTotals == null ? 0 : Stopwatch.GetTimestamp();
+            _allocatedBytesAtStart = _requestWorkTotals == null
+                ? 0
+                : GC.GetAllocatedBytesForCurrentThread();
+            _gen0AtStart = _requestWorkTotals == null ? 0 : GC.CollectionCount(0);
+            _gen1AtStart = _requestWorkTotals == null ? 0 : GC.CollectionCount(1);
+            _gen2AtStart = _requestWorkTotals == null ? 0 : GC.CollectionCount(2);
+            _gcPauseAtStart = _requestWorkTotals == null
+                ? TimeSpan.Zero
+                : GC.GetTotalPauseDuration();
+            _steps = owner.SolveCoreSteps(_state).GetEnumerator();
+        }
+
+        public SolverResult? Result => _state.Result;
+        internal int TotalCommittedParentsForTesting => _state.TotalCommittedParents;
+        internal bool HasLiveSimulatorsForTesting => _state.HasLiveSimulators();
+
+        public SearchStepResult Step(SearchWorkAllowance allowance, CancellationToken token)
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(SearchMemberExecutionSession));
+            if (_state.Phase == SearchMemberExecutionPhase.Completed)
             {
-                if (node.Snapshot.HasSimulator)
-                    node.Snapshot.ReleaseSimulator();
+                return new SearchStepResult(
+                    SearchStepStatus.Completed,
+                    0,
+                    _state.TotalCommittedParents);
             }
+            if (token.IsCancellationRequested)
+            {
+                Cancel();
+                return new SearchStepResult(
+                    SearchStepStatus.Canceled,
+                    0,
+                    _state.TotalCommittedParents);
+            }
+
+            _state.BeginStep(allowance, token);
+            try
+            {
+                bool yielded = _steps.MoveNext();
+                if (!yielded)
+                {
+                    if (_state.Result == null)
+                        throw new InvalidOperationException("搜索成员结束时没有生成最终结果。");
+                    _state.Phase = SearchMemberExecutionPhase.Completed;
+                    _steps.Dispose();
+                    FinalizeLifecycle();
+                    return new SearchStepResult(
+                        SearchStepStatus.Completed,
+                        _state.CommittedParentsInCurrentStep,
+                        _state.TotalCommittedParents);
+                }
+
+                _state.Phase = SearchMemberExecutionPhase.Yielded;
+                return new SearchStepResult(
+                    SearchStepStatus.Yielded,
+                    _state.CommittedParentsInCurrentStep,
+                    _state.TotalCommittedParents);
+            }
+            catch (OperationCanceledException)
+                when (token.IsCancellationRequested || _ownerCancellationToken.IsCancellationRequested)
+            {
+                Cancel();
+                return new SearchStepResult(
+                    SearchStepStatus.Canceled,
+                    _state.CommittedParentsInCurrentStep,
+                    _state.TotalCommittedParents);
+            }
+            catch
+            {
+                DisposeCore(releaseLiveSimulators: true);
+                throw;
+            }
+        }
+
+        private void Cancel()
+        {
+            _state.Phase = SearchMemberExecutionPhase.Canceled;
+            DisposeCore(releaseLiveSimulators: true);
+        }
+
+        private void FinalizeLifecycle()
+        {
+            if (_finalized)
+                return;
+            _finalized = true;
+            _owner.CompleteExecutionLifecycle(
+                _requestWorkTotals,
+                _startedTimestamp,
+                _allocatedBytesAtStart,
+                _gen0AtStart,
+                _gen1AtStart,
+                _gen2AtStart,
+                _gcPauseAtStart);
+        }
+
+        private void DisposeCore(bool releaseLiveSimulators)
+        {
+            if (_disposed)
+                return;
+            if (releaseLiveSimulators)
+                _state.ReleaseLiveSimulators();
+            _steps.Dispose();
+            _disposed = true;
+            FinalizeLifecycle();
+        }
+
+        public void Dispose()
+        {
+            if (_state.Phase is not SearchMemberExecutionPhase.Completed
+                and not SearchMemberExecutionPhase.Canceled)
+            {
+                _state.Phase = SearchMemberExecutionPhase.Disposed;
+            }
+            DisposeCore(releaseLiveSimulators: _state.Phase != SearchMemberExecutionPhase.Completed);
         }
     }
 

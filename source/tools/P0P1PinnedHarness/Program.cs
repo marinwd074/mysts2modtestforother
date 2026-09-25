@@ -142,7 +142,7 @@ internal static class Program
                 battleDamage,
                 captured,
                 settings);
-            P0SearchEvidence p0FixedWork = e2Resumable.Sliced;
+            P0SearchEvidence p0FixedWork = e2Resumable.SingleParent;
 
             P0JointEvidence joint;
             try
@@ -454,44 +454,56 @@ internal static class Program
         SolverSettingsSnapshot settings)
     {
         P0FixedWorkRun continuous = RunP0FixedWorkProbe(
-            root,
-            names,
-            battleDamage,
-            captured,
-            settings,
-            parentCommitSlice: null);
-        P0FixedWorkRun sliced = RunP0FixedWorkProbe(
-            root,
-            names,
-            battleDamage,
-            captured,
-            settings,
-            parentCommitSlice: 1);
+            root, names, battleDamage, captured, settings, parentCommitSlice: null);
+        P0FixedWorkRun singleParent = RunP0FixedWorkProbe(
+            root, names, battleDamage, captured, settings, parentCommitSlice: 1);
+        P0FixedWorkRun coarse = RunP0FixedWorkProbe(
+            root, names, battleDamage, captured, settings, parentCommitSlice: 8);
 
-        bool equivalent = continuous.Evidence.Pass
-            && sliced.Evidence.Pass
-            && continuous.Actions.SequenceEqual(sliced.Actions, StringComparer.Ordinal)
-            && continuous.Evidence.Boundary == sliced.Evidence.Boundary
-            && continuous.Evidence.ProjectedBattleHpLost == sliced.Evidence.ProjectedBattleHpLost
-            && continuous.Evidence.FinalHp == sliced.Evidence.FinalHp
-            && continuous.Evidence.FinalEnemyHp == sliced.Evidence.FinalEnemyHp
-            && continuous.Evidence.CombatEndedTurn == sliced.Evidence.CombatEndedTurn
-            && continuous.Evidence.ContinuationCount == sliced.Evidence.ContinuationCount
-            && continuous.Evidence.ExpandedNodes == sliced.Evidence.ExpandedNodes
-            && continuous.Evidence.ChoiceBranchesEvaluated == sliced.Evidence.ChoiceBranchesEvaluated
-            && continuous.TransitionCount == sliced.TransitionCount;
+        bool Equivalent(P0FixedWorkRun candidate)
+            => candidate.Evidence.Pass
+                && continuous.Actions.SequenceEqual(candidate.Actions, StringComparer.Ordinal)
+                && continuous.Evidence.Boundary == candidate.Evidence.Boundary
+                && continuous.Evidence.ProjectedBattleHpLost == candidate.Evidence.ProjectedBattleHpLost
+                && continuous.Evidence.FinalHp == candidate.Evidence.FinalHp
+                && continuous.Evidence.FinalEnemyHp == candidate.Evidence.FinalEnemyHp
+                && continuous.Evidence.CombatEndedTurn == candidate.Evidence.CombatEndedTurn
+                && continuous.Evidence.ContinuationCount == candidate.Evidence.ContinuationCount
+                && continuous.Evidence.ExpandedNodes == candidate.Evidence.ExpandedNodes
+                && continuous.Evidence.ChoiceBranchesEvaluated == candidate.Evidence.ChoiceBranchesEvaluated
+                && continuous.TransitionCount == candidate.TransitionCount
+                && continuous.CommittedParents == candidate.CommittedParents;
+
+        bool singleEquivalent = Equivalent(singleParent) && singleParent.YieldCount > 0;
+        bool coarseEquivalent = Equivalent(coarse) && coarse.YieldCount > 0;
         Require(
-            equivalent,
-            "E2 continuous and sliced fixed-work searches diverged in route, terminal state, or work totals.");
+            singleEquivalent && coarseEquivalent,
+            "E2 continuous and resumed fixed-work searches diverged in route, terminal state, work totals, or parent commits.");
+
+        E2LifecycleEvidence lifecycle = VerifyE2SessionLifecycle(
+            root,
+            names,
+            battleDamage,
+            captured,
+            settings);
 
         return new(
-            Pass: equivalent,
+            Pass: singleEquivalent && coarseEquivalent && lifecycle.Pass,
             Continuous: continuous.Evidence,
-            Sliced: sliced.Evidence,
+            SingleParent: singleParent.Evidence,
+            Coarse: coarse.Evidence,
             ContinuousActions: continuous.Actions,
-            SlicedActions: sliced.Actions,
+            SingleParentActions: singleParent.Actions,
+            CoarseActions: coarse.Actions,
             ContinuousTransitionCount: continuous.TransitionCount,
-            SlicedTransitionCount: sliced.TransitionCount);
+            SingleParentTransitionCount: singleParent.TransitionCount,
+            CoarseTransitionCount: coarse.TransitionCount,
+            ContinuousCommittedParents: continuous.CommittedParents,
+            SingleParentCommittedParents: singleParent.CommittedParents,
+            CoarseCommittedParents: coarse.CommittedParents,
+            SingleParentYieldCount: singleParent.YieldCount,
+            CoarseYieldCount: coarse.YieldCount,
+            Lifecycle: lifecycle);
     }
 
     private static P0FixedWorkRun RunP0FixedWorkProbe(
@@ -502,36 +514,37 @@ internal static class Program
         SolverSettingsSnapshot settings,
         int? parentCommitSlice)
     {
-        SolverSearchProfile profile = settings.Profile with
-        {
-            BeamWidth = BeamWidth,
-            MaxExpandedNodes = P0FixedWorkNodeBudget,
-            SoftTimeBudgetMilliseconds = BudgetMilliseconds,
-        };
+        SolverSearchProfile profile = E2FixedWorkProfile(settings);
         SearchRequestWorkTotals totals = new();
-        SearchPolicySnapshot policy = captured with
-        {
-            Profile = profile,
-            RoutePolicy = SearchRoutePolicy.SinglePlayerFullRoute,
-            CurrentTurnOnly = false,
-            VerifyIncrementalSearch = true,
-            FixedBudget = true,
-            MaxDegreeOfParallelism = 1,
-            BudgetOverrideMilliseconds = null,
-            UseNoveltyPortfolio = false,
-            NoveltySearch = null,
-            UseBeamWidthPortfolio = false,
-            BeamWidthPortfolioWidths = null,
-            Interaction = null,
-            RequestWorkTotals = totals,
-            ResumableParentCommitSliceForTesting = parentCommitSlice,
-        };
-        SolverResult result = new CombatBeamSolver(
+        SearchPolicySnapshot policy = E2FixedWorkPolicy(captured, profile, totals);
+        CombatBeamSolver solver = new(
             root,
             names,
             battleDamage,
             policy,
-            searchProfile: profile).Solve();
+            searchProfile: profile);
+        using CombatBeamSolver.SearchMemberExecutionSession session = solver.CreateExecutionSession();
+        SearchWorkAllowance allowance = parentCommitSlice is { } slice
+            ? new SearchWorkAllowance(slice)
+            : SearchWorkAllowance.Unlimited;
+        int yieldCount = 0;
+        SearchStepResult finalStep;
+        while (true)
+        {
+            SearchStepResult step = session.Step(allowance, CancellationToken.None);
+            if (step.Status == SearchStepStatus.Yielded)
+            {
+                yieldCount++;
+                continue;
+            }
+            Require(
+                step.Status == SearchStepStatus.Completed && session.Result != null,
+                $"E2 fixed-work member did not complete cleanly: {step.Status}.");
+            finalStep = step;
+            break;
+        }
+
+        SolverResult result = session.Result!;
         SearchRequestWorkSnapshot work = totals.Snapshot();
         P0SearchEvidence evidence = CaptureSearch(result) with
         {
@@ -547,8 +560,113 @@ internal static class Program
         return new(
             evidence,
             result.BestNode.Actions.Select(ActionToken).ToArray(),
-            work.TransitionCount);
+            work.TransitionCount,
+            finalStep.TotalCommittedParents,
+            yieldCount);
     }
+
+    private static E2LifecycleEvidence VerifyE2SessionLifecycle(
+        CombatRootSnapshot root,
+        SolverDisplayNames names,
+        BattleDamageSnapshot battleDamage,
+        SearchPolicySnapshot captured,
+        SolverSettingsSnapshot settings)
+    {
+        CombatBeamSolver CreateProbeSolver()
+        {
+            SolverSearchProfile profile = E2FixedWorkProfile(settings);
+            SearchPolicySnapshot policy = E2FixedWorkPolicy(
+                captured,
+                profile,
+                new SearchRequestWorkTotals());
+            return new CombatBeamSolver(
+                root,
+                names,
+                battleDamage,
+                policy,
+                searchProfile: profile);
+        }
+
+        bool cancelReleased;
+        int cancelCommitted;
+        using (CombatBeamSolver.SearchMemberExecutionSession canceled =
+               CreateProbeSolver().CreateExecutionSession())
+        {
+            SearchStepResult first = canceled.Step(
+                SearchWorkAllowance.SingleParent,
+                CancellationToken.None);
+            Require(first.Status == SearchStepStatus.Yielded,
+                "E2 cancellation probe did not reach a resumable safe point.");
+            cancelCommitted = first.TotalCommittedParents;
+            using CancellationTokenSource cts = new();
+            cts.Cancel();
+            SearchStepResult canceledStep = canceled.Step(
+                SearchWorkAllowance.Unlimited,
+                cts.Token);
+            cancelReleased = canceledStep.Status == SearchStepStatus.Canceled
+                && canceledStep.TotalCommittedParents == cancelCommitted
+                && !canceled.HasLiveSimulatorsForTesting;
+        }
+
+        CombatBeamSolver.SearchMemberExecutionSession disposed =
+            CreateProbeSolver().CreateExecutionSession();
+        SearchStepResult disposeFirst = disposed.Step(
+            SearchWorkAllowance.SingleParent,
+            CancellationToken.None);
+        Require(disposeFirst.Status == SearchStepStatus.Yielded,
+            "E2 dispose probe did not reach a resumable safe point.");
+        int disposeCommitted = disposeFirst.TotalCommittedParents;
+        disposed.Dispose();
+        bool disposeReleased = !disposed.HasLiveSimulatorsForTesting;
+        bool disposeRejectsResume = false;
+        try
+        {
+            _ = disposed.Step(SearchWorkAllowance.SingleParent, CancellationToken.None);
+        }
+        catch (ObjectDisposedException)
+        {
+            disposeRejectsResume = true;
+        }
+
+        bool pass = cancelReleased && disposeReleased && disposeRejectsResume;
+        Require(pass, "E2 cancel/dispose lifecycle left resumable work or live simulators behind.");
+        return new(
+            Pass: pass,
+            CancelCommittedParents: cancelCommitted,
+            CancelReleasedSimulators: cancelReleased,
+            DisposeCommittedParents: disposeCommitted,
+            DisposeReleasedSimulators: disposeReleased,
+            DisposeRejectsResume: disposeRejectsResume);
+    }
+
+    private static SolverSearchProfile E2FixedWorkProfile(SolverSettingsSnapshot settings)
+        => settings.Profile with
+        {
+            BeamWidth = BeamWidth,
+            MaxExpandedNodes = P0FixedWorkNodeBudget,
+            SoftTimeBudgetMilliseconds = BudgetMilliseconds,
+        };
+
+    private static SearchPolicySnapshot E2FixedWorkPolicy(
+        SearchPolicySnapshot captured,
+        SolverSearchProfile profile,
+        SearchRequestWorkTotals totals)
+        => captured with
+        {
+            Profile = profile,
+            RoutePolicy = SearchRoutePolicy.SinglePlayerFullRoute,
+            CurrentTurnOnly = false,
+            VerifyIncrementalSearch = true,
+            FixedBudget = true,
+            MaxDegreeOfParallelism = 1,
+            BudgetOverrideMilliseconds = null,
+            UseNoveltyPortfolio = false,
+            NoveltySearch = null,
+            UseBeamWidthPortfolio = false,
+            BeamWidthPortfolioWidths = null,
+            Interaction = null,
+            RequestWorkTotals = totals,
+        };
 
     private static P1Evidence VerifyP1ObjectiveRuntime(
         CombatState combat,
@@ -809,16 +927,35 @@ internal static class Program
     internal sealed record P0FixedWorkRun(
         P0SearchEvidence Evidence,
         string[] Actions,
-        long TransitionCount);
+        long TransitionCount,
+        int CommittedParents,
+        int YieldCount);
+
+    internal sealed record E2LifecycleEvidence(
+        bool Pass,
+        int CancelCommittedParents,
+        bool CancelReleasedSimulators,
+        int DisposeCommittedParents,
+        bool DisposeReleasedSimulators,
+        bool DisposeRejectsResume);
 
     internal sealed record E2ResumableSearchEvidence(
         bool Pass,
         P0SearchEvidence Continuous,
-        P0SearchEvidence Sliced,
+        P0SearchEvidence SingleParent,
+        P0SearchEvidence Coarse,
         string[] ContinuousActions,
-        string[] SlicedActions,
+        string[] SingleParentActions,
+        string[] CoarseActions,
         long ContinuousTransitionCount,
-        long SlicedTransitionCount);
+        long SingleParentTransitionCount,
+        long CoarseTransitionCount,
+        int ContinuousCommittedParents,
+        int SingleParentCommittedParents,
+        int CoarseCommittedParents,
+        int SingleParentYieldCount,
+        int CoarseYieldCount,
+        E2LifecycleEvidence Lifecycle);
 
     internal sealed record P0SearchEvidence(
         bool Pass,
