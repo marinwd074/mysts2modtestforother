@@ -200,3 +200,10 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - AfterBlockBroken, AfterCardPlayed, AfterAttack, and AfterModifyingHpLostAfterOsty now use the existing mirrored-hook participation mask instead of scanning listeners that cannot handle the hook.
 - The hook enumerator now applies masks independently to segmented run-listener snapshots and has an unsuspended cleanup mode for paired attack state.
 - Death lifecycle fingerprinting replaces per-node LINQ OrderBy allocations with stable inline sorting; COMBATSOLVER_VERIFY_FAST_LANES=1 can reconcile both fast lanes against the old behavior.
+
+## 2026-09-25 ModelDb.GetId cache backport
+
+- Backported the isolated route-preserving part of upstream PR #114: ModelDb.GetId(Type) now memoizes the immutable Type-to-ModelId result.
+- Null and exception behavior stays on the native path; no ModelDb content or model instance is cached.
+- Registered in the normal RitsuLib patch set and the OfflineSearchHarness patch inventory.
+- No transposition-table limits, learned portfolio experiments, GC truncation, or other decision-changing PR #114 changes were imported.

@@ -37,6 +37,7 @@ internal static class PatchRegistration
         patcher.RegisterPatch<BaseLibDynamicVarCloneMetadataPatch>();
         patcher.RegisterPatch<RitsuDynamicVarCloneMetadataPatch>();
         patcher.RegisterPatch<PowerDynamicVarMaterializationGuardPatch>();
+        patcher.RegisterPatch<ModelDbGetIdCachePatch>();
         patcher.RegisterPatch<PowerAmountComparisonPatch>();
         patcher.RegisterPatch<RichTextEnvironmentLifetimePatch>();
         patcher.RegisterPatch<NodePoolSignalLifetimePatch>();
