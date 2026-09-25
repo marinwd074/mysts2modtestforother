@@ -104,6 +104,17 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - 最终验证：compatibility run `36100277486` 的 static-consistency / L1 contracts 全 PASS；Pinned 0.107.1 run `36100277430` 的 Release、E0、U0/U1、U2、P0 contracts、P0/P1 runtime 与历史 P0 A/B 分类链完成。P1 的 5 秒 timed 样本在已胜利状态触及 TimeLimit，但 5000-node fixed-work 两种目标均 PASS，历史分类为 `FIXED_WORK_PASS_TIME_BOUNDARY`，不作为搜索语义回归。
 - **E3 已关闭。** 后续若没有新的 time-to-quality 数据证明 adaptive 稳定优于 fixed，不重新打开 E3B。
 
+## 搜索效率 E4（2026-09-25，已关闭）
+
+- 生产继续使用原 **Robust** 固定四压力情景语义；E4 只改变这些情景的复评组织方式，不修改团队目标、Beam 排序、药水/遗物/特殊牌、多人牌过滤或部署权限，也没有提高默认总预算。
+- 严格模式现在先完整评估第一个可用 current-decision 作为 incumbent。后续候选继续复用当前 U3 的一次共享 Shadow 搜索，但情景 replay 按 incumbent 中更可能暴露弱点的压力顺序执行。
+- 对部分已评情景构造合法的 Robust 乐观下界：存活/终局字段只使用已经不可逆暴露的坏结果；worst-loss / worst-player / team-loss / enemy-durability 使用已观察最大值；未知 mean-loss 明确取 **负无穷**，未知情景从不按 0 或“良好结果”写回矩阵。
+- 只有该候选在“未评情景全部取得最理想值”的情况下，仍按现有完整字典序严格落后于一个已完整评估的 incumbent，才允许停止剩余 replay。等价/tie 情况不会剪枝；被跳过的格子保持 `Unknown`，并记录 `strict_eliminated / strict_reason / skipped_scenario_replays`。
+- 最终 Robust 排序允许“完整候选 + 已被严格证明淘汰的候选”形成闭合比较；普通预算中断/Unsupported 造成的 `Unknown` 仍 fail closed 回原 baseline。U4 nominal-reference / bounded-risk 诊断只有所有候选都完整时才运行，不把 E4 缺失格子伪造成完整矩阵。
+- 小型完整枚举门禁覆盖：严格渐进与全量复评选择同一 Robust 胜者、保留同一 baseline tie-break；另有“前三个压力情景都更好、最后一个情景才把候选翻成劣势”的反例，严格模式必须看到最后一格后才能淘汰。另一个明显劣势候选在首个压力情景后可安全跳过剩余 **3** 次 replay。
+- E4 的近似“首动作一致率 C”没有进入生产：计划本身规定它不是正确率/置信度，也不是严格停止证明。若未来要启用，必须作为单独近似策略做 A/B，不混入本次保持结果等价的优化。
+- 验证：compatibility run **36104370041** 的 `static-consistency` / `contract-tests` 全 PASS；Pinned 0.107.1 run **36104358801** 的 Release、E0、U0/U1、U2、P0/P1 与历史分类链全部 PASS。
+- **E4 已关闭。** 当前实现能真实省掉的是已生成四压力路线之后的部分 scenario replay；共享 Shadow 搜索仍按一次/候选完整计费，不把这段成本伪装成 E4 收益。
 ## 当前未验证边界
 
 - 当前 HEAD 的真实多人 Beam retention A/B：需要在“明显不如手打”的合法局面上确认更好路线究竟在 Beam、portfolio、U3/U4 还是执行层丢失。
@@ -112,5 +123,5 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 
 ## 下一任务
 
-E3 已完成。后续按总计划进入 **E4：候选与情景的渐进复评** 时再单独开始，不把 E4 的严格上下界/Robust 情景按需计算混回 E3。
+按总计划进入 **E5：策略引导的动作排序和中途估值**。先只调整动作枚举顺序并用 E0 时间线验证有限预算下的 time-to-quality；不要在同一提交里修改 Beam 保留评分。只有真实“好路线未生成/生成太晚”证据支持时，才继续改中途估值。
 
