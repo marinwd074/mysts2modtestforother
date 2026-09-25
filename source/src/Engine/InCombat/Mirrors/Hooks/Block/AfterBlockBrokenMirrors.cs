@@ -23,6 +23,9 @@ internal static class AfterBlockBrokenMirrors
         Registry.Invoke(listener, context);
     }
 
+    internal static MirrorDispatchKind ResolveDispatchKind(AbstractModel listener)
+        => Registry.ResolveDispatchKind(listener);
+
     private static Registry CreateRegistry()
     {
         var registry = new Registry(AfterBlockBroken);
@@ -43,11 +46,12 @@ internal static class AfterBlockBrokenMirrors
         {
             if (context.CombatState is not ICombatPredictionEffectSink effects)
                 throw new InvalidOperationException("破甲钻效果缺少可写的预测状态。");
-            effects.ApplyPower(
+            effects.ApplyPowerFromSource(
                 typeof(VulnerablePower),
                 context.Target,
                 relic.DynamicVars.Vulnerable.IntValue,
-                relic.Owner.Creature);
+                relic.Owner.Creature,
+                cardSource: null);
         }
     }
 #endif

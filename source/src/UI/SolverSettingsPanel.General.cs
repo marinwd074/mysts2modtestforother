@@ -13,6 +13,7 @@ internal sealed partial class SolverSettingsPanel
     private CheckButton _stopOnWorseRecalculation = null!;
     private OptionButton _actTransitionBossHpStrategy = null!;
     private OptionButton _finalBossHpStrategy = null!;
+    private CheckButton _multiplayerPrediction = null!;
     private OptionButton _multiplayerCombatObjective = null!;
     private LineEdit _acceptableBattleHpLoss = null!;
     private OptionButton _searchCompletionNotificationPolicy = null!;
@@ -231,16 +232,23 @@ internal sealed partial class SolverSettingsPanel
             SolverText.Get("分别设置幕末战斗的血量取舍，重新计算后生效。"), bossStrategyGrid);
 
         GridContainer multiplayerObjectiveGrid = CreateSettingsGrid();
+        _multiplayerPrediction = CreateToggle();
+        _multiplayerPrediction.Toggled += OnMultiplayerPredictionToggled;
+        AddBasicRow(
+            multiplayerObjectiveGrid,
+            SolverText.Get("启用多人预测算法（实验）"),
+            _multiplayerPrediction,
+            SolverText.Get("默认关闭：使用真实多人战斗状态，但路线按单人核心排序。开启后启用团队目标、队友预测、Scenario/Robust 复评和 Carry 排序；搜索更慢，且此前实战质量可能低于单人核心。"));
         _multiplayerCombatObjective = CreateMultiplayerCombatObjectiveInput();
         AddBasicRow(
             multiplayerObjectiveGrid,
             SolverText.Get("多人路线目标"),
             _multiplayerCombatObjective,
-            SolverText.Get("仅多人搜索生效。最低团队战损始终优先保血；动态斩杀会在敌方总有效血量降到 35% 以下后，用提前结束回合数与战损比共同选路：每提前 1 回合最多容忍约 5% 的额外战损比。"));
+            SolverText.Get("仅在启用多人预测算法后生效。最低团队战损始终优先保血；动态斩杀会综合提前结束回合数与团队战损选择路线。"));
         AddSettingsSection(
             content,
             SolverText.Get("多人模式"),
-            SolverText.Get("多人专用的完整战斗路线目标；单人搜索不读取此设置。"),
+            SolverText.Get("默认使用单人质量核心；需要对比实验多人预测时再打开总开关。单人搜索不读取这些设置。"),
             multiplayerObjectiveGrid);
 
         GridContainer interfaceGrid = CreateSettingsGrid();
@@ -270,6 +278,8 @@ internal sealed partial class SolverSettingsPanel
         _stopOnCombatEnd.ButtonPressed = data.StopFullAutoOnCombatEnd;
         _stopOnDeathTurn.ButtonPressed = data.StopFullAutoOnDeathTurn;
         _stopOnWorseRecalculation.ButtonPressed = data.StopFullAutoOnWorseRecalculation;
+        _multiplayerPrediction.ButtonPressed = data.UseMultiplayerPrediction;
+        _multiplayerCombatObjective.Disabled = !data.UseMultiplayerPrediction;
     }
 
     private OptionButton CreateSearchCompletionNotificationPolicyInput()
@@ -466,6 +476,19 @@ internal sealed partial class SolverSettingsPanel
             return;
         SolverController.SetStopFullAutoOnWorseRecalculation(enabled);
         SetStatus(SolverText.Get("已保存并立即生效"), SolverUiTokens.Palette.Success);
+    }
+
+    private void OnMultiplayerPredictionToggled(bool enabled)
+    {
+        if (_loading)
+            return;
+        SolverSettings.Update(SolverSettings.Current with { UseMultiplayerPrediction = enabled });
+        _multiplayerCombatObjective.Disabled = !enabled;
+        SetStatus(
+            SolverText.Get(enabled
+                ? "多人预测算法已开启，重新计算后生效"
+                : "多人预测算法已关闭，重新计算后使用单人质量核心"),
+            SolverUiTokens.Palette.Success);
     }
 
     private static SearchCompletionNotificationPolicy ResolveSearchCompletionNotificationPolicy(

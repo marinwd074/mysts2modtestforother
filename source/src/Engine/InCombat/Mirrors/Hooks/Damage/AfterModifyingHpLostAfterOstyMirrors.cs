@@ -21,6 +21,9 @@ internal static class AfterModifyingHpLostAfterOstyMirrors
         Registry.Invoke(modifier, context);
     }
 
+    internal static MirrorDispatchKind ResolveDispatchKind(AbstractModel listener)
+        => Registry.ResolveDispatchKind(listener);
+
     private static Registry CreateRegistry()
     {
         var registry = new Registry(AfterModifyingHpLostAfterOsty);

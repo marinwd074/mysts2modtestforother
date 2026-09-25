@@ -105,6 +105,11 @@ internal sealed record SolverSettingsData
     public BossHpStrategy FinalBossHpStrategy { get; init; } = BossHpStrategy.ProgressionFirst;
     public MultiplayerCombatObjectiveStrategy MultiplayerCombatObjectiveStrategy { get; init; }
         = MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo;
+    /// <summary>
+    /// Master production switch for the experimental multiplayer prediction stack.
+    /// Off keeps the real multiplayer root but uses the proven local single-player quality core.
+    /// </summary>
+    public bool UseMultiplayerPrediction { get; init; }
     public bool UseMultiplayerTeammateForecast { get; init; } = true;
     public bool UseMultiplayerScenarioReevaluation { get; init; } = true;
     public int AcceptableBattleHpLoss { get; init; }
@@ -161,6 +166,7 @@ internal sealed record SolverSettingsSnapshot(
     public bool IgnoreLongTermRewards { get; init; }
     public MultiplayerCombatObjectiveStrategy MultiplayerCombatObjectiveStrategy { get; init; }
         = MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo;
+    public bool UseMultiplayerPrediction { get; init; }
     public bool UseMultiplayerTeammateForecast { get; init; } = true;
     public bool UseMultiplayerScenarioReevaluation { get; init; } = true;
     public bool UseBeamWidthPortfolio { get; init; }
@@ -260,6 +266,7 @@ internal static class SolverSettings
             $"act_transition_boss_hp_strategy={migrated.ActTransitionBossHpStrategy} " +
             $"final_boss_hp_strategy={migrated.FinalBossHpStrategy} " +
             $"multiplayer_combat_objective={migrated.MultiplayerCombatObjectiveStrategy} " +
+            $"multiplayer_prediction={migrated.UseMultiplayerPrediction.ToString().ToLowerInvariant()} " +
             $"acceptable_battle_hp_loss={migrated.AcceptableBattleHpLoss} " +
             $"search_notifications_enabled={migrated.SearchCompletionNotificationsEnabled} " +
             $"search_notification_mode={migrated.SearchCompletionNotificationMode} " +
@@ -312,6 +319,7 @@ internal static class SolverSettings
             BrightestFlameMaxHpLossLimit = data.BrightestFlameMaxHpLossLimit,
             IgnoreLongTermRewards = data.IgnoreLongTermRewards,
             MultiplayerCombatObjectiveStrategy = data.MultiplayerCombatObjectiveStrategy,
+            UseMultiplayerPrediction = data.UseMultiplayerPrediction,
             UseMultiplayerTeammateForecast = data.UseMultiplayerTeammateForecast,
             UseMultiplayerScenarioReevaluation = data.UseMultiplayerScenarioReevaluation,
             UseBeamWidthPortfolio = data.UseBeamWidthPortfolio,

@@ -148,3 +148,76 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 
 搜索效率 **E0–E6 已按证据全部关闭**。下一任务回到 Quality-first 第三项：只处理 current HEAD 新出现、且有问题包与合法手打前缀证明的明显坏路线；先沿 `FINAL_CANDIDATE → MP_QUALITY_SORTING → FINAL_SELECTION → Safe Execute` 定位丢失层，再只修改有证据的那一层。
 
+
+
+## 2026-09-25 LOUSE_PROGENITOR T3 cross-family time-to-quality
+
+- 新问题包 `ece84d5632d449f7b8717c9ef68f54df`：最终 4 回合路线在 T3 使用 `OFFERING+`，并通过 `ATTACK_POTION -> FIEND_FIRE` 压缩战斗。
+- E0：winner `potion_required` 首次生成约 45.235s，最终发布约 46.439s；Novelty ~5.010s，无药 Beam ~37.903s 且 `TimeLimit`，一药水层 ~3.527s。结论：跨搜索家族的串行 starvation。
+- 当前修复：Novelty 后插入 bounded exact-one-potion scout；它与主 Beam 共用同一总预算。完整 scout 在最终无药基线下重新校验后可复用，截断/不再合格则回退原 E3 Smart audit。
+- 实机回归关注：T3 的 `potion_required` member 应显著早于无药 Beam 完成获得工作；最终路线质量不得退化。需要用户用当前 HEAD 重跑同类局面确认真实 time-to-quality。
+
+
+## 2026-09-25 multiplayer quality rollback to local single-player core
+
+- 5 个连续实战包显示跨战斗退化，不是单卡问题。四个 DECIMILLIPEDE 包合计 307 次 FINAL_SELECTION，233 次未发生 Scenario/Chance rerank，坏路线主要由 multiplayer baseline 直接产生。
+- 最明显样本中本地 projected_hp 已为 -25/-28、all_players_alive=false，但 AdaptiveLethalTempo 仍按团队损失/敌方耐久区分死亡路线；这与用户“单人算法直接打多人高血量怪物反而更好”的 A/B 观察一致。
+- production policy 已切换为 local-single-core：真实多人 root + 单人质量排序；team objective / teammate forecast / scenario reevaluation 生产关闭。多人网络、怪物语义、目标语义、安全执行与 continuation 不变。
+- 旧多人质量层保留为测试/研究代码，可由测试直接 override SearchPolicySnapshot，不删除历史 U2/U3/U4 证据。
+- 新诊断：`MULTIPLAYER_QUALITY_MODE mode=local_single_core team_objective=false teammate_forecast=false scenario_reevaluation=false`。
+
+
+### CI contract migration for local-single-core
+
+- `E0PinnedHarness --scenario teammate` now explicitly opts into Advisor capability before root capture, so the detached two-player root is an admitted local-player multiplayer search instead of an optional unsupported probe.
+- The teammate E0 scenario now validates the **production** policy: `MultiplayerLocalCrossTurn` route semantics with Team Objective, teammate forecast and scenario reevaluation all disabled; any Shadow phase is a failure.
+- `test-u2-search-kernel.ps1` was updated from the obsolete “production multiplayer keeps team objective enabled” assertion to the new local-single-core production contract. Experimental U3/U4/Shadow contracts remain intact and separately tested.
+
+
+- local-single-core also disables `MultiplayerCarryRankingContext` inside FinalPlanOrdering when Team Objective is off. Carry remains available to experimental/team-objective tests, but production local quality no longer has a remote-risk tie-break after otherwise equal local routes.
+
+
+- Pinned E1 early-publication A/B no longer treats exact expanded/transition equality as semantic correctness. The callback changes wall-clock overhead while portfolio refinement is time-gated, so exact work can differ even with the same route and quality. `sameWork` remains in evidence; route and final quality are still hard failures.
+
+
+## 2026-09-25 multiplayer prediction master switch
+
+- Added persisted `UseMultiplayerPrediction`; default is `false`, preserving local-single-core.
+- General settings exposes one experimental toggle. Off: real multiplayer root + local single-player quality ordering. On: Team Objective + teammate forecast + Scenario/Robust + Carry ranking.
+- Multiplayer objective selection is disabled in the UI while the master switch is off.
+- E0 pinned coverage uses the same detached two-player root for both switch states; U2 static contracts verify the production gate.
+
+## 2026-09-25 upstream backport
+
+- Backported upstream PR #127 prediction semantics: Power/relic-driven power applications explicitly use a null card source, and removed creatures reject later predicted Power application.
+- Adapted the Hand Drill hook to the pinned 0.107.1 path in `AfterDamageGivenMirrors`; the newer-version hook path is kept aligned as well.
+- Backported upstream PR #134's bounded fresh-resource stand-pat lane: only the first 64 candidates in existing beam order receive the expensive cross-turn roll-out.
+- Deliberately did not merge upstream UI, Loadout, ServerGC, or newer-game-version compatibility changes.
+
+## 2026-09-25 upstream hot-path backport
+
+- Backported upstream PR #125 fast lanes without changing search ordering or budgets.
+- AfterBlockBroken, AfterCardPlayed, AfterAttack, and AfterModifyingHpLostAfterOsty now use the existing mirrored-hook participation mask instead of scanning listeners that cannot handle the hook.
+- The hook enumerator now applies masks independently to segmented run-listener snapshots and has an unsuspended cleanup mode for paired attack state.
+- Death lifecycle fingerprinting replaces per-node LINQ OrderBy allocations with stable inline sorting; COMBATSOLVER_VERIFY_FAST_LANES=1 can reconcile both fast lanes against the old behavior.
+
+## 2026-09-25 ModelDb.GetId cache backport
+
+- Backported the isolated route-preserving part of upstream PR #114: ModelDb.GetId(Type) now memoizes the immutable Type-to-ModelId result.
+- Null and exception behavior stays on the native path; no ModelDb content or model instance is cached.
+- Registered in the normal RitsuLib patch set and the OfflineSearchHarness patch inventory.
+- No transposition-table limits, learned portfolio experiments, GC truncation, or other decision-changing PR #114 changes were imported.
+
+## 2026-09-25 Crossbow generation cache backport
+
+- Backported the measured Crossbow-only part of upstream PR #114.
+- Crossbow now reuses the existing root-captured character attack pool through GetDistinctUnlockedCharacterAttacksForCombat; RNG selection, card instance creation, add-to-hand, and free-this-turn semantics are unchanged.
+- The five turn<=1 relic generation sites remain on their existing code because upstream measured no meaningful search-path benefit there.
+
+## 2026-09-25 multiplayer history-counter owner fix
+
+- PR #118 incremental history counters were already present, but their owner binding still disabled counters whenever Players.Count > 1.
+- Multiplayer detached roots now bind the counter owner to the unique RootActionPlayers entry (the local search player); single-player/non-root fallback remains unchanged.
+- Shared finished-play count still records every simulated play, while owner-scoped draw/generation/orb/hit counters remain local-player scoped.
+- E0's real two-player detached fixture now verifies GetCounters(local) on the root simulator and an ordinary fork.
+- U2Runtime now installs ModelDbGetIdCachePatch so pinned 0.107.1 harnesses verify the new Harmony target.

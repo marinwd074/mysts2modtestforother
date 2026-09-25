@@ -272,7 +272,7 @@ internal static class AfterCardDrawnMirrors
             if (context.CombatState is not ICombatPredictionEffectSink effects)
                 throw new InvalidOperationException("腐蚀波效果缺少可写的预测状态。");
             foreach (Creature enemy in context.State.HittableEnemies)
-                effects.ApplyPower(typeof(PoisonPower), enemy, power.Amount, power.Owner);
+                effects.ApplyPowerFromSource(typeof(PoisonPower), enemy, power.Amount, power.Owner, cardSource: null);
         }
     }
 

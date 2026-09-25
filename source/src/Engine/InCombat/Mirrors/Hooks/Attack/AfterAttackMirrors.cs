@@ -29,6 +29,12 @@ internal static class AfterAttackMirrors
         Registry.Invoke(listener, context);
     }
 
+    internal static MirrorDispatchKind ResolveDispatchKind(AbstractModel listener)
+        => Registry.ResolveDispatchKind(listener);
+
+    internal static bool HasPairedState(AbstractModel listener)
+        => listener is GigantificationPower or VigorPower;
+
     // BeforeAttack stores command-scoped state for these powers. Pending-choice
     // suspension must make that state forkable without firing ordinary AfterAttack
     // effects or consuming the power; completed dispatch uses the same idempotent
@@ -153,11 +159,12 @@ internal static class AfterAttackMirrors
         {
             if (context.CombatState is not ICombatPredictionEffectSink effects)
                 throw new InvalidOperationException("吸取效果缺少可写的预测状态。");
-            effects.ApplyPower(
+            effects.ApplyPowerFromSource(
                 typeof(StrengthPower),
                 power.Owner,
                 power.Amount * triggeredHits,
-                power.Owner);
+                power.Owner,
+                cardSource: null);
         }
     }
 }

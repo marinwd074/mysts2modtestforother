@@ -390,13 +390,15 @@ internal sealed partial class SimulatedCombatState
                     simulator.GainEnergy(relic.Owner, relic.DynamicVars.Energy.BaseValue);
                     break;
                 case Crossbow:
-                    GenerateRelicCards(
+                    AddGeneratedRelicCards(
                         simulator,
                         relic,
-                        relic.Owner.Character.CardPool
-                            .GetUnlockedCards(relic.Owner.UnlockState, _cardMultiplayerConstraint)
-                            .Where(card => card.Type == CardType.Attack),
-                        1,
+                        simulator.GetDistinctUnlockedCharacterAttacksForCombat(
+                                relic.Owner,
+                                1,
+                                simulator.Rng.CombatCardGeneration,
+                                _cardMultiplayerConstraint)
+                            .ToList(),
                         setFreeThisTurn: true);
                     break;
                 case OrangeDough when turn <= 1:
@@ -454,6 +456,25 @@ internal sealed partial class SimulatedCombatState
         return true;
     }
 
+    private void AddGeneratedRelicCards(
+        CombatPredictionSimulator simulator,
+        RelicModel relic,
+        IReadOnlyList<PredictedCard> generated,
+        bool setFreeThisTurn = false)
+    {
+        if (setFreeThisTurn)
+        {
+            foreach (PredictedCard card in generated)
+                card.SetToFreeThisTurn();
+        }
+        simulator.AddGeneratedCardsToCombat(
+            generated,
+            PileType.Hand,
+            relic.Owner,
+            CardPilePosition.Bottom,
+            CardGenerationResultKind.Random);
+    }
+
     private void GenerateRelicCards(
         CombatPredictionSimulator simulator,
         RelicModel relic,
@@ -468,17 +489,7 @@ internal sealed partial class SimulatedCombatState
                 simulator.Rng.CombatCardGeneration,
                 _cardMultiplayerConstraint)
             .ToList();
-        if (setFreeThisTurn)
-        {
-            foreach (PredictedCard card in generated)
-                card.SetToFreeThisTurn();
-        }
-        simulator.AddGeneratedCardsToCombat(
-            generated,
-            PileType.Hand,
-            relic.Owner,
-            CardPilePosition.Bottom,
-            CardGenerationResultKind.Random);
+        AddGeneratedRelicCards(simulator, relic, generated, setFreeThisTurn);
     }
 
     public void PrepareRelicsBeforeSideTurnEnd(

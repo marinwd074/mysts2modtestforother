@@ -464,6 +464,8 @@ internal static partial class SolverController
                 $"搜索并行度必须在 1..{SolverWeights.MaximumSearchMaxDegreeOfParallelism} 之间，" +
                 $"实际为 {maxDegreeOfParallelism}。");
         }
+        bool useMultiplayerPrediction =
+            capabilities.IsMultiplayer && settings.UseMultiplayerPrediction;
         SearchPolicySnapshot policy = new(
             settings.Profile,
             effectivePotionPolicy,
@@ -488,15 +490,16 @@ internal static partial class SolverController
             Interaction = interaction,
             RoutePolicy = routePolicy,
             CurrentTurnOnly = MultiplayerLocalCrossTurnContracts.IsCurrentTurnOnly(routePolicy),
-            UseMultiplayerTeamObjective = capabilities.IsMultiplayer,
+            // Multiplayer always uses the real multiplayer combat root. The user-facing
+            // master switch decides whether route quality stays on the local single-player
+            // core or enables the experimental team prediction stack.
+            UseMultiplayerTeamObjective = useMultiplayerPrediction,
             MultiplayerCombatObjectiveStrategy = settings.MultiplayerCombatObjectiveStrategy,
             MultiplayerEnemyDurabilityRatio = capabilities.IsMultiplayer
                 ? MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(state.Enemies)
                 : 1d,
-            UseMultiplayerTeammateForecast =
-                capabilities.IsMultiplayer && settings.UseMultiplayerTeammateForecast,
-            UseMultiplayerScenarioReevaluation =
-                capabilities.IsMultiplayer && settings.UseMultiplayerScenarioReevaluation,
+            UseMultiplayerTeammateForecast = useMultiplayerPrediction,
+            UseMultiplayerScenarioReevaluation = useMultiplayerPrediction,
             UseNoveltyPortfolio = (settings.UseNoveltyPortfolio
                 || UnattendedTestRunner.UseNoveltyPortfolioOverride)
                 && useFullSearchKernel,
@@ -526,6 +529,17 @@ internal static partial class SolverController
                 : GrowthOpportunityTargets.Empty,
             IgnoreLongTermRewards = settings.IgnoreLongTermRewards || !useFullSearchKernel,
         };
+        if (capabilities.IsMultiplayer)
+        {
+            string multiplayerQualityMode = useMultiplayerPrediction
+                ? "team_prediction"
+                : "local_single_core";
+            policy.Diagnostics.Info(
+                $"[CombatSolver/Test] MULTIPLAYER_QUALITY_MODE mode={multiplayerQualityMode} " +
+                $"team_objective={useMultiplayerPrediction.ToString().ToLowerInvariant()} " +
+                $"teammate_forecast={useMultiplayerPrediction.ToString().ToLowerInvariant()} " +
+                $"scenario_reevaluation={useMultiplayerPrediction.ToString().ToLowerInvariant()}");
+        }
         CombatBugReportExporter.RecordSearchPolicy(state, policy);
         return policy;
     }

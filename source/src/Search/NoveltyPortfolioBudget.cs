@@ -23,6 +23,32 @@ internal sealed record NoveltyPortfolioBudget(
         };
     }
 
+    public static SolverSearchProfile? CrossFamilyScout(
+        SolverSearchProfile explorationProfile,
+        SolverSearchProfile remainingProfile)
+    {
+        if (remainingProfile.SoftTimeBudgetMilliseconds < 2
+            || remainingProfile.MaxExpandedNodes < 2)
+        {
+            return null;
+        }
+
+        int timeBudget = Math.Min(
+            explorationProfile.SoftTimeBudgetMilliseconds,
+            remainingProfile.SoftTimeBudgetMilliseconds / 2);
+        int nodeBudget = Math.Min(
+            explorationProfile.MaxExpandedNodes,
+            remainingProfile.MaxExpandedNodes / 2);
+        if (timeBudget < 1 || nodeBudget < 1)
+            return null;
+
+        return explorationProfile with
+        {
+            SoftTimeBudgetMilliseconds = timeBudget,
+            MaxExpandedNodes = nodeBudget,
+        };
+    }
+
     public static SolverSearchProfile? Remaining(
         SolverSearchProfile profile, long elapsedMilliseconds, long expandedNodes)
     {

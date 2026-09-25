@@ -164,6 +164,11 @@ internal sealed class MethodMirrorRegistry<TBase, TContext>(MirrorMethodSpec met
     }
 
     /// <summary>
+    /// Resolves what <see cref="Invoke"/> would do for this receiver without invoking anything.
+    /// </summary>
+    public MirrorDispatchKind ResolveDispatchKind(TBase receiver) => Lookup(receiver.GetType()).Kind;
+
+    /// <summary>
     /// Invokes only an explicit exact-type registration, without resolving inference or unsupported fallbacks.
     /// </summary>
     /// <remarks>

@@ -33,9 +33,9 @@ internal sealed record SearchPolicySnapshot(
     public bool CurrentTurnOnly { get; init; }
 
     /// <summary>
-    /// Ranking objective is independent from route mechanics. Production multiplayer enables
-    /// the team objective; U2 differential checks can keep multiplayer route semantics while
-    /// deliberately using the single-player objective on an otherwise identical root.
+    /// Ranking objective is independent from route mechanics. Production multiplayer uses
+    /// the persisted prediction master switch: off keeps the single-player quality objective,
+    /// while on enables the experimental team objective on the same multiplayer root.
     /// </summary>
     public bool UseMultiplayerTeamObjective { get; init; }
 

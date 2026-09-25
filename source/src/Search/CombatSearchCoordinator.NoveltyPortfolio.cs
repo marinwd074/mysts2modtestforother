@@ -9,6 +9,7 @@ internal static partial class CombatSearchCoordinator
         SearchPolicySnapshot policy, SolverSearchProfile profile, Stopwatch clock,
         SolverPotionPolicy? potionOverride, CancellationToken cancellation,
         Action<SolverProgress>? progress, Action<SolverResult>? publish,
+        Func<SolverResult, SolverSearchProfile, SolverResult?>? runCrossFamilyScout,
         Func<SolverSearchProfile, SolverResult> solveBaseline)
     {
         SolverSearchProfile? explorationProfile = policy.NoveltyBudget.Exploration(profile, root.IsActEndingBoss);
@@ -40,8 +41,25 @@ internal static partial class CombatSearchCoordinator
         }
         bool settled = exploration != null && (exploration.ResultScope != SolverResultScope.SearchCompletion
             || !policy.PotionStrategy.HasForcedDirectives && HasReachedAcceptableBattleHpLoss(policy, exploration));
+        if (!settled && exploration != null && runCrossFamilyScout != null)
+        {
+            SolverSearchProfile? beforeScout = NoveltyPortfolioBudget.Remaining(
+                profile,
+                clock.ElapsedMilliseconds,
+                explorationExpanded);
+            SolverSearchProfile? scoutProfile = beforeScout == null
+                ? null
+                : NoveltyPortfolioBudget.CrossFamilyScout(explorationProfile, beforeScout);
+            if (scoutProfile != null)
+            {
+                SolverResult? scout = runCrossFamilyScout(exploration, scoutProfile);
+                if (scout != null && scout.ResultScope != SolverResultScope.SearchCompletion)
+                    return scout;
+            }
+        }
+        long portfolioExpanded = totals.Snapshot().ExpandedNodes - expandedBefore;
         SolverSearchProfile? remaining = NoveltyPortfolioBudget.Remaining(profile,
-            clock.ElapsedMilliseconds, explorationExpanded);
+            clock.ElapsedMilliseconds, portfolioExpanded);
         if (settled || remaining == null)
         {
             if (exploration == null)

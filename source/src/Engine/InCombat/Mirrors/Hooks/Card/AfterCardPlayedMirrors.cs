@@ -48,6 +48,12 @@ internal static class AfterCardPlayedMirrors
         LateRegistry.Invoke(listener, context);
     }
 
+    internal static MirrorDispatchKind ResolveDispatchKind(AbstractModel listener)
+        => Registry.ResolveDispatchKind(listener);
+
+    internal static MirrorDispatchKind ResolveLateDispatchKind(AbstractModel listener)
+        => LateRegistry.ResolveDispatchKind(listener);
+
     public static void CompleteOrAbort(
         CombatPredictionSimulator simulator,
         CardPlay cardPlay,
@@ -521,7 +527,7 @@ internal static class AfterCardPlayedMirrors
             return false;
         if (context.CombatState is not ICombatPredictionEffectSink effects)
             throw new InvalidOperationException("遗物属性效果缺少可写的预测状态。");
-        effects.ApplyPower(powerType, relic.Owner.Creature, amount, relic.Owner.Creature);
+        effects.ApplyPowerFromSource(powerType, relic.Owner.Creature, amount, relic.Owner.Creature, cardSource: null);
         return true;
     }
 
@@ -593,7 +599,7 @@ internal static class AfterCardPlayedMirrors
             return;
         if (context.CombatState is not ICombatPredictionEffectSink effects)
             throw new InvalidOperationException("激怒效果缺少可写的预测状态。");
-        effects.ApplyPower(typeof(StrengthPower), power.Owner, power.Amount, power.Owner);
+        effects.ApplyPowerFromSource(typeof(StrengthPower), power.Owner, power.Amount, power.Owner, cardSource: null);
     }
 
     private static void HandleGalvanicPower(GalvanicPower power, AfterCardPlayedMirrorContext context)
@@ -700,7 +706,7 @@ internal static class AfterCardPlayedMirrors
             return;
         if (context.CombatState is not ICombatPredictionEffectSink effects)
             throw new InvalidOperationException("湮灭效果缺少可写的预测状态。");
-        effects.ApplyPower(typeof(DoomPower), power.Owner, amount, power.Applier);
+        effects.ApplyPowerFromSource(typeof(DoomPower), power.Owner, amount, power.Applier, cardSource: null);
     }
 
     private static void HandlePanachePower(PanachePower power, AfterCardPlayedMirrorContext context)
@@ -753,7 +759,7 @@ internal static class AfterCardPlayedMirrors
             return;
         if (context.CombatState is not ICombatPredictionEffectSink effects)
             throw new InvalidOperationException("撕裂效果缺少可写的预测状态。");
-        effects.ApplyPower(typeof(StrengthPower), power.Owner, amount, power.Owner);
+        effects.ApplyPowerFromSource(typeof(StrengthPower), power.Owner, amount, power.Owner, cardSource: null);
     }
 
     private static void HandleSmoggyPower(SmoggyPower power, AfterCardPlayedMirrorContext context)
@@ -829,9 +835,9 @@ internal static class AfterCardPlayedMirrors
             throw new InvalidOperationException("温柔效果缺少可写的预测状态。");
         effects.RecordTenderCardPlayed(power.Owner);
         if (!context.Simulator.IsEnding)
-            effects.ApplyPower(typeof(StrengthPower), power.Owner, -1, power.Applier);
+            effects.ApplyPowerFromSource(typeof(StrengthPower), power.Owner, -1, power.Applier, cardSource: null);
         if (!context.Simulator.IsEnding)
-            effects.ApplyPower(typeof(DexterityPower), power.Owner, -1, power.Applier);
+            effects.ApplyPowerFromSource(typeof(DexterityPower), power.Owner, -1, power.Applier, cardSource: null);
     }
 
     private static void HandleVitalSparkPower(VitalSparkPower power, AfterCardPlayedMirrorContext context)
@@ -840,11 +846,12 @@ internal static class AfterCardPlayedMirrors
             return;
         if (context.CombatState is not ICombatPredictionEffectSink effects)
             throw new InvalidOperationException("生命火花效果缺少可写的预测状态。");
-        effects.ApplyPower(
+        effects.ApplyPowerFromSource(
             typeof(TaintedPower),
             context.PreviewCard.Owner.Creature,
             power.Amount,
-            applier: null);
+            applier: null,
+            cardSource: null);
     }
 
     private static void HandleWitheringPresencePower(WitheringPresencePower power, AfterCardPlayedMirrorContext context)
