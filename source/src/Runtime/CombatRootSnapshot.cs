@@ -67,9 +67,10 @@ internal sealed class CombatRootSnapshot
     /// </summary>
     public IReadOnlyList<MultiplayerTeammateForecastState> TeammateForecastStates { get; }
     /// <summary>
-    /// Immutable public multiplayer input captured with this root. Single-player and
-    /// read-only Probe roots carry a disabled context; background search never reads live
-    /// remote players or creatures through this property.
+    /// Immutable multiplayer boundary captured with this root. Default local-core multiplayer
+    /// keeps Carry Ranking disabled but still records WorldVersion, shared scaling hooks, and the
+    /// card multiplayer constraint required for exact continuation reuse. Single-player roots
+    /// carry the fully empty disabled context; background search never reads live remote objects.
     /// </summary>
     public MultiplayerCarryRankingContext CarryRankingContext { get; }
     internal int CapturedPlayerMaxHp(Player player)
@@ -195,7 +196,11 @@ internal sealed class CombatRootSnapshot
             ? MultiplayerCarryRankingContextCapture.Capture(
                 state,
                 MultiplayerWorldTracker.WorldVersion)
-            : MultiplayerCarryRankingContext.Disabled;
+            : multiplayerSearch
+                ? MultiplayerCarryRankingContextCapture.CaptureContinuationBoundary(
+                    state,
+                    MultiplayerWorldTracker.WorldVersion)
+                : MultiplayerCarryRankingContext.Disabled;
         SolverPerspective perspective = SolverPerspective.Capture(
             player,
             state.Players.Count,

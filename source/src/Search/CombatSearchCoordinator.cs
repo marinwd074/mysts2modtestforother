@@ -586,6 +586,7 @@ internal static partial class CombatSearchCoordinator
         List<BeamWidthPortfolioMemberCost> costs = [];
         BeamWidthPortfolioBaseline baseline = default;
         bool baselineObserved = false;
+        SolverResult? bestPublishedMember = null;
         long expandedByMembers = 0;
 
         long RemainingMilliseconds()
@@ -627,7 +628,21 @@ internal static partial class CombatSearchCoordinator
                     effectiveProfile.BeamWidth);
                 baselineObserved = true;
                 telemetry.RecordFirstRoutePublished(passClock.Elapsed.TotalMilliseconds);
+                bestPublishedMember = memberResult;
                 publishBaseline?.Invoke(memberResult);
+            }
+            else if (publishBaseline != null
+                     && bestPublishedMember != null
+                     && IsBetterPotionPolicyResult(root, policy, memberResult, bestPublishedMember))
+            {
+                bestPublishedMember = memberResult;
+                publishBaseline(memberResult);
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Test] BEAM_WIDTH_PORTFOLIO_EARLY_IMPROVEMENT " +
+                    $"beam={effectiveProfile.BeamWidth} " +
+                    $"second_rank_band={effectiveProfile.SecondRankBand} " +
+                    $"base_score_only={effectiveProfile.BaseScoreOnly} " +
+                    $"elapsed_ms={passClock.ElapsedMilliseconds}");
             }
             return new BeamWidthPortfolioRun<SolverResult>(
                 memberResult,

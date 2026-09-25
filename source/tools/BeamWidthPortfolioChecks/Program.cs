@@ -81,9 +81,9 @@ static BeamWidthPortfolioMemberSpec Width(int width) => new(width);
 static BeamWidthPortfolioMemberSpec Band(int width) => new(width, SecondRankBand: true);
 static BeamWidthPortfolioMemberSpec Base(int width) => new(width, BaseScoreOnly: true);
 
-// 1. Production membership: baseline first, the narrow (2/3) and wide (3/2) refinements, then the
-// second-rank-band member and the base-score-only member at the baseline width.
-Require(BeamWidthPortfolio.ProductionMembers(24, null).SequenceEqual([Width(24), Width(16), Width(36), Band(24), Base(24)]),
+// 1. Production membership: baseline first, then the second-rank-band diversity member,
+// followed by narrow/wide refinements and the base-score-only member.
+Require(BeamWidthPortfolio.ProductionMembers(24, null).SequenceEqual([Width(24), Band(24), Width(16), Width(36), Base(24)]),
     "Production default membership changed.");
 Require(BeamWidthPortfolio.ProductionMembers(45, null).SequenceEqual([Width(45), Width(30), Width(68), Band(45), Base(45)]),
     "Act-ending boss baseline membership changed.");

@@ -16,6 +16,23 @@ namespace CombatSolver;
 /// </summary>
 internal static class MultiplayerCarryRankingContextCapture
 {
+    internal static MultiplayerCarryRankingContext CaptureContinuationBoundary(
+        CombatState state,
+        long worldVersion)
+    {
+        if (!NGame.IsMainThread())
+            throw new InvalidOperationException(
+                "Multiplayer continuation boundary must be captured on the main thread.");
+
+        return MultiplayerCarryRankingContext.Create(
+            enabled: false,
+            worldVersion,
+            remotePlayers: [],
+            enemies: [],
+            state.MultiplayerScalingModel?.ShouldReceiveCombatHooks,
+            state.RunState.CardMultiplayerConstraint.ToString());
+    }
+
     internal static MultiplayerCarryRankingContext Capture(
         CombatState state,
         long worldVersion)

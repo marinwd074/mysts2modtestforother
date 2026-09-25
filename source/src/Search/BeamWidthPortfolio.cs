@@ -106,10 +106,11 @@ internal static class BeamWidthPortfolio
 
     /// <summary>
     /// 生产成员列表。首项强制是基线宽度（基线成员必须逐位等于今天的单次搜索），其后按给定顺序
-    /// 去重追加，丢掉小于 1 的值。<paramref name="configuredWidths" /> 为空时用默认的
-    /// [基线, 基线×2/3, 基线×3/2, 次段 基线, 基础分 基线]（四舍五入，例如基线 24 是
-    /// [24, 16, 36, 24+band, 24+base]，基线 135 是 [135, 90, 203, 135+band, 135+base]）；
-    /// 显式给出宽度列表时只有宽度成员，不追加次段与基础分成员。
+    /// 去重追加，丢掉小于 1 的值。<paramref name="configuredWidths" /> 为空时优先运行与基线同宽的
+    /// 次段成员，再运行窄/宽 Beam，最后运行基础分成员：
+    /// [基线, 次段 基线, 基线×2/3, 基线×3/2, 基础分 基线]。次段成员直接覆盖基线剪掉的下一排名带，
+    /// 比重复改变 Beam 宽度更适合尽早找回“当前回合好动作、长期路线稍弱”的候选。显式给出宽度列表时
+    /// 只有宽度成员，不追加次段与基础分成员。
     /// </summary>
     internal static IReadOnlyList<BeamWidthPortfolioMemberSpec> ProductionMembers(
         int baselineBeamWidth,
@@ -127,6 +128,7 @@ internal static class BeamWidthPortfolio
             }
             return members;
         }
+        members.Add(new BeamWidthPortfolioMemberSpec(baselineBeamWidth, SecondRankBand: true));
         foreach (int width in new[]
                  {
                      ScaledWidth(baselineBeamWidth, NarrowRefinementRatio),
@@ -137,7 +139,6 @@ internal static class BeamWidthPortfolio
             if (!members.Contains(member))
                 members.Add(member);
         }
-        members.Add(new BeamWidthPortfolioMemberSpec(baselineBeamWidth, SecondRankBand: true));
         members.Add(new BeamWidthPortfolioMemberSpec(baselineBeamWidth, BaseScoreOnly: true));
         return members;
     }
