@@ -997,6 +997,21 @@ Check(
         && qualityStrategySelection.HasDisputedRobustOverride,
     "Quality-first attribution distinguishes a disputed Robust scenario override from the shared-core baseline without changing any risk weight or search budget.");
 
+MultiplayerQualityLayerAttribution qualityBaselineLayer =
+    MultiplayerScenarioReevaluationPolicy.AttributeQualityLayer(1, 1, 1);
+MultiplayerQualityLayerAttribution qualityScenarioLayer =
+    MultiplayerScenarioReevaluationPolicy.AttributeQualityLayer(1, 3, 3);
+MultiplayerQualityLayerAttribution qualityChanceLayer =
+    MultiplayerScenarioReevaluationPolicy.AttributeQualityLayer(1, 3, 2);
+Check(
+    qualityBaselineLayer.OverrideLayer == "baseline"
+        && qualityBaselineLayer.FinalSelectedBaselineRank == 1
+        && qualityScenarioLayer.OverrideLayer == "scenario_robust"
+        && qualityScenarioLayer.ScenarioSelectedBaselineRank == 3
+        && qualityChanceLayer.OverrideLayer == "shadow_chance"
+        && qualityChanceLayer.FinalSelectedBaselineRank == 2,
+    "Quality-first final-layer attribution remains available when strict E4 pruning prevents a complete U4 strategy matrix, and it distinguishes later Shadow chance reranking from Robust reranking.");
+
 Check(
     MultiplayerScenarioReevaluationPolicy.SelectNominalToleranceExperimentIndex(
         u4RiskAbRanks,

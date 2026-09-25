@@ -549,6 +549,37 @@ internal sealed partial class CombatBeamSolver
                 .ThenBy(candidate => candidate.Features.ActionCount)
                 .ToList();
 
+            Dictionary<SearchNode, int>? qualityBaselineIndex = null;
+            int qualityScenarioSelectedBaselineRank = 1;
+            if (qualityBaselineIndex != null && selected.Count > 0)
+            {
+                int finalSelectedBaselineRank =
+                    qualityBaselineIndex[selected[0].Node] + 1;
+                MultiplayerQualityLayerAttribution qualityLayer =
+                    MultiplayerScenarioReevaluationPolicy.AttributeQualityLayer(
+                        baselineWinnerRank: 1,
+                        qualityScenarioSelectedBaselineRank,
+                        finalSelectedBaselineRank);
+                diagnostics.Info(
+                    $"[CombatSolver/Multiplayer] MP_QUALITY_LAYER " +
+                    $"baseline_winner_rank={qualityLayer.BaselineWinnerRank} " +
+                    $"scenario_selected_baseline_rank={qualityLayer.ScenarioSelectedBaselineRank} " +
+                    $"final_selected_baseline_rank={qualityLayer.FinalSelectedBaselineRank} " +
+                    $"scenario_rerank={scenarioReevaluationEnabled.ToString().ToLowerInvariant()} " +
+                    $"chance_rerank={chanceAggregationEnabled.ToString().ToLowerInvariant()} " +
+                    $"override_layer={qualityLayer.OverrideLayer}");
+            }
+
+            if (emitDiagnostics
+                && useTeamObjective
+                && selected.Count > 0)
+            {
+                qualityBaselineIndex = new Dictionary<SearchNode, int>(
+                    ReferenceEqualityComparer.Instance);
+                for (int index = 0; index < selected.Count; index++)
+                    qualityBaselineIndex[selected[index].Node] = index;
+            }
+
             ScenarioDecisionSummary? selectedScenarioDecision = null;
             ScenarioDecisionSummary? u4RobustDecision = null;
             ScenarioDecisionSummary? u4NominalDecision = null;
@@ -803,6 +834,12 @@ internal sealed partial class CombatBeamSolver
                                 startTurnNumber) != winningDecisionKey))
                         .ToList();
                 }
+            }
+
+            if (qualityBaselineIndex != null && selected.Count > 0)
+            {
+                qualityScenarioSelectedBaselineRank =
+                    qualityBaselineIndex[selected[0].Node] + 1;
             }
 
             ChanceDecisionSummary? selectedChanceDecision = null;

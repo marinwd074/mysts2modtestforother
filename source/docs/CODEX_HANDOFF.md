@@ -35,6 +35,7 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - 历史 ANGER 样本：未完成多人路线曾被 `AngerCopiesGenerated` 的最终排序过早惩罚；已有定向修复。
 - 历史 X1 T3 空推荐：等价质量下 `ActionCount` 短路线曾压过当前回合实际出牌；已有定向修复。
 - Beam retention A/B 诊断已接入：同一真实候选池同时观察 TeamObjective 与 legacy 单人排序，不改变生产选择。
+- 最终排序归因新增始终可用的 `MP_QUALITY_LAYER`：记录原 baseline 胜者、Scenario 后的原始 baseline rank、Chance 后最终 baseline rank，并直接标记 `baseline|scenario_robust|shadow_chance`。它不依赖 U4 全矩阵完整，因此 E4 严格提前淘汰时也能判层；原 `MP_QUALITY_SORTING` 继续只承担完整 U4 三策略对照。
 - CEREMONIAL_BEAST T6：VICIOUS 的精确模拟原本存在，但战略估值低估未来抽牌收益；现按可达 Vulnerable 触发次数计入 `CardAccessPotential`，相关合同/pinned 已通过。
 - Headbutt immediate Choice 共用 `NativeChoiceRuntime`；当前实机样本已有完整自动选牌链。另一个跨回合 TurnStart Choice 缺口已独立补上 planned choice replay。
 

@@ -84,6 +84,12 @@ internal readonly record struct MultiplayerScenarioStrategySelection(
         && (!RobustAgreesWithNominal || !RobustAgreesWithBoundedRisk);
 }
 
+internal readonly record struct MultiplayerQualityLayerAttribution(
+    int BaselineWinnerRank,
+    int ScenarioSelectedBaselineRank,
+    int FinalSelectedBaselineRank,
+    string OverrideLayer);
+
 internal readonly record struct MultiplayerScenarioRiskMetrics(
     int ScenarioCount,
     double NominalReferenceLossEquivalent,
@@ -456,6 +462,32 @@ internal static class MultiplayerScenarioReevaluationPolicy
         => rank.MeanLossEquivalent
             + BoundedRiskWorstGapWeight
             * Math.Max(0d, rank.WorstLossEquivalent - rank.MeanLossEquivalent);
+
+    internal static MultiplayerQualityLayerAttribution AttributeQualityLayer(
+        int baselineWinnerRank,
+        int scenarioSelectedBaselineRank,
+        int finalSelectedBaselineRank)
+    {
+        if (baselineWinnerRank < 1
+            || scenarioSelectedBaselineRank < 1
+            || finalSelectedBaselineRank < 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(baselineWinnerRank),
+                "Quality-layer ranks are one-based and must be positive.");
+        }
+
+        string overrideLayer = finalSelectedBaselineRank != scenarioSelectedBaselineRank
+            ? "shadow_chance"
+            : scenarioSelectedBaselineRank != baselineWinnerRank
+                ? "scenario_robust"
+                : "baseline";
+        return new MultiplayerQualityLayerAttribution(
+            baselineWinnerRank,
+            scenarioSelectedBaselineRank,
+            finalSelectedBaselineRank,
+            overrideLayer);
+    }
 
     internal static MultiplayerScenarioStrategySelection CompareStrategies(
         IReadOnlyList<MultiplayerScenarioDecisionRank> ranks,
