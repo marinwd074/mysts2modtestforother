@@ -105,7 +105,7 @@ foreach ($scenario in @('simple', 'draw_energy')) {
         "$($baseline.combatEndedTurn)" -ceq "$($early.combatEndedTurn)" -and
         "$($baseline.boundaryReason)" -ceq "$($early.boundaryReason)"
     $sameWork =
-        [int]$baseline.totalExpandedNodes -eq [int]$early.totalExpandedNodes -and
+        [long]$baseline.totalExpandedNodes -eq [long]$early.totalExpandedNodes -and
         [long]$baseline.totalTransitionCount -eq [long]$early.totalTransitionCount
 
     $baselineLagMs = [double]$baseline.publishedMs - [double]$baseline.selectedMs
@@ -129,7 +129,7 @@ foreach ($scenario in @('simple', 'draw_energy')) {
         baselineSelectedToPublishedMs = [math]::Round($baselineLagMs, 3)
         e1SelectedToPublishedMs = [math]::Round($earlyLagMs, 3)
         allowedE1LagMs = [math]::Round($allowedEarlyLagMs, 3)
-        totalExpandedNodes = [int]$early.totalExpandedNodes
+        totalExpandedNodes = [long]$early.totalExpandedNodes
         totalTransitionCount = [long]$early.totalTransitionCount
     }
 }

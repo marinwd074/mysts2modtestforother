@@ -305,7 +305,7 @@ internal static class Program
         int ProjectedBattlePotionCount,
         int? CombatEndedTurn,
         string BoundaryReason,
-        int TotalExpandedNodes,
+        long TotalExpandedNodes,
         long TotalTransitionCount,
         long CandidateId,
         int SearchMemberId,
