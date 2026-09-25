@@ -2653,8 +2653,7 @@ internal sealed partial class CombatBeamSolver
                 bool yielded = MoveNextMeasured();
                 if (_state.CommittedParentsInCurrentStep > 0)
                 {
-                    _owner.policy.PortfolioTelemetry?.RecordSearchMemberFirstWork(
-                        _owner._run.SearchEfficiencyMemberId);
+                    _owner.RecordSearchEfficiencyFirstWork();
                 }
                 if (!yielded)
                 {

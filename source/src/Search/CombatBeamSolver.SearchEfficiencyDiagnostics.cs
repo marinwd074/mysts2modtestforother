@@ -43,6 +43,10 @@ internal sealed partial class CombatBeamSolver
             _run.Expanded,
             _run.TransitionCount);
 
+    private void RecordSearchEfficiencyFirstWork()
+        => policy.PortfolioTelemetry?.RecordSearchMemberFirstWork(
+            _searchEfficiencyMemberId);
+
     private CandidateOrigin? EnsureCandidateOrigin(SearchNode node)
     {
         BeamWidthPortfolioTelemetry? telemetry = policy.PortfolioTelemetry;
