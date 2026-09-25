@@ -772,6 +772,9 @@ internal static class Program
             && fixedRun.PotionRequiredTransitions[0] > 0
             && fixedRun.PotionRequiredTransitions[1] > 0
             && fixedRun.PotionRequiredFirstWorkMilliseconds[1] < fixedRun.PotionRequiredCompletedMilliseconds[0];
+        bool adaptiveSameFixedWork = fixedRun.SearchMemberExpanded == adaptiveRun.SearchMemberExpanded
+            && fixedRun.SearchMemberTransitions == adaptiveRun.SearchMemberTransitions
+            && fixedRun.PotionRequiredTransitions.SequenceEqual(adaptiveRun.PotionRequiredTransitions);
         bool adaptiveInterleaved = adaptiveRun.PotionRequiredMembers >= 2
             && adaptiveRun.PotionRequiredTransitions[0] > 0
             && adaptiveRun.PotionRequiredTransitions[1] > 0
@@ -779,13 +782,15 @@ internal static class Program
 
         Require(
             serial.Pass && fixedRun.Pass && adaptiveRun.Pass
-                && sameQuality && adaptiveSameQuality && sameFixedWork
+                && sameQuality && adaptiveSameQuality
+                && sameFixedWork && adaptiveSameFixedWork
                 && interleaved && adaptiveInterleaved,
             "E3 scheduling diverged from serial/fixed Smart quality/work or starved a later potion member.");
 
         return new(
             Pass: serial.Pass && fixedRun.Pass && adaptiveRun.Pass
-                && sameQuality && adaptiveSameQuality && sameFixedWork
+                && sameQuality && adaptiveSameQuality
+                && sameFixedWork && adaptiveSameFixedWork
                 && interleaved && adaptiveInterleaved,
             Serial: serial,
             FixedRoundRobin: fixedRun,
@@ -793,6 +798,7 @@ internal static class Program
             SameQuality: sameQuality,
             AdaptiveSameQuality: adaptiveSameQuality,
             SameFixedWork: sameFixedWork,
+            AdaptiveSameFixedWork: adaptiveSameFixedWork,
             LaterMemberReceivedWork: interleaved,
             AdaptiveLaterMemberReceivedWork: adaptiveInterleaved);
     }
@@ -1136,6 +1142,7 @@ internal static class Program
         bool SameQuality,
         bool AdaptiveSameQuality,
         bool SameFixedWork,
+        bool AdaptiveSameFixedWork,
         bool LaterMemberReceivedWork,
         bool AdaptiveLaterMemberReceivedWork);
 

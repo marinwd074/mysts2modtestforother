@@ -1605,13 +1605,16 @@ internal static partial class CombatSearchCoordinator
             root,
             policy,
             potionFree);
+
         Dictionary<int, CombatBeamSolver.SearchMemberExecutionSession> active = [];
         Dictionary<int, SolverResult> completed = [];
         HashSet<int> missing = [];
         Dictionary<int, int> slices = [];
-        Dictionary<int, int> improvementCredits = [];
+        Dictionary<int, double> marginalRates = [];
         Dictionary<int, SolverInterimResult> observedIncumbents = [];
-        SolverInterimResult? globalLiveIncumbent = null;
+        Dictionary<int, bool> importantCandidates = [];
+        Dictionary<int, E3AdaptivePriority> pendingPriorities = [];
+        int epoch = 0;
 
         void StartLayer(int potionCount)
         {
@@ -1630,7 +1633,9 @@ internal static partial class CombatSearchCoordinator
                 primaryIncumbent: primaryIncumbent);
             active.Add(potionCount, solver.CreateExecutionSession());
             slices[potionCount] = 0;
-            improvementCredits[potionCount] = 0;
+            marginalRates[potionCount] = 0d;
+            importantCandidates[potionCount] = false;
+            pendingPriorities[potionCount] = E3AdaptivePriority.None;
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] E3_PORTFOLIO_MEMBER_START kind=smart_potion " +
                 $"potion_count={potionCount} resident={active.Count}/{residentLimit} " +
@@ -1665,28 +1670,37 @@ internal static partial class CombatSearchCoordinator
 
         void ObserveAdaptiveSignal(
             int potionCount,
-            CombatBeamSolver.SearchMemberExecutionSession session)
+            CombatBeamSolver.SearchMemberExecutionSession session,
+            double exclusiveMilliseconds)
         {
-            if (!adaptive || session.CurrentBestResultForScheduling is not { } current)
+            if (!adaptive)
                 return;
 
-            int credits = 0;
-            if (!observedIncumbents.TryGetValue(potionCount, out SolverInterimResult? previous)
-                || IsBetterPotionPolicyResult(policy.TheftPolicy, current, previous))
-            {
+            observedIncumbents.TryGetValue(potionCount, out SolverInterimResult? previous);
+            SolverInterimResult? current = session.CurrentBestResultForScheduling;
+            E3AdaptiveObservation observation = E3AdaptiveBudgetPolicy.Observe(
+                previous,
+                current,
+                marginalRates.GetValueOrDefault(potionCount),
+                exclusiveMilliseconds);
+            marginalRates[potionCount] = observation.MarginalImprovementRate;
+            if (current != null)
                 observedIncumbents[potionCount] = current;
-                credits++;
-            }
-            if (globalLiveIncumbent == null
-                || IsBetterPotionPolicyResult(policy.TheftPolicy, current, globalLiveIncumbent))
+            if (observation.ImportantImprovement)
+                importantCandidates[potionCount] = true;
+            if (observation.Priority > pendingPriorities.GetValueOrDefault(potionCount))
+                pendingPriorities[potionCount] = observation.Priority;
+        }
+
+        void ObserveSchedulingBoundary()
+        {
+            if (policy.MemoryPressureSignal.ConservativeParallelismRequired && residentLimit > 1)
             {
-                globalLiveIncumbent = current;
-                credits += 2;
-            }
-            if (credits > 0)
-            {
-                improvementCredits[potionCount] = checked(
-                    improvementCredits.GetValueOrDefault(potionCount) + credits);
+                residentLimit = 1;
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Test] E3_PORTFOLIO_MEMORY " +
+                    $"scheduler={scheduler} resident_limit=1 active={active.Count} " +
+                    $"remaining_bytes={policy.MemoryPressureSignal.RemainingBytes}");
             }
         }
 
@@ -1699,6 +1713,7 @@ internal static partial class CombatSearchCoordinator
                 return null;
             }
 
+            double exclusiveBefore = session.ExclusiveElapsedForScheduling.TotalMilliseconds;
             SearchStepResult step;
             try
             {
@@ -1716,8 +1731,12 @@ internal static partial class CombatSearchCoordinator
                 return null;
             }
 
+            double exclusiveDelta = Math.Max(
+                0d,
+                session.ExclusiveElapsedForScheduling.TotalMilliseconds - exclusiveBefore);
             slices[potionCount] = checked(slices.GetValueOrDefault(potionCount) + 1);
-            ObserveAdaptiveSignal(potionCount, session);
+            ObserveAdaptiveSignal(potionCount, session, exclusiveDelta);
+            ObserveSchedulingBoundary();
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] E3_PORTFOLIO_SLICE kind=smart_potion " +
                 $"potion_count={potionCount} status={step.Status} " +
@@ -1725,8 +1744,11 @@ internal static partial class CombatSearchCoordinator
                 $"expanded={session.ExpandedNodesForScheduling} " +
                 $"transitions={session.TransitionCountForScheduling} " +
                 $"exclusive_ms={session.ExclusiveElapsedForScheduling.TotalMilliseconds:F3} " +
-                $"slices={slices[potionCount]} credits={improvementCredits.GetValueOrDefault(potionCount)} " +
-                $"resident={active.Count}/{residentLimit} scheduler={scheduler}");
+                $"slice_exclusive_ms={exclusiveDelta:F3} " +
+                $"marginal_rate={marginalRates.GetValueOrDefault(potionCount):F6} " +
+                $"important={importantCandidates.GetValueOrDefault(potionCount).ToString().ToLowerInvariant()} " +
+                $"priority={pendingPriorities.GetValueOrDefault(potionCount)} " +
+                $"slices={slices[potionCount]} resident={active.Count}/{residentLimit} scheduler={scheduler}");
 
             if (step.Status == SearchStepStatus.Canceled)
             {
@@ -1828,7 +1850,8 @@ internal static partial class CombatSearchCoordinator
         {
             while (active.Count > 0)
             {
-                // Hard fairness floor: every resident member receives one fixed-work slice each epoch.
+                epoch++;
+                // Hard exploration floor: every resident member gets one transition-bounded slice.
                 foreach (int potionCount in active.Keys.OrderBy(value => value).ToArray())
                 {
                     if (searchCancellationToken.IsCancellationRequested)
@@ -1852,18 +1875,26 @@ internal static partial class CombatSearchCoordinator
                 {
                     E3AdaptiveMemberSignal[] signals = active.Keys
                         .OrderBy(value => value)
-                        .Select(potionCount => new E3AdaptiveMemberSignal(
+                        .Select((potionCount, index) => new E3AdaptiveMemberSignal(
                             potionCount,
                             slices.GetValueOrDefault(potionCount),
-                            improvementCredits.GetValueOrDefault(potionCount)))
+                            ExplorationDue: false,
+                            ImportantCandidate: importantCandidates.GetValueOrDefault(potionCount),
+                            Priority: pendingPriorities.GetValueOrDefault(potionCount),
+                            MarginalImprovementRate: marginalRates.GetValueOrDefault(potionCount),
+                            TieOrder: index))
                         .ToArray();
                     int? bonusPotionCount = E3AdaptiveBudgetPolicy.SelectBonusMember(signals);
                     if (bonusPotionCount is { } bonus && active.ContainsKey(bonus))
                     {
                         policy.Diagnostics.Info(
-                            $"[CombatSolver/Test] E3_ADAPTIVE_BUDGET bonus_member={bonus} " +
-                            $"credits={improvementCredits.GetValueOrDefault(bonus)} " +
+                            $"[CombatSolver/Test] E3_ADAPTIVE_BUDGET epoch={epoch} bonus_member={bonus} " +
+                            $"priority={pendingPriorities.GetValueOrDefault(bonus)} " +
+                            $"important={importantCandidates.GetValueOrDefault(bonus).ToString().ToLowerInvariant()} " +
+                            $"marginal_rate={marginalRates.GetValueOrDefault(bonus):F6} " +
                             $"slices={slices.GetValueOrDefault(bonus)} active={active.Count}");
+                        importantCandidates[bonus] = false;
+                        pendingPriorities[bonus] = E3AdaptivePriority.None;
                         if (StepLayer(bonus) is { } takeover)
                             return takeover;
                         if (deadlineExpired)
@@ -1871,9 +1902,6 @@ internal static partial class CombatSearchCoordinator
                         if (CommitCompletedInOrder() is { } settledAfterBonus)
                             return settledAfterBonus;
                     }
-
-                    foreach (int potionCount in improvementCredits.Keys.ToArray())
-                        improvementCredits[potionCount] = 0;
                 }
 
                 FillResidentSet();

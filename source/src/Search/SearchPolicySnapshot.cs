@@ -95,8 +95,9 @@ internal sealed record SearchPolicySnapshot(
     public bool UseE3FixedPortfolioScheduling { get; init; }
 
     /// <summary>
-    /// E3B 实验开关：固定轮转的公平 slice 之后，允许最近产生/改进完整胜利 incumbent
-    /// 的成员多拿至多一个 bonus slice。默认关闭，最终 Smart 提交顺序不变。
+    /// E3B 实验开关：固定轮转仍提供硬探索份额；额外 slice 按同一硬约束类别内的
+    /// EMA 单位独占计算收益率分配，完整胜利/消除死亡风险使用独立优先级。
+    /// 默认关闭，最终 Smart 提交顺序不变。
     /// </summary>
     public bool UseE3AdaptivePortfolioScheduling { get; init; }
 
