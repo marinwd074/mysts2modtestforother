@@ -27,17 +27,32 @@ internal sealed class SolvedRouteCache(string path)
         if (!MultiplayerLocalCrossTurnContracts.CanUsePersistentRouteCache(policy.RoutePolicy))
             return Disabled;
         PacketWriter writer = new() { WarnOnGrow = false };
-        NetFullCombatState native = NetFullCombatState.FromRun(state.RunState, justFinishedAction: null);
-        // These network sequencing counters change on reload without changing combat.
-        native.nextChoiceIds.Clear();
-        native.nextRewardIds.Clear();
-        native.Serialize(writer);
-        foreach (var player in state.Players)
-            NetFullCombatState.CombatPileState.From(player.Deck).Serialize(writer);
+        bool localMultiplayerCore =
+            policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore;
+        if (localMultiplayerCore)
+        {
+            // The default multiplayer solver deliberately ignores teammate private state.
+            // Keep the cache identity aligned with that search scope: the continuation stamp
+            // already captures local combat state, enemies and RNG, while this adds the local
+            // permanent deck without serializing the full multiplayer packet.
+            NetFullCombatState.CombatPileState.From(root.PlayerIdentity.Deck).Serialize(writer);
+        }
+        else
+        {
+            NetFullCombatState native =
+                NetFullCombatState.FromRun(state.RunState, justFinishedAction: null);
+            // These network sequencing counters change on reload without changing combat.
+            native.nextChoiceIds.Clear();
+            native.nextRewardIds.Clear();
+            native.Serialize(writer);
+            foreach (var player in state.Players)
+                NetFullCombatState.CombatPileState.From(player.Deck).Serialize(writer);
+        }
         writer.ZeroByteRemainder();
         byte[] identity = JsonSerializer.SerializeToUtf8Bytes(new
         {
-            Schema = 1,
+            Schema = 2,
+            Scope = policy.RoutePolicy,
             Solver = typeof(SolvedRouteCache).Module.ModuleVersionId,
             Game = typeof(CombatState).Module.ModuleVersionId,
             Mods = ModManager.Mods.Select(mod => new
