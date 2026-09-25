@@ -21,7 +21,31 @@ $required = @(
     '.github/workflows/compatibility.yml',
     '.github/workflows/pinned-release-build.yml',
     '.github/workflows/release.yml',
-    'source/docs/REPOSITORY_MAINTENANCE.md'
+    'source/docs/REPOSITORY_MAINTENANCE.md',
+    '.github/README.md',
+    '.github/workflows/README.md',
+    'game-body/README.md',
+    'source/README.md',
+    'source/docs/README.md',
+    'source/docs/baseline/README.md',
+    'source/docs/compat/README.md',
+    'source/docs/multiplayer/README.md',
+    'source/src/README.md',
+    'source/src/Api/README.md',
+    'source/src/Compatibility/README.md',
+    'source/src/Diagnostics/README.md',
+    'source/src/Engine/README.md',
+    'source/src/Engine/Common/README.md',
+    'source/src/Engine/InCombat/README.md',
+    'source/src/Prediction/README.md',
+    'source/src/Replay/README.md',
+    'source/src/Runtime/README.md',
+    'source/src/Search/README.md',
+    'source/src/Strategy/README.md',
+    'source/src/Testing/README.md',
+    'source/src/UI/README.md',
+    'source/tools/README.md',
+    'source/tools/multiplayer-lab/README.md'
 )
 
 $missing = @($required | Where-Object { $_ -notin $tracked })

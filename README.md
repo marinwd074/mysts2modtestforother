@@ -79,9 +79,14 @@ Contribution and validation rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Repository layout
 
-- `source/`: active code, tests, build tooling, and current documentation.
-- `game-body/`: pinned STS2 0.107.1 compatibility snapshot used by CI/local verification.
-- `.github/`: CI, issue forms, PR template, and tag-release automation.
+Every architectural directory has a local `README.md` describing its ownership and boundaries.
+
+- [`source/`](source/README.md): active project.
+  - [`source/src/`](source/src/README.md): production architecture and game-internal tests.
+  - [`source/docs/`](source/docs/README.md): current documentation truth sources.
+  - [`source/tools/`](source/tools/README.md): build, validation, harnesses and research tooling.
+- [`game-body/`](game-body/README.md): pinned STS2 0.107.1 compatibility snapshot used by CI/local verification.
+- [`.github/`](.github/README.md): CI, issue forms, PR template and release automation.
 
 Runtime logs, generated benchmark results, problem ZIPs, temporary evidence, `bin/`, `obj/`, `.local/`, and `artifacts/` are intentionally excluded from the active Git tree. See [repository maintenance rules](source/docs/REPOSITORY_MAINTENANCE.md).
 
