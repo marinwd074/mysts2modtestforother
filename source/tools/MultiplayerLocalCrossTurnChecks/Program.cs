@@ -634,6 +634,218 @@ Check(
         && !u3InterruptedDecision.CompleteCoverage,
     "U3 matrix records Completed/Terminal cells as complete, counts shared planner work once plus scenario-specific replay work, and an Unknown budget-interrupted cell cannot masquerade as full scenario coverage.");
 
+MultiplayerScenarioOutcome[] e4IncumbentOutcomes =
+[
+    new(
+        ShadowTeammateScenarioKind.Aggressive,
+        CompleteVictory: false,
+        AllPlayersAlive: true,
+        LossEquivalent: 0.14d,
+        WorstPlayerLossRatio: 0.10d,
+        TeamLossRatio: 0.09d,
+        EnemyDurabilityRatio: 0.28d),
+    new(
+        ShadowTeammateScenarioKind.Defensive,
+        CompleteVictory: false,
+        AllPlayersAlive: true,
+        LossEquivalent: 0.16d,
+        WorstPlayerLossRatio: 0.11d,
+        TeamLossRatio: 0.10d,
+        EnemyDurabilityRatio: 0.32d),
+    new(
+        ShadowTeammateScenarioKind.Conserve,
+        CompleteVictory: false,
+        AllPlayersAlive: true,
+        LossEquivalent: 0.18d,
+        WorstPlayerLossRatio: 0.12d,
+        TeamLossRatio: 0.11d,
+        EnemyDurabilityRatio: 0.36d),
+    new(
+        ShadowTeammateScenarioKind.NoAction,
+        CompleteVictory: false,
+        AllPlayersAlive: true,
+        LossEquivalent: 0.20d,
+        WorstPlayerLossRatio: 0.13d,
+        TeamLossRatio: 0.12d,
+        EnemyDurabilityRatio: 0.40d),
+];
+MultiplayerScenarioDecisionRank e4IncumbentRank =
+    MultiplayerScenarioReevaluationPolicy.Aggregate(e4IncumbentOutcomes);
+MultiplayerScenarioDecisionEvaluation e4IncumbentDecision = new(
+    "e4-incumbent",
+    MultiplayerScenarioReevaluationPolicy.ScenarioSpecs
+        .Select(spec => new MultiplayerScenarioEvaluation(
+            spec,
+            MultiplayerScenarioEvaluationStatus.Completed,
+            e4IncumbentOutcomes.First(outcome => outcome.Kind == spec.Kind),
+            ExpandedBranches: 1))
+        .ToArray());
+
+IReadOnlyList<MultiplayerScenarioSpec> e4PressureOrder =
+    MultiplayerScenarioReevaluationPolicy.StrictEvaluationOrder(
+        e4IncumbentDecision);
+Check(
+    e4PressureOrder[0].Kind == ShadowTeammateScenarioKind.NoAction
+        && e4PressureOrder[^1].Kind == ShadowTeammateScenarioKind.Aggressive,
+    "E4 strict reevaluation visits the incumbent's most stressful fixed lane first without changing the ScenarioSpec set.");
+
+MultiplayerScenarioOutcome[] e4LateFlipOutcomes =
+[
+    new(
+        ShadowTeammateScenarioKind.Aggressive,
+        CompleteVictory: false,
+        AllPlayersAlive: true,
+        LossEquivalent: 0.30d,
+        WorstPlayerLossRatio: 0.15d,
+        TeamLossRatio: 0.14d,
+        EnemyDurabilityRatio: 0.42d),
+    new(
+        ShadowTeammateScenarioKind.Defensive,
+        CompleteVictory: false,
+        AllPlayersAlive: true,
+        LossEquivalent: 0.12d,
+        WorstPlayerLossRatio: 0.08d,
+        TeamLossRatio: 0.07d,
+        EnemyDurabilityRatio: 0.24d),
+    new(
+        ShadowTeammateScenarioKind.Conserve,
+        CompleteVictory: false,
+        AllPlayersAlive: true,
+        LossEquivalent: 0.11d,
+        WorstPlayerLossRatio: 0.08d,
+        TeamLossRatio: 0.07d,
+        EnemyDurabilityRatio: 0.22d),
+    new(
+        ShadowTeammateScenarioKind.NoAction,
+        CompleteVictory: false,
+        AllPlayersAlive: true,
+        LossEquivalent: 0.10d,
+        WorstPlayerLossRatio: 0.07d,
+        TeamLossRatio: 0.06d,
+        EnemyDurabilityRatio: 0.20d),
+];
+List<MultiplayerScenarioOutcome> e4LateFlipPartial = [];
+foreach (MultiplayerScenarioSpec spec in e4PressureOrder.Take(3))
+{
+    e4LateFlipPartial.Add(
+        e4LateFlipOutcomes.First(outcome => outcome.Kind == spec.Kind));
+}
+MultiplayerScenarioDecisionRank e4OptimisticBeforeLateFlip =
+    MultiplayerScenarioReevaluationPolicy.StrictOptimisticLowerBound(
+        e4LateFlipPartial);
+Check(
+    double.IsNegativeInfinity(e4OptimisticBeforeLateFlip.MeanLossEquivalent)
+        && !MultiplayerScenarioReevaluationPolicy.CanStrictlyEliminate(
+            e4LateFlipPartial,
+            e4IncumbentRank,
+            out _),
+    "E4 keeps unknown mean cost at negative infinity and cannot prune a candidate whose unseen final lane could still preserve or improve the Robust result.");
+
+e4LateFlipPartial.Add(
+    e4LateFlipOutcomes.First(outcome =>
+        outcome.Kind == e4PressureOrder[^1].Kind));
+Check(
+    MultiplayerScenarioReevaluationPolicy.CanStrictlyEliminate(
+        e4LateFlipPartial,
+        e4IncumbentRank,
+        out string e4LateFlipReason)
+        && e4LateFlipReason == "worst_loss_bound"
+        && MultiplayerScenarioReevaluationPolicy.Compare(
+            e4IncumbentRank,
+            MultiplayerScenarioReevaluationPolicy.Aggregate(
+                e4LateFlipOutcomes)) < 0,
+    "E4 late-flip counterexample evaluates the final unseen lane before rejecting the candidate; early agreement alone never triggers strict stopping.");
+
+MultiplayerScenarioOutcome[] e4ImmediateLoserOutcomes =
+    e4IncumbentOutcomes
+        .Select(outcome => outcome.Kind == ShadowTeammateScenarioKind.NoAction
+            ? outcome with
+            {
+                LossEquivalent = 0.50d,
+                WorstPlayerLossRatio = 0.40d,
+                TeamLossRatio = 0.35d,
+                EnemyDurabilityRatio = 0.70d,
+            }
+            : outcome with
+            {
+                LossEquivalent = Math.Max(0d, outcome.LossEquivalent - 0.02d),
+            })
+        .ToArray();
+MultiplayerScenarioOutcome[][] e4EnumerableMatrix =
+[
+    e4IncumbentOutcomes,
+    e4LateFlipOutcomes,
+    e4IncumbentOutcomes.ToArray(),
+    e4ImmediateLoserOutcomes,
+];
+MultiplayerScenarioDecisionRank[] e4FullRanks =
+    e4EnumerableMatrix
+        .Select(MultiplayerScenarioReevaluationPolicy.Aggregate)
+        .ToArray();
+int e4FullWinner =
+    MultiplayerScenarioReevaluationPolicy.SelectPreferredIndex(
+        MultiplayerScenarioRiskStrategy.Robust,
+        e4FullRanks);
+int e4StrictWinner = 0;
+int e4StrictSkippedReplays = 0;
+int[] e4StrictEvaluatedLanes = new int[e4EnumerableMatrix.Length];
+for (int candidateIndex = 1;
+     candidateIndex < e4EnumerableMatrix.Length;
+     candidateIndex++)
+{
+    MultiplayerScenarioDecisionRank currentIncumbent =
+        e4FullRanks[e4StrictWinner];
+    MultiplayerScenarioDecisionEvaluation currentIncumbentEvaluation = new(
+        $"e4-incumbent-{e4StrictWinner}",
+        MultiplayerScenarioReevaluationPolicy.ScenarioSpecs
+            .Select(spec => new MultiplayerScenarioEvaluation(
+                spec,
+                MultiplayerScenarioEvaluationStatus.Completed,
+                e4EnumerableMatrix[e4StrictWinner]
+                    .First(outcome => outcome.Kind == spec.Kind),
+                ExpandedBranches: 1))
+            .ToArray());
+    List<MultiplayerScenarioOutcome> partial = [];
+    bool eliminated = false;
+    IReadOnlyList<MultiplayerScenarioSpec> order =
+        MultiplayerScenarioReevaluationPolicy.StrictEvaluationOrder(
+            currentIncumbentEvaluation);
+    for (int scenarioIndex = 0; scenarioIndex < order.Count; scenarioIndex++)
+    {
+        partial.Add(
+            e4EnumerableMatrix[candidateIndex]
+                .First(outcome => outcome.Kind == order[scenarioIndex].Kind));
+        e4StrictEvaluatedLanes[candidateIndex]++;
+        if (MultiplayerScenarioReevaluationPolicy.CanStrictlyEliminate(
+                partial,
+                currentIncumbent,
+                out _))
+        {
+            e4StrictSkippedReplays += order.Count - scenarioIndex - 1;
+            eliminated = true;
+            break;
+        }
+    }
+
+    if (!eliminated
+        && MultiplayerScenarioReevaluationPolicy.Compare(
+            e4FullRanks[candidateIndex],
+            currentIncumbent) < 0)
+    {
+        e4StrictWinner = candidateIndex;
+    }
+}
+Check(
+    e4StrictWinner == e4FullWinner
+        && e4StrictWinner == 0
+        && e4StrictEvaluatedLanes[1]
+            == MultiplayerScenarioReevaluationPolicy.MaximumScenariosPerDecision
+        && e4StrictEvaluatedLanes[2]
+            == MultiplayerScenarioReevaluationPolicy.MaximumScenariosPerDecision
+        && e4StrictEvaluatedLanes[3] == 1
+        && e4StrictSkippedReplays == 3,
+    "E4 strict progressive reevaluation chooses the same Robust winner and baseline tie-break as full enumeration while skipping only lanes whose best possible completion is already dominated.");
+
 IReadOnlyList<ShadowTeammateScenarioChoice> orderDiversityChoices =
     ShadowTeammateScenarioPolicy.SelectProtected(
         teammateScenarioObservations,
