@@ -38,7 +38,10 @@ internal readonly record struct MultiplayerScenarioEvaluation(
 internal sealed record MultiplayerScenarioDecisionEvaluation(
     string DecisionKey,
     IReadOnlyList<MultiplayerScenarioEvaluation> Scenarios,
-    int SharedExpandedBranches = 0)
+    int SharedExpandedBranches = 0,
+    bool StrictlyEliminated = false,
+    string? StrictEliminationReason = null,
+    int SkippedScenarioReplays = 0)
 {
     internal bool CompleteCoverage =>
         Scenarios.Count == MultiplayerScenarioReevaluationPolicy.MaximumScenariosPerDecision
@@ -49,6 +52,8 @@ internal sealed record MultiplayerScenarioDecisionEvaluation(
             Scenarios
                 .Where(evaluation => evaluation.Status != MultiplayerScenarioEvaluationStatus.Unknown)
                 .Select(evaluation => evaluation.Spec.Kind));
+
+    internal bool StrictlyResolved => CompleteCoverage || StrictlyEliminated;
 
     internal int ExpandedBranches =>
         SharedExpandedBranches
@@ -217,6 +222,116 @@ internal static class MultiplayerScenarioReevaluationPolicy
                 return false;
         }
         return true;
+    }
+
+    /// <summary>
+    /// E4 strict mode lower bound for the current fixed ScenarioSpec set.
+    /// Unevaluated lanes are assigned the most optimistic legal values. In particular the
+    /// mean-loss lower bound is unknown, so it is negative infinity rather than an invented zero.
+    /// If even this optimistic rank loses to a fully evaluated incumbent, the decision cannot
+    /// become the Robust winner after evaluating more scenarios.
+    /// </summary>
+    internal static MultiplayerScenarioDecisionRank StrictOptimisticLowerBound(
+        IReadOnlyList<MultiplayerScenarioOutcome> evaluatedOutcomes)
+    {
+        bool allScenariosAliveBestCase =
+            evaluatedOutcomes.All(outcome => outcome.AllPlayersAlive);
+        bool guaranteedVictoryBestCase =
+            evaluatedOutcomes.All(outcome => outcome.CompleteVictory);
+        double worstLossLowerBound = evaluatedOutcomes.Count == 0
+            ? double.NegativeInfinity
+            : evaluatedOutcomes.Max(outcome => outcome.LossEquivalent);
+        double worstPlayerLossLowerBound = evaluatedOutcomes.Count == 0
+            ? double.NegativeInfinity
+            : evaluatedOutcomes.Max(outcome => outcome.WorstPlayerLossRatio);
+        double worstTeamLossLowerBound = evaluatedOutcomes.Count == 0
+            ? double.NegativeInfinity
+            : evaluatedOutcomes.Max(outcome => outcome.TeamLossRatio);
+        double worstEnemyDurabilityLowerBound = evaluatedOutcomes.Count == 0
+            ? double.NegativeInfinity
+            : evaluatedOutcomes.Max(outcome => outcome.EnemyDurabilityRatio);
+
+        return new MultiplayerScenarioDecisionRank(
+            MaximumScenariosPerDecision,
+            allScenariosAliveBestCase,
+            guaranteedVictoryBestCase,
+            worstLossLowerBound,
+            MeanLossEquivalent: double.NegativeInfinity,
+            worstPlayerLossLowerBound,
+            worstTeamLossLowerBound,
+            worstEnemyDurabilityLowerBound);
+    }
+
+    internal static bool CanStrictlyEliminate(
+        IReadOnlyList<MultiplayerScenarioOutcome> evaluatedOutcomes,
+        MultiplayerScenarioDecisionRank completeIncumbent,
+        out string reason)
+    {
+        reason = string.Empty;
+        if (evaluatedOutcomes.Count == 0)
+            return false;
+
+        MultiplayerScenarioDecisionRank optimistic =
+            StrictOptimisticLowerBound(evaluatedOutcomes);
+        if (Compare(optimistic, completeIncumbent) <= 0)
+            return false;
+
+        reason = !optimistic.AllScenariosAlive
+            && completeIncumbent.AllScenariosAlive
+                ? "survival_bound"
+                : !optimistic.GuaranteedVictory
+                    && completeIncumbent.GuaranteedVictory
+                        ? "victory_bound"
+                        : optimistic.WorstLossEquivalent
+                            > completeIncumbent.WorstLossEquivalent
+                            ? "worst_loss_bound"
+                            : optimistic.WorstLossEquivalent
+                                == completeIncumbent.WorstLossEquivalent
+                                && optimistic.WorstPlayerLossRatio
+                                    > completeIncumbent.WorstPlayerLossRatio
+                                ? "worst_player_loss_bound"
+                                : "lexicographic_bound";
+        return true;
+    }
+
+    /// <summary>
+    /// E4 evaluates fixed stress lanes in a deterministic pressure order derived from the
+    /// current complete incumbent. This is only an evaluation-order heuristic; it is not a
+    /// probability model and it never changes the fixed ScenarioSpec set.
+    /// </summary>
+    internal static IReadOnlyList<MultiplayerScenarioSpec> StrictEvaluationOrder(
+        MultiplayerScenarioDecisionEvaluation? completeIncumbent)
+    {
+        if (completeIncumbent is not { CompleteCoverage: true })
+            return ScenarioSpecsValue;
+
+        Dictionary<ShadowTeammateScenarioKind, MultiplayerScenarioOutcome> outcomes =
+            completeIncumbent.Scenarios
+                .Where(evaluation => evaluation.Outcome.HasValue)
+                .ToDictionary(
+                    evaluation => evaluation.Spec.Kind,
+                    evaluation => evaluation.Outcome!.Value);
+
+        return ScenarioSpecsValue
+            .Select((spec, index) => (
+                Spec: spec,
+                Index: index,
+                Outcome: outcomes.TryGetValue(spec.Kind, out MultiplayerScenarioOutcome outcome)
+                    ? outcome
+                    : (MultiplayerScenarioOutcome?)null))
+            .OrderBy(entry => entry.Outcome?.AllPlayersAlive ?? true)
+            .ThenBy(entry => entry.Outcome?.CompleteVictory ?? true)
+            .ThenByDescending(entry => entry.Outcome?.LossEquivalent
+                ?? double.NegativeInfinity)
+            .ThenByDescending(entry => entry.Outcome?.WorstPlayerLossRatio
+                ?? double.NegativeInfinity)
+            .ThenByDescending(entry => entry.Outcome?.TeamLossRatio
+                ?? double.NegativeInfinity)
+            .ThenByDescending(entry => entry.Outcome?.EnemyDurabilityRatio
+                ?? double.NegativeInfinity)
+            .ThenBy(entry => entry.Index)
+            .Select(entry => entry.Spec)
+            .ToArray();
     }
 
     internal static MultiplayerScenarioDecisionRank Aggregate(
