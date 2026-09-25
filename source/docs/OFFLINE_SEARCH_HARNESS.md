@@ -73,7 +73,8 @@ plan 每项的字段：`label`（必填，简单目录名）、`request`（必�
 
 - `result.json`：`label` / `status` / `profile` / `searchMode` / `budget` / `solverMetrics`（与游戏内
   无人测试 `result.json` 同名同形，由游戏自己的 Writer 构造）/ `pruneCounters`（宿主从 `SolverResult`
-  读的剪枝与复用计数，游戏内那份没有）/ `timeBoundaryObserved` / `wallSeconds` / 峰值托管堆、峰值
+  读的剪枝与复用计数，游戏内那份没有）/ `searchEfficiency`（E0 被选路线的生成→评估→选中→发布时刻、
+  搜索成员和 Shadow/Scenario/materialization 独占时间）/ `timeBoundaryObserved` / `wallSeconds` / 峰值托管堆、峰值
   工作集、总分配字节 / `rootContinuationStamp` / `catalogFingerprint`。
 - `route.json`：选中路线的动作序列。
 - `root-diagnostics.txt`：`SolverDiagnostics.DescribeStart` 的根局面描述。

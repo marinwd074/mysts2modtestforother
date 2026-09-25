@@ -259,7 +259,9 @@ foreach ($rule in $post01071GuardRules) {
 $cardEffectSpecPath = Join-Path $repositoryRoot 'src/Prediction/CardEffectSpecRegistry.cs'
 $cardEffectSpecText = [IO.File]::ReadAllText($cardEffectSpecPath)
 foreach ($modelDrivenRule in @(
-    'combat.RecordBrightestFlameMaxHpLoss(card.DynamicVars.MaxHp.IntValue)',
+    'combat.RecordBrightestFlameMaxHpLoss(',
+    'card.Owner,',
+    'card.DynamicVars.MaxHp.IntValue',
     'ownerState.MaxHp - card.DynamicVars.MaxHp.IntValue',
     'decimal increase = rampage.DynamicVars["Increase"].BaseValue',
     'mutableRampage.DynamicVars.Damage.BaseValue += increase')) {
@@ -1238,6 +1240,7 @@ $expectedBeamFiles = @(
     "CombatBeamSolver.EndTurnChoiceReplay.cs",
     "CombatBeamSolver.EndTurnExpansion.cs",
     "CombatBeamSolver.RoundTransition.cs",
+    'CombatBeamSolver.SearchEfficiencyDiagnostics.cs',
     "CombatBeamSolver.CardChoiceContinuation.cs",
     "CombatBeamSolver.PotionChoiceContinuation.cs",
     "CombatBeamSolver.ExecutionChoiceContinuation.cs",
@@ -1284,6 +1287,18 @@ foreach ($u5InterleaveRule in @(
     'deployable=false proactive_wait=false')) {
     if (-not $u5InterleaveText.Contains($u5InterleaveRule)) {
         $violations.Add("${u5InterleavePath}: U5 local/teammate interleave boundary drifted '$u5InterleaveRule'")
+    }
+}
+
+$retentionActionTokenPath = Join-Path $searchRoot "CombatBeamSolver.Retention.cs"
+$retentionActionTokenText = [IO.File]::ReadAllText($retentionActionTokenPath)
+foreach ($forecastTokenRule in @(
+    'PlanActionKind.TeammateForecast => action.ShadowForecast is { Actions.Count: > 0 } forecast',
+    'remote.PlayerNetId',
+    'remote.CardId',
+    'remote.TargetCombatId')) {
+    if (-not $retentionActionTokenText.Contains($forecastTokenRule)) {
+        $violations.Add("${retentionActionTokenPath}: teammate forecast policy token drifted '$forecastTokenRule'")
     }
 }
 foreach ($u5ExpansionRule in @(
@@ -2214,8 +2229,8 @@ if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/Comb
     $violations.Add('History key must consume incremental totals')
 }
 $historySolverPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.cs'
-if (-not (Select-String -LiteralPath $historySolverPath -SimpleMatch 'root.PlayerCount == 1' -Quiet)) {
-    $violations.Add('History-sensitive transposition key lost the single-player gate')
+if (Select-String -LiteralPath $historySolverPath -SimpleMatch 'root.PlayerCount == 1' -Quiet) {
+    $violations.Add('History-sensitive transposition key reintroduced the obsolete single-player gate')
 }
 if (-not (Select-String -LiteralPath $historySolverPath -SimpleMatch 'CombatHistoryCounterKey.AppliesTo(root.PlayerCardIds)' -Quiet)) {
     $violations.Add('History-sensitive transposition key lost the reader-card gate')
@@ -2406,6 +2421,27 @@ else {
     if (-not $historyRootBlock.Contains('!entry.CardPlay.Card.IsDupe')) {
         $violations.Add("${historyCoursePath}: live History Course lookup must exclude dupes")
     }
+}
+
+$interimOrderingPath = Join-Path $searchRoot "SolverInterimResultOrdering.cs"
+$interimOrderingText = [IO.File]::ReadAllText($interimOrderingPath)
+foreach ($setupTieBreakRule in @(
+    'CompletedRouteSetupTieBreakValue(',
+    'endTurn > startTurnNumber',
+    'Math.Max(0, peakPersistentBuffValue)')) {
+    if (-not $interimOrderingText.Contains($setupTieBreakRule)) {
+        $violations.Add("${interimOrderingPath}: completed-route setup tie-break drifted '$setupTieBreakRule'")
+    }
+}
+$finalPlanOrderingPath = Join-Path $searchRoot "CombatBeamSolver.FinalPlanOrdering.cs"
+$finalPlanOrderingText = [IO.File]::ReadAllText($finalPlanOrderingPath)
+if (-not $finalPlanOrderingText.Contains('ThenByDescending(candidate => candidate.CompletedSetupTieBreak)')) {
+    $violations.Add("${finalPlanOrderingPath}: final ordering must preserve useful earlier setup before score/action-count")
+}
+$beamRetentionPolicyPath = Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.cs"
+$beamRetentionPolicyText = [IO.File]::ReadAllText($beamRetentionPolicyPath)
+if (-not $beamRetentionPolicyText.Contains('left.CombatProgress?.BestPersistentBuffValue')) {
+    $violations.Add("${beamRetentionPolicyPath}: completed-victory retention must preserve peak persistent setup")
 }
 
 $cardOnPlayMirrorPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/CardOnPlayMirrors.cs'

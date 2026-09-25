@@ -203,7 +203,9 @@ internal sealed partial class SimulatedCombatState
             entry.HappenedThisTurn(combatState) && entry.CardPlay.Card.Owner == player
             && entry.CardPlay.Card.Type is CardType.Attack or CardType.Skill);
         AppendTurnCardHistory(text, statusCardsDrawn, zeroCostAttackStarts, cardPlayStarts, attackSkillStarts);
-        text.Append(";FlameHp=").Append(CaptureBrightestFlameMaxHpSpent(CombatManager.Instance.History.CardPlaysStarted));
+        text.Append(";FlameHp=").Append(CaptureBrightestFlameMaxHpSpent(
+            CombatManager.Instance.History.CardPlaysStarted,
+            [player]));
         text.Append(";AttackStarts=").Append(CombatManager.Instance.History.CardPlaysStarted.Count(entry =>
             entry.HappenedThisTurn(combatState) && entry.CardPlay.Card.Owner == player
             && entry.CardPlay.Card.Type == CardType.Attack));

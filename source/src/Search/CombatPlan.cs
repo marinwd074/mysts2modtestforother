@@ -1483,6 +1483,8 @@ internal sealed class SolverResult
     public SolverResultScope ResultScope { get; internal set; } = SolverResultScope.SearchCompletion;
     public MultiplayerSearchResultScope MultiplayerScope { get; internal set; }
     public string RouteIdentity { get; internal set; } = Guid.NewGuid().ToString("N");
+    public CandidateOrigin? SearchEfficiencyOrigin { get; internal set; }
+    public string? SearchEfficiencyEvaluationContextId { get; internal set; }
     public bool DeterministicBlockPotionInserted { get; internal set; }
     public bool SingleSessionSearch { get; internal set; }
     public IReadOnlyList<MultiplayerReplayCandidate> MultiplayerReplayCandidates { get; internal set; } = [];

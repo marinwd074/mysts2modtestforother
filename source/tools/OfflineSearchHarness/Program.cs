@@ -150,6 +150,7 @@ internal static class Program
                 File.WriteAllText(
                     Path.Combine(options.OutputDirectory, "search-policy.json"),
                     JsonSerializer.Serialize(outcome.Policy, UnattendedTestFiles.JsonOptions));
+                payload["searchEfficiency"] = outcome.SearchEfficiency;
                 payload["timeBoundaryObserved"] = outcome.TimeBoundaryObserved;
                 payload["wallSeconds"] = outcome.WallSeconds;
                 memory.Dispose();
@@ -206,6 +207,7 @@ internal static class Program
                 ["budget"] = payload.GetValueOrDefault("budget"),
                 ["solverMetrics"] = payload.GetValueOrDefault("solverMetrics"),
                 ["pruneCounters"] = payload.GetValueOrDefault("pruneCounters"),
+                ["searchEfficiency"] = payload.GetValueOrDefault("searchEfficiency"),
                 ["timeBoundaryObserved"] = payload.GetValueOrDefault("timeBoundaryObserved"),
                 ["wallSeconds"] = payload.GetValueOrDefault("wallSeconds"),
                 ["peakManagedHeapBytes"] = payload.GetValueOrDefault("peakManagedHeapBytes"),
