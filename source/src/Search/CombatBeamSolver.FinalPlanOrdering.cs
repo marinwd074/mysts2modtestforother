@@ -551,25 +551,6 @@ internal sealed partial class CombatBeamSolver
 
             Dictionary<SearchNode, int>? qualityBaselineIndex = null;
             int qualityScenarioSelectedBaselineRank = 1;
-            if (qualityBaselineIndex != null && selected.Count > 0)
-            {
-                int finalSelectedBaselineRank =
-                    qualityBaselineIndex[selected[0].Node] + 1;
-                MultiplayerQualityLayerAttribution qualityLayer =
-                    MultiplayerScenarioReevaluationPolicy.AttributeQualityLayer(
-                        baselineWinnerRank: 1,
-                        qualityScenarioSelectedBaselineRank,
-                        finalSelectedBaselineRank);
-                diagnostics.Info(
-                    $"[CombatSolver/Multiplayer] MP_QUALITY_LAYER " +
-                    $"baseline_winner_rank={qualityLayer.BaselineWinnerRank} " +
-                    $"scenario_selected_baseline_rank={qualityLayer.ScenarioSelectedBaselineRank} " +
-                    $"final_selected_baseline_rank={qualityLayer.FinalSelectedBaselineRank} " +
-                    $"scenario_rerank={scenarioReevaluationEnabled.ToString().ToLowerInvariant()} " +
-                    $"chance_rerank={chanceAggregationEnabled.ToString().ToLowerInvariant()} " +
-                    $"override_layer={qualityLayer.OverrideLayer}");
-            }
-
             if (emitDiagnostics
                 && useTeamObjective
                 && selected.Count > 0)
@@ -943,6 +924,25 @@ internal sealed partial class CombatBeamSolver
                                 != winningDecisionKey))
                         .ToList();
                 }
+            }
+
+            if (qualityBaselineIndex != null && selected.Count > 0)
+            {
+                int finalSelectedBaselineRank =
+                    qualityBaselineIndex[selected[0].Node] + 1;
+                MultiplayerQualityLayerAttribution qualityLayer =
+                    MultiplayerScenarioReevaluationPolicy.AttributeQualityLayer(
+                        baselineWinnerRank: 1,
+                        scenarioSelectedBaselineRank: qualityScenarioSelectedBaselineRank,
+                        finalSelectedBaselineRank: finalSelectedBaselineRank);
+                diagnostics.Info(
+                    $"[CombatSolver/Multiplayer] MP_QUALITY_LAYER " +
+                    $"baseline_winner_rank={qualityLayer.BaselineWinnerRank} " +
+                    $"scenario_selected_baseline_rank={qualityLayer.ScenarioSelectedBaselineRank} " +
+                    $"final_selected_baseline_rank={qualityLayer.FinalSelectedBaselineRank} " +
+                    $"scenario_rerank={scenarioReevaluationEnabled.ToString().ToLowerInvariant()} " +
+                    $"chance_rerank={chanceAggregationEnabled.ToString().ToLowerInvariant()} " +
+                    $"override_layer={qualityLayer.OverrideLayer}");
             }
 
             if (emitDiagnostics
