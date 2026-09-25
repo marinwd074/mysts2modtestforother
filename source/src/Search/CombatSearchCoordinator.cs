@@ -1495,18 +1495,30 @@ internal static partial class CombatSearchCoordinator
             return primary;
         try
         {
-            return SearchSmartPotionGradient(
-                root,
-                displayNames,
-                battleDamage,
-                policy,
-                searchCancellationToken,
-                callerCancellationToken,
-                progressCallback,
-                profile,
-                primary,
-                memoryForecast,
-                interimResultCallback);
+            return policy.UseE3FixedPortfolioScheduling
+                ? SearchSmartPotionGradientRoundRobin(
+                    root,
+                    displayNames,
+                    battleDamage,
+                    policy,
+                    searchCancellationToken,
+                    callerCancellationToken,
+                    profile,
+                    primary,
+                    memoryForecast,
+                    interimResultCallback)
+                : SearchSmartPotionGradient(
+                    root,
+                    displayNames,
+                    battleDamage,
+                    policy,
+                    searchCancellationToken,
+                    callerCancellationToken,
+                    progressCallback,
+                    profile,
+                    primary,
+                    memoryForecast,
+                    interimResultCallback);
         }
         catch (PotionPolicyUnsatisfiedException)
             when (policy.PotionPolicy == SolverPotionPolicy.Smart
@@ -1516,6 +1528,268 @@ internal static partial class CombatSearchCoordinator
                 "[CombatSolver/Test] SMART_POTION_AUDIT result optional_route_missing=true selected=primary");
             return primary;
         }
+    }
+
+    private static SolverResult SearchSmartPotionGradientRoundRobin(
+        CombatRootSnapshot root,
+        SolverDisplayNames displayNames,
+        BattleDamageSnapshot battleDamage,
+        SearchPolicySnapshot policy,
+        CancellationToken searchCancellationToken,
+        CancellationToken callerCancellationToken,
+        SolverSearchProfile profile,
+        SolverResult potionFree,
+        SmartLayerMemoryForecast memoryForecast,
+        Action<SolverResult>? interimResultCallback)
+    {
+        int forcedPotionCount = policy.PotionStrategy.ForcedDirectiveCount;
+        if (potionFree.ExplicitPotionCount != forcedPotionCount)
+            throw new InvalidOperationException("Smart 梯度搜索必须从仅满足强制用药的结果开始。");
+
+        bool potionFreeWon = potionFree.Snapshot.AllEnemiesDead
+            && !potionFree.Snapshot.PlayerDead
+            && potionFree.Snapshot.ProjectedPlayerHp > 0;
+        int potionFreeDeficit = StrategicHpDeficit(root, policy, potionFree);
+        int maximumOptionalPotionUses = MaximumSmartPotionUses(
+            root,
+            policy,
+            potionFreeWon,
+            potionFreeDeficit);
+        if (maximumOptionalPotionUses == 0)
+        {
+            policy.Diagnostics.Info(
+                $"[CombatSolver/Test] SMART_POTION_GRADIENT result " +
+                $"stop=no_potion_acceptable hp_deficit={potionFreeDeficit} maximum=0 scheduler=e3_fixed");
+            return potionFree;
+        }
+
+        PotionFreePolicyBaseline baseline = new(
+            potionFreeWon,
+            potionFreeDeficit,
+            potionFree.Snapshot.PlayerHp,
+            potionFree.CombatEndedTurn)
+        {
+            DeathSaveUseCount = potionFree.Snapshot.ProjectedDeathSaveUseCount,
+        };
+        List<SolverResult> searches = [potionFree];
+        SolverResult selected = potionFree;
+        bool deadlineExpired = false;
+        bool acceptablePotionLayerFound = false;
+        int firstPotionCount = forcedPotionCount + 1;
+        int lastPotionCount = forcedPotionCount + maximumOptionalPotionUses;
+        int nextPotionCountToStart = firstPotionCount;
+        int nextPotionCountToCommit = firstPotionCount;
+        int residentLimit = policy.MemoryPressureSignal.ConservativeParallelismRequired
+            ? 1
+            : Math.Min(3, maximumOptionalPotionUses);
+        PrimarySearchIncumbent? primaryIncumbent = BuildPrimarySearchIncumbent(
+            root,
+            policy,
+            potionFree);
+        Dictionary<int, CombatBeamSolver.SearchMemberExecutionSession> active = [];
+        Dictionary<int, SolverResult> completed = [];
+        HashSet<int> missing = [];
+
+        void StartLayer(int potionCount)
+        {
+            CombatBeamSolver solver = new(
+                root,
+                displayNames,
+                battleDamage,
+                policy,
+                searchCancellationToken,
+                progressCallback: null,
+                profile,
+                SolverPotionPolicy.RequireAtLeastOne,
+                baseline,
+                maximumPotionUses: potionCount,
+                minimumPotionUses: potionCount,
+                primaryIncumbent: primaryIncumbent);
+            active.Add(potionCount, solver.CreateExecutionSession());
+            policy.Diagnostics.Info(
+                $"[CombatSolver/Test] E3_PORTFOLIO_MEMBER_START kind=smart_potion " +
+                $"potion_count={potionCount} resident={active.Count}/{residentLimit} " +
+                $"slice_parents={ResumableMemberAllowance.MaxParentCommits}");
+        }
+
+        void FillResidentSet()
+        {
+            while (active.Count < residentLimit && nextPotionCountToStart <= lastPotionCount)
+            {
+                if (searchCancellationToken.IsCancellationRequested)
+                    return;
+                StartLayer(nextPotionCountToStart++);
+            }
+        }
+
+        void ObserveCompletedLayer(
+            int potionCount,
+            CombatBeamSolver.SearchMemberExecutionSession session,
+            SolverResult? result)
+        {
+            ObserveSmartLayerMemorySample(
+                policy,
+                memoryForecast,
+                result,
+                profile,
+                potionCount,
+                session.AllocatedBytesForScheduling,
+                session.TransitionCountForScheduling);
+        }
+
+        FillResidentSet();
+        try
+        {
+            while (active.Count > 0)
+            {
+                foreach (int potionCount in active.Keys.OrderBy(value => value).ToArray())
+                {
+                    if (searchCancellationToken.IsCancellationRequested)
+                    {
+                        callerCancellationToken.ThrowIfCancellationRequested();
+                        deadlineExpired = true;
+                        break;
+                    }
+
+                    CombatBeamSolver.SearchMemberExecutionSession session = active[potionCount];
+                    SearchStepResult step;
+                    try
+                    {
+                        step = session.Step(ResumableMemberAllowance, searchCancellationToken);
+                    }
+                    catch (PotionPolicyUnsatisfiedException)
+                    {
+                        ObserveCompletedLayer(potionCount, session, result: null);
+                        missing.Add(potionCount);
+                        active.Remove(potionCount);
+                        session.Dispose();
+                        policy.Diagnostics.Info(
+                            $"[CombatSolver/Test] SMART_POTION_GRADIENT layer={potionCount} " +
+                            "route_missing=true scheduler=e3_fixed");
+                        continue;
+                    }
+
+                    policy.Diagnostics.Info(
+                        $"[CombatSolver/Test] E3_PORTFOLIO_SLICE kind=smart_potion " +
+                        $"potion_count={potionCount} status={step.Status} " +
+                        $"committed_parents={step.CommittedParents} total_parents={step.TotalCommittedParents} " +
+                        $"expanded={session.ExpandedNodesForScheduling} " +
+                        $"transitions={session.TransitionCountForScheduling} " +
+                        $"exclusive_ms={session.ExclusiveElapsedForScheduling.TotalMilliseconds:F3} " +
+                        $"resident={active.Count}/{residentLimit}");
+
+                    if (step.Status == SearchStepStatus.Canceled)
+                    {
+                        callerCancellationToken.ThrowIfCancellationRequested();
+                        ObserveCompletedLayer(potionCount, session, result: null);
+                        deadlineExpired = true;
+                        break;
+                    }
+                    if (step.Status != SearchStepStatus.Completed)
+                        continue;
+
+                    SolverResult candidate = session.Result
+                        ?? throw new InvalidOperationException("E3 用药成员完成但没有结果。");
+                    ObserveCompletedLayer(potionCount, session, candidate);
+                    active.Remove(potionCount);
+                    session.Dispose();
+                    if (candidate.ResultScope != SolverResultScope.SearchCompletion)
+                        return candidate;
+                    candidate.SingleSessionSearch = true;
+                    PopulateSingleSessionTotals(candidate);
+                    completed.Add(potionCount, candidate);
+                }
+
+                if (deadlineExpired)
+                    break;
+
+                while (nextPotionCountToCommit <= lastPotionCount
+                    && (completed.ContainsKey(nextPotionCountToCommit)
+                        || missing.Contains(nextPotionCountToCommit)))
+                {
+                    int potionCount = nextPotionCountToCommit++;
+                    if (missing.Remove(potionCount))
+                        continue;
+
+                    SolverResult candidate = completed[potionCount];
+                    completed.Remove(potionCount);
+                    searches.Add(candidate);
+                    interimResultCallback?.Invoke(candidate);
+
+                    bool candidateWon = IsCompleteVictory(candidate);
+                    int candidateDeficit = StrategicHpDeficit(root, policy, candidate);
+                    int hpSaved = potionFreeWon
+                        ? Math.Max(0, potionFreeDeficit - candidateDeficit)
+                        : candidateWon
+                            ? Math.Max(0, candidate.Snapshot.PlayerHp - potionFree.Snapshot.PlayerHp)
+                            : 0;
+                    int hpRequired = SmartPotionHpRequired(root, policy, candidate);
+                    bool protectsLoot = policy.TheftPolicy == SolverTheftPolicy.PreserveResources
+                        && candidate.OutstandingStolenResource < potionFree.OutstandingStolenResource;
+                    bool acceptable = IsSmartPotionGradientCandidateAcceptable(
+                        potionFreeWon,
+                        candidateWon,
+                        hpSaved,
+                        hpRequired,
+                        protectsLoot);
+                    bool improvesSelection = acceptable
+                        && (policy.TheftPolicy != SolverTheftPolicy.PreserveResources
+                            || IsBetterCompletedResult(root, policy, candidate, selected));
+                    if (improvesSelection)
+                    {
+                        candidate.PotionHpSaved = hpSaved;
+                        candidate.PotionHpRequired = hpRequired;
+                        selected = candidate;
+                        acceptablePotionLayerFound = true;
+                    }
+                    policy.Diagnostics.Info(
+                        $"[CombatSolver/Test] SMART_POTION_GRADIENT layer={potionCount} " +
+                        $"won={candidateWon} hp_deficit={candidateDeficit} saved={hpSaved} " +
+                        $"required={hpRequired} protects_loot={protectsLoot} acceptable={acceptable} " +
+                        $"selected={improvesSelection} " +
+                        $"expanded={candidate.ExpandedNodes} transitions={candidate.TransitionCount} " +
+                        $"choice_branches={candidate.ChoiceBranchesEvaluated} " +
+                        $"elapsed_ms={candidate.Elapsed.TotalMilliseconds:F1} " +
+                        $"allocated_bytes={candidate.WorkerAllocatedBytes} " +
+                        $"incumbent_deficit={primaryIncumbent?.StrategicHpDeficit.ToString() ?? "-"} " +
+                        $"incumbent_turn={primaryIncumbent?.CombatEndedTurn.ToString() ?? "-"} " +
+                        $"incumbent_pruned={candidate.PrimaryIncumbentBranchesPruned} " +
+                        $"incumbent_updates={candidate.PrimaryIncumbentUpdates} scheduler=e3_fixed");
+
+                    if (acceptable
+                        && TheftEncounterStrategy.RecoverySatisfied(
+                            policy.TheftPolicy,
+                            selected.OutstandingStolenResource))
+                    {
+                        foreach (CombatBeamSolver.SearchMemberExecutionSession activeSession in active.Values)
+                            activeSession.Dispose();
+                        active.Clear();
+                        MergeAuditTotals(selected, [.. searches]);
+                        policy.Diagnostics.Info(
+                            $"[CombatSolver/Test] SMART_POTION_GRADIENT result " +
+                            $"stop=threshold_met maximum={lastPotionCount} " +
+                            $"selected_potions={selected.PotionCount} scheduler=e3_fixed");
+                        return selected;
+                    }
+                }
+
+                FillResidentSet();
+            }
+        }
+        finally
+        {
+            foreach (CombatBeamSolver.SearchMemberExecutionSession session in active.Values)
+                session.Dispose();
+            active.Clear();
+        }
+
+        callerCancellationToken.ThrowIfCancellationRequested();
+        MergeAuditTotals(selected, [.. searches]);
+        policy.Diagnostics.Info(
+            $"[CombatSolver/Test] SMART_POTION_GRADIENT result " +
+            $"stop={(deadlineExpired ? "deadline" : acceptablePotionLayerFound ? "threshold_met" : "complete")} " +
+            $"maximum={lastPotionCount} selected_potions={selected.PotionCount} scheduler=e3_fixed");
+        return selected;
     }
 
     private static SolverResult SearchSmartPotionGradient(
@@ -1709,6 +1983,32 @@ internal static partial class CombatSearchCoordinator
         => candidateWon
             && (!potionFreeWon || hpSaved >= hpRequired || protectsLoot);
 
+    private static void ObserveSmartLayerMemorySample(
+        SearchPolicySnapshot policy,
+        SmartLayerMemoryForecast forecast,
+        SolverResult? result,
+        SolverSearchProfile profile,
+        int completedPotionCount,
+        long processAllocated,
+        long transitions)
+    {
+        if (policy.PotionPolicy != SolverPotionPolicy.Smart)
+            return;
+        processAllocated = Math.Max(0, processAllocated);
+        transitions = Math.Max(0, transitions);
+        bool usableSample = result is { ResultScope: SolverResultScope.SearchCompletion }
+            && result.BoundaryReason != SearchBoundaryReason.TimeLimit
+            && result.Elapsed.TotalMilliseconds < profile.SoftTimeBudgetMilliseconds;
+        forecast.Observe(processAllocated, transitions, usableSample);
+        policy.Diagnostics.Info(
+            $"[CombatSolver/Test] SMART_LAYER_MEMORY_SAMPLE layer={completedPotionCount} " +
+            $"process_allocated_bytes={processAllocated} transitions={transitions} " +
+            $"sample_usable={usableSample.ToString().ToLowerInvariant()} " +
+            $"boundary={result?.BoundaryReason.ToString() ?? "incomplete"} " +
+            $"bytes_per_transition_high_water={forecast.BytesPerTransitionHighWater:F1} " +
+            $"prediction_error_high_water={forecast.UnderpredictionHighWater:F3}");
+    }
+
     private static void ObserveSmartLayerMemory(
         SearchPolicySnapshot policy,
         SmartLayerMemoryForecast forecast,
@@ -1729,17 +2029,14 @@ internal static partial class CombatSearchCoordinator
         // A fixed node budget is a comparable work window for the next layer using this same
         // profile. A timed-out or interrupted layer can understate that window, so keep the
         // optional reset conservative until a complete observation is available again.
-        bool usableSample = result is { ResultScope: SolverResultScope.SearchCompletion }
-            && result.BoundaryReason != SearchBoundaryReason.TimeLimit
-            && result.Elapsed.TotalMilliseconds < profile.SoftTimeBudgetMilliseconds;
-        forecast.Observe(processAllocated, transitions, usableSample);
-        policy.Diagnostics.Info(
-            $"[CombatSolver/Test] SMART_LAYER_MEMORY_SAMPLE layer={completedPotionCount} " +
-            $"process_allocated_bytes={processAllocated} transitions={transitions} " +
-            $"sample_usable={usableSample.ToString().ToLowerInvariant()} " +
-            $"boundary={result?.BoundaryReason.ToString() ?? "incomplete"} " +
-            $"bytes_per_transition_high_water={forecast.BytesPerTransitionHighWater:F1} " +
-            $"prediction_error_high_water={forecast.UnderpredictionHighWater:F3}");
+        ObserveSmartLayerMemorySample(
+            policy,
+            forecast,
+            result,
+            profile,
+            completedPotionCount,
+            processAllocated,
+            transitions);
     }
 
     private static void ReclaimAtPotionGradientBoundary(

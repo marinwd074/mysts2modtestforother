@@ -89,6 +89,12 @@ internal sealed record SearchPolicySnapshot(
     public bool UseBeamWidthPortfolio { get; init; }
 
     /// <summary>
+    /// E3 实验开关：Smart 用药层使用 E2 可恢复 session 做固定工作量轮转。
+    /// 默认关闭，只有固定工作量 A/B 证明不退化后才允许迁移成生产默认。
+    /// </summary>
+    public bool UseE3FixedPortfolioScheduling { get; init; }
+
+    /// <summary>
     /// 组合成员宽度。首项由 <see cref="BeamWidthPortfolio.ProductionMembers" /> 强制成基线宽度；
     /// 为空时用默认的 [基线, 基线×2/3, 基线×3/2, 次段 基线, 基础分 基线]，显式给出时只有宽度成员。
     /// </summary>
