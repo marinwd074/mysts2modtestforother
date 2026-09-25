@@ -26,14 +26,66 @@ internal sealed partial class CombatBeamSolver
         CardType CardType,
         uint? TargetCombatId);
 
+    private readonly record struct ActionSearchOrderHint(
+        bool EstimatedLethal,
+        bool UrgentDefense,
+        double StrategicValuePerResource,
+        double StrategicValue,
+        int ResourceCost,
+        int StableOrdinal);
+
     private readonly record struct PreparedCardAction(
         PlanAction Action,
         CardType CardType,
         uint? TargetCombatId,
         bool RequiresUnsupportedExistingChoice,
-        PlanCardChoice? RequiredEmptyChoice);
+        PlanCardChoice? RequiredEmptyChoice,
+        ActionSearchOrderHint SearchOrder);
 
     private readonly record struct PreparedPotionAction(PlanAction Action, PotionModel Potion);
+
+    private static int _legacyActionSearchOrderForTesting;
+
+    internal static void UseLegacyActionSearchOrderForTesting(bool enabled)
+        => Volatile.Write(ref _legacyActionSearchOrderForTesting, enabled ? 1 : 0);
+
+    private static int CompareActionSearchOrder(
+        ActionSearchOrderHint left,
+        ActionSearchOrderHint right)
+    {
+        int comparison = right.EstimatedLethal.CompareTo(left.EstimatedLethal);
+        if (comparison != 0)
+            return comparison;
+        comparison = right.UrgentDefense.CompareTo(left.UrgentDefense);
+        if (comparison != 0)
+            return comparison;
+        comparison = right.StrategicValuePerResource.CompareTo(left.StrategicValuePerResource);
+        if (comparison != 0)
+            return comparison;
+        comparison = right.StrategicValue.CompareTo(left.StrategicValue);
+        if (comparison != 0)
+            return comparison;
+        comparison = left.ResourceCost.CompareTo(right.ResourceCost);
+        return comparison != 0
+            ? comparison
+            : left.StableOrdinal.CompareTo(right.StableOrdinal);
+    }
+
+    internal static bool VerifyActionSearchOrderingForTesting()
+    {
+        ActionSearchOrderHint[] values =
+        [
+            new(false, false, 4d, 8d, 2, 0),
+            new(false, true, 2d, 5d, 1, 1),
+            new(true, false, 1d, 3d, 1, 2),
+            new(false, false, 4d, 8d, 2, 3),
+        ];
+        Array.Sort(values, CompareActionSearchOrder);
+        return values[0].EstimatedLethal
+            && values[1].UrgentDefense
+            && values[2].StableOrdinal == 0
+            && values[3].StableOrdinal == 3;
+    }
 
     private sealed class DeferredCardActionProbe(
         PreparedCardAction action,
@@ -532,10 +584,61 @@ internal sealed partial class CombatBeamSolver
                     card.Preview.Type,
                     target?.CombatId,
                     requiresUnsupportedExistingChoice,
-                    requiredEmptyChoice));
+                    requiredEmptyChoice,
+                    BuildActionSearchOrderHint(
+                        snapshot,
+                        simulator,
+                        card.Preview,
+                        target,
+                        actions.Count)));
             }
         }
+        if (Volatile.Read(ref _legacyActionSearchOrderForTesting) == 0)
+        {
+            actions.Sort(static (left, right) =>
+                CompareActionSearchOrder(left.SearchOrder, right.SearchOrder));
+        }
         return actions;
+    }
+
+    private static ActionSearchOrderHint BuildActionSearchOrderHint(
+        SimulationSnapshot snapshot,
+        CombatPredictionSimulator simulator,
+        CardModel card,
+        Creature? target,
+        int stableOrdinal)
+    {
+        double damage = Math.Max(
+            0d,
+            CardChoiceSupport.DynamicVarBaseValue(card.DynamicVars, "Damage"));
+        double block = Math.Max(
+            0d,
+            CardChoiceSupport.DynamicVarBaseValue(card.DynamicVars, "Block"));
+        double strategicValue = Math.Max(0d, CardChoiceSupport.CardValue(card));
+
+        int energyCost = card.EnergyCost.CostsX
+            ? Math.Max(0, snapshot.Energy)
+            : Math.Max(0, card.EnergyCost.GetWithModifiers(CostModifiers.Local));
+        int starCost = card.HasStarCostX
+            ? Math.Max(0, snapshot.Stars)
+            : Math.Max(0, card.CurrentStarCost);
+        int resourceCost = energyCost * 2 + starCost;
+        double strategicValuePerResource =
+            strategicValue / Math.Max(1d, energyCost + starCost * 0.5d);
+
+        bool estimatedLethal = damage > 0d
+            && target != null
+            && damage >= simulator.State.GetCreature(target).CurrentHp;
+        bool urgentDefense = block > 0d
+            && snapshot.ProjectedPlayerHp < snapshot.PlayerHp;
+
+        return new ActionSearchOrderHint(
+            estimatedLethal,
+            urgentDefense,
+            strategicValuePerResource,
+            strategicValue,
+            resourceCost,
+            stableOrdinal);
     }
 
     private DeferredCardActionProbe? GeneratePreparedCardAction(
