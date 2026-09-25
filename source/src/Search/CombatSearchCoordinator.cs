@@ -166,6 +166,18 @@ internal static partial class CombatSearchCoordinator
                             speculativeRouteVersion,
                             speculative.CandidateVersion);
                     }
+                    if (progress.OfficialPublishedOrigin is { } officialOrigin
+                        && !string.IsNullOrWhiteSpace(
+                            progress.OfficialPublishedEvaluationContextId))
+                    {
+                        portfolioTelemetry.RecordCandidatePublished(
+                            officialOrigin,
+                            progress.OfficialPublishedEvaluationContextId);
+                        policy.Diagnostics.Info(
+                            $"[CombatSolver/Test] SEARCH_E1_EARLY_PUBLISH " +
+                            $"candidate_id={officialOrigin.CandidateId} " +
+                            $"context={progress.OfficialPublishedEvaluationContextId}");
+                    }
                 }
                 progressCallback(progress with
                 {

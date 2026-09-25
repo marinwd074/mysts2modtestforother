@@ -510,6 +510,40 @@ internal sealed partial class CombatBeamSolver
                     ? publishedCandidate.Score
                     : materializedNode.Score,
             };
+            if (resultScope != SolverResultScope.RouteAdoption
+                && progressCallback != null)
+            {
+                bool completeVictory = SolverInterimResultOrdering.IsCompleteVictory(
+                    materializedNode.ActionCount,
+                    materializedNode.Snapshot.AllEnemiesDead,
+                    materializedNode.Snapshot.PlayerDead,
+                    materializedNode.Snapshot.ProjectedPlayerHp);
+                member.CurrentBestNode = materializedNode;
+                member.CurrentBestResult = SummarizeCandidate(
+                    materializedNode,
+                    completeVictory);
+                member.SpeculativeRouteOrigin = EnsureCandidateOrigin(materializedNode);
+                member.SpeculativeRouteEvaluationContextId = evaluationContextId;
+                member.SpeculativeRoutePreview = BuildRoutePreview(
+                    selectedCandidate,
+                    materializedAnnotations,
+                    onlyDeathRoutesFound,
+                    ++member.RoutePreviewVersion);
+                // The official route is safe to display now, but the full immutable
+                // SolverResult does not exist until replay/annotation flattening finishes.
+                // Never leave an older adoption closure attached to this newer preview.
+                member.RouteAdoptionSeed = null;
+                PublishProgress(
+                    _startTurnNumber + candidateSearchedTurnLayers,
+                    candidateSearchedTurnLayers,
+                    0,
+                    member.Frontier.Count,
+                    member.Completed.Count,
+                    "最终路线已确定，正在补全标注",
+                    force: true,
+                    officialPublishedOrigin: member.SpeculativeRouteOrigin,
+                    officialPublishedEvaluationContextId: evaluationContextId);
+            }
             int potionBranchesRejected = ordering.PotionBranchesRejected;
             int potionHpSaved = blockPotionInsertion?.HpSaved ?? ordering.PotionHpSaved;
             int potionHpRequired = blockPotionInsertion == null
@@ -890,7 +924,19 @@ internal sealed partial class CombatBeamSolver
             int candidateVersion)
         {
             FinalPlanCandidate selected = selection.Candidate;
-            RouteAnnotations annotations = BuildRouteAnnotations(selected.Node);
+            return BuildRoutePreview(
+                selected,
+                BuildRouteAnnotations(selected.Node),
+                onlyDeathRoutesFound,
+                candidateVersion);
+        }
+
+        SolverSpeculativeRoutePreview BuildRoutePreview(
+            FinalPlanCandidate selected,
+            RouteAnnotations annotations,
+            bool onlyDeathRoutesFound,
+            int candidateVersion)
+        {
             List<SearchNode> path = [];
             for (SearchNode? node = selected.Node; node?.Parent != null; node = node.Parent)
                 path.Add(node);
@@ -1041,7 +1087,9 @@ internal sealed partial class CombatBeamSolver
             int frontierNodes,
             int endedNodes,
             string phase,
-            bool force = false)
+            bool force = false,
+            CandidateOrigin? officialPublishedOrigin = null,
+            string? officialPublishedEvaluationContextId = null)
         {
             long elapsedMs = stopwatch.ElapsedMilliseconds;
             if (!force && elapsedMs - lastProgressMs < 100)
@@ -1049,9 +1097,12 @@ internal sealed partial class CombatBeamSolver
             lastProgressMs = elapsedMs;
             if (progressCallback == null)
                 return;
-            RecordCandidatePublished(
-                member.SpeculativeRouteOrigin,
-                member.SpeculativeRouteEvaluationContextId);
+            if (officialPublishedOrigin == null)
+            {
+                RecordCandidatePublished(
+                    member.SpeculativeRouteOrigin,
+                    member.SpeculativeRouteEvaluationContextId);
+            }
             progressCallback(new SolverProgress(
                 _startTurnNumber,
                 currentTurn,
@@ -1068,7 +1119,12 @@ internal sealed partial class CombatBeamSolver
                 member.CurrentBestResult,
                 member.CurrentTurnPreview,
                 member.SpeculativeRoutePreview,
-                member.RouteAdoptionSeed));
+                member.RouteAdoptionSeed)
+            {
+                OfficialPublishedOrigin = officialPublishedOrigin,
+                OfficialPublishedEvaluationContextId =
+                    officialPublishedEvaluationContextId,
+            });
         }
 
         PublishProgress(_startTurnNumber, 0, 0, 1, 0, "初始化", force: true);

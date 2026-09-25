@@ -25,6 +25,9 @@ internal static class Program
     {
         string scenario = Value(args, "--scenario") ?? "simple";
         string output = Value(args, "--out") ?? ".";
+        bool publishProgress = args.Contains(
+            "--publish-progress",
+            StringComparer.Ordinal);
         Directory.CreateDirectory(output);
         try
         {
@@ -96,13 +99,15 @@ internal static class Program
                     $"Detached teammate fixture did not produce two players: combat={combat.Players.Count} root={root.PlayerCount}.");
 
             string[] rootHand = local.PlayerCombatState!.Hand.Cards.Select(card => card.Id.Entry).ToArray();
+            Action<SolverProgress>? progressCallback =
+                publishProgress ? static _ => { } : null;
             SolverResult result = CombatSearchCoordinator.Solve(
                 root,
                 names,
                 damage,
                 policy,
                 CancellationToken.None,
-                progressCallback: null);
+                progressCallback);
             Evidence evidence = CaptureEvidence(scenario, combat, rootHand, result);
 
             if (string.Equals(scenario, "draw_energy", StringComparison.Ordinal)
@@ -236,6 +241,12 @@ internal static class Program
             RootHand: rootHand,
             Route: result.BestNode.Actions.Select(action =>
                 $"{action.Turn}:{action.Kind}:{action.CardId ?? action.PotionId ?? "-"}").ToArray(),
+            ProjectedBattleHpLost: result.ProjectedBattleHpLost,
+            ProjectedBattlePotionCount: result.ProjectedBattlePotionCount,
+            CombatEndedTurn: result.CombatEndedTurn,
+            BoundaryReason: result.BoundaryReason.ToString(),
+            TotalExpandedNodes: result.TotalExpandedNodes,
+            TotalTransitionCount: result.TotalTransitionCount,
             CandidateId: origin.CandidateId,
             SearchMemberId: origin.SearchMemberId,
             MemberKind: member?.Kind ?? "unknown",
@@ -290,6 +301,12 @@ internal static class Program
         int PlayerCount,
         string[] RootHand,
         string[] Route,
+        int ProjectedBattleHpLost,
+        int ProjectedBattlePotionCount,
+        int? CombatEndedTurn,
+        string BoundaryReason,
+        int TotalExpandedNodes,
+        long TotalTransitionCount,
         long CandidateId,
         int SearchMemberId,
         string MemberKind,
