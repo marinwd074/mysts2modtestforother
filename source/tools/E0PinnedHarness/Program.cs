@@ -129,9 +129,9 @@ internal static class Program
             }
             if (teammate)
             {
-                CombatPredictionSimulator historyProbe = root.ForkSimulator();
+                var historyProbe = root.ForkSimulator();
                 _ = historyProbe.History.GetCounters(local);
-                CombatPredictionSimulator historyFork = historyProbe.Fork();
+                var historyFork = historyProbe.Fork();
                 _ = historyFork.History.GetCounters(local);
             }
 
