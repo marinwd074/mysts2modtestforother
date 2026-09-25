@@ -337,37 +337,25 @@ internal static class Program
         Require(
             replayA.ContinuationStateText == replayB.ContinuationStateText,
             "U1 production one-action replay is not deterministic.");
-        Require(
-            replayA.RemoteFingerprint == replayB.RemoteFingerprint,
-            "U1 production remote fingerprint is not deterministic.");
 
-        MultiplayerSafeActionRevalidationFacts matchedWithLegacyDisagreement =
-            RevalidationFacts() with
-            {
-                LocalCardRemovedFromHand = false,
-                EnergyStateConsistent = false,
-                TargetIdentityStable = false,
-                RemotePublicStateUnchanged = false,
-                EnemyStateMatchesExpectedTarget = false,
-            };
         MultiplayerSafeActionRevalidationDecision matchedDecision =
-            MultiplayerSafeExecutePolicy.RevalidateAction(matchedWithLegacyDisagreement);
-        MultiplayerSafeActionRevalidationDecision remoteMismatchDecision =
+            MultiplayerSafeExecutePolicy.RevalidateAction(RevalidationFacts());
+        MultiplayerSafeActionRevalidationDecision queueBusyDecision =
             MultiplayerSafeExecutePolicy.RevalidateAction(
-                RevalidationFacts() with { ExpectedRemoteStateMatched = false });
-        MultiplayerSafeActionRevalidationDecision semanticMismatchDecision =
+                RevalidationFacts() with { ActionQueueIdle = false });
+        MultiplayerSafeActionRevalidationDecision worldUnstableDecision =
             MultiplayerSafeExecutePolicy.RevalidateAction(
-                RevalidationFacts() with { ExpectedContinuationStateMatched = false });
+                RevalidationFacts() with { WorldVersionStable = false });
 
         Require(
             matchedDecision == MultiplayerSafeActionRevalidationDecision.SafeToContinue,
-            $"U1 legal modeled chain was rejected: {matchedDecision}.");
+            $"U1 settled native action was rejected: {matchedDecision}.");
         Require(
-            remoteMismatchDecision == MultiplayerSafeActionRevalidationDecision.RemoteOrUnknownChange,
-            $"U1 remote mismatch decision changed: {remoteMismatchDecision}.");
+            queueBusyDecision == MultiplayerSafeActionRevalidationDecision.ActionMismatch,
+            $"U1 busy native action queue was not rejected: {queueBusyDecision}.");
         Require(
-            semanticMismatchDecision == MultiplayerSafeActionRevalidationDecision.ActionMismatch,
-            $"U1 semantic mismatch decision changed: {semanticMismatchDecision}.");
+            worldUnstableDecision == MultiplayerSafeActionRevalidationDecision.WorldUnstable,
+            $"U1 unstable WorldVersion was not rejected: {worldUnstableDecision}.");
 
         int turn = LocalContext.GetMe(combat)?.PlayerCombatState?.TurnNumber
             ?? throw new InvalidOperationException("U1 fixture has no local turn.");
@@ -424,14 +412,12 @@ internal static class Program
 
         return new U1Evidence(
             Status: "PASS",
-            EvidenceLevel: "pinned_production_one_action_replay_plus_fault_injection",
+            EvidenceLevel: "pinned_world_version_revalidation_plus_diagnostic_replay",
             FirstAction: ActionToken(action),
             ReplayDeterministic: true,
-            ContinuationFingerprint: replayA.ContinuationFingerprint,
-            RemoteFingerprint: replayA.RemoteFingerprint,
-            MatchedLegacyDisagreementDecision: matchedDecision.ToString(),
-            RemoteMismatchDecision: remoteMismatchDecision.ToString(),
-            SemanticMismatchDecision: semanticMismatchDecision.ToString(),
+            SettledDecision: matchedDecision.ToString(),
+            QueueBusyDecision: queueBusyDecision.ToString(),
+            WorldUnstableDecision: worldUnstableDecision.ToString(),
             NormalNextActionAuthorized: true,
             RemoteInsertionRejectedReason: remoteInsertionReason,
             CancelledRetryRejectedReason: cancelReason);
@@ -1096,17 +1082,7 @@ internal static class Program
                 snapshot.BoundaryReason == SearchBoundaryReason.None,
                 $"U1 one-action replay reached {snapshot.BoundaryReason}.");
             ContinuationStamp continuation = replay.CaptureDiagnosticContinuation(snapshot);
-            StateFingerprint remote =
-                MultiplayerContinuationRemoteFingerprint.CapturePredicted(
-                    snapshot.Simulator,
-                    root.PlayerIdentity);
-            StateFingerprintBuilder builder = new();
-            builder.Add(continuation.StateText);
-            StateFingerprint continuationFingerprint = builder.Finish();
-            return new ReplayEvidence(
-                continuation.StateText,
-                Format(continuationFingerprint),
-                Format(remote));
+            return new ReplayEvidence(continuation.StateText);
         }
         finally
         {
@@ -1118,14 +1094,6 @@ internal static class Program
         => new(
             NativeLocalActionCaptured: true,
             ActionQueueIdle: true,
-            ExpectedContinuationStateMatched: true,
-            ExpectedRemoteStateMatched: true,
-            LocalCardRemovedFromHand: true,
-            LocalPlayerIdentityStable: true,
-            EnergyStateConsistent: true,
-            TargetIdentityStable: true,
-            RemotePublicStateUnchanged: true,
-            EnemyStateMatchesExpectedTarget: true,
             WorldVersionAdvanced: true,
             WorldVersionStable: true,
             HasNextAction: true);
@@ -1259,17 +1227,12 @@ internal static class Program
         string EvidenceLevel,
         string FirstAction,
         bool ReplayDeterministic,
-        string ContinuationFingerprint,
-        string RemoteFingerprint,
-        string MatchedLegacyDisagreementDecision,
-        string RemoteMismatchDecision,
-        string SemanticMismatchDecision,
+        string SettledDecision,
+        string QueueBusyDecision,
+        string WorldUnstableDecision,
         bool NormalNextActionAuthorized,
         string RemoteInsertionRejectedReason,
         string CancelledRetryRejectedReason);
 
-    private sealed record ReplayEvidence(
-        string ContinuationStateText,
-        string ContinuationFingerprint,
-        string RemoteFingerprint);
+    private sealed record ReplayEvidence(string ContinuationStateText);
 }

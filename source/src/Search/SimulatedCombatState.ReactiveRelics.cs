@@ -299,7 +299,8 @@ internal sealed partial class SimulatedCombatState
     {
         if (historyEntry is not CombatPredictionDamageReceivedEntry entry
             || entry.Result.WasFullyBlocked
-            || entry.Receiver.Player is not { } player)
+            || entry.Receiver.Player is not { } player
+            || !IsRootCapturedPlayer(player))
         {
             return;
         }

@@ -35,19 +35,10 @@ internal static class MultiplayerCarryRankingContextCapture
             .ToArray();
         bool? scalingHooks = state.MultiplayerScalingModel?.ShouldReceiveCombatHooks;
         string cardConstraint = state.RunState.CardMultiplayerConstraint.ToString();
-        string publicFingerprint = BuildPublicFingerprint(
-            scalingHooks,
-            cardConstraint,
-            remotePlayers,
-            enemies);
-        StateFingerprint remotePublicFingerprint =
-            MultiplayerClientProbe.CaptureContinuationRemotePublicFingerprint(state);
 
         return MultiplayerCarryRankingContext.Create(
             enabled: true,
             worldVersion,
-            publicFingerprint,
-            remotePublicFingerprint,
             remotePlayers,
             enemies,
             scalingHooks,
@@ -98,30 +89,4 @@ internal static class MultiplayerCarryRankingContextCapture
             .Select(power => new MultiplayerCarryPowerPublicState(power.Id.Entry, power.Amount))
             .ToArray();
 
-    private static string BuildPublicFingerprint(
-        bool? scalingHooks,
-        string cardConstraint,
-        IReadOnlyList<MultiplayerCarryRemotePlayerPublicState> remotePlayers,
-        IReadOnlyList<MultiplayerCarryEnemyPublicState> enemies)
-    {
-        string remote = string.Join(
-            ';',
-            remotePlayers.Select(player =>
-                $"{player.NetId}:{player.CharacterId}:turn={player.TurnNumber}/phase={player.Phase}:" +
-                $"hp={player.CurrentHp}/{player.MaxHp}:block={player.Block}:" +
-                $"powers={PowerTokens(player.Powers)}"));
-        string enemy = string.Join(
-            ';',
-            enemies.Select(item =>
-                $"{item.CombatId}:{item.MonsterId}:" +
-                $"hp={item.CurrentHp}/{item.MaxHp}:block={item.Block}:" +
-                $"next={item.NextMoveId}:target={item.ThreatTarget}:" +
-                $"powers={PowerTokens(item.Powers)}"));
-        return $"scaling_hooks={scalingHooks?.ToString() ?? "-"};" +
-               $"card_constraint={cardConstraint};remote={remote};enemies={enemy}";
-    }
-
-    private static string PowerTokens(
-        IEnumerable<MultiplayerCarryPowerPublicState> powers)
-        => string.Join(',', powers.Select(power => $"{power.PowerId}:{power.Amount}"));
 }

@@ -16,6 +16,8 @@ internal sealed partial class CombatPredictionSimulator
     {
         if (amount < 0)
             throw new ArgumentOutOfRangeException(nameof(amount));
+        if (!State.IsRootCapturedPlayer(player))
+            return;
         SimOrbQueue queue = State.GetPlayerCombatState(player).OrbQueue;
         int added = Math.Min(OrbQueue.maxCapacity - queue.Capacity, amount);
         if (added > 0)
@@ -28,7 +30,7 @@ internal sealed partial class CombatPredictionSimulator
         Creature? target,
         ISet<uint>? processedEnemyDeaths = null)
     {
-        if (HasPendingChoice)
+        if (HasPendingChoice || !State.IsRootCapturedPlayer(orb.Owner))
             return;
 
         processedEnemyDeaths ??= new HashSet<uint>();
@@ -55,12 +57,16 @@ internal sealed partial class CombatPredictionSimulator
 
     // Mirrors OrbCmd.Channel<T> without mutating the real orb queue.
     public void OrbChannel<T>(Player player, int count = 1) where T : OrbModel
-        => _ = ContinueOrbChannelBatch<T>(player, count, nextIndex: 0);
+    {
+        if (!State.IsRootCapturedPlayer(player))
+            return;
+        _ = ContinueOrbChannelBatch<T>(player, count, nextIndex: 0);
+    }
 
     // Mirrors OrbCmd.Channel without VFX/SFX, waits, real queue mutation, or async hook execution.
     public bool OrbChannel(Player player, OrbModel orb)
     {
-        if (IsOverOrEnding || HasPendingChoice)
+        if (IsOverOrEnding || HasPendingChoice || !State.IsRootCapturedPlayer(player))
         {
             return false;
         }
@@ -117,7 +123,7 @@ internal sealed partial class CombatPredictionSimulator
     // Mirrors OrbCmd.EvokeNext without mutating the real orb queue.
     public void OrbEvokeNext(Player player, int repeat = 1, bool dequeue = true)
     {
-        if (HasPendingChoice)
+        if (HasPendingChoice || !State.IsRootCapturedPlayer(player))
             return;
 
         var orbQueue = State.GetPlayerCombatState(player).OrbQueue;
@@ -137,7 +143,7 @@ internal sealed partial class CombatPredictionSimulator
     // Mirrors OrbCmd.Evoke without VFX/SFX, choice-context model stack updates, or real queue mutation.
     public void OrbEvoke(Player player, OrbModel evokedOrb, bool dequeue = true)
     {
-        if (IsOverOrEnding || HasPendingChoice)
+        if (IsOverOrEnding || HasPendingChoice || !State.IsRootCapturedPlayer(player))
         {
             return;
         }
@@ -173,7 +179,7 @@ internal sealed partial class CombatPredictionSimulator
         Creature? target = null,
         ISet<uint>? processedEnemyDeaths = null)
     {
-        if (IsOverOrEnding || HasPendingChoice)
+        if (IsOverOrEnding || HasPendingChoice || !State.IsRootCapturedPlayer(orb.Owner))
         {
             return;
         }

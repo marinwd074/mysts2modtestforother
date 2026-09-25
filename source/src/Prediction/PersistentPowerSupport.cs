@@ -348,8 +348,9 @@ internal static class PersistentPowerSupport
                 return true;
 
             // Native HammerTime keeps a lazy iterator over CombatState.Players across
-            // awaited child Forges. Keep roster order but re-check IsAlive per index.
-            hammerPlayers = simulator.State.Players.ToArray();
+            // awaited child Forges. Prediction preserves that order inside the captured
+            // player scope; local-single-core must not Forge an uncaptured teammate.
+            hammerPlayers = simulator.State.RootCapturedPlayers.ToArray();
             nextPlayer = 0;
             stage = ForgeExecutionStage.HammerTimePlayers;
         }
@@ -357,7 +358,7 @@ internal static class PersistentPowerSupport
         if (stage != ForgeExecutionStage.HammerTimePlayers || hammerTime is null)
             return true;
 
-        hammerPlayers ??= simulator.State.Players;
+        hammerPlayers ??= simulator.State.RootCapturedPlayers;
         for (int index = nextPlayer; index < hammerPlayers.Count; index++)
         {
             Player teammate = hammerPlayers[index];

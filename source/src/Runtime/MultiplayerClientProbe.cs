@@ -61,25 +61,7 @@ internal sealed record MultiplayerProbeSnapshot(
 /// </summary>
 internal sealed record MultiplayerSafeExecutionBoundary(
     long WorldVersion,
-    int ObservationSequence,
-    string? LocalNetId,
-    int RoundNumber,
-    string CurrentSide,
-    int? LocalTurn,
-    string? LocalPhase,
-    int? LocalHp,
-    int? LocalBlock,
-    int? LocalEnergy,
-    int? LocalStars,
-    string[] LocalHand,
-    string[] LocalDrawPile,
-    string[] LocalDiscard,
-    string[] LocalExhaust,
-    string[] LocalPowers,
-    string[] RemotePlayers,
-    StateFingerprint LocalFingerprint,
-    StateFingerprint RemotePublicFingerprint,
-    string[] Enemies);
+    int ObservationSequence);
 
 /// <summary>
 /// Read-only observation for a network multiplayer client. It may read any combat state
@@ -106,8 +88,6 @@ internal static class MultiplayerClientProbe
     private static int _combatSegmentId;
     private static int _nextCardIdentityId;
     private static string? _lastTurnIdentity;
-    private static StateFingerprint? _lastReactivePublicFingerprint;
-    private static StateFingerprint? _lastLocalBoundaryFingerprint;
     private static AppendOnlyEventLog<MultiplayerProbeSnapshot>? _evidenceLog;
     private static bool _evidenceDisabled;
 
@@ -124,14 +104,13 @@ internal static class MultiplayerClientProbe
         _lastSampleAt = 0;
         _observationSequence = 0;
         _lastTurnIdentity = null;
-        _lastReactivePublicFingerprint = null;
-        _lastLocalBoundaryFingerprint = null;
         lock (CardIdentityGate)
         {
             CardIdentityIds.Clear();
             _nextCardIdentityId = 0;
         }
         MultiplayerWorldTracker.Reset();
+        MultiplayerRouteChangeTracker.Reset();
     }
 
     internal static void BeginCombatSegment()
@@ -140,14 +119,13 @@ internal static class MultiplayerClientProbe
         _lastSampleAt = 0;
         _observationSequence = 0;
         _lastTurnIdentity = null;
-        _lastReactivePublicFingerprint = null;
-        _lastLocalBoundaryFingerprint = null;
         lock (CardIdentityGate)
         {
             CardIdentityIds.Clear();
             _nextCardIdentityId = 0;
         }
         MultiplayerWorldTracker.Reset();
+        MultiplayerRouteChangeTracker.Reset();
     }
 
     internal static void Dispose()
@@ -165,7 +143,11 @@ internal static class MultiplayerClientProbe
     }
 
     internal static bool Observe(CombatState state, string reason)
-        => ObserveCore(state, reason, bypassSampleInterval: false);
+        => ObserveCore(
+            state,
+            reason,
+            bypassSampleInterval: false,
+            returnEnemyHpRouteChange: true);
 
     /// <summary>
     /// Captures an action-completion observation immediately. The ordinary Probe cadence
@@ -173,47 +155,16 @@ internal static class MultiplayerClientProbe
     /// world mutation before it decides whether another card is admissible.
     /// </summary>
     internal static bool ObserveActionBoundary(CombatState state, string reason)
-        => ObserveCore(state, reason, bypassSampleInterval: true);
+        => ObserveCore(
+            state,
+            reason,
+            bypassSampleInterval: true,
+            returnEnemyHpRouteChange: false);
 
-    internal static MultiplayerSafeExecutionBoundary CaptureSafeExecutionBoundary(CombatState state)
-    {
-        Player? localPlayer = LocalContext.GetMe(state);
-        PlayerCombatState? localCombat = localPlayer?.PlayerCombatState;
-        return new(
+    internal static MultiplayerSafeExecutionBoundary CaptureSafeExecutionBoundary()
+        => new(
             WorldVersion: MultiplayerWorldTracker.WorldVersion,
-            ObservationSequence: _observationSequence,
-            LocalNetId: localPlayer?.NetId.ToString(),
-            RoundNumber: state.RoundNumber,
-            CurrentSide: state.CurrentSide.ToString(),
-            LocalTurn: localCombat?.TurnNumber,
-            LocalPhase: localCombat?.Phase.ToString(),
-            LocalHp: localPlayer is null ? null : localPlayer.Creature.CurrentHp,
-            LocalBlock: localPlayer is null ? null : localPlayer.Creature.Block,
-            LocalEnergy: localCombat?.Energy,
-            LocalStars: localCombat?.Stars,
-            LocalHand: localCombat == null ? [] : CardTokens(localCombat.Hand.Cards),
-            LocalDrawPile: localCombat == null ? [] : CardTokens(localCombat.DrawPile.Cards),
-            LocalDiscard: localCombat == null ? [] : CardTokens(localCombat.DiscardPile.Cards),
-            LocalExhaust: localCombat == null ? [] : CardTokens(localCombat.ExhaustPile.Cards),
-            LocalPowers: localPlayer == null ? [] : PowerTokens(localPlayer.Creature.Powers),
-            RemotePlayers: RemotePlayerTokens(state, localPlayer),
-            LocalFingerprint: LocalBoundaryFingerprint(localPlayer),
-            RemotePublicFingerprint: RemotePublicBoundaryFingerprint(state, localPlayer),
-            Enemies: EnemyTokens(state));
-    }
-
-    /// <summary>
-    /// Captures only the public teammate/scaling portion used to validate a local
-    /// cross-turn continuation. Round/side and enemy state are checked separately:
-    /// they may advance as part of the modeled local route without implying a
-    /// teammate action.
-    /// </summary>
-    internal static StateFingerprint CaptureContinuationRemotePublicFingerprint(
-        CombatState state)
-    {
-        Player? localPlayer = LocalContext.GetMe(state);
-        return ContinuationRemotePublicFingerprint(state, localPlayer);
-    }
+            ObservationSequence: _observationSequence);
 
     internal static MultiplayerContinuationValidation CaptureContinuationValidation(
         CombatState state,
@@ -223,14 +174,17 @@ internal static class MultiplayerClientProbe
         return new MultiplayerContinuationValidation(
             ContinuationStamp.CaptureLiveCombatIdentity(state),
             localPlayer?.NetId.ToString() ?? string.Empty,
-            ContinuationRemotePublicFingerprint(state, localPlayer),
             state.MultiplayerScalingModel?.ShouldReceiveCombatHooks,
             state.RunState.CardMultiplayerConstraint.ToString(),
             MultiplayerWorldTracker.WorldVersion,
             minimumWorldVersion);
     }
 
-    private static bool ObserveCore(CombatState state, string reason, bool bypassSampleInterval)
+    private static bool ObserveCore(
+        CombatState state,
+        string reason,
+        bool bypassSampleInterval,
+        bool returnEnemyHpRouteChange)
     {
         if (!SolverSessionCapabilities.Capture(state).IsMultiplayer
             || !CombatManager.Instance.IsInProgress)
@@ -247,38 +201,50 @@ internal static class MultiplayerClientProbe
 
         Player? localPlayer = LocalContext.GetMe(state);
         StateFingerprint compactFingerprint = CompactFingerprint(state, localPlayer);
-        StateFingerprint reactivePublicFingerprint = ReactivePublicFingerprint(state, localPlayer);
-        StateFingerprint localBoundaryFingerprint = LocalBoundaryFingerprint(localPlayer);
-        bool changed = MultiplayerWorldTracker.ObserveSnapshot(compactFingerprint, reason);
-        if (!changed)
+        bool worldChanged = MultiplayerWorldTracker.ObserveSnapshot(compactFingerprint, reason);
+        if (!worldChanged)
             return false;
 
-        _observationSequence++;
-        StateFingerprint? previousReactivePublicFingerprint = _lastReactivePublicFingerprint;
-        StateFingerprint? previousLocalBoundaryFingerprint = _lastLocalBoundaryFingerprint;
-        _lastReactivePublicFingerprint = reactivePublicFingerprint;
-        _lastLocalBoundaryFingerprint = localBoundaryFingerprint;
-        if (previousReactivePublicFingerprint is { } previousReactive
-            && previousLocalBoundaryFingerprint is { } previousLocal)
+        StateFingerprint enemyHpFingerprint = EnemyHpFingerprint(state);
+        bool enemyHpRouteChanged;
+        if (returnEnemyHpRouteChange)
         {
-            Entry.Logger.Info(
-                $"[CombatSolver/MultiplayerProbe] MP_REACTIVE_WORLD_DELTA " +
-                $"world_version={MultiplayerWorldTracker.WorldVersion} reason={reason} " +
-                $"remote_public_changed={(previousReactive != reactivePublicFingerprint).ToString().ToLowerInvariant()} " +
-                $"remote_readable_changed={(previousReactive != reactivePublicFingerprint).ToString().ToLowerInvariant()} " +
-                $"local_private_changed={(previousLocal != localBoundaryFingerprint).ToString().ToLowerInvariant()} " +
-                "fresh_probe=true");
+            bool lethalHpRecalculationEnabled =
+                SolverSettings.Current.UseMultiplayerLethalHpRecalculation;
+            bool inLethalRecalculationWindow =
+                MultiplayerCombatObjectivePolicy.IsInLethalRecalculationWindow(
+                    state.Enemies);
+            enemyHpRouteChanged = MultiplayerRouteChangeTracker.ObserveEnemyHp(
+                enemyHpFingerprint,
+                lethalHpRecalculationEnabled && inLethalRecalculationWindow,
+                reason);
         }
+        else
+        {
+            // Local Safe Execute actions must advance the full world version, but their
+            // expected HP effects become the new route baseline instead of invalidating it.
+            MultiplayerRouteChangeTracker.SynchronizeEnemyHp(enemyHpFingerprint);
+            enemyHpRouteChanged = false;
+        }
+
+        _observationSequence++;
         string currentTurnIdentity = TurnIdentityToken(state, localPlayer);
         string? previousTurnIdentity = _lastTurnIdentity;
         _lastTurnIdentity = currentTurnIdentity;
-        if (previousTurnIdentity != null
-            && !string.Equals(previousTurnIdentity, currentTurnIdentity, StringComparison.Ordinal))
+        bool turnBoundary = previousTurnIdentity != null
+            && !string.Equals(previousTurnIdentity, currentTurnIdentity, StringComparison.Ordinal);
+        if (turnBoundary)
         {
+            if (!enemyHpRouteChanged)
+            {
+                MultiplayerRouteChangeTracker.SignalSchedulingBoundary(
+                    "local_turn_boundary");
+            }
             Entry.Logger.Info(
                 $"[CombatSolver/MultiplayerProbe] MP_REACTIVE_TURN_BOUNDARY " +
                 $"previous={previousTurnIdentity} current={currentTurnIdentity} " +
                 $"world_version={MultiplayerWorldTracker.WorldVersion} " +
+                $"route_version={MultiplayerRouteChangeTracker.Version} " +
                 $"observation_sequence={_observationSequence} " +
                 "fresh_probe=true fresh_capture=true");
         }
@@ -296,64 +262,22 @@ internal static class MultiplayerClientProbe
         }
         Entry.Logger.Info(
             $"[CombatSolver/MultiplayerProbe] OBSERVED sequence={_observationSequence} " +
-            $"world_version={MultiplayerWorldTracker.WorldVersion} reason={reason} " +
-            $"compact_changed=true fingerprint={compactFingerprint.First:X16}:{compactFingerprint.Second:X16}" +
+            $"world_version={MultiplayerWorldTracker.WorldVersion} " +
+            $"route_version={MultiplayerRouteChangeTracker.Version} reason={reason} " +
+            $"lethal_hp_recalculation={SolverSettings.Current.UseMultiplayerLethalHpRecalculation.ToString().ToLowerInvariant()} " +
+            $"in_lethal_window={MultiplayerCombatObjectivePolicy.IsInLethalRecalculationWindow(state.Enemies).ToString().ToLowerInvariant()} " +
+            $"enemy_hp_route_changed={enemyHpRouteChanged.ToString().ToLowerInvariant()} " +
+            "compact_changed=true" +
             (display is null ? string.Empty : $" {display}"));
-        return true;
+        return returnEnemyHpRouteChange ? enemyHpRouteChanged : worldChanged;
     }
 
-    private static StateFingerprint LocalBoundaryFingerprint(Player? localPlayer)
+    private static StateFingerprint EnemyHpFingerprint(CombatState state)
     {
         StateFingerprintBuilder fingerprint = new();
-        AppendCompactPlayer(ref fingerprint, localPlayer, includePrivateState: true);
-        return fingerprint.Finish();
-    }
-
-    private static StateFingerprint RemotePublicBoundaryFingerprint(
-        CombatState state,
-        Player? localPlayer)
-    {
-        // Legacy method name retained for serialized/runtime contract compatibility.
-        // The fingerprint now includes every teammate field already readable locally.
-        StateFingerprintBuilder fingerprint = new();
-        fingerprint.Add(state.Players.Count);
-        fingerprint.Add(state.RoundNumber);
-        fingerprint.Add(state.CurrentSide.ToString());
-        fingerprint.Add(state.MultiplayerScalingModel is null
-            ? -1
-            : state.MultiplayerScalingModel.ShouldReceiveCombatHooks ? 1 : 0);
-        fingerprint.Add(state.RunState.CardMultiplayerConstraint.ToString());
-        foreach (Player player in state.Players
-                     .Where(candidate => localPlayer == null || candidate.NetId != localPlayer.NetId)
-                     .OrderBy(candidate => candidate.NetId))
-        {
-            AppendCompactPlayer(ref fingerprint, player, includePrivateState: true);
-        }
-        return fingerprint.Finish();
-    }
-
-    private static StateFingerprint ContinuationRemotePublicFingerprint(
-        CombatState state,
-        Player? localPlayer)
-    {
-        Player resolvedLocal = localPlayer
-            ?? throw new InvalidOperationException(
-                "Multiplayer continuation fingerprint requires the local player.");
-        return MultiplayerContinuationRemoteFingerprint.CaptureLive(
-            state,
-            resolvedLocal);
-    }
-
-    private static StateFingerprint ReactivePublicFingerprint(
-        CombatState state,
-        Player? localPlayer)
-    {
-        StateFingerprintBuilder fingerprint = new();
-        StateFingerprint remote = RemotePublicBoundaryFingerprint(state, localPlayer);
-        fingerprint.Add(remote.First);
-        fingerprint.Add(remote.Second);
-        foreach (string token in EnemyTokens(state))
-            fingerprint.Add(token);
+        fingerprint.Add(state.Enemies.Count);
+        foreach (Creature enemy in state.Enemies)
+            fingerprint.Add(enemy.CurrentHp);
         return fingerprint.Finish();
     }
 

@@ -317,9 +317,10 @@ internal sealed partial class SimulatedCombatState
         {
             if (!_rootCapturedPlayers.Contains(player))
             {
-                // Teammate relic inventory is not known to a local-player root. Do not
-                // represent Unknown as an empty inventory; RelicsOf(remote) must fail
-                // closed instead of silently erasing public teammate influence.
+                // Default multiplayer local-single-core deliberately does not model
+                // teammate private relic inventory. Public enemy state remains shared,
+                // while private relic semantics are neutral unless full prediction
+                // explicitly captures that teammate.
                 continue;
             }
             RelicModel[] relics = player.Relics
@@ -337,7 +338,7 @@ internal sealed partial class SimulatedCombatState
         _rootPotionSlotCounts = _rootCapturedPlayers.ToDictionary(
             player => player,
             player => player.PotionSlots.Count);
-        _rootPlayerTurnNumbers = inner.Players.ToDictionary(
+        _rootPlayerTurnNumbers = _rootCapturedPlayers.ToDictionary(
             player => player,
             player => player.PlayerCombatState is { } state
                 ? state.TurnNumber
@@ -409,8 +410,19 @@ internal sealed partial class SimulatedCombatState
             .Where(listener => listener is not null)
             .Where(listener => listener is not RelicModel relic
                 || relic.Owner is not Player owner
-                || _rootCapturedPlayers.Contains(owner)
-                || MultiplayerRemotePublicRelicSupport.IsKnownCurrentTurnIrrelevant(relic))
+                || _rootCapturedPlayers.Contains(owner))
+            // Player-owned powers and player-side summons can carry hidden card/orb/turn
+            // state. Local-single-core keeps only listeners owned by captured players.
+            .Where(listener => listener is not PowerModel power
+                || IsCapturedPlayerOwnedCreature(power.Owner))
+            .Where(listener => listener is not MonsterModel monster
+                || monster.Creature.Side != CombatSide.Player
+                || IsCapturedPlayerOwnedCreature(monster.Creature))
+            // Local-single-core multiplayer deliberately does not capture teammate potion
+            // inventories. Remove their live potion listeners at the same root boundary so
+            // hook materialization never tries to resolve an out-of-scope private inventory.
+            .Where(listener => listener is not PotionModel potion
+                || _rootCapturedPlayers.Contains(potion.Owner))
             .Where(listener => listener is not CardModel
                 and not AfflictionModel
                 and not EnchantmentModel
@@ -2083,6 +2095,8 @@ internal sealed partial class SimulatedCombatState
             Creature creature = creatures[creatureIndex];
             if (_rootCreatures.Contains(creature))
                 continue;
+            if (creature.Side == CombatSide.Player && !IsCapturedPlayerOwnedCreature(creature))
+                continue;
             List<AbstractModel> target;
             if (creature.Side == CombatSide.Enemy)
             {
@@ -2127,6 +2141,12 @@ internal sealed partial class SimulatedCombatState
                 return true;
         }
         return false;
+    }
+
+    private bool IsCapturedPlayerOwnedCreature(Creature creature)
+    {
+        Player? owner = creature.Player ?? creature.PetOwner;
+        return owner == null || IsRootCapturedPlayer(owner);
     }
 
     internal void MaterializeRoot(CombatPredictionSimulator simulator)
@@ -2275,15 +2295,30 @@ internal sealed partial class SimulatedCombatState
             && !_rootCapturedPlayers.Contains(owner)
             && !MultiplayerRemotePublicRelicSupport.IsKnownCurrentTurnIrrelevant(relic));
 
+    internal IReadOnlyList<Player> CapturedPlayers => _rootCapturedPlayers;
+
+    internal bool IsRootCapturedPlayer(Player player)
+        => MultiplayerAdvisorBoundaryContracts.IsCapturedPlayer(_rootCapturedPlayers, player);
+
     internal IReadOnlyList<RelicModel> RelicsOf(Player player)
-        => _rootRelics.TryGetValue(player, out RelicModel[]? relics)
-            ? relics
-            : throw new InvalidOperationException($"Player {player.NetId} is outside the captured relic inventory.");
+    {
+        if (_rootRelics.TryGetValue(player, out RelicModel[]? relics))
+            return relics;
+        if (!IsRootCapturedPlayer(player))
+            return Array.Empty<RelicModel>();
+        throw new InvalidOperationException(
+            $"Captured player {player.NetId} has no captured relic inventory.");
+    }
 
     private int PotionSlotCount(Player player)
-        => _rootPotionSlotCounts.TryGetValue(player, out int count)
-            ? count
-            : throw new InvalidOperationException($"Player {player.NetId} is outside the captured potion inventory.");
+    {
+        if (_rootPotionSlotCounts.TryGetValue(player, out int count))
+            return count;
+        if (!IsRootCapturedPlayer(player))
+            return 0;
+        throw new InvalidOperationException(
+            $"Captured player {player.NetId} has no captured potion inventory.");
+    }
 
     internal int CapturedPotionSlotCount(Player player)
         => PotionSlotCount(player);

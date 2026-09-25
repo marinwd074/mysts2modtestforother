@@ -90,7 +90,7 @@ internal static class MonsterSpawnSupport
         SimulatedCombatState combat,
         Creature creature)
     {
-        foreach (RelicModel relic in combat.Players
+        foreach (RelicModel relic in combat.CapturedPlayers
                      .SelectMany(combat.RelicsOf)
                      .Where(relic => !relic.IsMelted))
         {

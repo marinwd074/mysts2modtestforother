@@ -34,6 +34,8 @@ internal sealed partial class CombatPredictionSimulator
     /// </summary>
     public IReadOnlyList<PredictedCard> Draw(Player player, int drawCount, bool fromHandDraw = false)
     {
+        if (!State.IsRootCapturedPlayer(player))
+            return [];
         if (_activeDrawDepth >= MaximumNestedDrawDepth)
         {
             throw new InvalidOperationException(
@@ -108,7 +110,7 @@ internal sealed partial class CombatPredictionSimulator
     /// </summary>
     public void Shuffle(Player player)
     {
-        if (IsOverOrEnding)
+        if (IsOverOrEnding || !State.IsRootCapturedPlayer(player))
         {
             return;
         }
@@ -159,7 +161,8 @@ internal sealed partial class CombatPredictionSimulator
         where TCard : CardModel
     {
         var player = target.Player ?? target.PetOwner;
-        if (player is null || State.GetCreature(player.Creature).IsDead)
+        if (player is null || !State.IsRootCapturedPlayer(player)
+            || State.GetCreature(player.Creature).IsDead)
         {
             return;
         }
@@ -185,6 +188,8 @@ internal sealed partial class CombatPredictionSimulator
         {
             cards.Add(PredictedCard.Create(CanonicalModels.Card<TCard>(), player));
         }
+        if (!State.IsRootCapturedPlayer(player))
+            return [.. cards.Select(card => new SimCardPileAddResult(false, card))];
 
         return AddGeneratedCardsToCombat(cards, pileType, creator, position, CardGenerationResultKind.Fixed);
     }
@@ -200,7 +205,7 @@ internal sealed partial class CombatPredictionSimulator
         CardPilePosition position = CardPilePosition.Bottom,
         CardGenerationResultKind resultKind = CardGenerationResultKind.Random)
     {
-        if (!IsInProgress)
+        if (!IsInProgress || !State.IsRootCapturedPlayer(card.Preview.Owner))
             return new SimCardPileAddResult(false, card);
 
         return AddGeneratedCardsToCombat([card], newPileType, creator, position, resultKind)[0];
@@ -223,6 +228,8 @@ internal sealed partial class CombatPredictionSimulator
     {
         if (!IsInProgress || cards.Count == 0)
             return [];
+        if (cards.Any(card => !State.IsRootCapturedPlayer(card.Preview.Owner)))
+            return [.. cards.Select(card => new SimCardPileAddResult(false, card))];
 
         if (!newPileType.IsCombatPile())
             throw new InvalidOperationException("Generated combat cards can only be added to combat piles.");
@@ -255,6 +262,8 @@ internal sealed partial class CombatPredictionSimulator
         CardPilePosition position = CardPilePosition.Bottom,
         bool isChangingOwners = false)
     {
+        if (!State.IsRootCapturedPlayer(card.Preview.Owner))
+            return new SimCardPileAddResult(false, card);
         SimCardPile newPile = State.GetPlayerCombatState(card.Preview.Owner).GetCardPile(newPileType)
             ?? throw new InvalidOperationException(
                 $"Cannot find combat pile {newPileType} for player {card.Preview.Owner}.");
@@ -272,6 +281,8 @@ internal sealed partial class CombatPredictionSimulator
 
         Player owner = card.Preview.Owner
             ?? throw new InvalidOperationException("Cannot add a card with no owner to a pile.");
+        if (!State.IsRootCapturedPlayer(owner))
+            return new SimCardPileAddResult(false, card);
         SimPlayerCombatState playerCombatState = State.GetPlayerCombatState(owner);
         SimCardPile? oldPile = card.GetPile(playerCombatState);
         PileType oldPileType = oldPile?.Type ?? PileType.None;
@@ -316,6 +327,8 @@ internal sealed partial class CombatPredictionSimulator
         {
             return [];
         }
+        if (!State.IsRootCapturedPlayer(cards[0].Preview.Owner))
+            return [.. cards.Select(card => new SimCardPileAddResult(false, card))];
 
         var newPile = State.GetPlayerCombatState(cards[0].Preview.Owner).GetCardPile(newPileType)
             ?? throw new InvalidOperationException(
@@ -342,6 +355,8 @@ internal sealed partial class CombatPredictionSimulator
 
         var owner = cards[0].Preview.Owner
             ?? throw new InvalidOperationException("Cannot add cards with no owner to a pile.");
+        if (!State.IsRootCapturedPlayer(owner))
+            return [.. cards.Select(card => new SimCardPileAddResult(false, card))];
         var playerCombatState = State.GetPlayerCombatState(owner);
 
         List<SimCardPileAddResult> results = new(cards.Count);
@@ -464,7 +479,9 @@ internal sealed partial class CombatPredictionSimulator
         PileType pileType,
         CardPilePosition position)
     {
-        if (IsOverOrEnding || State.GetCreature(newOwner.Creature).IsDead)
+        if (IsOverOrEnding || !State.IsRootCapturedPlayer(originalOwner)
+            || !State.IsRootCapturedPlayer(newOwner)
+            || State.GetCreature(newOwner.Creature).IsDead)
         {
             return;
         }

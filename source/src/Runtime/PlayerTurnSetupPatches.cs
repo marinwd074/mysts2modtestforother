@@ -900,7 +900,16 @@ internal static class PlayerTurnSetupCoordinator
                 ex,
                 initialSearch.SearchPolicy.MaxDegreeOfParallelism > 1);
             DisposeActive(active);
-            throw;
+
+            // A solver/search/replay failure must not abort CombatManager.StartTurn when
+            // the native setup itself is still valid. Let the original task finish and
+            // continue the vanilla turn; native task failures still propagate normally.
+            await originalSetup;
+            Entry.Logger.Warn(
+                $"[CombatSolver/Test] TURN_SETUP_FALLBACK_TO_NATIVE " +
+                $"turn={player.PlayerCombatState?.TurnNumber ?? -1} phase=setup " +
+                $"reason={ex.GetBaseException().GetType().Name}");
+            return;
         }
         finally
         {
@@ -1077,7 +1086,17 @@ internal static class PlayerTurnSetupCoordinator
                 active.LifecycleGeneration,
                 ex,
                 active.InitialSearch?.SearchPolicy.MaxDegreeOfParallelism > 1);
-            throw;
+            DisposeActive(active);
+
+            // Do not let a solver-owned pre-play choice failure tear down the native
+            // StartTurn pipeline. If the original phase succeeds, continue vanilla;
+            // if it fails, its own exception is preserved.
+            await original;
+            Entry.Logger.Warn(
+                $"[CombatSolver/Test] TURN_SETUP_FALLBACK_TO_NATIVE " +
+                $"turn={player.PlayerCombatState?.TurnNumber ?? -1} phase=auto_pre_play " +
+                $"reason={ex.GetBaseException().GetType().Name}");
+            return;
         }
         finally
         {

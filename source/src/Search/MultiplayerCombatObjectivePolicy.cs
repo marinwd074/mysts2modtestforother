@@ -4,6 +4,22 @@ namespace CombatSolver;
 
 internal static class MultiplayerCombatObjectivePolicy
 {
+    // The project historically used 35% remaining durability as the lethal boundary.
+    // AdaptiveLethalTempo replaced the discontinuous objective jump with a smooth urgency
+    // curve; runtime replan gating can still reuse that established boundary without
+    // changing route ranking.
+    internal const double LegacyLethalDurabilityBoundary = 0.35d;
+    internal static readonly double LegacyLethalUrgencyBoundary =
+        MultiplayerCombatObjectiveMath.ComputeLethalUrgency(
+            LegacyLethalDurabilityBoundary);
+
+    internal static bool IsInLethalRecalculationWindow(IEnumerable<Creature> enemies)
+    {
+        double durabilityRatio = ComputeEnemyDurabilityRatio(enemies);
+        return MultiplayerCombatObjectiveMath.ComputeLethalUrgency(durabilityRatio)
+            >= LegacyLethalUrgencyBoundary;
+    }
+
     internal static double ComputeEnemyDurabilityRatio(IEnumerable<Creature> enemies)
     {
         long maximumHp = 0;

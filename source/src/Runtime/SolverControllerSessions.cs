@@ -244,7 +244,6 @@ internal sealed class SolverDeploymentSession
     public int RouteGeneration { get; init; }
     public int CombatLifecycleGeneration { get; init; }
     public MultiplayerSafeExecutionSession? SafeExecutionSession { get; init; }
-    public SearchPolicySnapshot? SafeReplayPolicy { get; init; }
     public PlanAction? SafeEndTurnAction { get; set; }
     public CancellationTokenSource Cancellation { get; } = new();
     public Task Operation { get; set; } = Task.CompletedTask;

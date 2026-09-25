@@ -144,6 +144,9 @@ internal sealed partial class SimulatedCombatState
 
     private bool CanReceivePredictedPowers(Creature creature)
     {
+        Player? privateOwner = creature.Player ?? creature.PetOwner;
+        if (privateOwner != null && !IsRootCapturedPlayer(privateOwner))
+            return false;
         PredictedDeathPhase phase = _deathPhases?.GetValueOrDefault(creature)
             ?? PredictedDeathPhase.None;
         if (phase != PredictedDeathPhase.None)

@@ -10,7 +10,7 @@ internal sealed partial class CombatPredictionSimulator
     // Mirrors PlayerCmd.GainEnergy.
     public void GainEnergy(Player player, decimal amount)
     {
-        if (IsEnding || amount <= 0m)
+        if (IsEnding || amount <= 0m || !State.IsRootCapturedPlayer(player))
         {
             return;
         }
@@ -28,7 +28,7 @@ internal sealed partial class CombatPredictionSimulator
     // Mirrors PlayerCmd.LoseEnergy.
     public void LoseEnergy(Player player, decimal amount)
     {
-        if (IsEnding || amount <= 0m)
+        if (IsEnding || amount <= 0m || !State.IsRootCapturedPlayer(player))
         {
             return;
         }
@@ -39,7 +39,8 @@ internal sealed partial class CombatPredictionSimulator
     // Mirrors PlayerCmd.GainStars, including AfterStarsGained after the state mutation.
     public bool GainStars(Player player, decimal amount)
     {
-        if (IsEnding || !Hook.ShouldGainStars(State.CombatState, amount, player))
+        if (IsEnding || !State.IsRootCapturedPlayer(player)
+            || !Hook.ShouldGainStars(State.CombatState, amount, player))
         {
             return true;
         }

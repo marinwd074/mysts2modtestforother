@@ -42,7 +42,7 @@ internal static class MonsterMoveSemantics
                     simulator,
                     combat,
                     move.Owner,
-                    simulator.State.PlayerCreatures,
+                    simulator.State.RootCapturedPlayerCreatures,
                     baseDamage);
                 if (simulator.HasPendingChoice)
                     return simulatedPlayer.IsDead;
@@ -63,7 +63,7 @@ internal static class MonsterMoveSemantics
                 // solver owner dying does not end a multiplayer combat while a teammate survives,
                 // so later hits must still reach the remaining players.
                 bool anyPlayerAlive = false;
-                foreach (Creature candidate in simulator.State.PlayerCreatures)
+                foreach (Creature candidate in simulator.State.RootCapturedPlayerCreatures)
                 {
                     if (!simulator.State.GetCreature(candidate).IsAlive)
                         continue;

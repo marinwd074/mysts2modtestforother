@@ -1373,8 +1373,8 @@ internal static class CombatBugReportExporter
             settings.RelicCounterRules,
             settings.BrightestFlameMaxHpLossLimit,
             settings.IgnoreLongTermRewards,
-            settings.UseMultiplayerTeammateForecast,
-            settings.UseMultiplayerScenarioReevaluation,
+            settings.UseMultiplayerPrediction,
+            settings.UseMultiplayerLethalHpRecalculation,
             useNoveltyPortfolio = settings.UseNoveltyPortfolio
                 || UnattendedTestRunner.UseNoveltyPortfolioOverride,
             useBeamWidthPortfolio = settings.UseBeamWidthPortfolio

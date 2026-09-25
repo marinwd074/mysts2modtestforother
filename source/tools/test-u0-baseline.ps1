@@ -38,7 +38,6 @@ Assert-Contains $deployment '[CombatSolver/Test] DEPLOY_ACTION ' 'actual deploym
 Assert-Contains $deployment 'NATIVE_ACTION_CAPTURED ' 'native action capture trace'
 Assert-Contains $deployment '[CombatSolver/Test] DEPLOY_ACTION_COMPLETE ' 'actual action completion trace'
 Assert-Contains $deployment 'MP2B_ACTION_RECONCILED ' 'post-action reconciliation trace'
-Assert-Contains $deployment 'MP2B_ACTION_STATE_DIFF ' 'actual state diff trace'
 
 Assert-Contains $fixture 'NoTeammateEvents' 'no-teammate-event fixture'
 Assert-Contains $fixture 'ShadowFutureStateFingerprint.Capture(' 'no-event modeled-state equality'
@@ -50,4 +49,4 @@ if ($fixture.Contains('TryPlayCandidateInPlace(', [System.StringComparison]::Ord
     throw 'U0 fixture must not implement a second card-effect path.'
 }
 
-Write-Output 'U0BaselineChecks PASS: model transitions + candidates + selection + actual execution + deterministic fixtures'
+Write-Output 'U0BaselineChecks PASS: model transitions + candidates + selection + minimal execution reconciliation + deterministic fixtures'

@@ -2,9 +2,9 @@
 
 GitHub Actions 工作流目录。
 
-- `compatibility.yml`：结构、版本、仓库卫生和纯合同检查。
-- `pinned-release-build.yml`：固定 STS2 0.107.1 / RitsuLib 的完整 Release 与 pinned 回放链。
-- `pinned-monster-target-audit.yml`：固定版本怪物目标语义审计。
-- `release.yml`：版本 tag 的 draft GitHub Release 构建。
+- `compatibility.yml`：普通 push 唯一自动门禁；只跑一个轻量 Linux 结构/版本检查。
+- `pinned-release-build.yml`：固定 STS2 0.107.1 / RitsuLib 的完整 Release、E0/U0/U1/U2/P0/P1 验证；仅手动触发。
+- `pinned-monster-target-audit.yml`：固定版本怪物目标语义审计；仅手动触发。
+- `release.yml`：仅版本 tag 触发，构建并生成 draft GitHub Release。
 
-一次性实验不要长期留在这里；临时验证应在本地或 `.local/` 完成。
+原则：日常提交只做快速结构门禁；耗时 Windows、LFS、pinned harness 和 IL 审计按需手动运行。

@@ -335,7 +335,7 @@ internal sealed partial class CombatPredictionSimulator
             if (!Kill(killedCreatures))
                 return false;
         }
-        else if (State.Players.All(player => State.GetCreature(player.Creature).IsDead))
+        else if (State.RootCapturedPlayers.All(player => State.GetCreature(player.Creature).IsDead))
             LoseCombat();
         return !HasPendingChoice;
     }
@@ -347,7 +347,7 @@ internal sealed partial class CombatPredictionSimulator
         {
             if (!KillWithoutCheckingWinCondition(creature, force))
                 return false;
-            if (State.Players.All(player => State.GetCreature(player.Creature).IsDead))
+            if (State.RootCapturedPlayers.All(player => State.GetCreature(player.Creature).IsDead))
                 LoseCombat();
             return !HasPendingChoice;
         }
@@ -364,7 +364,7 @@ internal sealed partial class CombatPredictionSimulator
                     return false;
             }
     
-            if (State.Players.All(player => State.GetCreature(player.Creature).IsDead))
+            if (State.RootCapturedPlayers.All(player => State.GetCreature(player.Creature).IsDead))
             {
                 LoseCombat();
             }
@@ -484,6 +484,17 @@ internal sealed partial class CombatPredictionSimulator
         if (State.CombatState is SimulatedCombatState combat)
             combat.RemovePowersAfterDeath(player.Creature);
 
+        // A local-single-core root may still contain a public teammate creature, but it has
+        // no captured private pile/orb/resource state. If an external/shared effect kills
+        // that uncaptured creature, keep only public death cleanup and never materialize
+        // the teammate's private combat state.
+        if (!MultiplayerAdvisorBoundaryContracts.IsCapturedPlayer(State.RootCapturedPlayers, player))
+        {
+            if (State.CombatState is SimulatedCombatState remoteHookCombat)
+                remoteHookCombat.NotifyPlayerHooksDeactivated(player);
+            return !HasPendingChoice;
+        }
+
         var playerState = State.GetPlayerCombatState(player);
         playerState.OrbQueue.Clear();
 
@@ -496,8 +507,8 @@ internal sealed partial class CombatPredictionSimulator
         if (State.CombatState is SimulatedCombatState hookCombat)
             hookCombat.NotifyPlayerHooksDeactivated(player);
 
-        // Mirrors CombatManager.HandlePlayerDeath, which is only called when not all players are dead.
-        if (!State.Players.All(p => State.GetCreature(p.Creature).IsDead))
+        // Mirrors CombatManager.HandlePlayerDeath within the players captured by this prediction root.
+        if (!State.RootCapturedPlayers.All(p => State.GetCreature(p.Creature).IsDead))
         {
             RemoveFromCombat([.. playerState.AllCards]);
 

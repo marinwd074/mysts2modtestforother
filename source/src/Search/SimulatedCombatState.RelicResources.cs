@@ -18,12 +18,14 @@ internal sealed partial class SimulatedCombatState
 
     public void LosePlayerGold(Player player, int amount)
     {
+        if (!IsRootCapturedPlayer(player))
+            return;
         (_simulatedPlayerGold ??= [])[player] = Math.Max(0, GetPlayerGold(player) - amount);
     }
 
     public void GainPlayerGold(Player player, int amount)
     {
-        if (amount <= 0)
+        if (amount <= 0 || !IsRootCapturedPlayer(player))
             return;
         (_simulatedPlayerGold ??= [])[player] = checked(GetPlayerGold(player) + amount);
     }

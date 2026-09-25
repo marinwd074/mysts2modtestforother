@@ -209,7 +209,7 @@ $reconciled = @($sessionRecords | Where-Object {
 $reconciliationValid = Test-ContiguousActionIndices $reconciled $completedActions
 if ($reconciliationValid) {
     foreach ($record in $reconciled) {
-        if ($record.Text -notmatch 'decision=(?:SafeToContinue|RemoteOrUnknownChange)\b') {
+        if ($record.Text -notmatch 'decision=SafeToContinue\b') {
             $reconciliationValid = $false
             break
         }

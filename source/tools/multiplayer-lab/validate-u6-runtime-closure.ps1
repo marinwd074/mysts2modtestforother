@@ -98,8 +98,7 @@ $remoteDelta = @()
 if ($observe.Count -eq 1 -and $null -ne $acceptedWorldVersion) {
     $remoteDelta = @($records | Where-Object {
             $_.Index -gt $observe[0].Index -and
-            $_.Text -match '\[CombatSolver/MultiplayerProbe\] MP_REACTIVE_WORLD_DELTA\b' -and
-            $_.Text -match 'remote_public_changed=true\b'
+            $_.Text -match '\[CombatSolver/MultiplayerProbe\] OBSERVED\b'
         } | Where-Object {
             $version = Get-IntToken $_.Text 'world_version'
             $null -ne $version -and $version -gt $acceptedWorldVersion
@@ -108,7 +107,7 @@ if ($observe.Count -eq 1 -and $null -ne $acceptedWorldVersion) {
 if ($remoteDelta.Count -eq 1) {
     Add-Check 'remoteWorldAdvance' PASS $remoteDelta[0]
 } elseif ($observe.Count -eq 1) {
-    Add-Check 'remoteWorldAdvance' UNVERIFIED $observe[0] 'No later readable remote-state WorldVersion advance was observed.'
+    Add-Check 'remoteWorldAdvance' UNVERIFIED $observe[0] 'No later compact WorldVersion advance was observed.'
 } else {
     Add-Check 'remoteWorldAdvance' UNVERIFIED
 }
@@ -144,7 +143,7 @@ if ($remoteDelta.Count -eq 1) {
 if ($freshSearch.Count -eq 1) {
     Add-Check 'freshSearchAfterRemoteObservation' PASS $freshSearch[0]
 } elseif ($remoteDelta.Count -eq 1) {
-    Add-Check 'freshSearchAfterRemoteObservation' UNVERIFIED $remoteDelta[0] 'Remote state advanced, but no fresh debounced search was captured afterward.'
+    Add-Check 'freshSearchAfterRemoteObservation' UNVERIFIED $remoteDelta[0] 'WorldVersion advanced, but no fresh debounced search was captured afterward.'
 } else {
     Add-Check 'freshSearchAfterRemoteObservation' UNVERIFIED
 }

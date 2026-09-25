@@ -714,7 +714,8 @@ internal sealed partial class CombatBeamSolver
                 {
                     SearchRoutePolicy.MultiplayerCurrentTurnOnly
                         => MultiplayerSearchResultScope.CurrentTurnOnly,
-                    SearchRoutePolicy.MultiplayerLocalCrossTurn
+                    SearchRoutePolicy.MultiplayerSinglePlayerCore
+                        or SearchRoutePolicy.MultiplayerLocalCrossTurn
                         => annotations.CombatEndedTurn.HasValue
                             ? MultiplayerSearchResultScope.CompleteLocalBattleProjection
                             : MultiplayerSearchResultScope.PartialLocalCrossTurnProjection,
@@ -2273,7 +2274,7 @@ internal sealed partial class CombatBeamSolver
 
         List<SearchNode> finalPool;
         bool retainCrossTurnTakeoverRoute = member.CurrentTurnAdoptionReached
-            && policy.RoutePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn
+            && MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnProjection(policy.RoutePolicy)
             && HasFutureTurnActions(member.CurrentTurnPreviewNode);
         SearchNode? adoptedNode = policy.CurrentTurnOnly
             ? member.CurrentTurnCandidateNode ?? member.CurrentBestNode

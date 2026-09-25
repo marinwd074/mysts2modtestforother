@@ -39,7 +39,9 @@ internal static class FrostOrbMirrors
         }
 
         // StS2 v0.108.0 grants the owner block first, then the same block to all other players.
-        var allPlayers = context.State.CombatState.Players;
+        // Local-single-core prediction restricts that private player-side effect to the
+        // captured roster; full multiplayer prediction captures the complete roster.
+        var allPlayers = context.State.RootCapturedPlayers;
         foreach (var player in allPlayers)
         {
             if (player != orb.Owner)

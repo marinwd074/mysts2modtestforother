@@ -50,7 +50,6 @@ internal enum MultiplayerSafeExecutionState
 internal enum MultiplayerSafeActionRevalidationDecision
 {
     ExpectedLocalChange,
-    RemoteOrUnknownChange,
     ActionMismatch,
     WorldUnstable,
     SafeToContinue,
@@ -59,17 +58,6 @@ internal enum MultiplayerSafeActionRevalidationDecision
 internal readonly record struct MultiplayerSafeActionRevalidationFacts(
     bool NativeLocalActionCaptured,
     bool ActionQueueIdle,
-    bool ExpectedContinuationStateMatched,
-    bool ExpectedRemoteStateMatched,
-    // U1 keeps the historical heuristic checks only as side-by-side diagnostics.
-    // They no longer authorize or reject a completed action because the production
-    // simulator's predicted semantic post-state is the stronger source of truth.
-    bool LocalCardRemovedFromHand,
-    bool LocalPlayerIdentityStable,
-    bool EnergyStateConsistent,
-    bool TargetIdentityStable,
-    bool RemotePublicStateUnchanged,
-    bool EnemyStateMatchesExpectedTarget,
     bool WorldVersionAdvanced,
     bool WorldVersionStable,
     bool HasNextAction);
@@ -77,28 +65,16 @@ internal readonly record struct MultiplayerSafeActionRevalidationFacts(
 internal readonly record struct MultiplayerSafeEndTurnFacts(
     bool CurrentCombatLifecycle,
     bool LocalPlayableTurn,
-    bool RouteGenerationCurrent,
-    bool RouteEndsWithEndTurn,
-    bool ActionQueueIdle,
     bool NoPendingChoice,
-    bool LocalTurnIdentityStable,
-    bool WorldVersionMatchesAccepted,
-    bool WorldVersionStable,
-    bool NoPendingWorldObservation);
+    bool WorldVersionStable);
 
 internal enum MultiplayerSafeEndTurnDecision
 {
     Safe,
     CombatLifecycleChanged,
     NotLocalPlayableTurn,
-    RouteGenerationChanged,
-    RouteBoundaryMissing,
-    ActionQueuePending,
     ChoicePending,
-    LocalTurnIdentityChanged,
-    WorldVersionNotAccepted,
     WorldUnstable,
-    WorldObservationPending,
 }
 
 /// <summary>
@@ -434,70 +410,16 @@ internal static class MultiplayerSafeExecutePolicy
         return safe;
     }
 
-    internal static bool EnemyStateMatchesExpectedLocalAction(
-        IReadOnlyList<string> before,
-        IReadOnlyList<string> after,
-        uint? targetCombatId)
-    {
-        if (!TryBuildEnemyTokensById(before, out Dictionary<string, string> beforeById)
-            || !TryBuildEnemyTokensById(after, out Dictionary<string, string> afterById))
-        {
-            return false;
-        }
-
-        string[] beforeIds = [.. beforeById.Keys.OrderBy(key => key, StringComparer.Ordinal)];
-        string[] afterIds = [.. afterById.Keys.OrderBy(key => key, StringComparer.Ordinal)];
-        if (!beforeIds.SequenceEqual(afterIds, StringComparer.Ordinal))
-            return false;
-
-        // A targetless local card may legitimately damage/apply powers to one or many enemies.
-        // Remote teammate mutations are guarded independently by RemotePublicStateUnchanged.
-        if (targetCombatId is null)
-            return true;
-
-        string targetId = targetCombatId.Value.ToString();
-        foreach ((string id, string token) in beforeById)
-        {
-            if (string.Equals(id, targetId, StringComparison.Ordinal))
-                continue;
-            if (!string.Equals(afterById[id], token, StringComparison.Ordinal))
-                return false;
-        }
-        return true;
-    }
-
-    private static bool TryBuildEnemyTokensById(
-        IEnumerable<string> tokens,
-        out Dictionary<string, string> byId)
-    {
-        byId = new(StringComparer.Ordinal);
-        foreach (string token in tokens)
-        {
-            int separator = token.IndexOf(':');
-            if (separator <= 0 || !byId.TryAdd(token[..separator], token))
-            {
-                byId.Clear();
-                return false;
-            }
-        }
-        return true;
-    }
-
     internal static MultiplayerSafeActionRevalidationDecision RevalidateAction(
         MultiplayerSafeActionRevalidationFacts facts)
     {
+        // Keep only execution ownership and world-settlement boundaries. The selected route
+        // already passed the simulator; repeating semantic/hash checks after every native action
+        // caused redundant replay work and unnecessary abort/research cycles.
         if (!facts.NativeLocalActionCaptured || !facts.ActionQueueIdle)
             return MultiplayerSafeActionRevalidationDecision.ActionMismatch;
         if (!facts.WorldVersionAdvanced || !facts.WorldVersionStable)
             return MultiplayerSafeActionRevalidationDecision.WorldUnstable;
-
-        // U1: validate the settled native state against the exact one-action replay from
-        // the same live pre-action root. This admits legitimate draw/generation/Choice,
-        // AoE and power-trigger chains while still rejecting any unmodeled teammate delta.
-        if (!facts.ExpectedRemoteStateMatched)
-            return MultiplayerSafeActionRevalidationDecision.RemoteOrUnknownChange;
-        if (!facts.ExpectedContinuationStateMatched)
-            return MultiplayerSafeActionRevalidationDecision.ActionMismatch;
 
         return facts.HasNextAction
             ? MultiplayerSafeActionRevalidationDecision.SafeToContinue
@@ -510,8 +432,6 @@ internal static class MultiplayerSafeExecutePolicy
         {
             MultiplayerSafeActionRevalidationDecision.ExpectedLocalChange
                 => "expected_local_change",
-            MultiplayerSafeActionRevalidationDecision.RemoteOrUnknownChange
-                => "remote_or_unknown_change",
             MultiplayerSafeActionRevalidationDecision.ActionMismatch
                 => "action_mismatch",
             MultiplayerSafeActionRevalidationDecision.WorldUnstable
@@ -528,22 +448,10 @@ internal static class MultiplayerSafeExecutePolicy
             return MultiplayerSafeEndTurnDecision.CombatLifecycleChanged;
         if (!facts.LocalPlayableTurn)
             return MultiplayerSafeEndTurnDecision.NotLocalPlayableTurn;
-        if (!facts.RouteGenerationCurrent)
-            return MultiplayerSafeEndTurnDecision.RouteGenerationChanged;
-        if (!facts.RouteEndsWithEndTurn)
-            return MultiplayerSafeEndTurnDecision.RouteBoundaryMissing;
-        if (!facts.ActionQueueIdle)
-            return MultiplayerSafeEndTurnDecision.ActionQueuePending;
         if (!facts.NoPendingChoice)
             return MultiplayerSafeEndTurnDecision.ChoicePending;
-        if (!facts.LocalTurnIdentityStable)
-            return MultiplayerSafeEndTurnDecision.LocalTurnIdentityChanged;
-        if (!facts.WorldVersionMatchesAccepted)
-            return MultiplayerSafeEndTurnDecision.WorldVersionNotAccepted;
         if (!facts.WorldVersionStable)
             return MultiplayerSafeEndTurnDecision.WorldUnstable;
-        if (!facts.NoPendingWorldObservation)
-            return MultiplayerSafeEndTurnDecision.WorldObservationPending;
         return MultiplayerSafeEndTurnDecision.Safe;
     }
 
@@ -553,14 +461,8 @@ internal static class MultiplayerSafeExecutePolicy
             MultiplayerSafeEndTurnDecision.Safe => "safe_end_turn",
             MultiplayerSafeEndTurnDecision.CombatLifecycleChanged => "combat_lifecycle_changed",
             MultiplayerSafeEndTurnDecision.NotLocalPlayableTurn => "not_local_playable_turn",
-            MultiplayerSafeEndTurnDecision.RouteGenerationChanged => "route_generation_changed",
-            MultiplayerSafeEndTurnDecision.RouteBoundaryMissing => "route_boundary_missing",
-            MultiplayerSafeEndTurnDecision.ActionQueuePending => "action_queue_pending",
             MultiplayerSafeEndTurnDecision.ChoicePending => "choice_pending",
-            MultiplayerSafeEndTurnDecision.LocalTurnIdentityChanged => "local_turn_identity_changed",
-            MultiplayerSafeEndTurnDecision.WorldVersionNotAccepted => "world_version_not_accepted",
             MultiplayerSafeEndTurnDecision.WorldUnstable => "world_unstable",
-            MultiplayerSafeEndTurnDecision.WorldObservationPending => "world_observation_pending",
             _ => throw new ArgumentOutOfRangeException(nameof(decision), decision, null),
         };
 

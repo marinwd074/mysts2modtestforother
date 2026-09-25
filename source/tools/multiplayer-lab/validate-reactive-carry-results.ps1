@@ -209,7 +209,7 @@ foreach ($end in $selectedAccepted) {
     }
     $remoteDelta = @($records | Where-Object {
             ($_.Index -gt $end.Index) -and ($_.Index -lt $nextPlanIndex) -and
-            (($_.Text -match 'MP_REACTIVE_WORLD_DELTA\b.*remote_public_changed=true') -or
+            (($_.Text -match '\[CombatSolver/MultiplayerProbe\] OBSERVED\b') -or
              ($_.Text -match 'MP2B_WORLD_CHANGED\b'))
         } | Select-Object -First 1)
     if ($remoteDelta.Count -eq 1) { $remoteDeltaEvidence.Add($remoteDelta[0]) }

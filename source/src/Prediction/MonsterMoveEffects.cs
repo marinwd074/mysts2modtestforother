@@ -197,8 +197,8 @@ internal static partial class MonsterMoveEffects
         ForecastMove move,
         Creature fallbackPlayer)
     {
-        IReadOnlyList<Creature> targets = simulator.State.PlayerCreatures.Count > 1
-            ? simulator.State.PlayerCreatures
+        IReadOnlyList<Creature> targets = simulator.State.RootCapturedPlayerCreatures.Count > 1
+            ? simulator.State.RootCapturedPlayerCreatures
             : [fallbackPlayer];
         List<(Creature Target, PredictedCard Card)> stolenCards = [];
 
@@ -270,14 +270,14 @@ internal static partial class MonsterMoveEffects
 
         // Pinned 0.107.1 has two separate target loops: all Sandpit applications first,
         // then six Frantic Escape insertions per player. Do not interleave these phases.
-        foreach (Creature target in simulator.State.PlayerCreatures)
+        foreach (Creature target in simulator.State.RootCapturedPlayerCreatures)
         {
             combat.ApplyTargeted<SandpitPower>(move.Owner, target, 4, move.Owner);
             if (simulator.HasPendingChoice)
                 return true;
         }
 
-        foreach (Creature target in simulator.State.PlayerCreatures)
+        foreach (Creature target in simulator.State.RootCapturedPlayerCreatures)
         {
             simulator.AddToCombat<FranticEscape>(
                 target, PileType.Draw, 3, null, CardPilePosition.Random);
@@ -309,7 +309,7 @@ internal static partial class MonsterMoveEffects
         if (type == "GremlinMerc" && id == "DOUBLE_SMASH_MOVE")
             combat.RecordThievery(simulator, move.Owner);
 
-        foreach (Creature target in simulator.State.PlayerCreatures)
+        foreach (Creature target in simulator.State.RootCapturedPlayerCreatures)
         {
             ApplyPerPlayerTargetEffect(simulator, combat, move, type, id, target);
             if (simulator.HasPendingChoice)
@@ -569,7 +569,7 @@ internal static partial class MonsterMoveEffects
                 combat.ApplyDampen(simulator, player, move.Owner);
                 return true;
             case ("KnowledgeDemon", "CURSE_OF_KNOWLEDGE_MOVE"):
-                if (simulator.State.PlayerCreatures.Count > 1)
+                if (simulator.State.RootCapturedPlayerCreatures.Count > 1)
                 {
                     KnowledgeDemonChoiceSupport.BlockOnUncontrolledMultiplayerChoice(
                         combat,

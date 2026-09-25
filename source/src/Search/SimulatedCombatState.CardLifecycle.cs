@@ -167,6 +167,8 @@ internal sealed partial class SimulatedCombatState
         foreach (var entry in _rootHistory.CardPlaysFinished)
         {
             Player owner = entry.CardPlay.Card.Owner;
+            if (!IsRootCapturedPlayer(owner))
+                continue;
             bool awaitingTurnSetup = owner.PlayerCombatState?.Phase == PlayerTurnPhase.Start;
             if ((entry.HappenedThisTurn(this)
                     || awaitingTurnSetup && entry.HappenedLastPlayerTurn(owner))

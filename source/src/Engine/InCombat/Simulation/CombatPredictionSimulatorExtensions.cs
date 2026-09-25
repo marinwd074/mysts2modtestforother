@@ -16,6 +16,8 @@ internal static class CombatPredictionSimulatorExtensions
     // Used by Glowwater Potion and Pael's Eye to mirror their effects.
     public static void ExhaustHand(this CombatPredictionSimulator simulator, Player player)
     {
+        if (!simulator.State.IsRootCapturedPlayer(player))
+            return;
         var cards = simulator.State.GetPlayerCombatState(player).Hand.Cards.ToArray();
         foreach (var card in cards)
         {
@@ -29,6 +31,8 @@ internal static class CombatPredictionSimulatorExtensions
     // Used by Bottled Potential and Reboot to mirror their effects.
     public static void MoveHandToDrawPile(this CombatPredictionSimulator simulator, Player player)
     {
+        if (!simulator.State.IsRootCapturedPlayer(player))
+            return;
         var cards = simulator.State.GetPlayerCombatState(player).Hand.Cards.ToArray();
         simulator.AddToPile(cards, PileType.Draw);
     }

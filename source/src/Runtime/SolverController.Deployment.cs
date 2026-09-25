@@ -114,20 +114,6 @@ internal static partial class SolverController
                 out _).Count
             : 0;
         SolverSettingsSnapshot deploymentSettings = SolverSettings.Capture();
-        SearchPolicySnapshot? safeReplayPolicy =
-            capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute
-                ? CaptureSearchPolicy(
-                    deploymentSettings,
-                    state,
-                    includeTurnSetup: false,
-                    theftPolicy: _combat.TheftPolicy) with
-                {
-                    Interaction = null,
-                    Diagnostics = new SearchDiagnosticsSink(
-                        static _ => { },
-                        static _ => { }),
-                }
-                : null;
         SolverDeploymentSession deployment = new()
         {
             State = state,
@@ -144,7 +130,6 @@ internal static partial class SolverController
                      capabilities.IsMultiplayer ? MultiplayerWorldTracker.WorldVersion : 0,
                      safeSessionActionCapacity)
                 : null,
-            SafeReplayPolicy = safeReplayPolicy,
         };
         _deployment = deployment;
         int actionCount;
@@ -248,7 +233,6 @@ internal static partial class SolverController
             : !capabilities.CanEndTurnAutomatically
                 ? null
                 : preForecastTurnActions.FirstOrDefault(action => action.Kind == PlanActionKind.EndTurn);
-        MultiplayerSafeExecutionBoundary? lastAcceptedBoundary = null;
         FastModeType originalFastMode = SaveManager.Instance.PrefsSave.FastMode;
         SolverDeploymentFastMode allowedFastMode = capabilities.CanUseFastDeployment
             ? deploymentSettings.DeploymentFastMode
@@ -312,12 +296,9 @@ internal static partial class SolverController
                         $"last_accepted_world_version={safeSession.LastAcceptedWorldVersion}");
                 }
                 MultiplayerSafeExecutionBoundary? beforeBoundary = safeExecute
-                    ? MultiplayerClientProbe.CaptureSafeExecutionBoundary(state)
+                    ? MultiplayerClientProbe.CaptureSafeExecutionBoundary()
                     : null;
-                CardModel? playedCard = null;
                 GameAction? capturedAction = null;
-                int energyBefore = player.PlayerCombatState?.Energy ?? 0;
-                int starsBefore = player.PlayerCombatState?.Stars ?? 0;
                 SafeLocalActionDecision liveSafety = safeExecute
                     ? MultiplayerSafeLocalActionClassifier.Classify(state, action)
                     : SafeLocalActionDecision.Allow;
@@ -346,41 +327,6 @@ internal static partial class SolverController
                 {
                     AbortSafeExecution(host, deployment, turn, actionIndex, sessionStartReason);
                     return;
-                }
-
-                SafeExecutionExpectedPostAction? expectedPostAction = null;
-                if (safeExecute)
-                {
-                    try
-                    {
-                        expectedPostAction =
-                            await CaptureExpectedSafeExecutionPostActionAsync(
-                                state,
-                                deployment,
-                                action,
-                                token);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        throw;
-                    }
-                    catch (Exception ex)
-                    {
-                        Entry.Logger.Warn(
-                            $"[CombatSolver/MultiplayerSafeExecute] U1_EXPECTED_POST_STATE_UNAVAILABLE " +
-                            $"request_id={safeSession!.RequestId} turn={turn} action_index={actionIndex} " +
-                            $"card={action.CardId ?? "-"} exception={ex.GetType().Name} message={ex.Message}");
-                        StopMultiplayerSafeAutoAtUnsupportedBoundary(
-                            new SafeLocalActionDecision(false, "expected_post_state_unavailable"),
-                            turn);
-                        AbortSafeExecution(
-                            host,
-                            deployment,
-                            turn,
-                            actionIndex,
-                            "expected_post_state_unavailable");
-                        return;
-                    }
                 }
 
                 string actionTitle = action.Kind == PlanActionKind.UsePotion
@@ -496,7 +442,6 @@ internal static partial class SolverController
                 {
                     List<CardModel> hand = player.PlayerCombatState!.Hand.Cards.ToList();
                     CardModel card = FindCardForDeployment(hand, action);
-                    playedCard = card;
                     if (!card.CanPlayTargeting(target))
                     {
                         bool targetValid = card.IsValidTarget(target);
@@ -596,21 +541,6 @@ internal static partial class SolverController
                         return;
                     }
 
-                    SafeExecutionPostActionComparison semanticComparison =
-                        CompareSafeExecutionPostAction(
-                            state,
-                            player,
-                            expectedPostAction
-                                ?? throw new InvalidOperationException(
-                                    "多人 Safe Execute 缺少 U1 预测后态。"));
-                    LogSafeExecutionPostActionComparison(
-                        safeSession!,
-                        turn,
-                        actionIndex,
-                        action,
-                        expectedPostAction!,
-                        semanticComparison);
-
                     if (!safeSession!.BeginRevalidation())
                     {
                         AbortSafeExecution(host, deployment, turn, actionIndex, "session_not_revalidating");
@@ -622,15 +552,8 @@ internal static partial class SolverController
                         BuildSafeActionRevalidationFacts(
                             beforeBoundary!,
                             afterBoundary,
-                            semanticComparison,
                             capturedAction,
-                            playedCard,
-                            player,
-                            energyBefore,
-                            starsBefore,
                             action,
-                            target,
-                            state,
                             hasNextAction);
                     MultiplayerSafeActionRevalidationDecision decision =
                         MultiplayerSafeExecutePolicy.RevalidateAction(facts);
@@ -639,11 +562,8 @@ internal static partial class SolverController
                         $"[CombatSolver/MultiplayerSafeExecute] MP2B_ACTION_RECONCILED " +
                         $"request_id={safeSession!.RequestId} action_index={actionIndex} " +
                         $"card={action.CardId} decision={decision} reason={decisionReason} " +
-                        $"semantic_state_match={facts.ExpectedContinuationStateMatched.ToString().ToLowerInvariant()} " +
-                        $"semantic_remote_match={facts.ExpectedRemoteStateMatched.ToString().ToLowerInvariant()} " +
-                        $"legacy_local_card_removed={facts.LocalCardRemovedFromHand.ToString().ToLowerInvariant()} " +
-                        $"legacy_remote_unchanged={facts.RemotePublicStateUnchanged.ToString().ToLowerInvariant()} " +
-                        $"legacy_enemy_target_match={facts.EnemyStateMatchesExpectedTarget.ToString().ToLowerInvariant()} " +
+                        $"native_action_captured={facts.NativeLocalActionCaptured.ToString().ToLowerInvariant()} " +
+                        $"action_queue_idle={facts.ActionQueueIdle.ToString().ToLowerInvariant()} " +
                         $"before_world_version={beforeBoundary!.WorldVersion} " +
                         $"after_world_version={afterBoundary.WorldVersion} " +
                         $"observation_sequence={afterBoundary.ObservationSequence}");
@@ -674,7 +594,6 @@ internal static partial class SolverController
                         AbortSafeExecution(host, deployment, turn, actionIndex, "world_observation_pending");
                         return;
                     }
-                    lastAcceptedBoundary = afterBoundary;
                     if ((!hasNextAction || safeSession.State == MultiplayerSafeExecutionState.Completed)
                         && plannedEndTurn == null)
                     {
@@ -745,10 +664,8 @@ internal static partial class SolverController
                         state,
                         deployment,
                         safeSession!,
-                        plannedEndTurn,
                         turn,
                         actions.Count,
-                        lastAcceptedBoundary,
                         token);
                     return;
                 }
@@ -1037,40 +954,24 @@ internal static partial class SolverController
         CombatState state,
         SolverDeploymentSession deployment,
         MultiplayerSafeExecutionSession safeSession,
-        PlanAction plannedEndTurn,
         int turn,
         int actionCount,
-        MultiplayerSafeExecutionBoundary? lastAcceptedBoundary,
         CancellationToken token)
     {
         ActionExecutor actionExecutor = RunManager.Instance.ActionExecutor;
         await actionExecutor.FinishedExecutingActions().WaitAsync(token);
 
-        lastAcceptedBoundary ??= CaptureSafeExecutionBoundaryAfterObservation(
-            state,
-            "safe_execute_pre_end_turn_baseline");
         MultiplayerClientProbe.ObserveActionBoundary(state, "safe_execute_pre_end_turn");
         MultiplayerSafeExecutionBoundary current =
-            MultiplayerClientProbe.CaptureSafeExecutionBoundary(state);
-        bool currentLifecycle = IsCurrentCombatLifecycle(
-            state,
-            deployment.CombatLifecycleGeneration);
-        bool actionQueueIdle = actionExecutor.CurrentlyRunningAction == null;
-        bool localIdentityStable = SafeExecutionBoundaryHasSameLocalTurn(
-            lastAcceptedBoundary,
-            current);
+            MultiplayerClientProbe.CaptureSafeExecutionBoundary();
         MultiplayerSafeEndTurnFacts facts = new(
-            CurrentCombatLifecycle: currentLifecycle,
+            CurrentCombatLifecycle: IsCurrentCombatLifecycle(
+                state,
+                deployment.CombatLifecycleGeneration),
             LocalPlayableTurn: IsSamePlayableTurn(state, turn),
-            RouteGenerationCurrent: _combat.SearchesStarted == deployment.RouteGeneration,
-            RouteEndsWithEndTurn: plannedEndTurn.Kind == PlanActionKind.EndTurn,
-            ActionQueueIdle: actionQueueIdle,
             NoPendingChoice: !PlayerTurnSetupCoordinator.IsManaging(state)
                 && !PlayerTurnSetupCoordinator.HasPendingPlannedChoice(state),
-            LocalTurnIdentityStable: localIdentityStable,
-            WorldVersionMatchesAccepted: current.WorldVersion == safeSession.LastAcceptedWorldVersion,
-            WorldVersionStable: MultiplayerWorldTracker.IsStable(current.WorldVersion),
-            NoPendingWorldObservation: !MultiplayerWorldTracker.IsDirty);
+            WorldVersionStable: MultiplayerWorldTracker.IsStable(current.WorldVersion));
         MultiplayerSafeEndTurnDecision decision =
             MultiplayerSafeExecutePolicy.ValidateSafeEndTurn(facts);
         string decisionReason = MultiplayerSafeExecutePolicy.SafeEndTurnReason(decision);
@@ -1153,24 +1054,6 @@ internal static partial class SolverController
             "automatic_end_turn=true custom_network_api_used=false");
     }
 
-    private static MultiplayerSafeExecutionBoundary CaptureSafeExecutionBoundaryAfterObservation(
-        CombatState state,
-        string reason)
-    {
-        MultiplayerClientProbe.ObserveActionBoundary(state, reason);
-        return MultiplayerClientProbe.CaptureSafeExecutionBoundary(state);
-    }
-
-    private static bool SafeExecutionBoundaryHasSameLocalTurn(
-        MultiplayerSafeExecutionBoundary before,
-        MultiplayerSafeExecutionBoundary after)
-        => string.Equals(before.LocalNetId, after.LocalNetId, StringComparison.Ordinal)
-           && before.RoundNumber == after.RoundNumber
-           && string.Equals(before.CurrentSide, after.CurrentSide, StringComparison.Ordinal)
-           && before.LocalTurn == after.LocalTurn
-           && string.Equals(before.LocalPhase, after.LocalPhase, StringComparison.Ordinal)
-           && before.LocalFingerprint == after.LocalFingerprint;
-
     private static async Task<MultiplayerSafeExecutionBoundary?>
         WaitForStableSafeExecutionWorldAsync(
             NGame host,
@@ -1191,7 +1074,7 @@ internal static partial class SolverController
 
             MultiplayerClientProbe.ObserveActionBoundary(state, "safe_execute_action_complete");
             MultiplayerSafeExecutionBoundary current =
-                MultiplayerClientProbe.CaptureSafeExecutionBoundary(state);
+                MultiplayerClientProbe.CaptureSafeExecutionBoundary();
             if (current.WorldVersion > before.WorldVersion
                 && MultiplayerWorldTracker.TryReadStable(out long stableWorldVersion)
                 && stableWorldVersion == current.WorldVersion)
@@ -1208,40 +1091,10 @@ internal static partial class SolverController
     private static MultiplayerSafeActionRevalidationFacts BuildSafeActionRevalidationFacts(
         MultiplayerSafeExecutionBoundary before,
         MultiplayerSafeExecutionBoundary after,
-        SafeExecutionPostActionComparison semanticComparison,
         GameAction? capturedAction,
-        CardModel? playedCard,
-        Player player,
-        int energyBefore,
-        int starsBefore,
         PlanAction action,
-        Creature? expectedTarget,
-        CombatState state,
         bool hasNextAction)
     {
-        PlayerCombatState? liveCombat = player.PlayerCombatState;
-        bool localCardRemoved = playedCard != null
-            && liveCombat != null
-            && liveCombat.Hand.Cards.All(card => !ReferenceEquals(card, playedCard));
-        int energyCost = playedCard?.EnergyCost.GetAmountToSpend() ?? int.MaxValue;
-        int starsCost = playedCard?.GetStarCostWithModifiers() ?? int.MaxValue;
-        bool energyConsistent = after.LocalEnergy is { } energy
-            && energy >= 0
-            && energy >= energyBefore - Math.Max(0, energyCost);
-        bool starsConsistent = after.LocalStars is { } stars
-            && stars >= 0
-            && stars >= starsBefore - Math.Max(0, starsCost);
-        bool targetStable = action.TargetCombatId is null
-            ? true
-            : expectedTarget != null
-                && ReferenceEquals(expectedTarget, state.GetCreature(action.TargetCombatId));
-        bool localIdentityStable = before.LocalNetId != null
-            && string.Equals(before.LocalNetId, after.LocalNetId, StringComparison.Ordinal)
-            && before.RoundNumber == after.RoundNumber
-            && before.CurrentSide == after.CurrentSide
-            && before.LocalTurn == after.LocalTurn
-            && before.LocalPhase == after.LocalPhase;
-
         ActionExecutor actionExecutor = RunManager.Instance.ActionExecutor;
         bool actionQueueIdle = actionExecutor.CurrentlyRunningAction == null
             && actionExecutor.FinishedExecutingActions().IsCompleted;
@@ -1254,18 +1107,6 @@ internal static partial class SolverController
                 _ => false,
             },
             ActionQueueIdle: actionQueueIdle,
-            ExpectedContinuationStateMatched: semanticComparison.ContinuationMatched,
-            ExpectedRemoteStateMatched: semanticComparison.RemoteMatched,
-            LocalCardRemovedFromHand: localCardRemoved,
-            LocalPlayerIdentityStable: localIdentityStable,
-            EnergyStateConsistent: energyConsistent && starsConsistent,
-            TargetIdentityStable: targetStable,
-            RemotePublicStateUnchanged: before.RemotePublicFingerprint == after.RemotePublicFingerprint,
-            EnemyStateMatchesExpectedTarget:
-                MultiplayerSafeExecutePolicy.EnemyStateMatchesExpectedLocalAction(
-                    before.Enemies,
-                    after.Enemies,
-                    action.TargetCombatId),
             WorldVersionAdvanced: after.WorldVersion > before.WorldVersion,
             WorldVersionStable: MultiplayerWorldTracker.TryReadStable(out long stableVersion)
                 && stableVersion == after.WorldVersion,
@@ -1336,64 +1177,10 @@ internal static partial class SolverController
             failedChecks.Add("native_local_action");
         if (!facts.ActionQueueIdle)
             failedChecks.Add("action_queue_idle");
-        if (!facts.ExpectedContinuationStateMatched)
-            failedChecks.Add("expected_continuation_state");
-        if (!facts.ExpectedRemoteStateMatched)
-            failedChecks.Add("expected_remote_state");
         if (!facts.WorldVersionAdvanced)
             failedChecks.Add("world_version_advanced");
         if (!facts.WorldVersionStable)
             failedChecks.Add("world_version_stable");
-
-        List<string> legacyMismatches = [];
-        if (!facts.LocalCardRemovedFromHand)
-            legacyMismatches.Add("local_card_removed");
-        if (!facts.LocalPlayerIdentityStable)
-            legacyMismatches.Add("local_identity");
-        if (!facts.EnergyStateConsistent)
-            legacyMismatches.Add("energy_or_stars");
-        if (!facts.TargetIdentityStable)
-            legacyMismatches.Add("target_identity");
-        if (!facts.RemotePublicStateUnchanged)
-            legacyMismatches.Add("remote_public_state");
-        if (!facts.EnemyStateMatchesExpectedTarget)
-            legacyMismatches.Add("enemy_state");
-
-        List<string> changedFields = [];
-        if (before.LocalHp != after.LocalHp)
-            changedFields.Add("hp");
-        if (before.LocalBlock != after.LocalBlock)
-            changedFields.Add("block");
-        if (before.LocalEnergy != after.LocalEnergy)
-            changedFields.Add("energy");
-        if (before.LocalStars != after.LocalStars)
-            changedFields.Add("stars");
-        if (!before.LocalHand.SequenceEqual(after.LocalHand, StringComparer.Ordinal))
-            changedFields.Add("hand");
-        if (!before.LocalDrawPile.SequenceEqual(after.LocalDrawPile, StringComparer.Ordinal))
-            changedFields.Add("draw");
-        if (!before.LocalDiscard.SequenceEqual(after.LocalDiscard, StringComparer.Ordinal))
-            changedFields.Add("discard");
-        if (!before.LocalExhaust.SequenceEqual(after.LocalExhaust, StringComparer.Ordinal))
-            changedFields.Add("exhaust");
-        if (!before.LocalPowers.SequenceEqual(after.LocalPowers, StringComparer.Ordinal))
-            changedFields.Add("powers");
-        if (!before.RemotePlayers.SequenceEqual(after.RemotePlayers, StringComparer.Ordinal))
-            changedFields.Add("remote_players");
-        if (!before.Enemies.SequenceEqual(after.Enemies, StringComparer.Ordinal))
-            changedFields.Add("enemies");
-        if (!before.LocalFingerprint.Equals(after.LocalFingerprint))
-            changedFields.Add("local_fingerprint");
-        if (!before.RemotePublicFingerprint.Equals(after.RemotePublicFingerprint))
-            changedFields.Add("remote_public_fingerprint");
-        if (before.RoundNumber != after.RoundNumber)
-            changedFields.Add("round");
-        if (!string.Equals(before.CurrentSide, after.CurrentSide, StringComparison.Ordinal))
-            changedFields.Add("side");
-        if (before.LocalTurn != after.LocalTurn)
-            changedFields.Add("turn");
-        if (!string.Equals(before.LocalPhase, after.LocalPhase, StringComparison.Ordinal))
-            changedFields.Add("phase");
 
         int currentLifecycleGeneration = Volatile.Read(ref _combatLifecycleGeneration);
         bool lifecycleCurrent = deployment.State != null
@@ -1407,40 +1194,12 @@ internal static partial class SolverController
             $"card={action.CardId ?? "-"} target={action.TargetCombatId?.ToString() ?? "-"} " +
             $"decision={decision} reason={decisionReason} " +
             $"failed_checks={FormatSafeDiagnosticTokens(failedChecks)} " +
-            $"legacy_mismatches={FormatSafeDiagnosticTokens(legacyMismatches)} " +
-            $"changed_fields={FormatSafeDiagnosticTokens(changedFields)} " +
             $"before_world_version={before.WorldVersion} after_world_version={after.WorldVersion} " +
             $"before_observation_sequence={before.ObservationSequence} " +
             $"after_observation_sequence={after.ObservationSequence} " +
             $"lifecycle_current={lifecycleCurrent.ToString().ToLowerInvariant()} " +
             $"expected_lifecycle_generation={deployment.CombatLifecycleGeneration} " +
-            $"current_lifecycle_generation={currentLifecycleGeneration} " +
-            $"before_local_fingerprint={before.LocalFingerprint.First:X16}:{before.LocalFingerprint.Second:X16} " +
-            $"after_local_fingerprint={after.LocalFingerprint.First:X16}:{after.LocalFingerprint.Second:X16} " +
-            $"before_remote_fingerprint={before.RemotePublicFingerprint.First:X16}:{before.RemotePublicFingerprint.Second:X16} " +
-            $"after_remote_fingerprint={after.RemotePublicFingerprint.First:X16}:{after.RemotePublicFingerprint.Second:X16}");
-
-        Entry.Logger.Warn(
-            $"[CombatSolver/MultiplayerSafeExecute] MP2B_ACTION_STATE_DIFF " +
-            $"request_id={safeSession.RequestId} action_index={actionIndex} " +
-            $"before_hp={before.LocalHp?.ToString() ?? "-"} after_hp={after.LocalHp?.ToString() ?? "-"} " +
-            $"before_block={before.LocalBlock?.ToString() ?? "-"} after_block={after.LocalBlock?.ToString() ?? "-"} " +
-            $"before_energy={before.LocalEnergy?.ToString() ?? "-"} after_energy={after.LocalEnergy?.ToString() ?? "-"} " +
-            $"before_stars={before.LocalStars?.ToString() ?? "-"} after_stars={after.LocalStars?.ToString() ?? "-"} " +
-            $"before_hand=[{FormatSafeDiagnosticTokens(before.LocalHand)}] " +
-            $"after_hand=[{FormatSafeDiagnosticTokens(after.LocalHand)}] " +
-            $"before_draw=[{FormatSafeDiagnosticTokens(before.LocalDrawPile)}] " +
-            $"after_draw=[{FormatSafeDiagnosticTokens(after.LocalDrawPile)}] " +
-            $"before_discard=[{FormatSafeDiagnosticTokens(before.LocalDiscard)}] " +
-            $"after_discard=[{FormatSafeDiagnosticTokens(after.LocalDiscard)}] " +
-            $"before_exhaust=[{FormatSafeDiagnosticTokens(before.LocalExhaust)}] " +
-            $"after_exhaust=[{FormatSafeDiagnosticTokens(after.LocalExhaust)}] " +
-            $"before_powers=[{FormatSafeDiagnosticTokens(before.LocalPowers)}] " +
-            $"after_powers=[{FormatSafeDiagnosticTokens(after.LocalPowers)}] " +
-            $"before_remote=[{FormatSafeDiagnosticTokens(before.RemotePlayers)}] " +
-            $"after_remote=[{FormatSafeDiagnosticTokens(after.RemotePlayers)}] " +
-            $"before_enemies=[{FormatSafeDiagnosticTokens(before.Enemies)}] " +
-            $"after_enemies=[{FormatSafeDiagnosticTokens(after.Enemies)}]");
+            $"current_lifecycle_generation={currentLifecycleGeneration}");
     }
 
     private static string FormatSafeDiagnosticTokens(IEnumerable<string> tokens)

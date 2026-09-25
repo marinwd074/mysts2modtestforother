@@ -14,8 +14,8 @@
 ## 当前多人架构
 
 1. **共同搜索核心**：单人完整路线与多人本地跨回合共用 Beam、Novelty、成长、遗物、药水和长期收益基础。
-2. **团队目标/情景**：多人叠加公平 Scenario Matrix 和 Robust 目标；生产默认仍为 Robust。
-3. **交错预测**：支持 local → forecast-only teammate → local 的 detached 模拟；队友节点没有 deployment authority。U5 reverse-order 等价探针只在详细诊断开启时运行；生产搜索不再为纯日志额外 Fork/重放每条队友路线。单动作 teammate forecast 不再固定先 Fork 一份只读 seed：候选先在原状态只读枚举，只有真实候选才按原语义逐候选 Fork；无合法队友动作时零额外 simulator clone。性能设置新增两个默认开启的多人专用开关：关闭“多人队友联合预测”会同时停用回合内 U5 与结束回合 Joint teammate forecast；关闭“多人 Robust 情景复评”会停用 U3 Scenario Matrix，并把预留节点预算还给主 Beam。两个开关都不改变单人模式。
+2. **团队目标/情景**：Team Objective、Shadow teammate forecast、Scenario Matrix / Robust 和 Carry 统一属于实验多人预测栈。生产默认关闭该栈，使用真实多人战斗根 + local-single-core；仅“设置 → 常规 → 多人模式 → 启用多人预测算法（实验）”一个总开关控制是否启用整套预测栈。
+3. **交错预测**：实验预测栈开启时支持 local → forecast-only teammate → local 的 detached 模拟；队友节点没有 deployment authority。U5 reverse-order 等价探针只在详细诊断开启时运行；生产搜索不再为纯日志额外 Fork/重放每条队友路线。队友联合预测与 Robust 情景复评继续作为内部搜索阶段保留，但不再暴露独立用户开关，避免与总开关形成无效/矛盾组合。
 4. **路线刷新**：轻量 HP/Block drift 可对少量保留候选做 bounded refresh；目标死亡、资源、Power、牌堆/RNG 等强变化走 fresh search。
 5. **Safe Execute**：逐本地动作使用原生提交、稳定等待和 predicted/live semantic post-state 对照；旧 request/generation 不可复活。
 6. **药水**：本地药水已接入多人 Safe Execute；药水槽、策略面板、Smart/保护/强制与单人共用。多人只读取/消耗本地玩家药水，玩家类目标只允许自己，攻击/状态药仍可作用敌人；是否值得消耗药水固定按本地玩家的单人药水基线判断，队友战损不能改变用药资格。
@@ -221,3 +221,34 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - Shared finished-play count still records every simulated play, while owner-scoped draw/generation/orb/hit counters remain local-player scoped.
 - E0's real two-player detached fixture now verifies GetCounters(local) on the root simulator and an ordinary fork.
 - U2Runtime now installs ModelDbGetIdCachePatch so pinned 0.107.1 harnesses verify the new Harmony target.
+
+## 2026-09-25 runtime gate reduction
+
+- Multiplayer Safe Execute no longer performs a second one-action solver replay before every native action.
+- Per-action continuation/remote semantic fingerprints are no longer authorization gates; action continuation now keeps only native-action capture, queue-idle, advancing WorldVersion, and stable WorldVersion.
+- Safe-execution boundary snapshots no longer compute duplicate local/remote fingerprints.
+- Multiplayer root capture no longer runs the full post-capture pile/orb/remote-fingerprint verification pass.
+- Core search StateFingerprint remains intact for beam deduplication, transpositions, cycle detection, RNG/state identity, and other search semantics.
+
+## 2026-09-25 continuation fingerprint removal
+
+- Removed the dedicated multiplayer continuation remote-state fingerprint from SimulationSnapshot, continuation expectations, validation input, and reuse matching.
+- Continuation reuse still requires the existing ContinuationStamp plus combat/local-player identity, multiplayer scaling/card rules, and an advanced WorldVersion.
+- Search retention no longer computes a teammate-state fingerprint at every future turn boundary, and terminal continuation building no longer replays solely to recover that fingerprint.
+- The carry-ranking fingerprint is intentionally left separate for now; it is not a continuation admission gate.
+
+## 2026-09-25 probe and carry fingerprint cleanup
+
+- Multiplayer probe now computes only the compact fingerprint that actually advances WorldVersion; the extra reactive-public and local-boundary fingerprints and their delta log were removed.
+- The compact fingerprint value is no longer printed in the normal OBSERVED log; only the fact that WorldVersion advanced is logged.
+- Carry Ranking no longer stores or computes duplicate PublicFingerprint / RemotePublicFingerprint values. It uses its captured immutable player/enemy arrays plus WorldVersion.
+- The old MultiplayerContinuationRemoteFingerprint implementation and its probe wrapper were removed after continuation admission stopped consuming them.
+- Evidence validators now key off compact WorldVersion advancement rather than the removed remote-public diagnostic hash.
+
+## 2026-09-25 gate collapse
+
+- Safe Execute post-action revalidation now has only five facts: native action captured, native queue idle, WorldVersion advanced, WorldVersion stable, and whether another planned action exists.
+- Removed the retired hand-removal, energy/stars, target-identity, enemy-delta, remote-delta, and semantic-replay compatibility facts and their failure diagnostics.
+- MultiplayerSafeExecutionBoundary now carries only WorldVersion and observation sequence; it no longer snapshots piles, powers, enemies, teammate state, HP, block, energy, or stars for every played action.
+- Safe EndTurn preflight was reduced from ten duplicated gates to four: current combat lifecycle, local playable turn, no pending choice, and stable WorldVersion. Session.TryBeginEndTurn remains the single owner of turn, route-generation, authorization-state, and accepted-WorldVersion checks.
+- Removed the retired RemoteOrUnknownChange post-action decision and enemy-token heuristic gate. Pre-action WorldVersion invalidation remains the stale-route boundary.
