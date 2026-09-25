@@ -14,6 +14,7 @@ internal sealed partial class SolverSettingsPanel
     private OptionButton _actTransitionBossHpStrategy = null!;
     private OptionButton _finalBossHpStrategy = null!;
     private CheckButton _multiplayerPrediction = null!;
+    private CheckButton _multiplayerLethalHpRecalculation = null!;
     private OptionButton _multiplayerCombatObjective = null!;
     private LineEdit _acceptableBattleHpLoss = null!;
     private OptionButton _searchCompletionNotificationPolicy = null!;
@@ -239,6 +240,13 @@ internal sealed partial class SolverSettingsPanel
             SolverText.Get("启用多人专用搜索算法（实验）"),
             _multiplayerPrediction,
             SolverText.Get("默认关闭：多人使用单人完整路线搜索、排序与剪枝，只保留多人运行和执行边界。开启后才启用多人路线语义、团队目标、队友预测、Scenario/Robust 复评和 Carry 排序。"));
+        _multiplayerLethalHpRecalculation = CreateToggle();
+        _multiplayerLethalHpRecalculation.Toggled += OnMultiplayerLethalHpRecalculationToggled;
+        AddBasicRow(
+            multiplayerObjectiveGrid,
+            SolverText.Get("斩杀线敌人血量变化时重算（实验）"),
+            _multiplayerLethalHpRecalculation,
+            SolverText.Get("默认关闭。前期敌人掉血不打断现有单人最优路线；进入项目现有斩杀窗口后，敌人 HP 再发生变化才触发路线重算。该开关不启用团队目标、队友预测或 Robust。"));
         _multiplayerCombatObjective = CreateMultiplayerCombatObjectiveInput();
         AddBasicRow(
             multiplayerObjectiveGrid,
@@ -279,6 +287,7 @@ internal sealed partial class SolverSettingsPanel
         _stopOnDeathTurn.ButtonPressed = data.StopFullAutoOnDeathTurn;
         _stopOnWorseRecalculation.ButtonPressed = data.StopFullAutoOnWorseRecalculation;
         _multiplayerPrediction.ButtonPressed = data.UseMultiplayerPrediction;
+        _multiplayerLethalHpRecalculation.ButtonPressed = data.UseMultiplayerLethalHpRecalculation;
         _multiplayerCombatObjective.Disabled = !data.UseMultiplayerPrediction;
     }
 
@@ -488,6 +497,21 @@ internal sealed partial class SolverSettingsPanel
             SolverText.Get(enabled
                 ? "多人专用搜索算法已开启，重新计算后生效"
                 : "多人专用搜索算法已关闭，重新计算后使用单人搜索核心"),
+            SolverUiTokens.Palette.Success);
+    }
+
+    private void OnMultiplayerLethalHpRecalculationToggled(bool enabled)
+    {
+        if (_loading)
+            return;
+        SolverSettings.Update(SolverSettings.Current with
+        {
+            UseMultiplayerLethalHpRecalculation = enabled,
+        });
+        SetStatus(
+            SolverText.Get(enabled
+                ? "斩杀线血量重算已开启"
+                : "斩杀线血量重算已关闭，敌人掉血不会主动打断路线"),
             SolverUiTokens.Palette.Success);
     }
 

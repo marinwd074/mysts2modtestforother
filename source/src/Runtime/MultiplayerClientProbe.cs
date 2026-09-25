@@ -209,8 +209,14 @@ internal static class MultiplayerClientProbe
         bool enemyHpRouteChanged;
         if (returnEnemyHpRouteChange)
         {
+            bool lethalHpRecalculationEnabled =
+                SolverSettings.Current.UseMultiplayerLethalHpRecalculation;
+            bool inLethalRecalculationWindow =
+                MultiplayerCombatObjectivePolicy.IsInLethalRecalculationWindow(
+                    state.Enemies);
             enemyHpRouteChanged = MultiplayerRouteChangeTracker.ObserveEnemyHp(
                 enemyHpFingerprint,
+                lethalHpRecalculationEnabled && inLethalRecalculationWindow,
                 reason);
         }
         else
@@ -258,6 +264,8 @@ internal static class MultiplayerClientProbe
             $"[CombatSolver/MultiplayerProbe] OBSERVED sequence={_observationSequence} " +
             $"world_version={MultiplayerWorldTracker.WorldVersion} " +
             $"route_version={MultiplayerRouteChangeTracker.Version} reason={reason} " +
+            $"lethal_hp_recalculation={SolverSettings.Current.UseMultiplayerLethalHpRecalculation.ToString().ToLowerInvariant()} " +
+            $"in_lethal_window={MultiplayerCombatObjectivePolicy.IsInLethalRecalculationWindow(state.Enemies).ToString().ToLowerInvariant()} " +
             $"enemy_hp_route_changed={enemyHpRouteChanged.ToString().ToLowerInvariant()} " +
             "compact_changed=true" +
             (display is null ? string.Empty : $" {display}"));

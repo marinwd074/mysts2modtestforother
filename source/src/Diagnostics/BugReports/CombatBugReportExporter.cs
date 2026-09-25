@@ -1374,6 +1374,7 @@ internal static class CombatBugReportExporter
             settings.BrightestFlameMaxHpLossLimit,
             settings.IgnoreLongTermRewards,
             settings.UseMultiplayerPrediction,
+            settings.UseMultiplayerLethalHpRecalculation,
             useNoveltyPortfolio = settings.UseNoveltyPortfolio
                 || UnattendedTestRunner.UseNoveltyPortfolioOverride,
             useBeamWidthPortfolio = settings.UseBeamWidthPortfolio

@@ -113,14 +113,18 @@ internal static class MultiplayerRouteChangeTracker
         _dirty = false;
     }
 
-    internal static bool ObserveEnemyHp(StateFingerprint fingerprint, string reason)
+    internal static bool ObserveEnemyHp(
+        StateFingerprint fingerprint,
+        bool allowInvalidation,
+        string reason)
     {
         if (_lastEnemyHpFingerprint is { } previous && previous == fingerprint)
             return false;
 
         _lastEnemyHpFingerprint = fingerprint;
-        Signal(reason);
-        return true;
+        if (allowInvalidation)
+            Signal(reason);
+        return allowInvalidation;
     }
 
     internal static void SynchronizeEnemyHp(StateFingerprint fingerprint)

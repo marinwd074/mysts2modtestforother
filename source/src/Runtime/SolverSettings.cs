@@ -110,6 +110,11 @@ internal sealed record SolverSettingsData
     /// Off keeps the real multiplayer root but uses the proven local single-player quality core.
     /// </summary>
     public bool UseMultiplayerPrediction { get; init; }
+    /// <summary>
+    /// Optional multiplayer replan trigger. Enemy HP changes are ignored until the existing
+    /// adaptive-lethal model reaches the legacy 35% lethal window.
+    /// </summary>
+    public bool UseMultiplayerLethalHpRecalculation { get; init; }
     public int AcceptableBattleHpLoss { get; init; }
     public bool StopAtAcceptableBattleHpLoss { get; init; } = true;
     public int PerformanceMigrationVersion { get; init; }
@@ -165,6 +170,7 @@ internal sealed record SolverSettingsSnapshot(
     public MultiplayerCombatObjectiveStrategy MultiplayerCombatObjectiveStrategy { get; init; }
         = MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo;
     public bool UseMultiplayerPrediction { get; init; }
+    public bool UseMultiplayerLethalHpRecalculation { get; init; }
     public bool UseBeamWidthPortfolio { get; init; }
     public bool UseNoveltyPortfolio { get; init; }
 }
@@ -263,6 +269,7 @@ internal static class SolverSettings
             $"final_boss_hp_strategy={migrated.FinalBossHpStrategy} " +
             $"multiplayer_combat_objective={migrated.MultiplayerCombatObjectiveStrategy} " +
             $"multiplayer_prediction={migrated.UseMultiplayerPrediction.ToString().ToLowerInvariant()} " +
+            $"multiplayer_lethal_hp_recalculation={migrated.UseMultiplayerLethalHpRecalculation.ToString().ToLowerInvariant()} " +
             $"acceptable_battle_hp_loss={migrated.AcceptableBattleHpLoss} " +
             $"search_notifications_enabled={migrated.SearchCompletionNotificationsEnabled} " +
             $"search_notification_mode={migrated.SearchCompletionNotificationMode} " +
@@ -316,6 +323,7 @@ internal static class SolverSettings
             IgnoreLongTermRewards = data.IgnoreLongTermRewards,
             MultiplayerCombatObjectiveStrategy = data.MultiplayerCombatObjectiveStrategy,
             UseMultiplayerPrediction = data.UseMultiplayerPrediction,
+            UseMultiplayerLethalHpRecalculation = data.UseMultiplayerLethalHpRecalculation,
             UseBeamWidthPortfolio = data.UseBeamWidthPortfolio,
             UseNoveltyPortfolio = data.UseNoveltyPortfolio,
         };
