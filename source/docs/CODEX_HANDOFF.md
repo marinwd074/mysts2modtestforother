@@ -66,6 +66,19 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - 2026-09-25 收到真实双人问题包 `THIEVING_HOPPER_WEAK-9df3f90a...`：Client Probe 明确记录 `players=2`，且 Scenario Matrix 已实际运行两轮；但最终候选排序在 `PolicyActionToken(TeammateForecast)` 抛 `ArgumentOutOfRangeException`，因此本次没有形成完整 E0 selected/published 时间线，不能计为第三个 PASS。根因是通用动作 token 只处理 PlayCard/UsePotion/EndTurn；现已为 `TeammateForecast` 增加稳定 token（含远端玩家、牌、目标），不改排序或搜索语义。
 - **E0 已关闭（2026-09-25）**：三类样本齐全，且第三类为 current HEAD 的真实双人 Host/Client 运行证据。后续不再为了 E0 继续采样，除非改动再次触及搜索成员顺序、候选生成/评估/发布遥测或 E0 validator 语义。
 
+## 搜索效率 E2（2026-09-25，已关闭）
+
+- 第一切片 `d92d25bb` 建立 `SearchStepStatus` / `SearchWorkAllowance` / `SearchStepResult` / `IResumableSearch` 与完整父节点安全点；第二切片把 incumbent、frontier/completed、active/ended/nextPlays、fallback、父节点游标和内存高水位集中进成员状态。
+- 第三切片从 `3d60b7f0` 开始把整个搜索成员改成真正可离开调用栈再恢复的 `SearchMemberExecutionSession`：`SolveCore` 由 iterator state machine 保存阶段位置，session 的 `Step(allowance)` 在完整父节点/并行 wave 提交后返回 `Yielded`，下一次 `Step` 从同一成员状态继续。
+- 当前代码 HEAD `a77d4085`：主 Beam portfolio 成员已由 `CombatSearchCoordinator` 按 **256 个已提交父节点**为生产切片连续 Step；当前仍一次把同一成员跑完后才进入下一个成员，因此 E2 没有改变 portfolio 成员顺序、选择规则或 E3 调度语义。
+- `SimulationNotificationIsolation` 只覆盖每次 `Step` 的真实执行区间，session 暂停时不会继续占用通知隔离；诊断字段继续保持既有 `frontier=` / `ended=` 格式。
+- deterministic P0 fixed-work A/B 已直接对成员 session 验证三种执行方式：continuous、1-parent slice、8-parent slice。三者完整 18 个 action token 逐项相同，均为 `NodeLimit`、projected loss=0、final HP=66、enemy HP=4、expanded=1200、choice branches=0、continuations=3、transitions=5958、committed parents=1200。
+- 实际恢复次数也被门禁验证：1-parent 为 **1200 yields**，8-parent 为 **150 yields**；因此不是“开了接口但没有真的暂停”。
+- 生命周期门禁 PASS：cancel probe 在提交 1 个父节点后取消，累计父节点不增加且所有 live simulator 已释放；Dispose probe 同样在 1 个父节点后释放所有 live simulator，并拒绝后续 resume。
+- 最终验证：compatibility run `36095849302` 的 static-consistency 与 L1 contract-tests 全 PASS；Pinned 0.107.1 run `36095849283` 的 Release、E0、U0/U1、U2、P0 contracts、P0/P1 runtime、历史 P0 A/B 全链 PASS。
+- 本阶段始终没有改变 Beam 宽度、评分、Robust、药水/遗物/特殊牌、多人数值语义或执行权限。
+- **E2 已关闭。** 后续除非再次修改 member-session 状态所有权、安全点、取消/Dispose 或累计预算语义，否则不继续在 E2 增加可恢复搜索改造。
+
 ## 当前未验证边界
 
 - 当前 HEAD 的真实多人 Beam retention A/B：需要在“明显不如手打”的合法局面上确认更好路线究竟在 Beam、portfolio、U3/U4 还是执行层丢失。
@@ -74,11 +87,11 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 
 ## 下一任务
 
-E0 已关闭，本轮不进入后续阶段。下一次开始搜索效率优化时按 E0 证据走 **E2/E3 分支**，不要先做 E1：
+开始 **E3：portfolio 调度 / 早停 / 上界 / 成员间复用**。
 
-1. 先解释并量化为什么真实双人最终赢家直到第三个 `potion_required` portfolio member 才首次生成；保持目标函数和候选质量标准不变。
-2. 优先研究 portfolio 调度/早停/上界与复用，让“后续成员才发现的赢家”更早出现，而不是单纯缩短 selected→published。
-3. E1 保留给单人样本证明的发布延迟问题；只有当多人新证据也显示候选已早选中但迟发布时才优先处理。
-4. 不以固定卡名、seed 或单局硬编码换取速度；继续使用 deterministic node/transition budget 做等价性验证。
+1. 直接复用 E2 的 `SearchMemberExecutionSession`，第一小阶段只改 portfolio 的工作分配，让现有成员可以按 deterministic allowance 轮转，而不是成员 A 完整跑完后再从根启动成员 B；目标函数、Beam 排序、Robust 与最终比较规则保持不变。
+2. 优先处理 E0 的真实多人瓶颈：LOUSE_PROGENITOR 最终赢家直到第三个 `potion_required#3` 才首次生成。E3 要让这类“后置成员赢家”更早获得搜索预算，而不是降低候选质量标准。
+3. 先做固定 node/transition budget A/B，记录每个成员首次产生 incumbent 的工作量、重复根工作和最终赢家；只有证明最终选择不退化后才加入可信的早停或上界。
+4. E1 继续延后；只有新的多人证据显示候选早已 selected 但明显迟 published 时再优先处理发布延迟。
+5. 不按卡名、seed、怪物名或单局硬编码调度规则；每轮仍只推进一个小阶段并更新本 handoff。
 
-每次只推进一个小阶段，并在结束时更新本 handoff；不要重新创建阶段流水账文档。
