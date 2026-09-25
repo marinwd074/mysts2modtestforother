@@ -18,6 +18,7 @@ run_dotnet_contract() {
 }
 
 run_dotnet_contract 'StateFingerprintChecks' 'tools/StateFingerprintChecks/StateFingerprintChecks.csproj'
+run_dotnet_contract 'TranspositionFrontierChecks' 'tools/TranspositionFrontierChecks/TranspositionFrontierChecks.csproj'
 run_dotnet_contract 'CardHookReceiverChecks' 'tools/CardHookReceiverChecks/CardHookReceiverChecks.csproj'
 run_dotnet_contract 'TurnPhaseMirrorChecks' 'tools/TurnPhaseMirrorChecks/TurnPhaseMirrorChecks.csproj'
 run_dotnet_contract 'PredictionStateStoreChecks' 'tools/PredictionStateStoreChecks/PredictionStateStoreChecks.csproj'

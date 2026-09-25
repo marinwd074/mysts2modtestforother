@@ -1,2 +1,5 @@
 # The one-time game snapshot contains large binary files; keep them out of normal Git objects.
 game-body/** filter=lfs diff=lfs merge=lfs -text
+
+# Directory documentation is normal text, not part of the binary snapshot.
+game-body/README.md -filter -diff -merge text

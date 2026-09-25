@@ -23,6 +23,8 @@
 
 ## 文档规则
 
+- 根目录、`.github/`、`game-body/`、`source/src/` 及其一级架构模块必须有就地 `README.md`，说明职责、关键入口与禁止事项。
+- 目录 README 只描述当前职责，不写阶段流水账、旧提交号或一次性实验结果。
 - `docs/README.md` 是文档入口。
 - `CODEX_HANDOFF.md` 只记录当前状态、当前风险、下一任务。
 - 同一事实不要同时复制进 handoff、计划、README 和阶段报告。

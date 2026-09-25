@@ -35,6 +35,7 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - 历史 ANGER 样本：未完成多人路线曾被 `AngerCopiesGenerated` 的最终排序过早惩罚；已有定向修复。
 - 历史 X1 T3 空推荐：等价质量下 `ActionCount` 短路线曾压过当前回合实际出牌；已有定向修复。
 - Beam retention A/B 诊断已接入：同一真实候选池同时观察 TeamObjective 与 legacy 单人排序，不改变生产选择。
+- 最终排序归因新增始终可用的 `MP_QUALITY_LAYER`：记录原 baseline 胜者、Scenario 后的原始 baseline rank、Chance 后最终 baseline rank，并直接标记 `baseline|scenario_robust|shadow_chance`。它不依赖 U4 全矩阵完整，因此 E4 严格提前淘汰时也能判层；原 `MP_QUALITY_SORTING` 继续只承担完整 U4 三策略对照。
 - CEREMONIAL_BEAST T6：VICIOUS 的精确模拟原本存在，但战略估值低估未来抽牌收益；现按可达 Vulnerable 触发次数计入 `CardAccessPotential`，相关合同/pinned 已通过。
 - Headbutt immediate Choice 共用 `NativeChoiceRuntime`；当前实机样本已有完整自动选牌链。另一个跨回合 TurnStart Choice 缺口已独立补上 planned choice replay。
 
@@ -104,6 +105,39 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - 最终验证：compatibility run `36100277486` 的 static-consistency / L1 contracts 全 PASS；Pinned 0.107.1 run `36100277430` 的 Release、E0、U0/U1、U2、P0 contracts、P0/P1 runtime 与历史 P0 A/B 分类链完成。P1 的 5 秒 timed 样本在已胜利状态触及 TimeLimit，但 5000-node fixed-work 两种目标均 PASS，历史分类为 `FIXED_WORK_PASS_TIME_BOUNDARY`，不作为搜索语义回归。
 - **E3 已关闭。** 后续若没有新的 time-to-quality 数据证明 adaptive 稳定优于 fixed，不重新打开 E3B。
 
+## 搜索效率 E4（2026-09-25，已关闭）
+
+- 生产继续使用原 **Robust** 固定四压力情景语义；E4 只改变这些情景的复评组织方式，不修改团队目标、Beam 排序、药水/遗物/特殊牌、多人牌过滤或部署权限，也没有提高默认总预算。
+- 严格模式现在先完整评估第一个可用 current-decision 作为 incumbent。后续候选继续复用当前 U3 的一次共享 Shadow 搜索，但情景 replay 按 incumbent 中更可能暴露弱点的压力顺序执行。
+- 对部分已评情景构造合法的 Robust 乐观下界：存活/终局字段只使用已经不可逆暴露的坏结果；worst-loss / worst-player / team-loss / enemy-durability 使用已观察最大值；未知 mean-loss 明确取 **负无穷**，未知情景从不按 0 或“良好结果”写回矩阵。
+- 只有该候选在“未评情景全部取得最理想值”的情况下，仍按现有完整字典序严格落后于一个已完整评估的 incumbent，才允许停止剩余 replay。等价/tie 情况不会剪枝；被跳过的格子保持 `Unknown`，并记录 `strict_eliminated / strict_reason / skipped_scenario_replays`。
+- 最终 Robust 排序允许“完整候选 + 已被严格证明淘汰的候选”形成闭合比较；普通预算中断/Unsupported 造成的 `Unknown` 仍 fail closed 回原 baseline。U4 nominal-reference / bounded-risk 诊断只有所有候选都完整时才运行，不把 E4 缺失格子伪造成完整矩阵。
+- 小型完整枚举门禁覆盖：严格渐进与全量复评选择同一 Robust 胜者、保留同一 baseline tie-break；另有“前三个压力情景都更好、最后一个情景才把候选翻成劣势”的反例，严格模式必须看到最后一格后才能淘汰。另一个明显劣势候选在首个压力情景后可安全跳过剩余 **3** 次 replay。
+- E4 的近似“首动作一致率 C”没有进入生产：计划本身规定它不是正确率/置信度，也不是严格停止证明。若未来要启用，必须作为单独近似策略做 A/B，不混入本次保持结果等价的优化。
+- 验证：compatibility run **36104370041** 的 `static-consistency` / `contract-tests` 全 PASS；Pinned 0.107.1 run **36104358801** 的 Release、E0、U0/U1、U2、P0/P1 与历史分类链全部 PASS。
+- **E4 已关闭。** 当前实现能真实省掉的是已生成四压力路线之后的部分 scenario replay；共享 Shadow 搜索仍按一次/候选完整计费，不把这段成本伪装成 E4 收益。
+## 搜索效率 E5（2026-09-25，已关闭）
+
+- **生产只启用 E5A 策略引导动作枚举；E5B 中途估值不启用。** 本阶段只改变合法卡牌动作进入 replay 的先后，不改变动作集合、每节点候选额度、Beam retention / final ordering、Robust、Smart 用药、搜索预算或部署权限。
+- 串行 Expand 与并行 PrepareCardActions 统一复用同一份 prepared-action 枚举，避免两条搜索路径以后再次出现动作顺序漂移。
+- 动作顺序使用确定性只读提示：**估计可立即斩杀 > 当前存在预计掉血时的防御 > 每资源战略价值 > 原始战略价值 > 低资源成本 > 原始稳定顺序**。战略价值复用已有 CardChoiceSupport.CardValue；目标生命、当前能量/星能只用于排序提示，不参与剪枝或结果评分。
+- 排序是完整候选集上的稳定优先级，不会因为提示分低而删除动作。legacy 手牌顺序保留为 pinned A/B 测试入口，不暴露用户设置。
+- Pinned 0.107.1 E0 A/B（run **36106327175**）两个代表根均保持 sameQuality=true、sameRoute=true：
+  - simple：legacy **836.554 ms / 369 expanded-at-generation**；E5 **947.748 ms / 369**。确定性生成工作量不变，约 111 ms 墙钟差按运行噪声处理，不把它宣称为收益。
+  - draw_energy：legacy **1641.287 ms / 839 expanded-at-generation**；E5 **1633.226 ms / 823**，最终赢家提前 **16** 个展开节点生成，墙钟约提前 **8.062 ms**。
+- 这组证据证明 E5A 至少能在抽牌/能量根上让最终优质路线更早出现，同时 simple 根没有增加生成所需展开数；但没有证据表明剩余主要瓶颈来自“路线已生成却因中途估值过低被 Beam 丢弃”。因此按计划不修改 Beam 中途估值，避免把动作排序与评分语义混在同一阶段。
+- 合同增加纯排序门禁，覆盖斩杀、防御、价值效率和完全平手时的稳定原顺序。最终验证：compatibility PR run **36106409949** 的 static-consistency / contract-tests 全 PASS；Pinned run **36106327175** 的 Release、E0/E1/E5 A/B、U0/U1、U2、P0/P1 与历史分类链全 PASS。
+- **E5 已关闭。** 后续只有新的真实坏路线证据明确显示“目标动作已经生成，但在中途评分/Beam 保留处被淘汰”时，才单独重开中途估值工作。
+
+## 搜索效率 E6（2026-09-25，已关闭）
+
+- **E6A 不启用新的 pre-replay 可交换顺序剪枝。** 当前生产模型没有一份已证明完备、同时覆盖 Hook、战斗历史、RNG、死亡/复活、Choice/调度以及多人观察机会的动作读写集；按原计划，未知 Hook 必须视为全局依赖。仅凭卡牌类型、目标或现有 `IsPure` 历史分类不足以证明 `F_B(F_A(s)) = F_A(F_B(s))`，因此不把经验性“看起来可交换”升级成硬剪枝。
+- 生产继续保留现有 **完整 replay 后的精确状态去重**：`ExactTranspositionKey` 固定建模战斗状态，`TranspositionFrontier` 再以保守 Pareto label 区分药水/卖血/累计战损、团队与最弱队友损失、ActionCount/Score、路线 traits、边界/死亡/胜利、PredictionGaps 与 CombatProgress。它不能省掉首次 replay，但不会为了 E6 把未知副作用当作等价。
+- 重新接通并修复 `TranspositionFrontierChecks`：合同现在跟随 current label 结构，验证完整等价 label 会合并；Boundary、PlayerDead、AllEnemiesDead、PredictionGaps、CombatProgress 不同不会被误并；同时用独立 comparator 做随机决策对照，并保留 singleton frontier 分配回归检查。该检查已加入 PowerShell/Bash contract 入口。
+- **E6B 不启用局部 exact-kill DFS。** E0/E5 当前证据没有出现“主 Beam 候选池漏掉一条已知合法斩杀”：E0 的多人慢例是最终赢家直到后置 portfolio 成员才生成，E5 只证明动作顺序可让部分赢家更早出现。原计划明确要求只有 E0 证明 Beam 漏斩杀时才启动 DFS；现在加入会成为没有证据支持的额外搜索成本，并破坏“同一请求总预算”约束。
+- 本阶段因此**不改变生产搜索行为、Beam/Robust/Smart 药水/遗物/特殊牌语义，也不增加默认节点、时间或情景预算**。E6 的交付是把两类高风险优化的启用条件锁死，而不是为了阶段编号强行加入近似剪枝。
+- **E6 已关闭。** 未来只有新的 current-HEAD 问题包能证明“存在合法短窗口斩杀，但完整候选池没有生成它”时，才重开 E6B，并限定为共享现有请求预算的当回合/短窗口 DFS；若要重开 E6A，则必须先有覆盖相关 Hook/历史/RNG/死亡/调度语义的完备读写契约与反例门禁。
+
 ## 当前未验证边界
 
 - 当前 HEAD 的真实多人 Beam retention A/B：需要在“明显不如手打”的合法局面上确认更好路线究竟在 Beam、portfolio、U3/U4 还是执行层丢失。
@@ -112,5 +146,5 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 
 ## 下一任务
 
-E3 已完成。后续按总计划进入 **E4：候选与情景的渐进复评** 时再单独开始，不把 E4 的严格上下界/Robust 情景按需计算混回 E3。
+搜索效率 **E0–E6 已按证据全部关闭**。下一任务回到 Quality-first 第三项：只处理 current HEAD 新出现、且有问题包与合法手打前缀证明的明显坏路线；先沿 `FINAL_CANDIDATE → MP_QUALITY_SORTING → FINAL_SELECTION → Safe Execute` 定位丢失层，再只修改有证据的那一层。
 

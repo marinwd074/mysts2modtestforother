@@ -28,12 +28,41 @@ internal sealed partial class CombatBeamSolver
 
         List<MultiplayerScenarioDecisionEvaluation> decisions =
             new(decisionCount);
+        MultiplayerScenarioDecisionEvaluation? strictIncumbent = null;
         for (int decisionIndex = 0; decisionIndex < decisionCount; decisionIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            decisions.Add(EvaluateScenarioDecision(
+            MultiplayerScenarioDecisionEvaluation decision = EvaluateScenarioDecision(
                 decisionRepresentatives[decisionIndex],
-                decisionBudget));
+                decisionBudget,
+                strictIncumbent);
+            decisions.Add(decision);
+
+            if (!decision.CompleteCoverage)
+                continue;
+
+            if (strictIncumbent == null)
+            {
+                strictIncumbent = decision;
+                continue;
+            }
+
+            MultiplayerScenarioDecisionRank decisionRank =
+                MultiplayerScenarioReevaluationPolicy.Aggregate(
+                    decision.Scenarios
+                        .Select(evaluation => evaluation.Outcome!.Value)
+                        .ToArray());
+            MultiplayerScenarioDecisionRank incumbentRank =
+                MultiplayerScenarioReevaluationPolicy.Aggregate(
+                    strictIncumbent.Scenarios
+                        .Select(evaluation => evaluation.Outcome!.Value)
+                        .ToArray());
+            if (MultiplayerScenarioReevaluationPolicy.Compare(
+                    decisionRank,
+                    incumbentRank) < 0)
+            {
+                strictIncumbent = decision;
+            }
         }
 
         int replayExpanded = _run.Expanded - expandedBefore;
@@ -53,7 +82,9 @@ internal sealed partial class CombatBeamSolver
             $"scenarios_per_decision={MultiplayerScenarioReevaluationPolicy.MaximumScenariosPerDecision} " +
             $"decision_budget={decisionBudget} " +
             $"replay_expanded={replayExpanded} " +
-            $"replay_transitions={replayTransitions}");
+            $"replay_transitions={replayTransitions} " +
+            $"strict_pruned_decisions={decisions.Count(decision => decision.StrictlyEliminated)} " +
+            $"strict_skipped_scenario_replays={decisions.Sum(decision => decision.SkippedScenarioReplays)}");
         return decisions;
         }
         finally
@@ -70,7 +101,8 @@ internal sealed partial class CombatBeamSolver
 
     private MultiplayerScenarioDecisionEvaluation EvaluateScenarioDecision(
         SearchNode representative,
-        int maxExpandedBranches)
+        int maxExpandedBranches,
+        MultiplayerScenarioDecisionEvaluation? completeIncumbent)
     {
         string decisionKey =
             MultiplayerChanceDecisionIdentity.CurrentTurnDecisionKey(
@@ -214,20 +246,33 @@ internal sealed partial class CombatBeamSolver
                 routes.Add(route.ScenarioKind, route);
             }
 
-            List<MultiplayerScenarioEvaluation> evaluations =
-                new(scenarioCount);
+            Dictionary<ShadowTeammateScenarioKind, MultiplayerScenarioEvaluation>
+                evaluationsByKind = [];
+            List<MultiplayerScenarioOutcome> evaluatedOutcomes = [];
+            MultiplayerScenarioDecisionRank? incumbentRank =
+                completeIncumbent is { CompleteCoverage: true }
+                    ? MultiplayerScenarioReevaluationPolicy.Aggregate(
+                        completeIncumbent.Scenarios
+                            .Select(evaluation => evaluation.Outcome!.Value)
+                            .ToArray())
+                    : null;
+            IReadOnlyList<MultiplayerScenarioSpec> evaluationOrder =
+                MultiplayerScenarioReevaluationPolicy.StrictEvaluationOrder(
+                    completeIncumbent);
             int scenarioReplayWork = 0;
-            foreach (MultiplayerScenarioSpec spec in
-                     MultiplayerScenarioReevaluationPolicy.ScenarioSpecs)
+            bool strictlyEliminated = false;
+            string? strictEliminationReason = null;
+            int skippedScenarioReplays = 0;
+            foreach (MultiplayerScenarioSpec spec in evaluationOrder)
             {
                 if (!routes.TryGetValue(spec.Kind, out ShadowTeammateRoute? route)
                     || sharedWork + scenarioReplayWork >= maxExpandedBranches)
                 {
-                    evaluations.Add(new MultiplayerScenarioEvaluation(
+                    evaluationsByKind[spec.Kind] = new MultiplayerScenarioEvaluation(
                         spec,
                         MultiplayerScenarioEvaluationStatus.Unknown,
                         Outcome: null,
-                        ExpandedBranches: 0));
+                        ExpandedBranches: 0);
                     continue;
                 }
 
@@ -269,24 +314,38 @@ internal sealed partial class CombatBeamSolver
                     if (!terminal
                         && outcomeSnapshot.BoundaryReason != SearchBoundaryReason.None)
                     {
-                        evaluations.Add(new MultiplayerScenarioEvaluation(
+                        evaluationsByKind[spec.Kind] = new MultiplayerScenarioEvaluation(
                             spec,
                             MultiplayerScenarioEvaluationStatus.Unknown,
                             Outcome: null,
-                            ExpandedBranches: 1));
+                            ExpandedBranches: 1);
                         continue;
                     }
 
-                    evaluations.Add(new MultiplayerScenarioEvaluation(
+                    MultiplayerScenarioOutcome outcome = BuildScenarioOutcome(
+                        outcomeSnapshot,
+                        prefix.Count + 1,
+                        spec.Kind);
+                    evaluationsByKind[spec.Kind] = new MultiplayerScenarioEvaluation(
                         spec,
                         terminal
                             ? MultiplayerScenarioEvaluationStatus.Terminal
                             : MultiplayerScenarioEvaluationStatus.Completed,
-                        BuildScenarioOutcome(
-                            outcomeSnapshot,
-                            prefix.Count + 1,
-                            spec.Kind),
-                        ExpandedBranches: 1));
+                        outcome,
+                        ExpandedBranches: 1);
+                    evaluatedOutcomes.Add(outcome);
+
+                    if (incumbentRank is { } completeRank
+                        && MultiplayerScenarioReevaluationPolicy.CanStrictlyEliminate(
+                            evaluatedOutcomes,
+                            completeRank,
+                            out string reason))
+                    {
+                        strictlyEliminated = true;
+                        strictEliminationReason = reason;
+                        skippedScenarioReplays = scenarioCount - evaluationsByKind.Count;
+                        break;
+                    }
                 }
                 finally
                 {
@@ -294,10 +353,26 @@ internal sealed partial class CombatBeamSolver
                 }
             }
 
+            MultiplayerScenarioEvaluation[] evaluations =
+                MultiplayerScenarioReevaluationPolicy.ScenarioSpecs
+                    .Select(spec => evaluationsByKind.TryGetValue(
+                            spec.Kind,
+                            out MultiplayerScenarioEvaluation evaluation)
+                        ? evaluation
+                        : new MultiplayerScenarioEvaluation(
+                            spec,
+                            MultiplayerScenarioEvaluationStatus.Unknown,
+                            Outcome: null,
+                            ExpandedBranches: 0))
+                    .ToArray();
+
             return new MultiplayerScenarioDecisionEvaluation(
                 decisionKey,
                 evaluations,
-                SharedExpandedBranches: sharedWork);
+                SharedExpandedBranches: sharedWork,
+                StrictlyEliminated: strictlyEliminated,
+                StrictEliminationReason: strictEliminationReason,
+                SkippedScenarioReplays: skippedScenarioReplays);
         }
         finally
         {

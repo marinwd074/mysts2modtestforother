@@ -98,6 +98,9 @@ internal sealed partial class CombatBeamSolver
             MultiplayerScenarioDecisionRank Rank,
             MultiplayerScenarioRiskMetrics? RiskMetrics,
             bool ScenarioSetComplete,
+            bool StrictlyEliminated,
+            string? StrictEliminationReason,
+            int SkippedScenarioReplays,
             int BaselineIndex,
             int ConservativeRepresentativeIndex,
             string ScenarioStatuses,
@@ -546,6 +549,18 @@ internal sealed partial class CombatBeamSolver
                 .ThenBy(candidate => candidate.Features.ActionCount)
                 .ToList();
 
+            Dictionary<SearchNode, int>? qualityBaselineIndex = null;
+            int qualityScenarioSelectedBaselineRank = 1;
+            if (emitDiagnostics
+                && useTeamObjective
+                && selected.Count > 0)
+            {
+                qualityBaselineIndex = new Dictionary<SearchNode, int>(
+                    ReferenceEqualityComparer.Instance);
+                for (int index = 0; index < selected.Count; index++)
+                    qualityBaselineIndex[selected[index].Node] = index;
+            }
+
             ScenarioDecisionSummary? selectedScenarioDecision = null;
             ScenarioDecisionSummary? u4RobustDecision = null;
             ScenarioDecisionSummary? u4NominalDecision = null;
@@ -620,6 +635,9 @@ internal sealed partial class CombatBeamSolver
                          int CandidateIndex,
                          MultiplayerScenarioEvaluationStatus Status)> outcomes = [];
                     bool plannerReportedComplete = true;
+                    bool strictlyEliminated = false;
+                    string? strictEliminationReason = null;
+                    int skippedScenarioReplays = 0;
                     int replayExpandedBranches = 0;
                     bool usedFinalReplay = replayByDecision.TryGetValue(
                         decisionKey,
@@ -628,6 +646,9 @@ internal sealed partial class CombatBeamSolver
                     if (usedFinalReplay)
                     {
                         plannerReportedComplete = replayDecision!.CompleteCoverage;
+                        strictlyEliminated = replayDecision.StrictlyEliminated;
+                        strictEliminationReason = replayDecision.StrictEliminationReason;
+                        skippedScenarioReplays = replayDecision.SkippedScenarioReplays;
                         replayExpandedBranches = replayDecision.ExpandedBranches;
                         foreach (MultiplayerScenarioEvaluation evaluation in
                                  replayDecision.Scenarios)
@@ -728,39 +749,54 @@ internal sealed partial class CombatBeamSolver
                         rank,
                         riskMetrics,
                         complete,
+                        strictlyEliminated,
+                        strictEliminationReason,
+                        skippedScenarioReplays,
                         baselineRepresentativeIndex,
                         conservativeRepresentativeIndex,
                         string.Join(",", statusTokens),
                         replayExpandedBranches));
                 }
 
-                scenarioReevaluationEnabled =
-                    scenarioSummaries.Count == decisionKeys.Count
-                    && MultiplayerScenarioReevaluationPolicy.CanRerank(
-                        scenarioSummaries
-                            .Select(summary => summary.ScenarioSetComplete)
-                            .ToArray());
-                if (scenarioReevaluationEnabled)
-                {
-                    ScenarioDecisionSummary[] comparable = scenarioSummaries
+                ScenarioDecisionSummary[] completeScenarioSummaries =
+                    scenarioSummaries
+                        .Where(summary => summary.ScenarioSetComplete)
                         .OrderBy(summary => summary.BaselineIndex)
                         .ToArray();
+                bool allStrictlyResolved =
+                    scenarioSummaries.Count == decisionKeys.Count
+                    && scenarioSummaries.All(summary =>
+                        summary.ScenarioSetComplete || summary.StrictlyEliminated);
+                scenarioReevaluationEnabled =
+                    decisionKeys.Count > 1
+                    && allStrictlyResolved
+                    && completeScenarioSummaries.Length > 0;
+                if (scenarioReevaluationEnabled)
+                {
+                    ScenarioDecisionSummary[] comparable = completeScenarioSummaries;
                     MultiplayerScenarioDecisionRank[] comparableRanks = comparable
                         .Select(summary => summary.Rank)
                         .ToArray();
-                    MultiplayerScenarioStrategySelection strategySelection =
-                        MultiplayerScenarioReevaluationPolicy.CompareStrategies(
-                            comparableRanks,
-                            baselineIndex: 0);
-                    u4StrategySelection = strategySelection;
-                    u4RobustDecision = comparable[strategySelection.RobustIndex];
-                    u4NominalDecision = comparable[strategySelection.NominalReferenceIndex];
-                    u4BoundedRiskDecision = comparable[strategySelection.BoundedRiskIndex];
+                    int robustIndex =
+                        MultiplayerScenarioReevaluationPolicy.SelectPreferredIndex(
+                            MultiplayerScenarioRiskStrategy.Robust,
+                            comparableRanks);
+                    selectedScenarioDecision = comparable[robustIndex];
 
-                    // U4 A/B is zero-extra-work: all three policies consume the exact same U3
-                    // scenario matrix. Production remains the pre-U4 Robust selector until
-                    // runtime quality evidence justifies an explicit migration.
-                    selectedScenarioDecision = u4RobustDecision;
+                    // U4 diagnostics require the same complete matrix for every compared decision.
+                    // E4 strict elimination is exact for Robust, but intentionally does not invent
+                    // missing cells for nominal/bounded-risk experiments.
+                    if (completeScenarioSummaries.Length == scenarioSummaries.Count)
+                    {
+                        MultiplayerScenarioStrategySelection strategySelection =
+                            MultiplayerScenarioReevaluationPolicy.CompareStrategies(
+                                comparableRanks,
+                                baselineIndex: 0);
+                        u4StrategySelection = strategySelection;
+                        u4RobustDecision = comparable[strategySelection.RobustIndex];
+                        u4NominalDecision = comparable[strategySelection.NominalReferenceIndex];
+                        u4BoundedRiskDecision = comparable[strategySelection.BoundedRiskIndex];
+                    }
 
                     string winningDecisionKey = selectedScenarioDecision.DecisionKey;
                     int conservativeIndex =
@@ -779,6 +815,12 @@ internal sealed partial class CombatBeamSolver
                                 startTurnNumber) != winningDecisionKey))
                         .ToList();
                 }
+            }
+
+            if (qualityBaselineIndex != null && selected.Count > 0)
+            {
+                qualityScenarioSelectedBaselineRank =
+                    qualityBaselineIndex[selected[0].Node] + 1;
             }
 
             ChanceDecisionSummary? selectedChanceDecision = null;
@@ -884,6 +926,25 @@ internal sealed partial class CombatBeamSolver
                 }
             }
 
+            if (qualityBaselineIndex != null && selected.Count > 0)
+            {
+                int finalSelectedBaselineRank =
+                    qualityBaselineIndex[selected[0].Node] + 1;
+                MultiplayerQualityLayerAttribution qualityLayer =
+                    MultiplayerScenarioReevaluationPolicy.AttributeQualityLayer(
+                        baselineWinnerRank: 1,
+                        scenarioSelectedBaselineRank: qualityScenarioSelectedBaselineRank,
+                        finalSelectedBaselineRank: finalSelectedBaselineRank);
+                diagnostics.Info(
+                    $"[CombatSolver/Multiplayer] MP_QUALITY_LAYER " +
+                    $"baseline_winner_rank={qualityLayer.BaselineWinnerRank} " +
+                    $"scenario_selected_baseline_rank={qualityLayer.ScenarioSelectedBaselineRank} " +
+                    $"final_selected_baseline_rank={qualityLayer.FinalSelectedBaselineRank} " +
+                    $"scenario_rerank={scenarioReevaluationEnabled.ToString().ToLowerInvariant()} " +
+                    $"chance_rerank={chanceAggregationEnabled.ToString().ToLowerInvariant()} " +
+                    $"override_layer={qualityLayer.OverrideLayer}");
+            }
+
             if (emitDiagnostics
                 && useTeamObjective
                 && selected.Count > 0)
@@ -894,6 +955,9 @@ internal sealed partial class CombatBeamSolver
                         $"[CombatSolver/Multiplayer] MP_SCENARIO_COVERAGE " +
                         $"baseline_rank={summary.BaselineIndex + 1} " +
                         $"complete={summary.ScenarioSetComplete.ToString().ToLowerInvariant()} " +
+                        $"strict_eliminated={summary.StrictlyEliminated.ToString().ToLowerInvariant()} " +
+                        $"strict_reason={summary.StrictEliminationReason ?? "none"} " +
+                        $"skipped_scenario_replays={summary.SkippedScenarioReplays} " +
                         $"statuses={summary.ScenarioStatuses} " +
                         $"scenario_count={summary.Rank.ScenarioCount} " +
                         $"replay_expanded={summary.ReplayExpandedBranches}");
@@ -994,6 +1058,8 @@ internal sealed partial class CombatBeamSolver
                         $"[CombatSolver/Multiplayer] MP_SCENARIO_RERANK " +
                         $"enabled={scenarioReevaluationEnabled.ToString().ToLowerInvariant()} " +
                         $"complete={selectedScenarioDecision.ScenarioSetComplete.ToString().ToLowerInvariant()} " +
+                        $"strict_pruned_decisions={scenarioSummaries.Count(summary => summary.StrictlyEliminated)} " +
+                        $"strict_skipped_scenario_replays={scenarioSummaries.Sum(summary => summary.SkippedScenarioReplays)} " +
                         $"statuses={selectedScenarioDecision.ScenarioStatuses} " +
                         $"scenario_count={scenarioRank.ScenarioCount} " +
                         $"all_alive={scenarioRank.AllScenariosAlive.ToString().ToLowerInvariant()} " +

@@ -28,6 +28,10 @@ internal static class Program
         bool publishProgress = args.Contains(
             "--publish-progress",
             StringComparer.Ordinal);
+        bool legacyActionOrder = args.Contains(
+            "--legacy-action-order",
+            StringComparer.Ordinal);
+        CombatBeamSolver.UseLegacyActionSearchOrderForTesting(legacyActionOrder);
         Directory.CreateDirectory(output);
         try
         {
@@ -108,7 +112,12 @@ internal static class Program
                 policy,
                 CancellationToken.None,
                 progressCallback);
-            Evidence evidence = CaptureEvidence(scenario, combat, rootHand, result);
+            Evidence evidence = CaptureEvidence(
+                scenario,
+                legacyActionOrder ? "legacy_hand_order" : "e5_strategy_order",
+                combat,
+                rootHand,
+                result);
 
             if (string.Equals(scenario, "draw_energy", StringComparison.Ordinal)
                 && (!rootHand.Contains("OFFERING", StringComparer.Ordinal)
@@ -208,6 +217,7 @@ internal static class Program
 
     private static Evidence CaptureEvidence(
         string scenario,
+        string actionOrder,
         CombatState combat,
         string[] rootHand,
         SolverResult result)
@@ -237,6 +247,7 @@ internal static class Program
         SearchEfficiencyMemberReport? member = telemetry.FindSearchMember(origin.SearchMemberId);
         return new Evidence(
             Scenario: scenario,
+            ActionOrder: actionOrder,
             PlayerCount: combat.Players.Count,
             RootHand: rootHand,
             Route: result.BestNode.Actions.Select(action =>
@@ -298,6 +309,7 @@ internal static class Program
 
     private sealed record Evidence(
         string Scenario,
+        string ActionOrder,
         int PlayerCount,
         string[] RootHand,
         string[] Route,

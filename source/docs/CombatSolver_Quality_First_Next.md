@@ -123,7 +123,7 @@
 - 新合同用固定输入覆盖“baseline 由 Nominal 选择、Robust 在同 Matrix 改选另一决策、BoundedRisk 再选第三决策”的情况，确认归因层只测量已有选择，不改变风险权重和搜索预算；Anger 真实问题包 ID 也写入当前合同说明。
 - **生产行为刻意未变**：仍使用 Robust。两个可复原的“明显不如手打”排序样本（ANGER 与 X1 T3）都证明**好候选已经存在、基础最终排序曾选错**；重锤/Offering 则属于执行层。现有证据没有一条指向 U3/U4 Robust 推翻了更好的共同搜索核心路线，因此不把 `0.5` 换成别的任意常数，也不把压力情景均值冒充概率期望。
 - 验证：compatibility run `35985739446` **SUCCESS**；Pinned 0.107.1 Release run `35985739404` **SUCCESS**。合同明确覆盖 ANGER 坏例、X1 T3 空推荐坏例，以及“Robust 覆盖 baseline 且与参考策略分歧”的归因信号；这些测试只固定层级归因，不把 synthetic 分歧当作真实生产迁移证据。
-- 下一步只需对**当前 HEAD 新出现的明显坏路线**保留问题包和明确手打前缀；先看 `FINAL_CANDIDATE → MP_QUALITY_SORTING → FINAL_SELECTION → Safe Execute` 即可定位枚举/Beam/基础排序/情景复评/执行中的哪一层。若 `robust_overrode_baseline=true` 且手打前缀在 baseline 中存活，再进入生产风险策略迁移；否则修实际丢失层。
+- 下一步只需对**当前 HEAD 新出现的明显坏路线**保留问题包和明确手打前缀；先看 `FINAL_CANDIDATE → MP_QUALITY_LAYER → FINAL_SELECTION → Safe Execute`；当 U4 全矩阵完整时再同时参考 `MP_QUALITY_SORTING`。`MP_QUALITY_LAYER` 会区分 baseline、Scenario Robust 与后续 Shadow chance 改选，从而定位枚举/Beam/基础排序/情景复评/Chance/执行中的哪一层。若 `robust_overrode_baseline=true` 且手打前缀在 baseline 中存活，再进入生产风险策略迁移；否则修实际丢失层。
 - Beam 层已补真实生产候选池 A/B 诊断：开启详细诊断时，对同一个 `RankBest` pool 额外计算 legacy 单人排序，仅记录 `MP_BEAM_RETENTION_AB` / `MP_BEAM_RETENTION_AB_FINAL`，不增加搜索节点、不改 BeamWidth、不改变生产选择；最终还能区分 raw 顺序差异、被 outer portfolio 救回、被 incumbent 再裁掉、以及真正的 Beam pruning。
 - 唯一实机判定入口为 `source/tools/multiplayer-lab/validate-beam-retention-ab-results.ps1`，6-case 合同已覆盖 `no_difference_observed / raw_rank_difference_only / outer_portfolio_rescue_observed / incumbent_pruning_observed / beam_pruning_observed`。Pinned 0.107.1 run `35988652044` SUCCESS；compatibility run `35989267050` SUCCESS（33 PASS / 0 FAIL / 0 SKIP）。
 - 因此第三项下一步已经到**真实 Host/Client 人工边界**：当前 HEAD 复现一个“明显不如手打”的多人局面，记录更好的合法手打前缀，并保留正式 Client journal/问题包。只有当 validator 给出 `beam_pruning_observed`，且对应 prefix 确实是更好的合法路线，才修改主 Beam；若被 portfolio 救回，则继续向 FINAL_CANDIDATE/U3/U4 追踪。
@@ -139,6 +139,14 @@
 ## 第四项：最后再决定精确斩杀是否值得加
 
 只有对照证明“候选里确实没找到可行斩杀”时，才恢复局部DFS优先级；若斩杀已找到却被Robust排序淘汰，加DFS无效。总预算包括队友搜索、复评、快照与重放，不隐藏开销。
+
+### 第四项实施状态（2026-09-25）
+
+**当前证据下不启用局部精确斩杀，第四项关闭。**
+
+- E0/E5 没有证明主 Beam 漏掉一条已知合法斩杀；现有慢例分别落在后置 portfolio 生成和动作枚举时机，而不是“有限 Beam 永远没有生成可行 lethal”。
+- 因此不新增固定 DFS 开销，也不构造未经证明的乐观伤害上界。若以后问题包能固定真实初态并证明一条合法短窗口 lethal 未进入候选池，再按同一请求总预算重开 bounded exact search。
+- 可交换顺序优化同样保持 fail closed：没有覆盖 Hook/历史/RNG/死亡/调度的完备读写契约前，不做 pre-replay 规范化硬剪枝；完整 replay 后的精确状态 transposition 继续保留。
 
 ## GPT下一轮直接执行指令
 
