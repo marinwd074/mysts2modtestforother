@@ -101,4 +101,10 @@ internal sealed record SearchPolicySnapshot(
     public BeamWidthPortfolioTelemetry? PortfolioTelemetry { get; init; }
     public SearchRequestWorkTotals? RequestWorkTotals { get; init; }
     public SearchInteractionState? Interaction { get; init; }
+
+    /// <summary>
+    /// E2 deterministic verification only. Serial expansion yields after this many committed
+    /// parents while preserving the same fixed-work member state. Production capture leaves null.
+    /// </summary>
+    public int? ResumableParentCommitSliceForTesting { get; init; }
 }

@@ -136,12 +136,13 @@ internal static class Program
                 names,
                 battleDamage,
                 p0Policy);
-            P0SearchEvidence p0FixedWork = RunP0FixedWorkProbe(
+            E2ResumableSearchEvidence e2Resumable = VerifyE2ResumableSearch(
                 p0Root,
                 names,
                 battleDamage,
                 captured,
                 settings);
+            P0SearchEvidence p0FixedWork = e2Resumable.Sliced;
 
             P0JointEvidence joint;
             try
@@ -191,7 +192,7 @@ internal static class Program
                     Error: $"{error.GetType().Name}: {error.Message}");
             }
 
-            bool overallPass = p0Search.Pass && joint.Pass && p1.Pass;
+            bool overallPass = p0Search.Pass && joint.Pass && p1.Pass && e2Resumable.Pass;
             var evidence = new
             {
                 status = overallPass ? "PASS" : "FAIL",
@@ -217,6 +218,7 @@ internal static class Program
                     spRegression = p0Search,
                     singleMemberTimed = p0SingleMemberTimed,
                     fixedWork = p0FixedWork,
+                    e2Resumable,
                     joint,
                     classifier = "covered_by_contract_suite",
                 },
@@ -444,12 +446,61 @@ internal static class Program
         return CaptureSearch(result);
     }
 
-    private static P0SearchEvidence RunP0FixedWorkProbe(
+    private static E2ResumableSearchEvidence VerifyE2ResumableSearch(
         CombatRootSnapshot root,
         SolverDisplayNames names,
         BattleDamageSnapshot battleDamage,
         SearchPolicySnapshot captured,
         SolverSettingsSnapshot settings)
+    {
+        P0FixedWorkRun continuous = RunP0FixedWorkProbe(
+            root,
+            names,
+            battleDamage,
+            captured,
+            settings,
+            parentCommitSlice: null);
+        P0FixedWorkRun sliced = RunP0FixedWorkProbe(
+            root,
+            names,
+            battleDamage,
+            captured,
+            settings,
+            parentCommitSlice: 1);
+
+        bool equivalent = continuous.Evidence.Pass
+            && sliced.Evidence.Pass
+            && continuous.Actions.SequenceEqual(sliced.Actions, StringComparer.Ordinal)
+            && continuous.Evidence.Boundary == sliced.Evidence.Boundary
+            && continuous.Evidence.ProjectedBattleHpLost == sliced.Evidence.ProjectedBattleHpLost
+            && continuous.Evidence.FinalHp == sliced.Evidence.FinalHp
+            && continuous.Evidence.FinalEnemyHp == sliced.Evidence.FinalEnemyHp
+            && continuous.Evidence.CombatEndedTurn == sliced.Evidence.CombatEndedTurn
+            && continuous.Evidence.ContinuationCount == sliced.Evidence.ContinuationCount
+            && continuous.Evidence.ExpandedNodes == sliced.Evidence.ExpandedNodes
+            && continuous.Evidence.ChoiceBranchesEvaluated == sliced.Evidence.ChoiceBranchesEvaluated
+            && continuous.TransitionCount == sliced.TransitionCount;
+        Require(
+            equivalent,
+            "E2 continuous and sliced fixed-work searches diverged in route, terminal state, or work totals.");
+
+        return new(
+            Pass: equivalent,
+            Continuous: continuous.Evidence,
+            Sliced: sliced.Evidence,
+            ContinuousActions: continuous.Actions,
+            SlicedActions: sliced.Actions,
+            ContinuousTransitionCount: continuous.TransitionCount,
+            SlicedTransitionCount: sliced.TransitionCount);
+    }
+
+    private static P0FixedWorkRun RunP0FixedWorkProbe(
+        CombatRootSnapshot root,
+        SolverDisplayNames names,
+        BattleDamageSnapshot battleDamage,
+        SearchPolicySnapshot captured,
+        SolverSettingsSnapshot settings,
+        int? parentCommitSlice)
     {
         SolverSearchProfile profile = settings.Profile with
         {
@@ -457,6 +508,7 @@ internal static class Program
             MaxExpandedNodes = P0FixedWorkNodeBudget,
             SoftTimeBudgetMilliseconds = BudgetMilliseconds,
         };
+        SearchRequestWorkTotals totals = new();
         SearchPolicySnapshot policy = captured with
         {
             Profile = profile,
@@ -471,7 +523,8 @@ internal static class Program
             UseBeamWidthPortfolio = false,
             BeamWidthPortfolioWidths = null,
             Interaction = null,
-            RequestWorkTotals = new SearchRequestWorkTotals(),
+            RequestWorkTotals = totals,
+            ResumableParentCommitSliceForTesting = parentCommitSlice,
         };
         SolverResult result = new CombatBeamSolver(
             root,
@@ -479,10 +532,11 @@ internal static class Program
             battleDamage,
             policy,
             searchProfile: profile).Solve();
+        SearchRequestWorkSnapshot work = totals.Snapshot();
         P0SearchEvidence evidence = CaptureSearch(result) with
         {
-            ExpandedNodes = result.ExpandedNodes,
-            ChoiceBranchesEvaluated = result.ChoiceBranchesEvaluated,
+            ExpandedNodes = work.ExpandedNodes,
+            ChoiceBranchesEvaluated = work.ChoiceBranchesEvaluated,
         };
         Require(
             evidence.Boundary != SearchBoundaryReason.TimeLimit.ToString(),
@@ -490,7 +544,10 @@ internal static class Program
         Require(
             evidence.ExpandedNodes <= P0FixedWorkNodeBudget,
             $"P0 fixed-work probe exceeded node budget: {evidence.ExpandedNodes}/{P0FixedWorkNodeBudget}.");
-        return evidence;
+        return new(
+            evidence,
+            result.BestNode.Actions.Select(ActionToken).ToArray(),
+            work.TransitionCount);
     }
 
     private static P1Evidence VerifyP1ObjectiveRuntime(
@@ -748,6 +805,20 @@ internal static class Program
         string[] DeckIds,
         string[] RelicIds,
         string[] PotionIds);
+
+    internal sealed record P0FixedWorkRun(
+        P0SearchEvidence Evidence,
+        string[] Actions,
+        long TransitionCount);
+
+    internal sealed record E2ResumableSearchEvidence(
+        bool Pass,
+        P0SearchEvidence Continuous,
+        P0SearchEvidence Sliced,
+        string[] ContinuousActions,
+        string[] SlicedActions,
+        long ContinuousTransitionCount,
+        long SlicedTransitionCount);
 
     internal sealed record P0SearchEvidence(
         bool Pass,
