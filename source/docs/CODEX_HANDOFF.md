@@ -54,14 +54,17 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 |---|---|---:|---:|---:|---:|---|
 | 简单攻防 | `potion_disabled#1` | 778.718 | 815.425 | 816.561 | 2023.430 | PASS |
 | 抽牌/能量（含 Offering） | `potion_disabled#1` | 1157.420 | 1213.259 | 1214.584 | 1308.441 | PASS |
-| 队友配合 | - | - | - | - | - | UNVERIFIED_NO_REPLAYABLE_MULTIPLAYER_ROOT |
+| 队友配合（LOUSE_PROGENITOR） | `potion_required#3` | 52265.851 | 52305.547 | 52305.549 | 52311.969 | PASS |
 
-- 简单攻防从“已选中”到“首次发布”额外等待 **1206.869 ms**；抽牌/能量样本为 **93.857 ms**。现有证据首先支持“好路线已经生成/选中，但部分请求在后续工作结束前没有及时发布”，而不是“必须等后续 portfolio 成员才能找到好路线”。这是 E1 的触发条件，但本轮不进入 E1。
+- 简单攻防从“已选中”到“首次发布”额外等待 **1206.869 ms**；抽牌/能量样本为 **93.857 ms**。这两个单人样本仍证明存在“已选中但延迟发布”的 E1 型现象。
+- current HEAD `23a28ed3` 的真实双人 LOUSE_PROGENITOR 样本给出不同结构：最终赢家来自第三个 `potion_required#3` 成员，`52265.851 → 52305.547 → 52305.549 → 52311.969 ms`，selected→published 仅 **6.420 ms**。该候选首次生成时请求已经运行约 52.266 秒，因此这次多人慢搜索的主要延迟不是发布，而是赢家直到后续 portfolio 成员才出现。按效率计划的分支条件，该证据指向 **E2/E3**，而不是先做 E1。
 - 同一 pinned run 已重跑 attempt 2，并且整条 Release/E0/U0-U1/U2/P0-P1/历史 A-B 链全部 PASS。第二次 E0 仍由 `potion_disabled#1` 产生最终赢家：简单攻防 `924.454 → 984.287 → 985.911 → 3102.190 ms`，抽牌/能量 `1740.239 → 1806.158 → 1807.911 → 1924.488 ms`。墙钟绝对值有明显波动，但“首成员早已生成/选中，发布更晚”的结构结论重复出现。
 - attempt 1 的 P0/P1 尾部曾在 5 秒墙钟边界失败；同一提交 attempt 2 通过，且固定工作量测试始终通过，因此归类为墙钟波动，不作为 E0 搜索语义回归。
-- E0 harness 还尝试了 detached 双玩家根；生产搜索按当前正式边界以 `NotSupportedException: 第一版只支持单人战斗。` fail closed，因此没有绕过保护伪造多人 PASS。Library 中可见历史真实多人问题包，但当前 Project 没有授权重新物化这些 ZIP 原始字节供 current HEAD 重放。严格 E0 验收仍缺一份当前 HEAD 的真实 Host/Client 或可访问的可重放 `PlayerCount=2` 问题包。
+- E0 harness 的 detached 双玩家根仍只作为负向保护证据，不计入多人验收。2026-09-25 的真实双人 `LOUSE_PROGENITOR_NORMAL-73a5e5f8...` 问题包补齐了严格验收：`solverInformationalVersion=0.40.2+23a28ed360bbeb6c146b37fa42bccab94ee14885`，存在真实 MultiplayerProbe / MultiplayerAdvisor runtime marker，最终 E0 timeline 为 `player_count=2; route=MultiplayerLocalCrossTurn; team=True; scenario=True`，并实际执行 Shadow 与 Scenario Matrix。
 - E0 实机闭环工具已补齐：`SEARCH_E0_*` 摘要会进入持久 process journal，timeline 显式记录 `player_count`；`source/tools/multiplayer-lab/validate-e0-search-efficiency-results.ps1` 可直接读取 JSONL/日志目录/ZIP，只在存在真实多人 runtime marker（或 Probe `PlayerCount=2`）且同一候选确实跑过 Shadow + Scenario Matrix 时输出 PASS。离线 detached harness 不满足该条件。
+- LOUSE_PROGENITOR final candidate：`candidate_id=61670`，`expanded_at_generation=7762`，`turn_depth=10`；selected member `potion_required#3` 为 `elapsed=13573.462 ms / expanded=7815 / transitions=39850`。请求级 phase 总计：Shadow **1935 calls / 976.021 ms**，Scenario Matrix **2 / 27.827 ms**，materialization **3 / 18.734 ms**，materialization replay **3 / 9.503 ms**。当前执行环境缺少 `pwsh`，未直接运行 PowerShell validator；已逐项按 current HEAD validator 源码的完全相同条件核对，确定会进入 `E0_MULTIPLAYER_PASS` 分支。
 - 2026-09-25 收到真实双人问题包 `THIEVING_HOPPER_WEAK-9df3f90a...`：Client Probe 明确记录 `players=2`，且 Scenario Matrix 已实际运行两轮；但最终候选排序在 `PolicyActionToken(TeammateForecast)` 抛 `ArgumentOutOfRangeException`，因此本次没有形成完整 E0 selected/published 时间线，不能计为第三个 PASS。根因是通用动作 token 只处理 PlayCard/UsePotion/EndTurn；现已为 `TeammateForecast` 增加稳定 token（含远端玩家、牌、目标），不改排序或搜索语义。
+- **E0 已关闭（2026-09-25）**：三类样本齐全，且第三类为 current HEAD 的真实双人 Host/Client 运行证据。后续不再为了 E0 继续采样，除非改动再次触及搜索成员顺序、候选生成/评估/发布遥测或 E0 validator 语义。
 
 ## 当前未验证边界
 
@@ -71,11 +74,11 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 
 ## 下一任务
 
-先验证本轮 TUNNELER 路线质量修复；该改动会改变路线排序，所以不要把修复前 E0 数字当作最终语义基线。验证完成后继续 E0，不进入 E1：
+E0 已关闭，本轮不进入后续阶段。下一次开始搜索效率优化时按 E0 证据走 **E2/E3 分支**，不要先做 E1：
 
-1. 用包含 TeammateForecast token 修复的 current HEAD 复跑一次真实双人 Advisor 或 Safe Execute 搜索；优先复现 THIEVING_HOPPER_WEAK 同类局面，无需刻意刷 seed。
-2. 对新问题包运行 `validate-e0-search-efficiency-results.ps1`；PASS 后把第三行生成→评估→选中→发布及 Shadow/Scenario Matrix/materialization 独占时间写回本表并关闭 E0。
-3. 三类样本齐全后关闭 E0；再依据当前证据优先进入 E1，验证“同标准候选能否更早发布”，保持总预算、目标和候选集不变。
-4. E1 前不修改 Beam/Robust/动作排序/预算，不用单人或 L1 合同冒充多人 E0 证据。
+1. 先解释并量化为什么真实双人最终赢家直到第三个 `potion_required` portfolio member 才首次生成；保持目标函数和候选质量标准不变。
+2. 优先研究 portfolio 调度/早停/上界与复用，让“后续成员才发现的赢家”更早出现，而不是单纯缩短 selected→published。
+3. E1 保留给单人样本证明的发布延迟问题；只有当多人新证据也显示候选已早选中但迟发布时才优先处理。
+4. 不以固定卡名、seed 或单局硬编码换取速度；继续使用 deterministic node/transition budget 做等价性验证。
 
 每次只推进一个小阶段，并在结束时更新本 handoff；不要重新创建阶段流水账文档。
