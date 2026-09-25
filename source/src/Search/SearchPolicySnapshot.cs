@@ -103,7 +103,7 @@ internal sealed record SearchPolicySnapshot(
 
     /// <summary>
     /// 组合成员宽度。首项由 <see cref="BeamWidthPortfolio.ProductionMembers" /> 强制成基线宽度；
-    /// 为空时用默认的 [基线, 基线×2/3, 基线×3/2, 次段 基线, 基础分 基线]，显式给出时只有宽度成员。
+    /// 为空时用默认的 [基线, 次段 基线, 基线×2/3, 基线×3/2, 基础分 基线]，显式给出时只有宽度成员。
     /// </summary>
     public IReadOnlyList<int>? BeamWidthPortfolioWidths { get; init; }
 
