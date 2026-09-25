@@ -153,11 +153,12 @@ internal static class AfterAttackMirrors
         {
             if (context.CombatState is not ICombatPredictionEffectSink effects)
                 throw new InvalidOperationException("吸取效果缺少可写的预测状态。");
-            effects.ApplyPower(
+            effects.ApplyPowerFromSource(
                 typeof(StrengthPower),
                 power.Owner,
                 power.Amount * triggeredHits,
-                power.Owner);
+                power.Owner,
+                cardSource: null);
         }
     }
 }

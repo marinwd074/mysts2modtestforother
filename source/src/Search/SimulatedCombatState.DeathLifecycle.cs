@@ -145,7 +145,9 @@ internal sealed partial class SimulatedCombatState
     {
         PredictedDeathPhase phase = _deathPhases?.GetValueOrDefault(creature)
             ?? PredictedDeathPhase.None;
-        return phase == PredictedDeathPhase.None;
+        if (phase != PredictedDeathPhase.None)
+            return false;
+        return _predictionState is null || _predictionState.IsAttachedToCombat(creature);
     }
 
     public void ResolveReviveMove(

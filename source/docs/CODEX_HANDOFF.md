@@ -186,3 +186,10 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - General settings exposes one experimental toggle. Off: real multiplayer root + local single-player quality ordering. On: Team Objective + teammate forecast + Scenario/Robust + Carry ranking.
 - Multiplayer objective selection is disabled in the UI while the master switch is off.
 - E0 pinned coverage uses the same detached two-player root for both switch states; U2 static contracts verify the production gate.
+
+## 2026-09-25 upstream backport
+
+- Backported upstream PR #127 prediction semantics: Power/relic-driven power applications explicitly use a null card source, and removed creatures reject later predicted Power application.
+- Adapted the Hand Drill hook to the pinned 0.107.1 path in `AfterDamageGivenMirrors`; the newer-version hook path is kept aligned as well.
+- Backported upstream PR #134's bounded fresh-resource stand-pat lane: only the first 64 candidates in existing beam order receive the expensive cross-turn roll-out.
+- Deliberately did not merge upstream UI, Loadout, ServerGC, or newer-game-version compatibility changes.

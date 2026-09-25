@@ -158,6 +158,9 @@ internal sealed class CombatPredictionState
             : Hook.ShouldAllowHitting(CombatState, creature);
     }
 
+    public bool IsAttachedToCombat(Creature creature)
+        => _removedCreatures?.Contains(creature) != true;
+
     public IReadOnlyList<Creature> GetOpponentsOf(Creature creature)
         => !RequiresRemovedCreatureFiltering
             ? CombatState.GetOpponentsOf(creature)

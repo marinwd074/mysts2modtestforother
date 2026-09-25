@@ -2332,10 +2332,13 @@ internal sealed partial class CombatBeamSolver
 
         private SearchNode? FindBestFreshResourceStandPat(IReadOnlyList<SearchNode> nodes)
         {
+            const int probeLimit = 64;
             List<SearchNode> probes = nodes.Where(node => node.Parent is { } parent
                          && (node.Snapshot.FutureResourceValue > parent.Snapshot.FutureResourceValue
                              || node.Snapshot.StrategicEffects.ResourcePotential
-                                > parent.Snapshot.StrategicEffects.ResourcePotential)).ToList();
+                                > parent.Snapshot.StrategicEffects.ResourcePotential))
+                .Take(probeLimit)
+                .ToList();
             _prepareStandPat?.Invoke(probes);
             SearchNode? best = null;
             StandPatEvaluation bestEvaluation = default;

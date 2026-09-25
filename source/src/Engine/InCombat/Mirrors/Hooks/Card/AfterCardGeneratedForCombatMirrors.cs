@@ -65,7 +65,7 @@ internal static class AfterCardGeneratedForCombatMirrors
         {
             if (context.CombatState is not ICombatPredictionEffectSink effects)
                 throw new InvalidOperationException("军械库效果缺少可写的预测状态。");
-            effects.ApplyPower(typeof(StrengthPower), power.Owner, power.Amount, power.Owner);
+            effects.ApplyPowerFromSource(typeof(StrengthPower), power.Owner, power.Amount, power.Owner, cardSource: null);
         }
     }
 
