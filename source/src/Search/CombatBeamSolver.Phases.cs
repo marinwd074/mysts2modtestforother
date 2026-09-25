@@ -188,7 +188,7 @@ internal sealed partial class CombatBeamSolver
         {
             // A requested NoGC region that could not be established means system/runtime
             // headroom is already constrained. Do not allocate idle worker lanes above the
-            // same two-way cap used by member.Fallback parent/action/choice microbatches.
+            // same two-way cap used by fallback parent/action/choice microbatches.
             expansionParallelism = Math.Min(2, expansionParallelism);
         }
 
@@ -1264,7 +1264,7 @@ internal sealed partial class CombatBeamSolver
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] SEARCH_MEMORY_RESUMED " +
                 $"reason={reason} checkpoint={signal.ReclaimCount} " +
-                $"member.Frontier={frontierNodes} member.Ended={endedNodes} expanded={_run.Expanded} " +
+                $"frontier={frontierNodes} member.Ended={endedNodes} expanded={_run.Expanded} " +
                 $"turn_layer={member.SearchedTurnLayers} play_depth={playDepth}");
             PublishProgress(
                 _startTurnNumber + member.SearchedTurnLayers,
@@ -1368,7 +1368,7 @@ internal sealed partial class CombatBeamSolver
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] SEARCH_MEMORY_RESUMED " +
                 $"reason={reason}_default_gc checkpoint={signal.ReclaimCount} " +
-                $"member.Frontier={frontierNodes} member.Ended={endedNodes} expanded={_run.Expanded} " +
+                $"frontier={frontierNodes} member.Ended={endedNodes} expanded={_run.Expanded} " +
                 $"turn_layer={member.SearchedTurnLayers} play_depth={playDepth}");
             PublishProgress(
                 _startTurnNumber + member.SearchedTurnLayers,
@@ -1621,7 +1621,7 @@ internal sealed partial class CombatBeamSolver
                     policy.Diagnostics.Info(
                         $"[CombatSolver/Test] SEARCH_MEMORY_RESUMED " +
                         $"checkpoint={policy.MemoryPressureSignal.ReclaimCount} " +
-                        $"member.Frontier={member.Active.Count} member.Ended={member.Ended.Count} expanded={_run.Expanded} " +
+                        $"frontier={member.Active.Count} member.Ended={member.Ended.Count} expanded={_run.Expanded} " +
                         $"turn_layer={member.SearchedTurnLayers} play_depth={playDepth}");
                     PublishProgress(
                         _startTurnNumber + member.SearchedTurnLayers,
@@ -2014,7 +2014,7 @@ internal sealed partial class CombatBeamSolver
                 {
                     policy.Diagnostics.Info(
                         $"[CombatSolver/Debug] ROOT_DEPTH_POTIONS depth={playDepth + 1} " +
-                        $"member.Frontier={SummarizePotionCandidates(member.Active)} " +
+                        $"frontier={SummarizePotionCandidates(member.Active)} " +
                         $"routes={SummarizeDiagnosticRoutes(member.Active, 24)}");
                 }
                 PublishProgress(_startTurnNumber + member.SearchedTurnLayers, member.SearchedTurnLayers, playDepth,
@@ -2082,8 +2082,8 @@ internal sealed partial class CombatBeamSolver
             {
                 policy.Diagnostics.Info(
                     $"[CombatSolver/Debug] TURN_LAYER_POTIONS completed_turns={member.SearchedTurnLayers} " +
-                    $"member.Frontier={SummarizePotionCandidates(member.Frontier)} " +
-                    $"member.Completed={SummarizePotionCandidates(member.Completed)} " +
+                    $"frontier={SummarizePotionCandidates(member.Frontier)} " +
+                    $"completed={SummarizePotionCandidates(member.Completed)} " +
                     $"opening_lineages={SummarizeOpeningLineages(member.Frontier)} " +
                     $"frontier_routes={SummarizeDiagnosticRoutes(member.Frontier, 24)} " +
                     $"touch_choices={SummarizePotionChoiceTargets(member.Frontier, "TOUCH_OF_INSANITY")}");
