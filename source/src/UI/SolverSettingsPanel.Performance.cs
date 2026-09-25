@@ -292,9 +292,6 @@ internal sealed partial class SolverSettingsPanel
         _performancePreset.Selected = _performancePreset.GetItemIndex((int)preset);
         _beamWidthPortfolioEnabled.ButtonPressed = data.UseBeamWidthPortfolio;
         _noveltyPortfolioEnabled.ButtonPressed = data.UseNoveltyPortfolio;
-        _multiplayerTeammateForecastEnabled.ButtonPressed = data.UseMultiplayerTeammateForecast;
-        _multiplayerScenarioReevaluationEnabled.ButtonPressed =
-            data.UseMultiplayerScenarioReevaluation;
         _noGcRegionEnabled.ButtonPressed = data.EnableNoGcRegion;
         _noGcRegionBudget.Editable = data.EnableNoGcRegion;
         SetAdvancedParametersExpanded(preset == SolverPerformancePreset.Custom);
