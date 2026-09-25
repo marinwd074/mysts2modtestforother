@@ -13,7 +13,7 @@ StateFingerprint Fingerprint(ulong first, ulong second = 0)
     => new(first, second);
 
 Check(
-    CombatBeamSolver.VerifyActionSearchOrderingForTesting(),
+    ActionSearchOrderingPolicy.VerifyForTesting(),
     "E5 action enumeration prioritizes estimated lethal, urgent defense, strategic value-per-resource, then preserves stable original order for exact ties.");
 
 MultiplayerContinuationMatchInput Match(
