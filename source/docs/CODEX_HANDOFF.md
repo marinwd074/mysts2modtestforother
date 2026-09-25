@@ -178,3 +178,11 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 
 
 - Pinned E1 early-publication A/B no longer treats exact expanded/transition equality as semantic correctness. The callback changes wall-clock overhead while portfolio refinement is time-gated, so exact work can differ even with the same route and quality. `sameWork` remains in evidence; route and final quality are still hard failures.
+
+
+## 2026-09-25 multiplayer prediction master switch
+
+- Added persisted `UseMultiplayerPrediction`; default is `false`, preserving local-single-core.
+- General settings exposes one experimental toggle. Off: real multiplayer root + local single-player quality ordering. On: Team Objective + teammate forecast + Scenario/Robust + Carry ranking.
+- Multiplayer objective selection is disabled in the UI while the master switch is off.
+- E0 pinned coverage uses the same detached two-player root for both switch states; U2 static contracts verify the production gate.

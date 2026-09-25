@@ -85,6 +85,30 @@ if ($teammateExit -eq 0 -and (Test-Path -LiteralPath $teammatePath)) {
 }
 
 
+$teammatePredictionOut = Join-Path $workspacePath 'teammate-prediction'
+New-Item -ItemType Directory -Force -Path $teammatePredictionOut | Out-Null
+& dotnet $harness --scenario teammate --out $teammatePredictionOut --multiplayer-prediction
+$teammatePredictionExit = $LASTEXITCODE
+$teammatePredictionPath = Join-Path $teammatePredictionOut 'e0-teammate.json'
+if ($teammatePredictionExit -ne 0 -or -not (Test-Path -LiteralPath $teammatePredictionPath)) {
+    throw "E0 multiplayer prediction toggle-on scenario failed with exit $teammatePredictionExit."
+}
+$predictionEvidence = Get-Content -LiteralPath $teammatePredictionPath -Raw | ConvertFrom-Json
+$rows += [pscustomobject]@{
+    case = 'teammate_prediction_enabled'
+    status = 'PASS_DETACHED_TWO_PLAYER'
+    sourceMember = "$($predictionEvidence.memberKind)#$($predictionEvidence.searchMemberId)"
+    generatedMs = [math]::Round([double]$predictionEvidence.generatedMs, 3)
+    evaluatedMs = [math]::Round([double]$predictionEvidence.evaluatedMs, 3)
+    selectedMs = [math]::Round([double]$predictionEvidence.selectedMs, 3)
+    publishedMs = [math]::Round([double]$predictionEvidence.publishedMs, 3)
+    expandedAtGeneration = $predictionEvidence.expandedAtGeneration
+    turnDepth = $predictionEvidence.turnDepth
+    route = @($predictionEvidence.route)
+    reason = 'Same detached two-player root with the production multiplayer prediction master switch enabled.'
+}
+
+
 $e1Rows = @()
 foreach ($scenario in @('simple', 'draw_energy')) {
     $baseline = $baselineEvidence[$scenario]

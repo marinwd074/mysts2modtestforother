@@ -464,6 +464,8 @@ internal static partial class SolverController
                 $"搜索并行度必须在 1..{SolverWeights.MaximumSearchMaxDegreeOfParallelism} 之间，" +
                 $"实际为 {maxDegreeOfParallelism}。");
         }
+        bool useMultiplayerPrediction =
+            capabilities.IsMultiplayer && settings.UseMultiplayerPrediction;
         SearchPolicySnapshot policy = new(
             settings.Profile,
             effectivePotionPolicy,
@@ -488,19 +490,16 @@ internal static partial class SolverController
             Interaction = interaction,
             RoutePolicy = routePolicy,
             CurrentTurnOnly = MultiplayerLocalCrossTurnContracts.IsCurrentTurnOnly(routePolicy),
-            // Production multiplayer now keeps the proven single-player quality ordering.
-            // The root is still the real multiplayer combat (scaled enemy HP, multiplayer
-            // monster semantics and local-safe execution), but teammate forecasting, the
-            // team objective and scenario reranking no longer get to reshape route quality.
-            // Those experimental layers remain available to offline/pinned tests by overriding
-            // the policy snapshot directly.
-            UseMultiplayerTeamObjective = false,
+            // Multiplayer always uses the real multiplayer combat root. The user-facing
+            // master switch decides whether route quality stays on the local single-player
+            // core or enables the experimental team prediction stack.
+            UseMultiplayerTeamObjective = useMultiplayerPrediction,
             MultiplayerCombatObjectiveStrategy = settings.MultiplayerCombatObjectiveStrategy,
             MultiplayerEnemyDurabilityRatio = capabilities.IsMultiplayer
                 ? MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(state.Enemies)
                 : 1d,
-            UseMultiplayerTeammateForecast = false,
-            UseMultiplayerScenarioReevaluation = false,
+            UseMultiplayerTeammateForecast = useMultiplayerPrediction,
+            UseMultiplayerScenarioReevaluation = useMultiplayerPrediction,
             UseNoveltyPortfolio = (settings.UseNoveltyPortfolio
                 || UnattendedTestRunner.UseNoveltyPortfolioOverride)
                 && useFullSearchKernel,
@@ -532,9 +531,14 @@ internal static partial class SolverController
         };
         if (capabilities.IsMultiplayer)
         {
+            string multiplayerQualityMode = useMultiplayerPrediction
+                ? "team_prediction"
+                : "local_single_core";
             policy.Diagnostics.Info(
-                "[CombatSolver/Test] MULTIPLAYER_QUALITY_MODE mode=local_single_core " +
-                "team_objective=false teammate_forecast=false scenario_reevaluation=false");
+                $"[CombatSolver/Test] MULTIPLAYER_QUALITY_MODE mode={multiplayerQualityMode} " +
+                $"team_objective={useMultiplayerPrediction.ToString().ToLowerInvariant()} " +
+                $"teammate_forecast={useMultiplayerPrediction.ToString().ToLowerInvariant()} " +
+                $"scenario_reevaluation={useMultiplayerPrediction.ToString().ToLowerInvariant()}");
         }
         CombatBugReportExporter.RecordSearchPolicy(state, policy);
         return policy;

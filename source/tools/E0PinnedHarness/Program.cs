@@ -31,6 +31,9 @@ internal static class Program
         bool legacyActionOrder = args.Contains(
             "--legacy-action-order",
             StringComparer.Ordinal);
+        bool multiplayerPrediction = args.Contains(
+            "--multiplayer-prediction",
+            StringComparer.Ordinal);
         CombatBeamSolver.UseLegacyActionSearchOrderForTesting(legacyActionOrder);
         bool teammate = string.Equals(scenario, "teammate", StringComparison.Ordinal);
         if (teammate)
@@ -60,6 +63,7 @@ internal static class Program
                     PerformanceMigrationVersion = SolverSettings.CurrentPerformanceMigrationVersion,
                     PotionPolicy = SolverPotionPolicy.Smart,
                     SearchMaxDegreeOfParallelism = 1,
+                    UseMultiplayerPrediction = teammate && multiplayerPrediction,
                 },
                 SolverPerformancePreset.Medium);
             SolverSettings.ApplyForTesting(settingsData);
@@ -87,12 +91,15 @@ internal static class Program
             };
             if (teammate
                 && (captured.RoutePolicy != SearchRoutePolicy.MultiplayerLocalCrossTurn
-                    || captured.UseMultiplayerTeamObjective
-                    || captured.UseMultiplayerTeammateForecast
-                    || captured.UseMultiplayerScenarioReevaluation))
+                    || captured.UseMultiplayerTeamObjective != multiplayerPrediction
+                    || captured.UseMultiplayerTeammateForecast != multiplayerPrediction
+                    || captured.UseMultiplayerScenarioReevaluation != multiplayerPrediction))
             {
                 throw new InvalidOperationException(
-                    "Production teammate fixture did not capture local-single-core policy.");
+                    $"Production teammate fixture did not capture requested multiplayer prediction mode: " +
+                    $"requested={multiplayerPrediction} team={captured.UseMultiplayerTeamObjective} " +
+                    $"forecast={captured.UseMultiplayerTeammateForecast} " +
+                    $"scenario={captured.UseMultiplayerScenarioReevaluation}.");
             }
             SearchPolicySnapshot policy = captured with
             {
@@ -147,6 +154,7 @@ internal static class Program
                     "Draw/energy fixture did not exercise OFFERING in the selected route.");
             }
             if (teammate
+                && !multiplayerPrediction
                 && evidence.Phases.Any(phase =>
                     string.Equals(phase.Phase, "shadow", StringComparison.Ordinal)
                     && phase.CallCount > 0))
