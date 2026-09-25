@@ -191,20 +191,22 @@ internal static partial class SolverController
             return false;
         }
 
-        // Multiplayer Safe Execute can reach this hook before the normal continuation
-        // reuse path validates the complete next-turn state. Do not replay a native
-        // turn-start choice across a monster lifecycle transition (revive, transform,
-        // move-state change, etc.). Test Subject keeps the same combat id while changing
+        // Turn-setup replay runs before the normal continuation reuse path validates the
+        // complete next-turn state. Never replay a native turn-start choice across a monster
+        // lifecycle transition (revive, transform, move-state change, etc.), in either
+        // singleplayer or multiplayer. Test Subject keeps the same combat id while changing
         // form, so combat identity alone is insufficient here.
-        if (SolverSessionCapabilities.Capture(state).IsMultiplayer
-            && !MatchesTurnSetupEnemyLifecycle(
+        if (!MatchesTurnSetupEnemyLifecycle(
                 cached.ExpectedState,
                 ContinuationStamp.CaptureLive(state),
                 out string lifecycleDifference))
         {
-            Entry.Logger.Info(
-                $"[CombatSolver/MultiplayerSafeExecute] MP_TURN_SETUP_REPLAY_REJECT " +
-                $"turn={turn} reason=enemy_lifecycle_mismatch detail={lifecycleDifference}");
+            bool multiplayer = SolverSessionCapabilities.Capture(state).IsMultiplayer;
+            Entry.Logger.Info(multiplayer
+                ? $"[CombatSolver/MultiplayerSafeExecute] MP_TURN_SETUP_REPLAY_REJECT " +
+                  $"turn={turn} reason=enemy_lifecycle_mismatch detail={lifecycleDifference}"
+                : $"[CombatSolver/Test] TURN_SETUP_REPLAY_REJECT " +
+                  $"turn={turn} reason=enemy_lifecycle_mismatch detail={lifecycleDifference}");
             return false;
         }
 
