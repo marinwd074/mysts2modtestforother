@@ -12,6 +12,10 @@ void Check(bool condition, string message)
 StateFingerprint Fingerprint(ulong first, ulong second = 0)
     => new(first, second);
 
+Check(
+    ActionSearchOrderingPolicy.VerifyForTesting(),
+    "E5 action enumeration prioritizes estimated lethal, urgent defense, strategic value-per-resource, then preserves stable original order for exact ties.");
+
 MultiplayerContinuationMatchInput Match(
     StateFingerprint? remote = null,
     string combatIdentity = "combat-a",

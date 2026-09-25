@@ -72,165 +72,104 @@ internal sealed partial class CombatBeamSolver
             GenerateRawEndTurnCandidates(node, cycleExitBatch);
         }
 
-        SimPlayerCombatState playerState = simulator.State.GetPlayerCombatState(_player);
         List<ActionCandidate> nonDominated = new(16);
         List<ActionCandidate>? deferredCycleCandidates = null;
-        IReadOnlyList<PredictedCard> hand = playerState.Hand.Cards;
-        HandFingerprintBuffer seenCards = default;
-        int seenCardCount = 0;
-        for (int handIndex = 0; handIndex < hand.Count; handIndex++)
+        foreach (PreparedCardAction preparedAction in PrepareCardActions(node))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            PredictedCard card = hand[handIndex];
-            string cardId = card.Preview.Id.Entry;
-            int occurrence = 0;
-            for (int priorIndex = 0; priorIndex < handIndex; priorIndex++)
-            {
-                if (string.Equals(hand[priorIndex].Preview.Id.Entry, cardId, StringComparison.Ordinal))
-                    occurrence++;
-            }
-            if (!CanConsiderCardAction(card) || !simulatedCombat.CanPlayCard(simulator, card))
-                continue;
-            StateFingerprint playableKey = BuildPlayableCardKey(card);
-            bool duplicate = false;
-            for (int seenIndex = 0; seenIndex < seenCardCount; seenIndex++)
-            {
-                if (seenCards[seenIndex] == playableKey)
-                {
-                    duplicate = true;
-                    break;
-                }
-            }
-            if (duplicate)
-            {
-                _run.DuplicateCardBranchesPruned++;
-                continue;
-            }
-            seenCards[seenCardCount++] = playableKey;
-            string cardStateKey = CardChoiceSupport.ChoiceCardKey(card);
-            int cardStateOccurrence = 0;
-            for (int priorIndex = 0; priorIndex < handIndex; priorIndex++)
-            {
-                if (string.Equals(
-                        CardChoiceSupport.ChoiceCardKey(hand[priorIndex]),
-                        cardStateKey,
-                        StringComparison.Ordinal))
-                {
-                    cardStateOccurrence++;
-                }
-            }
-            foreach ((int targetIndex, Creature? target) in TargetsFor(card, simulator))
-            {
-                // The first action after a partial-route restart still observes the live target gate.
-                if (node.ActionCount == 0 && !card.Original.CanPlayTargeting(target))
-                    continue;
-                string targetName = displayNames.Creature(target);
-                PlanAction action = new(
-                    PlanActionKind.PlayCard,
-                    node.Turn,
-                    card.Preview.Id.Entry,
-                    occurrence,
-                    targetIndex,
-                    target?.CombatId,
-                    displayNames.Card(card.Preview),
-                    targetName,
-                    ReplayCount: Math.Max(0, card.Preview.GetEnchantedReplayCount()),
-                    CardStateKey: cardStateKey,
-                    CardStateOccurrence: cardStateOccurrence,
-                        CardEnchantmentId: card.Preview.Enchantment?.Id.Entry ?? "", CardUpgradeLevel: card.Preview.CurrentUpgradeLevel);
-                using CardChoiceReplayCapture? cardCapture = PrepareCardChoiceCapture(node, action);
-                SimulationSnapshot probeSnapshot = ReplayAction(node, action, cardChoiceCapture: cardCapture);
+            PlanAction action = preparedAction.Action;
+            using CardChoiceReplayCapture? cardCapture = PrepareCardChoiceCapture(node, action);
+            SimulationSnapshot probeSnapshot = ReplayAction(node, action, cardChoiceCapture: cardCapture);
 
-                CardChoiceSpec? choiceSpec = BuildPrimaryCardChoiceSpec(probeSnapshot);
-                if (choiceSpec == null && CardChoiceSupport.RequiresUnsupportedExistingChoice(card.Preview))
+            CardChoiceSpec? choiceSpec = BuildPrimaryCardChoiceSpec(probeSnapshot);
+            if (choiceSpec == null && preparedAction.RequiresUnsupportedExistingChoice)
+            {
+                probeSnapshot.ReleaseSimulator();
+                continue;
+            }
+            PlanCardChoice? requiredEmptyChoice = preparedAction.RequiredEmptyChoice;
+            CardChoiceSpec? primaryChoiceSpec = choiceSpec
+                ?? BuildRequiredEmptyChoiceSpec(requiredEmptyChoice);
+            IEnumerable<(PlanAction Action, SimulationSnapshot Snapshot)> resolvedBranches =
+                HasChoiceBeforePrimary(probeSnapshot, primaryChoiceSpec)
+                    ? ResolveRoundChoiceBranches(
+                        node,
+                        action,
+                        probeSnapshot,
+                        BuildPrimaryChoiceMatch(primaryChoiceSpec),
+                        budgetPrimaryChoiceSpec: primaryChoiceSpec)
+                    : ResolvePrimaryCardChoiceBranches(
+                        node,
+                        action,
+                        probeSnapshot,
+                        choiceSpec,
+                        requiredEmptyChoice);
+            resolvedBranches = WithCardChoiceCheckpoint(cardCapture?.Take(), resolvedBranches);
+            foreach ((PlanAction finalAction, SimulationSnapshot finalSnapshot) in resolvedBranches)
+            {
+                bool forcedTurnEnd = finalSnapshot.Turn > node.Turn;
+                PlanAction nodeAction = finalAction with { EndsPlayerTurn = forcedTurnEnd };
+                bool terminal = finalSnapshot.PlayerDead
+                    || finalSnapshot.AllEnemiesDead
+                    || finalSnapshot.BoundaryReason != SearchBoundaryReason.None;
+                double score = ApplySoldHpPenalty(
+                    finalSnapshot.Score,
+                    node.FutureSoldHp);
+                SearchNode child = new(
+                    nodeAction,
+                    node.ActionCount + 1,
+                    finalSnapshot.PotionUseCount,
+                    finalSnapshot.PotionStrategicCost,
+                    forcedTurnEnd ? node.Turn + 1 : node.Turn,
+                    node.Traits,
+                    node.FutureSoldHp,
+                    score,
+                    finalSnapshot.StateKey,
+                    finalSnapshot.HasRisk,
+                    finalSnapshot.BoundaryReason,
+                    terminal,
+                    node,
+                    finalSnapshot,
+                    forcedTurnEnd
+                        ? node.CombatProgress.Advance(finalSnapshot)
+                        : node.CombatProgress)
                 {
-                    probeSnapshot.ReleaseSimulator();
+                    CumulativeEnemyHpLost = AccumulateEnemyHpLost(node, finalSnapshot),
+                };
+                child = AttachCycleSchedulingEvidence(child);
+                PromoteOrderedMutationProgressTail(child);
+                CommitCycleExitObservation(child);
+                if (ShouldPruneCrossTurnNoProgress(child))
+                {
+                    _run.RepeatableNoProgressBranchesPruned++;
+                    finalSnapshot.ReleaseSimulator();
                     continue;
                 }
-                PlanCardChoice? requiredEmptyChoice = CardChoiceSupport.BuildRequiredEmptyChoice(card.Preview);
-                CardChoiceSpec? primaryChoiceSpec = choiceSpec
-                    ?? BuildRequiredEmptyChoiceSpec(requiredEmptyChoice);
-                IEnumerable<(PlanAction Action, SimulationSnapshot Snapshot)> resolvedBranches =
-                    HasChoiceBeforePrimary(probeSnapshot, primaryChoiceSpec)
-                        ? ResolveRoundChoiceBranches(
-                            node,
-                            action,
-                            probeSnapshot,
-                            BuildPrimaryChoiceMatch(primaryChoiceSpec),
-                            budgetPrimaryChoiceSpec: primaryChoiceSpec)
-                        : ResolvePrimaryCardChoiceBranches(
-                            node,
-                            action,
-                            probeSnapshot,
-                            choiceSpec,
-                            requiredEmptyChoice);
-                resolvedBranches = WithCardChoiceCheckpoint(cardCapture?.Take(), resolvedBranches);
-                foreach ((PlanAction finalAction, SimulationSnapshot finalSnapshot) in resolvedBranches)
+                ActionCandidate actionCandidate = BuildCandidate(
+                    snapshot,
+                    finalSnapshot,
+                    child,
+                    preparedAction.CardType,
+                    preparedAction.TargetCombatId);
+                if (CanRetainOrderedMutationLease(_run, child))
                 {
-                    bool forcedTurnEnd = finalSnapshot.Turn > node.Turn;
-                    PlanAction nodeAction = finalAction with { EndsPlayerTurn = forcedTurnEnd };
-                    bool terminal = finalSnapshot.PlayerDead
-                        || finalSnapshot.AllEnemiesDead
-                        || finalSnapshot.BoundaryReason != SearchBoundaryReason.None;
-                    double score = ApplySoldHpPenalty(
-                        finalSnapshot.Score,
-                        node.FutureSoldHp);
-                    SearchNode child = new(
-                        nodeAction,
-                        node.ActionCount + 1,
-                        finalSnapshot.PotionUseCount,
-                        finalSnapshot.PotionStrategicCost,
-                        forcedTurnEnd ? node.Turn + 1 : node.Turn,
-                        node.Traits,
-                        node.FutureSoldHp,
-                        score,
-                        finalSnapshot.StateKey,
-                        finalSnapshot.HasRisk,
-                        finalSnapshot.BoundaryReason,
-                        terminal,
-                        node,
-                        finalSnapshot,
-                        forcedTurnEnd
-                            ? node.CombatProgress.Advance(finalSnapshot)
-                            : node.CombatProgress)
-                    {
-                        CumulativeEnemyHpLost = AccumulateEnemyHpLost(node, finalSnapshot),
-                    };
-                    child = AttachCycleSchedulingEvidence(child);
-                    PromoteOrderedMutationProgressTail(child);
-                    CommitCycleExitObservation(child);
-                    if (ShouldPruneCrossTurnNoProgress(child))
-                    {
-                        _run.RepeatableNoProgressBranchesPruned++;
-                        finalSnapshot.ReleaseSimulator();
-                        continue;
-                    }
-                    ActionCandidate actionCandidate = BuildCandidate(
-                        snapshot,
-                        finalSnapshot,
-                        child,
-                        card.Preview.Type,
-                        target?.CombatId);
-                    if (CanRetainOrderedMutationLease(_run, child))
-                    {
-                        // An admitted ordered-state lease has a bounded coordinator budget of
-                        // its own. Let its direct semantic options reach action admission before
-                        // ordinary transposition/dominance can erase the delayed-payoff edge.
-                        nonDominated.Add(actionCandidate);
-                    }
-                    else if (ShouldDeferCycleTranspositionUntilActionAdmission(child))
-                    {
-                        deferredCycleCandidates ??= [];
-                        deferredCycleCandidates.Add(actionCandidate);
-                    }
-                    else if (TryAcceptTransposition(child))
-                    {
-                        AddNonDominatedCandidate(nonDominated, actionCandidate);
-                    }
-                    else
-                    {
-                        finalSnapshot.ReleaseSimulator();
-                    }
+                    // An admitted ordered-state lease has a bounded coordinator budget of
+                    // its own. Let its direct semantic options reach action admission before
+                    // ordinary transposition/dominance can erase the delayed-payoff edge.
+                    nonDominated.Add(actionCandidate);
+                }
+                else if (ShouldDeferCycleTranspositionUntilActionAdmission(child))
+                {
+                    deferredCycleCandidates ??= [];
+                    deferredCycleCandidates.Add(actionCandidate);
+                }
+                else if (TryAcceptTransposition(child))
+                {
+                    AddNonDominatedCandidate(nonDominated, actionCandidate);
+                }
+                else
+                {
+                    finalSnapshot.ReleaseSimulator();
                 }
             }
         }
