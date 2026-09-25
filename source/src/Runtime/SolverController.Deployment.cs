@@ -1339,11 +1339,7 @@ internal static partial class SolverController
             $"after_observation_sequence={after.ObservationSequence} " +
             $"lifecycle_current={lifecycleCurrent.ToString().ToLowerInvariant()} " +
             $"expected_lifecycle_generation={deployment.CombatLifecycleGeneration} " +
-            $"current_lifecycle_generation={currentLifecycleGeneration} " +
-            $"before_local_fingerprint={before.LocalFingerprint.First:X16}:{before.LocalFingerprint.Second:X16} " +
-            $"after_local_fingerprint={after.LocalFingerprint.First:X16}:{after.LocalFingerprint.Second:X16} " +
-            $"before_remote_fingerprint={before.RemotePublicFingerprint.First:X16}:{before.RemotePublicFingerprint.Second:X16} " +
-            $"after_remote_fingerprint={after.RemotePublicFingerprint.First:X16}:{after.RemotePublicFingerprint.Second:X16}");
+            $"current_lifecycle_generation={currentLifecycleGeneration}");
 
         Entry.Logger.Warn(
             $"[CombatSolver/MultiplayerSafeExecute] MP2B_ACTION_STATE_DIFF " +
