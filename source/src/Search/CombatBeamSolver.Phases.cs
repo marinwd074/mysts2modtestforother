@@ -524,7 +524,7 @@ internal sealed partial class CombatBeamSolver
                     completeVictory);
                 member.SpeculativeRouteOrigin = EnsureCandidateOrigin(materializedNode);
                 member.SpeculativeRouteEvaluationContextId = evaluationContextId;
-                member.SpeculativeRoutePreview = BuildRoutePreview(
+                member.SpeculativeRoutePreview = BuildRoutePreviewFromAnnotations(
                     selectedCandidate,
                     materializedAnnotations,
                     onlyDeathRoutesFound,
@@ -924,14 +924,14 @@ internal sealed partial class CombatBeamSolver
             int candidateVersion)
         {
             FinalPlanCandidate selected = selection.Candidate;
-            return BuildRoutePreview(
+            return BuildRoutePreviewFromAnnotations(
                 selected,
                 BuildRouteAnnotations(selected.Node),
                 onlyDeathRoutesFound,
                 candidateVersion);
         }
 
-        SolverSpeculativeRoutePreview BuildRoutePreview(
+        SolverSpeculativeRoutePreview BuildRoutePreviewFromAnnotations(
             FinalPlanCandidate selected,
             RouteAnnotations annotations,
             bool onlyDeathRoutesFound,
