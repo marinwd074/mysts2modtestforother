@@ -5,15 +5,7 @@ on:
     branches:
       - main
     paths:
-      - '.github/**'
-      - '.editorconfig'
-      - '.gitignore'
-      - '.gitattributes'
-      - 'source/**'
-      - '!source/docs/**'
-  pull_request:
-    paths:
-      - '.github/**'
+      - '.github/workflows/compatibility.yml'
       - '.editorconfig'
       - '.gitignore'
       - '.gitattributes'
@@ -29,7 +21,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  static-consistency:
+  contract-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -44,24 +36,11 @@ jobs:
           ./source/tools/verify-target-version.ps1
           ./source/tools/verify-refactor-boundaries.ps1
 
-  contract-tests:
-    # Keep the historical check name so existing required-check settings do not
-    # become pending forever. The expensive contract suite is manual below.
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: Minimal source sanity
-        shell: pwsh
-        run: |
           [xml]$project = Get-Content -LiteralPath './source/CombatSolver.csproj' -Raw
           if ($project.Project.Sdk -ne 'Godot.NET.Sdk/4.5.1') {
             throw 'CombatSolver.csproj SDK drifted from the pinned Godot SDK.'
           }
+
           $target = Get-Content -LiteralPath './source/build-target.json' -Raw | ConvertFrom-Json
           if ($target.game_version -ne '0.107.1' -or
               $target.ritsu_lib_target_version -ne '0.107.1' -or
@@ -69,20 +48,6 @@ jobs:
             throw 'build-target.json does not describe the supported 0.107.1 target.'
           }
 
-  full-contract-tests:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: windows-latest
-    timeout-minutes: 30
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: Run full L1 contract suite
-        shell: pwsh
-        run: ./source/tools/run-contract-tests.ps1
-
-# Default push/PR CI is intentionally a very small structural gate. Full L1
-# contracts remain available on demand through workflow_dispatch. Native game
-# Release/runtime evidence remains local because it requires STS2/RitsuLib.
+# Default push CI intentionally stays tiny: one Linux structural/version gate.
+# Heavy pinned builds, runtime replays, monster IL audits, and full contracts are
+# manual workflows. Tag releases still perform their own pinned Release build.

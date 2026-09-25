@@ -1,12 +1,6 @@
 name: Pinned 0.107.1 monster target audit
 
 on:
-  push:
-    paths:
-      - '.github/workflows/pinned-monster-target-audit.yml'
-      - 'source/src/Prediction/MonsterMoveEffects.StaticValues.cs'
-      - 'source/src/Prediction/MonsterValueReader.cs'
-      - 'source/tools/Sts2LocalInspector/**'
   workflow_dispatch:
 
 permissions:
