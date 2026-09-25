@@ -114,10 +114,10 @@ foreach ($scenario in @('simple', 'draw_energy')) {
         250.0,
         [math]::Max(20.0, $baselineLagMs * 0.75))
     if (-not $sameRoute -or -not $sameQuality -or -not $sameWork) {
-        throw "E1 changed final semantics for $scenario: route=$sameRoute quality=$sameQuality work=$sameWork."
+        throw "E1 changed final semantics for ${scenario}: route=$sameRoute quality=$sameQuality work=$sameWork."
     }
     if ($earlyLagMs -lt 0 -or $earlyLagMs -gt $allowedEarlyLagMs) {
-        throw "E1 did not publish the official final candidate early enough for $scenario: baseline_lag_ms=$baselineLagMs early_lag_ms=$earlyLagMs allowed_ms=$allowedEarlyLagMs."
+        throw "E1 did not publish the official final candidate early enough for ${scenario}: baseline_lag_ms=$baselineLagMs early_lag_ms=$earlyLagMs allowed_ms=$allowedEarlyLagMs."
     }
 
     $e1Rows += [pscustomobject]@{
