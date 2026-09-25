@@ -411,6 +411,11 @@ internal sealed partial class SimulatedCombatState
                 || relic.Owner is not Player owner
                 || _rootCapturedPlayers.Contains(owner)
                 || MultiplayerRemotePublicRelicSupport.IsKnownCurrentTurnIrrelevant(relic))
+            // Local-single-core multiplayer deliberately does not capture teammate potion
+            // inventories. Remove their live potion listeners at the same root boundary so
+            // hook materialization never tries to resolve an out-of-scope private inventory.
+            .Where(listener => listener is not PotionModel potion
+                || _rootCapturedPlayers.Contains(potion.Owner))
             .Where(listener => listener is not CardModel
                 and not AfflictionModel
                 and not EnchantmentModel

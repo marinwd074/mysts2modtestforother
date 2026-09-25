@@ -224,6 +224,9 @@ internal static class Program
             Player remote = players[1];
             SetDeck(runState, remote,
                 ["BASH", "STRIKE_IRONCLAD", "STRIKE_IRONCLAD", "DEFEND_IRONCLAD", "DEFEND_IRONCLAD"]);
+            PotionModel remotePotion = ResolveUnique(ModelDb.AllPotions, "FIRE_POTION", "potion").ToMutable();
+            if (!remote.AddPotionInternal(remotePotion, 0, silent: false).success)
+                throw new InvalidOperationException("Could not add teammate FIRE_POTION to slot 0.");
         }
 
         await RunManager.Instance.EnterRoomDebug(
