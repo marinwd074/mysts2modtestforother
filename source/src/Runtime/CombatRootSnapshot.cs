@@ -180,16 +180,26 @@ internal sealed class CombatRootSnapshot
         PlayerCombatState playerState = player.PlayerCombatState
             ?? throw new InvalidOperationException("玩家没有战斗状态。");
         SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
-        MultiplayerCarryRankingContext carryRankingContext = capabilities.IsMultiplayer && capabilities.CanSearch
-            ? MultiplayerCarryRankingContextCapture.Capture(state, MultiplayerWorldTracker.WorldVersion)
+        bool multiplayerSearch = capabilities.IsMultiplayer && capabilities.CanSearch;
+        bool useMultiplayerPrediction = multiplayerSearch
+            && SolverSettings.Current.UseMultiplayerPrediction;
+        // Default multiplayer now deliberately uses the single-player search core. Keep the
+        // native multiplayer enemy/root state, but capture only the local player's private
+        // search state so every fork is as close as possible to a single-player fork.
+        IReadOnlyList<Player>? rootCapturedPlayers = multiplayerSearch
+            ? useMultiplayerPrediction
+                ? state.Players.ToArray()
+                : [player]
+            : null;
+        MultiplayerCarryRankingContext carryRankingContext = useMultiplayerPrediction
+            ? MultiplayerCarryRankingContextCapture.Capture(
+                state,
+                MultiplayerWorldTracker.WorldVersion)
             : MultiplayerCarryRankingContext.Disabled;
         SolverPerspective perspective = SolverPerspective.Capture(
             player,
             state.Players.Count,
             capabilities.IsMultiplayer);
-        IReadOnlyList<Player>? rootCapturedPlayers = capabilities.IsMultiplayer && capabilities.CanSearch
-            ? state.Players.ToArray()
-            : null;
 
         PowerDynamicVarWarmup.EnsureMaterialized(state);
         CardDynamicVarWarmup.EnsureMaterialized(state, rootCapturedPlayers);
@@ -213,13 +223,15 @@ internal sealed class CombatRootSnapshot
         SimulatedCombatState simulatedCombat = new(
             state,
             liveCombatHookListeners,
-            localPlayerOnly: null,
-            localActionPlayer: capabilities.IsMultiplayer && capabilities.CanSearch
+            localPlayerOnly: multiplayerSearch && !useMultiplayerPrediction
+                ? player
+                : null,
+            localActionPlayer: multiplayerSearch
                 ? player
                 : null);
         CombatPredictionSimulator simulator = new(simulatedCombat);
         IReadOnlyList<MultiplayerTeammateForecastState> teammateForecastStates = [];
-        if (capabilities.IsMultiplayer && capabilities.CanSearch)
+        if (useMultiplayerPrediction)
         {
             teammateForecastStates =
                 MultiplayerTeammateForecastCapture.Capture(simulator, player);
@@ -285,6 +297,16 @@ internal sealed class CombatRootSnapshot
             .ToHashSet(StringComparer.Ordinal);
         int powerCount = state.Creatures.Sum(creature => creature.Powers.Count);
         stopwatch.Stop();
+
+        if (multiplayerSearch)
+        {
+            Entry.Logger.Info(
+                $"[CombatSolver/Multiplayer] MP_SEARCH_ROOT_CAPTURE " +
+                $"mode={(useMultiplayerPrediction ? "full_prediction" : "local_single_player_core")} " +
+                $"captured_players={rootCapturedPlayers?.Count ?? state.Players.Count} " +
+                $"cards={cardCount} hooks={simulatedCombat.RootHookListenerCount} " +
+                $"capture_ms={stopwatch.Elapsed.TotalMilliseconds:F1}");
+        }
 
         if (carryRankingContext.Enabled)
         {
