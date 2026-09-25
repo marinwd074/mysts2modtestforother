@@ -110,8 +110,6 @@ internal sealed record SolverSettingsData
     /// Off keeps the real multiplayer root but uses the proven local single-player quality core.
     /// </summary>
     public bool UseMultiplayerPrediction { get; init; }
-    public bool UseMultiplayerTeammateForecast { get; init; } = true;
-    public bool UseMultiplayerScenarioReevaluation { get; init; } = true;
     public int AcceptableBattleHpLoss { get; init; }
     public bool StopAtAcceptableBattleHpLoss { get; init; } = true;
     public int PerformanceMigrationVersion { get; init; }
@@ -167,8 +165,6 @@ internal sealed record SolverSettingsSnapshot(
     public MultiplayerCombatObjectiveStrategy MultiplayerCombatObjectiveStrategy { get; init; }
         = MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo;
     public bool UseMultiplayerPrediction { get; init; }
-    public bool UseMultiplayerTeammateForecast { get; init; } = true;
-    public bool UseMultiplayerScenarioReevaluation { get; init; } = true;
     public bool UseBeamWidthPortfolio { get; init; }
     public bool UseNoveltyPortfolio { get; init; }
 }
@@ -320,8 +316,6 @@ internal static class SolverSettings
             IgnoreLongTermRewards = data.IgnoreLongTermRewards,
             MultiplayerCombatObjectiveStrategy = data.MultiplayerCombatObjectiveStrategy,
             UseMultiplayerPrediction = data.UseMultiplayerPrediction,
-            UseMultiplayerTeammateForecast = data.UseMultiplayerTeammateForecast,
-            UseMultiplayerScenarioReevaluation = data.UseMultiplayerScenarioReevaluation,
             UseBeamWidthPortfolio = data.UseBeamWidthPortfolio,
             UseNoveltyPortfolio = data.UseNoveltyPortfolio,
         };

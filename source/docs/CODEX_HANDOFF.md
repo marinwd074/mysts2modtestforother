@@ -14,8 +14,8 @@
 ## 当前多人架构
 
 1. **共同搜索核心**：单人完整路线与多人本地跨回合共用 Beam、Novelty、成长、遗物、药水和长期收益基础。
-2. **团队目标/情景**：多人叠加公平 Scenario Matrix 和 Robust 目标；生产默认仍为 Robust。
-3. **交错预测**：支持 local → forecast-only teammate → local 的 detached 模拟；队友节点没有 deployment authority。U5 reverse-order 等价探针只在详细诊断开启时运行；生产搜索不再为纯日志额外 Fork/重放每条队友路线。单动作 teammate forecast 不再固定先 Fork 一份只读 seed：候选先在原状态只读枚举，只有真实候选才按原语义逐候选 Fork；无合法队友动作时零额外 simulator clone。性能设置新增两个默认开启的多人专用开关：关闭“多人队友联合预测”会同时停用回合内 U5 与结束回合 Joint teammate forecast；关闭“多人 Robust 情景复评”会停用 U3 Scenario Matrix，并把预留节点预算还给主 Beam。两个开关都不改变单人模式。
+2. **团队目标/情景**：Team Objective、Shadow teammate forecast、Scenario Matrix / Robust 和 Carry 统一属于实验多人预测栈。生产默认关闭该栈，使用真实多人战斗根 + local-single-core；仅“设置 → 常规 → 多人模式 → 启用多人预测算法（实验）”一个总开关控制是否启用整套预测栈。
+3. **交错预测**：实验预测栈开启时支持 local → forecast-only teammate → local 的 detached 模拟；队友节点没有 deployment authority。U5 reverse-order 等价探针只在详细诊断开启时运行；生产搜索不再为纯日志额外 Fork/重放每条队友路线。队友联合预测与 Robust 情景复评继续作为内部搜索阶段保留，但不再暴露独立用户开关，避免与总开关形成无效/矛盾组合。
 4. **路线刷新**：轻量 HP/Block drift 可对少量保留候选做 bounded refresh；目标死亡、资源、Power、牌堆/RNG 等强变化走 fresh search。
 5. **Safe Execute**：逐本地动作使用原生提交、稳定等待和 predicted/live semantic post-state 对照；旧 request/generation 不可复活。
 6. **药水**：本地药水已接入多人 Safe Execute；药水槽、策略面板、Smart/保护/强制与单人共用。多人只读取/消耗本地玩家药水，玩家类目标只允许自己，攻击/状态药仍可作用敌人；是否值得消耗药水固定按本地玩家的单人药水基线判断，队友战损不能改变用药资格。
