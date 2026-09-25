@@ -95,6 +95,12 @@ internal sealed record SearchPolicySnapshot(
     public bool UseE3FixedPortfolioScheduling { get; init; }
 
     /// <summary>
+    /// E3B 实验开关：固定轮转的公平 slice 之后，允许最近产生/改进完整胜利 incumbent
+    /// 的成员多拿至多一个 bonus slice。默认关闭，最终 Smart 提交顺序不变。
+    /// </summary>
+    public bool UseE3AdaptivePortfolioScheduling { get; init; }
+
+    /// <summary>
     /// 组合成员宽度。首项由 <see cref="BeamWidthPortfolio.ProductionMembers" /> 强制成基线宽度；
     /// 为空时用默认的 [基线, 基线×2/3, 基线×3/2, 次段 基线, 基础分 基线]，显式给出时只有宽度成员。
     /// </summary>

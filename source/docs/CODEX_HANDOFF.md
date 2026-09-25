@@ -79,6 +79,14 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - 本阶段始终没有改变 Beam 宽度、评分、Robust、药水/遗物/特殊牌、多人数值语义或执行权限。
 - **E2 已关闭。** 后续除非再次修改 member-session 状态所有权、安全点、取消/Dispose 或累计预算语义，否则不继续在 E2 增加可恢复搜索改造。
 
+## 搜索效率 E3（2026-09-25，进行中）
+
+- **E3A 固定轮转已通过门禁**：Smart 用药层复用 E2 `SearchMemberExecutionSession`，每 slice 上限为 256 committed parents / 1024 transitions；成员等待期间自己的预算钟暂停，request deadline 仍共享真实墙钟。
+- E3A pinned A/B 已锁定同质量且同固定工作量：串行与固定轮转的动作、boundary、战损、终局 HP、敌方 HP、结束回合、显式药水数、总 expanded/transitions 和逐 `potion_required` transitions 一致；后置成员在前一成员完成前获得真实工作。
+- HEAD `f44c4acc` 的 compatibility run `36098398713` 与 pinned Release run `36098398707` PASS；随后 `280cc0ff` / `16849b4a` 把固定工作门禁与 transition slice 正式锁定。
+- **E3B 当前切片**：固定轮转仍是硬公平底座；每个活跃成员每 epoch 必得 1 个 slice，只有最近产生/改进完整胜利 incumbent 的成员可额外得到 1 个 bonus slice。最终 Smart 结果仍按原低瓶数→高瓶数提交/阈值规则处理。
+- E3B 为内部实验开关，不改生产默认；通过 adaptive/fixed 质量门禁后再进入 E3C 早停/上界。
+
 ## 当前未验证边界
 
 - 当前 HEAD 的真实多人 Beam retention A/B：需要在“明显不如手打”的合法局面上确认更好路线究竟在 Beam、portfolio、U3/U4 还是执行层丢失。
@@ -87,11 +95,9 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 
 ## 下一任务
 
-开始 **E3：portfolio 调度 / 早停 / 上界 / 成员间复用**。
+继续 **E3B：自适应预算分配**。
 
-1. 直接复用 E2 的 `SearchMemberExecutionSession`，第一小阶段只改 portfolio 的工作分配，让现有成员可以按 deterministic allowance 轮转，而不是成员 A 完整跑完后再从根启动成员 B；目标函数、Beam 排序、Robust 与最终比较规则保持不变。
-2. 优先处理 E0 的真实多人瓶颈：LOUSE_PROGENITOR 最终赢家直到第三个 `potion_required#3` 才首次生成。E3 要让这类“后置成员赢家”更早获得搜索预算，而不是降低候选质量标准。
-3. 先做固定 node/transition budget A/B，记录每个成员首次产生 incumbent 的工作量、重复根工作和最终赢家；只有证明最终选择不退化后才加入可信的早停或上界。
-4. E1 继续延后；只有新的多人证据显示候选早已 selected 但明显迟 published 时再优先处理发布延迟。
-5. 不按卡名、seed、怪物名或单局硬编码调度规则；每轮仍只推进一个小阶段并更新本 handoff。
-
+1. 验证 adaptive/fixed 的 pinned 最终质量一致，后置成员不被饿死。
+2. 若 bonus 在代表样本上无收益，保留固定轮转，不为了“自适应”增加复杂度。
+3. E3B 通过后进入 E3C：只加入可证明安全的早停/上界；最后做 E3D 成员间复用。
+4. E1 继续延后；不按卡名、seed、怪物名或单局硬编码调度。
