@@ -165,3 +165,10 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - production policy 已切换为 local-single-core：真实多人 root + 单人质量排序；team objective / teammate forecast / scenario reevaluation 生产关闭。多人网络、怪物语义、目标语义、安全执行与 continuation 不变。
 - 旧多人质量层保留为测试/研究代码，可由测试直接 override SearchPolicySnapshot，不删除历史 U2/U3/U4 证据。
 - 新诊断：`MULTIPLAYER_QUALITY_MODE mode=local_single_core team_objective=false teammate_forecast=false scenario_reevaluation=false`。
+
+
+### CI contract migration for local-single-core
+
+- `E0PinnedHarness --scenario teammate` now explicitly opts into Advisor capability before root capture, so the detached two-player root is an admitted local-player multiplayer search instead of an optional unsupported probe.
+- The teammate E0 scenario now validates the **production** policy: `MultiplayerLocalCrossTurn` route semantics with Team Objective, teammate forecast and scenario reevaluation all disabled; any Shadow phase is a failure.
+- `test-u2-search-kernel.ps1` was updated from the obsolete “production multiplayer keeps team objective enabled” assertion to the new local-single-core production contract. Experimental U3/U4/Shadow contracts remain intact and separately tested.

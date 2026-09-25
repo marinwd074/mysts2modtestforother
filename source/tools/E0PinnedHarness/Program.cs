@@ -32,6 +32,13 @@ internal static class Program
             "--legacy-action-order",
             StringComparer.Ordinal);
         CombatBeamSolver.UseLegacyActionSearchOrderForTesting(legacyActionOrder);
+        bool teammate = string.Equals(scenario, "teammate", StringComparison.Ordinal);
+        if (teammate)
+        {
+            Environment.SetEnvironmentVariable(
+                SolverSessionCapabilities.MultiplayerModeEnvironmentVariable,
+                "advisor");
+        }
         Directory.CreateDirectory(output);
         try
         {
@@ -78,7 +85,15 @@ internal static class Program
                 MaxExpandedNodes = MaxExpandedNodes,
                 SoftTimeBudgetMilliseconds = BudgetMilliseconds,
             };
-            bool teammate = string.Equals(scenario, "teammate", StringComparison.Ordinal);
+            if (teammate
+                && (captured.RoutePolicy != SearchRoutePolicy.MultiplayerLocalCrossTurn
+                    || captured.UseMultiplayerTeamObjective
+                    || captured.UseMultiplayerTeammateForecast
+                    || captured.UseMultiplayerScenarioReevaluation))
+            {
+                throw new InvalidOperationException(
+                    "Production teammate fixture did not capture local-single-core policy.");
+            }
             SearchPolicySnapshot policy = captured with
             {
                 Profile = profile,
@@ -86,9 +101,6 @@ internal static class Program
                     ? SearchRoutePolicy.MultiplayerLocalCrossTurn
                     : SearchRoutePolicy.SinglePlayerFullRoute,
                 CurrentTurnOnly = false,
-                UseMultiplayerTeamObjective = teammate,
-                UseMultiplayerTeammateForecast = teammate,
-                UseMultiplayerScenarioReevaluation = teammate,
                 UseNoveltyPortfolio = false,
                 UseBeamWidthPortfolio = true,
                 BeamWidthPortfolioWidths = null,
@@ -98,9 +110,16 @@ internal static class Program
                 Interaction = null,
             };
 
-            if (teammate && (combat.Players.Count != 2 || root.PlayerCount != 2))
+            if (teammate
+                && (combat.Players.Count != 2
+                    || root.PlayerCount != 2
+                    || !root.AllowsLocalPlayerOnlySearch))
+            {
                 throw new InvalidOperationException(
-                    $"Detached teammate fixture did not produce two players: combat={combat.Players.Count} root={root.PlayerCount}.");
+                    $"Detached teammate fixture is not an admitted local-player multiplayer root: " +
+                    $"combat={combat.Players.Count} root={root.PlayerCount} " +
+                    $"local_only={root.AllowsLocalPlayerOnlySearch}.");
+            }
 
             string[] rootHand = local.PlayerCombatState!.Hand.Cards.Select(card => card.Id.Entry).ToArray();
             Action<SolverProgress>? progressCallback =
@@ -128,12 +147,12 @@ internal static class Program
                     "Draw/energy fixture did not exercise OFFERING in the selected route.");
             }
             if (teammate
-                && !evidence.Phases.Any(phase =>
+                && evidence.Phases.Any(phase =>
                     string.Equals(phase.Phase, "shadow", StringComparison.Ordinal)
                     && phase.CallCount > 0))
             {
                 throw new InvalidOperationException(
-                    "Detached teammate fixture produced no Shadow teammate work.");
+                    "Production local-single-core fixture unexpectedly performed Shadow teammate work.");
             }
 
             string path = Path.Combine(output, $"e0-{scenario}.json");
