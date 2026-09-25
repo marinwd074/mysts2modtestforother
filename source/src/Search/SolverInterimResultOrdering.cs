@@ -51,6 +51,22 @@ internal static class SolverInterimResultOrdering
             .CompareTo(currentCombatEndedTurn ?? int.MaxValue);
     }
 
+    /// <summary>
+    /// Secondary value for otherwise-equal completed routes. Persistent setup is worth remembering
+    /// only when it can affect a later turn; a route that already wins on the current root turn
+    /// must never add a Power merely to improve this tie-break.
+    /// </summary>
+    public static int CompletedRouteSetupTieBreakValue(
+        bool completeVictory,
+        int? combatEndedTurn,
+        int startTurnNumber,
+        int peakPersistentBuffValue)
+        => completeVictory
+            && combatEndedTurn is int endTurn
+            && endTurn > startTurnNumber
+                ? Math.Max(0, peakPersistentBuffValue)
+                : 0;
+
     public static bool IsBetter(SolverInterimResult candidate, SolverInterimResult current)
     {
         int comparison = current.Won.CompareTo(candidate.Won);

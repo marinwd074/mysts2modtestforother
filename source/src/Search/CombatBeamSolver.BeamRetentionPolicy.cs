@@ -1753,6 +1753,19 @@ internal sealed partial class CombatBeamSolver
             comparison = leftSnapshot.EnemyHp.CompareTo(rightSnapshot.EnemyHp);
             if (comparison != 0)
                 return comparison;
+            int leftSetupTieBreak = SolverInterimResultOrdering.CompletedRouteSetupTieBreakValue(
+                leftWon,
+                leftWon ? CompletedCombatTurn(left) : null,
+                _startTurnNumber,
+                left.CombatProgress?.BestPersistentBuffValue ?? leftSnapshot.PersistentBuffValue);
+            int rightSetupTieBreak = SolverInterimResultOrdering.CompletedRouteSetupTieBreakValue(
+                rightWon,
+                rightWon ? CompletedCombatTurn(right) : null,
+                _startTurnNumber,
+                right.CombatProgress?.BestPersistentBuffValue ?? rightSnapshot.PersistentBuffValue);
+            comparison = rightSetupTieBreak.CompareTo(leftSetupTieBreak);
+            if (comparison != 0)
+                return comparison;
             comparison = right.Score.CompareTo(left.Score);
             if (comparison != 0)
                 return comparison;

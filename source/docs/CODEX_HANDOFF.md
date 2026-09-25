@@ -40,6 +40,8 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 
 最近与上述代码相关的 compatibility / pinned 0.107.1 验证均通过。仓库治理已移除历史资料/生成输出，并删除旧后台在线状态、跑局统计上传、服务器更新检查和自动 Showcase 上传链；搜索/模拟算法本身未因此改变。
 
+- TUNNELER real-multiplayer 连续问题包（`8ee4...` / `0c44...` / `426b...`）确认了两个不同现象：`Offering+` 并未被搜索器禁用，历史最终路线多次真实选中 `4:C:OFFERING`；最新 T4 状态已有无需 Offering 的同回合斩杀，因此不增加“见祭品必打”规则。相反，T1 `Inflame` 在 3 能量手牌中可用且最终路线仍留下 1 能量，三份包的最终路线均没有 `INFLAME`。Inflame 的 `StrengthPower` 模拟已存在于 `CorePowerSupport`；缺口是完成胜利后早期 persistent setup 价值归零，终局代表选择再用 Score/ActionCount 偏向少打一张牌。现统一给 Beam completed-victory representative 与 FinalPlanOrdering 增加“历史 peak persistent setup”低优先级 tie-break；仅当斩杀回合晚于当前搜索根回合时生效，避免为了已经到手的本回合斩杀额外刷 Power。
+
 ## 搜索效率 E0（2026-09-25）
 
 - 已按 `CombatSolver_Search_Efficiency_Math_Plan` 接入 E0 观测，不改变 Beam/Robust/动作排序/预算：最终候选可追踪首次成为可比较候选、完成当前评估上下文、被选中、首次发布四个时间点。
@@ -69,7 +71,7 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 
 ## 下一任务
 
-继续 E0，不进入 E1：
+先验证本轮 TUNNELER 路线质量修复；该改动会改变路线排序，所以不要把修复前 E0 数字当作最终语义基线。验证完成后继续 E0，不进入 E1：
 
 1. 用包含 TeammateForecast token 修复的 current HEAD 复跑一次真实双人 Advisor 或 Safe Execute 搜索；优先复现 THIEVING_HOPPER_WEAK 同类局面，无需刻意刷 seed。
 2. 对新问题包运行 `validate-e0-search-efficiency-results.ps1`；PASS 后把第三行生成→评估→选中→发布及 Shadow/Scenario Matrix/materialization 独占时间写回本表并关闭 E0。

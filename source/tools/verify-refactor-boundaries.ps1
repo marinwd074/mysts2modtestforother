@@ -2423,6 +2423,27 @@ else {
     }
 }
 
+$interimOrderingPath = Join-Path $searchRoot "SolverInterimResultOrdering.cs"
+$interimOrderingText = [IO.File]::ReadAllText($interimOrderingPath)
+foreach ($setupTieBreakRule in @(
+    'CompletedRouteSetupTieBreakValue(',
+    'endTurn > startTurnNumber',
+    'Math.Max(0, peakPersistentBuffValue)')) {
+    if (-not $interimOrderingText.Contains($setupTieBreakRule)) {
+        $violations.Add("${interimOrderingPath}: completed-route setup tie-break drifted '$setupTieBreakRule'")
+    }
+}
+$finalPlanOrderingPath = Join-Path $searchRoot "CombatBeamSolver.FinalPlanOrdering.cs"
+$finalPlanOrderingText = [IO.File]::ReadAllText($finalPlanOrderingPath)
+if (-not $finalPlanOrderingText.Contains('ThenByDescending(candidate => candidate.CompletedSetupTieBreak)')) {
+    $violations.Add("${finalPlanOrderingPath}: final ordering must preserve useful earlier setup before score/action-count")
+}
+$beamRetentionPolicyPath = Join-Path $searchRoot "CombatBeamSolver.BeamRetentionPolicy.cs"
+$beamRetentionPolicyText = [IO.File]::ReadAllText($beamRetentionPolicyPath)
+if (-not $beamRetentionPolicyText.Contains('left.CombatProgress?.BestPersistentBuffValue')) {
+    $violations.Add("${beamRetentionPolicyPath}: completed-victory retention must preserve peak persistent setup")
+}
+
 $cardOnPlayMirrorPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/CardOnPlayMirrors.cs'
 $cardOnPlayMirrorText = [IO.File]::ReadAllText($cardOnPlayMirrorPath)
 if (-not $cardOnPlayMirrorText.Contains('registry.Register<Scare>(static (_, _) => { });')) {

@@ -293,6 +293,12 @@ internal sealed partial class CombatBeamSolver
                         OptionalAmbergrisCount: optionalAmbergrisCount,
                         EffectivePotionPolicy: effectivePotionPolicy,
                         MultiplayerObjective: multiplayerObjective,
+                        CompletedSetupTieBreak: SolverInterimResultOrdering.CompletedRouteSetupTieBreakValue(
+                            completeVictory,
+                            completeVictory ? candidate.Snapshot.CombatEndedTurn : null,
+                            startTurnNumber,
+                            candidate.Node.CombatProgress?.BestPersistentBuffValue
+                                ?? candidate.Snapshot.PersistentBuffValue),
                         CarryEvaluation: carryEvaluation,
                         CarryObservationActionCount: carryObservationNode.ActionCount,
                         CarryCompatibility: new MultiplayerCarryCompatibilityKey(
@@ -518,6 +524,9 @@ internal sealed partial class CombatBeamSolver
                 .ThenBy(candidate => candidate.OptionalPotionCount)
                 .ThenBy(candidate => candidate.StrategicSold)
                 .ThenBy(candidate => candidate.Features.EnemyHp)
+                // Completed routes otherwise forget setup whose value naturally collapses at
+                // terminal victory. Prefer useful earlier setup only after all harder quality keys.
+                .ThenByDescending(candidate => candidate.CompletedSetupTieBreak)
                 .ThenBy(candidate =>
                     MultiplayerLocalCrossTurnContracts.DelayAngerCopyPreferenceUntilAfterEnemyHp(
                         useMultiplayerRouteSemantics,
