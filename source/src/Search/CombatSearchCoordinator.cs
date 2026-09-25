@@ -427,11 +427,30 @@ internal static partial class CombatSearchCoordinator
                 => RunBeamWidthPortfolioPass(root, beamPolicy, baselineProfile,
                     ReferenceEquals(baselineProfile, passProfile) ? passClock : Stopwatch.StartNew(),
                     SolveMember, publishBaseline);
+            SolverResult? earlySmartPotionBaseline = null;
+            SolverResult? earlySmartPotionScout = null;
+            SolverResult? RunCrossFamilyScout(
+                SolverResult provisionalPotionFree,
+                SolverSearchProfile scoutProfile)
+            {
+                earlySmartPotionBaseline = provisionalPotionFree;
+                earlySmartPotionScout = SearchEarlySmartPotionScout(
+                    root,
+                    displayNames,
+                    battleDamage,
+                    beamPolicy,
+                    cancellationToken,
+                    progressCallback,
+                    scoutProfile,
+                    provisionalPotionFree,
+                    interimResultCallback);
+                return earlySmartPotionScout;
+            }
             SolverResult RunPrimary()
                 => policy.UseNoveltyPortfolio
                     ? RunNoveltyPortfolioPass(root, displayNames, battleDamage, passPolicy, passProfile,
                         passClock, initialPotionPolicyOverride, cancellationToken, progressCallback,
-                        interimResultCallback, RunBaseline)
+                        interimResultCallback, RunCrossFamilyScout, RunBaseline)
                     : RunBaseline(passProfile);
 
             bool hasForcedBaseline = forcedSmartGradient;
@@ -493,7 +512,9 @@ internal static partial class CombatSearchCoordinator
                     passClock,
                     passResult,
                     memoryForecast,
-                    interimResultCallback);
+                    interimResultCallback,
+                    earlySmartPotionBaseline,
+                    earlySmartPotionScout);
                 // The final potion audit may return another result object. Keep the
                 // primary-pass observations alongside the request's final outcome.
                 passResult.NoveltyPortfolio = noveltyPass;
@@ -768,7 +789,9 @@ internal static partial class CombatSearchCoordinator
         Stopwatch requestClock,
         SolverResult primary,
         SmartLayerMemoryForecast memoryForecast,
-        Action<SolverResult>? interimResultCallback)
+        Action<SolverResult>? interimResultCallback,
+        SolverResult? earlySmartPotionBaseline,
+        SolverResult? earlySmartPotionScout)
     {
         long remainingMilliseconds = profile.SoftTimeBudgetMilliseconds - requestClock.ElapsedMilliseconds;
         if (remainingMilliseconds <= 0)
@@ -802,18 +825,31 @@ internal static partial class CombatSearchCoordinator
             if (!policy.PotionStrategy.HasForcedDirectives
                 && HasReachedAcceptableBattleHpLoss(policy, selected))
                 return selected;
-            selected = AuditSmartPotionUse(
-                root,
-                displayNames,
-                battleDamage,
-                policy,
-                deadline.Token,
-                cancellationToken,
-                progressCallback,
-                profile,
-                selected,
-                memoryForecast,
-                interimResultCallback);
+            if (TryReuseEarlySmartPotionScout(
+                    root,
+                    policy,
+                    selected,
+                    earlySmartPotionBaseline,
+                    earlySmartPotionScout,
+                    out SolverResult? reusedScout))
+            {
+                selected = reusedScout!;
+            }
+            else
+            {
+                selected = AuditSmartPotionUse(
+                    root,
+                    displayNames,
+                    battleDamage,
+                    policy,
+                    deadline.Token,
+                    cancellationToken,
+                    progressCallback,
+                    profile,
+                    selected,
+                    memoryForecast,
+                    interimResultCallback);
+            }
             if (HasReachedAcceptableBattleHpLoss(policy, selected))
                 return selected;
             if (policy.PotionPolicy != SolverPotionPolicy.Smart)
@@ -1491,6 +1527,144 @@ internal static partial class CombatSearchCoordinator
             $"selected_saved={auditedSelection.PotionHpSaved} " +
             $"selected_required={auditedSelection.PotionHpRequired}");
         return auditedSelection;
+    }
+
+    private static SolverResult? SearchEarlySmartPotionScout(
+        CombatRootSnapshot root,
+        SolverDisplayNames displayNames,
+        BattleDamageSnapshot battleDamage,
+        SearchPolicySnapshot policy,
+        CancellationToken cancellationToken,
+        Action<SolverProgress>? progressCallback,
+        SolverSearchProfile profile,
+        SolverResult provisionalPotionFree,
+        Action<SolverResult>? interimResultCallback)
+    {
+        if (policy.PotionPolicy != SolverPotionPolicy.Smart
+            || policy.PotionStrategy.HasForcedDirectives
+            || !policy.UseE3FixedPortfolioScheduling
+            || provisionalPotionFree.ResultScope != SolverResultScope.SearchCompletion)
+        {
+            return null;
+        }
+
+        bool potionFreeWon = IsCompleteVictory(provisionalPotionFree);
+        int potionFreeDeficit = StrategicHpDeficit(root, policy, provisionalPotionFree);
+        if (MaximumSmartPotionUses(root, policy, potionFreeWon, potionFreeDeficit) == 0)
+            return null;
+
+        PotionFreePolicyBaseline baseline = new(
+            potionFreeWon,
+            potionFreeDeficit,
+            provisionalPotionFree.Snapshot.PlayerHp,
+            provisionalPotionFree.CombatEndedTurn)
+        {
+            DeathSaveUseCount = provisionalPotionFree.Snapshot.ProjectedDeathSaveUseCount,
+        };
+        SolverResult? scout = SolveOptionalPotionPosterior(
+            new CombatBeamSolver(
+                root,
+                displayNames,
+                battleDamage,
+                policy,
+                cancellationToken,
+                progressCallback,
+                profile,
+                SolverPotionPolicy.RequireAtLeastOne,
+                baseline,
+                maximumPotionUses: 1,
+                minimumPotionUses: 1,
+                primaryIncumbent: BuildPrimarySearchIncumbent(
+                    root,
+                    policy,
+                    provisionalPotionFree)),
+            policy,
+            "E3_CROSS_FAMILY_SCOUT");
+        if (scout == null || scout.ResultScope != SolverResultScope.SearchCompletion)
+            return scout;
+
+        scout.SingleSessionSearch = true;
+        PopulateSingleSessionTotals(scout);
+        policy.Diagnostics.Info(
+            $"[CombatSolver/Test] E3_CROSS_FAMILY_SCOUT result " +
+            $"boundary={scout.BoundaryReason} won={IsCompleteVictory(scout)} " +
+            $"potions={scout.ExplicitPotionCount} expanded={scout.ExpandedNodes} " +
+            $"transitions={scout.TransitionCount} elapsed_ms={scout.Elapsed.TotalMilliseconds:F1}");
+        if (IsCompleteVictory(scout))
+            interimResultCallback?.Invoke(scout);
+        return scout;
+    }
+
+    private static bool TryReuseEarlySmartPotionScout(
+        CombatRootSnapshot root,
+        SearchPolicySnapshot policy,
+        SolverResult finalPotionFree,
+        SolverResult? provisionalPotionFree,
+        SolverResult? scout,
+        out SolverResult? selected)
+    {
+        selected = null;
+        if (policy.PotionPolicy != SolverPotionPolicy.Smart
+            || policy.PotionStrategy.HasForcedDirectives
+            || provisionalPotionFree == null
+            || scout == null
+            || scout.ResultScope != SolverResultScope.SearchCompletion
+            || scout.BoundaryReason != SearchBoundaryReason.None
+            || scout.ExplicitPotionCount != 1)
+        {
+            return false;
+        }
+
+        // The early member used the provisional no-potion incumbent. Reuse it only
+        // when the later no-potion result is at least as strong; otherwise rerun the
+        // ordinary Smart audit rather than assuming the early search stayed complete.
+        if (CompareCompletedResultPrimaryQuality(
+                root,
+                policy,
+                finalPotionFree,
+                provisionalPotionFree) > 0)
+        {
+            policy.Diagnostics.Info(
+                "[CombatSolver/Test] E3_CROSS_FAMILY_REUSE reused=false reason=baseline_regressed");
+            return false;
+        }
+
+        bool potionFreeWon = IsCompleteVictory(finalPotionFree);
+        bool candidateWon = IsCompleteVictory(scout);
+        int potionFreeDeficit = StrategicHpDeficit(root, policy, finalPotionFree);
+        int candidateDeficit = StrategicHpDeficit(root, policy, scout);
+        int hpSaved = potionFreeWon
+            ? Math.Max(0, potionFreeDeficit - candidateDeficit)
+            : candidateWon
+                ? Math.Max(0, scout.Snapshot.PlayerHp - finalPotionFree.Snapshot.PlayerHp)
+                : 0;
+        int hpRequired = SmartPotionHpRequired(root, policy, scout);
+        bool protectsLoot = policy.TheftPolicy == SolverTheftPolicy.PreserveResources
+            && scout.OutstandingStolenResource < finalPotionFree.OutstandingStolenResource;
+        bool acceptable = IsSmartPotionGradientCandidateAcceptable(
+            potionFreeWon,
+            candidateWon,
+            hpSaved,
+            hpRequired,
+            protectsLoot);
+        bool improvesSelection = acceptable
+            && (policy.TheftPolicy != SolverTheftPolicy.PreserveResources
+                || IsBetterCompletedResult(root, policy, scout, finalPotionFree));
+        if (!improvesSelection)
+        {
+            policy.Diagnostics.Info(
+                $"[CombatSolver/Test] E3_CROSS_FAMILY_REUSE reused=false reason=revalidation " +
+                $"won={candidateWon} saved={hpSaved} required={hpRequired} protects_loot={protectsLoot}");
+            return false;
+        }
+
+        scout.PotionHpSaved = hpSaved;
+        scout.PotionHpRequired = hpRequired;
+        selected = scout;
+        policy.Diagnostics.Info(
+            $"[CombatSolver/Test] E3_CROSS_FAMILY_REUSE reused=true saved={hpSaved} " +
+            $"required={hpRequired} turn={scout.CombatEndedTurn?.ToString() ?? "-"}");
+        return true;
     }
 
     private static SolverResult AuditSmartPotionUse(

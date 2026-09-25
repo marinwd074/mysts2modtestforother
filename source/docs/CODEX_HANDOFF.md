@@ -148,3 +148,11 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 
 搜索效率 **E0–E6 已按证据全部关闭**。下一任务回到 Quality-first 第三项：只处理 current HEAD 新出现、且有问题包与合法手打前缀证明的明显坏路线；先沿 `FINAL_CANDIDATE → MP_QUALITY_SORTING → FINAL_SELECTION → Safe Execute` 定位丢失层，再只修改有证据的那一层。
 
+
+
+## 2026-09-25 LOUSE_PROGENITOR T3 cross-family time-to-quality
+
+- 新问题包 `ece84d5632d449f7b8717c9ef68f54df`：最终 4 回合路线在 T3 使用 `OFFERING+`，并通过 `ATTACK_POTION -> FIEND_FIRE` 压缩战斗。
+- E0：winner `potion_required` 首次生成约 45.235s，最终发布约 46.439s；Novelty ~5.010s，无药 Beam ~37.903s 且 `TimeLimit`，一药水层 ~3.527s。结论：跨搜索家族的串行 starvation。
+- 当前修复：Novelty 后插入 bounded exact-one-potion scout；它与主 Beam 共用同一总预算。完整 scout 在最终无药基线下重新校验后可复用，截断/不再合格则回退原 E3 Smart audit。
+- 实机回归关注：T3 的 `potion_required` member 应显著早于无药 Beam 完成获得工作；最终路线质量不得退化。需要用户用当前 HEAD 重跑同类局面确认真实 time-to-quality。

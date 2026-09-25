@@ -164,3 +164,12 @@
 - https://github.com/marinwd074/mysts2modtestforother/blob/923f5c999d93c7114b4d146e1494dd4272899c8a/source/src/Search/CombatBeamSolver.FinalPlanOrdering.cs
 - https://github.com/marinwd074/mysts2modtestforother/blob/923f5c999d93c7114b4d146e1494dd4272899c8a/source/src/Search/MultiplayerScenarioReevaluationPolicy.cs
 - https://www.megacrit.com/news/2026-03-05-early-access-launch/ （官方多人协作与EA持续平衡说明；不作为0.107.1具体卡牌语义证据）
+
+
+### 第三项新增真实样本：LOUSE_PROGENITOR T3 time-to-quality（2026-09-25）
+
+- 问题包 `ece84d5632d449f7b8717c9ef68f54df` 的 T3 最终路线为 4 回合结束，包含 `OFFERING+` 与 `ATTACK_POTION[FIEND_FIRE]`；祭品模拟/真实重放本身一致，不是卡牌语义缺失。
+- E0 时间线显示最终候选由 `potion_required` 成员在请求约 `45.235s` 才首次生成，请求约 `46.439s` 发布；此前 Novelty 约 `5.010s`，无药主搜索约 `37.903s` 且以 `TimeLimit` 结束，随后一药水成员约 `3.527s` 找到 4 回合路线。证据定位为**搜索家族串行导致的候选饥饿**，不是 UI 单纯晚刷新，也不是 Beam 永远漏解。
+- 修复保持总请求预算、BeamWidth、目标函数与 Smart 药水阈值不变：Novelty 后先给 exact-one-potion 一个受限 cross-family scout，预算不超过既有 Novelty envelope 且不超过当时剩余时间/节点的一半；scout 的实际工作从后续 Beam 剩余预算中扣除。
+- scout 完整胜利会立即作为 anytime 候选发布。主无药 Beam 完成后，只有当 scout 未触及 `TimeLimit/NodeLimit`、最终无药基线不弱于 provisional baseline、并且按最终基线重新计算后仍满足 Smart 用药门槛时才直接复用；否则继续原有 E3 Smart audit，不牺牲最终校验。
+- 新增 `E3_CROSS_FAMILY_SCOUT` / `E3_CROSS_FAMILY_REUSE` 诊断和 scout 预算合同。目标不是保证固定秒数，而是消除“无药 TimeLimit 完整跑完之后才第一次搜索一药水路线”的结构性等待。

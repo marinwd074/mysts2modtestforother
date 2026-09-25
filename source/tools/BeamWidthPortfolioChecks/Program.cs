@@ -5,6 +5,34 @@ void Require(bool condition, string message) { checks++; if (!condition) throw n
 
 SolverSearchProfile baseProfile = SolverSearchProfile.Default with { BeamWidth = 24, MaxExpandedNodes = 20_000 };
 
+SolverSearchProfile explorationProfile = baseProfile with
+{
+    MaxExpandedNodes = 2_500,
+    SoftTimeBudgetMilliseconds = 5_000,
+};
+SolverSearchProfile remainingForScout = baseProfile with
+{
+    MaxExpandedNodes = 6_000,
+    SoftTimeBudgetMilliseconds = 8_000,
+};
+SolverSearchProfile? crossFamilyScout = NoveltyPortfolioBudget.CrossFamilyScout(
+    explorationProfile,
+    remainingForScout);
+Require(crossFamilyScout is
+    {
+        MaxExpandedNodes: 2_500,
+        SoftTimeBudgetMilliseconds: 4_000,
+    },
+    "Cross-family scout did not stay inside the novelty envelope or reserve half the remaining time.");
+Require(NoveltyPortfolioBudget.CrossFamilyScout(
+        explorationProfile,
+        remainingForScout with { MaxExpandedNodes = 3_000 })?.MaxExpandedNodes == 1_500,
+    "Cross-family scout did not reserve half the remaining node budget.");
+Require(NoveltyPortfolioBudget.CrossFamilyScout(
+        explorationProfile,
+        remainingForScout with { MaxExpandedNodes = 1, SoftTimeBudgetMilliseconds = 1 }) == null,
+    "Cross-family scout ran when no budget could be reserved for the deep Beam.");
+
 static SolverInterimResult Outcome(bool won, int hpDeficit, int potions = 0, double score = 0)
     => new(won, 0, hpDeficit, hpDeficit, 0, potions, 0, score);
 
