@@ -1479,9 +1479,21 @@ internal sealed partial class CombatBeamSolver
                 PublishProgress(node.Turn, Math.Max(0, node.Turn - _startTurnNumber),
                     node.ActionCount, openCount, completedCount, "探索不同路线");
             }
-            member.TimeBudgetReached = RunNoveltyOpen(member.Frontier, member.Completed, stopwatch, ref member.Fallback,
-                MeetsHpTarget, BeforeNoveltyParent, AfterNoveltyParent, ObserveNoveltyBoundary,
-                out member.AcceptableBattleHpLossReached, out member.SearchedTurnLayers);
+            SearchNode noveltyFallback = member.Fallback;
+            member.TimeBudgetReached = RunNoveltyOpen(
+                member.Frontier,
+                member.Completed,
+                stopwatch,
+                ref noveltyFallback,
+                MeetsHpTarget,
+                BeforeNoveltyParent,
+                AfterNoveltyParent,
+                ObserveNoveltyBoundary,
+                out bool noveltyAcceptableBattleHpLossReached,
+                out int noveltySearchedTurnLayers);
+            member.Fallback = noveltyFallback;
+            member.AcceptableBattleHpLossReached = noveltyAcceptableBattleHpLossReached;
+            member.SearchedTurnLayers = noveltySearchedTurnLayers;
         }
 
         while (member.Frontier.Count > 0
