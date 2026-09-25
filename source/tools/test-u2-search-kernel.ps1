@@ -59,6 +59,8 @@ Assert-Contains $retention 'bool _useMultiplayerTeamObjective' 'beam ranking rec
 Assert-Contains $retention 'if (!_useMultiplayerTeamObjective)' 'legacy/single objective beam path remains selectable under multiplayer route mechanics'
 Assert-Contains $ordering 'bool useMultiplayerTeamObjective' 'final ordering receives explicit objective mode'
 Assert-Contains $ordering 'bool useTeamObjective = useMultiplayerTeamObjective;' 'final ranking keys follow objective mode instead of route identity'
+Assert-Contains $solver '? root.CarryRankingContext' 'team carry ranking is conditional on the multiplayer team objective'
+Assert-Contains $solver ': MultiplayerCarryRankingContext.Disabled' 'local single-player quality mode disables carry tie-breaks'
 Assert-Contains $controller '&& useFullSearchKernel' 'novelty/full-horizon features use shared kernel'
 Assert-Contains $controller 'GrowthBudgets = useFullSearchKernel ? settings.GrowthBudgets : default' 'growth budget parity'
 Assert-Contains $controller 'RelicTargets = useFullSearchKernel' 'relic target parity'

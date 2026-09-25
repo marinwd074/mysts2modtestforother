@@ -165,7 +165,9 @@ internal sealed partial class CombatBeamSolver(
         policy.MultiplayerEnemyDurabilityRatio,
         _initialEnemyMaximumHp,
         _startTurnNumber,
-        root.CarryRankingContext,
+        policy.UseMultiplayerTeamObjective
+            ? root.CarryRankingContext
+            : MultiplayerCarryRankingContext.Disabled,
         battleDamage,
         policy.UseMultiplayerScenarioReevaluation,
         policy.UseMultiplayerScenarioReevaluation

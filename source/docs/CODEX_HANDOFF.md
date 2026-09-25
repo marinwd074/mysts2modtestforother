@@ -172,3 +172,6 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - `E0PinnedHarness --scenario teammate` now explicitly opts into Advisor capability before root capture, so the detached two-player root is an admitted local-player multiplayer search instead of an optional unsupported probe.
 - The teammate E0 scenario now validates the **production** policy: `MultiplayerLocalCrossTurn` route semantics with Team Objective, teammate forecast and scenario reevaluation all disabled; any Shadow phase is a failure.
 - `test-u2-search-kernel.ps1` was updated from the obsolete “production multiplayer keeps team objective enabled” assertion to the new local-single-core production contract. Experimental U3/U4/Shadow contracts remain intact and separately tested.
+
+
+- local-single-core also disables `MultiplayerCarryRankingContext` inside FinalPlanOrdering when Team Objective is off. Carry remains available to experimental/team-objective tests, but production local quality no longer has a remote-risk tie-break after otherwise equal local routes.
