@@ -1289,6 +1289,18 @@ foreach ($u5InterleaveRule in @(
         $violations.Add("${u5InterleavePath}: U5 local/teammate interleave boundary drifted '$u5InterleaveRule'")
     }
 }
+
+$retentionActionTokenPath = Join-Path $searchRoot "CombatBeamSolver.Retention.cs"
+$retentionActionTokenText = [IO.File]::ReadAllText($retentionActionTokenPath)
+foreach ($forecastTokenRule in @(
+    'PlanActionKind.TeammateForecast => action.ShadowForecast is { Actions.Count: > 0 } forecast',
+    'remote.PlayerNetId',
+    'remote.CardId',
+    'remote.TargetCombatId')) {
+    if (-not $retentionActionTokenText.Contains($forecastTokenRule)) {
+        $violations.Add("${retentionActionTokenPath}: teammate forecast policy token drifted '$forecastTokenRule'")
+    }
+}
 foreach ($u5ExpansionRule in @(
     'StateFingerprint transpositionKey = ExactTranspositionKey(candidate);',
     '_run.Transpositions.TryGetValue(transpositionKey, out TranspositionFrontier? frontier)',

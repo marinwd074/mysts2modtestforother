@@ -1225,6 +1225,10 @@ internal sealed partial class CombatBeamSolver
                 ? $"{action.Turn}:E"
                 : $"{action.Turn}:E:" + string.Join(';', action.TurnStartChoices.Select(choice =>
                     $"{choice.SourceId}={string.Join(',', choice.Cards.Select(card => card.CardId))}")),
+            PlanActionKind.TeammateForecast => action.ShadowForecast is { Actions.Count: > 0 } forecast
+                ? $"{action.Turn}:F:" + string.Join('+', forecast.Actions.Select(remote =>
+                    $"{remote.PlayerNetId}:{remote.CardId}:{remote.TargetCombatId?.ToString() ?? "-"}"))
+                : $"{action.Turn}:F:{action.CardId}:{action.TargetCombatId?.ToString() ?? "-"}",
             _ => throw new ArgumentOutOfRangeException(nameof(action), action.Kind, null),
         };
 
