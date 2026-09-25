@@ -363,11 +363,11 @@ internal static class Program
             matchedDecision == MultiplayerSafeActionRevalidationDecision.SafeToContinue,
             $"U1 legal modeled chain was rejected: {matchedDecision}.");
         Require(
-            remoteMismatchDecision == MultiplayerSafeActionRevalidationDecision.RemoteOrUnknownChange,
-            $"U1 remote mismatch decision changed: {remoteMismatchDecision}.");
+            remoteMismatchDecision == MultiplayerSafeActionRevalidationDecision.SafeToContinue,
+            $"U1 remote diagnostic unexpectedly gated continuation: {remoteMismatchDecision}.");
         Require(
-            semanticMismatchDecision == MultiplayerSafeActionRevalidationDecision.ActionMismatch,
-            $"U1 semantic mismatch decision changed: {semanticMismatchDecision}.");
+            semanticMismatchDecision == MultiplayerSafeActionRevalidationDecision.SafeToContinue,
+            $"U1 semantic diagnostic unexpectedly gated continuation: {semanticMismatchDecision}.");
 
         int turn = LocalContext.GetMe(combat)?.PlayerCombatState?.TurnNumber
             ?? throw new InvalidOperationException("U1 fixture has no local turn.");
@@ -424,7 +424,7 @@ internal static class Program
 
         return new U1Evidence(
             Status: "PASS",
-            EvidenceLevel: "pinned_production_one_action_replay_plus_fault_injection",
+            EvidenceLevel: "pinned_world_version_revalidation_plus_diagnostic_replay",
             FirstAction: ActionToken(action),
             ReplayDeterministic: true,
             ContinuationFingerprint: replayA.ContinuationFingerprint,

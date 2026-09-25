@@ -221,7 +221,6 @@ internal sealed class CombatRootSnapshot
         IReadOnlyList<MultiplayerTeammateForecastState> teammateForecastStates = [];
         if (capabilities.IsMultiplayer && capabilities.CanSearch)
         {
-            MultiplayerRootCaptureContracts.Verify(state, simulator, player);
             teammateForecastStates =
                 MultiplayerTeammateForecastCapture.Capture(simulator, player);
         }

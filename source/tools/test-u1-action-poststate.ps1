@@ -20,53 +20,35 @@ function Assert-Contains {
     }
 }
 
-function Assert-Before {
+function Assert-NotContains {
     param(
         [Parameter(Mandatory)][string]$Text,
-        [Parameter(Mandatory)][string]$First,
-        [Parameter(Mandatory)][string]$Second,
+        [Parameter(Mandatory)][string]$Needle,
         [Parameter(Mandatory)][string]$Label
     )
-    $firstIndex = $Text.IndexOf($First, [System.StringComparison]::Ordinal)
-    $secondIndex = $Text.IndexOf($Second, [System.StringComparison]::Ordinal)
-    if ($firstIndex -lt 0 -or $secondIndex -lt 0 -or $firstIndex -ge $secondIndex) {
-        throw "U1 ordering contract failed: $Label"
+    if ($Text.Contains($Needle, [System.StringComparison]::Ordinal)) {
+        throw "U1 retired gate returned: $Label"
     }
 }
 
 $policy = Read-RepoFile 'src/Runtime/MultiplayerSafeExecutePolicy.cs'
 $deployment = Read-RepoFile 'src/Runtime/SolverController.Deployment.cs'
-$expectedState = Read-RepoFile 'src/Runtime/SolverController.SafeExecutionExpectedState.cs'
-$tests = Read-RepoFile 'tools/MultiplayerSafeExecuteChecks/Program.cs'
+$probe = Read-RepoFile 'src/Runtime/MultiplayerClientProbe.cs'
 
-Assert-Contains $policy 'ExpectedContinuationStateMatched' 'semantic continuation match fact'
-Assert-Contains $policy 'ExpectedRemoteStateMatched' 'semantic remote match fact'
-Assert-Contains $policy '!facts.ExpectedRemoteStateMatched' 'remote semantic mismatch rejection'
-Assert-Contains $policy '!facts.ExpectedContinuationStateMatched' 'predicted semantic mismatch rejection'
-Assert-Before $policy '!facts.ExpectedRemoteStateMatched' 'return facts.HasNextAction' 'semantic gate runs before continuation authorization'
+Assert-Contains $policy '!facts.NativeLocalActionCaptured || !facts.ActionQueueIdle' 'native action ownership / queue-settled boundary'
+Assert-Contains $policy '!facts.WorldVersionAdvanced || !facts.WorldVersionStable' 'world-version settlement boundary'
+Assert-NotContains $policy 'if (!facts.ExpectedRemoteStateMatched)' 'remote semantic hash rejection'
+Assert-NotContains $policy 'if (!facts.ExpectedContinuationStateMatched)' 'continuation semantic hash rejection'
 
 Assert-Contains $deployment '"safe_execute_pre_action"' 'fresh observation before every local action'
-Assert-Contains $deployment 'U1_PRE_ACTION_PROBE' 'pre-action evidence'
-Assert-Before $deployment '"safe_execute_pre_action"' 'TryBeginAction(' 'fresh observation precedes action authorization'
-Assert-Contains $deployment 'CaptureExpectedSafeExecutionPostActionAsync(' 'predicted one-action post-state capture'
-Assert-Before $deployment 'CaptureExpectedSafeExecutionPostActionAsync(' 'card.TryManualPlay(target)' 'prediction is frozen before native submission'
-Assert-Contains $deployment 'CompareSafeExecutionPostAction(' 'settled live/predicted comparison'
-Assert-Contains $deployment 'ActionQueueIdle: actionQueueIdle' 'queue state is measured instead of hard-coded'
-Assert-Contains $deployment 'legacy_mismatches=' 'historical heuristics remain diagnostic-only'
+Assert-Contains $deployment 'WaitForStableSafeExecutionWorldAsync(' 'world-settlement wait'
+Assert-Contains $deployment 'ActionQueueIdle: actionQueueIdle' 'queue state is measured'
+Assert-NotContains $deployment 'CaptureExpectedSafeExecutionPostActionAsync(' 'per-action prediction replay'
+Assert-NotContains $deployment 'CompareSafeExecutionPostAction(' 'post-action semantic replay comparison'
+Assert-NotContains $deployment 'before.RemotePublicFingerprint == after.RemotePublicFingerprint' 'remote fingerprint gate'
+Assert-NotContains $deployment 'before.LocalFingerprint == after.LocalFingerprint' 'local fingerprint gate'
 
-Assert-Contains $expectedState 'CombatRootSnapshot.Capture(state)' 'fresh detached root capture'
-Assert-Contains $expectedState 'ReplayDiagnosticPrefix([action])' 'production replay path'
-Assert-Contains $expectedState 'CaptureDiagnosticContinuation(snapshot)' 'production predicted continuation stamp'
-Assert-Contains $expectedState 'MultiplayerContinuationRemoteFingerprint.CapturePredicted(' 'predicted teammate semantic fingerprint'
-Assert-Contains $expectedState 'ContinuationStamp.CaptureLive(state, state.Players.ToArray())' 'live semantic state comparison'
-Assert-Contains $expectedState 'MultiplayerContinuationRemoteFingerprint.CaptureLive(' 'live teammate semantic comparison'
-if ($expectedState.Contains('ManualPlay(', [System.StringComparison]::Ordinal) -or
-    $expectedState.Contains('OnPlayWrapper(', [System.StringComparison]::Ordinal)) {
-    throw 'U1 helper must not implement a second card execution path.'
-}
+Assert-NotContains $probe 'StateFingerprint LocalFingerprint,' 'safe boundary local fingerprint field'
+Assert-NotContains $probe 'StateFingerprint RemotePublicFingerprint,' 'safe boundary remote fingerprint field'
 
-Assert-Contains $tests 'legacy heuristics disagree' 'modeled local chain behavior check'
-Assert-Contains $tests 'ExpectedRemoteStateMatched = false' 'remote insertion behavior check'
-Assert-Contains $tests 'ExpectedContinuationStateMatched = false' 'simulation mismatch behavior check'
-
-Write-Output 'U1_ACTION_POSTSTATE_CHECKS_PASS semantic-replay/pre-action-probe/fail-closed/legacy-diagnostic'
+Write-Output 'U1_ACTION_POSTSTATE_CHECKS_PASS native-action/queue/world-version-only'

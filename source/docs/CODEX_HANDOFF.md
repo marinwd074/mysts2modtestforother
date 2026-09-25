@@ -221,3 +221,11 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - Shared finished-play count still records every simulated play, while owner-scoped draw/generation/orb/hit counters remain local-player scoped.
 - E0's real two-player detached fixture now verifies GetCounters(local) on the root simulator and an ordinary fork.
 - U2Runtime now installs ModelDbGetIdCachePatch so pinned 0.107.1 harnesses verify the new Harmony target.
+
+## 2026-09-25 runtime gate reduction
+
+- Multiplayer Safe Execute no longer performs a second one-action solver replay before every native action.
+- Per-action continuation/remote semantic fingerprints are no longer authorization gates; action continuation now keeps only native-action capture, queue-idle, advancing WorldVersion, and stable WorldVersion.
+- Safe-execution boundary snapshots no longer compute duplicate local/remote fingerprints.
+- Multiplayer root capture no longer runs the full post-capture pile/orb/remote-fingerprint verification pass.
+- Core search StateFingerprint remains intact for beam deduplication, transpositions, cycle detection, RNG/state identity, and other search semantics.

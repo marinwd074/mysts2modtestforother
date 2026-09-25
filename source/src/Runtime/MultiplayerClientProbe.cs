@@ -77,8 +77,6 @@ internal sealed record MultiplayerSafeExecutionBoundary(
     string[] LocalExhaust,
     string[] LocalPowers,
     string[] RemotePlayers,
-    StateFingerprint LocalFingerprint,
-    StateFingerprint RemotePublicFingerprint,
     string[] Enemies);
 
 /// <summary>
@@ -197,8 +195,6 @@ internal static class MultiplayerClientProbe
             LocalExhaust: localCombat == null ? [] : CardTokens(localCombat.ExhaustPile.Cards),
             LocalPowers: localPlayer == null ? [] : PowerTokens(localPlayer.Creature.Powers),
             RemotePlayers: RemotePlayerTokens(state, localPlayer),
-            LocalFingerprint: LocalBoundaryFingerprint(localPlayer),
-            RemotePublicFingerprint: RemotePublicBoundaryFingerprint(state, localPlayer),
             Enemies: EnemyTokens(state));
     }
 

@@ -333,13 +333,13 @@ Check(
 Check(
     MultiplayerSafeExecutePolicy.RevalidateAction(
         RevalidationFacts() with { ExpectedRemoteStateMatched = false })
-        == MultiplayerSafeActionRevalidationDecision.RemoteOrUnknownChange,
-    "A teammate state that differs from the one-action prediction invalidates the old suffix.");
+        == MultiplayerSafeActionRevalidationDecision.SafeToContinue,
+    "Remote semantic diagnostics no longer gate an already-captured settled local action.");
 Check(
     MultiplayerSafeExecutePolicy.RevalidateAction(
         RevalidationFacts() with { ExpectedContinuationStateMatched = false })
-        == MultiplayerSafeActionRevalidationDecision.ActionMismatch,
-    "A settled local/enemy/RNG state that differs from production replay fails closed.");
+        == MultiplayerSafeActionRevalidationDecision.SafeToContinue,
+    "Continuation semantic diagnostics no longer gate an already-captured settled local action.");
 Check(
     MultiplayerSafeExecutePolicy.RevalidateAction(
         RevalidationFacts() with { NativeLocalActionCaptured = false })
