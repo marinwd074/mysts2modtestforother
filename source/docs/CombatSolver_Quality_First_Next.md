@@ -173,3 +173,13 @@
 - 修复保持总请求预算、BeamWidth、目标函数与 Smart 药水阈值不变：Novelty 后先给 exact-one-potion 一个受限 cross-family scout，预算不超过既有 Novelty envelope 且不超过当时剩余时间/节点的一半；scout 的实际工作从后续 Beam 剩余预算中扣除。
 - scout 完整胜利会立即作为 anytime 候选发布。主无药 Beam 完成后，只有当 scout 未触及 `TimeLimit/NodeLimit`、最终无药基线不弱于 provisional baseline、并且按最终基线重新计算后仍满足 Smart 用药门槛时才直接复用；否则继续原有 E3 Smart audit，不牺牲最终校验。
 - 新增 `E3_CROSS_FAMILY_SCOUT` / `E3_CROSS_FAMILY_REUSE` 诊断和 scout 预算合同。目标不是保证固定秒数，而是消除“无药 TimeLimit 完整跑完之后才第一次搜索一药水路线”的结构性等待。
+
+
+### 第三项生产策略收口：多人使用单人质量核心（2026-09-25）
+
+- 新增 5 份连续实战问题包：`OVICOPTER_NORMAL-6796...` 与四份 `DECIMILLIPEDE_ELITE`。千足虫四包共记录 307 次 `FINAL_SELECTION`；其中 233 次（约 76%）`scenario_rerank=false && chance_rerank=false`，说明多数差路线不是 Robust/Chance 后置推翻，而是多人 baseline 本身已经这样排序。
+- 临死阶段出现更直接的证据：`all_players_alive=false`，本地 `projected_hp=-25/-28`，但多人 `AdaptiveLethalTempo` 仍以约 `team_loss_ratio=0.075` 和敌方耐久继续比较死亡路线。当前最终排序实现也确实把 Team Loss / Worst Player Loss / Enemy Durability 放在本地生存与单人 HP 排序之前。
+- 用户跨多场实战对照表明：关闭多人算法、让单人算法直接面对多人实际高血量怪物，路线质量反而更高。这个对照与日志层级归因一致，因此不再继续微调 Team Objective 权重。
+- **生产策略改为 local-single-core**：多人仍捕获真实多人根（实际多人怪物 HP、行动、目标语义），仍使用多人安全执行和 continuation；但生产搜索不启用 `UseMultiplayerTeamObjective`、`UseMultiplayerTeammateForecast`、`UseMultiplayerScenarioReevaluation`。最终路线质量由单人核心排序决定。
+- 多人 Team Objective / Shadow teammate forecast / Scenario Robust 代码不删除，保留给 pinned/offline A/B 与未来重新校准；生产代码不再让这些实验层影响路线。
+- 验收重点从“团队模型看起来更聪明”改为：相同真实多人根、相同预算下，生产首选不得系统性差于 local-single-core；多人专用代码只处理真实状态语义与执行边界，不创造第二套较差的牌序目标。

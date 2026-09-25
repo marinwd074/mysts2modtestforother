@@ -156,3 +156,12 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - E0：winner `potion_required` 首次生成约 45.235s，最终发布约 46.439s；Novelty ~5.010s，无药 Beam ~37.903s 且 `TimeLimit`，一药水层 ~3.527s。结论：跨搜索家族的串行 starvation。
 - 当前修复：Novelty 后插入 bounded exact-one-potion scout；它与主 Beam 共用同一总预算。完整 scout 在最终无药基线下重新校验后可复用，截断/不再合格则回退原 E3 Smart audit。
 - 实机回归关注：T3 的 `potion_required` member 应显著早于无药 Beam 完成获得工作；最终路线质量不得退化。需要用户用当前 HEAD 重跑同类局面确认真实 time-to-quality。
+
+
+## 2026-09-25 multiplayer quality rollback to local single-player core
+
+- 5 个连续实战包显示跨战斗退化，不是单卡问题。四个 DECIMILLIPEDE 包合计 307 次 FINAL_SELECTION，233 次未发生 Scenario/Chance rerank，坏路线主要由 multiplayer baseline 直接产生。
+- 最明显样本中本地 projected_hp 已为 -25/-28、all_players_alive=false，但 AdaptiveLethalTempo 仍按团队损失/敌方耐久区分死亡路线；这与用户“单人算法直接打多人高血量怪物反而更好”的 A/B 观察一致。
+- production policy 已切换为 local-single-core：真实多人 root + 单人质量排序；team objective / teammate forecast / scenario reevaluation 生产关闭。多人网络、怪物语义、目标语义、安全执行与 continuation 不变。
+- 旧多人质量层保留为测试/研究代码，可由测试直接 override SearchPolicySnapshot，不删除历史 U2/U3/U4 证据。
+- 新诊断：`MULTIPLAYER_QUALITY_MODE mode=local_single_core team_objective=false teammate_forecast=false scenario_reevaluation=false`。

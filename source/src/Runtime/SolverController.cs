@@ -488,15 +488,19 @@ internal static partial class SolverController
             Interaction = interaction,
             RoutePolicy = routePolicy,
             CurrentTurnOnly = MultiplayerLocalCrossTurnContracts.IsCurrentTurnOnly(routePolicy),
-            UseMultiplayerTeamObjective = capabilities.IsMultiplayer,
+            // Production multiplayer now keeps the proven single-player quality ordering.
+            // The root is still the real multiplayer combat (scaled enemy HP, multiplayer
+            // monster semantics and local-safe execution), but teammate forecasting, the
+            // team objective and scenario reranking no longer get to reshape route quality.
+            // Those experimental layers remain available to offline/pinned tests by overriding
+            // the policy snapshot directly.
+            UseMultiplayerTeamObjective = false,
             MultiplayerCombatObjectiveStrategy = settings.MultiplayerCombatObjectiveStrategy,
             MultiplayerEnemyDurabilityRatio = capabilities.IsMultiplayer
                 ? MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(state.Enemies)
                 : 1d,
-            UseMultiplayerTeammateForecast =
-                capabilities.IsMultiplayer && settings.UseMultiplayerTeammateForecast,
-            UseMultiplayerScenarioReevaluation =
-                capabilities.IsMultiplayer && settings.UseMultiplayerScenarioReevaluation,
+            UseMultiplayerTeammateForecast = false,
+            UseMultiplayerScenarioReevaluation = false,
             UseNoveltyPortfolio = (settings.UseNoveltyPortfolio
                 || UnattendedTestRunner.UseNoveltyPortfolioOverride)
                 && useFullSearchKernel,
@@ -526,6 +530,12 @@ internal static partial class SolverController
                 : GrowthOpportunityTargets.Empty,
             IgnoreLongTermRewards = settings.IgnoreLongTermRewards || !useFullSearchKernel,
         };
+        if (capabilities.IsMultiplayer)
+        {
+            policy.Diagnostics.Info(
+                "[CombatSolver/Test] MULTIPLAYER_QUALITY_MODE mode=local_single_core " +
+                "team_objective=false teammate_forecast=false scenario_reevaluation=false");
+        }
         CombatBugReportExporter.RecordSearchPolicy(state, policy);
         return policy;
     }

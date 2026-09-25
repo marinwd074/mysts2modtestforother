@@ -66,3 +66,15 @@
 - 当前门禁：见 [../TEST_MATRIX.md](../TEST_MATRIX.md)。
 
 运行日志、Probe、问题包和一次性 JSON 不提交到本目录。它们保存在 `.local/`、外部问题包或 Git history；可重复的结论应转成测试/fixture。
+
+
+## 生产路线质量模式
+
+当前多人生产搜索采用 **local-single-core**：
+
+- 战斗根仍是真实多人状态，包括多人实际敌方血量、怪物动作与目标语义。
+- 路线评分、Beam 保留和终局排序以单人核心为准，不使用 Team Objective 改写。
+- 队友 Shadow forecast 与 Scenario Robust 不参与生产路线选择；它们保留为离线 A/B 与研究模块。
+- 多人专用 Runtime 继续负责网络状态、continuation、目标合法性和 Safe Execute，不把这些执行语义变成另一套出牌目标。
+
+这样多人模式的目标是“在真实多人战斗里求本地玩家自身的高质量牌序”，而不是预测或替队友做整队决策。
