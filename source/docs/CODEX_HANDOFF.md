@@ -66,6 +66,16 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - 2026-09-25 收到真实双人问题包 `THIEVING_HOPPER_WEAK-9df3f90a...`：Client Probe 明确记录 `players=2`，且 Scenario Matrix 已实际运行两轮；但最终候选排序在 `PolicyActionToken(TeammateForecast)` 抛 `ArgumentOutOfRangeException`，因此本次没有形成完整 E0 selected/published 时间线，不能计为第三个 PASS。根因是通用动作 token 只处理 PlayCard/UsePotion/EndTurn；现已为 `TeammateForecast` 增加稳定 token（含远端玩家、牌、目标），不改排序或搜索语义。
 - **E0 已关闭（2026-09-25）**：三类样本齐全，且第三类为 current HEAD 的真实双人 Host/Client 运行证据。后续不再为了 E0 继续采样，除非改动再次触及搜索成员顺序、候选生成/评估/发布遥测或 E0 validator 语义。
 
+## 搜索效率 E2（2026-09-25，第一切片）
+
+- 已提交 `d92d25bb`：引入 `SearchStepStatus`、`SearchWorkAllowance`、`SearchStepResult` 与 `IResumableSearch`，先把串行父节点展开变成可恢复的确定性工作单元。
+- 新的 `ParentExpansionSession` 只在一个完整父节点展开、子节点提交且父快照释放之后推进游标；取消发生在下一父节点提交前，不会越过这个安全点。
+- 普通串行搜索使用 unlimited allowance，保持原来连续执行；`VerifyIncrementalSearch=true` 时强制每次只提交 1 个父节点，因此同一真实 `CombatBeamSolver` 会反复经历 `Yielded -> Step -> resume`，并沿用原有固定节点/转移预算。
+- 会话自身保留累计父节点游标；分片之间不重置工作量。内置合同覆盖 continuous 与 single-parent split 的顺序一致、累计预算不重置、预算耗尽以及预取消不提交新工作。
+- 本切片没有改变 Beam 宽度、评分、Robust、portfolio 成员顺序、药水/遗物/特殊牌、多人数值语义或执行权限；并行展开路径也保持原样。
+- 验证已通过：compatibility run `36091943182` 的 static-consistency 与 L1 contract-tests 全 PASS；Pinned 0.107.1 run `36091943224` 的 Release、E0、U0/U1、U2、P0/P1 runtime 与历史 P0 A/B 全链 PASS。P0/P1 的 fixed-work 路径显式使用 `VerifyIncrementalSearch=true` + 单线程，因此真实搜索器实际执行了 single-parent pause/resume 切片。
+- E2 **尚未关闭**：当前 `frontier/completed/current turn layer/playDepth/active/ended/nextPlays/incumbent` 仍由 `SolveCore` 局部生命周期持有，还不能把整个搜索成员交回协调器后再恢复。下一切片要把这些状态收纳为成员级 session，再做完整单成员 continuous-vs-sliced 结果/工作量 A/B。
+
 ## 当前未验证边界
 
 - 当前 HEAD 的真实多人 Beam retention A/B：需要在“明显不如手打”的合法局面上确认更好路线究竟在 Beam、portfolio、U3/U4 还是执行层丢失。
@@ -74,11 +84,11 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 
 ## 下一任务
 
-E0 已关闭，本轮不进入后续阶段。下一次开始搜索效率优化时按 E0 证据走 **E2/E3 分支**，不要先做 E1：
+继续 **E2 第二切片**，暂不进入 E3，也不回头做 E1：
 
-1. 先解释并量化为什么真实双人最终赢家直到第三个 `potion_required` portfolio member 才首次生成；保持目标函数和候选质量标准不变。
-2. 优先研究 portfolio 调度/早停/上界与复用，让“后续成员才发现的赢家”更早出现，而不是单纯缩短 selected→published。
-3. E1 保留给单人样本证明的发布延迟问题；只有当多人新证据也显示候选已早选中但迟发布时才优先处理。
-4. 不以固定卡名、seed 或单局硬编码换取速度；继续使用 deterministic node/transition budget 做等价性验证。
+1. 把 `frontier/completed/current turn layer/playDepth/active/ended/nextPlays`、fallback/incumbent、下一父节点游标与累计工作量，从 `SolveCore` 局部变量收纳到单个成员拥有的 resumable session；root 继续只读。
+2. 协调器仍按旧策略把同一成员连续 Step 到结束；本阶段不交错 portfolio 成员、不改成员顺序、不加早停/上界，先隔离“状态可恢复”这一项变量。
+3. 增加固定 deterministic work A/B：同一 root 连续 unlimited 与多段 allowance 恢复后，最终 actions、终局快照/BoundaryReason、候选顺序、expanded/transition 总量必须一致；取消后不得保留会继续扩展的 simulator，恢复不得重置预算。
+4. 只有完整单成员 pause/resume 等价性闭环后才进入 E3 的 portfolio 调度；Beam/评分/Robust/药水遗物/特殊牌/多人权限继续冻结。
 
 每次只推进一个小阶段，并在结束时更新本 handoff；不要重新创建阶段流水账文档。
