@@ -143,6 +143,12 @@ internal static class Program
                 captured,
                 settings);
             P0SearchEvidence p0FixedWork = e2Resumable.SingleParent;
+            E3PortfolioEvidence e3Portfolio = VerifyE3FixedPortfolioScheduling(
+                p0Root,
+                names,
+                battleDamage,
+                captured,
+                settings);
 
             P0JointEvidence joint;
             try
@@ -192,7 +198,11 @@ internal static class Program
                     Error: $"{error.GetType().Name}: {error.Message}");
             }
 
-            bool overallPass = p0Search.Pass && joint.Pass && p1.Pass && e2Resumable.Pass;
+            bool overallPass = p0Search.Pass
+                && joint.Pass
+                && p1.Pass
+                && e2Resumable.Pass
+                && e3Portfolio.Pass;
             var evidence = new
             {
                 status = overallPass ? "PASS" : "FAIL",
@@ -219,6 +229,7 @@ internal static class Program
                     singleMemberTimed = p0SingleMemberTimed,
                     fixedWork = p0FixedWork,
                     e2Resumable,
+                    e3Portfolio,
                     joint,
                     classifier = "covered_by_contract_suite",
                 },
@@ -668,6 +679,104 @@ internal static class Program
             RequestWorkTotals = totals,
         };
 
+    private static E3PortfolioEvidence VerifyE3FixedPortfolioScheduling(
+        CombatRootSnapshot root,
+        SolverDisplayNames names,
+        BattleDamageSnapshot battleDamage,
+        SearchPolicySnapshot captured,
+        SolverSettingsSnapshot settings)
+    {
+        SolverSearchProfile profile = settings.Profile with
+        {
+            BeamWidth = BeamWidth,
+            MaxExpandedNodes = P0FixedWorkNodeBudget,
+            SoftTimeBudgetMilliseconds = 120_000,
+        };
+
+        E3PortfolioRunEvidence Run(bool useFixedRoundRobin)
+        {
+            SearchPolicySnapshot policy = captured with
+            {
+                Profile = profile,
+                RoutePolicy = SearchRoutePolicy.SinglePlayerFullRoute,
+                CurrentTurnOnly = false,
+                UseMultiplayerTeamObjective = false,
+                VerifyIncrementalSearch = false,
+                FixedBudget = true,
+                MaxDegreeOfParallelism = 1,
+                BudgetOverrideMilliseconds = null,
+                UseNoveltyPortfolio = false,
+                NoveltySearch = null,
+                UseBeamWidthPortfolio = false,
+                BeamWidthPortfolioWidths = null,
+                UseE3FixedPortfolioScheduling = useFixedRoundRobin,
+                Interaction = null,
+                RequestWorkTotals = null,
+                PortfolioTelemetry = null,
+            };
+            SolverResult result = CombatSearchCoordinator.Solve(
+                root,
+                names,
+                battleDamage,
+                policy,
+                CancellationToken.None,
+                progressCallback: null);
+            BeamWidthPortfolioTelemetry telemetry = result.PortfolioTelemetry
+                ?? throw new InvalidOperationException("E3 A/B missing request telemetry.");
+            SearchEfficiencyMemberReport[] members = telemetry.SearchMembers.ToArray();
+            SearchEfficiencyMemberReport[] potionMembers = members
+                .Where(member => string.Equals(
+                    member.Kind,
+                    "potion_required",
+                    StringComparison.Ordinal))
+                .OrderBy(member => member.MemberId)
+                .ToArray();
+            return new(
+                Pass: result.BoundaryReason != SearchBoundaryReason.TimeLimit
+                    && result.BestNode.Actions.Count > 0,
+                Actions: result.BestNode.Actions.Select(ActionToken).ToArray(),
+                Boundary: result.BoundaryReason.ToString(),
+                ProjectedBattleHpLost: result.ProjectedBattleHpLost,
+                FinalHp: result.Snapshot.PlayerHp,
+                FinalEnemyHp: result.Snapshot.EnemyHp,
+                CombatEndedTurn: result.CombatEndedTurn,
+                ExplicitPotionCount: result.ExplicitPotionCount,
+                SearchMemberExpanded: members.Sum(member => member.ExpandedNodes),
+                SearchMemberTransitions: members.Sum(member => member.TransitionCount),
+                PotionRequiredMembers: potionMembers.Length,
+                PotionRequiredTransitions: potionMembers
+                    .Select(member => member.TransitionCount)
+                    .ToArray(),
+                PotionRequiredStartMilliseconds: potionMembers
+                    .Select(member => telemetry.ToRequestMilliseconds(member.StartedTicks))
+                    .ToArray());
+        }
+
+        E3PortfolioRunEvidence serial = Run(useFixedRoundRobin: false);
+        E3PortfolioRunEvidence fixedRoundRobin = Run(useFixedRoundRobin: true);
+        bool sameQuality = serial.Actions.SequenceEqual(
+                fixedRoundRobin.Actions,
+                StringComparer.Ordinal)
+            && serial.Boundary == fixedRoundRobin.Boundary
+            && serial.ProjectedBattleHpLost == fixedRoundRobin.ProjectedBattleHpLost
+            && serial.FinalHp == fixedRoundRobin.FinalHp
+            && serial.FinalEnemyHp == fixedRoundRobin.FinalEnemyHp
+            && serial.CombatEndedTurn == fixedRoundRobin.CombatEndedTurn
+            && serial.ExplicitPotionCount == fixedRoundRobin.ExplicitPotionCount;
+        bool interleaved = fixedRoundRobin.PotionRequiredMembers >= 2
+            && fixedRoundRobin.PotionRequiredTransitions.Skip(1).Any(value => value > 0);
+        Require(
+            serial.Pass && fixedRoundRobin.Pass && sameQuality && interleaved,
+            "E3 fixed round-robin diverged from serial Smart quality or failed to give a later potion member real work.");
+
+        return new(
+            Pass: serial.Pass && fixedRoundRobin.Pass && sameQuality && interleaved,
+            Serial: serial,
+            FixedRoundRobin: fixedRoundRobin,
+            SameQuality: sameQuality,
+            LaterMemberReceivedWork: interleaved);
+    }
+
     private static P1Evidence VerifyP1ObjectiveRuntime(
         CombatState combat,
         SolverSettingsSnapshot settings,
@@ -981,6 +1090,28 @@ internal static class Program
         string MismatchReason,
         bool LocalStateExact,
         string? Error);
+
+    internal sealed record E3PortfolioRunEvidence(
+        bool Pass,
+        string[] Actions,
+        string Boundary,
+        int ProjectedBattleHpLost,
+        int FinalHp,
+        int FinalEnemyHp,
+        int? CombatEndedTurn,
+        int ExplicitPotionCount,
+        long SearchMemberExpanded,
+        long SearchMemberTransitions,
+        int PotionRequiredMembers,
+        long[] PotionRequiredTransitions,
+        double[] PotionRequiredStartMilliseconds);
+
+    internal sealed record E3PortfolioEvidence(
+        bool Pass,
+        E3PortfolioRunEvidence Serial,
+        E3PortfolioRunEvidence FixedRoundRobin,
+        bool SameQuality,
+        bool LaterMemberReceivedWork);
 
     internal sealed record P1SearchEvidence(
         bool Pass,
