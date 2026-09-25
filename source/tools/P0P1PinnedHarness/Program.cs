@@ -775,20 +775,33 @@ internal static class Program
             && serial.FinalEnemyHp == fixedRoundRobin.FinalEnemyHp
             && serial.CombatEndedTurn == fixedRoundRobin.CombatEndedTurn
             && serial.ExplicitPotionCount == fixedRoundRobin.ExplicitPotionCount;
+        bool sameFixedWork = serial.SearchMemberExpanded == fixedRoundRobin.SearchMemberExpanded
+            && serial.SearchMemberTransitions == fixedRoundRobin.SearchMemberTransitions
+            && serial.PotionRequiredTransitions.SequenceEqual(
+                fixedRoundRobin.PotionRequiredTransitions);
         bool interleaved = fixedRoundRobin.PotionRequiredMembers >= 2
             && fixedRoundRobin.PotionRequiredTransitions[0] > 0
             && fixedRoundRobin.PotionRequiredTransitions[1] > 0
             && fixedRoundRobin.PotionRequiredFirstWorkMilliseconds[1]
                 < fixedRoundRobin.PotionRequiredCompletedMilliseconds[0];
         Require(
-            serial.Pass && fixedRoundRobin.Pass && sameQuality && interleaved,
-            "E3 fixed round-robin diverged from serial Smart quality or failed to give a later potion member real work.");
+            serial.Pass
+                && fixedRoundRobin.Pass
+                && sameQuality
+                && sameFixedWork
+                && interleaved,
+            "E3 fixed round-robin diverged from serial Smart quality/work or failed to give a later potion member real work.");
 
         return new(
-            Pass: serial.Pass && fixedRoundRobin.Pass && sameQuality && interleaved,
+            Pass: serial.Pass
+                && fixedRoundRobin.Pass
+                && sameQuality
+                && sameFixedWork
+                && interleaved,
             Serial: serial,
             FixedRoundRobin: fixedRoundRobin,
             SameQuality: sameQuality,
+            SameFixedWork: sameFixedWork,
             LaterMemberReceivedWork: interleaved);
     }
 
@@ -1128,6 +1141,7 @@ internal static class Program
         E3PortfolioRunEvidence Serial,
         E3PortfolioRunEvidence FixedRoundRobin,
         bool SameQuality,
+        bool SameFixedWork,
         bool LaterMemberReceivedWork);
 
     internal sealed record P1SearchEvidence(
