@@ -148,6 +148,59 @@ foreach ($row in $e1Rows) {
 }
 Write-Host "e1_evidence=$e1EvidencePath"
 
+$e5Rows = @()
+foreach ($scenario in @('simple', 'draw_energy')) {
+    $strategy = $baselineEvidence[$scenario]
+    $out = Join-Path $workspacePath "e5-legacy-$scenario"
+    New-Item -ItemType Directory -Force -Path $out | Out-Null
+    & dotnet $harness --scenario $scenario --out $out --legacy-action-order
+    if ($LASTEXITCODE -ne 0) {
+        throw "E5 legacy-order scenario $scenario failed with exit $LASTEXITCODE."
+    }
+    $legacy = Get-Content -LiteralPath (Join-Path $out "e0-$scenario.json") -Raw | ConvertFrom-Json
+
+    $sameQuality =
+        [int]$legacy.projectedBattleHpLost -eq [int]$strategy.projectedBattleHpLost -and
+        [int]$legacy.projectedBattlePotionCount -eq [int]$strategy.projectedBattlePotionCount -and
+        "$($legacy.combatEndedTurn)" -ceq "$($strategy.combatEndedTurn)" -and
+        "$($legacy.boundaryReason)" -ceq "$($strategy.boundaryReason)"
+    if (-not $sameQuality) {
+        throw "E5 action ordering changed final quality for $scenario; ordering-only E5A must remain quality-equivalent on pinned representative roots."
+    }
+
+    $sameRoute = (@($legacy.route) -join "`n") -ceq (@($strategy.route) -join "`n")
+    $e5Rows += [pscustomobject]@{
+        case = $scenario
+        status = 'PASS'
+        sameQuality = $sameQuality
+        sameRoute = $sameRoute
+        legacyGeneratedMs = [math]::Round([double]$legacy.generatedMs, 3)
+        strategyGeneratedMs = [math]::Round([double]$strategy.generatedMs, 3)
+        generatedMsSaved = [math]::Round(
+            [double]$legacy.generatedMs - [double]$strategy.generatedMs, 3)
+        legacyExpandedAtGeneration = [long]$legacy.expandedAtGeneration
+        strategyExpandedAtGeneration = [long]$strategy.expandedAtGeneration
+        expandedAtGenerationSaved =
+            [long]$legacy.expandedAtGeneration - [long]$strategy.expandedAtGeneration
+        legacySourceMember = "$($legacy.memberKind)#$($legacy.searchMemberId)"
+        strategySourceMember = "$($strategy.memberKind)#$($strategy.searchMemberId)"
+    }
+}
+
+$e5Result = [pscustomobject]@{
+    schemaVersion = 1
+    source = 'pinned-0.107.1-e5-strategy-action-order-ab'
+    rows = $e5Rows
+}
+$e5EvidencePath = Join-Path $workspacePath 'e5-action-order-evidence.json'
+$e5Result | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $e5EvidencePath -Encoding utf8
+Write-Host '| E5 case | quality same | route same | legacy generated ms | E5 generated ms | saved ms | legacy expanded at generation | E5 expanded at generation | saved expanded |'
+Write-Host '|---|---|---|---:|---:|---:|---:|---:|---:|'
+foreach ($row in $e5Rows) {
+    Write-Host "| $($row.case) | $($row.sameQuality) | $($row.sameRoute) | $($row.legacyGeneratedMs) | $($row.strategyGeneratedMs) | $($row.generatedMsSaved) | $($row.legacyExpandedAtGeneration) | $($row.strategyExpandedAtGeneration) | $($row.expandedAtGenerationSaved) |"
+}
+Write-Host "e5_evidence=$e5EvidencePath"
+
 $result = [pscustomobject]@{
     schemaVersion = 1
     source = 'pinned-0.107.1-production-coordinator'
