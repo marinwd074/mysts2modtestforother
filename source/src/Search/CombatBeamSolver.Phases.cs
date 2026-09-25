@@ -1795,10 +1795,12 @@ internal sealed partial class CombatBeamSolver
                         ExpandNextSerially();
                         if (member.ObserveCommittedParents(1))
                         {
+                            stopwatch.Stop();
                             yield return new SearchStepResult(
                                 SearchStepStatus.Yielded,
                                 member.CommittedParentsInCurrentStep,
                                 member.TotalCommittedParents);
+                            stopwatch.Start();
                         }
                     }
                 }
@@ -1820,10 +1822,12 @@ internal sealed partial class CombatBeamSolver
                                 ExpandNextSerially();
                                 if (member.ObserveCommittedParents(1))
                                 {
+                                    stopwatch.Stop();
                                     yield return new SearchStepResult(
                                         SearchStepStatus.Yielded,
                                         member.CommittedParentsInCurrentStep,
                                         member.TotalCommittedParents);
+                                    stopwatch.Start();
                                 }
                                 if (_run.Expanded >= _profile.MaxExpandedNodes)
                                     break;
@@ -1850,10 +1854,12 @@ internal sealed partial class CombatBeamSolver
                             ExpandNextSerially();
                             if (member.ObserveCommittedParents(1))
                             {
+                                stopwatch.Stop();
                                 yield return new SearchStepResult(
                                     SearchStepStatus.Yielded,
                                     member.CommittedParentsInCurrentStep,
                                     member.TotalCommittedParents);
+                                stopwatch.Start();
                             }
                             continue;
                         }
@@ -1866,10 +1872,12 @@ internal sealed partial class CombatBeamSolver
                             ExpandNextSerially();
                             if (member.ObserveCommittedParents(1))
                             {
+                                stopwatch.Stop();
                                 yield return new SearchStepResult(
                                     SearchStepStatus.Yielded,
                                     member.CommittedParentsInCurrentStep,
                                     member.TotalCommittedParents);
+                                stopwatch.Start();
                             }
                             continue;
                         }
@@ -1976,10 +1984,12 @@ internal sealed partial class CombatBeamSolver
                         ReclaimAfterCommittedWork("after_parallel_wave");
                         if (member.ObserveCommittedParents(entries.Count))
                         {
+                            stopwatch.Stop();
                             yield return new SearchStepResult(
                                 SearchStepStatus.Yielded,
                                 member.CommittedParentsInCurrentStep,
                                 member.TotalCommittedParents);
+                            stopwatch.Start();
                         }
                     }
                 }
