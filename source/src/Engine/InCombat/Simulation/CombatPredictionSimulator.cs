@@ -119,11 +119,20 @@ internal sealed partial class CombatPredictionSimulator
             ? runSnapshot.CreatePredictionRngSet()
             : CombatPredictionRngSet.From(combatState.RunState.Rng);
         StateStore = new PredictionStateStore();
-        History = new CombatPredictionHistory(
-            _trace,
-            combatState.Players.Count == 1 ? combatState.Players[0] : null);
+        History = new CombatPredictionHistory(_trace, ResolveHistoryCounterOwner(combatState));
         if (combatState is ICombatPredictionRootMaterializable materializable)
             materializable.MaterializeRoot(this);
+    }
+
+    private static Player? ResolveHistoryCounterOwner(ICombatState combatState)
+    {
+        if (combatState is ICombatPredictionRootCaptureBoundary boundary
+            && boundary.RootActionPlayers.Count == 1)
+        {
+            return boundary.RootActionPlayers[0];
+        }
+
+        return combatState.Players.Count == 1 ? combatState.Players[0] : null;
     }
 
     private CombatPredictionSimulator(

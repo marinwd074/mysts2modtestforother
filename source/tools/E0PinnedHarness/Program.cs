@@ -127,6 +127,13 @@ internal static class Program
                     $"combat={combat.Players.Count} root={root.PlayerCount} " +
                     $"local_only={root.AllowsLocalPlayerOnlySearch}.");
             }
+            if (teammate)
+            {
+                CombatPredictionSimulator historyProbe = root.ForkSimulator();
+                _ = historyProbe.History.GetCounters(local);
+                CombatPredictionSimulator historyFork = historyProbe.Fork();
+                _ = historyFork.History.GetCounters(local);
+            }
 
             string[] rootHand = local.PlayerCombatState!.Hand.Cards.Select(card => card.Id.Entry).ToArray();
             Action<SolverProgress>? progressCallback =

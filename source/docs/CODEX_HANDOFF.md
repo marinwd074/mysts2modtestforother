@@ -213,3 +213,11 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - Backported the measured Crossbow-only part of upstream PR #114.
 - Crossbow now reuses the existing root-captured character attack pool through GetDistinctUnlockedCharacterAttacksForCombat; RNG selection, card instance creation, add-to-hand, and free-this-turn semantics are unchanged.
 - The five turn<=1 relic generation sites remain on their existing code because upstream measured no meaningful search-path benefit there.
+
+## 2026-09-25 multiplayer history-counter owner fix
+
+- PR #118 incremental history counters were already present, but their owner binding still disabled counters whenever Players.Count > 1.
+- Multiplayer detached roots now bind the counter owner to the unique RootActionPlayers entry (the local search player); single-player/non-root fallback remains unchanged.
+- Shared finished-play count still records every simulated play, while owner-scoped draw/generation/orb/hit counters remain local-player scoped.
+- E0's real two-player detached fixture now verifies GetCounters(local) on the root simulator and an ordinary fork.
+- U2Runtime now installs ModelDbGetIdCachePatch so pinned 0.107.1 harnesses verify the new Harmony target.

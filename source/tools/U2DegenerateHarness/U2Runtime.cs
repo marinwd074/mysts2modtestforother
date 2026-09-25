@@ -11,6 +11,7 @@ internal static class U2Runtime
     [
         "CombatSolver.CombatStateTrackerIsolationPatch",
         "CombatSolver.PowerDynamicVarMaterializationGuardPatch",
+        "CombatSolver.ModelDbGetIdCachePatch",
         "CombatSolver.BaseLibCloneConcurrencyPatch",
         "CombatSolver.BaseLibDynamicVarCloneMetadataPatch",
         "CombatSolver.RitsuDynamicVarCloneMetadataPatch",
