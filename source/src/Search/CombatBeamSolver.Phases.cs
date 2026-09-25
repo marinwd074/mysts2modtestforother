@@ -2651,6 +2651,11 @@ internal sealed partial class CombatBeamSolver
             try
             {
                 bool yielded = MoveNextMeasured();
+                if (_state.CommittedParentsInCurrentStep > 0)
+                {
+                    _owner.policy.PortfolioTelemetry?.RecordSearchMemberFirstWork(
+                        _owner._run.SearchEfficiencyMemberId);
+                }
                 if (!yielded)
                 {
                     if (_state.Result == null)

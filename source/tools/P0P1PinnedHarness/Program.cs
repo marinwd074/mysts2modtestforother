@@ -691,7 +691,7 @@ internal static class Program
             BeamWidth = BeamWidth,
             // E3 only needs enough deterministic work to prove real interleaving and
             // serial/fixed semantic equivalence; keep it smaller than the P0 quality probe.
-            MaxExpandedNodes = 256,
+            MaxExpandedNodes = 512,
             SoftTimeBudgetMilliseconds = 120_000,
         };
 
@@ -751,6 +751,16 @@ internal static class Program
                     .ToArray(),
                 PotionRequiredStartMilliseconds: potionMembers
                     .Select(member => telemetry.ToRequestMilliseconds(member.StartedTicks))
+                    .ToArray(),
+                PotionRequiredFirstWorkMilliseconds: potionMembers
+                    .Select(member => member.FirstWorkTicks is { } firstWork
+                        ? telemetry.ToRequestMilliseconds(firstWork)
+                        : double.PositiveInfinity)
+                    .ToArray(),
+                PotionRequiredCompletedMilliseconds: potionMembers
+                    .Select(member => member.CompletedTicks is { } completed
+                        ? telemetry.ToRequestMilliseconds(completed)
+                        : double.PositiveInfinity)
                     .ToArray());
         }
 
@@ -766,7 +776,10 @@ internal static class Program
             && serial.CombatEndedTurn == fixedRoundRobin.CombatEndedTurn
             && serial.ExplicitPotionCount == fixedRoundRobin.ExplicitPotionCount;
         bool interleaved = fixedRoundRobin.PotionRequiredMembers >= 2
-            && fixedRoundRobin.PotionRequiredTransitions.Skip(1).Any(value => value > 0);
+            && fixedRoundRobin.PotionRequiredTransitions[0] > 0
+            && fixedRoundRobin.PotionRequiredTransitions[1] > 0
+            && fixedRoundRobin.PotionRequiredFirstWorkMilliseconds[1]
+                < fixedRoundRobin.PotionRequiredCompletedMilliseconds[0];
         Require(
             serial.Pass && fixedRoundRobin.Pass && sameQuality && interleaved,
             "E3 fixed round-robin diverged from serial Smart quality or failed to give a later potion member real work.");
@@ -1106,7 +1119,9 @@ internal static class Program
         long SearchMemberTransitions,
         int PotionRequiredMembers,
         long[] PotionRequiredTransitions,
-        double[] PotionRequiredStartMilliseconds);
+        double[] PotionRequiredStartMilliseconds,
+        double[] PotionRequiredFirstWorkMilliseconds,
+        double[] PotionRequiredCompletedMilliseconds);
 
     internal sealed record E3PortfolioEvidence(
         bool Pass,

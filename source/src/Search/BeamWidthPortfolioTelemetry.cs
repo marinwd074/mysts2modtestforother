@@ -59,7 +59,14 @@ internal sealed record SearchEfficiencyMemberReport(
     long StartedTicks,
     long? CompletedTicks,
     long ExpandedNodes,
-    long TransitionCount);
+    long TransitionCount)
+{
+    /// <summary>
+    /// First safe-point slice that committed real parent work. This distinguishes
+    /// "session constructed early" from genuine E3 interleaving.
+    /// </summary>
+    public long? FirstWorkTicks { get; init; }
+}
 
 internal sealed record SearchEfficiencyPhaseReport(
     int SearchMemberId,
@@ -170,6 +177,22 @@ internal sealed class BeamWidthPortfolioTelemetry
         lock (_gate)
             _searchMembers.Add(memberId, report);
         return memberId;
+    }
+
+    public void RecordSearchMemberFirstWork(int memberId)
+    {
+        if (memberId <= 0)
+            return;
+        long now = Stopwatch.GetTimestamp();
+        lock (_gate)
+        {
+            if (!_searchMembers.TryGetValue(memberId, out SearchEfficiencyMemberReport? report)
+                || report.FirstWorkTicks.HasValue)
+            {
+                return;
+            }
+            _searchMembers[memberId] = report with { FirstWorkTicks = now };
+        }
     }
 
     public void CompleteSearchMember(int memberId, long expandedNodes, long transitionCount)
