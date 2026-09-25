@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../src/Search/StateFingerprint.cs" Link="StateFingerprint.cs" />
+    <Compile Include="../../src/Search/ActionSearchOrderingPolicy.cs" Link="ActionSearchOrderingPolicy.cs" />
     <Compile Include="../../src/Search/MultiplayerLocalCrossTurnContracts.cs" Link="MultiplayerLocalCrossTurnContracts.cs" />
     <Compile Include="../../src/Search/MultiplayerPlanRefreshContracts.cs" Link="MultiplayerPlanRefreshContracts.cs" />
     <Compile Include="../../src/Search/ShadowTeammateBehaviorModel.cs" Link="ShadowTeammateBehaviorModel.cs" />
