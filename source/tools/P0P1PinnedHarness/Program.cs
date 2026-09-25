@@ -143,6 +143,12 @@ internal static class Program
                 captured,
                 settings);
             P0SearchEvidence p0FixedWork = e2Resumable.SingleParent;
+            E3PortfolioEvidence e3Portfolio = VerifyE3FixedPortfolioScheduling(
+                p0Root,
+                names,
+                battleDamage,
+                captured,
+                settings);
 
             P0JointEvidence joint;
             try
@@ -192,7 +198,11 @@ internal static class Program
                     Error: $"{error.GetType().Name}: {error.Message}");
             }
 
-            bool overallPass = p0Search.Pass && joint.Pass && p1.Pass && e2Resumable.Pass;
+            bool overallPass = p0Search.Pass
+                && joint.Pass
+                && p1.Pass
+                && e2Resumable.Pass
+                && e3Portfolio.Pass;
             var evidence = new
             {
                 status = overallPass ? "PASS" : "FAIL",
@@ -219,6 +229,7 @@ internal static class Program
                     singleMemberTimed = p0SingleMemberTimed,
                     fixedWork = p0FixedWork,
                     e2Resumable,
+                    e3Portfolio,
                     joint,
                     classifier = "covered_by_contract_suite",
                 },
@@ -668,6 +679,144 @@ internal static class Program
             RequestWorkTotals = totals,
         };
 
+    private static E3PortfolioEvidence VerifyE3FixedPortfolioScheduling(
+        CombatRootSnapshot root,
+        SolverDisplayNames names,
+        BattleDamageSnapshot battleDamage,
+        SearchPolicySnapshot captured,
+        SolverSettingsSnapshot settings)
+    {
+        E3AdaptiveBudgetPolicy.VerifyForTesting();
+        SolverSearchProfile profile = settings.Profile with
+        {
+            BeamWidth = BeamWidth,
+            MaxExpandedNodes = 512,
+            SoftTimeBudgetMilliseconds = 120_000,
+        };
+
+        E3PortfolioRunEvidence Run(bool fixedRoundRobin, bool adaptive = false)
+        {
+            SearchPolicySnapshot policy = captured with
+            {
+                Profile = profile,
+                RoutePolicy = SearchRoutePolicy.SinglePlayerFullRoute,
+                CurrentTurnOnly = false,
+                UseMultiplayerTeamObjective = false,
+                VerifyIncrementalSearch = false,
+                FixedBudget = true,
+                MaxDegreeOfParallelism = 1,
+                BudgetOverrideMilliseconds = null,
+                UseNoveltyPortfolio = false,
+                NoveltySearch = null,
+                UseBeamWidthPortfolio = false,
+                BeamWidthPortfolioWidths = null,
+                UseE3FixedPortfolioScheduling = fixedRoundRobin || adaptive,
+                UseE3AdaptivePortfolioScheduling = adaptive,
+                Interaction = null,
+                RequestWorkTotals = null,
+                PortfolioTelemetry = null,
+            };
+            SolverResult result = CombatSearchCoordinator.Solve(
+                root, names, battleDamage, policy, CancellationToken.None, progressCallback: null);
+            BeamWidthPortfolioTelemetry telemetry = result.PortfolioTelemetry
+                ?? throw new InvalidOperationException("E3 A/B missing request telemetry.");
+            SearchEfficiencyMemberReport[] members = telemetry.SearchMembers.ToArray();
+            SearchEfficiencyMemberReport[] potionMembers = members
+                .Where(member => string.Equals(member.Kind, "potion_required", StringComparison.Ordinal))
+                .OrderBy(member => member.MemberId)
+                .ToArray();
+            return new(
+                Pass: result.BoundaryReason != SearchBoundaryReason.TimeLimit
+                    && result.BestNode.Actions.Count > 0,
+                Actions: result.BestNode.Actions.Select(ActionToken).ToArray(),
+                Boundary: result.BoundaryReason.ToString(),
+                ProjectedBattleHpLost: result.ProjectedBattleHpLost,
+                FinalHp: result.Snapshot.PlayerHp,
+                FinalEnemyHp: result.Snapshot.EnemyHp,
+                CombatEndedTurn: result.CombatEndedTurn,
+                ExplicitPotionCount: result.ExplicitPotionCount,
+                AdaptiveBonusSlices: telemetry.E3AdaptiveBonusSlices,
+                SearchMemberExpanded: members.Sum(member => member.ExpandedNodes),
+                SearchMemberTransitions: members.Sum(member => member.TransitionCount),
+                PotionRequiredMembers: potionMembers.Length,
+                PotionRequiredTransitions: potionMembers.Select(member => member.TransitionCount).ToArray(),
+                PotionRequiredStartMilliseconds: potionMembers
+                    .Select(member => telemetry.ToRequestMilliseconds(member.StartedTicks)).ToArray(),
+                PotionRequiredFirstWorkMilliseconds: potionMembers
+                    .Select(member => member.FirstWorkTicks is { } t
+                        ? telemetry.ToRequestMilliseconds(t)
+                        : double.PositiveInfinity).ToArray(),
+                PotionRequiredCompletedMilliseconds: potionMembers
+                    .Select(member => member.CompletedTicks is { } t
+                        ? telemetry.ToRequestMilliseconds(t)
+                        : double.PositiveInfinity).ToArray());
+        }
+
+        static bool SameQuality(E3PortfolioRunEvidence a, E3PortfolioRunEvidence b)
+            => a.Actions.SequenceEqual(b.Actions, StringComparer.Ordinal)
+                && a.Boundary == b.Boundary
+                && a.ProjectedBattleHpLost == b.ProjectedBattleHpLost
+                && a.FinalHp == b.FinalHp
+                && a.FinalEnemyHp == b.FinalEnemyHp
+                && a.CombatEndedTurn == b.CombatEndedTurn
+                && a.ExplicitPotionCount == b.ExplicitPotionCount;
+
+        E3PortfolioRunEvidence serial = Run(fixedRoundRobin: false);
+        E3PortfolioRunEvidence fixedRun = Run(fixedRoundRobin: true);
+        E3PortfolioRunEvidence adaptiveRun = Run(fixedRoundRobin: true, adaptive: true);
+        bool sameQuality = SameQuality(serial, fixedRun);
+        bool adaptiveSameQuality = SameQuality(fixedRun, adaptiveRun);
+        bool sameFixedWork = serial.SearchMemberExpanded == fixedRun.SearchMemberExpanded
+            && serial.SearchMemberTransitions == fixedRun.SearchMemberTransitions
+            && serial.PotionRequiredTransitions.SequenceEqual(fixedRun.PotionRequiredTransitions);
+        bool interleaved = fixedRun.PotionRequiredMembers >= 2
+            && fixedRun.PotionRequiredTransitions[0] > 0
+            && fixedRun.PotionRequiredTransitions[1] > 0
+            && fixedRun.PotionRequiredFirstWorkMilliseconds[1] < fixedRun.PotionRequiredCompletedMilliseconds[0];
+        bool adaptiveSameFixedWork = fixedRun.SearchMemberExpanded == adaptiveRun.SearchMemberExpanded
+            && fixedRun.SearchMemberTransitions == adaptiveRun.SearchMemberTransitions
+            && fixedRun.PotionRequiredTransitions.SequenceEqual(adaptiveRun.PotionRequiredTransitions);
+        bool adaptiveTriggered = fixedRun.AdaptiveBonusSlices == 0
+            && adaptiveRun.AdaptiveBonusSlices > 0;
+        bool adaptiveInterleaved = adaptiveRun.PotionRequiredMembers >= 2
+            && adaptiveRun.PotionRequiredTransitions[0] > 0
+            && adaptiveRun.PotionRequiredTransitions[1] > 0
+            && adaptiveRun.PotionRequiredFirstWorkMilliseconds[1] < adaptiveRun.PotionRequiredCompletedMilliseconds[0];
+        bool adaptiveReducedWork =
+            adaptiveRun.SearchMemberTransitions < fixedRun.SearchMemberTransitions
+            || adaptiveRun.SearchMemberExpanded < fixedRun.SearchMemberExpanded;
+        bool fixedPass = serial.Pass
+            && fixedRun.Pass
+            && sameQuality
+            && sameFixedWork
+            && interleaved;
+        bool adaptiveQualified = adaptiveRun.Pass
+            && adaptiveSameQuality
+            && adaptiveInterleaved
+            && adaptiveTriggered
+            && adaptiveReducedWork;
+
+        Require(
+            fixedPass,
+            $"E3 fixed round-robin gate failed: serial_pass={serial.Pass} fixed_pass={fixedRun.Pass} " +
+            $"same_quality={sameQuality} same_work={sameFixedWork} interleaved={interleaved}.");
+
+        return new(
+            Pass: fixedPass,
+            Serial: serial,
+            FixedRoundRobin: fixedRun,
+            Adaptive: adaptiveRun,
+            SameQuality: sameQuality,
+            AdaptiveSameQuality: adaptiveSameQuality,
+            SameFixedWork: sameFixedWork,
+            AdaptiveSameFixedWork: adaptiveSameFixedWork,
+            AdaptiveTriggered: adaptiveTriggered,
+            AdaptiveReducedWork: adaptiveReducedWork,
+            AdaptiveQualified: adaptiveQualified,
+            LaterMemberReceivedWork: interleaved,
+            AdaptiveLaterMemberReceivedWork: adaptiveInterleaved);
+    }
+
     private static P1Evidence VerifyP1ObjectiveRuntime(
         CombatState combat,
         SolverSettingsSnapshot settings,
@@ -981,6 +1130,39 @@ internal static class Program
         string MismatchReason,
         bool LocalStateExact,
         string? Error);
+
+    internal sealed record E3PortfolioRunEvidence(
+        bool Pass,
+        string[] Actions,
+        string Boundary,
+        int ProjectedBattleHpLost,
+        int FinalHp,
+        int FinalEnemyHp,
+        int? CombatEndedTurn,
+        int ExplicitPotionCount,
+        int AdaptiveBonusSlices,
+        long SearchMemberExpanded,
+        long SearchMemberTransitions,
+        int PotionRequiredMembers,
+        long[] PotionRequiredTransitions,
+        double[] PotionRequiredStartMilliseconds,
+        double[] PotionRequiredFirstWorkMilliseconds,
+        double[] PotionRequiredCompletedMilliseconds);
+
+    internal sealed record E3PortfolioEvidence(
+        bool Pass,
+        E3PortfolioRunEvidence Serial,
+        E3PortfolioRunEvidence FixedRoundRobin,
+        E3PortfolioRunEvidence Adaptive,
+        bool SameQuality,
+        bool AdaptiveSameQuality,
+        bool SameFixedWork,
+        bool AdaptiveSameFixedWork,
+        bool AdaptiveTriggered,
+        bool AdaptiveReducedWork,
+        bool AdaptiveQualified,
+        bool LaterMemberReceivedWork,
+        bool AdaptiveLaterMemberReceivedWork);
 
     internal sealed record P1SearchEvidence(
         bool Pass,

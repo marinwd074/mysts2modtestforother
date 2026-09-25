@@ -31,18 +31,25 @@ internal enum SearchStepStatus
 
 internal readonly record struct SearchWorkAllowance
 {
-    public SearchWorkAllowance(int maxParentCommits)
+    public SearchWorkAllowance(
+        int maxParentCommits,
+        long maxTransitions = long.MaxValue)
     {
         if (maxParentCommits <= 0)
             throw new ArgumentOutOfRangeException(nameof(maxParentCommits));
+        if (maxTransitions <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxTransitions));
         MaxParentCommits = maxParentCommits;
+        MaxTransitions = maxTransitions;
     }
 
     public int MaxParentCommits { get; }
+    public long MaxTransitions { get; }
 
     public static SearchWorkAllowance SingleParent { get; } = new(1);
 
-    public static SearchWorkAllowance Unlimited { get; } = new(int.MaxValue);
+    public static SearchWorkAllowance Unlimited { get; } =
+        new(int.MaxValue, long.MaxValue);
 }
 
 internal readonly record struct SearchStepResult(
@@ -98,12 +105,12 @@ internal sealed partial class CombatBeamSolver
 
     private void CompleteExecutionLifecycle(
         SearchRequestWorkTotals? requestWorkTotals,
-        long startedTimestamp,
-        long allocatedBytesAtStart,
-        int gen0AtStart,
-        int gen1AtStart,
-        int gen2AtStart,
-        TimeSpan gcPauseAtStart)
+        TimeSpan exclusiveElapsed,
+        long exclusiveAllocatedBytes,
+        int gen0Collections,
+        int gen1Collections,
+        int gen2Collections,
+        TimeSpan gcPauseDuration)
     {
         policy.Diagnostics.Info(
             $"[CombatSolver/Test] ROUTING_CHOICE_SUMMARIES scope=solver " +
@@ -130,41 +137,19 @@ internal sealed partial class CombatBeamSolver
         }
         if (requestWorkTotals != null)
         {
-            RecordRequestWork(
-                requestWorkTotals,
-                startedTimestamp,
-                allocatedBytesAtStart,
-                gen0AtStart,
-                gen1AtStart,
-                gen2AtStart,
-                gcPauseAtStart);
+            requestWorkTotals.Record(new SearchSolverWorkContribution(
+                _run.Expanded,
+                _run.TransitionCount,
+                _run.ChoiceBranchesEvaluated,
+                exclusiveElapsed,
+                Math.Max(0, exclusiveAllocatedBytes),
+                Math.Max(0, gen0Collections),
+                Math.Max(0, gen1Collections),
+                Math.Max(0, gen2Collections),
+                gcPauseDuration < TimeSpan.Zero ? TimeSpan.Zero : gcPauseDuration,
+                _run.WorkPacer.MaxObservedGcPause));
         }
         CompleteSearchEfficiencyMember();
-    }
-
-    private void RecordRequestWork(
-        SearchRequestWorkTotals requestWorkTotals,
-        long startedTimestamp,
-        long allocatedBytesAtStart,
-        int gen0AtStart,
-        int gen1AtStart,
-        int gen2AtStart,
-        TimeSpan gcPauseAtStart)
-    {
-        TimeSpan elapsed = Stopwatch.GetElapsedTime(startedTimestamp);
-        TimeSpan gcPauseDuration = GC.GetTotalPauseDuration() - gcPauseAtStart;
-        requestWorkTotals.Record(new SearchSolverWorkContribution(
-            _run.Expanded,
-            _run.TransitionCount,
-            _run.ChoiceBranchesEvaluated,
-            elapsed,
-            Math.Max(0, GC.GetAllocatedBytesForCurrentThread() - allocatedBytesAtStart)
-                + _run.OffThreadAllocatedBytes,
-            Math.Max(0, GC.CollectionCount(0) - gen0AtStart),
-            Math.Max(0, GC.CollectionCount(1) - gen1AtStart),
-            Math.Max(0, GC.CollectionCount(2) - gen2AtStart),
-            gcPauseDuration < TimeSpan.Zero ? TimeSpan.Zero : gcPauseDuration,
-            _run.WorkPacer.MaxObservedGcPause));
     }
 
     private IEnumerable<SearchStepResult> SolveCoreSteps(SearchMemberExecutionState execution)
@@ -1815,12 +1800,14 @@ internal sealed partial class CombatBeamSolver
                     {
                         member.StepCancellationToken.ThrowIfCancellationRequested();
                         ExpandNextSerially();
-                        if (member.ObserveCommittedParents(1))
+                        if (member.ObserveCommittedParents(1, _run.TransitionCount))
                         {
+                            stopwatch.Stop();
                             yield return new SearchStepResult(
                                 SearchStepStatus.Yielded,
                                 member.CommittedParentsInCurrentStep,
                                 member.TotalCommittedParents);
+                            stopwatch.Start();
                         }
                     }
                 }
@@ -1840,12 +1827,14 @@ internal sealed partial class CombatBeamSolver
                             {
                                 member.StepCancellationToken.ThrowIfCancellationRequested();
                                 ExpandNextSerially();
-                                if (member.ObserveCommittedParents(1))
+                                if (member.ObserveCommittedParents(1, _run.TransitionCount))
                                 {
+                                    stopwatch.Stop();
                                     yield return new SearchStepResult(
                                         SearchStepStatus.Yielded,
                                         member.CommittedParentsInCurrentStep,
                                         member.TotalCommittedParents);
+                                    stopwatch.Start();
                                 }
                                 if (_run.Expanded >= _profile.MaxExpandedNodes)
                                     break;
@@ -1870,12 +1859,14 @@ internal sealed partial class CombatBeamSolver
                         {
                             member.StepCancellationToken.ThrowIfCancellationRequested();
                             ExpandNextSerially();
-                            if (member.ObserveCommittedParents(1))
+                            if (member.ObserveCommittedParents(1, _run.TransitionCount))
                             {
+                                stopwatch.Stop();
                                 yield return new SearchStepResult(
                                     SearchStepStatus.Yielded,
                                     member.CommittedParentsInCurrentStep,
                                     member.TotalCommittedParents);
+                                stopwatch.Start();
                             }
                             continue;
                         }
@@ -1886,12 +1877,14 @@ internal sealed partial class CombatBeamSolver
                             // The serial path rechecks one parent at its own committed boundary.
                             member.StepCancellationToken.ThrowIfCancellationRequested();
                             ExpandNextSerially();
-                            if (member.ObserveCommittedParents(1))
+                            if (member.ObserveCommittedParents(1, _run.TransitionCount))
                             {
+                                stopwatch.Stop();
                                 yield return new SearchStepResult(
                                     SearchStepStatus.Yielded,
                                     member.CommittedParentsInCurrentStep,
                                     member.TotalCommittedParents);
+                                stopwatch.Start();
                             }
                             continue;
                         }
@@ -1996,12 +1989,14 @@ internal sealed partial class CombatBeamSolver
                                 $"gc_pause_ms={(GC.GetTotalPauseDuration() - wavePauseBefore).TotalMilliseconds:F3}");
                         }
                         ReclaimAfterCommittedWork("after_parallel_wave");
-                        if (member.ObserveCommittedParents(entries.Count))
+                        if (member.ObserveCommittedParents(entries.Count, _run.TransitionCount))
                         {
+                            stopwatch.Stop();
                             yield return new SearchStepResult(
                                 SearchStepStatus.Yielded,
                                 member.CommittedParentsInCurrentStep,
                                 member.TotalCommittedParents);
+                            stopwatch.Start();
                         }
                     }
                 }
@@ -2495,32 +2490,47 @@ internal sealed partial class CombatBeamSolver
         public SearchMemberExecutionPhase Phase { get; set; } = SearchMemberExecutionPhase.Created;
         public CancellationToken StepCancellationToken { get; set; }
         public int RemainingParentCommitsBeforeYield { get; private set; } = int.MaxValue;
+        public long MaxTransitionsBeforeYield { get; private set; } = long.MaxValue;
+        public long TransitionCountAtStepStart { get; private set; }
         public int CommittedParentsInCurrentStep { get; private set; }
         public int TotalCommittedParents { get; private set; }
 
-        public void BeginStep(SearchWorkAllowance allowance, CancellationToken token)
+        public void BeginStep(
+            SearchWorkAllowance allowance,
+            CancellationToken token,
+            long currentTransitionCount)
         {
+            if (currentTransitionCount < 0)
+                throw new ArgumentOutOfRangeException(nameof(currentTransitionCount));
             StepCancellationToken = token;
             RemainingParentCommitsBeforeYield = allowance.MaxParentCommits;
+            MaxTransitionsBeforeYield = allowance.MaxTransitions;
+            TransitionCountAtStepStart = currentTransitionCount;
             CommittedParentsInCurrentStep = 0;
             Phase = SearchMemberExecutionPhase.Running;
         }
 
-        public bool ObserveCommittedParents(int count)
+        public bool ObserveCommittedParents(int count, long currentTransitionCount)
         {
             if (count <= 0)
                 throw new ArgumentOutOfRangeException(nameof(count));
+            if (currentTransitionCount < TransitionCountAtStepStart)
+                throw new ArgumentOutOfRangeException(nameof(currentTransitionCount));
             checked
             {
                 TotalCommittedParents += count;
                 CommittedParentsInCurrentStep += count;
             }
-            if (RemainingParentCommitsBeforeYield == int.MaxValue)
-                return false;
-            RemainingParentCommitsBeforeYield = Math.Max(
-                0,
-                RemainingParentCommitsBeforeYield - count);
-            return RemainingParentCommitsBeforeYield == 0;
+            if (RemainingParentCommitsBeforeYield != int.MaxValue)
+            {
+                RemainingParentCommitsBeforeYield = Math.Max(
+                    0,
+                    RemainingParentCommitsBeforeYield - count);
+            }
+            bool parentBudgetReached = RemainingParentCommitsBeforeYield == 0;
+            bool transitionBudgetReached = MaxTransitionsBeforeYield != long.MaxValue
+                && currentTransitionCount - TransitionCountAtStepStart >= MaxTransitionsBeforeYield;
+            return parentBudgetReached || transitionBudgetReached;
         }
 
         public SolverInterimResult? CurrentBestResult { get; set; }
@@ -2619,12 +2629,12 @@ internal sealed partial class CombatBeamSolver
         private readonly SearchMemberExecutionState _state = new();
         private readonly IEnumerator<SearchStepResult> _steps;
         private readonly SearchRequestWorkTotals? _requestWorkTotals;
-        private readonly long _startedTimestamp;
-        private readonly long _allocatedBytesAtStart;
-        private readonly int _gen0AtStart;
-        private readonly int _gen1AtStart;
-        private readonly int _gen2AtStart;
-        private readonly TimeSpan _gcPauseAtStart;
+        private TimeSpan _exclusiveElapsed;
+        private long _exclusiveAllocatedBytes;
+        private int _gen0Collections;
+        private int _gen1Collections;
+        private int _gen2Collections;
+        private TimeSpan _gcPauseDuration;
         private bool _finalized;
         private bool _disposed;
 
@@ -2637,22 +2647,17 @@ internal sealed partial class CombatBeamSolver
             _ownerCancellationToken = ownerCancellationToken;
             _owner.BeginSearchEfficiencyMember();
             _requestWorkTotals = requestWorkTotals;
-            _startedTimestamp = _requestWorkTotals == null ? 0 : Stopwatch.GetTimestamp();
-            _allocatedBytesAtStart = _requestWorkTotals == null
-                ? 0
-                : GC.GetAllocatedBytesForCurrentThread();
-            _gen0AtStart = _requestWorkTotals == null ? 0 : GC.CollectionCount(0);
-            _gen1AtStart = _requestWorkTotals == null ? 0 : GC.CollectionCount(1);
-            _gen2AtStart = _requestWorkTotals == null ? 0 : GC.CollectionCount(2);
-            _gcPauseAtStart = _requestWorkTotals == null
-                ? TimeSpan.Zero
-                : GC.GetTotalPauseDuration();
             _steps = owner.SolveCoreSteps(_state).GetEnumerator();
         }
 
         public SolverResult? Result => _state.Result;
         internal int TotalCommittedParentsForTesting => _state.TotalCommittedParents;
         internal bool HasLiveSimulatorsForTesting => _state.HasLiveSimulators();
+        internal long ExpandedNodesForScheduling => _owner._run.Expanded;
+        internal long TransitionCountForScheduling => _owner._run.TransitionCount;
+        internal TimeSpan ExclusiveElapsedForScheduling => _exclusiveElapsed;
+        internal long AllocatedBytesForScheduling => _exclusiveAllocatedBytes;
+        internal SolverInterimResult? CurrentBestResultForScheduling => _state.CurrentBestResult;
 
         public SearchStepResult Step(SearchWorkAllowance allowance, CancellationToken token)
         {
@@ -2674,11 +2679,17 @@ internal sealed partial class CombatBeamSolver
                     _state.TotalCommittedParents);
             }
 
-            _state.BeginStep(allowance, token);
+            _state.BeginStep(
+                allowance,
+                token,
+                _owner._run.TransitionCount);
             try
             {
-                using IDisposable notificationIsolation = SimulationNotificationIsolation.Enter();
-                bool yielded = _steps.MoveNext();
+                bool yielded = MoveNextMeasured();
+                if (_state.CommittedParentsInCurrentStep > 0)
+                {
+                    _owner.RecordSearchEfficiencyFirstWork();
+                }
                 if (!yielded)
                 {
                     if (_state.Result == null)
@@ -2714,6 +2725,36 @@ internal sealed partial class CombatBeamSolver
             }
         }
 
+        private bool MoveNextMeasured()
+        {
+            long startedTimestamp = Stopwatch.GetTimestamp();
+            long allocatedBytesAtStart = GC.GetAllocatedBytesForCurrentThread();
+            long offThreadAllocatedBytesAtStart = _owner._run.OffThreadAllocatedBytes;
+            int gen0AtStart = GC.CollectionCount(0);
+            int gen1AtStart = GC.CollectionCount(1);
+            int gen2AtStart = GC.CollectionCount(2);
+            TimeSpan gcPauseAtStart = GC.GetTotalPauseDuration();
+            try
+            {
+                using IDisposable notificationIsolation = SimulationNotificationIsolation.Enter();
+                return _steps.MoveNext();
+            }
+            finally
+            {
+                _exclusiveElapsed += Stopwatch.GetElapsedTime(startedTimestamp);
+                _exclusiveAllocatedBytes = checked(
+                    _exclusiveAllocatedBytes
+                    + Math.Max(0, GC.GetAllocatedBytesForCurrentThread() - allocatedBytesAtStart)
+                    + Math.Max(0, _owner._run.OffThreadAllocatedBytes - offThreadAllocatedBytesAtStart));
+                _gen0Collections = checked(_gen0Collections + Math.Max(0, GC.CollectionCount(0) - gen0AtStart));
+                _gen1Collections = checked(_gen1Collections + Math.Max(0, GC.CollectionCount(1) - gen1AtStart));
+                _gen2Collections = checked(_gen2Collections + Math.Max(0, GC.CollectionCount(2) - gen2AtStart));
+                TimeSpan pause = GC.GetTotalPauseDuration() - gcPauseAtStart;
+                if (pause > TimeSpan.Zero)
+                    _gcPauseDuration += pause;
+            }
+        }
+
         private void Cancel()
         {
             _state.Phase = SearchMemberExecutionPhase.Canceled;
@@ -2727,12 +2768,12 @@ internal sealed partial class CombatBeamSolver
             _finalized = true;
             _owner.CompleteExecutionLifecycle(
                 _requestWorkTotals,
-                _startedTimestamp,
-                _allocatedBytesAtStart,
-                _gen0AtStart,
-                _gen1AtStart,
-                _gen2AtStart,
-                _gcPauseAtStart);
+                _exclusiveElapsed,
+                _exclusiveAllocatedBytes,
+                _gen0Collections,
+                _gen1Collections,
+                _gen2Collections,
+                _gcPauseDuration);
         }
 
         private void DisposeCore(bool releaseLiveSimulators)

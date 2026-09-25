@@ -6,6 +6,9 @@ namespace CombatSolver;
 internal static partial class CombatSearchCoordinator
 {
     private static readonly SearchWorkAllowance ResumableMemberAllowance = new(256);
+    private static readonly SearchWorkAllowance E3FixedMemberAllowance = new(
+        maxParentCommits: 256,
+        maxTransitions: 1_024);
 
     private static SolverResult RunResumableMemberToCompletion(
         CombatBeamSolver solver,
@@ -1495,18 +1498,44 @@ internal static partial class CombatSearchCoordinator
             return primary;
         try
         {
-            return SearchSmartPotionGradient(
-                root,
-                displayNames,
-                battleDamage,
-                policy,
-                searchCancellationToken,
-                callerCancellationToken,
-                progressCallback,
-                profile,
-                primary,
-                memoryForecast,
-                interimResultCallback);
+            return policy.UseE3AdaptivePortfolioScheduling
+                ? SearchSmartPotionGradientScheduled(
+                    root,
+                    displayNames,
+                    battleDamage,
+                    policy,
+                    searchCancellationToken,
+                    callerCancellationToken,
+                    profile,
+                    primary,
+                    memoryForecast,
+                    interimResultCallback,
+                    adaptive: true)
+                : policy.UseE3FixedPortfolioScheduling
+                    ? SearchSmartPotionGradientScheduled(
+                        root,
+                        displayNames,
+                        battleDamage,
+                        policy,
+                        searchCancellationToken,
+                        callerCancellationToken,
+                        profile,
+                        primary,
+                        memoryForecast,
+                        interimResultCallback,
+                        adaptive: false)
+                    : SearchSmartPotionGradient(
+                    root,
+                    displayNames,
+                    battleDamage,
+                    policy,
+                    searchCancellationToken,
+                    callerCancellationToken,
+                    progressCallback,
+                    profile,
+                    primary,
+                    memoryForecast,
+                    interimResultCallback);
         }
         catch (PotionPolicyUnsatisfiedException)
             when (policy.PotionPolicy == SolverPotionPolicy.Smart
@@ -1516,6 +1545,383 @@ internal static partial class CombatSearchCoordinator
                 "[CombatSolver/Test] SMART_POTION_AUDIT result optional_route_missing=true selected=primary");
             return primary;
         }
+    }
+
+    private static SolverResult SearchSmartPotionGradientScheduled(
+        CombatRootSnapshot root,
+        SolverDisplayNames displayNames,
+        BattleDamageSnapshot battleDamage,
+        SearchPolicySnapshot policy,
+        CancellationToken searchCancellationToken,
+        CancellationToken callerCancellationToken,
+        SolverSearchProfile profile,
+        SolverResult potionFree,
+        SmartLayerMemoryForecast memoryForecast,
+        Action<SolverResult>? interimResultCallback,
+        bool adaptive)
+    {
+        int forcedPotionCount = policy.PotionStrategy.ForcedDirectiveCount;
+        if (potionFree.ExplicitPotionCount != forcedPotionCount)
+            throw new InvalidOperationException("Smart 梯度搜索必须从仅满足强制用药的结果开始。");
+
+        string scheduler = adaptive ? "e3_adaptive" : "e3_fixed";
+        bool potionFreeWon = potionFree.Snapshot.AllEnemiesDead
+            && !potionFree.Snapshot.PlayerDead
+            && potionFree.Snapshot.ProjectedPlayerHp > 0;
+        int potionFreeDeficit = StrategicHpDeficit(root, policy, potionFree);
+        int maximumOptionalPotionUses = MaximumSmartPotionUses(
+            root,
+            policy,
+            potionFreeWon,
+            potionFreeDeficit);
+        if (maximumOptionalPotionUses == 0)
+        {
+            policy.Diagnostics.Info(
+                $"[CombatSolver/Test] SMART_POTION_GRADIENT result " +
+                $"stop=no_potion_acceptable hp_deficit={potionFreeDeficit} maximum=0 scheduler={scheduler}");
+            return potionFree;
+        }
+
+        PotionFreePolicyBaseline baseline = new(
+            potionFreeWon,
+            potionFreeDeficit,
+            potionFree.Snapshot.PlayerHp,
+            potionFree.CombatEndedTurn)
+        {
+            DeathSaveUseCount = potionFree.Snapshot.ProjectedDeathSaveUseCount,
+        };
+        List<SolverResult> searches = [potionFree];
+        SolverResult selected = potionFree;
+        bool deadlineExpired = false;
+        bool acceptablePotionLayerFound = false;
+        int firstPotionCount = forcedPotionCount + 1;
+        int lastPotionCount = forcedPotionCount + maximumOptionalPotionUses;
+        int nextPotionCountToStart = firstPotionCount;
+        int nextPotionCountToCommit = firstPotionCount;
+        int residentLimit = policy.MemoryPressureSignal.ConservativeParallelismRequired
+            ? 1
+            : Math.Min(3, maximumOptionalPotionUses);
+        PrimarySearchIncumbent? primaryIncumbent = BuildPrimarySearchIncumbent(
+            root,
+            policy,
+            potionFree);
+
+        Dictionary<int, CombatBeamSolver.SearchMemberExecutionSession> active = [];
+        Dictionary<int, SolverResult> completed = [];
+        HashSet<int> missing = [];
+        Dictionary<int, int> slices = [];
+        Dictionary<int, double> marginalRates = [];
+        Dictionary<int, SolverInterimResult> observedIncumbents = [];
+        Dictionary<int, bool> importantCandidates = [];
+        Dictionary<int, E3AdaptivePriority> pendingPriorities = [];
+        int epoch = 0;
+
+        void StartLayer(int potionCount)
+        {
+            CombatBeamSolver solver = new(
+                root,
+                displayNames,
+                battleDamage,
+                policy,
+                searchCancellationToken,
+                progressCallback: null,
+                profile,
+                SolverPotionPolicy.RequireAtLeastOne,
+                baseline,
+                maximumPotionUses: potionCount,
+                minimumPotionUses: potionCount,
+                primaryIncumbent: primaryIncumbent);
+            active.Add(potionCount, solver.CreateExecutionSession());
+            slices[potionCount] = 0;
+            marginalRates[potionCount] = 0d;
+            importantCandidates[potionCount] = false;
+            pendingPriorities[potionCount] = E3AdaptivePriority.None;
+            policy.Diagnostics.Info(
+                $"[CombatSolver/Test] E3_PORTFOLIO_MEMBER_START kind=smart_potion " +
+                $"potion_count={potionCount} resident={active.Count}/{residentLimit} " +
+                $"slice_parents={E3FixedMemberAllowance.MaxParentCommits} " +
+                $"slice_transitions={E3FixedMemberAllowance.MaxTransitions} scheduler={scheduler}");
+        }
+
+        void FillResidentSet()
+        {
+            while (active.Count < residentLimit && nextPotionCountToStart <= lastPotionCount)
+            {
+                if (searchCancellationToken.IsCancellationRequested)
+                    return;
+                StartLayer(nextPotionCountToStart++);
+            }
+        }
+
+        void ObserveCompletedLayer(
+            int potionCount,
+            CombatBeamSolver.SearchMemberExecutionSession session,
+            SolverResult? result)
+        {
+            ObserveSmartLayerMemorySample(
+                policy,
+                memoryForecast,
+                result,
+                profile,
+                potionCount,
+                session.AllocatedBytesForScheduling,
+                session.TransitionCountForScheduling);
+        }
+
+        void ObserveAdaptiveSignal(
+            int potionCount,
+            CombatBeamSolver.SearchMemberExecutionSession session,
+            double exclusiveMilliseconds)
+        {
+            if (!adaptive)
+                return;
+
+            observedIncumbents.TryGetValue(potionCount, out SolverInterimResult? previous);
+            SolverInterimResult? current = session.CurrentBestResultForScheduling;
+            E3AdaptiveObservation observation = E3AdaptiveBudgetPolicy.Observe(
+                previous,
+                current,
+                marginalRates.GetValueOrDefault(potionCount),
+                exclusiveMilliseconds);
+            marginalRates[potionCount] = observation.MarginalImprovementRate;
+            if (current != null)
+                observedIncumbents[potionCount] = current;
+            if (observation.ImportantImprovement)
+                importantCandidates[potionCount] = true;
+            if (observation.Priority > pendingPriorities.GetValueOrDefault(potionCount))
+                pendingPriorities[potionCount] = observation.Priority;
+        }
+
+        void ObserveSchedulingBoundary()
+        {
+            if (policy.MemoryPressureSignal.ConservativeParallelismRequired && residentLimit > 1)
+            {
+                residentLimit = 1;
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Test] E3_PORTFOLIO_MEMORY " +
+                    $"scheduler={scheduler} resident_limit=1 active={active.Count} " +
+                    $"remaining_bytes={policy.MemoryPressureSignal.RemainingBytes}");
+            }
+        }
+
+        SolverResult? StepLayer(int potionCount)
+        {
+            if (!active.TryGetValue(
+                    potionCount,
+                    out CombatBeamSolver.SearchMemberExecutionSession? session))
+            {
+                return null;
+            }
+
+            double exclusiveBefore = session.ExclusiveElapsedForScheduling.TotalMilliseconds;
+            SearchStepResult step;
+            try
+            {
+                step = session.Step(E3FixedMemberAllowance, searchCancellationToken);
+            }
+            catch (PotionPolicyUnsatisfiedException)
+            {
+                ObserveCompletedLayer(potionCount, session, result: null);
+                missing.Add(potionCount);
+                active.Remove(potionCount);
+                session.Dispose();
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Test] SMART_POTION_GRADIENT layer={potionCount} " +
+                    $"route_missing=true scheduler={scheduler}");
+                return null;
+            }
+
+            double exclusiveDelta = Math.Max(
+                0d,
+                session.ExclusiveElapsedForScheduling.TotalMilliseconds - exclusiveBefore);
+            slices[potionCount] = checked(slices.GetValueOrDefault(potionCount) + 1);
+            ObserveAdaptiveSignal(potionCount, session, exclusiveDelta);
+            ObserveSchedulingBoundary();
+            policy.Diagnostics.Info(
+                $"[CombatSolver/Test] E3_PORTFOLIO_SLICE kind=smart_potion " +
+                $"potion_count={potionCount} status={step.Status} " +
+                $"committed_parents={step.CommittedParents} total_parents={step.TotalCommittedParents} " +
+                $"expanded={session.ExpandedNodesForScheduling} " +
+                $"transitions={session.TransitionCountForScheduling} " +
+                $"exclusive_ms={session.ExclusiveElapsedForScheduling.TotalMilliseconds:F3} " +
+                $"slice_exclusive_ms={exclusiveDelta:F3} " +
+                $"marginal_rate={marginalRates.GetValueOrDefault(potionCount):F6} " +
+                $"important={importantCandidates.GetValueOrDefault(potionCount).ToString().ToLowerInvariant()} " +
+                $"priority={pendingPriorities.GetValueOrDefault(potionCount)} " +
+                $"slices={slices[potionCount]} resident={active.Count}/{residentLimit} scheduler={scheduler}");
+
+            if (step.Status == SearchStepStatus.Canceled)
+            {
+                callerCancellationToken.ThrowIfCancellationRequested();
+                ObserveCompletedLayer(potionCount, session, result: null);
+                deadlineExpired = true;
+                return null;
+            }
+            if (step.Status != SearchStepStatus.Completed)
+                return null;
+
+            SolverResult candidate = session.Result
+                ?? throw new InvalidOperationException("E3 用药成员完成但没有结果。");
+            ObserveCompletedLayer(potionCount, session, candidate);
+            active.Remove(potionCount);
+            session.Dispose();
+            if (candidate.ResultScope != SolverResultScope.SearchCompletion)
+                return candidate;
+            candidate.SingleSessionSearch = true;
+            PopulateSingleSessionTotals(candidate);
+            completed.Add(potionCount, candidate);
+            return null;
+        }
+
+        SolverResult? CommitCompletedInOrder()
+        {
+            while (nextPotionCountToCommit <= lastPotionCount
+                && (completed.ContainsKey(nextPotionCountToCommit)
+                    || missing.Contains(nextPotionCountToCommit)))
+            {
+                int potionCount = nextPotionCountToCommit++;
+                if (missing.Remove(potionCount))
+                    continue;
+
+                SolverResult candidate = completed[potionCount];
+                completed.Remove(potionCount);
+                searches.Add(candidate);
+                interimResultCallback?.Invoke(candidate);
+
+                bool candidateWon = IsCompleteVictory(candidate);
+                int candidateDeficit = StrategicHpDeficit(root, policy, candidate);
+                int hpSaved = potionFreeWon
+                    ? Math.Max(0, potionFreeDeficit - candidateDeficit)
+                    : candidateWon
+                        ? Math.Max(0, candidate.Snapshot.PlayerHp - potionFree.Snapshot.PlayerHp)
+                        : 0;
+                int hpRequired = SmartPotionHpRequired(root, policy, candidate);
+                bool protectsLoot = policy.TheftPolicy == SolverTheftPolicy.PreserveResources
+                    && candidate.OutstandingStolenResource < potionFree.OutstandingStolenResource;
+                bool acceptable = IsSmartPotionGradientCandidateAcceptable(
+                    potionFreeWon,
+                    candidateWon,
+                    hpSaved,
+                    hpRequired,
+                    protectsLoot);
+                bool improvesSelection = acceptable
+                    && (policy.TheftPolicy != SolverTheftPolicy.PreserveResources
+                        || IsBetterCompletedResult(root, policy, candidate, selected));
+                if (improvesSelection)
+                {
+                    candidate.PotionHpSaved = hpSaved;
+                    candidate.PotionHpRequired = hpRequired;
+                    selected = candidate;
+                    acceptablePotionLayerFound = true;
+                }
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Test] SMART_POTION_GRADIENT layer={potionCount} " +
+                    $"won={candidateWon} hp_deficit={candidateDeficit} saved={hpSaved} " +
+                    $"required={hpRequired} protects_loot={protectsLoot} acceptable={acceptable} " +
+                    $"selected={improvesSelection} expanded={candidate.ExpandedNodes} " +
+                    $"transitions={candidate.TransitionCount} choice_branches={candidate.ChoiceBranchesEvaluated} " +
+                    $"elapsed_ms={candidate.Elapsed.TotalMilliseconds:F1} allocated_bytes={candidate.WorkerAllocatedBytes} " +
+                    $"incumbent_deficit={primaryIncumbent?.StrategicHpDeficit.ToString() ?? "-"} " +
+                    $"incumbent_turn={primaryIncumbent?.CombatEndedTurn.ToString() ?? "-"} " +
+                    $"incumbent_pruned={candidate.PrimaryIncumbentBranchesPruned} " +
+                    $"incumbent_updates={candidate.PrimaryIncumbentUpdates} scheduler={scheduler}");
+
+                if (acceptable
+                    && TheftEncounterStrategy.RecoverySatisfied(
+                        policy.TheftPolicy,
+                        selected.OutstandingStolenResource))
+                {
+                    foreach (CombatBeamSolver.SearchMemberExecutionSession activeSession in active.Values)
+                        activeSession.Dispose();
+                    active.Clear();
+                    MergeAuditTotals(selected, [.. searches]);
+                    policy.Diagnostics.Info(
+                        $"[CombatSolver/Test] SMART_POTION_GRADIENT result " +
+                        $"stop=threshold_met maximum={lastPotionCount} " +
+                        $"selected_potions={selected.PotionCount} scheduler={scheduler}");
+                    return selected;
+                }
+            }
+            return null;
+        }
+
+        FillResidentSet();
+        try
+        {
+            while (active.Count > 0)
+            {
+                epoch++;
+                // Hard exploration floor: every resident member gets one transition-bounded slice.
+                foreach (int potionCount in active.Keys.OrderBy(value => value).ToArray())
+                {
+                    if (searchCancellationToken.IsCancellationRequested)
+                    {
+                        callerCancellationToken.ThrowIfCancellationRequested();
+                        deadlineExpired = true;
+                        break;
+                    }
+                    if (StepLayer(potionCount) is { } takeover)
+                        return takeover;
+                    if (deadlineExpired)
+                        break;
+                }
+
+                if (deadlineExpired)
+                    break;
+                if (CommitCompletedInOrder() is { } settled)
+                    return settled;
+
+                if (adaptive && active.Count > 0)
+                {
+                    E3AdaptiveMemberSignal[] signals = active.Keys
+                        .OrderBy(value => value)
+                        .Select((potionCount, index) => new E3AdaptiveMemberSignal(
+                            potionCount,
+                            slices.GetValueOrDefault(potionCount),
+                            ExplorationDue: false,
+                            ImportantCandidate: importantCandidates.GetValueOrDefault(potionCount),
+                            Priority: pendingPriorities.GetValueOrDefault(potionCount),
+                            MarginalImprovementRate: marginalRates.GetValueOrDefault(potionCount),
+                            TieOrder: index))
+                        .ToArray();
+                    int? bonusPotionCount = E3AdaptiveBudgetPolicy.SelectBonusMember(signals);
+                    if (bonusPotionCount is { } bonus && active.ContainsKey(bonus))
+                    {
+                        policy.PortfolioTelemetry?.RecordE3AdaptiveBonusSlice();
+                        policy.Diagnostics.Info(
+                            $"[CombatSolver/Test] E3_ADAPTIVE_BUDGET epoch={epoch} bonus_member={bonus} " +
+                            $"priority={pendingPriorities.GetValueOrDefault(bonus)} " +
+                            $"important={importantCandidates.GetValueOrDefault(bonus).ToString().ToLowerInvariant()} " +
+                            $"marginal_rate={marginalRates.GetValueOrDefault(bonus):F6} " +
+                            $"slices={slices.GetValueOrDefault(bonus)} active={active.Count}");
+                        importantCandidates[bonus] = false;
+                        pendingPriorities[bonus] = E3AdaptivePriority.None;
+                        if (StepLayer(bonus) is { } takeover)
+                            return takeover;
+                        if (deadlineExpired)
+                            break;
+                        if (CommitCompletedInOrder() is { } settledAfterBonus)
+                            return settledAfterBonus;
+                    }
+                }
+
+                FillResidentSet();
+            }
+        }
+        finally
+        {
+            foreach (CombatBeamSolver.SearchMemberExecutionSession session in active.Values)
+                session.Dispose();
+            active.Clear();
+        }
+
+        callerCancellationToken.ThrowIfCancellationRequested();
+        MergeAuditTotals(selected, [.. searches]);
+        policy.Diagnostics.Info(
+            $"[CombatSolver/Test] SMART_POTION_GRADIENT result " +
+            $"stop={(deadlineExpired ? "deadline" : acceptablePotionLayerFound ? "threshold_met" : "complete")} " +
+            $"maximum={lastPotionCount} selected_potions={selected.PotionCount} scheduler={scheduler}");
+        return selected;
     }
 
     private static SolverResult SearchSmartPotionGradient(
@@ -1709,6 +2115,32 @@ internal static partial class CombatSearchCoordinator
         => candidateWon
             && (!potionFreeWon || hpSaved >= hpRequired || protectsLoot);
 
+    private static void ObserveSmartLayerMemorySample(
+        SearchPolicySnapshot policy,
+        SmartLayerMemoryForecast forecast,
+        SolverResult? result,
+        SolverSearchProfile profile,
+        int completedPotionCount,
+        long processAllocated,
+        long transitions)
+    {
+        if (policy.PotionPolicy != SolverPotionPolicy.Smart)
+            return;
+        processAllocated = Math.Max(0, processAllocated);
+        transitions = Math.Max(0, transitions);
+        bool usableSample = result is { ResultScope: SolverResultScope.SearchCompletion }
+            && result.BoundaryReason != SearchBoundaryReason.TimeLimit
+            && result.Elapsed.TotalMilliseconds < profile.SoftTimeBudgetMilliseconds;
+        forecast.Observe(processAllocated, transitions, usableSample);
+        policy.Diagnostics.Info(
+            $"[CombatSolver/Test] SMART_LAYER_MEMORY_SAMPLE layer={completedPotionCount} " +
+            $"process_allocated_bytes={processAllocated} transitions={transitions} " +
+            $"sample_usable={usableSample.ToString().ToLowerInvariant()} " +
+            $"boundary={result?.BoundaryReason.ToString() ?? "incomplete"} " +
+            $"bytes_per_transition_high_water={forecast.BytesPerTransitionHighWater:F1} " +
+            $"prediction_error_high_water={forecast.UnderpredictionHighWater:F3}");
+    }
+
     private static void ObserveSmartLayerMemory(
         SearchPolicySnapshot policy,
         SmartLayerMemoryForecast forecast,
@@ -1729,17 +2161,14 @@ internal static partial class CombatSearchCoordinator
         // A fixed node budget is a comparable work window for the next layer using this same
         // profile. A timed-out or interrupted layer can understate that window, so keep the
         // optional reset conservative until a complete observation is available again.
-        bool usableSample = result is { ResultScope: SolverResultScope.SearchCompletion }
-            && result.BoundaryReason != SearchBoundaryReason.TimeLimit
-            && result.Elapsed.TotalMilliseconds < profile.SoftTimeBudgetMilliseconds;
-        forecast.Observe(processAllocated, transitions, usableSample);
-        policy.Diagnostics.Info(
-            $"[CombatSolver/Test] SMART_LAYER_MEMORY_SAMPLE layer={completedPotionCount} " +
-            $"process_allocated_bytes={processAllocated} transitions={transitions} " +
-            $"sample_usable={usableSample.ToString().ToLowerInvariant()} " +
-            $"boundary={result?.BoundaryReason.ToString() ?? "incomplete"} " +
-            $"bytes_per_transition_high_water={forecast.BytesPerTransitionHighWater:F1} " +
-            $"prediction_error_high_water={forecast.UnderpredictionHighWater:F3}");
+        ObserveSmartLayerMemorySample(
+            policy,
+            forecast,
+            result,
+            profile,
+            completedPotionCount,
+            processAllocated,
+            transitions);
     }
 
     private static void ReclaimAtPotionGradientBoundary(

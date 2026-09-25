@@ -79,6 +79,18 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - 本阶段始终没有改变 Beam 宽度、评分、Robust、药水/遗物/特殊牌、多人数值语义或执行权限。
 - **E2 已关闭。** 后续除非再次修改 member-session 状态所有权、安全点、取消/Dispose 或累计预算语义，否则不继续在 E2 增加可恢复搜索改造。
 
+## 搜索效率 E3（2026-09-25，已关闭）
+
+- **交付结论：生产采用 E3A 固定轮转；E3B 自适应不启用。**
+- Smart 用药层复用 E2 `SearchMemberExecutionSession`，每个工作片最多 256 committed parents / 1024 transitions。多个 exact-potion 成员可同时驻留；暂停成员不累计自己的搜索预算钟，请求级 deadline 仍按真实墙钟统一约束。
+- fixed 与 serial 的 deterministic P0 门禁完全等价：动作序列、boundary、战损、终局 HP、敌方 HP、结束回合、显式药水数一致；总工作均为 **1536 expanded / 6310 transitions**，两个 `potion_required` 成员均为 **2146 / 2172 transitions**。
+- fixed 确认是真轮转而非提前建 session：第二个用药成员在约 **646.5 ms** 首次获得真实工作，而第一个成员约 **1053.9 ms** 才完成；serial 中第二成员要等第一个约 **653.2 ms** 完成后才开始。
+- E3A 已在 `3073c757` 作为 full-search 生产默认启用；不新增 UI，不改变目标函数、Beam 排序、Robust、Smart 用药资格、遗物/特殊牌、多人数值或部署权限。Novelty 与没有 E0 证据的其他 Beam 组合未在本阶段重构。
+- E3B 保留原计划的实验实现：同硬约束类别内用 `Δq/Δt` EMA，完整胜利/消除死亡风险使用独立优先级，并保留探索份额、重要候选优先和确定性 tie-break；内存压力可把驻留成员收缩到 1。
+- 本轮 pinned 资格结果：`AdaptiveSameQuality=true`、`AdaptiveSameFixedWork=true`，但 `AdaptiveBonusSlices=0`，因此 `AdaptiveTriggered=false`、`AdaptiveReducedWork=false`、`AdaptiveQualified=false`。该样本没有证明 adaptive 比 fixed 更早达到质量或减少工作，所以按计划保持关闭，不为了“自适应”增加生产复杂度。
+- 最终验证：compatibility run `36100277486` 的 static-consistency / L1 contracts 全 PASS；Pinned 0.107.1 run `36100277430` 的 Release、E0、U0/U1、U2、P0 contracts、P0/P1 runtime 与历史 P0 A/B 分类链完成。P1 的 5 秒 timed 样本在已胜利状态触及 TimeLimit，但 5000-node fixed-work 两种目标均 PASS，历史分类为 `FIXED_WORK_PASS_TIME_BOUNDARY`，不作为搜索语义回归。
+- **E3 已关闭。** 后续若没有新的 time-to-quality 数据证明 adaptive 稳定优于 fixed，不重新打开 E3B。
+
 ## 当前未验证边界
 
 - 当前 HEAD 的真实多人 Beam retention A/B：需要在“明显不如手打”的合法局面上确认更好路线究竟在 Beam、portfolio、U3/U4 还是执行层丢失。
@@ -87,11 +99,5 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 
 ## 下一任务
 
-开始 **E3：portfolio 调度 / 早停 / 上界 / 成员间复用**。
-
-1. 直接复用 E2 的 `SearchMemberExecutionSession`，第一小阶段只改 portfolio 的工作分配，让现有成员可以按 deterministic allowance 轮转，而不是成员 A 完整跑完后再从根启动成员 B；目标函数、Beam 排序、Robust 与最终比较规则保持不变。
-2. 优先处理 E0 的真实多人瓶颈：LOUSE_PROGENITOR 最终赢家直到第三个 `potion_required#3` 才首次生成。E3 要让这类“后置成员赢家”更早获得搜索预算，而不是降低候选质量标准。
-3. 先做固定 node/transition budget A/B，记录每个成员首次产生 incumbent 的工作量、重复根工作和最终赢家；只有证明最终选择不退化后才加入可信的早停或上界。
-4. E1 继续延后；只有新的多人证据显示候选早已 selected 但明显迟 published 时再优先处理发布延迟。
-5. 不按卡名、seed、怪物名或单局硬编码调度规则；每轮仍只推进一个小阶段并更新本 handoff。
+E3 已完成。后续按总计划进入 **E4：候选与情景的渐进复评** 时再单独开始，不把 E4 的严格上下界/Robust 情景按需计算混回 E3。
 

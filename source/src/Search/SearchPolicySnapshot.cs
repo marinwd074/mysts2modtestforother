@@ -89,6 +89,19 @@ internal sealed record SearchPolicySnapshot(
     public bool UseBeamWidthPortfolio { get; init; }
 
     /// <summary>
+    /// E3 实验开关：Smart 用药层使用 E2 可恢复 session 做固定工作量轮转。
+    /// 默认关闭，只有固定工作量 A/B 证明不退化后才允许迁移成生产默认。
+    /// </summary>
+    public bool UseE3FixedPortfolioScheduling { get; init; }
+
+    /// <summary>
+    /// E3B 实验开关：固定轮转仍提供硬探索份额；额外 slice 按同一硬约束类别内的
+    /// EMA 单位独占计算收益率分配，完整胜利/消除死亡风险使用独立优先级。
+    /// 默认关闭，最终 Smart 提交顺序不变。
+    /// </summary>
+    public bool UseE3AdaptivePortfolioScheduling { get; init; }
+
+    /// <summary>
     /// 组合成员宽度。首项由 <see cref="BeamWidthPortfolio.ProductionMembers" /> 强制成基线宽度；
     /// 为空时用默认的 [基线, 基线×2/3, 基线×3/2, 次段 基线, 基础分 基线]，显式给出时只有宽度成员。
     /// </summary>
