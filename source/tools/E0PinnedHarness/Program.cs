@@ -78,6 +78,32 @@ internal static class Program
             SolverDisplayNames names = SolverDisplayNames.Capture(combat);
             BattleDamageSnapshot damage = BattleDamageTracker.Observe(combat);
             CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
+            if (teammate)
+            {
+                var captureProbe = root.ForkSimulator();
+                int expectedCapturedPlayers = multiplayerPrediction ? 2 : 1;
+                if (captureProbe.State.Players.Count != 2
+                    || captureProbe.State.RootCapturedPlayers.Count != expectedCapturedPlayers
+                    || captureProbe.State.RootCapturedPlayerCreatures.Count != expectedCapturedPlayers)
+                {
+                    throw new InvalidOperationException(
+                        $"Multiplayer prediction target roster mismatch: public={captureProbe.State.Players.Count} " +
+                        $"captured={captureProbe.State.RootCapturedPlayers.Count} " +
+                        $"targets={captureProbe.State.RootCapturedPlayerCreatures.Count} " +
+                        $"prediction={multiplayerPrediction}.");
+                }
+
+                var deathProbe = root.ForkSimulator();
+                if (!deathProbe.Kill(local.Creature, force: true))
+                    throw new InvalidOperationException("Multiplayer death-boundary probe did not complete.");
+                bool shouldEndOnLocalDeath = !multiplayerPrediction;
+                if (deathProbe.IsOverOrEnding != shouldEndOnLocalDeath)
+                {
+                    throw new InvalidOperationException(
+                        $"Multiplayer local-death terminal mismatch: ended={deathProbe.IsOverOrEnding} " +
+                        $"expected={shouldEndOnLocalDeath} prediction={multiplayerPrediction}.");
+                }
+            }
             SearchPolicySnapshot captured = SolverController.CaptureSearchPolicy(
                 settings,
                 combat,

@@ -116,6 +116,18 @@ internal sealed class CombatPredictionState
             ? boundary.RootActionPlayers
             : Players;
 
+    private IReadOnlyList<Creature>? _rootCapturedPlayerCreatures;
+
+    /// <summary>
+    /// Player targets whose private combat state belongs to this prediction root.
+    /// Default multiplayer local-single-core roots contain only the local player;
+    /// full multiplayer prediction captures the complete player roster.
+    /// </summary>
+    internal IReadOnlyList<Creature> RootCapturedPlayerCreatures
+        => _rootCapturedPlayerCreatures ??= RootCapturedPlayers.Count == Players.Count
+            ? PlayerCreatures
+            : RootCapturedPlayers.Select(static player => player.Creature).ToArray();
+
     public IReadOnlyList<Creature> HittableEnemies => _hittableEnemies ??= new HittableEnemyView(this);
 
     public IReadOnlyList<Creature> GetValidManualTargets(Creature self, TargetType targetType)
@@ -123,9 +135,9 @@ internal sealed class CombatPredictionState
         return targetType switch
         {
             TargetType.AnyPlayer =>
-                [.. PlayerCreatures.Where(creature => GetCreature(creature).IsAlive)],
+                [.. RootCapturedPlayerCreatures.Where(creature => GetCreature(creature).IsAlive)],
             TargetType.AnyAlly =>
-                [.. PlayerCreatures.Where(creature =>
+                [.. RootCapturedPlayerCreatures.Where(creature =>
                     !ReferenceEquals(creature, self) && GetCreature(creature).IsAlive)],
             _ => [],
         };

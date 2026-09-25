@@ -191,7 +191,7 @@ internal sealed partial class CombatPredictionSimulator
         {
             return attackCommand._sourceType switch
             {
-                AttackCommand.SourceType.Monster => State.PlayerCreatures,
+                AttackCommand.SourceType.Monster => State.RootCapturedPlayerCreatures,
                 _ => State.GetOpponentsOf(attacker)
             };
         }

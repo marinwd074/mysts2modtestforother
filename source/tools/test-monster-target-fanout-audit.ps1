@@ -140,8 +140,8 @@ if ((-not $runtimeTargetsText.Contains('private enum MultiplayerTargetMode')) -o
     throw 'Dedicated multiplayer monster target dispatcher is incomplete.'
 }
 
-if (-not $runtimeText.Contains('foreach (Creature target in simulator.State.PlayerCreatures)')) {
-    throw 'Pinned runtime fanout no longer enumerates the captured player roster.'
+if (-not $runtimeText.Contains('foreach (Creature target in simulator.State.RootCapturedPlayerCreatures)')) {
+    throw 'Pinned runtime fanout no longer enumerates the root-captured prediction player roster.'
 }
 if (-not $runtimeText.Contains('bool applySharedPreamble = true;')) {
     throw 'Pinned simple fanout no longer protects one-per-move shared preamble state.'
@@ -214,7 +214,7 @@ if ($remoteChoiceRows.Count -ne 1 -or $remoteChoiceRows[0].Key -ne 'KnowledgeDem
 $knowledgeChoiceText = [IO.File]::ReadAllText($knowledgeChoicePath)
 $knowledgeStateText = [IO.File]::ReadAllText($knowledgeStatePath)
 $stateEvaluationText = [IO.File]::ReadAllText($stateEvaluationPath)
-if ((-not $runtimeText.Contains('KnowledgeDemonChoiceSupport.BlockOnUncontrolledMultiplayerChoice(')) -or (-not $runtimeText.Contains('simulator.State.PlayerCreatures.Count > 1'))) {
+if ((-not $runtimeText.Contains('KnowledgeDemonChoiceSupport.BlockOnUncontrolledMultiplayerChoice(')) -or (-not $runtimeText.Contains('simulator.State.RootCapturedPlayerCreatures.Count > 1'))) {
     throw 'Multiplayer Knowledge Demon no longer stops before local-only curse resolution.'
 }
 if ((-not $knowledgeChoiceText.Contains('IsUncontrolledRemoteChoice: true')) -or (-not $knowledgeChoiceText.Contains('远端 Knowledge Demon 玩家选择不能作为本地求解器可优化分支'))) {

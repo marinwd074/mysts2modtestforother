@@ -106,7 +106,7 @@ internal static partial class MonsterMoveEffects
         MultiplayerTargetMode mode = ResolveMultiplayerTargetMode(
             type,
             id,
-            simulator.State.PlayerCreatures.Count);
+            simulator.State.RootCapturedPlayerCreatures.Count);
 
         return mode switch
         {
@@ -137,7 +137,7 @@ internal static partial class MonsterMoveEffects
         bool handled = false;
         killedOwner = false;
         bool applySharedPreamble = true;
-        foreach (Creature target in simulator.State.PlayerCreatures)
+        foreach (Creature target in simulator.State.RootCapturedPlayerCreatures)
         {
             handled |= ApplySingleTarget(
                 simulator,

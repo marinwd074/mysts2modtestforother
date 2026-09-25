@@ -118,7 +118,7 @@ if ($monsterStaticValuesText.Contains('["LouseProgenitor"] = ["CurlBlock", "Grow
 $monsterMoveSemanticsPath = Join-Path $repositoryRoot 'src/Prediction/MonsterMoveSemantics.cs'
 $monsterMoveSemanticsText = [IO.File]::ReadAllText($monsterMoveSemanticsPath)
 foreach ($multiplayerMonsterAttackRule in @(
-    'simulator.State.PlayerCreatures,',
+    'simulator.State.RootCapturedPlayerCreatures,',
     'public static IReadOnlyList<DamageResult> DamagePlayers(',
     'return simulator.Damage(players, baseDamage, ValueProp.Move, attacker);',
     'if (result.WasFullyBlocked)',
@@ -132,6 +132,13 @@ $predictionDamagePath = Join-Path $repositoryRoot 'src/Engine/InCombat/Simulatio
 $predictionDamageText = [IO.File]::ReadAllText($predictionDamagePath)
 if (-not $predictionDamageText.Contains('hookCombat.NotifyPlayerHooksDeactivated(player);')) {
     $violations.Add("${predictionDamagePath}: simulated player death must deactivate that player's later hooks")
+}
+foreach ($capturedDeathRule in @(
+    'State.RootCapturedPlayers.All(player => State.GetCreature(player.Creature).IsDead)',
+    'MultiplayerAdvisorBoundaryContracts.IsCapturedPlayer(State.RootCapturedPlayers, player)')) {
+    if (-not $predictionDamageText.Contains($capturedDeathRule)) {
+        $violations.Add("${predictionDamagePath}: local-single-core death boundary drifted '$capturedDeathRule'")
+    }
 }
 
 $simulatedCombatStatePath = Join-Path $repositoryRoot 'src/Search/SimulatedCombatState.cs'
@@ -2966,7 +2973,8 @@ foreach ($requiredHammerTimeForgeRule in @(
     'if (source is HammerTimePower)',
     'hammerTime = combat.GetPower<HammerTimePower>(player.Creature)',
     'combat.GetAmount<HammerTimePower>(player.Creature) <= 0',
-    'simulator.State.Players.ToArray()',
+    'simulator.State.RootCapturedPlayers.ToArray()',
+    'hammerPlayers ??= simulator.State.RootCapturedPlayers',
     '!simulator.State.GetCreature(teammate.Creature).IsAlive',
     'Forge(simulator, teammate, amount, hammerTime)',
     'ForgeExecutionStage.HammerTimePlayers')) {
@@ -3780,7 +3788,7 @@ foreach ($requiredForgeContinuationRule in @(
     'ForgeExecutionStage.HammerTimePlayers',
     'private sealed record ForgeExecutionFrame(',
     'new ForgeExecutionFrame(',
-    'simulator.State.Players.ToArray()',
+    'simulator.State.RootCapturedPlayers.ToArray()',
     '!simulator.State.GetCreature(teammate.Creature).IsAlive',
     'Forge(simulator, teammate, amount, hammerTime)',
     'Source = Source is null ? null : context.RemapOrSelf(Source)',
