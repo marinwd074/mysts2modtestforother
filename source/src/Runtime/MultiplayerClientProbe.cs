@@ -110,6 +110,7 @@ internal static class MultiplayerClientProbe
             _nextCardIdentityId = 0;
         }
         MultiplayerWorldTracker.Reset();
+        MultiplayerRouteChangeTracker.Reset();
     }
 
     internal static void BeginCombatSegment()
@@ -124,6 +125,7 @@ internal static class MultiplayerClientProbe
             _nextCardIdentityId = 0;
         }
         MultiplayerWorldTracker.Reset();
+        MultiplayerRouteChangeTracker.Reset();
     }
 
     internal static void Dispose()
@@ -141,7 +143,11 @@ internal static class MultiplayerClientProbe
     }
 
     internal static bool Observe(CombatState state, string reason)
-        => ObserveCore(state, reason, bypassSampleInterval: false);
+        => ObserveCore(
+            state,
+            reason,
+            bypassSampleInterval: false,
+            returnEnemyHpRouteChange: true);
 
     /// <summary>
     /// Captures an action-completion observation immediately. The ordinary Probe cadence
@@ -149,7 +155,11 @@ internal static class MultiplayerClientProbe
     /// world mutation before it decides whether another card is admissible.
     /// </summary>
     internal static bool ObserveActionBoundary(CombatState state, string reason)
-        => ObserveCore(state, reason, bypassSampleInterval: true);
+        => ObserveCore(
+            state,
+            reason,
+            bypassSampleInterval: true,
+            returnEnemyHpRouteChange: false);
 
     internal static MultiplayerSafeExecutionBoundary CaptureSafeExecutionBoundary()
         => new(
@@ -170,7 +180,11 @@ internal static class MultiplayerClientProbe
             minimumWorldVersion);
     }
 
-    private static bool ObserveCore(CombatState state, string reason, bool bypassSampleInterval)
+    private static bool ObserveCore(
+        CombatState state,
+        string reason,
+        bool bypassSampleInterval,
+        bool returnEnemyHpRouteChange)
     {
         if (!SolverSessionCapabilities.Capture(state).IsMultiplayer
             || !CombatManager.Instance.IsInProgress)
@@ -187,21 +201,44 @@ internal static class MultiplayerClientProbe
 
         Player? localPlayer = LocalContext.GetMe(state);
         StateFingerprint compactFingerprint = CompactFingerprint(state, localPlayer);
-        bool changed = MultiplayerWorldTracker.ObserveSnapshot(compactFingerprint, reason);
-        if (!changed)
+        bool worldChanged = MultiplayerWorldTracker.ObserveSnapshot(compactFingerprint, reason);
+        if (!worldChanged)
             return false;
+
+        StateFingerprint enemyHpFingerprint = EnemyHpFingerprint(state);
+        bool enemyHpRouteChanged;
+        if (returnEnemyHpRouteChange)
+        {
+            enemyHpRouteChanged = MultiplayerRouteChangeTracker.ObserveEnemyHp(
+                enemyHpFingerprint,
+                reason);
+        }
+        else
+        {
+            // Local Safe Execute actions must advance the full world version, but their
+            // expected HP effects become the new route baseline instead of invalidating it.
+            MultiplayerRouteChangeTracker.SynchronizeEnemyHp(enemyHpFingerprint);
+            enemyHpRouteChanged = false;
+        }
 
         _observationSequence++;
         string currentTurnIdentity = TurnIdentityToken(state, localPlayer);
         string? previousTurnIdentity = _lastTurnIdentity;
         _lastTurnIdentity = currentTurnIdentity;
-        if (previousTurnIdentity != null
-            && !string.Equals(previousTurnIdentity, currentTurnIdentity, StringComparison.Ordinal))
+        bool turnBoundary = previousTurnIdentity != null
+            && !string.Equals(previousTurnIdentity, currentTurnIdentity, StringComparison.Ordinal);
+        if (turnBoundary)
         {
+            if (!enemyHpRouteChanged)
+            {
+                MultiplayerRouteChangeTracker.SignalSchedulingBoundary(
+                    "local_turn_boundary");
+            }
             Entry.Logger.Info(
                 $"[CombatSolver/MultiplayerProbe] MP_REACTIVE_TURN_BOUNDARY " +
                 $"previous={previousTurnIdentity} current={currentTurnIdentity} " +
                 $"world_version={MultiplayerWorldTracker.WorldVersion} " +
+                $"route_version={MultiplayerRouteChangeTracker.Version} " +
                 $"observation_sequence={_observationSequence} " +
                 "fresh_probe=true fresh_capture=true");
         }
@@ -219,10 +256,21 @@ internal static class MultiplayerClientProbe
         }
         Entry.Logger.Info(
             $"[CombatSolver/MultiplayerProbe] OBSERVED sequence={_observationSequence} " +
-            $"world_version={MultiplayerWorldTracker.WorldVersion} reason={reason} " +
+            $"world_version={MultiplayerWorldTracker.WorldVersion} " +
+            $"route_version={MultiplayerRouteChangeTracker.Version} reason={reason} " +
+            $"enemy_hp_route_changed={enemyHpRouteChanged.ToString().ToLowerInvariant()} " +
             "compact_changed=true" +
             (display is null ? string.Empty : $" {display}"));
-        return true;
+        return returnEnemyHpRouteChange ? enemyHpRouteChanged : worldChanged;
+    }
+
+    private static StateFingerprint EnemyHpFingerprint(CombatState state)
+    {
+        StateFingerprintBuilder fingerprint = new();
+        fingerprint.Add(state.Enemies.Count);
+        foreach (Creature enemy in state.Enemies)
+            fingerprint.Add(enemy.CurrentHp);
+        return fingerprint.Finish();
     }
 
     private static MultiplayerProbeSnapshot CaptureSnapshot(

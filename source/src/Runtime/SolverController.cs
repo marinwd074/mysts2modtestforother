@@ -1307,30 +1307,32 @@ internal static partial class SolverController
         }
 
         SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(current);
-        bool multiplayerWorldChanged = capabilities.IsMultiplayer
+        bool multiplayerRouteChanged = capabilities.IsMultiplayer
             && MultiplayerClientProbe.Observe(current, "main_thread_monitor");
         bool enteredMultiplayerSession = capabilities.IsMultiplayer && !_multiplayerInertSessionObserved;
         if (capabilities.IsMultiplayer)
         {
             _multiplayerInertSessionObserved = true;
-            if (enteredMultiplayerSession || multiplayerWorldChanged)
+            if (enteredMultiplayerSession || multiplayerRouteChanged)
             {
-                if (multiplayerWorldChanged)
+                if (multiplayerRouteChanged)
                 {
                     if (capabilities.Kind == SolverSessionKind.MultiplayerAdvisor)
                     {
                         Entry.Logger.Info(
-                            $"[CombatSolver/MultiplayerAdvisor] MP_ADVISOR_WORLD_CHANGED " +
+                            $"[CombatSolver/MultiplayerAdvisor] MP_ADVISOR_ENEMY_HP_CHANGED " +
                             $"world_version={MultiplayerWorldTracker.WorldVersion} " +
-                            $"reason={MultiplayerWorldTracker.LastReason}");
+                            $"route_version={MultiplayerRouteChangeTracker.Version} " +
+                            $"reason={MultiplayerRouteChangeTracker.LastReason}");
                     }
                     else if (capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute)
                     {
                         Entry.Logger.Info(
-                            $"[CombatSolver/MultiplayerSafeExecute] MP2B_WORLD_CHANGED " +
+                            $"[CombatSolver/MultiplayerSafeExecute] MP2B_ENEMY_HP_CHANGED " +
                             $"timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
                             $"world_version={MultiplayerWorldTracker.WorldVersion} " +
-                            $"reason={MultiplayerWorldTracker.LastReason} " +
+                            $"route_version={MultiplayerRouteChangeTracker.Version} " +
+                            $"reason={MultiplayerRouteChangeTracker.LastReason} " +
                             $"session_state={_deployment?.SafeExecutionSession?.State.ToString() ?? "-"}");
                     }
                 }
@@ -1501,7 +1503,8 @@ internal static partial class SolverController
             $"{invalidationPrefix} " +
             $"timestamp_ms={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} " +
             $"world_version={MultiplayerWorldTracker.WorldVersion} " +
-            $"reason={MultiplayerWorldTracker.LastReason} " +
+            $"route_version={MultiplayerRouteChangeTracker.Version} " +
+            $"reason={MultiplayerRouteChangeTracker.LastReason} " +
             $"turn={LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0} " +
             $"continuation_preserved={preservePendingContinuation.ToString().ToLowerInvariant()} " +
             $"bounded_refresh_pending={canAttemptBoundedPlanRefresh.ToString().ToLowerInvariant()} " +
@@ -1538,7 +1541,7 @@ internal static partial class SolverController
             || !UnattendedTestRunner.AutomaticTurnSearchEnabled
             || _combat.AutomaticSearchPaused
             || !localTurnPlayable
-            || !MultiplayerWorldTracker.TryTakeStable(out long worldVersion))
+            || !MultiplayerRouteChangeTracker.TryTakeStable(out long routeVersion))
         {
             return;
         }
@@ -1560,13 +1563,14 @@ internal static partial class SolverController
         int requestId = ++_multiplayerDebounceId;
         Entry.Logger.Info(
             $"[CombatSolver/MultiplayerAdvisor] SEARCH_DEBOUNCED " +
-            $"world_version={worldVersion} request_id={requestId} " +
-            $"delay_ms={MultiplayerWorldTracker.DefaultDebounceMilliseconds}");
+            $"route_version={routeVersion} world_version={MultiplayerWorldTracker.WorldVersion} " +
+            $"request_id={requestId} " +
+            $"delay_ms={MultiplayerRouteChangeTracker.DefaultDebounceMilliseconds}");
         Task operation = StartCombatDeferredOperation(combatToken =>
             RunMultiplayerDebouncedSearchAsync(
                 host,
                 state,
-                worldVersion,
+                routeVersion,
                 requestId,
                 debounceCancellation,
                 combatToken));
@@ -1578,7 +1582,7 @@ internal static partial class SolverController
     private static async Task RunMultiplayerDebouncedSearchAsync(
         NGame host,
         CombatState state,
-        long worldVersion,
+        long routeVersion,
         int requestId,
         CancellationTokenSource debounceCancellation,
         CancellationToken combatToken)
@@ -1598,7 +1602,7 @@ internal static partial class SolverController
             if (requestId != _multiplayerDebounceId
                 || !ReferenceEquals(_multiplayerDebounceCts, debounceCancellation)
                 || !ReferenceEquals(CombatManager.Instance.DebugOnlyGetState(), state)
-                || MultiplayerWorldTracker.WorldVersion != worldVersion
+                || MultiplayerRouteChangeTracker.Version != routeVersion
                 || !CanSolve(state, out _)
                 || (!AutomaticCalculationEnabled && !_combat.MultiplayerSafeAutoEnabled)
                 || !UnattendedTestRunner.AutomaticTurnSearchEnabled
@@ -1607,9 +1611,10 @@ internal static partial class SolverController
                 return;
             }
 
+            long worldVersion = MultiplayerWorldTracker.WorldVersion;
             Entry.Logger.Info(
                 $"[CombatSolver/MultiplayerAdvisor] SEARCH_DEBOUNCED_START " +
-                $"world_version={worldVersion} request_id={requestId}");
+                $"route_version={routeVersion} world_version={worldVersion} request_id={requestId}");
             if (_combat.PendingMultiplayerPlanRefresh)
             {
                 MultiplayerPlanRefreshDecision refreshDecision =
@@ -1631,7 +1636,8 @@ internal static partial class SolverController
         {
             Entry.Logger.Info(
                 $"[CombatSolver/MultiplayerAdvisor] SEARCH_DEBOUNCED_CANCEL " +
-                $"world_version={worldVersion} request_id={requestId}");
+                $"route_version={routeVersion} world_version={MultiplayerWorldTracker.WorldVersion} " +
+                $"request_id={requestId}");
         }
         finally
         {
