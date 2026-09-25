@@ -81,11 +81,12 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 
 ## 搜索效率 E3（2026-09-25，进行中）
 
-- **E3A 固定轮转已通过门禁**：Smart 用药层复用 E2 `SearchMemberExecutionSession`，每 slice 上限为 256 committed parents / 1024 transitions；成员等待期间自己的预算钟暂停，request deadline 仍共享真实墙钟。
-- E3A pinned A/B 已锁定同质量且同固定工作量：串行与固定轮转的动作、boundary、战损、终局 HP、敌方 HP、结束回合、显式药水数、总 expanded/transitions 和逐 `potion_required` transitions 一致；后置成员在前一成员完成前获得真实工作。
-- HEAD `f44c4acc` 的 compatibility run `36098398713` 与 pinned Release run `36098398707` PASS；随后 `280cc0ff` / `16849b4a` 把固定工作门禁与 transition slice 正式锁定。
-- **E3B 当前切片**：固定轮转仍是硬公平底座；每个活跃成员每 epoch 必得 1 个 slice，只有最近产生/改进完整胜利 incumbent 的成员可额外得到 1 个 bonus slice。最终 Smart 结果仍按原低瓶数→高瓶数提交/阈值规则处理。
-- E3B 为内部实验开关，不改生产默认；通过 adaptive/fixed 质量门禁后再进入 E3C 早停/上界。
+- **E3A 固定轮转已通过硬门禁**：Smart 用药层复用 E2 `SearchMemberExecutionSession`，每 slice 上限 256 committed parents / 1024 transitions；成员等待期间自己的预算钟暂停，请求级 deadline 仍按真实墙钟共享。
+- deterministic P0 A/B 已证明 serial 与 fixed 的动作、boundary、战损、终局 HP、敌方 HP、结束回合、显式药水数、总 expanded/transitions 与逐 `potion_required` transitions 一致；后置成员在前一成员完成前获得真实工作。
+- **E3A 现已作为 full-search 生产默认启用**；不新增 UI 开关，不改变目标函数、Beam 排序、Robust、Smart 用药资格、遗物/特殊牌或部署语义。
+- **E3B 自适应仍为实验路径**：按原计划使用同类别 `Δq/Δt` 的 EMA、完整胜利/消除死亡风险独立优先级、确定性 tie-break，并在每个 epoch 保留固定轮转探索底座。请求遥测记录 adaptive bonus slice，防止“名义自适应但实际未运行”。
+- E3B 的验收不再错误要求“实际消耗工作量必须与 fixed 完全相同”；正确要求是同一配置预算上限下不降低最终质量，并稳定改善 time-to-quality 或最终质量。若没有稳定收益，按原计划保留 fixed 作为 E3 交付，不强行启用 adaptive。
+- 当前 pinned harness 会输出 `AdaptiveTriggered`、`AdaptiveReducedWork`、`AdaptiveQualified`，但 E3 的硬 PASS 只由已验证的 fixed 门禁决定；adaptive 只有在资格成立并补足稳定收益证据后才允许进入生产。
 
 ## 当前未验证边界
 
@@ -95,9 +96,9 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 
 ## 下一任务
 
-继续 **E3B：自适应预算分配**。
+完成 **E3B 资格判定**，不要扩展到 E4。
 
-1. 验证 adaptive/fixed 的 pinned 最终质量一致，后置成员不被饿死。
-2. 若 bonus 在代表样本上无收益，保留固定轮转，不为了“自适应”增加复杂度。
-3. E3B 通过后进入 E3C：只加入可证明安全的早停/上界；最后做 E3D 成员间复用。
-4. E1 继续延后；不按卡名、seed、怪物名或单局硬编码调度。
+1. 重跑 pinned evidence，读取 `AdaptiveTriggered / AdaptiveReducedWork / AdaptiveQualified`。
+2. 若 adaptive 未显示稳定收益，关闭 E3：生产保留 E3A fixed；E3B 继续关闭。
+3. 若 adaptive 在同预算下明确改善工作到质量/最终质量，再补未调参样本后决定是否生产启用。
+4. E4 的情景渐进复评、严格上下界属于下一阶段，不混入 E3。

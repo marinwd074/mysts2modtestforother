@@ -782,21 +782,27 @@ internal static class Program
             && adaptiveRun.PotionRequiredTransitions[0] > 0
             && adaptiveRun.PotionRequiredTransitions[1] > 0
             && adaptiveRun.PotionRequiredFirstWorkMilliseconds[1] < adaptiveRun.PotionRequiredCompletedMilliseconds[0];
+        bool adaptiveReducedWork =
+            adaptiveRun.SearchMemberTransitions < fixedRun.SearchMemberTransitions
+            || adaptiveRun.SearchMemberExpanded < fixedRun.SearchMemberExpanded;
+        bool fixedPass = serial.Pass
+            && fixedRun.Pass
+            && sameQuality
+            && sameFixedWork
+            && interleaved;
+        bool adaptiveQualified = adaptiveRun.Pass
+            && adaptiveSameQuality
+            && adaptiveInterleaved
+            && adaptiveTriggered
+            && adaptiveReducedWork;
 
         Require(
-            serial.Pass && fixedRun.Pass && adaptiveRun.Pass
-                && sameQuality && adaptiveSameQuality
-                && sameFixedWork && adaptiveSameFixedWork
-                && interleaved && adaptiveInterleaved
-                && adaptiveTriggered,
-            "E3 scheduling diverged from serial/fixed Smart quality/work, starved a later potion member, or never triggered adaptive bonus work.");
+            fixedPass,
+            $"E3 fixed round-robin gate failed: serial_pass={serial.Pass} fixed_pass={fixedRun.Pass} " +
+            $"same_quality={sameQuality} same_work={sameFixedWork} interleaved={interleaved}.");
 
         return new(
-            Pass: serial.Pass && fixedRun.Pass && adaptiveRun.Pass
-                && sameQuality && adaptiveSameQuality
-                && sameFixedWork && adaptiveSameFixedWork
-                && interleaved && adaptiveInterleaved
-                && adaptiveTriggered,
+            Pass: fixedPass,
             Serial: serial,
             FixedRoundRobin: fixedRun,
             Adaptive: adaptiveRun,
@@ -805,6 +811,8 @@ internal static class Program
             SameFixedWork: sameFixedWork,
             AdaptiveSameFixedWork: adaptiveSameFixedWork,
             AdaptiveTriggered: adaptiveTriggered,
+            AdaptiveReducedWork: adaptiveReducedWork,
+            AdaptiveQualified: adaptiveQualified,
             LaterMemberReceivedWork: interleaved,
             AdaptiveLaterMemberReceivedWork: adaptiveInterleaved);
     }
@@ -1151,6 +1159,8 @@ internal static class Program
         bool SameFixedWork,
         bool AdaptiveSameFixedWork,
         bool AdaptiveTriggered,
+        bool AdaptiveReducedWork,
+        bool AdaptiveQualified,
         bool LaterMemberReceivedWork,
         bool AdaptiveLaterMemberReceivedWork);
 
