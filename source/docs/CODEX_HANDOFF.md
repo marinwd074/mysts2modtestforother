@@ -175,3 +175,6 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 
 
 - local-single-core also disables `MultiplayerCarryRankingContext` inside FinalPlanOrdering when Team Objective is off. Carry remains available to experimental/team-objective tests, but production local quality no longer has a remote-risk tie-break after otherwise equal local routes.
+
+
+- Pinned E1 early-publication A/B no longer treats exact expanded/transition equality as semantic correctness. The callback changes wall-clock overhead while portfolio refinement is time-gated, so exact work can differ even with the same route and quality. `sameWork` remains in evidence; route and final quality are still hard failures.

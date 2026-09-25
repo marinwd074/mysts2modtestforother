@@ -113,7 +113,11 @@ foreach ($scenario in @('simple', 'draw_energy')) {
     $allowedEarlyLagMs = [math]::Min(
         250.0,
         [math]::Max(20.0, $baselineLagMs * 0.75))
-    if (-not $sameRoute -or -not $sameQuality -or -not $sameWork) {
+    # E1 measures publication timing by adding a progress callback. The production
+    # portfolio has wall-clock headroom gates, so callback overhead can legitimately
+    # change how much refinement work fits inside the same time budget. Exact work
+    # identity is therefore diagnostic only; route and final quality remain hard gates.
+    if (-not $sameRoute -or -not $sameQuality) {
         throw "E1 changed final semantics for ${scenario}: route=$sameRoute quality=$sameQuality work=$sameWork."
     }
     if ($earlyLagMs -lt 0 -or $earlyLagMs -gt $allowedEarlyLagMs) {
