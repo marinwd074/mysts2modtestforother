@@ -299,14 +299,6 @@ MultiplayerSafeActionRevalidationFacts RevalidationFacts(bool hasNextAction = tr
     => new(
         NativeLocalActionCaptured: true,
         ActionQueueIdle: true,
-        ExpectedContinuationStateMatched: true,
-        ExpectedRemoteStateMatched: true,
-        LocalCardRemovedFromHand: true,
-        LocalPlayerIdentityStable: true,
-        EnergyStateConsistent: true,
-        TargetIdentityStable: true,
-        RemotePublicStateUnchanged: true,
-        EnemyStateMatchesExpectedTarget: true,
         WorldVersionAdvanced: true,
         WorldVersionStable: true,
         HasNextAction: hasNextAction);
@@ -314,64 +306,32 @@ MultiplayerSafeActionRevalidationFacts RevalidationFacts(bool hasNextAction = tr
 Check(
     MultiplayerSafeExecutePolicy.RevalidateAction(RevalidationFacts())
         == MultiplayerSafeActionRevalidationDecision.SafeToContinue,
-    "A fully matched first action is safe to continue.");
+    "A captured native action with a settled advanced WorldVersion may continue.");
 Check(
     MultiplayerSafeExecutePolicy.RevalidateAction(RevalidationFacts(hasNextAction: false))
         == MultiplayerSafeActionRevalidationDecision.ExpectedLocalChange,
-    "A fully matched final action is recorded as an expected local change.");
-Check(
-    MultiplayerSafeExecutePolicy.RevalidateAction(
-        RevalidationFacts() with
-        {
-            LocalCardRemovedFromHand = false,
-            EnergyStateConsistent = false,
-            RemotePublicStateUnchanged = false,
-            EnemyStateMatchesExpectedTarget = false,
-        })
-        == MultiplayerSafeActionRevalidationDecision.SafeToContinue,
-    "Modeled draw/generation/Choice or multi-target chains continue even when legacy heuristics disagree.");
-Check(
-    MultiplayerSafeExecutePolicy.RevalidateAction(
-        RevalidationFacts() with { ExpectedRemoteStateMatched = false })
-        == MultiplayerSafeActionRevalidationDecision.SafeToContinue,
-    "Remote semantic diagnostics no longer gate an already-captured settled local action.");
-Check(
-    MultiplayerSafeExecutePolicy.RevalidateAction(
-        RevalidationFacts() with { ExpectedContinuationStateMatched = false })
-        == MultiplayerSafeActionRevalidationDecision.SafeToContinue,
-    "Continuation semantic diagnostics no longer gate an already-captured settled local action.");
+    "The final captured action is recorded as the expected local change.");
 Check(
     MultiplayerSafeExecutePolicy.RevalidateAction(
         RevalidationFacts() with { NativeLocalActionCaptured = false })
         == MultiplayerSafeActionRevalidationDecision.ActionMismatch,
-    "A missing expected native local-action attribution fails closed.");
-
-string[] oneEnemyBefore = ["7:VINE:54/100/0:MOVE_A:powers=-"];
-string[] oneEnemyAfter = ["7:VINE:29/100/0:MOVE_A:powers=VULNERABLE:1"];
+    "A missing native local-action attribution stops continuation.");
 Check(
-    MultiplayerSafeExecutePolicy.EnemyStateMatchesExpectedLocalAction(
-        oneEnemyBefore,
-        oneEnemyAfter,
-        targetCombatId: null),
-    "A targetless local card may legitimately mutate existing enemy state without being mistaken for a remote delta.");
+    MultiplayerSafeExecutePolicy.RevalidateAction(
+        RevalidationFacts() with { ActionQueueIdle = false })
+        == MultiplayerSafeActionRevalidationDecision.ActionMismatch,
+    "A still-running native queue stops continuation.");
 Check(
-    !MultiplayerSafeExecutePolicy.EnemyStateMatchesExpectedLocalAction(
-        oneEnemyBefore,
-        [.. oneEnemyAfter, "8:SPAWN:10/10/0:MOVE:powers=-"],
-        targetCombatId: null),
-    "A targetless local card still fails closed if the enemy identity set changes unexpectedly.");
-Check(
-    !MultiplayerSafeExecutePolicy.EnemyStateMatchesExpectedLocalAction(
-        ["7:A:50/50/0:M:powers=-", "8:B:50/50/0:M:powers=-"],
-        ["7:A:40/50/0:M:powers=-", "8:B:40/50/0:M:powers=-"],
-        targetCombatId: 7),
-    "A targeted action still rejects mutation of a different enemy.");
+    MultiplayerSafeExecutePolicy.RevalidateAction(
+        RevalidationFacts() with { WorldVersionAdvanced = false })
+        == MultiplayerSafeActionRevalidationDecision.WorldUnstable,
+    "A non-advanced WorldVersion stops continuation.");
 Check(
     MultiplayerSafeExecutePolicy.RevalidateAction(
         RevalidationFacts() with { WorldVersionStable = false })
         == MultiplayerSafeActionRevalidationDecision.WorldUnstable,
-    "An unstable WorldVersion blocks continuation.");
-conflictSession.Abort("remote_or_unknown_change");
+    "An unstable WorldVersion stops continuation.");
+conflictSession.Abort("world_unstable");
 Check(
     conflictSession.State == MultiplayerSafeExecutionState.Aborted
         && !conflictSession.TryBeginAction(0, "PlayCard:STRIKE:0:target=-", 1, 7, 4, out string abortReason)
@@ -382,19 +342,13 @@ MultiplayerSafeEndTurnFacts EndTurnFacts(bool allowed = true)
     => new(
         CurrentCombatLifecycle: allowed,
         LocalPlayableTurn: allowed,
-        RouteGenerationCurrent: allowed,
-        RouteEndsWithEndTurn: allowed,
-        ActionQueueIdle: allowed,
         NoPendingChoice: allowed,
-        LocalTurnIdentityStable: allowed,
-        WorldVersionMatchesAccepted: allowed,
-        WorldVersionStable: allowed,
-        NoPendingWorldObservation: allowed);
+        WorldVersionStable: allowed);
 
 Check(
     MultiplayerSafeExecutePolicy.ValidateSafeEndTurn(EndTurnFacts())
         == MultiplayerSafeEndTurnDecision.Safe,
-    "A fully revalidated accepted route may consume Safe EndTurn.");
+    "A settled local turn may consume Safe EndTurn.");
 Check(
     MultiplayerSafeExecutePolicy.ValidateSafeEndTurn(
         EndTurnFacts() with { CurrentCombatLifecycle = false })
@@ -402,19 +356,9 @@ Check(
     "A lifecycle change before EndTurn cancels the boundary.");
 Check(
     MultiplayerSafeExecutePolicy.ValidateSafeEndTurn(
-        EndTurnFacts() with { RouteGenerationCurrent = false })
-        == MultiplayerSafeEndTurnDecision.RouteGenerationChanged,
-    "A stale route generation cannot authorize EndTurn.");
-Check(
-    MultiplayerSafeExecutePolicy.ValidateSafeEndTurn(
-        EndTurnFacts() with { RouteEndsWithEndTurn = false })
-        == MultiplayerSafeEndTurnDecision.RouteBoundaryMissing,
-    "Action exhaustion without an accepted EndTurn boundary cannot end the turn.");
-Check(
-    MultiplayerSafeExecutePolicy.ValidateSafeEndTurn(
-        EndTurnFacts() with { ActionQueueIdle = false })
-        == MultiplayerSafeEndTurnDecision.ActionQueuePending,
-    "A pending native action blocks Safe EndTurn.");
+        EndTurnFacts() with { LocalPlayableTurn = false })
+        == MultiplayerSafeEndTurnDecision.NotLocalPlayableTurn,
+    "A non-playable local turn cannot end automatically.");
 Check(
     MultiplayerSafeExecutePolicy.ValidateSafeEndTurn(
         EndTurnFacts() with { NoPendingChoice = false })
@@ -422,14 +366,9 @@ Check(
     "A pending native choice blocks Safe EndTurn.");
 Check(
     MultiplayerSafeExecutePolicy.ValidateSafeEndTurn(
-        EndTurnFacts() with { WorldVersionMatchesAccepted = false })
-        == MultiplayerSafeEndTurnDecision.WorldVersionNotAccepted,
-    "An observed world change not accepted by the session blocks EndTurn.");
-Check(
-    MultiplayerSafeExecutePolicy.ValidateSafeEndTurn(
-        EndTurnFacts() with { NoPendingWorldObservation = false })
-        == MultiplayerSafeEndTurnDecision.WorldObservationPending,
-    "A pending remote observation blocks Safe EndTurn.");
+        EndTurnFacts() with { WorldVersionStable = false })
+        == MultiplayerSafeEndTurnDecision.WorldUnstable,
+    "An unstable WorldVersion blocks Safe EndTurn.");
 
 MultiplayerSafeExecutionSession endTurnSession = new(
     startTurnNumber: 1,

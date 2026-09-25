@@ -49,11 +49,6 @@ try {
         })
     Invoke-Case -Name 'request-id-selects-one-session' -Lines ($base + $secondSession) -ExpectedExitCode 0 -RequestId 12
 
-    $duringRevalidation = @($base | ForEach-Object {
-            $_ -replace 'decision=SafeToContinue reason=safe_to_continue', 'decision=RemoteOrUnknownChange reason=remote_or_unknown_change'
-        })
-    Invoke-Case -Name 'pass-during-revalidation' -Lines $duringRevalidation -ExpectedExitCode 0
-
     $secondAction = $base + @(
         '[CombatSolver/MultiplayerSafeExecute] NATIVE_ACTION_CAPTURED request_id=12 action_index=1 type=PlayCardAction turn=1 card=DEFEND local_net_id=1000 custom_network_api_used=false'
     )
@@ -79,7 +74,7 @@ try {
     )
     Invoke-Case -Name 'two-actions-before-remote-abort' -Lines $twoActionAbort -ExpectedExitCode 0 -MinCompletedActions 2 -MaxActions 6
 
-    Write-Output 'MP2B_INTERFERENCE_VALIDATOR_OK checks=6'
+    Write-Output 'MP2B_INTERFERENCE_VALIDATOR_OK checks=5'
 }
 finally {
     Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue

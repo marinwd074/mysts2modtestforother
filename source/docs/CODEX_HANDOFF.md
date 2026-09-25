@@ -244,3 +244,11 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - Carry Ranking no longer stores or computes duplicate PublicFingerprint / RemotePublicFingerprint values. It uses its captured immutable player/enemy arrays plus WorldVersion.
 - The old MultiplayerContinuationRemoteFingerprint implementation and its probe wrapper were removed after continuation admission stopped consuming them.
 - Evidence validators now key off compact WorldVersion advancement rather than the removed remote-public diagnostic hash.
+
+## 2026-09-25 gate collapse
+
+- Safe Execute post-action revalidation now has only five facts: native action captured, native queue idle, WorldVersion advanced, WorldVersion stable, and whether another planned action exists.
+- Removed the retired hand-removal, energy/stars, target-identity, enemy-delta, remote-delta, and semantic-replay compatibility facts and their failure diagnostics.
+- MultiplayerSafeExecutionBoundary now carries only WorldVersion and observation sequence; it no longer snapshots piles, powers, enemies, teammate state, HP, block, energy, or stars for every played action.
+- Safe EndTurn preflight was reduced from ten duplicated gates to four: current combat lifecycle, local playable turn, no pending choice, and stable WorldVersion. Session.TryBeginEndTurn remains the single owner of turn, route-generation, authorization-state, and accepted-WorldVersion checks.
+- Removed the retired RemoteOrUnknownChange post-action decision and enemy-token heuristic gate. Pre-action WorldVersion invalidation remains the stale-route boundary.

@@ -338,33 +338,24 @@ internal static class Program
             replayA.ContinuationStateText == replayB.ContinuationStateText,
             "U1 production one-action replay is not deterministic.");
 
-        MultiplayerSafeActionRevalidationFacts matchedWithLegacyDisagreement =
-            RevalidationFacts() with
-            {
-                LocalCardRemovedFromHand = false,
-                EnergyStateConsistent = false,
-                TargetIdentityStable = false,
-                RemotePublicStateUnchanged = false,
-                EnemyStateMatchesExpectedTarget = false,
-            };
         MultiplayerSafeActionRevalidationDecision matchedDecision =
-            MultiplayerSafeExecutePolicy.RevalidateAction(matchedWithLegacyDisagreement);
-        MultiplayerSafeActionRevalidationDecision remoteMismatchDecision =
+            MultiplayerSafeExecutePolicy.RevalidateAction(RevalidationFacts());
+        MultiplayerSafeActionRevalidationDecision queueBusyDecision =
             MultiplayerSafeExecutePolicy.RevalidateAction(
-                RevalidationFacts() with { ExpectedRemoteStateMatched = false });
-        MultiplayerSafeActionRevalidationDecision semanticMismatchDecision =
+                RevalidationFacts() with { ActionQueueIdle = false });
+        MultiplayerSafeActionRevalidationDecision worldUnstableDecision =
             MultiplayerSafeExecutePolicy.RevalidateAction(
-                RevalidationFacts() with { ExpectedContinuationStateMatched = false });
+                RevalidationFacts() with { WorldVersionStable = false });
 
         Require(
             matchedDecision == MultiplayerSafeActionRevalidationDecision.SafeToContinue,
-            $"U1 legal modeled chain was rejected: {matchedDecision}.");
+            $"U1 settled native action was rejected: {matchedDecision}.");
         Require(
-            remoteMismatchDecision == MultiplayerSafeActionRevalidationDecision.SafeToContinue,
-            $"U1 remote diagnostic unexpectedly gated continuation: {remoteMismatchDecision}.");
+            queueBusyDecision == MultiplayerSafeActionRevalidationDecision.ActionMismatch,
+            $"U1 busy native action queue was not rejected: {queueBusyDecision}.");
         Require(
-            semanticMismatchDecision == MultiplayerSafeActionRevalidationDecision.SafeToContinue,
-            $"U1 semantic diagnostic unexpectedly gated continuation: {semanticMismatchDecision}.");
+            worldUnstableDecision == MultiplayerSafeActionRevalidationDecision.WorldUnstable,
+            $"U1 unstable WorldVersion was not rejected: {worldUnstableDecision}.");
 
         int turn = LocalContext.GetMe(combat)?.PlayerCombatState?.TurnNumber
             ?? throw new InvalidOperationException("U1 fixture has no local turn.");
@@ -424,9 +415,9 @@ internal static class Program
             EvidenceLevel: "pinned_world_version_revalidation_plus_diagnostic_replay",
             FirstAction: ActionToken(action),
             ReplayDeterministic: true,
-            MatchedLegacyDisagreementDecision: matchedDecision.ToString(),
-            RemoteMismatchDecision: remoteMismatchDecision.ToString(),
-            SemanticMismatchDecision: semanticMismatchDecision.ToString(),
+            SettledDecision: matchedDecision.ToString(),
+            QueueBusyDecision: queueBusyDecision.ToString(),
+            WorldUnstableDecision: worldUnstableDecision.ToString(),
             NormalNextActionAuthorized: true,
             RemoteInsertionRejectedReason: remoteInsertionReason,
             CancelledRetryRejectedReason: cancelReason);
@@ -1103,14 +1094,6 @@ internal static class Program
         => new(
             NativeLocalActionCaptured: true,
             ActionQueueIdle: true,
-            ExpectedContinuationStateMatched: true,
-            ExpectedRemoteStateMatched: true,
-            LocalCardRemovedFromHand: true,
-            LocalPlayerIdentityStable: true,
-            EnergyStateConsistent: true,
-            TargetIdentityStable: true,
-            RemotePublicStateUnchanged: true,
-            EnemyStateMatchesExpectedTarget: true,
             WorldVersionAdvanced: true,
             WorldVersionStable: true,
             HasNextAction: true);
@@ -1244,9 +1227,9 @@ internal static class Program
         string EvidenceLevel,
         string FirstAction,
         bool ReplayDeterministic,
-        string MatchedLegacyDisagreementDecision,
-        string RemoteMismatchDecision,
-        string SemanticMismatchDecision,
+        string SettledDecision,
+        string QueueBusyDecision,
+        string WorldUnstableDecision,
         bool NormalNextActionAuthorized,
         string RemoteInsertionRejectedReason,
         string CancelledRetryRejectedReason);

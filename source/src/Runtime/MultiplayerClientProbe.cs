@@ -61,23 +61,7 @@ internal sealed record MultiplayerProbeSnapshot(
 /// </summary>
 internal sealed record MultiplayerSafeExecutionBoundary(
     long WorldVersion,
-    int ObservationSequence,
-    string? LocalNetId,
-    int RoundNumber,
-    string CurrentSide,
-    int? LocalTurn,
-    string? LocalPhase,
-    int? LocalHp,
-    int? LocalBlock,
-    int? LocalEnergy,
-    int? LocalStars,
-    string[] LocalHand,
-    string[] LocalDrawPile,
-    string[] LocalDiscard,
-    string[] LocalExhaust,
-    string[] LocalPowers,
-    string[] RemotePlayers,
-    string[] Enemies);
+    int ObservationSequence);
 
 /// <summary>
 /// Read-only observation for a network multiplayer client. It may read any combat state
@@ -167,30 +151,10 @@ internal static class MultiplayerClientProbe
     internal static bool ObserveActionBoundary(CombatState state, string reason)
         => ObserveCore(state, reason, bypassSampleInterval: true);
 
-    internal static MultiplayerSafeExecutionBoundary CaptureSafeExecutionBoundary(CombatState state)
-    {
-        Player? localPlayer = LocalContext.GetMe(state);
-        PlayerCombatState? localCombat = localPlayer?.PlayerCombatState;
-        return new(
+    internal static MultiplayerSafeExecutionBoundary CaptureSafeExecutionBoundary()
+        => new(
             WorldVersion: MultiplayerWorldTracker.WorldVersion,
-            ObservationSequence: _observationSequence,
-            LocalNetId: localPlayer?.NetId.ToString(),
-            RoundNumber: state.RoundNumber,
-            CurrentSide: state.CurrentSide.ToString(),
-            LocalTurn: localCombat?.TurnNumber,
-            LocalPhase: localCombat?.Phase.ToString(),
-            LocalHp: localPlayer is null ? null : localPlayer.Creature.CurrentHp,
-            LocalBlock: localPlayer is null ? null : localPlayer.Creature.Block,
-            LocalEnergy: localCombat?.Energy,
-            LocalStars: localCombat?.Stars,
-            LocalHand: localCombat == null ? [] : CardTokens(localCombat.Hand.Cards),
-            LocalDrawPile: localCombat == null ? [] : CardTokens(localCombat.DrawPile.Cards),
-            LocalDiscard: localCombat == null ? [] : CardTokens(localCombat.DiscardPile.Cards),
-            LocalExhaust: localCombat == null ? [] : CardTokens(localCombat.ExhaustPile.Cards),
-            LocalPowers: localPlayer == null ? [] : PowerTokens(localPlayer.Creature.Powers),
-            RemotePlayers: RemotePlayerTokens(state, localPlayer),
-            Enemies: EnemyTokens(state));
-    }
+            ObservationSequence: _observationSequence);
 
     internal static MultiplayerContinuationValidation CaptureContinuationValidation(
         CombatState state,
