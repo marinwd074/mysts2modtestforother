@@ -4,6 +4,11 @@ internal enum SearchRoutePolicy
 {
     SinglePlayerFullRoute,
     MultiplayerCurrentTurnOnly,
+    // Multiplayer runtime boundary with the proven single-player search core.
+    // This keeps local-only deployment/continuation semantics without enabling
+    // teammate prediction, team objectives, robust scenario reranking, or other
+    // multiplayer-specific search behavior.
+    MultiplayerSinglePlayerCore,
     MultiplayerLocalCrossTurn,
 }
 
@@ -46,6 +51,11 @@ internal static class MultiplayerLocalCrossTurnContracts
 
     internal static bool CanUseFullSearchHeuristics(SearchRoutePolicy policy)
         => policy is SearchRoutePolicy.SinglePlayerFullRoute
+            or SearchRoutePolicy.MultiplayerSinglePlayerCore
+            or SearchRoutePolicy.MultiplayerLocalCrossTurn;
+
+    internal static bool HasLocalCrossTurnProjection(SearchRoutePolicy policy)
+        => policy is SearchRoutePolicy.MultiplayerSinglePlayerCore
             or SearchRoutePolicy.MultiplayerLocalCrossTurn;
 
     internal static bool HasActiveMultiplayerRouteSemantics(
@@ -61,7 +71,8 @@ internal static class MultiplayerLocalCrossTurnContracts
             && !completeVictory;
 
     internal static bool CanUsePersistentRouteCache(SearchRoutePolicy policy)
-        => policy == SearchRoutePolicy.SinglePlayerFullRoute;
+        => policy is SearchRoutePolicy.SinglePlayerFullRoute
+            or SearchRoutePolicy.MultiplayerSinglePlayerCore;
 
     internal static bool ShouldExcludeMultiplayerOnlyCard(
         SearchRoutePolicy policy,

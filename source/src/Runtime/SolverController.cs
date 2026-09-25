@@ -430,10 +430,14 @@ internal static partial class SolverController
         SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
         Player localPlayer = LocalContext.GetMe(state)
             ?? throw new InvalidOperationException("当前战斗找不到本地玩家。");
+        bool useMultiplayerPrediction =
+            capabilities.IsMultiplayer && settings.UseMultiplayerPrediction;
         SearchRoutePolicy routePolicy = capabilities.Kind switch
         {
             SolverSessionKind.Singleplayer => SearchRoutePolicy.SinglePlayerFullRoute,
             SolverSessionKind.MultiplayerProbe => SearchRoutePolicy.MultiplayerCurrentTurnOnly,
+            _ when capabilities.CanPlanLocalCrossTurn && !useMultiplayerPrediction
+                => SearchRoutePolicy.MultiplayerSinglePlayerCore,
             _ when capabilities.CanPlanLocalCrossTurn
                 => SearchRoutePolicy.MultiplayerLocalCrossTurn,
             _ => SearchRoutePolicy.MultiplayerCurrentTurnOnly,
@@ -464,8 +468,6 @@ internal static partial class SolverController
                 $"搜索并行度必须在 1..{SolverWeights.MaximumSearchMaxDegreeOfParallelism} 之间，" +
                 $"实际为 {maxDegreeOfParallelism}。");
         }
-        bool useMultiplayerPrediction =
-            capabilities.IsMultiplayer && settings.UseMultiplayerPrediction;
         SearchPolicySnapshot policy = new(
             settings.Profile,
             effectivePotionPolicy,
@@ -533,9 +535,10 @@ internal static partial class SolverController
         {
             string multiplayerQualityMode = useMultiplayerPrediction
                 ? "team_prediction"
-                : "local_single_core";
+                : "single_player_core";
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] MULTIPLAYER_QUALITY_MODE mode={multiplayerQualityMode} " +
+                $"route_policy={routePolicy} " +
                 $"team_objective={useMultiplayerPrediction.ToString().ToLowerInvariant()} " +
                 $"teammate_forecast={useMultiplayerPrediction.ToString().ToLowerInvariant()} " +
                 $"scenario_reevaluation={useMultiplayerPrediction.ToString().ToLowerInvariant()}");

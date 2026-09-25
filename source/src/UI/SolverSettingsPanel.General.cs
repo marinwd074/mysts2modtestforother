@@ -236,9 +236,9 @@ internal sealed partial class SolverSettingsPanel
         _multiplayerPrediction.Toggled += OnMultiplayerPredictionToggled;
         AddBasicRow(
             multiplayerObjectiveGrid,
-            SolverText.Get("启用多人预测算法（实验）"),
+            SolverText.Get("启用多人专用搜索算法（实验）"),
             _multiplayerPrediction,
-            SolverText.Get("默认关闭：使用真实多人战斗状态，但路线按单人核心排序。开启后启用团队目标、队友预测、Scenario/Robust 复评和 Carry 排序；搜索更慢，且此前实战质量可能低于单人核心。"));
+            SolverText.Get("默认关闭：多人使用单人完整路线搜索、排序与剪枝，只保留多人运行和执行边界。开启后才启用多人路线语义、团队目标、队友预测、Scenario/Robust 复评和 Carry 排序。"));
         _multiplayerCombatObjective = CreateMultiplayerCombatObjectiveInput();
         AddBasicRow(
             multiplayerObjectiveGrid,
@@ -248,7 +248,7 @@ internal sealed partial class SolverSettingsPanel
         AddSettingsSection(
             content,
             SolverText.Get("多人模式"),
-            SolverText.Get("默认使用单人质量核心；需要对比实验多人预测时再打开总开关。单人搜索不读取这些设置。"),
+            SolverText.Get("默认多人算法与单人搜索核心一致；所有多人专用搜索算法都必须通过上方总开关显式开启。单人搜索不读取这些设置。"),
             multiplayerObjectiveGrid);
 
         GridContainer interfaceGrid = CreateSettingsGrid();
@@ -486,8 +486,8 @@ internal sealed partial class SolverSettingsPanel
         _multiplayerCombatObjective.Disabled = !enabled;
         SetStatus(
             SolverText.Get(enabled
-                ? "多人预测算法已开启，重新计算后生效"
-                : "多人预测算法已关闭，重新计算后使用单人质量核心"),
+                ? "多人专用搜索算法已开启，重新计算后生效"
+                : "多人专用搜索算法已关闭，重新计算后使用单人搜索核心"),
             SolverUiTokens.Palette.Success);
     }
 
