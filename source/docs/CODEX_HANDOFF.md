@@ -66,15 +66,16 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - 2026-09-25 收到真实双人问题包 `THIEVING_HOPPER_WEAK-9df3f90a...`：Client Probe 明确记录 `players=2`，且 Scenario Matrix 已实际运行两轮；但最终候选排序在 `PolicyActionToken(TeammateForecast)` 抛 `ArgumentOutOfRangeException`，因此本次没有形成完整 E0 selected/published 时间线，不能计为第三个 PASS。根因是通用动作 token 只处理 PlayCard/UsePotion/EndTurn；现已为 `TeammateForecast` 增加稳定 token（含远端玩家、牌、目标），不改排序或搜索语义。
 - **E0 已关闭（2026-09-25）**：三类样本齐全，且第三类为 current HEAD 的真实双人 Host/Client 运行证据。后续不再为了 E0 继续采样，除非改动再次触及搜索成员顺序、候选生成/评估/发布遥测或 E0 validator 语义。
 
-## 搜索效率 E2（2026-09-25，第一切片）
+## 搜索效率 E2（2026-09-25，第一/第二切片）
 
-- 已提交 `d92d25bb`：引入 `SearchStepStatus`、`SearchWorkAllowance`、`SearchStepResult` 与 `IResumableSearch`，先把串行父节点展开变成可恢复的确定性工作单元。
-- 新的 `ParentExpansionSession` 只在一个完整父节点展开、子节点提交且父快照释放之后推进游标；取消发生在下一父节点提交前，不会越过这个安全点。
-- 普通串行搜索使用 unlimited allowance，保持原来连续执行；`VerifyIncrementalSearch=true` 时强制每次只提交 1 个父节点，因此同一真实 `CombatBeamSolver` 会反复经历 `Yielded -> Step -> resume`，并沿用原有固定节点/转移预算。
-- 会话自身保留累计父节点游标；分片之间不重置工作量。内置合同覆盖 continuous 与 single-parent split 的顺序一致、累计预算不重置、预算耗尽以及预取消不提交新工作。
-- 本切片没有改变 Beam 宽度、评分、Robust、portfolio 成员顺序、药水/遗物/特殊牌、多人数值语义或执行权限；并行展开路径也保持原样。
-- 验证已通过：compatibility run `36091943182` 的 static-consistency 与 L1 contract-tests 全 PASS；Pinned 0.107.1 run `36091943224` 的 Release、E0、U0/U1、U2、P0/P1 runtime 与历史 P0 A/B 全链 PASS。P0/P1 的 fixed-work 路径显式使用 `VerifyIncrementalSearch=true` + 单线程，因此真实搜索器实际执行了 single-parent pause/resume 切片。
-- E2 **尚未关闭**：当前 `frontier/completed/current turn layer/playDepth/active/ended/nextPlays/incumbent` 仍由 `SolveCore` 局部生命周期持有，还不能把整个搜索成员交回协调器后再恢复。下一切片要把这些状态收纳为成员级 session，再做完整单成员 continuous-vs-sliced 结果/工作量 A/B。
+- 第一切片提交 `d92d25bb`：引入 `SearchStepStatus`、`SearchWorkAllowance`、`SearchStepResult` 与 `IResumableSearch`，先把串行父节点展开变成可恢复的确定性工作单元；安全点位于一个完整父节点展开、子节点提交和父快照释放之后。
+- 第二切片当前代码 HEAD `3628f87e`：把搜索成员长期可变状态集中进 `SearchMemberSessionState`。当前由它持有 incumbent/current-turn preview、frontier/completed、每个出牌深度的 active/ended/nextPlays/activeIndex、fallback、路线接管状态以及父展开/剪枝内存高水位；root 仍只读。
+- 新增仅供 E2 deterministic 验证的 `ResumableParentCommitSliceForTesting`。生产 capture 保持 `null`，连续执行逻辑不改变；pinned A/B 可设为 `1`，让同一真实 `CombatBeamSolver` 在每个完整父节点后 `Yielded -> Step -> resume`。
+- 取消在下一父节点提交前被观察到时，会先释放 `SearchMemberSessionState` 当前持有的 live simulator，再传播取消；恢复继续沿用同一 member state 和累计节点/转移预算，不重新建根。
+- P0 pinned fixed-work 已增加真正的同根 A/B：continuous 与 one-parent sliced 的 **18 个动作逐项相同**；两者均为 `NodeLimit`、projected loss=0、final HP=66、enemy HP=4、expanded=1200、choice branches=0、continuations=3、transitions=5958。该门禁比较完整动作 token、终局字段和真实请求级工作量，不拿墙钟等价代替语义等价。
+- 最终验证：compatibility run `36093479460` 的 static-consistency + L1 contract-tests 全 PASS；Pinned 0.107.1 run `36093479346` 的 Release、E0、U0/U1、U2、P0 contracts、P0/P1 runtime、历史 P0 A/B 全链 PASS。
+- 本阶段没有改变 Beam 宽度、评分、Robust、portfolio 成员顺序、药水/遗物/特殊牌、多人数值语义或执行权限；日志字段名保持既有兼容格式。
+- E2 **尚未关闭**：目前 `SearchMemberSessionState` 虽然已持久化关键搜索状态，但 `SolveCore` 仍在同一次调用栈中把成员连续跑到底；`playDepth`、回合层预算/计时和阶段推进控制还没有被一个可返回给协调器的成员级 `Step()` 完整拥有。因此现在已证明“父节点切片可恢复且等价”，还没有证明“整个搜索成员可被协调器暂停后稍后恢复”。
 
 ## 当前未验证边界
 
@@ -84,11 +85,12 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 
 ## 下一任务
 
-继续 **E2 第二切片**，暂不进入 E3，也不回头做 E1：
+继续 **E2 第三切片**，仍不进入 E3：
 
-1. 把 `frontier/completed/current turn layer/playDepth/active/ended/nextPlays`、fallback/incumbent、下一父节点游标与累计工作量，从 `SolveCore` 局部变量收纳到单个成员拥有的 resumable session；root 继续只读。
-2. 协调器仍按旧策略把同一成员连续 Step 到结束；本阶段不交错 portfolio 成员、不改成员顺序、不加早停/上界，先隔离“状态可恢复”这一项变量。
-3. 增加固定 deterministic work A/B：同一 root 连续 unlimited 与多段 allowance 恢复后，最终 actions、终局快照/BoundaryReason、候选顺序、expanded/transition 总量必须一致；取消后不得保留会继续扩展的 simulator，恢复不得重置预算。
-4. 只有完整单成员 pause/resume 等价性闭环后才进入 E3 的 portfolio 调度；Beam/评分/Robust/药水遗物/特殊牌/多人权限继续冻结。
+1. 建立真正的成员级 execution session，让 `playDepth`、turn-layer 预算/计时、阶段位置和 `SearchMemberSessionState` 一起被 `Step(SearchWorkAllowance)` 持有；`SolveCore`/协调器可以在安全点收到 `Yielded`，之后再调用同一个 session 恢复。
+2. 第一版调度仍只运行**一个成员直到完成**，不交错 portfolio 成员、不改成员顺序、不加 E3 早停/上界；先把“可返回再恢复”的语义单独闭环。
+3. 保留 deterministic A/B：continuous 与分段执行必须保持完整 actions、终局快照/BoundaryReason、expanded、transitions 一致；至少覆盖 one-parent slice 和一个较粗 slice。取消/Dispose 后不得残留可继续扩展的 live simulator。
+4. 只有成员级 session 能真正离开调用栈并恢复、且上述 A/B 通过后，才关闭 E2 并进入 E3 portfolio 调度/早停/上界与成员间复用。
+5. Beam/评分/Robust/药水遗物/特殊牌/多人权限继续冻结。
 
 每次只推进一个小阶段，并在结束时更新本 handoff；不要重新创建阶段流水账文档。
