@@ -5,6 +5,7 @@ using MegaCrit.Sts2.Core.Models.Monsters;
 using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.MonsterMoves.Intents;
 using MegaCrit.Sts2.Core.MonsterMoves.MonsterMoveStateMachine;
+using CombatSolver.Engine.Common;
 using CombatSolver.Engine.InCombat.Simulation;
 
 namespace CombatSolver;
@@ -242,16 +243,83 @@ internal sealed partial class SimulatedCombatState
     private void SetDeathPhase(Creature creature, PredictedDeathPhase phase)
         => (_deathPhases ??= [])[creature] = phase;
 
+    private const int InlineDeathPhaseCapacity = 32;
+
     private void AppendDeathLifecycleFingerprint(ref StateFingerprintBuilder fingerprint)
     {
-        if (_deathPhases == null)
+        if (_deathPhases is not { Count: > 0 })
             return;
-        foreach ((Creature creature, PredictedDeathPhase phase) in _deathPhases
-                     .OrderBy(entry => entry.Key.CombatId))
+
+        int count = _deathPhases.Count;
+        Span<long> sortKeys = count <= InlineDeathPhaseCapacity
+            ? stackalloc long[InlineDeathPhaseCapacity]
+            : new long[count];
+        Span<uint> ids = count <= InlineDeathPhaseCapacity
+            ? stackalloc uint[InlineDeathPhaseCapacity]
+            : new uint[count];
+        Span<int> phases = count <= InlineDeathPhaseCapacity
+            ? stackalloc int[InlineDeathPhaseCapacity]
+            : new int[count];
+
+        int next = 0;
+        foreach ((Creature creature, PredictedDeathPhase phase) in _deathPhases)
+        {
+            uint? combatId = creature.CombatId;
+            sortKeys[next] = combatId.HasValue ? combatId.Value : -1L;
+            ids[next] = combatId ?? uint.MaxValue;
+            phases[next] = (int)phase;
+            next++;
+        }
+
+        for (int index = 1; index < count; index++)
+        {
+            long key = sortKeys[index];
+            uint id = ids[index];
+            int phase = phases[index];
+            int scan = index - 1;
+            while (scan >= 0 && sortKeys[scan] > key)
+            {
+                sortKeys[scan + 1] = sortKeys[scan];
+                ids[scan + 1] = ids[scan];
+                phases[scan + 1] = phases[scan];
+                scan--;
+            }
+            sortKeys[scan + 1] = key;
+            ids[scan + 1] = id;
+            phases[scan + 1] = phase;
+        }
+
+        if (FastLaneVerification.Enabled)
+            VerifyDeathLifecycleOrder(ids[..count], phases[..count]);
+
+        for (int index = 0; index < count; index++)
         {
             fingerprint.Add('L');
-            fingerprint.Add(creature.CombatId ?? uint.MaxValue);
-            fingerprint.Add((int)phase);
+            fingerprint.Add(ids[index]);
+            fingerprint.Add(phases[index]);
+        }
+    }
+
+    private void VerifyDeathLifecycleOrder(ReadOnlySpan<uint> ids, ReadOnlySpan<int> phases)
+    {
+        int index = 0;
+        foreach ((Creature creature, PredictedDeathPhase phase) in _deathPhases!
+                     .OrderBy(entry => entry.Key.CombatId))
+        {
+            uint expectedId = creature.CombatId ?? uint.MaxValue;
+            if (index >= ids.Length || ids[index] != expectedId || phases[index] != (int)phase)
+            {
+                throw new InvalidOperationException(
+                    "Death lifecycle fingerprint fast lane diverged from OrderBy at index " +
+                    $"{index}: expected ({expectedId},{(int)phase}), got " +
+                    (index < ids.Length ? $"({ids[index]},{phases[index]})" : "<past end>") + ".");
+            }
+            index++;
+        }
+        if (index != ids.Length)
+        {
+            throw new InvalidOperationException(
+                $"Death lifecycle fingerprint fast lane produced {ids.Length} entries, OrderBy produced {index}.");
         }
     }
 }

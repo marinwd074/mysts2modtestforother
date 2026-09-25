@@ -48,6 +48,12 @@ internal static class AfterCardPlayedMirrors
         LateRegistry.Invoke(listener, context);
     }
 
+    internal static MirrorDispatchKind ResolveDispatchKind(AbstractModel listener)
+        => Registry.ResolveDispatchKind(listener);
+
+    internal static MirrorDispatchKind ResolveLateDispatchKind(AbstractModel listener)
+        => LateRegistry.ResolveDispatchKind(listener);
+
     public static void CompleteOrAbort(
         CombatPredictionSimulator simulator,
         CardPlay cardPlay,

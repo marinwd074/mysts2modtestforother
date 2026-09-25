@@ -193,3 +193,10 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - Adapted the Hand Drill hook to the pinned 0.107.1 path in `AfterDamageGivenMirrors`; the newer-version hook path is kept aligned as well.
 - Backported upstream PR #134's bounded fresh-resource stand-pat lane: only the first 64 candidates in existing beam order receive the expensive cross-turn roll-out.
 - Deliberately did not merge upstream UI, Loadout, ServerGC, or newer-game-version compatibility changes.
+
+## 2026-09-25 upstream hot-path backport
+
+- Backported upstream PR #125 fast lanes without changing search ordering or budgets.
+- AfterBlockBroken, AfterCardPlayed, AfterAttack, and AfterModifyingHpLostAfterOsty now use the existing mirrored-hook participation mask instead of scanning listeners that cannot handle the hook.
+- The hook enumerator now applies masks independently to segmented run-listener snapshots and has an unsuspended cleanup mode for paired attack state.
+- Death lifecycle fingerprinting replaces per-node LINQ OrderBy allocations with stable inline sorting; COMBATSOLVER_VERIFY_FAST_LANES=1 can reconcile both fast lanes against the old behavior.

@@ -23,6 +23,9 @@ internal static class AfterBlockBrokenMirrors
         Registry.Invoke(listener, context);
     }
 
+    internal static MirrorDispatchKind ResolveDispatchKind(AbstractModel listener)
+        => Registry.ResolveDispatchKind(listener);
+
     private static Registry CreateRegistry()
     {
         var registry = new Registry(AfterBlockBroken);

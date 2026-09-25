@@ -10,6 +10,7 @@ using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Relics;
 using MegaCrit.Sts2.Core.ValueProps;
 using CombatSolver.Engine.Common;
+using CombatSolver.Engine.Common.Mirrors;
 using CombatSolver.Engine.InCombat.Mirrors.Hooks.Attack;
 using CombatSolver.Engine.InCombat.Mirrors.Hooks.Block;
 using CombatSolver.Engine.InCombat.Mirrors.Hooks.Card;
@@ -210,7 +211,18 @@ internal static partial class HookMirrors
             Breaker = breaker
         };
 
-        foreach (var listener in context.State.IterateHookListeners())
+        IReadOnlyList<AbstractModel> listeners = MirroredCombatHookListeners(simulator);
+        if (VerifyHookListenerMask)
+        {
+            VerifyMaskedListenersAreNoOps(
+                listeners,
+                MirroredHookMask.AfterBlockBroken,
+                nameof(AbstractModel.AfterBlockBroken),
+                static listener => IsDispatched(AfterBlockBrokenMirrors.ResolveDispatchKind(listener)));
+        }
+
+        foreach (var listener in new HookListenerEnumerable(
+            simulator, listeners, MirroredHookMask.AfterBlockBroken))
         {
             AfterBlockBrokenMirrors.Invoke(listener, context);
             if (simulator.HasPendingChoice)
@@ -668,14 +680,36 @@ internal static partial class HookMirrors
             CardPlay = cardPlay
         };
 
-        foreach (var listener in context.State.IterateHookListeners())
+        IReadOnlyList<AbstractModel> listeners = MirroredCombatHookListeners(simulator);
+        if (VerifyHookListenerMask)
+        {
+            VerifyMaskedListenersAreNoOps(
+                listeners,
+                MirroredHookMask.AfterCardPlayed,
+                nameof(AbstractModel.AfterCardPlayed),
+                static listener => IsDispatched(AfterCardPlayedMirrors.ResolveDispatchKind(listener)));
+        }
+
+        foreach (var listener in new HookListenerEnumerable(
+            simulator, listeners, MirroredHookMask.AfterCardPlayed))
         {
             AfterCardPlayedMirrors.Invoke(listener, context);
             if (simulator.HasPendingChoice)
                 return;
         }
 
-        foreach (var listener in context.State.IterateHookListeners())
+        IReadOnlyList<AbstractModel> lateListeners = MirroredCombatHookListeners(simulator);
+        if (VerifyHookListenerMask)
+        {
+            VerifyMaskedListenersAreNoOps(
+                lateListeners,
+                MirroredHookMask.AfterCardPlayedLate,
+                nameof(AbstractModel.AfterCardPlayedLate),
+                static listener => IsDispatched(AfterCardPlayedMirrors.ResolveLateDispatchKind(listener)));
+        }
+
+        foreach (var listener in new HookListenerEnumerable(
+            simulator, lateListeners, MirroredHookMask.AfterCardPlayedLate))
         {
             AfterCardPlayedMirrors.InvokeLate(listener, context);
             if (simulator.HasPendingChoice)
@@ -902,10 +936,20 @@ internal static partial class HookMirrors
     {
         // Preserve listener materialization, including the generic source fallback, even
         // when there is no modifier to notify. The empty pass invokes no callbacks.
-        HookListenerEnumerable listeners = IterateRunHookListeners(simulator);
+        HookListenerEnumerable listeners = IterateRunHookListeners(
+            simulator, MirroredHookMask.AfterModifyingHpLostAfterOsty);
         if (modifiers.Count == 0)
             return;
         var context = new AfterModifyingHpLostMirrorContext { Simulator = simulator };
+        if (VerifyHookListenerMask)
+        {
+            VerifyMaskedListenersAreNoOps(
+                MirroredRunHookListeners(simulator),
+                MirroredHookMask.AfterModifyingHpLostAfterOsty,
+                nameof(AbstractModel.AfterModifyingHpLostAfterOsty),
+                static candidate => IsDispatched(
+                    AfterModifyingHpLostAfterOstyMirrors.ResolveDispatchKind(candidate)));
+        }
 
         foreach (var modifier in listeners)
         {
@@ -1014,12 +1058,16 @@ internal static partial class HookMirrors
     public static void AfterAttack(CombatPredictionSimulator simulator, AttackCommand command)
     {
         var context = new AfterAttackMirrorContext { Simulator = simulator, Command = command };
-        IReadOnlyList<AbstractModel> listeners = simulator.State.IterateHookListeners();
+        IReadOnlyList<AbstractModel> listeners = MirroredCombatHookListeners(simulator);
         bool completed = false;
+
+        if (VerifyHookListenerMask)
+            VerifyAfterAttackMask(listeners);
 
         try
         {
-            foreach (var listener in listeners)
+            foreach (var listener in new HookListenerEnumerable(
+                simulator, listeners, MirroredHookMask.AfterAttack))
             {
                 AfterAttackMirrors.Invoke(listener, context);
                 if (simulator.HasPendingChoice)
@@ -1029,10 +1077,21 @@ internal static partial class HookMirrors
         }
         finally
         {
-            foreach (AbstractModel listener in listeners)
+            foreach (AbstractModel listener in HookListenerEnumerable.Unsuspended(
+                listeners, MirroredHookMask.AfterAttack))
+            {
                 AfterAttackMirrors.CompleteOrAbortPairedState(listener, context, completed);
+            }
         }
     }
+
+    private static void VerifyAfterAttackMask(IReadOnlyList<AbstractModel> listeners)
+        => VerifyMaskedListenersAreNoOps(
+            listeners,
+            MirroredHookMask.AfterAttack,
+            nameof(AbstractModel.AfterAttack),
+            static listener => IsDispatched(AfterAttackMirrors.ResolveDispatchKind(listener))
+                || AfterAttackMirrors.HasPairedState(listener));
 
     // Clears command-scoped BeforeAttack bookkeeping when the containing action
     // suspends. This deliberately does not record an attack, invoke ordinary
@@ -1041,8 +1100,15 @@ internal static partial class HookMirrors
     public static void AbortAttack(CombatPredictionSimulator simulator, AttackCommand command)
     {
         var context = new AfterAttackMirrorContext { Simulator = simulator, Command = command };
-        foreach (AbstractModel listener in simulator.State.IterateHookListeners())
+        IReadOnlyList<AbstractModel> listeners = MirroredCombatHookListeners(simulator);
+        if (VerifyHookListenerMask)
+            VerifyAfterAttackMask(listeners);
+
+        foreach (AbstractModel listener in HookListenerEnumerable.Unsuspended(
+            listeners, MirroredHookMask.AfterAttack))
+        {
             AfterAttackMirrors.CompleteOrAbortPairedState(listener, context, completed: false);
+        }
     }
 
     // Mirrors Hook.ShouldDie followed by Hook.ShouldDieLate, including first-preventer short-circuiting.
@@ -1272,26 +1338,19 @@ internal static partial class HookMirrors
     // search allocation source, so iterate the immutable listener snapshot by index instead.
     private readonly struct HookListenerEnumerable
     {
-        // 运行级监听表可能是"根牌组前缀 + 战斗监听表"的拼接视图。走视图自己的索引器意味着
-        // 每个元素两次接口调用外加一次分支；这里拆成两段各自按下标推进，元素与顺序不变。
         private readonly IReadOnlyList<AbstractModel> _first;
         private readonly IReadOnlyList<AbstractModel>? _second;
 
-        private readonly CombatPredictionSimulator _simulator;
-        private readonly int[]? _filteredIndices;
+        private readonly CombatPredictionSimulator? _simulator;
+        private readonly MirroredHookMask _mask;
 
-        public HookListenerEnumerable(CombatPredictionSimulator simulator, IReadOnlyList<AbstractModel> listeners,
+        public HookListenerEnumerable(CombatPredictionSimulator? simulator, IReadOnlyList<AbstractModel> listeners,
             MirroredHookMask mask = MirroredHookMask.All)
         {
             _simulator = simulator;
-            _filteredIndices = null;
-            if (listeners is MirroredHookListenerSnapshot snapshot)
-            {
-                if (!snapshot.HasAny(mask))
-                    listeners = Array.Empty<AbstractModel>();
-                else
-                    _filteredIndices = snapshot.Layout.IndicesFor(mask);
-            }
+            _mask = mask;
+            if (listeners is MirroredHookListenerSnapshot snapshot && !snapshot.HasAny(mask))
+                listeners = Array.Empty<AbstractModel>();
             if (listeners is ISegmentedModelList segmented)
             {
                 _first = segmented.Prefix;
@@ -1304,8 +1363,11 @@ internal static partial class HookMirrors
             }
         }
 
+        public static HookListenerEnumerable Unsuspended(IReadOnlyList<AbstractModel> listeners, MirroredHookMask mask)
+            => new(simulator: null, listeners, mask);
+
         public Enumerator GetEnumerator()
-            => new(_simulator, _first, _second, _filteredIndices);
+            => new(_simulator, _first, _second, _mask);
 
         public bool Contains(AbstractModel candidate)
         {
@@ -1325,35 +1387,33 @@ internal static partial class HookMirrors
         }
 
         internal struct Enumerator(
-            CombatPredictionSimulator simulator,
+            CombatPredictionSimulator? simulator,
             IReadOnlyList<AbstractModel> first,
             IReadOnlyList<AbstractModel>? second,
-            int[]? filteredIndices)
+            MirroredHookMask mask)
         {
             private IReadOnlyList<AbstractModel> _segment = first;
             private IReadOnlyList<AbstractModel>? _pending = second;
             private int _index = -1;
-            private int[]? _filteredIndices = filteredIndices;
+            private MirroredHookListenerSnapshot? _filtered = first as MirroredHookListenerSnapshot;
 
-            public AbstractModel Current
-                => _filteredIndices is { } indices
-                    ? _segment[indices[_index]]
-                    : _segment[_index];
+            public AbstractModel Current => _segment[_index];
 
             public bool MoveNext()
             {
-                // Mirrored listeners are synchronous projections of async vanilla hooks. A
-                // nested card choice is their suspension boundary: no later listener or later
-                // hook phase may run until the containing action is replayed with that choice.
-                if (simulator.HasPendingChoice)
+                if (simulator is { HasPendingChoice: true })
                     return false;
                 int next = _index + 1;
-                if (_filteredIndices is { } indices)
+                if (_filtered is { } filtered)
                 {
-                    if (next < indices.Length)
+                    while (next < filtered.Layout.Entries.Length)
                     {
-                        _index = next;
-                        return true;
+                        if ((filtered.Layout.Entries[next].Mask & mask) != 0)
+                        {
+                            _index = next;
+                            return true;
+                        }
+                        next++;
                     }
                 }
                 else if (next < _segment.Count)
@@ -1364,13 +1424,51 @@ internal static partial class HookMirrors
                 if (_pending is null)
                     return false;
                 _segment = _pending;
+                _filtered = _segment as MirroredHookListenerSnapshot;
                 _pending = null;
-                _filteredIndices = null;
                 _index = -1;
                 return MoveNext();
             }
         }
     }
+
+    internal static bool VerifyHookListenerMask => FastLaneVerification.Enabled;
+
+    private static IReadOnlyList<AbstractModel> MirroredCombatHookListeners(CombatPredictionSimulator simulator)
+        => simulator.State.CombatState is ICombatPredictionHookListenerSource source
+            ? source.MirroredHookListeners
+            : simulator.State.IterateHookListeners();
+
+    private static IReadOnlyList<AbstractModel> MirroredRunHookListeners(CombatPredictionSimulator simulator)
+        => simulator.State.CombatState is ICombatPredictionHookListenerSource source
+            ? source.MirroredRunHookListeners
+            : Array.Empty<AbstractModel>();
+
+    private static void VerifyMaskedListenersAreNoOps(
+        IReadOnlyList<AbstractModel> listeners,
+        MirroredHookMask mask,
+        string hookName,
+        Func<AbstractModel, bool> wouldActOnUnfilteredPath)
+    {
+        if (listeners is not MirroredHookListenerSnapshot snapshot)
+            return;
+
+        MirroredHookListenerLayout layout = snapshot.Layout;
+        for (int index = 0; index < layout.Entries.Length && index < listeners.Count; index++)
+        {
+            if ((layout.Entries[index].Mask & mask) != 0)
+                continue;
+            AbstractModel skipped = listeners[index];
+            if (!wouldActOnUnfilteredPath(skipped))
+                continue;
+            throw new InvalidOperationException(
+                $"Hook listener mask for {hookName} skipped {skipped.GetType().FullName}, " +
+                "but the unfiltered path would have dispatched it.");
+        }
+    }
+
+    private static bool IsDispatched(MirrorDispatchKind kind)
+        => kind is not (MirrorDispatchKind.NotOverridden or MirrorDispatchKind.Ignored);
 
     /// <summary>
     /// Mirrors <see cref="MegaCrit.Sts2.Core.Runs.IRunState.IterateHookListeners"/> with the simulator's combat state.
