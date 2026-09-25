@@ -1282,7 +1282,7 @@ internal sealed partial class CombatBeamSolver
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] SEARCH_MEMORY_RESUMED " +
                 $"reason={reason} checkpoint={signal.ReclaimCount} " +
-                $"frontier={frontierNodes} member.Ended={endedNodes} expanded={_run.Expanded} " +
+                $"frontier={frontierNodes} ended={endedNodes} expanded={_run.Expanded} " +
                 $"turn_layer={member.SearchedTurnLayers} play_depth={playDepth}");
             PublishProgress(
                 _startTurnNumber + member.SearchedTurnLayers,
@@ -1386,7 +1386,7 @@ internal sealed partial class CombatBeamSolver
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] SEARCH_MEMORY_RESUMED " +
                 $"reason={reason}_default_gc checkpoint={signal.ReclaimCount} " +
-                $"frontier={frontierNodes} member.Ended={endedNodes} expanded={_run.Expanded} " +
+                $"frontier={frontierNodes} ended={endedNodes} expanded={_run.Expanded} " +
                 $"turn_layer={member.SearchedTurnLayers} play_depth={playDepth}");
             PublishProgress(
                 _startTurnNumber + member.SearchedTurnLayers,
@@ -1651,7 +1651,7 @@ internal sealed partial class CombatBeamSolver
                     policy.Diagnostics.Info(
                         $"[CombatSolver/Test] SEARCH_MEMORY_RESUMED " +
                         $"checkpoint={policy.MemoryPressureSignal.ReclaimCount} " +
-                        $"frontier={member.Active.Count} member.Ended={member.Ended.Count} expanded={_run.Expanded} " +
+                        $"frontier={member.Active.Count} ended={member.Ended.Count} expanded={_run.Expanded} " +
                         $"turn_layer={member.SearchedTurnLayers} play_depth={member.PlayDepth}");
                     PublishProgress(
                         _startTurnNumber + member.SearchedTurnLayers,
@@ -1992,7 +1992,7 @@ internal sealed partial class CombatBeamSolver
                                 $"signal_enabled={policy.MemoryPressureSignal.IsEnabled.ToString().ToLowerInvariant()} " +
                                 $"remaining_before={waveRemainingBefore} process_allocated_bytes={waveAllocated} " +
                                 $"reserved_bytes={reservedWaveBytes} raw_candidates={rawCandidateCount} " +
-                                $"pending_plays={member.NextPlays.Count} member.Ended={member.Ended.Count} " +
+                                $"pending_plays={member.NextPlays.Count} ended={member.Ended.Count} " +
                                 $"gc_pause_ms={(GC.GetTotalPauseDuration() - wavePauseBefore).TotalMilliseconds:F3}");
                         }
                         ReclaimAfterCommittedWork("after_parallel_wave");
