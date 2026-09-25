@@ -735,6 +735,7 @@ internal static class Program
                 FinalEnemyHp: result.Snapshot.EnemyHp,
                 CombatEndedTurn: result.CombatEndedTurn,
                 ExplicitPotionCount: result.ExplicitPotionCount,
+                AdaptiveBonusSlices: telemetry.E3AdaptiveBonusSlices,
                 SearchMemberExpanded: members.Sum(member => member.ExpandedNodes),
                 SearchMemberTransitions: members.Sum(member => member.TransitionCount),
                 PotionRequiredMembers: potionMembers.Length,
@@ -775,6 +776,8 @@ internal static class Program
         bool adaptiveSameFixedWork = fixedRun.SearchMemberExpanded == adaptiveRun.SearchMemberExpanded
             && fixedRun.SearchMemberTransitions == adaptiveRun.SearchMemberTransitions
             && fixedRun.PotionRequiredTransitions.SequenceEqual(adaptiveRun.PotionRequiredTransitions);
+        bool adaptiveTriggered = fixedRun.AdaptiveBonusSlices == 0
+            && adaptiveRun.AdaptiveBonusSlices > 0;
         bool adaptiveInterleaved = adaptiveRun.PotionRequiredMembers >= 2
             && adaptiveRun.PotionRequiredTransitions[0] > 0
             && adaptiveRun.PotionRequiredTransitions[1] > 0
@@ -784,14 +787,16 @@ internal static class Program
             serial.Pass && fixedRun.Pass && adaptiveRun.Pass
                 && sameQuality && adaptiveSameQuality
                 && sameFixedWork && adaptiveSameFixedWork
-                && interleaved && adaptiveInterleaved,
-            "E3 scheduling diverged from serial/fixed Smart quality/work or starved a later potion member.");
+                && interleaved && adaptiveInterleaved
+                && adaptiveTriggered,
+            "E3 scheduling diverged from serial/fixed Smart quality/work, starved a later potion member, or never triggered adaptive bonus work.");
 
         return new(
             Pass: serial.Pass && fixedRun.Pass && adaptiveRun.Pass
                 && sameQuality && adaptiveSameQuality
                 && sameFixedWork && adaptiveSameFixedWork
-                && interleaved && adaptiveInterleaved,
+                && interleaved && adaptiveInterleaved
+                && adaptiveTriggered,
             Serial: serial,
             FixedRoundRobin: fixedRun,
             Adaptive: adaptiveRun,
@@ -799,6 +804,7 @@ internal static class Program
             AdaptiveSameQuality: adaptiveSameQuality,
             SameFixedWork: sameFixedWork,
             AdaptiveSameFixedWork: adaptiveSameFixedWork,
+            AdaptiveTriggered: adaptiveTriggered,
             LaterMemberReceivedWork: interleaved,
             AdaptiveLaterMemberReceivedWork: adaptiveInterleaved);
     }
@@ -1126,6 +1132,7 @@ internal static class Program
         int FinalEnemyHp,
         int? CombatEndedTurn,
         int ExplicitPotionCount,
+        int AdaptiveBonusSlices,
         long SearchMemberExpanded,
         long SearchMemberTransitions,
         int PotionRequiredMembers,
@@ -1143,6 +1150,7 @@ internal static class Program
         bool AdaptiveSameQuality,
         bool SameFixedWork,
         bool AdaptiveSameFixedWork,
+        bool AdaptiveTriggered,
         bool LaterMemberReceivedWork,
         bool AdaptiveLaterMemberReceivedWork);
 

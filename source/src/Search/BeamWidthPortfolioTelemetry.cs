@@ -95,8 +95,14 @@ internal sealed class BeamWidthPortfolioTelemetry
     private long _peakManagedHeapBytes;
     private long _nextCandidateId;
     private int _nextSearchMemberId;
+    private int _e3AdaptiveBonusSlices;
 
     public long RequestStartedTicks => _requestStartedTicks;
+
+    public int E3AdaptiveBonusSlices
+    {
+        get { lock (_gate) return _e3AdaptiveBonusSlices; }
+    }
 
     /// <summary>基线成员完成并按今天的方式发布给覆盖层的时刻，相对本次搜索请求开始。</summary>
     public double? FirstRoutePublishedMilliseconds
@@ -177,6 +183,12 @@ internal sealed class BeamWidthPortfolioTelemetry
         lock (_gate)
             _searchMembers.Add(memberId, report);
         return memberId;
+    }
+
+    public void RecordE3AdaptiveBonusSlice()
+    {
+        lock (_gate)
+            _e3AdaptiveBonusSlices = checked(_e3AdaptiveBonusSlices + 1);
     }
 
     public void RecordSearchMemberFirstWork(int memberId)

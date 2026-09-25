@@ -1887,6 +1887,7 @@ internal static partial class CombatSearchCoordinator
                     int? bonusPotionCount = E3AdaptiveBudgetPolicy.SelectBonusMember(signals);
                     if (bonusPotionCount is { } bonus && active.ContainsKey(bonus))
                     {
+                        policy.PortfolioTelemetry?.RecordE3AdaptiveBonusSlice();
                         policy.Diagnostics.Info(
                             $"[CombatSolver/Test] E3_ADAPTIVE_BUDGET epoch={epoch} bonus_member={bonus} " +
                             $"priority={pendingPriorities.GetValueOrDefault(bonus)} " +
