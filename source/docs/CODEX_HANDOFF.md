@@ -229,3 +229,10 @@ U0–U6 的实现与 pinned/合同阶段均已完成。U5/U6 的部分真实 Hos
 - Safe-execution boundary snapshots no longer compute duplicate local/remote fingerprints.
 - Multiplayer root capture no longer runs the full post-capture pile/orb/remote-fingerprint verification pass.
 - Core search StateFingerprint remains intact for beam deduplication, transpositions, cycle detection, RNG/state identity, and other search semantics.
+
+## 2026-09-25 continuation fingerprint removal
+
+- Removed the dedicated multiplayer continuation remote-state fingerprint from SimulationSnapshot, continuation expectations, validation input, and reuse matching.
+- Continuation reuse still requires the existing ContinuationStamp plus combat/local-player identity, multiplayer scaling/card rules, and an advanced WorldVersion.
+- Search retention no longer computes a teammate-state fingerprint at every future turn boundary, and terminal continuation building no longer replays solely to recover that fingerprint.
+- The carry-ranking fingerprint is intentionally left separate for now; it is not a continuation admission gate.

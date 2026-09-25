@@ -666,26 +666,17 @@ internal sealed partial class CombatBeamSolver
         {
             return;
         }
-        bool continuationComplete = node.Snapshot.Continuation != null
-            && (!root.AllowsLocalPlayerOnlySearch
-                || node.Snapshot.ContinuationRemoteFingerprint != null);
-        if (continuationComplete)
+        if (node.Snapshot.Continuation != null)
             return;
         CombatPredictionSimulator simulator =
             (CombatPredictionSimulator)node.Snapshot.Simulator;
-        StateFingerprint? remoteFingerprint = root.AllowsLocalPlayerOnlySearch
-            ? MultiplayerContinuationRemoteFingerprint.CapturePredicted(
-                simulator,
-                _player)
-            : null;
         node.Snapshot.SetContinuation(
             ContinuationStamp.CapturePredicted(
                 _player,
                 simulator,
                 node.Turn,
                 _forecast,
-                _startTurnNumber),
-            remoteFingerprint);
+                _startTurnNumber));
     }
 
     private static void ValidateHistoricalSimulatorsReleased(IReadOnlyList<SearchNode> candidates)

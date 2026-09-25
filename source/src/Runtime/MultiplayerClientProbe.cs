@@ -219,7 +219,6 @@ internal static class MultiplayerClientProbe
         return new MultiplayerContinuationValidation(
             ContinuationStamp.CaptureLiveCombatIdentity(state),
             localPlayer?.NetId.ToString() ?? string.Empty,
-            ContinuationRemotePublicFingerprint(state, localPlayer),
             state.MultiplayerScalingModel?.ShouldReceiveCombatHooks,
             state.RunState.CardMultiplayerConstraint.ToString(),
             MultiplayerWorldTracker.WorldVersion,

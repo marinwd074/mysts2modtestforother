@@ -205,12 +205,6 @@ internal static partial class SolverController
             MultiplayerContinuationExpectation? expectedMultiplayer =
                 expectedContinuation?.MultiplayerExpectation;
             string continuationRejectReason = "none";
-            string expectedRemoteFingerprint = expectedMultiplayer == null
-                ? "-"
-                : $"{expectedMultiplayer.RemotePublicFingerprint.First:x16}{expectedMultiplayer.RemotePublicFingerprint.Second:x16}";
-            string actualRemoteFingerprint = multiplayerValidation == null
-                ? "-"
-                : $"{multiplayerValidation.RemotePublicFingerprint.First:x16}{multiplayerValidation.RemotePublicFingerprint.Second:x16}";
             if (continuationStamp != null && capabilities.IsMultiplayer)
             {
                 Entry.Logger.Info(
@@ -219,7 +213,6 @@ internal static partial class SolverController
                     $"source_world_version={expectedMultiplayer?.SourceWorldVersion.ToString() ?? "-"} " +
                     $"minimum_world_version={multiplayerValidation?.MinimumWorldVersion.ToString() ?? "-"} " +
                     $"actual_world_version={multiplayerValidation?.CurrentWorldVersion.ToString() ?? "-"} " +
-                    $"expected_remote_fp={expectedRemoteFingerprint} actual_remote_fp={actualRemoteFingerprint} " +
                     $"fresh_probe_changed={freshProbeChanged.ToString().ToLowerInvariant()}");
             }
             if (continuationStamp != null
@@ -260,13 +253,7 @@ internal static partial class SolverController
                         reused!,
                         UnexpectedReplanCount > 0,
                         _combat.ReviewedWorldlinesTotal));
-                bool softRemoteReuse = string.Equals(
-                    continuationRejectReason,
-                    "remote_public_soft_reuse",
-                    StringComparison.Ordinal);
-                string reuseValidation = softRemoteReuse
-                    ? "exact_local_state_remote_public_soft"
-                    : "exact_state_text";
+                const string reuseValidation = "exact_state_text";
                 Entry.Logger.Info(
                     $"[CombatSolver/Test] SEARCH_REUSED from_turn={reused!.ReusedFromTurn} " +
                     $"turn={reused.StartTurnNumber} validation={reuseValidation} " +
@@ -281,7 +268,7 @@ internal static partial class SolverController
                         $"source_world_version={expectedMultiplayer?.SourceWorldVersion.ToString() ?? "-"} " +
                         $"minimum_world_version={multiplayerValidation?.MinimumWorldVersion.ToString() ?? "-"} " +
                         $"actual_world_version={multiplayerValidation?.CurrentWorldVersion.ToString() ?? "-"} " +
-                        $"local_state_exact=true reason={(softRemoteReuse ? "remote_public_soft_reuse" : "exact")}");
+                        $"local_state_exact=true reason=exact");
                 }
                 Entry.Logger.Info(SolverDiagnostics.DescribeResult(reused));
                 if (_combat.FullAutoEnabled)
@@ -336,7 +323,6 @@ internal static partial class SolverController
                     $"previous_boundary={source.BoundaryReason} " +
                     $"continuation_reject_reason={continuationRejectReason} " +
                     $"local_state_exact={localStateExact.ToString().ToLowerInvariant()} " +
-                    $"expected_remote_fp={expectedRemoteFingerprint} actual_remote_fp={actualRemoteFingerprint} " +
                     $"diff_count={_combat.LastContinuationDifferences.Count} {difference}");
                 if (_combat.LastContinuationDifferences.Count > 0)
                 {
@@ -356,7 +342,6 @@ internal static partial class SolverController
                         $"minimum_world_version={multiplayerValidation?.MinimumWorldVersion.ToString() ?? "-"} " +
                         $"actual_world_version={multiplayerValidation?.CurrentWorldVersion.ToString() ?? "-"} " +
                         $"local_state_exact={localStateExact.ToString().ToLowerInvariant()} " +
-                        $"expected_remote_fp={expectedRemoteFingerprint} actual_remote_fp={actualRemoteFingerprint} " +
                         $"reason={continuationRejectReason}");
                 }
             }

@@ -1368,7 +1368,6 @@ internal sealed class SimulationSnapshot(
     public SearchBoundaryReason BoundaryReason { get; } = boundaryReason;
     public IReadOnlyList<PredictionGap> PredictionGaps { get; } = predictionGaps;
     public ContinuationStamp? Continuation { get; private set; }
-    public StateFingerprint? ContinuationRemoteFingerprint { get; private set; }
 
     public CombatPredictionSimulator Simulator => _simulator
         ?? throw new InvalidOperationException(
@@ -1376,12 +1375,9 @@ internal sealed class SimulationSnapshot(
 
     public bool HasSimulator => _simulator != null;
 
-    public void SetContinuation(
-        ContinuationStamp continuation,
-        StateFingerprint? remoteFingerprint = null)
+    public void SetContinuation(ContinuationStamp continuation)
     {
         Continuation = continuation;
-        ContinuationRemoteFingerprint = remoteFingerprint;
     }
 
     public void ReleaseSimulator(
@@ -1457,7 +1453,6 @@ internal sealed record SolverSnapshot(
 internal sealed record MultiplayerContinuationExpectation(
     string CombatIdentity,
     string LocalNetId,
-    StateFingerprint RemotePublicFingerprint,
     bool? MultiplayerScalingHooks,
     string CardMultiplayerConstraint,
     long SourceWorldVersion);
@@ -1465,7 +1460,6 @@ internal sealed record MultiplayerContinuationExpectation(
 internal sealed record MultiplayerContinuationValidation(
     string CombatIdentity,
     string LocalNetId,
-    StateFingerprint RemotePublicFingerprint,
     bool? MultiplayerScalingHooks,
     string CardMultiplayerConstraint,
     long CurrentWorldVersion,
@@ -1720,8 +1714,6 @@ internal sealed class SolverResult
                 actualMultiplayer.CombatIdentity,
                 expected.LocalNetId,
                 actualMultiplayer.LocalNetId,
-                expected.RemotePublicFingerprint,
-                actualMultiplayer.RemotePublicFingerprint,
                 expected.MultiplayerScalingHooks,
                 actualMultiplayer.MultiplayerScalingHooks,
                 expected.CardMultiplayerConstraint,
@@ -1733,26 +1725,9 @@ internal sealed class SolverResult
                 MultiplayerLocalCrossTurnContracts.DescribeContinuationMismatch(matchInput);
             if (mismatch is not null)
             {
-                // ExpectedState == actual above is the hard local/enemy/RNG contract.
-                // The legacy RemotePublicFingerprint now also contains teammate cards,
-                // resources and potions that are readable in the local process. A mismatch
-                // therefore cannot be classified as harmless HP/block drift; the soft-reuse
-                // hook below intentionally fails closed and forces a fresh search.
-                if (string.Equals(
-                        mismatch,
-                        "remote_public_mismatch",
-                        StringComparison.Ordinal)
-                    && MultiplayerLocalCrossTurnContracts.CanSoftReuseRemotePublicDelta(
-                        matchInput))
-                {
-                    rejectionReason = "remote_public_soft_reuse";
-                }
-                else
-                {
-                    rejectionReason = mismatch;
-                    continuation = null;
-                    return false;
-                }
+                rejectionReason = mismatch;
+                continuation = null;
+                return false;
             }
         }
         if (!BestNode.Actions.Any(action => action.Turn == cached.StartTurnNumber))

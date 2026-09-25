@@ -26,8 +26,6 @@ internal readonly record struct MultiplayerContinuationMatchInput(
     string ActualCombatIdentity,
     string ExpectedLocalNetId,
     string ActualLocalNetId,
-    StateFingerprint ExpectedRemotePublicFingerprint,
-    StateFingerprint ActualRemotePublicFingerprint,
     bool? ExpectedMultiplayerScalingHooks,
     bool? ActualMultiplayerScalingHooks,
     string ExpectedCardMultiplayerConstraint,
@@ -155,16 +153,6 @@ internal static class MultiplayerLocalCrossTurnContracts
     internal static bool IsExactContinuation(MultiplayerContinuationMatchInput input)
         => DescribeContinuationMismatch(input) is null;
 
-    /// <summary>
-    /// Legacy compatibility hook. The remote fingerprint now includes every teammate
-    /// combat field already readable in the local process (cards/resources/potions in
-    /// addition to public HP/block/powers), so a mismatch can no longer be proven to be
-    /// harmless public drift. Fail closed and force a fresh search.
-    /// </summary>
-    internal static bool CanSoftReuseRemotePublicDelta(
-        MultiplayerContinuationMatchInput input)
-        => false;
-
     internal static string? DescribeContinuationMismatch(
         MultiplayerContinuationMatchInput input)
     {
@@ -188,8 +176,6 @@ internal static class MultiplayerLocalCrossTurnContracts
         {
             return "local_net_id_mismatch";
         }
-        if (input.ExpectedRemotePublicFingerprint != input.ActualRemotePublicFingerprint)
-            return "remote_public_mismatch";
         if (input.ExpectedMultiplayerScalingHooks != input.ActualMultiplayerScalingHooks)
             return "scaling_mismatch";
         if (!string.Equals(

@@ -17,20 +17,18 @@ Check(
     "E5 action enumeration prioritizes estimated lethal, urgent defense, strategic value-per-resource, then preserves stable original order for exact ties.");
 
 MultiplayerContinuationMatchInput Match(
-    StateFingerprint? remote = null,
     string combatIdentity = "combat-a",
-    long actualWorldVersion = 12)
+    long actualWorldVersion = 12,
+    string actualConstraint = "Shared")
     => new(
         ExpectedCombatIdentity: "combat-a",
         ActualCombatIdentity: combatIdentity,
         ExpectedLocalNetId: "local-1",
         ActualLocalNetId: "local-1",
-        ExpectedRemotePublicFingerprint: Fingerprint(1),
-        ActualRemotePublicFingerprint: remote ?? Fingerprint(1),
         ExpectedMultiplayerScalingHooks: true,
         ActualMultiplayerScalingHooks: true,
         ExpectedCardMultiplayerConstraint: "Shared",
-        ActualCardMultiplayerConstraint: "Shared",
+        ActualCardMultiplayerConstraint: actualConstraint,
         ExpectedSourceWorldVersion: 10,
         MinimumWorldVersion: 10,
         ActualWorldVersion: actualWorldVersion);
@@ -155,24 +153,13 @@ Check(
     "An exact local continuation requires a strictly advanced WorldVersion and matching public inputs.");
 
 Check(
-    !MultiplayerLocalCrossTurnContracts.IsExactContinuation(Match(remote: Fingerprint(2)))
-        && MultiplayerLocalCrossTurnContracts.DescribeContinuationMismatch(Match(remote: Fingerprint(2)))
-            == "remote_public_mismatch"
-        && !MultiplayerLocalCrossTurnContracts.IsExactContinuation(Match(actualWorldVersion: 10))
+    !MultiplayerLocalCrossTurnContracts.IsExactContinuation(Match(actualWorldVersion: 10))
         && MultiplayerLocalCrossTurnContracts.DescribeContinuationMismatch(Match(actualWorldVersion: 10))
-            == "world_version_not_advanced",
-    "A remote public delta or a non-advanced WorldVersion rejects future-route reuse with a precise reason.");
-
-Check(
-    !MultiplayerLocalCrossTurnContracts.CanSoftReuseRemotePublicDelta(
-        Match(remote: Fingerprint(2)))
-        && !MultiplayerLocalCrossTurnContracts.CanSoftReuseRemotePublicDelta(
-            Match(remote: Fingerprint(1)))
-        && !MultiplayerLocalCrossTurnContracts.CanSoftReuseRemotePublicDelta(
-            Match(remote: Fingerprint(2), actualWorldVersion: 10))
-        && !MultiplayerLocalCrossTurnContracts.CanSoftReuseRemotePublicDelta(
-            Match(remote: Fingerprint(2), combatIdentity: "combat-b")),
-    "A locally readable teammate-state delta always rejects soft reuse and requires a fresh search.");
+            == "world_version_not_advanced"
+        && !MultiplayerLocalCrossTurnContracts.IsExactContinuation(Match(actualConstraint: "LocalOnly"))
+        && MultiplayerLocalCrossTurnContracts.DescribeContinuationMismatch(Match(actualConstraint: "LocalOnly"))
+            == "card_constraint_mismatch",
+    "Continuation reuse keeps WorldVersion and shared-rule boundaries without a teammate-state fingerprint gate.");
 
 string refreshBase =
     "combat_identity=seed=s;players=1,2;enemies=10:A;local_net_id=1;round=1;side=Player;phase=Play;turn=1;" +

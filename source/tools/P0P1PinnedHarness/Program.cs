@@ -363,11 +363,9 @@ internal static class Program
         List<CachedContinuation> mutable = result.Continuations as List<CachedContinuation>
             ?? result.Continuations.ToList();
         CachedContinuation cached = mutable[0];
-        StateFingerprint expectedRemote = new(0x504f5f4a4f494e54UL, 0x52455553455f3031UL);
         MultiplayerContinuationExpectation expectation = new(
             cached.ExpectedState.CombatIdentity,
             root.PlayerIdentity.NetId.ToString(),
-            expectedRemote,
             MultiplayerScalingHooks: true,
             CardMultiplayerConstraint: "P0_PINNED",
             SourceWorldVersion: 10);
@@ -381,7 +379,6 @@ internal static class Program
         MultiplayerContinuationValidation exact = new(
             expectation.CombatIdentity,
             expectation.LocalNetId,
-            expectation.RemotePublicFingerprint,
             expectation.MultiplayerScalingHooks,
             expectation.CardMultiplayerConstraint,
             CurrentWorldVersion: 12,
@@ -400,12 +397,9 @@ internal static class Program
         Require(continuation is { WasReused: true }, "P0 Joint reuse did not materialize a reused result.");
         Require(exactReason == "none", $"P0 Joint exact reuse reason changed: {exactReason}.");
 
-        StateFingerprint mismatchFingerprint = new(
-            expectedRemote.First ^ 0x1UL,
-            expectedRemote.Second ^ 0x100UL);
         MultiplayerContinuationValidation mismatch = exact with
         {
-            RemotePublicFingerprint = mismatchFingerprint,
+            CardMultiplayerConstraint = "P0_MISMATCH",
             CurrentWorldVersion = 13,
             MinimumWorldVersion = 12,
         };
@@ -419,7 +413,7 @@ internal static class Program
             out string mismatchReason);
         Require(!mismatchedReuse && rejected == null, "P0 Joint mismatch incorrectly reused the old route.");
         Require(
-            mismatchReason == "remote_public_mismatch",
+            mismatchReason == "card_constraint_mismatch",
             $"P0 Joint mismatch reason changed: {mismatchReason}.");
 
         return new(
