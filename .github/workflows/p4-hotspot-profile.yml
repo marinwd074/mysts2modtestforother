@@ -76,3 +76,56 @@ jobs:
             "P4_PROFILE_TIME scenario=$scenario data=$($timeTop | ConvertTo-Json -Compress)"
             "P4_PROFILE_ALLOC scenario=$scenario data=$($allocTop | ConvertTo-Json -Compress)"
           }
+
+      - name: P4 calculated-history fresh-process A/B
+        shell: pwsh
+        run: |
+          $harness = '.\source\tools\E0PinnedHarness\bin\Release\net9.0\E0PinnedHarness.dll'
+          foreach ($scenario in @('teammate', 'draw_energy')) {
+            $baselineDir = Join-Path $env:RUNNER_TEMP "p4-ab-$scenario-baseline"
+            $candidateDir = Join-Path $env:RUNNER_TEMP "p4-ab-$scenario-candidate"
+            New-Item -ItemType Directory -Force -Path $baselineDir,$candidateDir | Out-Null
+
+            $baselineLines = @(& dotnet $harness --scenario $scenario --out $baselineDir --p4-profile --p4-legacy-history-scan --max-nodes 2000 --budget-ms 15000 2>&1)
+            $baselineExit = $LASTEXITCODE
+            $baselineLines | ForEach-Object { Write-Host $_ }
+            if ($baselineExit -ne 0) { throw "P4 baseline failed for $scenario." }
+
+            $candidateLines = @(& dotnet $harness --scenario $scenario --out $candidateDir --p4-profile --max-nodes 2000 --budget-ms 15000 2>&1)
+            $candidateExit = $LASTEXITCODE
+            $candidateLines | ForEach-Object { Write-Host $_ }
+            if ($candidateExit -ne 0) { throw "P4 candidate failed for $scenario." }
+
+            $baseline = Get-Content -LiteralPath (Join-Path $baselineDir "e0-$scenario.json") -Raw | ConvertFrom-Json
+            $candidate = Get-Content -LiteralPath (Join-Path $candidateDir "e0-$scenario.json") -Raw | ConvertFrom-Json
+
+            $sameRoute = (@($baseline.route) -join [char]31) -eq (@($candidate.route) -join [char]31)
+            $sameQuality = $baseline.projectedBattleHpLost -eq $candidate.projectedBattleHpLost -and
+              $baseline.projectedBattlePotionCount -eq $candidate.projectedBattlePotionCount -and
+              $baseline.combatEndedTurn -eq $candidate.combatEndedTurn -and
+              $baseline.boundaryReason -eq $candidate.boundaryReason
+            $sameWork = $baseline.totalExpandedNodes -eq $candidate.totalExpandedNodes -and
+              $baseline.totalTransitionCount -eq $candidate.totalTransitionCount
+
+            $baselineCombat = @($baseline.performance | Where-Object name -eq 'combat_fingerprint')[0]
+            $candidateCombat = @($candidate.performance | Where-Object name -eq 'combat_fingerprint')[0]
+
+            $baselineDetailLine = @($baselineLines | Where-Object { "$_" -like 'P4_FINGERPRINT_DETAIL*' })[-1]
+            $candidateDetailLine = @($candidateLines | Where-Object { "$_" -like 'P4_FINGERPRINT_DETAIL*' })[-1]
+            if ($null -eq $baselineDetailLine -or $null -eq $candidateDetailLine) {
+              throw "P4 fingerprint detail missing for $scenario."
+            }
+            $baselineDetail = ("$baselineDetailLine" -split ' data=',2)[1] | ConvertFrom-Json
+            $candidateDetail = ("$candidateDetailLine" -split ' data=',2)[1] | ConvertFrom-Json
+            $baselineTurn = @($baselineDetail | Where-Object phase -eq 'TurnState')[0]
+            $candidateTurn = @($candidateDetail | Where-Object phase -eq 'TurnState')[0]
+
+            "P4_HISTORY_AB scenario=$scenario same_route=$sameRoute same_quality=$sameQuality same_work=$sameWork baseline_nodes=$($baseline.totalExpandedNodes) candidate_nodes=$($candidate.totalExpandedNodes) baseline_turn_ms=$($baselineTurn.elapsedMs) candidate_turn_ms=$($candidateTurn.elapsedMs) baseline_turn_alloc=$($baselineTurn.allocatedBytes) candidate_turn_alloc=$($candidateTurn.allocatedBytes) baseline_combat_ms=$($baselineCombat.elapsedMs) candidate_combat_ms=$($candidateCombat.elapsedMs) baseline_combat_alloc=$($baselineCombat.allocatedBytes) candidate_combat_alloc=$($candidateCombat.allocatedBytes)"
+
+            if (-not $sameRoute -or -not $sameQuality -or -not $sameWork) {
+              throw "P4 calculated-history fast path changed route/quality/work for $scenario."
+            }
+            if ($candidateTurn.allocatedBytes -ge $baselineTurn.allocatedBytes) {
+              throw "P4 calculated-history fast path did not reduce TurnState allocations for $scenario."
+            }
+          }
