@@ -1,0 +1,64 @@
+name: P2 targeted validation
+
+on:
+  push:
+    branches:
+      - p2-validation
+    paths:
+      - '.github/workflows/p2-targeted-validation.yml'
+      - 'source/**'
+
+permissions:
+  contents: read
+
+jobs:
+  p2-targeted:
+    runs-on: windows-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+          lfs: false
+
+      - name: Fetch pinned 0.107.1 game references
+        shell: pwsh
+        run: |
+          git lfs pull --include="game-body/data_sts2_windows_x86_64/sts2.dll,game-body/data_sts2_windows_x86_64/0Harmony.dll,game-body/data_sts2_windows_x86_64/GodotSharp.dll" --exclude=""
+          $dll = '.\game-body\data_sts2_windows_x86_64\sts2.dll'
+          $actual = (Get-FileHash -LiteralPath $dll -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expected = 'a1f9e653f1e28e4076558fee1e60d218619cb7e057b887c6417f62c62c6d7a52'
+          if ($actual -ne $expected) {
+            throw "Pinned sts2.dll hash mismatch. expected=$expected actual=$actual"
+          }
+
+      - name: Fetch pinned RitsuLib 0.107.1 compatibility package
+        shell: pwsh
+        run: |
+          $uri = 'https://github.com/BAKAOLC/STS2-RitsuLib/releases/download/v0.6.2/STS2.RitsuLib.Compat.0.107.1.0.6.2.github.zip'
+          $zip = Join-Path $env:RUNNER_TEMP 'ritsulib-0.107.1-0.6.2.zip'
+          Invoke-WebRequest -Uri $uri -OutFile $zip
+          $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expected = '8cb0bc276d3c64dde5ea5415e1738808dcbe71f0a0baf3ef51008ae6dde13517'
+          if ($actual -ne $expected) {
+            throw "RitsuLib package hash mismatch. expected=$expected actual=$actual"
+          }
+          $out = Join-Path $env:RUNNER_TEMP 'ritsulib'
+          Expand-Archive -LiteralPath $zip -DestinationPath $out -Force
+          $props = Get-ChildItem -LiteralPath $out -Recurse -Filter 'RitsuLib.References.props' | Select-Object -First 1
+          if ($null -eq $props) {
+            throw 'RitsuLib.References.props not found in pinned compatibility package.'
+          }
+          "RITSU_PROPS=$($props.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Release build
+        shell: pwsh
+        run: |
+          $gameData = (Resolve-Path '.\game-body\data_sts2_windows_x86_64').Path
+          dotnet build '.\source\CombatSolver.csproj' -c Release -p:CopyModOnBuild=false -p:Sts2DataDir="$gameData" -p:RitsuLibReferencesProps="$env:RITSU_PROPS" -p:RitsuLibReferenceTarget='0.107.1' -p:TreatWarningsAsErrors=true --nologo
+
+      - name: P2 local-cross-turn contracts
+        shell: pwsh
+        run: |
+          dotnet run --project '.\source\tools\MultiplayerLocalCrossTurnChecks\MultiplayerLocalCrossTurnChecks.csproj' -c Release --nologo
