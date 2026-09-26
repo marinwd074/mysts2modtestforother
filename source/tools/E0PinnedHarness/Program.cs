@@ -303,15 +303,15 @@ internal static class Program
                 ModelDb.AllPotions,
                 "FIRE_POTION",
                 "potion").ToMutable();
-            PotionModel blockPotion = ResolveUnique(
+            PotionModel strengthPotion = ResolveUnique(
                 ModelDb.AllPotions,
-                "BLOCK_POTION",
+                "STRENGTH_POTION",
                 "potion").ToMutable();
             if (!local.AddPotionInternal(firePotion, 0, silent: false).success
-                || !local.AddPotionInternal(blockPotion, 1, silent: false).success)
+                || !local.AddPotionInternal(strengthPotion, 1, silent: false).success)
             {
                 throw new InvalidOperationException(
-                    "Could not add P3 local FIRE_POTION/BLOCK_POTION fixture.");
+                    "Could not add P3 local FIRE_POTION/STRENGTH_POTION fixture.");
             }
         }
 
