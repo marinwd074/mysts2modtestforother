@@ -34,6 +34,8 @@
 
 ## 3. 看多少回合：按事件闭合，而非固定截断
 
+网上上游复核后的约束：两回合只是优先完成的比较窗口，**没有证据证明它是《杀戮尖塔 2》的最佳固定视野**。先保留上游不限固定回合数的求解能力，只改变结果发布和增量工作的安排；窗口内非终局候选的正式采用须单独验证。详见第10节。
+
 ### 3.1 三种长度分开
 
 | 长度 | 建议起点 | 作用 |
@@ -184,8 +186,8 @@ GPU、学习型价值网络和 MCTS 可作为以后独立实验：现有 C# 规�
 
 | 阶段 | GPT 要完成的修改 | 最小验收 | 依赖/回滚 |
 |---|---|---|---|
-| A 现状与测量 | 沿当前调用链确认候选发布时间、重搜原因、已有复用，扩展现有诊断计数 | 同一输入结果不变；区分冷搜、精确续用、重放 | 起点；仅诊断可独立撤回 |
-| B 延迟影响合同 | 扩展跨回合 evidence 与评估元数据，首先覆盖下一回合确定副作用；共同窗口比较 | 延迟负效应、慢收益、当回合斩杀三类不双算、不漏算 | 先旁路对照，排序迁移独立提交 |
+| A 现状与测量 | 沿当前调用链确认候选发布时间、重搜原因、已有复用；对照第10节固定上游源码，区分已有能力、可移植改进及本 fork 独有边界 | 同一输入结果不变；区分冷搜、精确续用、重放 | 起点；仅诊断可独立撤回 |
+| B 延迟影响合同 | 先对照上游 CrossTurnProbe、PowerCommitment，再扩展缺失的负债/覆盖元数据；核实已模拟效果而非重复扣费 | 延迟负效应、慢收益、当回合斩杀三类不双算、不漏算 | 先旁路对照，排序迁移独立提交 |
 | C 战斗级 R0 转移缓存 | 审计键/所有权，抽取纯值转移结果；先只跨同战斗请求复用 | 开/关缓存逐状态和结果一致；RNG/Choice/版本变化不得假命中 | B 可并行概念设计，实施串行；开关可禁用 |
 | D 新根恢复 R1 | 保留 frontier/候选，从真实新根精确接入或重放，回传受影响评价 | 精确命中、轻微 drift、斩杀阈值变化各走正确分支 | C；失败只撤缓存采用，原求解仍可用 |
 | E 前台/后台分离 | 先发布已获准当前建议，后台恢复探索；引入时域/负债调度 | 旧 epoch 不发布、不部署；前台质量门槛不降低 | B–D；保留原完整搜索对照 |
@@ -241,3 +243,40 @@ GPT 负责代码、精确合同、构建与允许的 pinned 回放、诊断分�
 - [A Local Monte Carlo Tree Search Approach in Deterministic Planning，AAAI 2011](https://ojs.aaai.org/index.php/AAAI/article/view/8039)：作为后续局部探索研究入口，不能替代本项目 Beam 基线对照。
 
 本文具体窗口、数据结构、阶段划分与时延目标是针对当前仓库的工程建议，不是上述论文对本游戏的结论。最优先落地的是 **延迟负债不能漏算、精确成果跨请求保留、真实新根重新授权**；磁盘和更多计算资源用于扩大可靠成果复用。
+
+## 10. 官方游戏与 CombatSolver 上游网上复核
+
+核对日期：2026-09-27。本地基线为 `eb70db3`；通过 GitHub API 将本次上游读取固定为 [`d231e9e51a0e58d6bfa1373c6265cce13ffd9a45`](https://github.com/Torch1230/CombatSolver/tree/d231e9e51a0e58d6bfa1373c6265cce13ffd9a45)。这是定向源码核对，不是上游全仓审计或性能验证。此前版本已检查本地实现，但未直接检查网上上游源码；本节补足该证据边界。
+
+### 10.1 游戏、来源和版本边界
+
+- 游戏是 Mega Crit 的《杀戮尖塔 2》。官方商店明确支持最多4人合作、多人专属牌与团队配合；这支持“队友变化是预测环境的一部分”，但不证明具体事件次序、共享 RNG 或某张牌的固定版本语义。[官方 Steam 页面](https://store.steampowered.com/app/2868840/Slay_the_Spire_2/)
+- 本 fork 的直接上游是 Torch1230/CombatSolver；其公开说明定位为单人求解器，使用预算约束的 Beam Search，已有跨回合预测与路线复用，没有固定回合数/洗牌次数上限。公开 README 当次列出的目标是 STS2 `0.111.0`，本 fork 固定 `0.107.1`，不能以相同 Mod 版本号判断兼容。[上游说明](https://github.com/Torch1230/CombatSolver/tree/d231e9e51a0e58d6bfa1373c6265cce13ffd9a45#readme)
+- 模拟底座还使用并改造了 Random Foreseer 的部分实现。应区分“模拟引擎来源”和“CombatSolver 的搜索/路线执行扩展”；不能把整个算法统一归为 MCTS 或从零开发。来源、许可仍由现有 [THIRD_PARTY_NOTICES](../THIRD_PARTY_NOTICES.md) 管理。
+
+### 10.2 可直接指向代码的核对结果
+
+以下链接均固定同一上游提交；表中“缺口”只针对本次读取范围，不把未找到等同于全仓不存在。
+
+| 上游一手源码 | 核对到的机制 | 对本方案的修正或限制 |
+|---|---|---|
+| [CombatBeamSolver.Phases.cs](https://github.com/Torch1230/CombatSolver/blob/d231e9e51a0e58d6bfa1373c6265cce13ffd9a45/src/Search/CombatBeamSolver.Phases.cs) | `SolveCore` 明确拒绝 `root.PlayerCount != 1`，使用独立根的求解生命周期 | 多人同步与新根复用不能直接套上游单人合同 |
+| [CombatSearchCoordinator.cs](https://github.com/Torch1230/CombatSolver/blob/d231e9e51a0e58d6bfa1373c6265cce13ffd9a45/src/Search/CombatSearchCoordinator.cs) | Beam portfolio、可选 Novelty、成员准入与剩余工作预算编排 | 保留主引擎；先测哪个成员产出好候选，不新增另一套主搜索器 |
+| [SolverSearchProfile.cs](https://github.com/Torch1230/CombatSolver/blob/d231e9e51a0e58d6bfa1373c6265cce13ffd9a45/src/Search/SolverSearchProfile.cs) | 含默认启用的 `ReallocatedRefinementPortfolio`、`StopPortfolioAtHpTarget`，以及标注离线实验的选项 | 属候选移植内容；不能将实验字段全部视为生产能力，不能直接导入会改变本 fork 预算分配的默认值 |
+| [CrossTurnPlanning.cs](https://github.com/Torch1230/CombatSolver/blob/d231e9e51a0e58d6bfa1373c6265cce13ffd9a45/src/Search/CombatBeamSolver.CrossTurnPlanning.cs) | stand-pat 对照、语义已改变但收益尚未显现的 probe 保留 | 本方案账本须扩展已有证据，不能声称上游只顾当前收益 |
+| [PowerCommitmentRetention.cs](https://github.com/Torch1230/CombatSolver/blob/d231e9e51a0e58d6bfa1373c6265cce13ffd9a45/src/Search/PowerCardValuation/Commitments/PowerCommitmentRetention.cs) | 按 commitment 家族、已实现/进展证据、未实现净值等选择保留候选 | B阶段先审计此机制与本地准备牌保留的重叠；它是保路机制，不是所有跨回合负债都已正确计价的证明 |
+| [RoundTransition.cs](https://github.com/Torch1230/CombatSolver/blob/d231e9e51a0e58d6bfa1373c6265cce13ffd9a45/src/Search/CombatBeamSolver.RoundTransition.cs) | 下一回合能量消费、EndTurn 重放、回合开始 Choice checkpoint | 下一回合成本可能已由模拟器执行；先查丢失在枚举、保留、边界或最终排序，禁止重复收费 |
+| [Transpositions.cs](https://github.com/Torch1230/CombatSolver/blob/d231e9e51a0e58d6bfa1373c6265cce13ffd9a45/src/Search/CombatBeamSolver.Transpositions.cs) | 同状态保留非支配路径标签 | 跨请求缓存必须保留路径目标维度，不能退化为 State→单一分数 |
+| [SolvedRouteCache.cs](https://github.com/Torch1230/CombatSolver/blob/d231e9e51a0e58d6bfa1373c6265cce13ffd9a45/src/Runtime/SolvedRouteCache.cs) | 纯值路线落盘、游戏/求解器版本身份、64条容量边界 | SSD路线缓存并非新增概念；本计划新增范围是细粒度转移/frontier复用，不是再建相同路线缓存 |
+
+本地定向路径查询未找到同名 PowerCommitment/PowerValuation 文件，不足以排除本地以不同名称实现等价效果；实施前必须继续按具体责任核对。上游下一回合能量字段也不能单独证明所有负效应都正确模拟。
+
+### 10.3 调整后的开发取舍
+
+1. **优先保留基础算法。** 在现有 Beam/portfolio/模拟器上做成果存活、发布与新根修复，不以通用规划论文替代真实调用链。
+2. **先诊断再缩窗口。** 延迟损失缺失可能是模拟缺口、Beam提前剪枝、终局偏好或候选尚未完成评估；各层使用不同修复，不能统一靠增加惩罚项解决。
+3. **先评估上游已有改进。** 能力牌 commitment 和 portfolio 调度分别作为独立可移植候选，与本 fork 的多人目标、资源策略和 `0.107.1` 语义对照，不整包合并。
+4. **持续搜索复用仍值得实施，但收益待测。** 已有路线续用不等于任意队友变化后的完整搜索图可复用；R0/R1先行、R2依赖证明后置的次序保持。
+5. **不硬编码两回合，也不承诺1–2秒。** 保留这些数值作为实验窗口/响应目标；官方与上游没有给出它们最优或必能实现的证据。
+
+后续移植遵循 [UPSTREAM.md](../../UPSTREAM.md)：通用改进、版本绑定语义、fork冲突分别处理。此次没有移植上游代码、改生产默认或进行实机测试；没有下载整仓及创建研究临时文件。
