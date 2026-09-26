@@ -51,7 +51,7 @@ internal static class P4CombatFingerprintProfiler
 
     public static P4FingerprintPhaseSnapshot[] Snapshot()
     {
-        P4FingerprintPhase[] phases = Enum.GetValues<P4CombatFingerprintPhase>();
+        P4CombatFingerprintPhase[] phases = Enum.GetValues<P4CombatFingerprintPhase>();
         P4FingerprintPhaseSnapshot[] result = new P4FingerprintPhaseSnapshot[phases.Length];
         for (int index = 0; index < phases.Length; index++)
         {
