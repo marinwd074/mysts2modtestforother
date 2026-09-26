@@ -234,6 +234,133 @@ internal static class HpChangeText
         };
 }
 
+internal enum DeferredImpactCoverageBoundary
+{
+    CurrentTurn,
+    NextLocalTurnStart,
+    CombatTerminal,
+    Incomplete,
+}
+
+/// <summary>
+/// Absolute outcome at one explicitly named horizon boundary. These are observed simulator values,
+/// not a second scoring model: consumers compare candidates only after they have reached the same
+/// coverage boundary.
+/// </summary>
+internal readonly record struct DeferredImpactOutcome(
+    bool PlayerDead,
+    bool AllEnemiesDead,
+    int CumulativePlayerHpLost,
+    int PlayerHp,
+    int ProjectedPlayerHp,
+    int EnemyHp,
+    int EnemyBlock,
+    int AliveEnemyCount,
+    int Energy,
+    int Stars,
+    int HandCount,
+    int PotionUseCount,
+    int PotionStrategicCost,
+    int LongTermResourceValue,
+    int PersistentBuffValue,
+    int StrategicRetentionValue,
+    PersistentSetupTraits StrategicSetupTraits,
+    int FutureResourceValue,
+    int DelayedDamageValue,
+    int ReactiveDamageValue,
+    int LiveDeckClutter,
+    int LiveDeckSize)
+{
+    public static DeferredImpactOutcome Capture(SimulationSnapshot snapshot)
+        => new(
+            snapshot.PlayerDead,
+            snapshot.AllEnemiesDead,
+            snapshot.CumulativePlayerHpLost,
+            snapshot.PlayerHp,
+            snapshot.ProjectedPlayerHp,
+            snapshot.EnemyHp,
+            snapshot.EnemyBlock,
+            snapshot.AliveEnemyCount,
+            snapshot.Energy,
+            snapshot.Stars,
+            snapshot.HandCount,
+            snapshot.PotionUseCount,
+            snapshot.PotionStrategicCost,
+            snapshot.LongTermResourceValue,
+            snapshot.PersistentBuffValue,
+            snapshot.StrategicEffects.RetentionValue,
+            snapshot.StrategicSetupTraits,
+            snapshot.FutureResourceValue,
+            snapshot.DelayedDamageValue,
+            snapshot.ReactiveDamageValue,
+            snapshot.LiveDeckClutter,
+            snapshot.LiveDeckSize);
+}
+
+/// <summary>
+/// Sidecar evidence for rolling-horizon comparison. It never changes Score, Beam retention or
+/// action legality. Future effects stay owned by the simulator; this record only says how far the
+/// route was actually simulated and exposes the exact state that was reached there.
+/// </summary>
+internal sealed record DeferredImpactCoverage(
+    StateFingerprint OriginStateKey,
+    int OriginTurn,
+    int ObservedTurn,
+    DeferredImpactCoverageBoundary CoverageThrough,
+    DeferredImpactOutcome Outcome,
+    SearchBoundaryReason BoundaryReason,
+    bool SemanticEvidenceAvailable,
+    bool SemanticStateChanged,
+    bool ModeledQualityDominatedByStandPat,
+    bool HasUncompensatedPredictionGap,
+    bool RequiresFurtherClosure)
+{
+    public static DeferredImpactCoverage Capture(
+        StateFingerprint originStateKey,
+        int originTurn,
+        SimulationSnapshot snapshot,
+        bool semanticEvidenceAvailable,
+        bool semanticStateChanged,
+        bool modeledQualityDominatedByStandPat)
+    {
+        bool hasUncompensatedPredictionGap =
+            snapshot.PredictionGaps.Any(static gap => !gap.Compensated);
+        bool hasUnknownSemantics = snapshot.BoundaryReason is
+            SearchBoundaryReason.UnsupportedEffect or SearchBoundaryReason.PendingChoice
+            || hasUncompensatedPredictionGap;
+        bool combatTerminal = snapshot.PlayerDead
+            || (snapshot.AllEnemiesDead && !hasUnknownSemantics);
+
+        DeferredImpactCoverageBoundary coverage = combatTerminal
+            ? DeferredImpactCoverageBoundary.CombatTerminal
+            : snapshot.BoundaryReason != SearchBoundaryReason.None
+                || hasUncompensatedPredictionGap
+                ? DeferredImpactCoverageBoundary.Incomplete
+                : snapshot.Turn > originTurn
+                    ? DeferredImpactCoverageBoundary.NextLocalTurnStart
+                    : DeferredImpactCoverageBoundary.CurrentTurn;
+
+        bool requiresFurtherClosure = !combatTerminal
+            && (coverage == DeferredImpactCoverageBoundary.Incomplete
+                || modeledQualityDominatedByStandPat
+                || (semanticStateChanged
+                    && coverage == DeferredImpactCoverageBoundary.CurrentTurn));
+
+        return new DeferredImpactCoverage(
+            originStateKey,
+            originTurn,
+            snapshot.Turn,
+            coverage,
+            DeferredImpactOutcome.Capture(snapshot),
+            snapshot.BoundaryReason,
+            semanticEvidenceAvailable,
+            semanticStateChanged,
+            modeledQualityDominatedByStandPat,
+            hasUncompensatedPredictionGap,
+            requiresFurtherClosure);
+    }
+}
+
 internal sealed record TurnOutcome(
     int Turn,
     int HpLost,
@@ -242,7 +369,8 @@ internal sealed record TurnOutcome(
     int SoldHp,
     int MaxBlock,
     int ActualBlock,
-    int EnergyLeft);
+    int EnergyLeft,
+    DeferredImpactCoverage? DeferredImpact = null);
 
 internal readonly record struct EnemyDurabilityEntry(uint CombatId, int Durability);
 

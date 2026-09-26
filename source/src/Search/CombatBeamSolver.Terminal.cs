@@ -154,7 +154,14 @@ internal sealed partial class CombatBeamSolver
                 soldThisTurn,
                 maxBlock,
                 outcome.ActualBlock,
-                outcome.EnergyLeft),
+                outcome.EnergyLeft,
+                DeferredImpactCoverage.Capture(
+                    outcome.TurnStart.StateKey,
+                    outcome.TurnStart.Turn,
+                    outcome.Node.Snapshot,
+                    outcome.Node.CrossTurnSemanticEvidenceAttached,
+                    outcome.Node.CrossTurnSemanticStateChanged,
+                    outcome.Node.CrossTurnSemanticInvisibleToModeledQuality)),
         };
         PropagateCandidateOrigin(outcome.Node, annotated);
         EnsureCandidateOrigin(annotated);
