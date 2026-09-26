@@ -783,10 +783,14 @@ internal static class Program
             acceptance = new
             {
                 finalQualityNotWorse = comparison <= 0,
+                potionScheduled = crossPotionWorkMs.HasValue,
                 potionStartedEarlier = crossPotionWorkMs.HasValue
                     && (!baselinePotionWorkMs.HasValue
                         || crossPotionWorkMs.Value < baselinePotionWorkMs.Value),
+                safeColdFallback = !crossPotionWorkMs.HasValue && comparison <= 0,
                 referencePublishedEarlierOrEqual = crossPublishedMs <= baselinePublishedMs,
+                withinConfiguredNodeBudget =
+                    cross.TotalExpandedNodes <= crossPolicy.Profile.MaxExpandedNodes,
                 totalExpandedNotHigher = cross.TotalExpandedNodes <= baseline.TotalExpandedNodes,
             },
         };
@@ -808,12 +812,18 @@ internal static class Program
 
         if (comparison > 0)
             throw new InvalidOperationException("P3 cross-family A/B regressed formal final quality.");
-        if (!crossPotionWorkMs.HasValue
-            || baselinePotionWorkMs.HasValue
-                && crossPotionWorkMs.Value >= baselinePotionWorkMs.Value)
+        if (cross.TotalExpandedNodes > crossPolicy.Profile.MaxExpandedNodes)
         {
             throw new InvalidOperationException(
-                "P3 cross-family A/B did not start potion work earlier.");
+                $"P3 cross-family A/B exceeded configured node budget: " +
+                $"{cross.TotalExpandedNodes}>{crossPolicy.Profile.MaxExpandedNodes}.");
+        }
+        if (crossPotionWorkMs.HasValue
+            && baselinePotionWorkMs.HasValue
+            && crossPotionWorkMs.Value >= baselinePotionWorkMs.Value)
+        {
+            throw new InvalidOperationException(
+                "P3 cross-family A/B started potion work no earlier than baseline.");
         }
 
         Console.WriteLine($"evidence={path}");
