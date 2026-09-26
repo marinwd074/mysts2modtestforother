@@ -133,9 +133,9 @@ jobs:
                 throw "P3 $($pair.Name) did not start potion work earlier than baseline."
               }
             }
-            if ($pair.Name -like 'warm*'
-                -and $baseline.ProjectedBattlePotionCount -gt 0
-                -and $cross.ProjectedBattlePotionCount -gt 0) {
+            if ($pair.Name -like 'warm*' -and
+                $baseline.ProjectedBattlePotionCount -gt 0 -and
+                $cross.ProjectedBattlePotionCount -gt 0) {
               $smartReferenceWarmPairs++
               if ($cross.publishedMs -lt $baseline.publishedMs) {
                 $earlierReferenceWarmPairs++
