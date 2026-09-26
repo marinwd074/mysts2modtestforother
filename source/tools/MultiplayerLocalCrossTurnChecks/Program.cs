@@ -182,6 +182,9 @@ Check(
 Check(
     ActionSearchOrderingPolicy.VerifyForTesting(),
     "E5 action enumeration prioritizes estimated lethal, urgent defense, strategic value-per-resource, then preserves stable original order for exact ties.");
+Check(
+    ActionSearchOrderingPolicy.VerifyContinuationSeedPriorityForTesting(),
+    "P2 continuation enumeration hint can move the exact next seed action ahead of ordinary action-order heuristics without changing the candidate set.");
 
 MultiplayerContinuationMatchInput Match(
     string combatIdentity = "combat-a",

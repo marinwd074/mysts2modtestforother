@@ -47,14 +47,22 @@ internal static class ActionSearchOrderingPolicy
             new(false, false, true, 2d, 5d, 1, 1),
             new(false, true, false, 1d, 3d, 1, 2),
             new(false, false, false, 4d, 8d, 2, 3),
-            new(true, false, false, 0d, 0d, 9, 4),
         ];
 
         Array.Sort(values, Compare);
-        return values[0].ContinuationSeedPreferred
-            && values[1].EstimatedLethal
-            && values[2].UrgentDefense
-            && values[3].StableOrdinal == 0
-            && values[4].StableOrdinal == 3;
+        return values[0].EstimatedLethal
+            && values[1].UrgentDefense
+            && values[2].StableOrdinal == 0
+            && values[3].StableOrdinal == 3;
+    }
+
+    internal static bool VerifyContinuationSeedPriorityForTesting()
+    {
+        ActionSearchOrderHint preferred =
+            new(true, false, false, 0d, 0d, 9, 1);
+        ActionSearchOrderHint lethal =
+            new(false, true, false, 99d, 99d, 0, 0);
+        return Compare(preferred, lethal) < 0
+            && Compare(lethal, preferred) > 0;
     }
 }

@@ -440,6 +440,7 @@ internal static partial class SolverController
                 searchPolicy = searchPolicy with
                 {
                     ContinuationSeedActions = continuationSeedActions,
+                    ContinuationEnumerationHintActions = continuationSeedActions,
                 };
             }
             if (continuationStamp != null && capabilities.IsMultiplayer)

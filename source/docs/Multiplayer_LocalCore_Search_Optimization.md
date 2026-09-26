@@ -13,7 +13,9 @@
 - P1 已加入 `resume_kind=exact_continuation|seeded_search|cold_search` 诊断和专用 action-boundary 合同；真实 Host/Client 的跨回合等待收益与最终质量仍需实机/固定输入 A/B 证明，本阶段不宣称性能收益。
 - P2 已进入实现：continuation seed 不再进入普通 Beam 初始 Frontier。Coordinator 先以独立 `continuation_seed_incumbent` 成员重放同一新根建议，探针最多使用当前节点/时间额度的 5%，实际消耗从后续普通搜索余额扣除；中途失效继续沿 P1 的已验证前缀语义。普通 Beam、Novelty、药水审计收到的 policy 均清空 seed，因此候选集合、Beam retention 和动作枚举不因 P2 占槽或变序。
 - P2 独立成员只有得到完整胜利结果后才通过现有 `PublishAdoptableResult` / `SolverRouteAdoptionSeed` 发布为可手动采用 incumbent；随后正常搜索继续并用现有正式质量排序决定是否提升。未增加按钮，也未改变 Full Auto / Multiplayer Safe Auto 的默认提前采用时机。
-- P2 的“旧动作作为枚举提示”仍保持关闭；这是会改变有限预算探索次序的质量敏感实验，必须等独立 incumbent A/B 后再决定。P3 调度扩展和 P4 热点优化仍未进入。
+- P2 固定输入验证已通过。独立 incumbent 在同一路线、同质量下三次均更早得到可采用结果；枚举提示随后做了独立 fixed-work A/B，三次都保持同一路线、同最终质量和相同节点数（7536 vs 7536），`time_to_reference_quality` 分别为 6163→2113ms、6726→2477ms、7730→3667ms，中位数 6726→2477ms。样本仅 3 对，不宣称统计显著或可靠 P95；证据见 [P2 targeted validation run 7](https://github.com/marinwd074/mysts2modtestforother/actions/runs/36222967258) 的 3 次 attempt。
+- P2 枚举提示因此只接入已有合法 continuation seed 的 `MultiplayerSinglePlayerCore` 路径：它仅提高与已实现前缀严格一致的“下一动作”枚举优先级；一旦前缀偏离、跨回合、Choice/目标/卡实例不匹配就停止提示。候选集合、合法性、Beam retention、最终排序、预算和 Safe Execute 授权均不放宽；没有 seed 时行为不变。独立 incumbent 的 5% 预算和普通 Beam 的提示仍是两个隔离机制。
+- P2 至此按离线固定输入收尾；真实 Host/Client 的累计等待与跨连续本地回合收益仍需实机证据。P3 调度扩展和 P4 热点优化仍未进入。
 
 ## 1. 项目决策
 
