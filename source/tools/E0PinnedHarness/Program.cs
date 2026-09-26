@@ -50,14 +50,23 @@ internal static class Program
         bool p3CrossFamilyAb = args.Contains(
             "--p3-cross-family-ab",
             StringComparer.Ordinal);
-        if ((p3Novelty || p3CrossFamily || p3CrossFamilyAb) && !p3SchedulingProbe)
-            throw new ArgumentException(
-                "--p3-novelty/--p3-cross-family require --p3-scheduling-probe.");
-        if (p3Novelty && (p3CrossFamily || p3CrossFamilyAb)
-            || p3CrossFamily && p3CrossFamilyAb)
+        bool p3CrossFamilyAbReverse = args.Contains(
+            "--p3-cross-family-ab-reverse",
+            StringComparer.Ordinal);
+        if ((p3Novelty || p3CrossFamily || p3CrossFamilyAb || p3CrossFamilyAbReverse)
+            && !p3SchedulingProbe)
         {
             throw new ArgumentException(
-                "P3 novelty, direct cross-family, and cross-family A/B modes are isolated.");
+                "P3 novelty/cross-family modes require --p3-scheduling-probe.");
+        }
+        int p3ModeCount = (p3Novelty ? 1 : 0)
+            + (p3CrossFamily ? 1 : 0)
+            + (p3CrossFamilyAb ? 1 : 0)
+            + (p3CrossFamilyAbReverse ? 1 : 0);
+        if (p3ModeCount > 1)
+        {
+            throw new ArgumentException(
+                "P3 novelty, direct cross-family, A/B, and reverse A/B modes are isolated.");
         }
         CombatBeamSolver.UseLegacyActionSearchOrderForTesting(legacyActionOrder);
         bool teammate = string.Equals(scenario, "teammate", StringComparison.Ordinal);
@@ -185,7 +194,7 @@ internal static class Program
                     : SearchRoutePolicy.SinglePlayerFullRoute,
                 CurrentTurnOnly = false,
                 UseNoveltyPortfolio = p3Novelty,
-                UseBeamWidthPortfolio = !(p3CrossFamily || p3CrossFamilyAb),
+                UseBeamWidthPortfolio = !(p3CrossFamily || p3CrossFamilyAb || p3CrossFamilyAbReverse),
                 UseP3CrossFamilyScheduling = p3CrossFamily,
                 BeamWidthPortfolioWidths = null,
                 FixedBudget = true,
@@ -224,12 +233,18 @@ internal static class Program
                     policy,
                     local.PlayerCombatState!.TurnNumber);
             }
-            if (p3CrossFamilyAb)
+            if (p3CrossFamilyAb || p3CrossFamilyAbReverse)
             {
                 if (!teammate || multiplayerPrediction)
                     throw new InvalidOperationException(
                         "P3 A/B requires teammate fixture with multiplayer prediction disabled.");
-                return RunP3CrossFamilyAb(output, root, names, damage, policy);
+                return RunP3CrossFamilyAb(
+                    output,
+                    root,
+                    names,
+                    damage,
+                    policy,
+                    reverseOrder: p3CrossFamilyAbReverse);
             }
 
             string[] rootHand = local.PlayerCombatState!.Hand.Cards.Select(card => card.Id.Entry).ToArray();
@@ -644,7 +659,8 @@ internal static class Program
         CombatRootSnapshot root,
         SolverDisplayNames names,
         BattleDamageSnapshot damage,
-        SearchPolicySnapshot policy)
+        SearchPolicySnapshot policy,
+        bool reverseOrder)
     {
         SearchPolicySnapshot baselinePolicy = policy with
         {
@@ -659,20 +675,42 @@ internal static class Program
             UseP3CrossFamilyScheduling = true,
         };
 
-        SolverResult baseline = CombatSearchCoordinator.Solve(
-            root,
-            names,
-            damage,
-            baselinePolicy,
-            CancellationToken.None,
-            progressCallback: null);
-        SolverResult cross = CombatSearchCoordinator.Solve(
-            root,
-            names,
-            damage,
-            crossPolicy,
-            CancellationToken.None,
-            progressCallback: null);
+        SolverResult baseline;
+        SolverResult cross;
+        if (reverseOrder)
+        {
+            cross = CombatSearchCoordinator.Solve(
+                root,
+                names,
+                damage,
+                crossPolicy,
+                CancellationToken.None,
+                progressCallback: null);
+            baseline = CombatSearchCoordinator.Solve(
+                root,
+                names,
+                damage,
+                baselinePolicy,
+                CancellationToken.None,
+                progressCallback: null);
+        }
+        else
+        {
+            baseline = CombatSearchCoordinator.Solve(
+                root,
+                names,
+                damage,
+                baselinePolicy,
+                CancellationToken.None,
+                progressCallback: null);
+            cross = CombatSearchCoordinator.Solve(
+                root,
+                names,
+                damage,
+                crossPolicy,
+                CancellationToken.None,
+                progressCallback: null);
+        }
 
         static double PublishedMs(SolverResult result)
         {
@@ -718,6 +756,7 @@ internal static class Program
         {
             schemaVersion = 1,
             source = "pinned-0.107.1-p3-cross-family-ab",
+            order = reverseOrder ? "BA" : "AB",
             comparison,
             baseline = new
             {
@@ -760,7 +799,7 @@ internal static class Program
                 new JsonSerializerOptions { WriteIndented = true }));
 
         Console.WriteLine(
-            $"P3_CROSS_AB comparison={comparison} " +
+            $"P3_CROSS_AB order={(reverseOrder ? "BA" : "AB")} comparison={comparison} " +
             $"baseline_hp={baseline.ProjectedBattleHpLost} cross_hp={cross.ProjectedBattleHpLost} " +
             $"baseline_published_ms={baselinePublishedMs:F3} cross_published_ms={crossPublishedMs:F3} " +
             $"baseline_potion_first_ms={baselinePotionWorkMs?.ToString("F3") ?? "-"} " +
