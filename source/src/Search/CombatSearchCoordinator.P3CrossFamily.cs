@@ -109,9 +109,12 @@ internal static partial class CombatSearchCoordinator
         int rounds = 0;
 
         const int beamSlicesPerPotionSlice = 4;
-        int minimumBeamWarmupNodes = Math.Max(1, profile.MaxExpandedNodes / 4);
-        long warmupDeadlineMs = Math.Max(
+        int minimumBeamWarmupNodes = Math.Max(1, profile.MaxExpandedNodes / 8);
+        long warmupReadyMs = Math.Max(
             1,
+            profile.SoftTimeBudgetMilliseconds * 2L / 5L);
+        long warmupDeadlineMs = Math.Max(
+            warmupReadyMs,
             profile.SoftTimeBudgetMilliseconds * 3L / 5L);
 
         SearchStepResult StepBeam()
@@ -156,13 +159,16 @@ internal static partial class CombatSearchCoordinator
                 bool enoughBeamWork =
                     sharedBudget.ExpandedNodes >= minimumBeamWarmupNodes;
                 bool provisionalWin = incumbent?.Won == true;
-                if (enoughBeamWork && provisionalWin)
+                bool warmupTimeReady =
+                    sharedBudget.ElapsedMilliseconds >= warmupReadyMs;
+                if (provisionalWin && (enoughBeamWork || warmupTimeReady))
                 {
                     potionSchedulingEnabled = true;
                     break;
                 }
 
-                if (sharedBudget.ElapsedMilliseconds >= warmupDeadlineMs)
+                if (!provisionalWin
+                    && sharedBudget.ElapsedMilliseconds >= warmupDeadlineMs)
                 {
                     potionSchedulingSkippedForColdQuality = true;
                     break;
@@ -316,7 +322,8 @@ internal static partial class CombatSearchCoordinator
         policy.Diagnostics.Info(
             $"[CombatSolver/Test] P3_CROSS_FAMILY_FIXED " +
             $"rounds={rounds} beam_to_potion={beamSlicesPerPotionSlice}:1 " +
-            $"warmup_nodes={minimumBeamWarmupNodes} warmup_deadline_ms={warmupDeadlineMs} " +
+            $"warmup_nodes={minimumBeamWarmupNodes} warmup_ready_ms={warmupReadyMs} " +
+            $"warmup_deadline_ms={warmupDeadlineMs} " +
             $"potion_scheduled={potionSchedulingEnabled.ToString().ToLowerInvariant()} " +
             $"cold_quality_skip={potionSchedulingSkippedForColdQuality.ToString().ToLowerInvariant()} " +
             $"node_budget={sharedBudget.ExpandedNodes}/{sharedBudget.MaxExpandedNodes} " +
