@@ -73,6 +73,7 @@ jobs:
             @{ Name = 'pair2-ba'; Reverse = $true },
             @{ Name = 'pair3-ab'; Reverse = $false }
           )
+          $results = @()
           foreach ($case in $cases) {
             $workspace = Join-Path $env:RUNNER_TEMP $case.Name
             New-Item -ItemType Directory -Force -Path $workspace | Out-Null
@@ -92,5 +93,26 @@ jobs:
               throw "P3 formal paired A/B failed for $($case.Name) with exit $LASTEXITCODE."
             }
             $evidence = Get-Content -LiteralPath (Join-Path $workspace 'p3-cross-family-ab.json') -Raw
+            $parsed = $evidence | ConvertFrom-Json
+            $results += $parsed
             "P3_PAIR=$($case.Name) $($evidence -replace '\r?\n',' ')"
           }
+
+          $regressions = @($results | Where-Object { -not $_.acceptance.finalQualityNotWorse })
+          if ($regressions.Count -ne 0) {
+            throw "P3 paired A/B contains $($regressions.Count) formal quality regressions."
+          }
+          $budgetViolations = @($results | Where-Object { -not $_.acceptance.withinConfiguredNodeBudget })
+          if ($budgetViolations.Count -ne 0) {
+            throw "P3 paired A/B contains $($budgetViolations.Count) node budget violations."
+          }
+          $scheduled = @($results | Where-Object { $_.acceptance.potionScheduled })
+          if ($scheduled.Count -lt 1) {
+            throw 'P3 paired A/B never scheduled potion work; no starvation improvement was demonstrated.'
+          }
+          $latePotion = @($scheduled | Where-Object { -not $_.acceptance.potionStartedEarlier })
+          if ($latePotion.Count -ne 0) {
+            throw "P3 paired A/B contains $($latePotion.Count) scheduled pairs without earlier potion work."
+          }
+          $coldFallbacks = @($results | Where-Object { $_.acceptance.safeColdFallback })
+          "P3_PAIRED_SUMMARY pairs=$($results.Count) potion_scheduled=$($scheduled.Count) safe_cold_fallbacks=$($coldFallbacks.Count) quality_regressions=$($regressions.Count) budget_violations=$($budgetViolations.Count)"
