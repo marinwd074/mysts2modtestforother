@@ -86,27 +86,6 @@ jobs:
           }) | ConvertTo-Json -Compress)
           'P3_DEFAULT_MEMBERS=' + (($evidence.members | Select-Object memberId,kind,beamWidth,secondRankBand,baseScoreOnly,novelty,startedMs,firstWorkMs,completedMs,elapsedMs,expandedNodes,transitionCount) | ConvertTo-Json -Depth 4 -Compress)
 
-      - name: Measure optional Novelty families
-        shell: pwsh
-        run: |
-          $workspace = Join-Path $env:RUNNER_TEMP 'p3-novelty'
-          New-Item -ItemType Directory -Force -Path $workspace | Out-Null
-          & dotnet '.\source\tools\E0PinnedHarness\bin\Release\net9.0\E0PinnedHarness.dll' --scenario teammate --out $workspace --p3-scheduling-probe --p3-novelty
-          if ($LASTEXITCODE -ne 0) {
-            throw "P3 novelty scheduling probe failed with exit $LASTEXITCODE."
-          }
-          $evidence = Get-Content -LiteralPath (Join-Path $workspace 'e0-teammate.json') -Raw | ConvertFrom-Json
-          'P3_NOVELTY_SUMMARY=' + (([pscustomobject]@{
-            projectedBattleHpLost = $evidence.projectedBattleHpLost
-            projectedBattlePotionCount = $evidence.projectedBattlePotionCount
-            combatEndedTurn = $evidence.combatEndedTurn
-            boundaryReason = $evidence.boundaryReason
-            totalExpandedNodes = $evidence.totalExpandedNodes
-            totalTransitionCount = $evidence.totalTransitionCount
-            memberCount = @($evidence.members).Count
-          }) | ConvertTo-Json -Compress)
-          'P3_NOVELTY_MEMBERS=' + (($evidence.members | Select-Object memberId,kind,beamWidth,secondRankBand,baseScoreOnly,novelty,startedMs,firstWorkMs,completedMs,elapsedMs,expandedNodes,transitionCount) | ConvertTo-Json -Depth 4 -Compress)
-
       - name: Measure P3 cross-family fixed rotation
         shell: pwsh
         run: |

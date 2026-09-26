@@ -65,12 +65,15 @@ internal static partial class CombatSearchCoordinator
         bool potionMissing = false;
         int rounds = 0;
 
+        const int beamSlicesPerPotionSlice = 4;
         while (!beamDone || !potionDone)
         {
             cancellationToken.ThrowIfCancellationRequested();
             rounds = checked(rounds + 1);
 
-            if (!beamDone)
+            for (int beamSlice = 0;
+                 beamSlice < beamSlicesPerPotionSlice && !beamDone;
+                 beamSlice++)
             {
                 SearchStepResult step = beamSession.Step(
                     E3FixedMemberAllowance,
@@ -201,7 +204,8 @@ internal static partial class CombatSearchCoordinator
 
         policy.Diagnostics.Info(
             $"[CombatSolver/Test] P3_CROSS_FAMILY_FIXED " +
-            $"rounds={rounds} node_budget={sharedBudget.ExpandedNodes}/{sharedBudget.MaxExpandedNodes} " +
+            $"rounds={rounds} beam_to_potion={beamSlicesPerPotionSlice}:1 " +
+            $"node_budget={sharedBudget.ExpandedNodes}/{sharedBudget.MaxExpandedNodes} " +
             $"elapsed_ms={sharedBudget.ElapsedMilliseconds}/{sharedBudget.BudgetMilliseconds} " +
             $"beam_boundary={beamResult.BoundaryReason} beam_hp={potionFreeDeficit} " +
             $"potion_missing={potionMissing.ToString().ToLowerInvariant()} " +
