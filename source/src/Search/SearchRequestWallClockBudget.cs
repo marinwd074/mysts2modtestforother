@@ -29,7 +29,8 @@ internal sealed class SearchRequestWallClockBudget
 
     public bool IsExpired => ElapsedMilliseconds >= BudgetMilliseconds;
     public int ExpandedNodes => Volatile.Read(ref _expandedNodes);
-    public bool HasExpandedNodeBudgetRemaining => ExpandedNodes < MaxExpandedNodes;
+    public int RemainingExpandedNodes => Math.Max(0, MaxExpandedNodes - ExpandedNodes);
+    public bool HasExpandedNodeBudgetRemaining => RemainingExpandedNodes > 0;
 
     public bool TryConsumeExpandedNode()
     {
