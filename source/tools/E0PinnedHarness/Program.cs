@@ -799,6 +799,8 @@ internal static class Program
             boundaryReason = result.BoundaryReason.ToString(),
             result.TotalExpandedNodes,
             result.TotalTransitionCount,
+            configuredMaxExpandedNodes = targetPolicy.Profile.MaxExpandedNodes,
+            configuredBudgetMilliseconds = targetPolicy.Profile.SoftTimeBudgetMilliseconds,
             publishedMs,
             firstPotionWorkMs,
             managedBefore,
