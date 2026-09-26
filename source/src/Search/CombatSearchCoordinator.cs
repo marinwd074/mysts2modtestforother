@@ -464,17 +464,28 @@ internal static partial class CombatSearchCoordinator
                     interimResultCallback);
                 return earlySmartPotionScout;
             }
+            SolverResult RunP3Primary()
+            {
+                SolverResult potionFree = RunP3CrossFamilyFixedPass(
+                    root,
+                    displayNames,
+                    battleDamage,
+                    beamPolicy,
+                    activeProfile,
+                    cancellationToken,
+                    progressCallback,
+                    out SolverResult? scout);
+                if (scout != null)
+                {
+                    earlySmartPotionBaseline = potionFree;
+                    earlySmartPotionScout = scout;
+                }
+                return potionFree;
+            }
+
             SolverResult RunPrimary()
                 => policy.UseP3CrossFamilyScheduling
-                    ? RunP3CrossFamilyFixedPass(
-                        root,
-                        displayNames,
-                        battleDamage,
-                        beamPolicy,
-                        activeProfile,
-                        cancellationToken,
-                        progressCallback,
-                        interimResultCallback)
+                    ? RunP3Primary()
                     : policy.UseNoveltyPortfolio
                         ? RunNoveltyPortfolioPass(root, displayNames, battleDamage, passPolicy, activeProfile,
                             activeClock, initialPotionPolicyOverride, cancellationToken, progressCallback,
@@ -938,10 +949,26 @@ internal static partial class CombatSearchCoordinator
         long remainingMilliseconds = profile.SoftTimeBudgetMilliseconds - requestClock.ElapsedMilliseconds;
         if (remainingMilliseconds <= 0)
         {
+            if (TryReuseEarlySmartPotionScout(
+                    root,
+                    policy,
+                    primary,
+                    earlySmartPotionBaseline,
+                    earlySmartPotionScout,
+                    out SolverResult? deadlineReusedScout))
+            {
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Test] SUPPLEMENTAL_AUDIT_BUDGET exhausted=true " +
+                    $"elapsed_ms={requestClock.ElapsedMilliseconds} " +
+                    $"budget_ms={profile.SoftTimeBudgetMilliseconds} " +
+                    $"reused_early_scout=true");
+                return deadlineReusedScout!;
+            }
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] SUPPLEMENTAL_AUDIT_BUDGET exhausted=true " +
                 $"elapsed_ms={requestClock.ElapsedMilliseconds} " +
-                $"budget_ms={profile.SoftTimeBudgetMilliseconds}");
+                $"budget_ms={profile.SoftTimeBudgetMilliseconds} " +
+                $"reused_early_scout=false");
             return primary;
         }
 
