@@ -206,6 +206,10 @@ internal static partial class SolverController
                 expectedContinuation?.MultiplayerExpectation;
             bool sharedShuffleRngDrift = false;
             bool sharedFinishedCardPlayDrift = false;
+            bool livingEnemyHpDecreaseDrift = false;
+            bool allowLivingEnemyHpDecrease =
+                !SolverSettings.Current.UseMultiplayerLethalHpRecalculation
+                || !MultiplayerCombatObjectivePolicy.IsInLethalRecalculationWindow(state.Enemies);
             ContinuationStamp? continuationValidationStamp = continuationStamp;
             if (continuationStamp != null
                 && expectedContinuation != null
@@ -214,9 +218,13 @@ internal static partial class SolverController
                 && MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
                     expectedContinuation.ExpectedState.StateText,
                     continuationStamp.StateText,
+                    allowLivingEnemyHpDecrease,
                     out sharedShuffleRngDrift,
-                    out sharedFinishedCardPlayDrift)
-                && (sharedShuffleRngDrift || sharedFinishedCardPlayDrift))
+                    out sharedFinishedCardPlayDrift,
+                    out livingEnemyHpDecreaseDrift)
+                && (sharedShuffleRngDrift
+                    || sharedFinishedCardPlayDrift
+                    || livingEnemyHpDecreaseDrift))
             {
                 // TryCreateContinuation remains exact by contract. Substitute the cached stamp
                 // only after the local-core boundary proved all drift is remote-only shared state.
@@ -234,6 +242,8 @@ internal static partial class SolverController
                     $"actual_world_version={multiplayerValidation?.CurrentWorldVersion.ToString() ?? "-"} " +
                     $"shared_shuffle_rng_drift={sharedShuffleRngDrift.ToString().ToLowerInvariant()} " +
                     $"shared_finished_card_play_drift={sharedFinishedCardPlayDrift.ToString().ToLowerInvariant()} " +
+                    $"living_enemy_hp_decrease_drift={livingEnemyHpDecreaseDrift.ToString().ToLowerInvariant()} " +
+                    $"allow_living_enemy_hp_decrease={allowLivingEnemyHpDecrease.ToString().ToLowerInvariant()} " +
                     $"fresh_probe_changed={freshProbeChanged.ToString().ToLowerInvariant()}");
             }
             if (continuationValidationStamp != null
@@ -275,13 +285,17 @@ internal static partial class SolverController
                         reused!,
                         UnexpectedReplanCount > 0,
                         _combat.ReviewedWorldlinesTotal));
-                string reuseValidation = (sharedShuffleRngDrift, sharedFinishedCardPlayDrift) switch
-                {
-                    (true, true) => "exact_except_shared_shuffle_and_card_history",
-                    (true, false) => "exact_except_shared_shuffle_rng",
-                    (false, true) => "exact_except_remote_card_history",
-                    _ => "exact_state_text",
-                };
+                string reuseValidation = livingEnemyHpDecreaseDrift
+                    ? sharedShuffleRngDrift || sharedFinishedCardPlayDrift
+                        ? "compatible_remote_enemy_hp_and_shared_state"
+                        : "exact_except_remote_enemy_hp"
+                    : (sharedShuffleRngDrift, sharedFinishedCardPlayDrift) switch
+                    {
+                        (true, true) => "exact_except_shared_shuffle_and_card_history",
+                        (true, false) => "exact_except_shared_shuffle_rng",
+                        (false, true) => "exact_except_remote_card_history",
+                        _ => "exact_state_text",
+                    };
                 Entry.Logger.Info(
                     $"[CombatSolver/Test] SEARCH_REUSED from_turn={reused!.ReusedFromTurn} " +
                     $"turn={reused.StartTurnNumber} validation={reuseValidation} " +
@@ -300,7 +314,12 @@ internal static partial class SolverController
                         $"local_state_compatible=true " +
                         $"shared_shuffle_rng_drift={sharedShuffleRngDrift.ToString().ToLowerInvariant()} " +
                         $"shared_finished_card_play_drift={sharedFinishedCardPlayDrift.ToString().ToLowerInvariant()} " +
-                        $"reason={(sharedShuffleRngDrift || sharedFinishedCardPlayDrift ? "remote_shared_state_drift" : "exact")} " +
+                        $"living_enemy_hp_decrease_drift={livingEnemyHpDecreaseDrift.ToString().ToLowerInvariant()} " +
+                        $"reason={(livingEnemyHpDecreaseDrift
+                            ? "remote_enemy_hp_decrease"
+                            : sharedShuffleRngDrift || sharedFinishedCardPlayDrift
+                                ? "remote_shared_state_drift"
+                                : "exact")} " +
                         $"resume_kind=exact_continuation");
                 }
                 Entry.Logger.Info(SolverDiagnostics.DescribeResult(reused));

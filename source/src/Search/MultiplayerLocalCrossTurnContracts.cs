@@ -230,9 +230,31 @@ internal static class MultiplayerLocalCrossTurnContracts
         string actualStateText,
         out bool sharedShuffleRngDrift,
         out bool sharedFinishedCardPlayDrift)
+        => IsLocalCoreContinuationStateCompatible(
+            expectedStateText,
+            actualStateText,
+            allowLivingEnemyHpDecrease: false,
+            out sharedShuffleRngDrift,
+            out sharedFinishedCardPlayDrift,
+            out _);
+
+    /// <summary>
+    /// Default multiplayer local-core may reuse a predicted next-turn route when remote play only
+    /// dealt additional damage to an enemy that is still alive. Enemy identity, max HP, block,
+    /// next move and every local field remain exact. HP increases and alive/dead transitions are
+    /// never soft drift.
+    /// </summary>
+    internal static bool IsLocalCoreContinuationStateCompatible(
+        string expectedStateText,
+        string actualStateText,
+        bool allowLivingEnemyHpDecrease,
+        out bool sharedShuffleRngDrift,
+        out bool sharedFinishedCardPlayDrift,
+        out bool livingEnemyHpDecreaseDrift)
     {
         sharedShuffleRngDrift = false;
         sharedFinishedCardPlayDrift = false;
+        livingEnemyHpDecreaseDrift = false;
         if (string.Equals(expectedStateText, actualStateText, StringComparison.Ordinal))
             return true;
 
@@ -292,10 +314,62 @@ internal static class MultiplayerLocalCrossTurnContracts
                 continue;
             }
 
+            if (allowLivingEnemyHpDecrease
+                && IsIndexedEnemyField(name)
+                && IsLivingEnemyHpDecreaseOnly(
+                    expectedField[(expectedSeparator + 1)..],
+                    actualField[(actualSeparator + 1)..]))
+            {
+                livingEnemyHpDecreaseDrift = true;
+                continue;
+            }
+
             return false;
         }
 
-        return sharedShuffleRngDrift || sharedFinishedCardPlayDrift;
+        return sharedShuffleRngDrift
+            || sharedFinishedCardPlayDrift
+            || livingEnemyHpDecreaseDrift;
+    }
+
+    private static bool IsIndexedEnemyField(string name)
+    {
+        if (!name.StartsWith('E') || name.Length == 1)
+            return false;
+        for (int index = 1; index < name.Length; index++)
+        {
+            if (!char.IsAsciiDigit(name[index]))
+                return false;
+        }
+        return true;
+    }
+
+    private static bool IsLivingEnemyHpDecreaseOnly(
+        string expectedValue,
+        string actualValue)
+    {
+        string[] expectedParts = expectedValue.Split('/');
+        string[] actualParts = actualValue.Split('/');
+        if (expectedParts.Length != 7 || actualParts.Length != 7)
+            return false;
+
+        // combat id, monster id, slot, max HP, block and move remain exact.
+        foreach (int fixedIndex in new[] { 0, 1, 2, 4, 5, 6 })
+        {
+            if (!string.Equals(
+                    expectedParts[fixedIndex],
+                    actualParts[fixedIndex],
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return int.TryParse(expectedParts[3], out int expectedHp)
+            && int.TryParse(actualParts[3], out int actualHp)
+            && expectedHp > 0
+            && actualHp > 0
+            && actualHp < expectedHp;
     }
 
     private static bool StateContainsGlobalFinishedCardPlayDependentLocalCard(

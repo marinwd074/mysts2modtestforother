@@ -193,6 +193,27 @@ string continuationGoldAxeHistoryDrift = continuationGoldAxe.Replace(
     ";HC=14/",
     StringComparison.Ordinal);
 
+string continuationEnemyBase = continuationExact.Replace(
+    ";H=A;",
+    ";E0=10/TUNNELER_WEAK/front/181/220/0/ATTACK;H=A;",
+    StringComparison.Ordinal);
+string continuationEnemyHpDecrease = continuationEnemyBase.Replace(
+    "/181/220/0/",
+    "/161/220/0/",
+    StringComparison.Ordinal);
+string continuationEnemyHpIncrease = continuationEnemyBase.Replace(
+    "/181/220/0/",
+    "/191/220/0/",
+    StringComparison.Ordinal);
+string continuationEnemyDeath = continuationEnemyBase.Replace(
+    "/181/220/0/",
+    "/0/220/0/",
+    StringComparison.Ordinal);
+string continuationEnemyBlockDrift = continuationEnemyBase.Replace(
+    "/181/220/0/",
+    "/181/220/5/",
+    StringComparison.Ordinal);
+
 Check(
     MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
         continuationExact,
@@ -236,6 +257,47 @@ Check(
         out _,
         out _),
     "Local-core continuation ignores only remote Shuffle/global finished-play drift; local history, piles and Gold Axe-sensitive history remain exact.");
+
+Check(
+    MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationEnemyBase,
+        continuationEnemyHpDecrease,
+        allowLivingEnemyHpDecrease: true,
+        out bool enemyHpShuffleDrift,
+        out bool enemyHpHistoryDrift,
+        out bool acceptedEnemyHpDecrease)
+    && !enemyHpShuffleDrift
+    && !enemyHpHistoryDrift
+    && acceptedEnemyHpDecrease
+    && !MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationEnemyBase,
+        continuationEnemyHpDecrease,
+        allowLivingEnemyHpDecrease: false,
+        out _,
+        out _,
+        out _)
+    && !MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationEnemyBase,
+        continuationEnemyHpIncrease,
+        allowLivingEnemyHpDecrease: true,
+        out _,
+        out _,
+        out _)
+    && !MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationEnemyBase,
+        continuationEnemyDeath,
+        allowLivingEnemyHpDecrease: true,
+        out _,
+        out _,
+        out _)
+    && !MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationEnemyBase,
+        continuationEnemyBlockDrift,
+        allowLivingEnemyHpDecrease: true,
+        out _,
+        out _,
+        out _),
+    "Local-core continuation may ignore only downward HP drift on a still-living enemy; lethal-window gating, HP increases, death and block changes remain strict.");
 
 Check(
     !MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled

@@ -130,6 +130,15 @@ foreach ($coupledPreviewRule in @(
 
 $searchLifecycleCompletionPath = Join-Path $repositoryRoot 'src/Runtime/SolverController.SearchLifecycle.cs'
 $searchLifecycleCompletionText = [IO.File]::ReadAllText($searchLifecycleCompletionPath)
+foreach ($enemyHpReuseRule in @(
+    'livingEnemyHpDecreaseDrift',
+    'exact_except_remote_enemy_hp',
+    'remote_enemy_hp_decrease',
+    'IsInLethalRecalculationWindow(state.Enemies)')) {
+    if (-not $searchLifecycleCompletionText.Contains($enemyHpReuseRule)) {
+        $violations.Add("${searchLifecycleCompletionPath}: continuation enemy-HP reuse gating drifted '$enemyHpReuseRule'")
+    }
+}
 foreach ($routeScopedCompletionRule in @(
     'RouteVersion = capabilities.IsMultiplayer',
     'LiveCombatStamp.CaptureLocalCoreSearchValidity(state)',
@@ -4338,6 +4347,14 @@ foreach ($localCoreHorizonRule in @(
 }
 if (-not $p1ContinuationContractsText.Contains('IsLocalCoreContinuationStateCompatible(')) {
     $violations.Add("${p1ContinuationContractsPath}: local-core shared-state continuation compatibility contract is missing")
+}
+foreach ($enemyHpContinuationRule in @(
+    'allowLivingEnemyHpDecrease',
+    'IsLivingEnemyHpDecreaseOnly(',
+    'actualHp < expectedHp')) {
+    if (-not $p1ContinuationContractsText.Contains($enemyHpContinuationRule)) {
+        $violations.Add("${p1ContinuationContractsPath}: nonlethal remote enemy-HP continuation drifted '$enemyHpContinuationRule'")
+    }
 }
 foreach ($localCoreQualityRule in @(
     'sharedFinishedCardPlayDrift',

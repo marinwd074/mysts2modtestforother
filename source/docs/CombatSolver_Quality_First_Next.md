@@ -229,6 +229,14 @@
 - 动态路线现在按每个 SearchNode 的敌方 alive-mask 变化携带基础击杀标记；最终路线仍以精确 annotation replay 的 `RecordedKill` 来源覆盖它，因此普通显式卡牌、结束回合触发与隐式自动牌统一走同一套击杀展示链。
 - 该改动只增加路线注释/展示，不改变 Beam 评分、3 回合预测窗、动作合法性或部署授权。
 
+### TUNNELER：第二回合不再因队友非斩杀伤害冷重算（2026-09-27）
+
+- 问题包 `TUNNELER_WEAK-7116f29c223e431089f215e845817983` 的第一回合路线已经生成 T2/T3 continuation，但第二回合开始时预测敌人 HP 为 181、实机为 161；日志同时记录 `enemy_hp_route_changed=false`、`in_lethal_window=false`。Route tracker 认为无需失效，但 continuation 的 exact-state 门禁仍以 `field=E0.hp` 拒绝复用并触发 cold search。
+- 默认 `MultiplayerSinglePlayerCore` 现在允许一种新的软漂移：**同一只仍存活敌人的当前 HP 只向下变化**。combat id、怪物 id、slot、max HP、block、next move 必须完全一致，本地 HP/能量/手牌/牌堆/Power/RNG 等其余字段继续沿用原严格规则。
+- HP 上升、敌人从存活跨到死亡、Block 改变或任何其他敌人字段变化都会拒绝 continuation。不会把实际已死目标继续按旧路线执行。
+- 若设置 `UseMultiplayerLethalHpRecalculation` 开启且实机已进入已有 `IsInLethalRecalculationWindow`，即使只是 HP 向下变化也不放宽，仍按原逻辑重算；因此 continuation 与现有“普通 HP 变化忽略、斩杀窗口重算”的 route-version 策略一致。
+- 成功复用时日志标记 `validation=exact_except_remote_enemy_hp`、`living_enemy_hp_decrease_drift=true`、`reason=remote_enemy_hp_decrease`。
+
 ### 当前真实样本补充：多人战损只统计本地玩家（2026-09-26）
 
 - 问题包 `1cd414aa66e94546bd9713630077d99c` 的 MAWLER 首回合实机记录显示：敌人两次 4 点攻击都对本地玩家结算为 `BlockedDamage=4 / UnblockedDamage=0`，50 格挡最终剩 42；队友则两次各承受 4 点。敌人对本地造成的实际 HP 伤害为 0。
