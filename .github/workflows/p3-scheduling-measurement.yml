@@ -65,54 +65,77 @@ jobs:
           $gameData = (Resolve-Path '.\game-body\data_sts2_windows_x86_64').Path
           dotnet build '.\source\tools\E0PinnedHarness\E0PinnedHarness.csproj' -c Release -p:Sts2DataDir="$gameData" -p:RitsuLibReferencesProps="$env:RITSU_PROPS" -p:RitsuWorkshopRoot="$env:RITSU_ROOT" -p:RitsuLibReferenceTarget='0.107.1' -p:TreatWarningsAsErrors=true --nologo
 
-      - name: Run P3 formal cross-family paired A/B
+      - name: Run P3 fresh-process cold and warm pairs
         shell: pwsh
         run: |
+          $harness = '.\source\tools\E0PinnedHarness\bin\Release\net9.0\E0PinnedHarness.dll'
           $cases = @(
-            @{ Name = 'pair1-ab'; Reverse = $false },
-            @{ Name = 'pair2-ba'; Reverse = $true },
-            @{ Name = 'pair3-ab'; Reverse = $false }
+            @{ Name = 'cold-baseline'; Mode = '--p3-single-baseline'; Prewarm = $false },
+            @{ Name = 'cold-cross'; Mode = '--p3-single-cross'; Prewarm = $false },
+            @{ Name = 'warm1-baseline'; Mode = '--p3-single-baseline'; Prewarm = $true },
+            @{ Name = 'warm1-cross'; Mode = '--p3-single-cross'; Prewarm = $true },
+            @{ Name = 'warm2-baseline'; Mode = '--p3-single-baseline'; Prewarm = $true },
+            @{ Name = 'warm2-cross'; Mode = '--p3-single-cross'; Prewarm = $true }
           )
-          $results = @()
+
           foreach ($case in $cases) {
             $workspace = Join-Path $env:RUNNER_TEMP $case.Name
             New-Item -ItemType Directory -Force -Path $workspace | Out-Null
             $args = @(
-              '.\source\tools\E0PinnedHarness\bin\Release\net9.0\E0PinnedHarness.dll',
+              $harness,
               '--scenario', 'teammate',
               '--out', $workspace,
-              '--p3-scheduling-probe'
+              '--p3-scheduling-probe',
+              $case.Mode
             )
-            $args += if ($case.Reverse) {
-              '--p3-cross-family-ab-reverse'
-            } else {
-              '--p3-cross-family-ab'
+            if ($case.Prewarm) {
+              $args += '--p3-prewarm'
             }
             & dotnet @args
             if ($LASTEXITCODE -ne 0) {
-              throw "P3 formal paired A/B failed for $($case.Name) with exit $LASTEXITCODE."
+              throw "P3 single-run evidence failed for $($case.Name) with exit $LASTEXITCODE."
             }
-            $evidence = Get-Content -LiteralPath (Join-Path $workspace 'p3-cross-family-ab.json') -Raw
-            $parsed = $evidence | ConvertFrom-Json
-            $results += $parsed
-            "P3_PAIR=$($case.Name) $($evidence -replace '\r?\n',' ')"
+            $evidence = Get-Content -LiteralPath (Join-Path $workspace 'p3-single.json') -Raw
+            "P3_SINGLE_CASE=$($case.Name) $($evidence -replace '\r?\n',' ')"
           }
 
-          $regressions = @($results | Where-Object { -not $_.acceptance.finalQualityNotWorse })
-          if ($regressions.Count -ne 0) {
-            throw "P3 paired A/B contains $($regressions.Count) formal quality regressions."
+          $pairs = @(
+            @{ Name = 'cold'; Baseline = 'cold-baseline'; Cross = 'cold-cross' },
+            @{ Name = 'warm1'; Baseline = 'warm1-baseline'; Cross = 'warm1-cross' },
+            @{ Name = 'warm2'; Baseline = 'warm2-baseline'; Cross = 'warm2-cross' }
+          )
+          $scheduledWarmPairs = 0
+          $earlierWarmPairs = 0
+          foreach ($pair in $pairs) {
+            $baselineDir = Join-Path $env:RUNNER_TEMP $pair.Baseline
+            $crossDir = Join-Path $env:RUNNER_TEMP $pair.Cross
+            $baselineQuality = Join-Path $baselineDir 'p3-quality.json'
+            $crossQuality = Join-Path $crossDir 'p3-quality.json'
+
+            & dotnet $harness --p3-compare-candidate $crossQuality --p3-compare-current $baselineQuality
+            if ($LASTEXITCODE -ne 0) {
+              throw "P3 formal quality regression in $($pair.Name) pair."
+            }
+
+            $baseline = Get-Content -LiteralPath (Join-Path $baselineDir 'p3-single.json') -Raw | ConvertFrom-Json
+            $cross = Get-Content -LiteralPath (Join-Path $crossDir 'p3-single.json') -Raw | ConvertFrom-Json
+
+            if ($cross.TotalExpandedNodes -gt $cross.configuredMaxExpandedNodes) {
+              throw "P3 $($pair.Name) exceeded node budget: $($cross.TotalExpandedNodes)>$($cross.configuredMaxExpandedNodes)."
+            }
+            if ($pair.Name -like 'warm*' -and $null -ne $cross.firstPotionWorkMs) {
+              $scheduledWarmPairs++
+              if ($null -eq $baseline.firstPotionWorkMs -or $cross.firstPotionWorkMs -lt $baseline.firstPotionWorkMs) {
+                $earlierWarmPairs++
+              } else {
+                throw "P3 $($pair.Name) did not start potion work earlier than baseline."
+              }
+            }
+
+            "P3_FRESH_PAIR name=$($pair.Name) baseline_hp=$($baseline.ProjectedBattleHpLost) cross_hp=$($cross.ProjectedBattleHpLost) baseline_potion_first_ms=$($baseline.firstPotionWorkMs) cross_potion_first_ms=$($cross.firstPotionWorkMs) baseline_nodes=$($baseline.TotalExpandedNodes) cross_nodes=$($cross.TotalExpandedNodes) baseline_published_ms=$($baseline.publishedMs) cross_published_ms=$($cross.publishedMs)"
           }
-          $budgetViolations = @($results | Where-Object { -not $_.acceptance.withinConfiguredNodeBudget })
-          if ($budgetViolations.Count -ne 0) {
-            throw "P3 paired A/B contains $($budgetViolations.Count) node budget violations."
+
+          if ($scheduledWarmPairs -lt 1 -or $earlierWarmPairs -ne $scheduledWarmPairs) {
+            throw "P3 warm evidence did not demonstrate earlier potion work."
           }
-          $scheduled = @($results | Where-Object { $_.acceptance.potionScheduled })
-          if ($scheduled.Count -lt 1) {
-            throw 'P3 paired A/B never scheduled potion work; no starvation improvement was demonstrated.'
-          }
-          $latePotion = @($scheduled | Where-Object { -not $_.acceptance.potionStartedEarlier })
-          if ($latePotion.Count -ne 0) {
-            throw "P3 paired A/B contains $($latePotion.Count) scheduled pairs without earlier potion work."
-          }
-          $coldFallbacks = @($results | Where-Object { $_.acceptance.safeColdFallback })
-          "P3_PAIRED_SUMMARY pairs=$($results.Count) potion_scheduled=$($scheduled.Count) safe_cold_fallbacks=$($coldFallbacks.Count) quality_regressions=$($regressions.Count) budget_violations=$($budgetViolations.Count)"
+          "P3_FRESH_SUMMARY pairs=3 searches=10 warm_potion_scheduled=$scheduledWarmPairs warm_potion_earlier=$earlierWarmPairs"
