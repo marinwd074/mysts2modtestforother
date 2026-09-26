@@ -56,95 +56,159 @@ internal static partial class CombatSearchCoordinator
                 potionPolicyOverride: SolverPotionPolicy.Disabled)
             .CreateExecutionSession();
 
-        using CombatBeamSolver.SearchMemberExecutionSession potionSession =
-            new CombatBeamSolver(
-                root,
-                displayNames,
-                battleDamage,
-                memberPolicy,
-                cancellationToken,
-                progressCallback: null,
-                profile,
-                potionPolicyOverride: SolverPotionPolicy.RequireAtLeastOne,
-                potionFreePolicyBaseline: null,
-                maximumPotionUses: 1,
-                minimumPotionUses: 1)
-            .CreateExecutionSession();
-
         SolverResult? beamResult = null;
         SolverResult? potionResult = null;
+        CombatBeamSolver.SearchMemberExecutionSession? potionSession = null;
         bool beamDone = false;
         bool potionDone = false;
         bool potionMissing = false;
+        bool potionSchedulingEnabled = false;
+        bool potionSchedulingSkippedForColdQuality = false;
         int rounds = 0;
 
         const int beamSlicesPerPotionSlice = 4;
-        while (!beamDone || !potionDone)
+        int minimumBeamWarmupNodes = Math.Max(1, profile.MaxExpandedNodes / 3);
+        long warmupDeadlineMs = Math.Max(
+            1,
+            profile.SoftTimeBudgetMilliseconds * 3L / 5L);
+
+        SearchStepResult StepBeam()
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            rounds = checked(rounds + 1);
-
-            for (int beamSlice = 0;
-                 beamSlice < beamSlicesPerPotionSlice && !beamDone;
-                 beamSlice++)
+            SearchStepResult step = beamSession.Step(
+                E3FixedMemberAllowance,
+                cancellationToken);
+            if (step.Status == SearchStepStatus.Completed)
             {
-                SearchStepResult step = beamSession.Step(
-                    E3FixedMemberAllowance,
-                    cancellationToken);
-                if (step.Status == SearchStepStatus.Completed)
-                {
-                    beamResult = beamSession.Result
-                        ?? throw new InvalidOperationException("P3 Beam member completed without a result.");
-                    beamDone = true;
-                }
-                else if (step.Status == SearchStepStatus.Canceled)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    throw new OperationCanceledException(cancellationToken);
-                }
-                else if (step.Status == SearchStepStatus.BudgetExhausted)
-                {
-                    throw new InvalidOperationException("P3 Beam member exhausted without a result.");
-                }
+                beamResult = beamSession.Result
+                    ?? throw new InvalidOperationException(
+                        "P3 Beam member completed without a result.");
+                beamDone = true;
             }
-
-            if (!potionDone)
+            else if (step.Status == SearchStepStatus.Canceled)
             {
-                try
-                {
-                    SearchStepResult step = potionSession.Step(
-                        E3FixedMemberAllowance,
-                        cancellationToken);
-                    if (step.Status == SearchStepStatus.Completed)
-                    {
-                        potionResult = potionSession.Result
-                            ?? throw new InvalidOperationException(
-                                "P3 potion member completed without a result.");
-                        potionDone = true;
-                    }
-                    else if (step.Status == SearchStepStatus.Canceled)
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        throw new OperationCanceledException(cancellationToken);
-                    }
-                    else if (step.Status == SearchStepStatus.BudgetExhausted)
-                    {
-                        throw new InvalidOperationException(
-                            "P3 potion member exhausted without a result.");
-                    }
-                }
-                catch (PotionPolicyUnsatisfiedException)
-                {
-                    potionMissing = true;
-                    potionDone = true;
-                }
+                cancellationToken.ThrowIfCancellationRequested();
+                throw new OperationCanceledException(cancellationToken);
             }
-
-            if (rounds > profile.MaxExpandedNodes + 1024)
+            else if (step.Status == SearchStepStatus.BudgetExhausted)
             {
                 throw new InvalidOperationException(
-                    "P3 cross-family scheduler exceeded its deterministic round guard.");
+                    "P3 Beam member exhausted without a result.");
             }
+            return step;
+        }
+
+        try
+        {
+            // Quality-first warm-up. A cold process can spend a large fraction of the request
+            // on JIT/static initialization. Do not let a second family steal that first request:
+            // require meaningful Beam work and a provisional win before starting potion search.
+            while (!beamDone
+                && sharedBudget.HasExpandedNodeBudgetRemaining
+                && !sharedBudget.IsExpired)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                _ = StepBeam();
+
+                SolverInterimResult? incumbent =
+                    beamSession.CurrentBestResultForScheduling;
+                bool enoughBeamWork =
+                    sharedBudget.ExpandedNodes >= minimumBeamWarmupNodes;
+                bool provisionalWin = incumbent?.Won == true;
+                if (enoughBeamWork && provisionalWin)
+                {
+                    potionSchedulingEnabled = true;
+                    break;
+                }
+
+                if (sharedBudget.ElapsedMilliseconds >= warmupDeadlineMs)
+                {
+                    potionSchedulingSkippedForColdQuality = true;
+                    break;
+                }
+            }
+
+            if (beamDone && beamResult != null && IsCompleteVictory(beamResult)
+                && sharedBudget.HasExpandedNodeBudgetRemaining
+                && !sharedBudget.IsExpired)
+            {
+                potionSchedulingEnabled = true;
+            }
+
+            if (potionSchedulingEnabled)
+            {
+                potionSession = new CombatBeamSolver(
+                        root,
+                        displayNames,
+                        battleDamage,
+                        memberPolicy,
+                        cancellationToken,
+                        progressCallback: null,
+                        profile,
+                        potionPolicyOverride: SolverPotionPolicy.RequireAtLeastOne,
+                        potionFreePolicyBaseline: null,
+                        maximumPotionUses: 1,
+                        minimumPotionUses: 1)
+                    .CreateExecutionSession();
+            }
+            else
+            {
+                potionDone = true;
+            }
+
+            while (!beamDone || !potionDone)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                rounds = checked(rounds + 1);
+
+                for (int beamSlice = 0;
+                     beamSlice < beamSlicesPerPotionSlice && !beamDone;
+                     beamSlice++)
+                {
+                    _ = StepBeam();
+                }
+
+                if (!potionDone && potionSession != null)
+                {
+                    try
+                    {
+                        SearchStepResult step = potionSession.Step(
+                            E3FixedMemberAllowance,
+                            cancellationToken);
+                        if (step.Status == SearchStepStatus.Completed)
+                        {
+                            potionResult = potionSession.Result
+                                ?? throw new InvalidOperationException(
+                                    "P3 potion member completed without a result.");
+                            potionDone = true;
+                        }
+                        else if (step.Status == SearchStepStatus.Canceled)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            throw new OperationCanceledException(cancellationToken);
+                        }
+                        else if (step.Status == SearchStepStatus.BudgetExhausted)
+                        {
+                            throw new InvalidOperationException(
+                                "P3 potion member exhausted without a result.");
+                        }
+                    }
+                    catch (PotionPolicyUnsatisfiedException)
+                    {
+                        potionMissing = true;
+                        potionDone = true;
+                    }
+                }
+
+                if (rounds > profile.MaxExpandedNodes + 1024)
+                {
+                    throw new InvalidOperationException(
+                        "P3 cross-family scheduler exceeded its deterministic round guard.");
+                }
+            }
+        }
+        finally
+        {
+            potionSession?.Dispose();
         }
 
         if (beamResult == null)
@@ -218,6 +282,9 @@ internal static partial class CombatSearchCoordinator
         policy.Diagnostics.Info(
             $"[CombatSolver/Test] P3_CROSS_FAMILY_FIXED " +
             $"rounds={rounds} beam_to_potion={beamSlicesPerPotionSlice}:1 " +
+            $"warmup_nodes={minimumBeamWarmupNodes} warmup_deadline_ms={warmupDeadlineMs} " +
+            $"potion_scheduled={potionSchedulingEnabled.ToString().ToLowerInvariant()} " +
+            $"cold_quality_skip={potionSchedulingSkippedForColdQuality.ToString().ToLowerInvariant()} " +
             $"node_budget={sharedBudget.ExpandedNodes}/{sharedBudget.MaxExpandedNodes} " +
             $"elapsed_ms={sharedBudget.ElapsedMilliseconds}/{sharedBudget.BudgetMilliseconds} " +
             $"beam_boundary={beamResult.BoundaryReason} beam_hp={potionFreeDeficit} " +
