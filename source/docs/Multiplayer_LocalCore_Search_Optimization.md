@@ -7,7 +7,7 @@
 2026-09-26 用户要求执行最难的跨回合复用部分。本次实现基于 `9390af5`，保留远端已加入的路线提前发布和续接误判修复。
 
 - P0 已收尾：默认 `MultiplayerSinglePlayerCore` 共用候选前缀保留入口；最终排序 → 结果物化 → Runtime Pending refresh → 新根 bounded replay 调用链加入快速结构门禁。`--replay-candidate-retention` 专用合同同时覆盖 exact / 存活目标 HP/Block 可重放，以及目标死亡 / 本地资源 / RNG 变化拒绝。候选仍最多 3 条、每条最多 2 个当前回合普通 PlayCard；未开启 Shadow/Team/Scenario/Carry，未修改预算、评分或 UI。
-- P1 已实现：精确 continuation 仍是第一优先级；失败后若战斗、本地玩家和多人规则身份仍兼容，Runtime 提取当前回合连续普通 PlayCard 建议并冻结到 `SearchPolicySnapshot.ContinuationSeedActions`。Search 保留正常冷根，同时从真实新根额外重放建议分支；完整合法则加入完整种子，中途失效则只保留已验证前缀，第一步失效或模拟异常则完全回到冷搜索。
+- P1 已实现：精确 continuation 仍是第一优先级；失败后若战斗、本地玩家和多人规则身份仍兼容，Runtime 提取当前回合连续普通 PlayCard 建议并冻结到 `SearchPolicySnapshot.ContinuationSeedActions`。Search 保留正常冷根，同时从真实新根额外重放建议分支；完整合法则加入完整种子，中途失效则只保留已验证前缀，第一步失效或明确的 `PredictionUnsupportedException` 则完全回到冷搜索；其他模拟异常继续上抛，不能被热启动掩盖。
 - P1 种子只在每个请求的首个 Beam baseline 成员消费一次，Novelty、精炼成员、强制药水/Choice、既有 fixed-prefix 专项搜索不重复花这份工作；重放转移计入原搜索的 transition/elapsed 账户。所有后续排序、药水资格、最终物化和 Safe Execute 仍走现有流程，不直接部署旧结果，也不改变自动采用时机。
 - 首版继续只支持同一新根当前回合、带精确 `CardStateKey` 的普通 PlayCard；药水、Choice、TurnStart Choice、Shadow forecast 和跨越下一个回合边界仍明确停在建议重放边界。RNG/手牌变化允许从新根重新尝试建议，但牌实例不存在、不可出或动作语义异常时停止，不猜同名替代。
 - P1 已加入 `resume_kind=exact_continuation|seeded_search|cold_search` 诊断和专用 action-boundary 合同；真实 Host/Client 的跨回合等待收益与最终质量仍需实机/固定输入 A/B 证明，本阶段不宣称性能收益。

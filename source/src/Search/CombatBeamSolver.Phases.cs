@@ -2491,15 +2491,13 @@ internal sealed partial class CombatBeamSolver
             {
                 next = TryApplyPrefixAction(node, action);
             }
-            catch (Exception ex)
-                when (ex is not OperationCanceledException
-                      && ex is not OutOfMemoryException)
+            catch (PredictionUnsupportedException ex)
             {
                 policy.Diagnostics.Info(
-                    $"[CombatSolver/Test] SEARCH_CONTINUATION_SEED_EXCEPTION " +
+                    $"[CombatSolver/Test] SEARCH_CONTINUATION_SEED_UNSUPPORTED " +
                     $"replayed={replayedActions} exception={ex.GetType().Name}");
                 node.Snapshot.ReleaseSimulator();
-                reason = $"simulation_exception:{ex.GetType().Name}";
+                reason = $"prediction_unsupported:{ex.GetType().Name}";
                 return null;
             }
 
