@@ -65,13 +65,32 @@ jobs:
           $gameData = (Resolve-Path '.\game-body\data_sts2_windows_x86_64').Path
           dotnet build '.\source\tools\E0PinnedHarness\E0PinnedHarness.csproj' -c Release -p:Sts2DataDir="$gameData" -p:RitsuLibReferencesProps="$env:RITSU_PROPS" -p:RitsuWorkshopRoot="$env:RITSU_ROOT" -p:RitsuLibReferenceTarget='0.107.1' -p:TreatWarningsAsErrors=true --nologo
 
-      - name: Run P3 formal cross-family A/B
+      - name: Run P3 formal cross-family paired A/B
         shell: pwsh
         run: |
-          $workspace = Join-Path $env:RUNNER_TEMP 'p3-cross-family-ab'
-          New-Item -ItemType Directory -Force -Path $workspace | Out-Null
-          & dotnet '.\source\tools\E0PinnedHarness\bin\Release\net9.0\E0PinnedHarness.dll' --scenario teammate --out $workspace --p3-scheduling-probe --p3-cross-family-ab
-          if ($LASTEXITCODE -ne 0) {
-            throw "P3 formal cross-family A/B failed with exit $LASTEXITCODE."
+          $cases = @(
+            @{ Name = 'pair1-ab'; Reverse = $false },
+            @{ Name = 'pair2-ba'; Reverse = $true },
+            @{ Name = 'pair3-ab'; Reverse = $false }
+          )
+          foreach ($case in $cases) {
+            $workspace = Join-Path $env:RUNNER_TEMP $case.Name
+            New-Item -ItemType Directory -Force -Path $workspace | Out-Null
+            $args = @(
+              '.\source\tools\E0PinnedHarness\bin\Release\net9.0\E0PinnedHarness.dll',
+              '--scenario', 'teammate',
+              '--out', $workspace,
+              '--p3-scheduling-probe'
+            )
+            $args += if ($case.Reverse) {
+              '--p3-cross-family-ab-reverse'
+            } else {
+              '--p3-cross-family-ab'
+            }
+            & dotnet @args
+            if ($LASTEXITCODE -ne 0) {
+              throw "P3 formal paired A/B failed for $($case.Name) with exit $LASTEXITCODE."
+            }
+            $evidence = Get-Content -LiteralPath (Join-Path $workspace 'p3-cross-family-ab.json') -Raw
+            "P3_PAIR=$($case.Name) $($evidence -replace '\r?\n',' ')"
           }
-          Get-Content -LiteralPath (Join-Path $workspace 'p3-cross-family-ab.json')
