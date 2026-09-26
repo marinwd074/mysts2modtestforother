@@ -33,7 +33,8 @@ internal static class Program
 
     private static int Main(string[] args)
     {
-        string outputDirectory = ParseOutput(args);
+        bool darkEmbracePactOnly = args.Length > 0 && args[0] == "dark-embrace-pact";
+        string outputDirectory = ParseOutput(darkEmbracePactOnly ? args[1..] : args);
         Directory.CreateDirectory(outputDirectory);
 
         try
@@ -79,6 +80,13 @@ internal static class Program
                 combat,
                 includeTurnSetup: false,
                 theftPolicy: null);
+
+            if (darkEmbracePactOnly)
+            {
+                ValidateDarkEmbraceBurningPactDraw(combat, names, damage, captured, profile);
+                Console.WriteLine("DarkEmbraceBurningPact PASS");
+                return 0;
+            }
 
             U0Evidence u0 = RunU0(combat, names, damage, captured, profile);
             U1Evidence u1 = RunU1(combat, names, damage, captured, profile, u0.FirstAction);
@@ -182,6 +190,54 @@ internal static class Program
         Require(
             CardEffectSpecRegistry.Contains(darkEmbrace),
             "Dark Embrace power application is missing from CardEffectSpecRegistry.");
+    }
+
+    private static void ValidateDarkEmbraceBurningPactDraw(
+        CombatState combat,
+        SolverDisplayNames names,
+        BattleDamageSnapshot damage,
+        SearchPolicySnapshot policy,
+        SolverSearchProfile profile)
+    {
+        Player player = LocalContext.GetMe(combat)
+            ?? throw new InvalidOperationException("Dark Embrace fixture has no local player.");
+        var state = player.PlayerCombatState
+            ?? throw new InvalidOperationException("Dark Embrace fixture has no local combat state.");
+        foreach (string id in new[] { "DARK_EMBRACE", "BURNING_PACT", "HELLRAISER" })
+            state.Hand.AddInternal(combat.CreateCard(ResolveCard(id), player), -1);
+        foreach (string id in new[] { "OFFERING", "NOT_YET", "STOKE", "DEFEND_IRONCLAD" })
+            state.DrawPile.AddInternal(combat.CreateCard(ResolveCard(id), player), 0);
+        int turn = state.TurnNumber;
+        PlanAction embrace = new(PlanActionKind.PlayCard, turn, CardId: "DARK_EMBRACE");
+        PlanAction pact = new(PlanActionKind.PlayCard, turn, CardId: "BURNING_PACT",
+            Choice: new PlanCardChoice(PlanChoiceEffect.Exhaust, PileType.Hand,
+                [new PlanCardToken("HELLRAISER", 0, "", 0, 0, "Hellraiser")]));
+        CombatBeamSolver replay = new(CombatRootSnapshot.Capture(combat), names, damage, policy,
+            searchProfile: profile);
+        SimulationSnapshot afterEmbrace = replay.ReplayDiagnosticPrefix([embrace]);
+        try
+        {
+            Require(afterEmbrace.BoundaryReason == SearchBoundaryReason.None,
+                $"Dark Embrace replay reached {afterEmbrace.BoundaryReason}.");
+            Require(((SimulatedCombatState)afterEmbrace.Simulator.State.CombatState)
+                    .GetAmount<DarkEmbracePower>(player.Creature) == 1,
+                "Dark Embrace applied more than one power stack.");
+        }
+        finally { afterEmbrace.ReleaseSimulator(); }
+
+        SimulationSnapshot afterPact = replay.ReplayDiagnosticPrefix([embrace, pact]);
+        try
+        {
+            Require(afterPact.BoundaryReason == SearchBoundaryReason.None,
+                $"Burning Pact replay reached {afterPact.BoundaryReason}.");
+            SimPlayerCombatState predicted = afterPact.Simulator.State.GetPlayerCombatState(player);
+            string[] hand = predicted.Hand.Cards.Select(card => card.Preview.Id.Entry).ToArray();
+            Require(hand.Contains("DEFEND_IRONCLAD") && hand.Contains("STOKE") && hand.Contains("NOT_YET")
+                && !hand.Contains("OFFERING") && predicted.DrawPile.Cards[0].Preview.Id.Entry == "OFFERING",
+                $"Burning Pact predicted the wrong draw: hand={string.Join(',', hand)}; "
+                + $"next={predicted.DrawPile.Cards[0].Preview.Id.Entry}.");
+        }
+        finally { afterPact.ReleaseSimulator(); }
     }
 
     private static U0Evidence RunU0(

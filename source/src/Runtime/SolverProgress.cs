@@ -277,6 +277,9 @@ internal sealed record SolverProgress(
     // scenario rerank and deterministic block-potion insertion) but is still flattening
     // replay/annotation data. The coordinator records Published only if this route actually
     // wins the global displayed-result ordering.
+    // Current-turn quality is an independent anytime incumbent. A later complete
+    // long-horizon route must not overwrite a better first-turn line merely because it won.
+    public SolverInterimResult? CurrentTurnBestResult { get; init; }
     public CandidateOrigin? OfficialPublishedOrigin { get; init; }
     public string? OfficialPublishedEvaluationContextId { get; init; }
 }

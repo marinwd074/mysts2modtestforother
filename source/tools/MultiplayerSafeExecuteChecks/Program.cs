@@ -177,6 +177,25 @@ IReadOnlyList<SafeLocalActionDecision> longSafePrefix =
 Check(
     longSafePrefix.Count == longSafeRoute.Count && longSafeStop.IsSafe,
     "Safe Execute preflight is bounded by the finite planned route, not a fixed action-count ceiling.");
+
+/*
+ * Historical VINE_SHAMBLER regression: a later action can be absent from the root hand
+ * and become legal only after an earlier Offering/draw action. Root-time resolved
+ * availability must therefore not truncate the structurally safe deployment prefix.
+ */
+SafeLocalActionDecision futureDrawCardAtRoot = Resolved(localCard: false);
+IReadOnlyList<SafeLocalActionDecision> offeringStyleRoute =
+    [Structural(), Structural(), Structural()];
+IReadOnlyList<SafeLocalActionDecision> offeringStylePreflight =
+    MultiplayerSafeExecutePolicy.TakeBoundedSafePrefix(
+        offeringStyleRoute,
+        decision => decision,
+        out SafeLocalActionDecision offeringStyleStop);
+Check(
+    futureDrawCardAtRoot.Reason == "local_card_missing"
+        && offeringStylePreflight.Count == offeringStyleRoute.Count
+        && offeringStyleStop.IsSafe,
+    "Offering-style preflight keeps structurally valid future-drawn actions; live hand presence is checked only when each action is reached.");
 IReadOnlyList<SafeLocalActionDecision> allSafe =
     [SafeLocalActionDecision.Allow, SafeLocalActionDecision.Allow,
      SafeLocalActionDecision.Allow, SafeLocalActionDecision.Allow];
@@ -302,6 +321,11 @@ MultiplayerSafeActionRevalidationFacts RevalidationFacts(bool hasNextAction = tr
         WorldVersionAdvanced: true,
         WorldVersionStable: true,
         HasNextAction: hasNextAction);
+
+Check(
+    !Enum.GetNames<MultiplayerSafeActionRevalidationDecision>()
+        .Contains("RemoteOrUnknownChange", StringComparer.Ordinal),
+    "Expected local side effects cannot reintroduce the retired RemoteOrUnknownChange post-action abort.");
 
 Check(
     MultiplayerSafeExecutePolicy.RevalidateAction(RevalidationFacts())

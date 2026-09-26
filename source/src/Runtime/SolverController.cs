@@ -117,12 +117,38 @@ internal static partial class SolverController
             CombatState? state = CombatManager.Instance.DebugOnlyGetState();
             if (state == null || !CombatManager.Instance.IsInProgress)
                 return false;
-            if (!SolverSessionCapabilities.Capture(state).CanDeploySimpleLocalActions)
+            SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
+            if (!capabilities.CanDeploySimpleLocalActions)
                 return false;
-            return _combat.LatestResult != null
-                    && _combat.LatestStamp == LiveCombatStamp.Capture(state)
+            LiveCombatStamp current = LiveCombatStamp.Capture(state);
+            return IsLatestResultDeploymentCompatible(state, capabilities, current)
                 || PlayerTurnSetupCoordinator.CanTakeOverTurnSetup(state);
         }
+    }
+
+    private static bool IsLatestResultDeploymentCompatible(
+        CombatState state,
+        SolverSessionCapabilitySet capabilities,
+        LiveCombatStamp current)
+    {
+        if (_combat.LatestResult == null || _combat.LatestStamp is not { } latestStamp)
+            return false;
+        if (latestStamp == current)
+            return true;
+        return capabilities.IsMultiplayer
+            && !SolverSettings.Current.UseMultiplayerPrediction
+            && _combat.LatestRouteVersion == MultiplayerRouteChangeTracker.Version
+            && LiveCombatStamp.IsLocalCoreSearchCompatible(latestStamp, state);
+    }
+
+    private static void RefreshLatestDeploymentStamp(
+        CombatState state,
+        LiveCombatStamp current)
+    {
+        _combat.LatestStamp = current;
+        _combat.LatestRouteVersion = SolverSessionCapabilities.Capture(state).IsMultiplayer
+            ? MultiplayerRouteChangeTracker.Version
+            : 0;
     }
 
     /// <summary>
@@ -852,16 +878,33 @@ internal static partial class SolverController
         if (safeExecuteRequest)
             _combat.MultiplayerSafeExecuteDeploymentRequested = true;
         LiveCombatStamp current = LiveCombatStamp.Capture(state);
-        if (_combat.LatestResult != null && _combat.LatestStamp == current)
+        bool useLocalSingleCore =
+            capabilities.IsMultiplayer && !SolverSettings.Current.UseMultiplayerPrediction;
+        if (IsLatestResultDeploymentCompatible(state, capabilities, current))
         {
+            if (_combat.LatestStamp != current)
+            {
+                RefreshLatestDeploymentStamp(state, current);
+                Entry.Logger.Info(
+                    $"[CombatSolver/Test] DEPLOY_COMPATIBLE_WORLD_DELTA " +
+                    $"turn={LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0} " +
+                    $"world_version={MultiplayerWorldTracker.WorldVersion} " +
+                    $"route_version={MultiplayerRouteChangeTracker.Version}");
+            }
             _combat.MultiplayerSafeExecuteDeploymentRequested = false;
-            StartDeployment(host, state, _combat.LatestResult);
+            StartDeployment(host, state, _combat.LatestResult!);
             return;
         }
 
+        LiveCombatStamp? currentLocalCoreStamp = useLocalSingleCore
+            ? LiveCombatStamp.CaptureLocalCoreSearchValidity(state)
+            : null;
         if (_search is { } search
             && ReferenceEquals(search.State, state)
-            && search.Stamp == current)
+            && (search.Stamp == current
+                || search.UseRouteScopedCompletion
+                    && search.RouteVersion == MultiplayerRouteChangeTracker.Version
+                    && search.LocalCoreSearchStamp == currentLocalCoreStamp))
         {
             search.DeployWhenReady = true;
             Player player = LocalContext.GetMe(state)!;
@@ -870,12 +913,17 @@ internal static partial class SolverController
                 player.PlayerCombatState!.TurnNumber,
                 deployWhenReady: true,
                 _combat.ReviewedWorldlinesTotal);
-            Entry.Logger.Info($"[CombatSolver/Test] DEPLOY_WAIT generation={search.Generation}");
+            Entry.Logger.Info(
+                $"[CombatSolver/Test] DEPLOY_WAIT generation={search.Generation} " +
+                $"route_scoped={(search.Stamp != current).ToString().ToLowerInvariant()}");
             return;
         }
 
-        if ((_combat.LatestResult != null || _search != null) && _combat.LatestStamp != current)
-            MarkManualControlObserved("deploy_after_live_state_change");
+        if ((_combat.LatestResult != null || _search != null)
+            && _combat.LatestStamp != current)
+        {
+            MarkManualControlObserved("deploy_after_local_state_change");
+        }
 
         RequestSearch(host, state, SearchReason.Deploy, deployWhenReady: true);
     }

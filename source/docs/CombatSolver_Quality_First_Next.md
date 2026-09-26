@@ -175,6 +175,53 @@
 - 新增 `E3_CROSS_FAMILY_SCOUT` / `E3_CROSS_FAMILY_REUSE` 诊断和 scout 预算合同。目标不是保证固定秒数，而是消除“无药 TimeLimit 完整跑完之后才第一次搜索一药水路线”的结构性等待。
 
 
+### 当前真实样本补充：当前回合质量优先 + 队友普通出牌不再打断复用（2026-09-26）
+
+- 问题包 `44da26159c5e4e4e939e5a4d43ca1580` 证明首回合优质前缀并未缺失：完整搜索最终明确得到 `UNMOVABLE → OFFERING → SECOND_WIND → EndTurn`，重振后为 85 HP / 50 Block；但首次请求在约 56 秒完成后因为 `route_version=2→2` 不变时的 local stamp 漂移被 `SEARCH_STALE` 丢弃，随后人工重算才重新找到。
+- 同一包 T2/T3/T4 都先成功 `SEARCH_REUSED`，队友普通出牌期间 `enemy_hp_route_changed=false` 且 RouteVersion 不变，但点击执行仍触发 `manual_divergence` fresh search。根因是 local-core validity stamp 仍保留 `HC[0]`（全局已完成出牌数）；队友每打一张牌都会改变它，即使本地 H/D/C/X、HP、费用和 RouteVersion 全没变。
+- local-core 搜索/执行 validity 现在忽略 `HC[0]` 的远端增长；跨回合 continuation 同样允许只发生该字段和/或 shared Shuffle 漂移。其余 HC 分量仍精确。本地牌堆含 `GOLD_AXE` 时继续严格比较，因为它的数值明确读取全局 finished-card-play 计数。
+- 默认 `MultiplayerSinglePlayerCore` 不再把 Novelty 放在最前面。原 Novelty exploration envelope 改作**当前回合质量 scout**：同一 Beam/模拟内核、同一总请求预算，只设置 `CurrentTurnOnly=true` 先搜索固定手牌的低战损前缀；实际消耗从完整跨回合 Beam 的剩余预算扣除。诊断：`MP_LOCAL_CURRENT_TURN_QUALITY_SCOUT`。
+- 目的不是把当前回合硬编码成最终路线，而是先把像 `Offering → Second Wind` 这类近回合防御/资源组合展示出来，再继续完整路线；完整搜索仍可在后续发现更好的长期方案。
+- 补充协调器边界：current-turn scout 与整场 complete-victory incumbent 分开维护。后续完整路线只有在首回合与当前更优候选一致时才接管 speculative route；否则后台继续深化，但 UI 不再从低战损首回合回跳到更差的首回合。诊断：`SEARCH_CURRENT_TURN_PROMOTED`。
+- 问题包 `PHROG_PARASITE_ELITE-a39294cfc795445ba37aee48f82932e2` 进一步证明只保护 UI 仍不够：手牌为 `BARRICADE / FORGOTTEN_RITUAL / NOT_YET / STRIKE / NOT_YET`、4 费；约 5 秒时搜索已经出现以 `STRIKE` 开始的首回合候选，但 120 秒正式结果退化成 `BARRICADE → EndTurn`，并明确记录 `energy_left=1`。这不是“打击没进候选”，而是完整胜利的长尾排序最终覆盖了更好的首回合边界。
+- 正式结果现在与 anytime UI 使用同一原则：`MultiplayerSinglePlayerCore` 在最终完整路线选出后，再把它的首回合边界与搜索过程中保留的 current-turn incumbent 用既有 `SolverInterimResultOrdering` 比较；若 incumbent 严格更优，则最终物化为 `CurrentTurnAdoption`，下一回合从真实多人状态重新建根。不会增加“必须把能量花光”的规则；同战损/资源下，原排序已经会让更低敌方 HP（例如可合法补一张 Strike）的边界优先。诊断：`MP_LOCAL_CORE_CURRENT_TURN_PRIORITY`。
+
+### VINE_SHAMBLER 七包历史回归收口（2026-09-26）
+
+- `5cb164c8...` / `880808d2...`：搜索在根捕获阶段拒绝 TheBookOfAges 的 `ChronicleHandLimitPillagePatch`。当前生产代码已经用精确 owner / patch type / target type、且仅多人模式的惰性例外修复；本轮新增结构门禁，防止 Pillage / Scrawl 例外在重构中丢失。
+- `521b4365...` / `bafb159c...`：manual card choice 分支 Fork 时，正在执行且已离开普通牌堆的 `PredictedCard` 没有 remap。当前 `ForkManualCardChoice` 已先走 `PrepareExecutionCardPlay` 再 `RequireRemap`，原有 refactor gate 已固定这条所有权边界。
+- `7732e936...` / `cb8061a4...`：旧多人 continuation 因 `remote_public_mismatch` 在本地状态完全一致时仍重算。默认 `MultiplayerSinglePlayerCore` 已不再携带/比较队友公开 fingerprint；本轮增加 production source 禁止门禁，防止该依赖回流。
+- `cb8061a4...`：T2 路线明确为连续 `OFFERING` 后再打后续抽到的牌，但旧 Safe Execute 在部署开始时按根手牌检查整条路线，提前以 `local_card_missing` 截断。当前预检只看结构，真正的手牌存在性在每一步抵达时再检查；新增 Offering-style 回归合同固定这一分层。
+- `04606558...`：连续动作执行到 `PACTS_END` 后，旧 post-action gate 把本地合法连锁变化归为 `RemoteOrUnknownChange` 并触发 `DeploymentDrift`。当前 revalidation 只保留原生本地动作归因、队列稳定与 WorldVersion 前进/稳定，旧 decision 已删除；本轮新增禁止其重新出现的合同。
+- 因此这七包暴露的生产根因在当前 `main` 均已有行为修复。本轮不再叠加第二套补丁，只补齐缺失的回归合同与结构门禁，避免未来清理/重构把旧问题重新引入。
+
+### 当前真实样本补充：多人战损只统计本地玩家（2026-09-26）
+
+- 问题包 `1cd414aa66e94546bd9713630077d99c` 的 MAWLER 首回合实机记录显示：敌人两次 4 点攻击都对本地玩家结算为 `BlockedDamage=4 / UnblockedDamage=0`，50 格挡最终剩 42；队友则两次各承受 4 点。敌人对本地造成的实际 HP 伤害为 0。
+- 本地 HP 从 91 降到 85 的 6 点来自本地牌自身的 HP 消耗；这与怪物攻击的 0 穿透伤害是两个不同口径。
+- 根因之一是 `BattleDamageTracker` 仍使用旧单人假设：`Players.Count == 1` 才返回玩家。多人日志因此出现 `BATTLE_DAMAGE_RESET start_hp=-`，导致实际本地战损、卖血提交和重算基线全部失去真实起点。
+- 现在多人也通过 `LocalContext.GetMe(state)` 只追踪本地玩家。历史伤害继续按 receiver 精确过滤，因此队友的 4+4 不会进入本地战损；新增 `BATTLE_DAMAGE_OBSERVED` 记录 HP 实际下降、历史未格挡伤害和累计值，便于区分牌自损与怪物穿透伤害。
+
+### 当前真实样本补充：好路线找到后立即进入 anytime 预览（2026-09-26）
+
+- 问题包 `9607427a06024ec3abf3fc6c269ddd14` 的最终路线并非 80 秒才发现：E0 时间线显示最终候选在约 `20.357s` 已生成，`PRIMARY_INCUMBENT_UPDATE` 在约 `20.361s` 已把战略战损压到 5；但直到约 `80.369s` 才 evaluated/selected/published。
+- 根因在实时 `PublishRoutePreview`：为控制内存，已完成的优质终局节点可以释放 simulator，但预览层此前硬要求 `Snapshot.HasSimulator`，导致这些仍有完整不可变快照和动作链的候选被实时 UI 忽略。最终阶段重新物化后才“突然出现”。
+- 现在实时预览允许 retained/released snapshot 参与同一 FinalOrdering；如果用户采用该路线，正式 `MaterializeSelectedRoute` 仍通过 `RefreshReleasedFallback` 从根重放并重新授权，不直接执行释放后的模拟状态。诊断标记：`SEARCH_ANYTIME_RELEASED_SNAPSHOT_PREVIEW`。
+- 该修复不改变 Beam、评分、节点预算或候选集合，只把“已经找到的更好路线”更早发布。此样本的目标是把最终 5 战损路线的可见时间从约 80 秒推进到约 20 秒量级；仍需实机复测确认。
+
+### 当前真实样本补充：队友推进共享 Shuffle RNG 不再强制重算（2026-09-26）
+
+- 问题包 `04873fada8174afa84813c0e940eb670` 在 T3 的唯一 continuation 差异为 `R.shuffle`：预测计数 224，实机计数 233；同一时刻日志明确记录 `enemy_hp_route_changed=false`。因此本次每回合 fresh search 与敌方 HP 无关，是共享 Shuffle RNG 被当成本地 exact-state 硬门禁。
+- 默认 `MultiplayerSinglePlayerCore` 现在允许**仅 Shuffle RNG** 漂移的 continuation 继续复用；H/D/C/X、HP、能量、Power、敌人状态以及其他 RNG 流仍全部要求精确一致。队友 RNG 真正改变本地抽牌结果后，牌堆字段自然失配并触发重算。
+- 完整多人预测模式继续严格比较全部 RNG，不使用该放宽。成功复用时记录 `validation=exact_except_shared_shuffle_rng` 与 `shared_shuffle_rng_drift=true`。
+
+### 当前真实样本补充：未来死亡不再污染当前牌序（2026-09-26）
+
+- 最新无厌沙虫多人问题包出现明确世界模型偏差：本地玩家约 90 HP、累计战损仅约 19 HP，但 local-core 在不预测队友出牌的情况下要求本地单独处理多人实际 770 HP Boss，最终受 `Sandpit` 未来处决影响，结果落入 `final_hp=0 / only_death_routes=true`。
+- 不修改多人真实敌方 HP，也不虚构队友伤害。完整搜索仍照常寻找真实本地斩杀；仅当 `MultiplayerSinglePlayerCore` 的完整候选全部死亡、而当前回合存在合法存活边界时，最终改用搜索过程中保留的最佳当前回合候选，并以 `CurrentTurnAdoption` 结束本次结果。下一回合从真实多人状态重新建根。
+- 该回退不会作用于单人、当前回合本身会死、已找到完整胜利或仍存在存活完整候选的情况。诊断标记：`MP_LOCAL_CORE_DEATH_HORIZON_FALLBACK`。
+- 目标是保持“当前回合像单人一样选牌”，同时承认未建模的队友未来动作不能被当作本地玩家未来必然不作为。
+
 ### 第三项生产策略收口：多人使用单人质量核心（2026-09-25）
 
 - 新增 5 份连续实战问题包：`OVICOPTER_NORMAL-6796...` 与四份 `DECIMILLIPEDE_ELITE`。千足虫四包共记录 307 次 `FINAL_SELECTION`；其中 233 次（约 76%）`scenario_rerank=false && chance_rerank=false`，说明多数差路线不是 Robust/Chance 后置推翻，而是多人 baseline 本身已经这样排序。

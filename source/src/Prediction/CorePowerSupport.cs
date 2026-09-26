@@ -226,9 +226,6 @@ internal static class CorePowerSupport
             case CreativeAi:
                 combat.Apply<CreativeAiPower>(owner, card.DynamicVars["CreativeAi"].IntValue, owner);
                 break;
-            case DarkEmbrace:
-                combat.Apply<DarkEmbracePower>(owner, 1, owner);
-                break;
             case Defragment:
                 combat.Apply<FocusPower>(owner, card.DynamicVars["FocusPower"].IntValue, owner);
                 break;

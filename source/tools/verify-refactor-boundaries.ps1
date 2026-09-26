@@ -27,6 +27,87 @@ $forbiddenSearchReferences = @(
 )
 
 $violations = [System.Collections.Generic.List[string]]::new()
+
+$searchCompletionContractPath = Join-Path $repositoryRoot 'src/Runtime/MultiplayerSearchCompletionContracts.cs'
+$searchCompletionContractText = [IO.File]::ReadAllText($searchCompletionContractPath)
+foreach ($searchCompletionContractRule in @(
+    'if (routeScopedCompletion)',
+    'searchRouteVersion != currentRouteVersion || !localStampMatches',
+    'currentWorldVersion != searchWorldVersion',
+    '|| !fullStampMatches')) {
+    if (-not $searchCompletionContractText.Contains($searchCompletionContractRule)) {
+        $violations.Add("${searchCompletionContractPath}: multiplayer search completion contract drifted '$searchCompletionContractRule'")
+    }
+}
+
+$liveCombatStampPath = Join-Path $repositoryRoot 'src/Runtime/LiveCombatStamp.cs'
+$liveCombatStampText = [IO.File]::ReadAllText($liveCombatStampPath)
+foreach ($sharedHistoryRule in @(
+    'requiresGlobalFinishedCardPlays',
+    'NormalizeSharedFinishedCardPlayCount(',
+    'GOLD_AXE')) {
+    if (-not $liveCombatStampText.Contains($sharedHistoryRule)) {
+        $violations.Add("${liveCombatStampPath}: local-core shared card-history normalization drifted '$sharedHistoryRule'")
+    }
+}
+foreach ($localSearchStampRule in @(
+    'CaptureLocalCoreSearchValidity',
+    'ProjectLocalCoreSearchValidity',
+    'IsLocalCoreSearchCompatible',
+    'name is "P" or "R"',
+    'IsIndexedField(name, "E")',
+    'IsIndexedField(name, "AI")',
+    'IsIndexedField(name, "MS")')) {
+    if (-not $liveCombatStampText.Contains($localSearchStampRule)) {
+        $violations.Add("${liveCombatStampPath}: local-core search validity stamp drifted '$localSearchStampRule'")
+    }
+}
+
+$solverControllerPath = Join-Path $repositoryRoot 'src/Runtime/SolverController.cs'
+$solverControllerText = [IO.File]::ReadAllText($solverControllerPath)
+foreach ($routeScopedDeployRule in @(
+    'DEPLOY_COMPATIBLE_WORLD_DELTA',
+    'deploy_after_local_state_change',
+    'IsLatestResultDeploymentCompatible(',
+    '_combat.LatestRouteVersion == MultiplayerRouteChangeTracker.Version',
+    'search.RouteVersion == MultiplayerRouteChangeTracker.Version')) {
+    if (-not $solverControllerText.Contains($routeScopedDeployRule)) {
+        $violations.Add("${solverControllerPath}: route-scoped deployment drifted '$routeScopedDeployRule'")
+    }
+}
+
+$solverProgressPath = Join-Path $repositoryRoot 'src/Runtime/SolverProgress.cs'
+$solverProgressText = [IO.File]::ReadAllText($solverProgressPath)
+if (-not $solverProgressText.Contains('public SolverInterimResult? CurrentTurnBestResult { get; init; }')) {
+    $violations.Add("${solverProgressPath}: current-turn anytime result is no longer carried independently")
+}
+
+$searchCoordinatorPath = Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.cs'
+$searchCoordinatorText = [IO.File]::ReadAllText($searchCoordinatorPath)
+foreach ($currentTurnPromotionRule in @(
+    'SEARCH_CURRENT_TURN_PROMOTED',
+    'TryPromoteCurrentTurn(',
+    'RouteStartsWithCurrentTurn(',
+    'currentTurnDisplayedResult')) {
+    if (-not $searchCoordinatorText.Contains($currentTurnPromotionRule)) {
+        $violations.Add("${searchCoordinatorPath}: current-turn/global anytime separation drifted '$currentTurnPromotionRule'")
+    }
+}
+
+$searchLifecycleCompletionPath = Join-Path $repositoryRoot 'src/Runtime/SolverController.SearchLifecycle.cs'
+$searchLifecycleCompletionText = [IO.File]::ReadAllText($searchLifecycleCompletionPath)
+foreach ($routeScopedCompletionRule in @(
+    'RouteVersion = capabilities.IsMultiplayer',
+    'LiveCombatStamp.CaptureLocalCoreSearchValidity(state)',
+    'searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore',
+    'MultiplayerSearchCompletionContracts.IsStale(',
+    '_combat.LatestStamp = currentStamp!;',
+    'SEARCH_COMPATIBLE_WORLD_DELTA')) {
+    if (-not $searchLifecycleCompletionText.Contains($routeScopedCompletionRule)) {
+        $violations.Add("${searchLifecycleCompletionPath}: route-scoped search completion drifted '$routeScopedCompletionRule'")
+    }
+}
+
 $crossTurnTranspositionPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Expansion.cs'
 $crossTurnTranspositionText = [IO.File]::ReadAllText($crossTurnTranspositionPath)
 foreach ($crossTurnTranspositionRule in @(
@@ -141,6 +222,29 @@ foreach ($capturedDeathRule in @(
     }
 }
 
+$continuationStampPath = Join-Path $repositoryRoot 'src/Runtime/ContinuationStamp.cs'
+$continuationStampText = [IO.File]::ReadAllText($continuationStampPath)
+foreach ($continuationPowerBoundaryRule in @(
+    'IReadOnlyList<Player> powerCapturedPlayers = capturedPlayers ?? state.Players;',
+    'MultiplayerAdvisorBoundaryContracts.IsCapturedPlayerOwnedCreature(',
+    'powerCapturedPlayers,',
+    'power.Owner')) {
+    if (-not $continuationStampText.Contains($continuationPowerBoundaryRule)) {
+        $violations.Add("${continuationStampPath}: live continuation Power scope drifted '$continuationPowerBoundaryRule'")
+    }
+}
+
+$advisorBoundaryPath = Join-Path $repositoryRoot 'src/Engine/Common/MultiplayerAdvisorBoundaryContracts.cs'
+$advisorBoundaryText = [IO.File]::ReadAllText($advisorBoundaryPath)
+foreach ($sharedCreatureBoundaryRule in @(
+    'internal static bool IsCapturedPlayerOwnedCreature(',
+    'Player? owner = creature.Player ?? creature.PetOwner;',
+    'return owner == null || IsCapturedPlayer(capturedPlayers, owner);')) {
+    if (-not $advisorBoundaryText.Contains($sharedCreatureBoundaryRule)) {
+        $violations.Add("${advisorBoundaryPath}: shared captured-creature boundary drifted '$sharedCreatureBoundaryRule'")
+    }
+}
+
 $simulatedCombatStatePath = Join-Path $repositoryRoot 'src/Search/SimulatedCombatState.cs'
 $simulatedCombatStateText = [IO.File]::ReadAllText($simulatedCombatStatePath)
 foreach ($localSingleCorePrivateRule in @(
@@ -239,6 +343,15 @@ foreach ($deadPlayerHookRule in @(
 
 $monsterMoveEffectsPath = Join-Path $repositoryRoot 'src/Prediction/MonsterMoveEffects.cs'
 $monsterMoveEffectsText = [IO.File]::ReadAllText($monsterMoveEffectsPath)
+foreach ($liquifyLocalCoreRule in @(
+    'foreach (Creature target in simulator.State.PlayerCreatures)',
+    '!simulator.State.IsRootCapturedPlayer(targetPlayer)',
+    'ConsumeRemoteRandomPileInsertions(simulator, 6)',
+    'simulator.Rng.Shuffle.Advance(count);')) {
+    if (-not $monsterMoveEffectsText.Contains($liquifyLocalCoreRule)) {
+        $violations.Add("${monsterMoveEffectsPath}: Liquify Ground local-core multiplayer fanout drifted '$liquifyLocalCoreRule'")
+    }
+}
 if (-not $monsterMoveEffectsText.Contains('combat.GetMonsterStaticInt(move.Owner, "_growStrength")')) {
     $violations.Add("${monsterMoveEffectsPath}: LouseProgenitor CURL_AND_GROW must consume captured _growStrength")
 }
@@ -4178,6 +4291,27 @@ $p1ContinuationContractsText = [IO.File]::ReadAllText($p1ContinuationContractsPa
 if (-not $p1ContinuationContractsText.Contains('CanReplayContinuationSeedAction(')) {
     $violations.Add("${p1ContinuationContractsPath}: P1 continuation seed action boundary is missing")
 }
+if (-not $p1ContinuationContractsText.Contains('internal static bool LocalCoreSearchAcceleratorsEnabled => false;')) {
+    $violations.Add("${p1ContinuationContractsPath}: default local-core must keep multiplayer search accelerators disabled")
+}
+if (-not $p1ContinuationContractsText.Contains('ShouldUseLocalCoreDeathHorizonFallback(')) {
+    $violations.Add("${p1ContinuationContractsPath}: local-core death-horizon fallback contract is missing")
+}
+if (-not $p1ContinuationContractsText.Contains('ShouldPreferLocalCoreCurrentTurnResult(')) {
+    $violations.Add("${p1ContinuationContractsPath}: local-core final current-turn priority contract is missing")
+}
+if (-not $p1ContinuationContractsText.Contains('IsLocalCoreContinuationStateCompatible(')) {
+    $violations.Add("${p1ContinuationContractsPath}: local-core shared-state continuation compatibility contract is missing")
+}
+foreach ($localCoreQualityRule in @(
+    'ShouldRunLocalCoreCurrentTurnQualityScout(',
+    'sharedFinishedCardPlayDrift',
+    'HistoryCountersMatchExceptFinishedCardPlays(',
+    'GOLD_AXE')) {
+    if (-not $p1ContinuationContractsText.Contains($localCoreQualityRule)) {
+        $violations.Add("${p1ContinuationContractsPath}: local-core quality/reuse contract drifted '$localCoreQualityRule'")
+    }
+}
 
 $p1SearchPolicyPath = Join-Path $repositoryRoot 'src/Search/SearchPolicySnapshot.cs'
 $p1SearchPolicyText = [IO.File]::ReadAllText($p1SearchPolicyPath)
@@ -4191,6 +4325,14 @@ foreach ($p1RuntimeRule in @(
     'CaptureContinuationSeedActions(',
     'MultiplayerLocalCrossTurnContracts.CanReplayContinuationSeedAction(',
     'ContinuationSeedActions = continuationSeedActions',
+    'LocalCoreSearchAcceleratorsEnabled',
+    'MP_LOCAL_XTURN_SEED_SKIPPED',
+    'IsLocalCoreContinuationStateCompatible(',
+    'exact_except_shared_shuffle_rng',
+    'exact_except_remote_card_history',
+    'shared_shuffle_rng_drift=',
+    'shared_finished_card_play_drift=',
+    'single_player_quality_order=',
     'resume_kind=exact_continuation',
     'MP_LOCAL_XTURN_RESUME_KIND')) {
     if (-not $p1LifecycleText.Contains($p1RuntimeRule)) {
@@ -4198,8 +4340,27 @@ foreach ($p1RuntimeRule in @(
     }
 }
 
+$localCoreNoveltyPath = Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.NoveltyPortfolio.cs'
+$localCoreNoveltyText = [IO.File]::ReadAllText($localCoreNoveltyPath)
+foreach ($currentTurnScoutRule in @(
+    'RunLocalCoreCurrentTurnQualityFirst(',
+    'CurrentTurnOnly = true',
+    'MP_LOCAL_CURRENT_TURN_QUALITY_SCOUT',
+    'NoveltyPortfolioBudget.Remaining(')) {
+    if (-not $localCoreNoveltyText.Contains($currentTurnScoutRule)) {
+        $violations.Add("${localCoreNoveltyPath}: current-turn-first local-core search drifted '$currentTurnScoutRule'")
+    }
+}
+
 $p1CoordinatorPath = Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.cs'
 $p1CoordinatorText = [IO.File]::ReadAllText($p1CoordinatorPath)
+foreach ($localCorePrimaryRule in @(
+    'ShouldRunLocalCoreCurrentTurnQualityScout(',
+    'RunLocalCoreCurrentTurnQualityFirst(')) {
+    if (-not $p1CoordinatorText.Contains($localCorePrimaryRule)) {
+        $violations.Add("${p1CoordinatorPath}: local-core current-turn quality scout is no longer a primary-search behavior '$localCorePrimaryRule'")
+    }
+}
 foreach ($p2CoordinatorRule in @(
     'IReadOnlyList<PlanAction> continuationSeedActions =',
     'policy = policy with { ContinuationSeedActions = [] };',
@@ -4216,6 +4377,26 @@ foreach ($p2CoordinatorRule in @(
 
 $p1PhasesPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Phases.cs'
 $p1PhasesText = [IO.File]::ReadAllText($p1PhasesPath)
+if ($p1PhasesText.Contains('.Where(node => node.ActionCount > 0 && node.Snapshot.HasSimulator)')) {
+    $violations.Add("${p1PhasesPath}: anytime route preview must not discard retained candidates only because their simulator was released")
+}
+if (-not $p1PhasesText.Contains('SEARCH_ANYTIME_RELEASED_SNAPSHOT_PREVIEW')) {
+    $violations.Add("${p1PhasesPath}: released-snapshot anytime preview diagnostic is missing")
+}
+foreach ($currentTurnFinalRule in @(
+    'ShouldPreferLocalCoreCurrentTurnResult(',
+    'MP_LOCAL_CORE_CURRENT_TURN_PRIORITY',
+    'completion: "final_current_turn_priority"')) {
+    if (-not $p1PhasesText.Contains($currentTurnFinalRule)) {
+        $violations.Add("${p1PhasesPath}: final current-turn quality priority drifted '$currentTurnFinalRule'")
+    }
+}
+if (-not $p1PhasesText.Contains('MultiplayerScope = policy.CurrentTurnOnly')) {
+    $violations.Add("${p1PhasesPath}: current-turn quality scout must materialize as CurrentTurnOnly multiplayer scope")
+}
+if (-not $p1PhasesText.Contains('SearchNode? candidate = member.CurrentTurnPreviewNode')) {
+    $violations.Add("${p1PhasesPath}: current-turn preview must prefer the dedicated current-turn candidate over the long-horizon incumbent")
+}
 foreach ($p2SearchRule in @(
     'if (_continuationSeedProbe)',
     'SearchNode? seeded = TryReplayContinuationSeed(',
@@ -4229,6 +4410,48 @@ foreach ($p2SearchRule in @(
 }
 if ($p1PhasesText.Contains('rootCandidates.Count + (policy.ContinuationSeedActions.Count > 0 ? 1 : 0)')) {
     $violations.Add("${p1PhasesPath}: P2 continuation seed returned to the ordinary Beam initial frontier")
+}
+foreach ($deathHorizonRule in @(
+    'ShouldUseLocalCoreDeathHorizonFallback(',
+    'MP_LOCAL_CORE_DEATH_HORIZON_FALLBACK',
+    'member.CurrentTurnAdoptionReached = true;')) {
+    if (-not $p1PhasesText.Contains($deathHorizonRule)) {
+        $violations.Add("${p1PhasesPath}: local-core death-horizon fallback drifted '$deathHorizonRule'")
+    }
+}
+
+# Historical VINE_SHAMBLER regression bundle: keep the already-fixed production
+# boundaries explicit so future cleanup cannot revive the old failures.
+$mpSafeClassifierPath = Join-Path $repositoryRoot 'src/Runtime/MultiplayerSafeLocalActionClassifier.cs'
+$mpSafeClassifierText = [IO.File]::ReadAllText($mpSafeClassifierPath)
+$boundedDeploymentPattern =
+    '(?s)TakeBoundedDeploymentSlice\(.*?return MultiplayerSafeExecutePolicy\.TakeBoundedSafePrefix\(\s*actions,\s*ClassifyStructural,\s*out stop\);'
+if (-not [regex]::IsMatch($mpSafeClassifierText, $boundedDeploymentPattern)) {
+    $violations.Add("${mpSafeClassifierPath}: future-drawn actions must use structural-only Safe Execute preflight")
+}
+
+$mpSafePolicyPath = Join-Path $repositoryRoot 'src/Runtime/MultiplayerSafeExecutePolicy.cs'
+$mpSafePolicyText = [IO.File]::ReadAllText($mpSafePolicyPath)
+if ($mpSafePolicyText.Contains('RemoteOrUnknownChange')) {
+    $violations.Add("${mpSafePolicyPath}: retired RemoteOrUnknownChange post-action abort was reintroduced")
+}
+
+$patchAuditPath = Join-Path $repositoryRoot 'src/Prediction/PredictionModPatchAudit.cs'
+$patchAuditText = [IO.File]::ReadAllText($patchAuditPath)
+foreach ($chronicleRule in @(
+    'ChronicleHandLimitPillagePatch',
+    'ChronicleHandLimitScrawlPatch',
+    'isMultiplayer && IsKnownMultiplayerNeutralOnPlayPatch')) {
+    if (-not $patchAuditText.Contains($chronicleRule)) {
+        $violations.Add("${patchAuditPath}: TheBookOfAges multiplayer-neutral Chronicle exception drifted '$chronicleRule'")
+    }
+}
+
+if ($p1ContinuationContractsText.Contains('RemotePublicFingerprint')) {
+    $violations.Add("${p1ContinuationContractsPath}: local-core continuation must not gate reuse on teammate public fingerprint")
+}
+if ($p1LifecycleText.Contains('remote_public_mismatch')) {
+    $violations.Add("${p1LifecyclePath}: production local-core continuation reintroduced teammate-public mismatch replans")
 }
 
 $p2BudgetPath = Join-Path $repositoryRoot 'src/Search/ContinuationSeedIncumbentBudget.cs'

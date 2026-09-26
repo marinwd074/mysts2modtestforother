@@ -1,3 +1,4 @@
+using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 
 namespace CombatSolver.Engine.Common;
@@ -17,6 +18,19 @@ internal static class MultiplayerAdvisorBoundaryContracts
                 return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// Shared private-state boundary for player-side creatures. Enemy/public creatures
+    /// remain visible; a player or pet-owned creature is visible only when that player
+    /// belongs to the root's captured private-state roster.
+    /// </summary>
+    internal static bool IsCapturedPlayerOwnedCreature(
+        IReadOnlyList<Player> capturedPlayers,
+        Creature creature)
+    {
+        Player? owner = creature.Player ?? creature.PetOwner;
+        return owner == null || IsCapturedPlayer(capturedPlayers, owner);
     }
 
     internal static void RequireCapturedPlayer(

@@ -99,6 +99,7 @@ internal sealed record ContinuationStamp(string StateText)
         if (capturedPlayers is null
             && SolverSessionCapabilities.Capture(state).IsMultiplayer)
             capturedPlayers = [player];
+        IReadOnlyList<Player> powerCapturedPlayers = capturedPlayers ?? state.Players;
         PlayerCombatState pcs = player.PlayerCombatState
             ?? throw new InvalidOperationException("玩家没有战斗状态。");
         StringBuilder text = Begin(
@@ -138,7 +139,13 @@ internal sealed record ContinuationStamp(string StateText)
         ModelPredictionStateMirrors.AppendLiveContinuation(text, state, capturedPlayers);
         if (AdaptedCardOnPlayMirrors.CaptureLiveStamp() is { } onPlayStamp)
             text.Append(";onplay_configuration=").Append(onPlayStamp);
-        AppendPowers(text, state.Creatures.SelectMany(creature => creature.Powers));
+        AppendPowers(
+            text,
+            state.Creatures
+                .SelectMany(creature => creature.Powers)
+                .Where(power => MultiplayerAdvisorBoundaryContracts.IsCapturedPlayerOwnedCreature(
+                    powerCapturedPlayers,
+                    power.Owner)));
         AppendRng(text,
             state.RunState.Rng.Shuffle.CaptureState(),
             state.RunState.Rng.CombatCardGeneration.CaptureState(),

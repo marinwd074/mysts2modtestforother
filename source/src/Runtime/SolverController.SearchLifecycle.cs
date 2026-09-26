@@ -204,6 +204,24 @@ internal static partial class SolverController
                 : null;
             MultiplayerContinuationExpectation? expectedMultiplayer =
                 expectedContinuation?.MultiplayerExpectation;
+            bool sharedShuffleRngDrift = false;
+            bool sharedFinishedCardPlayDrift = false;
+            ContinuationStamp? continuationValidationStamp = continuationStamp;
+            if (continuationStamp != null
+                && expectedContinuation != null
+                && capabilities.IsMultiplayer
+                && !SolverSettings.Current.UseMultiplayerPrediction
+                && MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+                    expectedContinuation.ExpectedState.StateText,
+                    continuationStamp.StateText,
+                    out sharedShuffleRngDrift,
+                    out sharedFinishedCardPlayDrift)
+                && (sharedShuffleRngDrift || sharedFinishedCardPlayDrift))
+            {
+                // TryCreateContinuation remains exact by contract. Substitute the cached stamp
+                // only after the local-core boundary proved all drift is remote-only shared state.
+                continuationValidationStamp = expectedContinuation.ExpectedState;
+            }
             string continuationRejectReason = "none";
             IReadOnlyList<PlanAction> continuationSeedActions = Array.Empty<PlanAction>();
             if (continuationStamp != null && capabilities.IsMultiplayer)
@@ -214,11 +232,13 @@ internal static partial class SolverController
                     $"source_world_version={expectedMultiplayer?.SourceWorldVersion.ToString() ?? "-"} " +
                     $"minimum_world_version={multiplayerValidation?.MinimumWorldVersion.ToString() ?? "-"} " +
                     $"actual_world_version={multiplayerValidation?.CurrentWorldVersion.ToString() ?? "-"} " +
+                    $"shared_shuffle_rng_drift={sharedShuffleRngDrift.ToString().ToLowerInvariant()} " +
+                    $"shared_finished_card_play_drift={sharedFinishedCardPlayDrift.ToString().ToLowerInvariant()} " +
                     $"fresh_probe_changed={freshProbeChanged.ToString().ToLowerInvariant()}");
             }
-            if (continuationStamp != null
+            if (continuationValidationStamp != null
                 && continuationSource!.TryCreateContinuation(
-                    continuationStamp,
+                    continuationValidationStamp,
                     continuationTurn!.Value,
                     LocalContext.GetMe(state)!.Creature.CurrentHp,
                     battleDamage,
@@ -230,6 +250,7 @@ internal static partial class SolverController
                 _combat.State = state;
                 _combat.LatestResult = reused;
                 _combat.LatestStamp = stamp;
+                _combat.LatestRouteVersion = MultiplayerRouteChangeTracker.Version;
                 _combat.ContinuationSource = reused;
                 _combat.AwaitingMultiplayerContinuation = false;
                 _combat.LastSafeEndTurnWorldVersion = null;
@@ -254,7 +275,13 @@ internal static partial class SolverController
                         reused!,
                         UnexpectedReplanCount > 0,
                         _combat.ReviewedWorldlinesTotal));
-                const string reuseValidation = "exact_state_text";
+                string reuseValidation = (sharedShuffleRngDrift, sharedFinishedCardPlayDrift) switch
+                {
+                    (true, true) => "exact_except_shared_shuffle_and_card_history",
+                    (true, false) => "exact_except_shared_shuffle_rng",
+                    (false, true) => "exact_except_remote_card_history",
+                    _ => "exact_state_text",
+                };
                 Entry.Logger.Info(
                     $"[CombatSolver/Test] SEARCH_REUSED from_turn={reused!.ReusedFromTurn} " +
                     $"turn={reused.StartTurnNumber} validation={reuseValidation} " +
@@ -269,7 +296,12 @@ internal static partial class SolverController
                         $"source_world_version={expectedMultiplayer?.SourceWorldVersion.ToString() ?? "-"} " +
                         $"minimum_world_version={multiplayerValidation?.MinimumWorldVersion.ToString() ?? "-"} " +
                         $"actual_world_version={multiplayerValidation?.CurrentWorldVersion.ToString() ?? "-"} " +
-                        $"local_state_exact=true reason=exact resume_kind=exact_continuation");
+                        $"local_state_exact={(!sharedShuffleRngDrift && !sharedFinishedCardPlayDrift).ToString().ToLowerInvariant()} " +
+                        $"local_state_compatible=true " +
+                        $"shared_shuffle_rng_drift={sharedShuffleRngDrift.ToString().ToLowerInvariant()} " +
+                        $"shared_finished_card_play_drift={sharedFinishedCardPlayDrift.ToString().ToLowerInvariant()} " +
+                        $"reason={(sharedShuffleRngDrift || sharedFinishedCardPlayDrift ? "remote_shared_state_drift" : "exact")} " +
+                        $"resume_kind=exact_continuation");
                 }
                 Entry.Logger.Info(SolverDiagnostics.DescribeResult(reused));
                 if (_combat.FullAutoEnabled)
@@ -387,6 +419,12 @@ internal static partial class SolverController
                 WorldVersion = capabilities.IsMultiplayer
                     ? MultiplayerWorldTracker.WorldVersion
                     : 0,
+                RouteVersion = capabilities.IsMultiplayer
+                    ? MultiplayerRouteChangeTracker.Version
+                    : 0,
+                LocalCoreSearchStamp = capabilities.IsMultiplayer
+                    ? LiveCombatStamp.CaptureLocalCoreSearchValidity(state)
+                    : null,
             };
             _search = search;
             CancellationToken token = search.Cancellation.Token;
@@ -433,9 +471,12 @@ internal static partial class SolverController
                 includeTurnSetup: false,
                 theftPolicy: theftPolicy,
                 interaction: search.Interaction);
+            search.UseRouteScopedCompletion =
+                searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore;
             if (continuationSeedActions.Count > 0
                 && searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
-                && !searchPolicy.IncludeTurnSetup)
+                && !searchPolicy.IncludeTurnSetup
+                && MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled)
             {
                 searchPolicy = searchPolicy with
                 {
@@ -443,12 +484,20 @@ internal static partial class SolverController
                     ContinuationEnumerationHintActions = continuationSeedActions,
                 };
             }
+            else if (continuationSeedActions.Count > 0
+                     && searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore)
+            {
+                Entry.Logger.Info(
+                    $"[CombatSolver/Test] MP_LOCAL_XTURN_SEED_SKIPPED " +
+                    $"reason=single_player_quality_order actions={continuationSeedActions.Count}");
+            }
             if (continuationStamp != null && capabilities.IsMultiplayer)
             {
                 Entry.Logger.Info(
                     $"[CombatSolver/Test] MP_LOCAL_XTURN_RESUME_KIND " +
                     $"resume_kind={(searchPolicy.ContinuationSeedActions.Count > 0 ? "seeded_search" : "cold_search")} " +
                     $"seed_actions={searchPolicy.ContinuationSeedActions.Count} " +
+                    $"single_player_quality_order={(!MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled).ToString().ToLowerInvariant()} " +
                     $"continuation_reject_reason={continuationRejectReason}");
             }
             search.MaxDegreeOfParallelism = searchPolicy.MaxDegreeOfParallelism;
@@ -780,11 +829,29 @@ internal static partial class SolverController
         CombatState searchedState = search.State;
         LiveCombatStamp searchedStamp = search.Stamp;
         CombatState? currentState = CombatManager.Instance.DebugOnlyGetState();
-        if (!ReferenceEquals(currentState, searchedState)
-            || !CanSolve(searchedState, out _)
-            || search.WorldVersion != 0
-                && MultiplayerWorldTracker.WorldVersion != search.WorldVersion
-            || LiveCombatStamp.Capture(searchedState) != searchedStamp)
+        bool sameCombatState = ReferenceEquals(currentState, searchedState);
+        bool stillSearchable = sameCombatState && CanSolve(searchedState, out _);
+        LiveCombatStamp? currentStamp = stillSearchable
+            ? LiveCombatStamp.Capture(searchedState)
+            : null;
+        LiveCombatStamp? currentLocalCoreStamp = stillSearchable
+            && search.UseRouteScopedCompletion
+                ? LiveCombatStamp.CaptureLocalCoreSearchValidity(searchedState)
+                : null;
+        long currentWorldVersion = MultiplayerWorldTracker.WorldVersion;
+        long currentRouteVersion = MultiplayerRouteChangeTracker.Version;
+        bool fullStampMatches = currentStamp == searchedStamp;
+        bool localCoreStampMatches = !search.UseRouteScopedCompletion
+            || currentLocalCoreStamp == search.LocalCoreSearchStamp;
+        bool completionStale = MultiplayerSearchCompletionContracts.IsStale(
+            search.UseRouteScopedCompletion,
+            search.WorldVersion,
+            currentWorldVersion,
+            search.RouteVersion,
+            currentRouteVersion,
+            fullStampMatches,
+            localCoreStampMatches);
+        if (!stillSearchable || completionStale)
         {
             _combat.BugReportIssues.Record(
                 CombatBugReportIssueKind.SearchResultStale,
@@ -805,8 +872,24 @@ internal static partial class SolverController
                     $"generation={generation} search_world_version={search.WorldVersion} " +
                     $"current_world_version={MultiplayerWorldTracker.WorldVersion}");
             }
+            Entry.Logger.Info(
+                $"[CombatSolver/Test] SEARCH_STALE_DETAIL generation={generation} " +
+                $"route_scoped={search.UseRouteScopedCompletion.ToString().ToLowerInvariant()} " +
+                $"search_world_version={search.WorldVersion} current_world_version={currentWorldVersion} " +
+                $"search_route_version={search.RouteVersion} current_route_version={currentRouteVersion} " +
+                $"full_stamp_match={fullStampMatches.ToString().ToLowerInvariant()} " +
+                $"local_stamp_match={localCoreStampMatches.ToString().ToLowerInvariant()}");
             Entry.Logger.Info($"[CombatSolver/Test] SEARCH_STALE generation={generation}");
             return;
+        }
+
+        if (search.UseRouteScopedCompletion
+            && search.WorldVersion != currentWorldVersion)
+        {
+            Entry.Logger.Info(
+                $"[CombatSolver/Test] SEARCH_COMPATIBLE_WORLD_DELTA generation={generation} " +
+                $"search_world_version={search.WorldVersion} current_world_version={currentWorldVersion} " +
+                $"route_version={currentRouteVersion} local_stamp_match=true");
         }
 
         SolverResult result = task.Result;
@@ -835,7 +918,7 @@ internal static partial class SolverController
         if (stopped)
         {
             result.ResultScope = SolverResultScope.RouteAdoption;
-            search.Interaction.PreserveStoppedResult(result, searchedStamp);
+            search.Interaction.PreserveStoppedResult(result, currentStamp!);
             _combat.StoppedSearch = search.Interaction;
             SolverOverlay.ShowResult(
                 host,
@@ -852,7 +935,8 @@ internal static partial class SolverController
         }
 
         _combat.LatestResult = result;
-        _combat.LatestStamp = searchedStamp;
+        _combat.LatestStamp = currentStamp!;
+        _combat.LatestRouteVersion = currentRouteVersion;
         bool retainCurrentTurnRoute = currentTurnAdopted
             && MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnContinuation(
                 result.MultiplayerScope,

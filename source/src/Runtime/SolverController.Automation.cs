@@ -81,9 +81,14 @@ internal static partial class SolverController
         SolverOverlay.RefreshControls();
 
         LiveCombatStamp current = LiveCombatStamp.Capture(state);
-        if (_combat.LatestResult != null && _combat.LatestStamp == current)
+        if (IsLatestResultDeploymentCompatible(
+                state,
+                SolverSessionCapabilities.Capture(state),
+                current))
         {
-            StartFullAutoDeployment(host, state, _combat.LatestResult);
+            if (_combat.LatestStamp != current)
+                RefreshLatestDeploymentStamp(state, current);
+            StartFullAutoDeployment(host, state, _combat.LatestResult!);
             return;
         }
         if (_search == null && _deployment == null)
@@ -133,13 +138,15 @@ internal static partial class SolverController
         if (CanSolve(state, out _))
         {
             LiveCombatStamp current = LiveCombatStamp.Capture(state);
-            if (_combat.LatestResult != null && _combat.LatestStamp == current)
+            if (IsLatestResultDeploymentCompatible(state, capabilities, current))
             {
+                if (_combat.LatestStamp != current)
+                    RefreshLatestDeploymentStamp(state, current);
                 Entry.Logger.Info(
                     $"[CombatSolver/MultiplayerSafeExecute] MP_SAFE_AUTO_ARMED " +
                     $"source=existing_result turn={LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0} " +
                     $"world_version={MultiplayerWorldTracker.WorldVersion}");
-                StartDeployment(host, state, _combat.LatestResult);
+                StartDeployment(host, state, _combat.LatestResult!);
                 return;
             }
         }

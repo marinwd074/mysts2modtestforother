@@ -157,22 +157,154 @@ Check(
     continuationSeedActionContractsAreCorrect,
     "P1 continuation-seed action boundary rejects cross-turn, non-card, choice and ambiguous-card suggestions.");
 
+string continuationExact =
+    "combat_identity=seed=s;players=1,2;enemies=4:A;local_net_id=2;turn=3;hp=77;H=A;D=B;C=;X=;" +
+    "R=224:shuffle/0:cardgen/4:potion/2:select/0:energy/5:targets/0:orbs/10:ai/8:niche";
+string continuationShuffleDrift = continuationExact.Replace(
+    "R=224:shuffle/",
+    "R=233:shuffle/",
+    StringComparison.Ordinal);
+string continuationCardGenerationDrift = continuationExact.Replace(
+    "/0:cardgen/",
+    "/1:cardgen/",
+    StringComparison.Ordinal);
+string continuationHandDrift = continuationExact.Replace(
+    ";H=A;",
+    ";H=C;",
+    StringComparison.Ordinal);
+string continuationHistoryBase = continuationExact.Replace(
+    ";R=",
+    ";HC=10/2/0/1/0/8;R=",
+    StringComparison.Ordinal);
+string continuationFinishedPlayDrift = continuationHistoryBase.Replace(
+    ";HC=10/",
+    ";HC=14/",
+    StringComparison.Ordinal);
+string continuationLocalHistoryDrift = continuationHistoryBase.Replace(
+    "/2/0/1/0/8;",
+    "/3/0/1/0/8;",
+    StringComparison.Ordinal);
+string continuationGoldAxe = continuationHistoryBase.Replace(
+    ";H=A;",
+    ";H=GOLD_AXE+0,A;",
+    StringComparison.Ordinal);
+string continuationGoldAxeHistoryDrift = continuationGoldAxe.Replace(
+    ";HC=10/",
+    ";HC=14/",
+    StringComparison.Ordinal);
+
 Check(
-    MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
+    MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationExact,
+        continuationExact,
+        out bool exactShuffleDrift,
+        out bool exactHistoryDrift)
+    && !exactShuffleDrift
+    && !exactHistoryDrift
+    && MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationExact,
+        continuationShuffleDrift,
+        out bool acceptedShuffleDrift,
+        out bool shuffleHistoryDrift)
+    && acceptedShuffleDrift
+    && !shuffleHistoryDrift
+    && MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationHistoryBase,
+        continuationFinishedPlayDrift,
+        out bool historyShuffleDrift,
+        out bool acceptedHistoryDrift)
+    && !historyShuffleDrift
+    && acceptedHistoryDrift
+    && !MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationHistoryBase,
+        continuationLocalHistoryDrift,
+        out _,
+        out _)
+    && !MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationGoldAxe,
+        continuationGoldAxeHistoryDrift,
+        out _,
+        out _)
+    && !MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationExact,
+        continuationCardGenerationDrift,
+        out _,
+        out _)
+    && !MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationExact,
+        continuationHandDrift,
+        out _,
+        out _),
+    "Local-core continuation ignores only remote Shuffle/global finished-play drift; local history, piles and Gold Axe-sensitive history remain exact.");
+
+Check(
+    MultiplayerLocalCrossTurnContracts.ShouldRunLocalCoreCurrentTurnQualityScout(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore,
+        includeTurnSetup: false)
+    && !MultiplayerLocalCrossTurnContracts.ShouldRunLocalCoreCurrentTurnQualityScout(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore,
+        includeTurnSetup: true)
+    && !MultiplayerLocalCrossTurnContracts.ShouldRunLocalCoreCurrentTurnQualityScout(
+        SearchRoutePolicy.SinglePlayerFullRoute,
+        includeTurnSetup: false),
+    "Default local-core spends the former novelty-first window on current-turn quality before long-horizon search.");
+
+Check(
+    MultiplayerLocalCrossTurnContracts.ShouldPreferLocalCoreCurrentTurnResult(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore,
+        playerCount: 2,
+        currentTurnStrictlyBetter: true)
+    && !MultiplayerLocalCrossTurnContracts.ShouldPreferLocalCoreCurrentTurnResult(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore,
+        playerCount: 1,
+        currentTurnStrictlyBetter: true)
+    && !MultiplayerLocalCrossTurnContracts.ShouldPreferLocalCoreCurrentTurnResult(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore,
+        playerCount: 2,
+        currentTurnStrictlyBetter: false)
+    && !MultiplayerLocalCrossTurnContracts.ShouldPreferLocalCoreCurrentTurnResult(
+        SearchRoutePolicy.SinglePlayerFullRoute,
+        playerCount: 2,
+        currentTurnStrictlyBetter: true),
+    "Default local-core formal result keeps a strictly better current-turn incumbent over a worse long-horizon first turn.");
+
+Check(
+    !MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled
+    && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
         SearchRoutePolicy.MultiplayerSinglePlayerCore, false, true, false, false)
     && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
         SearchRoutePolicy.SinglePlayerFullRoute, false, true, false, false)
     && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
-        SearchRoutePolicy.MultiplayerLocalCrossTurn, false, true, false, false)
-    && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore, true, true, false, false)
-    && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore, false, true, true, false)
-    && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore, false, true, false, true)
-    && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore, false, false, false, false),
-    "P3 cross-family scheduling is admitted only for multiplayer local single-player-core Smart search outside turn setup, forced directives and Novelty.");
+        SearchRoutePolicy.MultiplayerLocalCrossTurn, false, true, false, false),
+    "Default multiplayer local-core disables P1/P2/P3 search accelerators so finite-budget exploration keeps single-player ordering.");
+
+Check(
+    MultiplayerLocalCrossTurnContracts.ShouldUseLocalCoreDeathHorizonFallback(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore,
+        playerCount: 2,
+        onlyDeathRoutesFound: true,
+        hasSurvivingCurrentTurnCandidate: true)
+    && !MultiplayerLocalCrossTurnContracts.ShouldUseLocalCoreDeathHorizonFallback(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore,
+        playerCount: 1,
+        onlyDeathRoutesFound: true,
+        hasSurvivingCurrentTurnCandidate: true)
+    && !MultiplayerLocalCrossTurnContracts.ShouldUseLocalCoreDeathHorizonFallback(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore,
+        playerCount: 2,
+        onlyDeathRoutesFound: false,
+        hasSurvivingCurrentTurnCandidate: true)
+    && !MultiplayerLocalCrossTurnContracts.ShouldUseLocalCoreDeathHorizonFallback(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore,
+        playerCount: 2,
+        onlyDeathRoutesFound: true,
+        hasSurvivingCurrentTurnCandidate: false)
+    && !MultiplayerLocalCrossTurnContracts.ShouldUseLocalCoreDeathHorizonFallback(
+        SearchRoutePolicy.SinglePlayerFullRoute,
+        playerCount: 2,
+        onlyDeathRoutesFound: true,
+        hasSurvivingCurrentTurnCandidate: true),
+    "Local-core multiplayer falls back to the best surviving current-turn boundary only when every full local-only projection dies.");
 
 SolverSearchProfile p2BudgetProfile = SolverSearchProfile.Default with
 {

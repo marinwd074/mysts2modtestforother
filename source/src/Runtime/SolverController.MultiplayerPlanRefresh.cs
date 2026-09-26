@@ -214,6 +214,7 @@ internal static partial class SolverController
             _combat.State = state;
             _combat.LatestResult = refreshed;
             _combat.LatestStamp = currentStamp;
+            _combat.LatestRouteVersion = MultiplayerRouteChangeTracker.Version;
             _combat.ContinuationSource = refreshed;
             _combat.AwaitingMultiplayerContinuation = false;
             _combat.LastPlanRefreshDecisionTimestampMilliseconds =
