@@ -77,6 +77,11 @@ jobs:
             "P4_PROFILE_ALLOC scenario=$scenario data=$($allocTop | ConvertTo-Json -Compress)"
           }
 
+      - name: P4 history counter contracts
+        shell: pwsh
+        run: |
+          dotnet run --project '.\source\tools\HistoryCounterKeyChecks\HistoryCounterKeyChecks.csproj' -c Release --nologo
+
       - name: P4 calculated-history fresh-process A/B
         shell: pwsh
         run: |
