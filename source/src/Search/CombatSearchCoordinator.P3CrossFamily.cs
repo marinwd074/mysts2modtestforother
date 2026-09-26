@@ -23,7 +23,6 @@ internal static partial class CombatSearchCoordinator
         SolverSearchProfile profile,
         CancellationToken cancellationToken,
         Action<SolverProgress>? progressCallback,
-        Action<SolverResult>? interimResultCallback,
         out SolverResult? earlyPotionScout)
     {
         earlyPotionScout = null;
