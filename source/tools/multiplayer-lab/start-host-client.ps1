@@ -67,6 +67,83 @@ function Invoke-LabScriptJson {
     return ConvertFrom-Json -InputObject $jsonText -AsHashtable
 }
 
+function Invoke-LabGameStart {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ScriptPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$InstanceRoot,
+
+        [string[]]$ScriptArguments = @()
+    )
+
+    $startedUtc = [DateTimeOffset]::UtcNow
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $script:pwshPath
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    foreach ($argument in (@('-NoLogo', '-NoProfile', '-File', $ScriptPath) + $ScriptArguments)) {
+        [void]$startInfo.ArgumentList.Add([string]$argument)
+    }
+
+    $launcher = [Diagnostics.Process]::new()
+    $launcher.StartInfo = $startInfo
+    if (-not $launcher.Start()) {
+        throw "Could not start '$ScriptPath'."
+    }
+    # Drain the wrapper streams without capturing them. The game inherits these
+    # handles; capturing stdout in this process would wait for the game to exit.
+    $launcher.BeginOutputReadLine()
+    $launcher.BeginErrorReadLine()
+    if (-not $launcher.WaitForExit(30000)) {
+        try { $launcher.Kill() } catch { }
+        throw "'$ScriptPath' did not finish its launch step within 30 seconds."
+    }
+    if ($launcher.ExitCode -ne 0) {
+        throw "'$ScriptPath' failed with exit code $($launcher.ExitCode); inspect '$InstanceRoot\logs'."
+    }
+
+    $logsRoot = Join-Path $InstanceRoot 'logs'
+    $resultFile = Get-ChildItem -LiteralPath $logsRoot -Filter '*.start.json' -File |
+        Where-Object { $_.LastWriteTimeUtc -ge $startedUtc.UtcDateTime.AddSeconds(-2) } |
+        Sort-Object LastWriteTimeUtc -Descending |
+        Select-Object -First 1
+    if ($null -ne $resultFile) {
+        $result = Get-Content -LiteralPath $resultFile.FullName -Raw | ConvertFrom-Json -AsHashtable
+        if ($result.status -eq 'STARTED' -and $null -eq (Get-Process -Id ([int]$result.processId) -ErrorAction SilentlyContinue)) {
+            throw "The $($result.role) process exited during startup; inspect '$($result.logPath)'."
+        }
+        return $result
+    }
+
+    $markerPath = Join-Path $InstanceRoot 'process.json'
+    if (Test-Path -LiteralPath $markerPath -PathType Leaf) {
+        $marker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json -AsHashtable
+        $gameProcess = Get-Process -Id ([int]$marker.pid) -ErrorAction SilentlyContinue
+        if ($null -ne $gameProcess) {
+            return [ordered]@{
+                status = 'ALREADY_RUNNING'
+                role = $marker.role
+                profile = $marker.profile
+                runtimeRoot = $marker.runtimeRoot
+                processId = $marker.pid
+                logPath = $marker.logPath
+                multiplayerMode = $marker.multiplayerMode
+                clientId = $marker.clientId
+                forceSteamOff = $marker.forceSteamOff
+                modRestartPolicy = $marker.modRestartPolicy
+                runtimeEvidenceEligible = $false
+            }
+        }
+    }
+
+    throw "'$ScriptPath' exited without a fresh launch result or a running owned game process."
+}
+
 $commonPrepareArguments = @()
 if (-not [string]::IsNullOrWhiteSpace($Sts2GameRoot)) {
     $commonPrepareArguments += @('-Sts2GameRoot', $Sts2GameRoot)
@@ -110,8 +187,8 @@ if ($AllowSteam.IsPresent) {
     $clientArguments += '-ForceSteamOff'
 }
 
-$hostResult = Invoke-LabScriptJson -ScriptPath $startHostScript -ScriptArguments $hostArguments
-$clientResult = Invoke-LabScriptJson -ScriptPath $startClientScript -ScriptArguments $clientArguments
+$hostResult = Invoke-LabGameStart -ScriptPath $startHostScript -InstanceRoot $hostRoot -ScriptArguments $hostArguments
+$clientResult = Invoke-LabGameStart -ScriptPath $startClientScript -InstanceRoot $clientRoot -ScriptArguments $clientArguments
 
 if ($warmupRequired) {
     Write-Host 'Client started in warm-up mode. Let the mod load and complete the game restart; if the Client remains open, close it and rerun this script to start safe-execute-lab.'
