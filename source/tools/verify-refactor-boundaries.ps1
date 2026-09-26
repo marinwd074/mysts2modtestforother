@@ -114,8 +114,8 @@ foreach ($retiredPreviewLockRule in @(
     'TryPromoteCurrentTurn(',
     'RouteStartsWithCurrentTurn(',
     'currentTurnDisplayedResult')) {
-    if ($solverProgressText.Contains($retiredPreviewLockRule)
-        -or $searchCoordinatorText.Contains($retiredPreviewLockRule)) {
+    if ($solverProgressText.Contains($retiredPreviewLockRule) -or
+        $searchCoordinatorText.Contains($retiredPreviewLockRule)) {
         $violations.Add("Retired independent current-turn preview lock returned: '$retiredPreviewLockRule'")
     }
 }
