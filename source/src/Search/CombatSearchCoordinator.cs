@@ -407,12 +407,47 @@ internal static partial class CombatSearchCoordinator
             SolverSearchProfile activeProfile = passProfile;
             Stopwatch activeClock = passClock;
             SolverResult? continuationSeedIncumbent = null;
+            SolverResult? earlySmartPotionBaseline = null;
+            SolverResult? earlySmartPotionScout = null;
+
+            bool HasOptionalSmartPotionCandidate()
+                => initialPotionPolicyOverride == SolverPotionPolicy.Disabled
+                    && root.SearchablePotions.Any(potion =>
+                        beamPolicy.PotionStrategy.AllowsExplicitUse(
+                            potion.Slot,
+                            potion.PotionId,
+                            SolverPotionPolicy.Smart,
+                            forceAllDisabled: false)
+                        && beamPolicy.PotionStrategy.Resolve(
+                            potion.Slot,
+                            potion.PotionId) != SolverPotionDirective.Force);
 
             SolverResult SolveMember(SolverSearchProfile memberProfile, bool refinement)
             {
                 Action<SolverProgress>? memberProgressCallback = refinement && progressCallback != null
                     ? progress => progressCallback(progress with { Phase = "正在精炼路线" })
                     : progressCallback;
+                if (policy.UseP3CrossFamilyScheduling
+                    && !refinement
+                    && HasOptionalSmartPotionCandidate())
+                {
+                    SolverResult potionFree = RunP3CrossFamilyFixedPass(
+                        root,
+                        displayNames,
+                        battleDamage,
+                        beamPolicy,
+                        memberProfile,
+                        cancellationToken,
+                        memberProgressCallback,
+                        out SolverResult? scout);
+                    if (scout != null)
+                    {
+                        earlySmartPotionBaseline = potionFree;
+                        earlySmartPotionScout = scout;
+                    }
+                    return potionFree;
+                }
+
                 CombatBeamSolver solver = new(
                     root,
                     displayNames,
@@ -445,8 +480,6 @@ internal static partial class CombatSearchCoordinator
                         ? activeClock
                         : Stopwatch.StartNew(),
                     SolveMember, publishBaseline);
-            SolverResult? earlySmartPotionBaseline = null;
-            SolverResult? earlySmartPotionScout = null;
             SolverResult? RunCrossFamilyScout(
                 SolverResult provisionalPotionFree,
                 SolverSearchProfile scoutProfile)
@@ -928,10 +961,26 @@ internal static partial class CombatSearchCoordinator
         long remainingMilliseconds = profile.SoftTimeBudgetMilliseconds - requestClock.ElapsedMilliseconds;
         if (remainingMilliseconds <= 0)
         {
+            if (TryReuseEarlySmartPotionScout(
+                    root,
+                    policy,
+                    primary,
+                    earlySmartPotionBaseline,
+                    earlySmartPotionScout,
+                    out SolverResult? deadlineReusedScout))
+            {
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Test] SUPPLEMENTAL_AUDIT_BUDGET exhausted=true " +
+                    $"elapsed_ms={requestClock.ElapsedMilliseconds} " +
+                    $"budget_ms={profile.SoftTimeBudgetMilliseconds} " +
+                    $"reused_early_scout=true");
+                return deadlineReusedScout!;
+            }
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] SUPPLEMENTAL_AUDIT_BUDGET exhausted=true " +
                 $"elapsed_ms={requestClock.ElapsedMilliseconds} " +
-                $"budget_ms={profile.SoftTimeBudgetMilliseconds}");
+                $"budget_ms={profile.SoftTimeBudgetMilliseconds} " +
+                $"reused_early_scout=false");
             return primary;
         }
 

@@ -164,6 +164,10 @@ RepairResult ReplaySeed(CombatRootSnapshot root, RouteSeed seed,
 
 ### P3：仅在当前数据证明等待后，扩展跨家族调度
 
+状态（2026-09-26）：P3 已通过固定输入准入并接入生产多人本地核心。启用边界仅限 `MultiplayerSinglePlayerCore`、非 TurnSetup、Smart 药水、无强制药水指令且 Novelty 关闭；单人、多人预测栈、TurnSetup、强制药水和 Novelty 都保持原路径。P3 只把默认 Beam portfolio 的首个基线 Beam 与“恰好 1 药”Beam 做可恢复固定轮转，后续次段/窄/宽/基础分 refinement 继续使用原 gate、正式比较和剩余预算。共享墙钟与节点额度避免复制请求总预算；早期药水结果只作为隐藏 scout，最终仍由既有 Smart 审计使用正式无药基线复核。
+
+最终证据：[P3 validation run #45](https://github.com/marinwd074/mysts2modtestforother/actions/runs/36228413588)。Release 与 E0 probe 均为 0 warning / 0 error，生产启用边界合同通过；三对 fresh-process 正式质量比较均为 `comparison=0`。目标 Smart 坏例中 cold / warm1 / warm2 最终均保持 42 战损、1 药和相同动作路线；药水首个真实工作时间分别从 6433→2336ms、2060→447ms、2031→456ms，最终 Smart 参考质量发布时间从 7776→4118ms、3165→2510ms、3170→2470ms。cross 展开节点分别为 2685 / 7695 / 7695，未超过 20000 上限且低于基线 9231。样本量仍小，不声称统计显著或可靠 P95；真实 Host/Client 的累计等待、paused session 内存峰值和跨连续本地回合收益仍需实机证据。
+
 现有 E3 Smart 固定轮转与 early potion scout 继续使用。先测 `first_work_ms`：究竟是 Novelty、无药 Beam、一药/多药、不同 beam 成员谁在等待；若当前 scout 已解决，不重做调度器。
 
 若仍存在 starvation：以已有 `SearchMemberExecutionSession.Step` 为单位扩展 Coordinator 固定轮转，沿用当前 256 committed parents / 1024 transitions 切片上限；它不是硬毫秒抢占保证，单次昂贵转移仍须等待现有安全点。

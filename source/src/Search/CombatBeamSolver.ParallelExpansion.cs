@@ -393,6 +393,8 @@ internal sealed partial class CombatBeamSolver
             ObserveSearchPath(node, SearchPathObservationStage.ExpansionBlocked, "cycle_exit_budget");
             return false;
         }
+        if (!TryConsumeExpandedNodeBudget())
+            return false;
         _run.Expanded++;
         ObserveSearchPath(node, SearchPathObservationStage.Expanded, "parallel_parent");
         return true;
