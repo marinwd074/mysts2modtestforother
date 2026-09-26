@@ -23,8 +23,10 @@ internal static partial class CombatSearchCoordinator
         SolverSearchProfile profile,
         CancellationToken cancellationToken,
         Action<SolverProgress>? progressCallback,
-        Action<SolverResult>? interimResultCallback)
+        Action<SolverResult>? interimResultCallback,
+        out SolverResult? earlyPotionScout)
     {
+        earlyPotionScout = null;
         if (!policy.UseP3CrossFamilyScheduling)
             throw new InvalidOperationException("P3 cross-family scheduler was not enabled.");
         if (policy.PotionPolicy != SolverPotionPolicy.Smart
@@ -223,14 +225,13 @@ internal static partial class CombatSearchCoordinator
             PopulateSingleSessionTotals(potionResult);
         }
 
-        SolverResult selected = beamResult;
-        bool potionAccepted = false;
         int potionFreeDeficit = StrategicHpDeficit(root, policy, beamResult);
         int candidateDeficit = potionResult == null
             ? int.MaxValue
             : StrategicHpDeficit(root, policy, potionResult);
         int hpSaved = 0;
         int hpRequired = int.MaxValue;
+        bool scoutWouldQualify = false;
 
         if (potionResult is { ResultScope: SolverResultScope.SearchCompletion })
         {
@@ -251,33 +252,26 @@ internal static partial class CombatSearchCoordinator
                 hpRequired = SmartPotionHpRequired(root, policy, potionResult);
                 bool protectsLoot = policy.TheftPolicy == SolverTheftPolicy.PreserveResources
                     && potionResult.OutstandingStolenResource < beamResult.OutstandingStolenResource;
-                bool acceptable = IsSmartPotionGradientCandidateAcceptable(
+                scoutWouldQualify = IsSmartPotionGradientCandidateAcceptable(
                     potionFreeWon,
                     candidateWon,
                     hpSaved,
                     hpRequired,
-                    protectsLoot);
-                potionAccepted = acceptable
+                    protectsLoot)
                     && (policy.TheftPolicy != SolverTheftPolicy.PreserveResources
                         || IsBetterCompletedResult(root, policy, potionResult, beamResult));
-                if (potionAccepted)
+                if (scoutWouldQualify)
                 {
                     potionResult.PotionHpSaved = hpSaved;
                     potionResult.PotionHpRequired = hpRequired;
-                    selected = potionResult;
                 }
             }
         }
 
-        if (IsCompleteVictory(beamResult))
-            interimResultCallback?.Invoke(beamResult);
-        if (potionAccepted && IsCompleteVictory(selected))
-            interimResultCallback?.Invoke(selected);
-
-        if (potionResult != null)
-            MergeAuditTotals(selected, beamResult, potionResult);
-        else
-            MergeAuditTotals(selected, beamResult);
+        // P3 is only a scheduling optimization. Keep the formal no-potion result as the
+        // primary result and hand the early potion result to the existing Smart audit,
+        // which revalidates it against the completed no-potion baseline before reuse.
+        earlyPotionScout = potionResult;
 
         policy.Diagnostics.Info(
             $"[CombatSolver/Test] P3_CROSS_FAMILY_FIXED " +
@@ -291,8 +285,8 @@ internal static partial class CombatSearchCoordinator
             $"potion_missing={potionMissing.ToString().ToLowerInvariant()} " +
             $"potion_boundary={potionResult?.BoundaryReason.ToString() ?? "-"} " +
             $"potion_hp={candidateDeficit} saved={hpSaved} required={hpRequired} " +
-            $"selected={(ReferenceEquals(selected, potionResult) ? "potion" : "beam")}");
+            $"scout_would_qualify={scoutWouldQualify.ToString().ToLowerInvariant()}");
 
-        return selected;
+        return beamResult;
     }
 }
