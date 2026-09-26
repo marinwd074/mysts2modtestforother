@@ -44,6 +44,8 @@ $liveCombatStampPath = Join-Path $repositoryRoot 'src/Runtime/LiveCombatStamp.cs
 $liveCombatStampText = [IO.File]::ReadAllText($liveCombatStampPath)
 foreach ($localSearchStampRule in @(
     'CaptureLocalCoreSearchValidity',
+    'ProjectLocalCoreSearchValidity',
+    'IsLocalCoreSearchCompatible',
     'name is "P" or "R"',
     'IsIndexedField(name, "E")',
     'IsIndexedField(name, "AI")',
@@ -56,6 +58,9 @@ foreach ($localSearchStampRule in @(
 $searchLifecycleCompletionPath = Join-Path $repositoryRoot 'src/Runtime/SolverController.SearchLifecycle.cs'
 $searchLifecycleCompletionText = [IO.File]::ReadAllText($searchLifecycleCompletionPath)
 foreach ($routeScopedCompletionRule in @(
+    'DEPLOY_COMPATIBLE_WORLD_DELTA',
+    'deploy_after_local_state_change',
+    'LiveCombatStamp.IsLocalCoreSearchCompatible(latestStamp, state)',
     'RouteVersion = capabilities.IsMultiplayer',
     'LiveCombatStamp.CaptureLocalCoreSearchValidity(state)',
     'searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore',
@@ -302,6 +307,15 @@ foreach ($deadPlayerHookRule in @(
 
 $monsterMoveEffectsPath = Join-Path $repositoryRoot 'src/Prediction/MonsterMoveEffects.cs'
 $monsterMoveEffectsText = [IO.File]::ReadAllText($monsterMoveEffectsPath)
+foreach ($liquifyLocalCoreRule in @(
+    'foreach (Creature target in simulator.State.PlayerCreatures)',
+    '!simulator.State.IsRootCapturedPlayer(targetPlayer)',
+    'ConsumeRemoteRandomPileInsertions(simulator, 6)',
+    '_ = simulator.Rng.Shuffle.NextInt(2);')) {
+    if (-not $monsterMoveEffectsText.Contains($liquifyLocalCoreRule)) {
+        $violations.Add("${monsterMoveEffectsPath}: Liquify Ground local-core multiplayer fanout drifted '$liquifyLocalCoreRule'")
+    }
+}
 if (-not $monsterMoveEffectsText.Contains('combat.GetMonsterStaticInt(move.Owner, "_growStrength")')) {
     $violations.Add("${monsterMoveEffectsPath}: LouseProgenitor CURL_AND_GROW must consume captured _growStrength")
 }

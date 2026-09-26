@@ -117,10 +117,17 @@ internal static partial class SolverController
             CombatState? state = CombatManager.Instance.DebugOnlyGetState();
             if (state == null || !CombatManager.Instance.IsInProgress)
                 return false;
-            if (!SolverSessionCapabilities.Capture(state).CanDeploySimpleLocalActions)
+            SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
+            if (!capabilities.CanDeploySimpleLocalActions)
                 return false;
+            LiveCombatStamp current = LiveCombatStamp.Capture(state);
+            bool localCoreCompatible =
+                capabilities.IsMultiplayer
+                && !SolverSettings.Current.UseMultiplayerPrediction
+                && _combat.LatestStamp is { } latestStamp
+                && LiveCombatStamp.IsLocalCoreSearchCompatible(latestStamp, state);
             return _combat.LatestResult != null
-                    && _combat.LatestStamp == LiveCombatStamp.Capture(state)
+                    && (_combat.LatestStamp == current || localCoreCompatible)
                 || PlayerTurnSetupCoordinator.CanTakeOverTurnSetup(state);
         }
     }
@@ -852,16 +859,37 @@ internal static partial class SolverController
         if (safeExecuteRequest)
             _combat.MultiplayerSafeExecuteDeploymentRequested = true;
         LiveCombatStamp current = LiveCombatStamp.Capture(state);
-        if (_combat.LatestResult != null && _combat.LatestStamp == current)
+        bool useLocalSingleCore =
+            capabilities.IsMultiplayer && !SolverSettings.Current.UseMultiplayerPrediction;
+        bool retainedRouteCompatible =
+            useLocalSingleCore
+            && _combat.LatestStamp is { } latestStamp
+            && LiveCombatStamp.IsLocalCoreSearchCompatible(latestStamp, state);
+        if (_combat.LatestResult != null
+            && (_combat.LatestStamp == current || retainedRouteCompatible))
         {
+            if (_combat.LatestStamp != current)
+            {
+                _combat.LatestStamp = current;
+                Entry.Logger.Info(
+                    $"[CombatSolver/Test] DEPLOY_COMPATIBLE_WORLD_DELTA " +
+                    $"turn={LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0} " +
+                    $"world_version={MultiplayerWorldTracker.WorldVersion} " +
+                    $"route_version={MultiplayerRouteChangeTracker.Version}");
+            }
             _combat.MultiplayerSafeExecuteDeploymentRequested = false;
             StartDeployment(host, state, _combat.LatestResult);
             return;
         }
 
+        LiveCombatStamp? currentLocalCoreStamp = useLocalSingleCore
+            ? LiveCombatStamp.CaptureLocalCoreSearchValidity(state)
+            : null;
         if (_search is { } search
             && ReferenceEquals(search.State, state)
-            && search.Stamp == current)
+            && (search.Stamp == current
+                || search.UseRouteScopedCompletion
+                    && search.LocalCoreSearchStamp == currentLocalCoreStamp))
         {
             search.DeployWhenReady = true;
             Player player = LocalContext.GetMe(state)!;
@@ -870,12 +898,17 @@ internal static partial class SolverController
                 player.PlayerCombatState!.TurnNumber,
                 deployWhenReady: true,
                 _combat.ReviewedWorldlinesTotal);
-            Entry.Logger.Info($"[CombatSolver/Test] DEPLOY_WAIT generation={search.Generation}");
+            Entry.Logger.Info(
+                $"[CombatSolver/Test] DEPLOY_WAIT generation={search.Generation} " +
+                $"route_scoped={(search.Stamp != current).ToString().ToLowerInvariant()}");
             return;
         }
 
-        if ((_combat.LatestResult != null || _search != null) && _combat.LatestStamp != current)
-            MarkManualControlObserved("deploy_after_live_state_change");
+        if ((_combat.LatestResult != null || _search != null)
+            && _combat.LatestStamp != current)
+        {
+            MarkManualControlObserved("deploy_after_local_state_change");
+        }
 
         RequestSearch(host, state, SearchReason.Deploy, deployWhenReady: true);
     }

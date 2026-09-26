@@ -15,6 +15,15 @@ internal sealed record LiveCombatStamp(string StateText)
         => new(NormalizeLocalCoreSearchValidity(
             ContinuationStamp.CaptureLive(state).StateText));
 
+    public static LiveCombatStamp ProjectLocalCoreSearchValidity(LiveCombatStamp stamp)
+        => new(NormalizeLocalCoreSearchValidity(stamp.StateText));
+
+    public static bool IsLocalCoreSearchCompatible(
+        LiveCombatStamp expected,
+        CombatState current)
+        => ProjectLocalCoreSearchValidity(expected)
+            == CaptureLocalCoreSearchValidity(current);
+
     private static string NormalizeLocalCoreSearchValidity(string stateText)
     {
         string[] fields = stateText.Split(';');

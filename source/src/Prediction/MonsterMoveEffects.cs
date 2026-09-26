@@ -269,16 +269,26 @@ internal static partial class MonsterMoveEffects
         ApplyOwnerPreludeOnce(simulator, combat, move, monster, type, id);
 
         // Pinned 0.107.1 has two separate target loops: all Sandpit applications first,
-        // then six Frantic Escape insertions per player. Do not interleave these phases.
-        foreach (Creature target in simulator.State.RootCapturedPlayerCreatures)
+        // then six Frantic Escape insertions per player. The local-single-core root keeps
+        // teammate private piles uncaptured, but the native move still creates one public
+        // Sandpit instance per player and consumes shared Shuffle RNG for every random
+        // insertion. Preserve those public/shared effects without materializing remote piles.
+        foreach (Creature target in simulator.State.PlayerCreatures)
         {
             combat.ApplyTargeted<SandpitPower>(move.Owner, target, 4, move.Owner);
             if (simulator.HasPendingChoice)
                 return true;
         }
 
-        foreach (Creature target in simulator.State.RootCapturedPlayerCreatures)
+        foreach (Creature target in simulator.State.PlayerCreatures)
         {
+            Player? targetPlayer = target.Player ?? target.PetOwner;
+            if (targetPlayer != null && !simulator.State.IsRootCapturedPlayer(targetPlayer))
+            {
+                ConsumeRemoteRandomPileInsertions(simulator, 6);
+                continue;
+            }
+
             simulator.AddToCombat<FranticEscape>(
                 target, PileType.Draw, 3, null, CardPilePosition.Random);
             if (simulator.HasPendingChoice)
@@ -291,6 +301,17 @@ internal static partial class MonsterMoveEffects
 
         combat.SetMonsterBool(move.Owner, "HasLiquified", true);
         return true;
+    }
+
+    private static void ConsumeRemoteRandomPileInsertions(
+        CombatPredictionSimulator simulator,
+        int count)
+    {
+        // CardPilePosition.Random advances the shared Shuffle stream once per inserted
+        // card. The remote insertion index is private and discarded; only the exact
+        // shared RNG advancement can affect the local player's later pile order.
+        for (int index = 0; index < count; index++)
+            _ = simulator.Rng.Shuffle.NextInt(2);
     }
 
     private static bool ApplyPerPlayerThenOwnerOnce(
