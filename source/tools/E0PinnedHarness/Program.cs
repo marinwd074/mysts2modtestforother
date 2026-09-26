@@ -705,6 +705,129 @@ internal static class Program
         return 0;
     }
 
+    private static int RunP3Single(
+        string output,
+        CombatRootSnapshot root,
+        SolverDisplayNames names,
+        BattleDamageSnapshot damage,
+        SearchPolicySnapshot policy,
+        bool crossFamily,
+        bool prewarm)
+    {
+        SearchPolicySnapshot baselinePolicy = policy with
+        {
+            UseNoveltyPortfolio = false,
+            UseBeamWidthPortfolio = false,
+            UseP3CrossFamilyScheduling = false,
+            P3SharedWallClockBudget = null,
+            Interaction = null,
+        };
+        SearchPolicySnapshot targetPolicy = baselinePolicy with
+        {
+            UseP3CrossFamilyScheduling = crossFamily,
+        };
+
+        if (prewarm)
+        {
+            _ = CombatSearchCoordinator.Solve(
+                root,
+                names,
+                damage,
+                baselinePolicy,
+                CancellationToken.None,
+                progressCallback: null);
+        }
+
+        long managedBefore = GC.GetTotalMemory(forceFullCollection: false);
+        long allocatedBefore = GC.GetTotalAllocatedBytes(precise: false);
+        SolverResult result = CombatSearchCoordinator.Solve(
+            root,
+            names,
+            damage,
+            targetPolicy,
+            CancellationToken.None,
+            progressCallback: null);
+        long allocatedDelta = Math.Max(
+            0,
+            GC.GetTotalAllocatedBytes(precise: false) - allocatedBefore);
+        long managedAfter = GC.GetTotalMemory(forceFullCollection: false);
+
+        BeamWidthPortfolioTelemetry telemetry = result.PortfolioTelemetry
+            ?? throw new InvalidOperationException("P3 single result has no telemetry.");
+        double? firstPotionWorkMs = telemetry.SearchMembers
+            .Where(member => string.Equals(
+                member.Kind,
+                "potion_required",
+                StringComparison.Ordinal))
+            .Where(member => member.FirstWorkTicks.HasValue)
+            .Select(member => telemetry.ToRequestMilliseconds(member.FirstWorkTicks!.Value))
+            .Cast<double?>()
+            .Min();
+
+        CandidateOrigin origin = result.SearchEfficiencyOrigin
+            ?? throw new InvalidOperationException("P3 single result has no candidate origin.");
+        string context = result.SearchEfficiencyEvaluationContextId
+            ?? throw new InvalidOperationException("P3 single result has no evaluation context.");
+        CandidateMilestones milestones = telemetry.FindCandidateMilestones(origin, context)
+            ?? throw new InvalidOperationException("P3 single result has no milestones.");
+        long published = milestones.PublishedTicks
+            ?? throw new InvalidOperationException("P3 single final candidate was not published.");
+        double publishedMs = telemetry.ToRequestMilliseconds(published);
+
+        P3FinalQualitySnapshot quality =
+            CombatSearchCoordinator.CaptureP3FinalQualityForTesting(
+                root,
+                targetPolicy,
+                result);
+
+        string qualityPath = Path.Combine(output, "p3-quality.json");
+        File.WriteAllText(
+            qualityPath,
+            JsonSerializer.Serialize(
+                quality,
+                new JsonSerializerOptions { WriteIndented = true }));
+
+        var evidence = new
+        {
+            schemaVersion = 1,
+            source = "pinned-0.107.1-p3-single",
+            mode = crossFamily ? "cross" : "baseline",
+            prewarm,
+            result.ProjectedBattleHpLost,
+            result.ProjectedBattlePotionCount,
+            result.CombatEndedTurn,
+            boundaryReason = result.BoundaryReason.ToString(),
+            result.TotalExpandedNodes,
+            result.TotalTransitionCount,
+            publishedMs,
+            firstPotionWorkMs,
+            managedBefore,
+            managedAfter,
+            managedDelta = managedAfter - managedBefore,
+            allocatedDelta,
+            route = result.BestNode.Actions.Select(action =>
+                $"{action.Turn}:{action.Kind}:{action.CardId ?? action.PotionId ?? "-"}").ToArray(),
+        };
+        string evidencePath = Path.Combine(output, "p3-single.json");
+        File.WriteAllText(
+            evidencePath,
+            JsonSerializer.Serialize(
+                evidence,
+                new JsonSerializerOptions { WriteIndented = true }));
+
+        Console.WriteLine(
+            $"P3_SINGLE mode={(crossFamily ? "cross" : "baseline")} " +
+            $"prewarm={prewarm.ToString().ToLowerInvariant()} " +
+            $"hp={result.ProjectedBattleHpLost} potions={result.ProjectedBattlePotionCount} " +
+            $"turn={result.CombatEndedTurn?.ToString() ?? "-"} boundary={result.BoundaryReason} " +
+            $"published_ms={publishedMs:F3} potion_first_ms={firstPotionWorkMs?.ToString("F3") ?? "-"} " +
+            $"nodes={result.TotalExpandedNodes} transitions={result.TotalTransitionCount} " +
+            $"managed_delta={managedAfter - managedBefore} allocated_delta={allocatedDelta}");
+        Console.WriteLine($"quality={qualityPath}");
+        Console.WriteLine($"evidence={evidencePath}");
+        return 0;
+    }
+
     private static int RunP3CrossFamilyAb(
         string output,
         CombatRootSnapshot root,
