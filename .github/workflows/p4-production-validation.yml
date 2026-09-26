@@ -1,0 +1,78 @@
+name: P4 production validation
+
+on:
+  push:
+    branches:
+      - p4-production-validation
+    paths:
+      - '.github/workflows/p4-production-validation.yml'
+      - 'source/**'
+
+permissions:
+  contents: read
+
+jobs:
+  p4-production:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+          lfs: false
+
+      - name: Fetch pinned 0.107.1 game references
+        shell: pwsh
+        run: |
+          git lfs pull --include="game-body/data_sts2_windows_x86_64/sts2.dll,game-body/data_sts2_windows_x86_64/0Harmony.dll,game-body/data_sts2_windows_x86_64/GodotSharp.dll,game-body/data_sts2_windows_x86_64/Steamworks.NET.dll,game-body/data_sts2_windows_x86_64/System.IO.Hashing.dll,game-body/data_sts2_windows_x86_64/SmartFormat.dll,game-body/data_sts2_windows_x86_64/SmartFormat.ZString.dll,game-body/data_sts2_windows_x86_64/JetBrains.Annotations.dll,game-body/data_sts2_windows_x86_64/Sentry.dll" --exclude=""
+          $dll = '.\game-body\data_sts2_windows_x86_64\sts2.dll'
+          $actual = (Get-FileHash -LiteralPath $dll -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne 'a1f9e653f1e28e4076558fee1e60d218619cb7e057b887c6417f62c62c6d7a52') {
+            throw "Pinned sts2.dll hash mismatch."
+          }
+
+      - name: Fetch pinned RitsuLib compatibility package
+        shell: pwsh
+        run: |
+          $uri = 'https://github.com/BAKAOLC/STS2-RitsuLib/releases/download/v0.6.2/STS2.RitsuLib.Compat.0.107.1.0.6.2.github.zip'
+          $zip = Join-Path $env:RUNNER_TEMP 'ritsulib.zip'
+          Invoke-WebRequest -Uri $uri -OutFile $zip
+          $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne '8cb0bc276d3c64dde5ea5415e1738808dcbe71f0a0baf3ef51008ae6dde13517') {
+            throw "RitsuLib package hash mismatch."
+          }
+          $out = Join-Path $env:RUNNER_TEMP 'ritsulib'
+          Expand-Archive -LiteralPath $zip -DestinationPath $out -Force
+          $props = Get-ChildItem -LiteralPath $out -Recurse -Filter 'RitsuLib.References.props' | Select-Object -First 1
+          if ($null -eq $props) { throw 'RitsuLib.References.props not found.' }
+          "RITSU_PROPS=$($props.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RITSU_ROOT=$out" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Release build
+        shell: pwsh
+        run: |
+          $gameData = (Resolve-Path '.\game-body\data_sts2_windows_x86_64').Path
+          dotnet build '.\source\CombatSolver.csproj' -c Release -p:CopyModOnBuild=false -p:Sts2DataDir="$gameData" -p:RitsuLibReferencesProps="$env:RITSU_PROPS" -p:RitsuLibReferenceTarget='0.107.1' -p:TreatWarningsAsErrors=true --nologo
+
+      - name: History counter contracts
+        shell: pwsh
+        run: |
+          dotnet run --project '.\source\tools\HistoryCounterKeyChecks\HistoryCounterKeyChecks.csproj' -c Release --nologo
+
+      - name: Build E0 harness
+        shell: pwsh
+        run: |
+          $gameData = (Resolve-Path '.\game-body\data_sts2_windows_x86_64').Path
+          dotnet build '.\source\tools\E0PinnedHarness\E0PinnedHarness.csproj' -c Release -p:Sts2DataDir="$gameData" -p:RitsuLibReferencesProps="$env:RITSU_PROPS" -p:RitsuWorkshopRoot="$env:RITSU_ROOT" -p:RitsuLibReferenceTarget='0.107.1' -p:TreatWarningsAsErrors=true --nologo
+
+      - name: E0 representative roots
+        shell: pwsh
+        run: |
+          $harness = '.\source\tools\E0PinnedHarness\bin\Release\net9.0\E0PinnedHarness.dll'
+          foreach ($scenario in @('teammate', 'draw_energy')) {
+            $workspace = Join-Path $env:RUNNER_TEMP "p4-clean-$scenario"
+            New-Item -ItemType Directory -Force -Path $workspace | Out-Null
+            & dotnet $harness --scenario $scenario --out $workspace
+            if ($LASTEXITCODE -ne 0) { throw "E0 clean P4 candidate failed for $scenario." }
+          }
