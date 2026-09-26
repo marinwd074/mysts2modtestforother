@@ -26,6 +26,25 @@ internal static class Program
     {
         string scenario = Value(args, "--scenario") ?? "simple";
         string output = Value(args, "--out") ?? ".";
+        string? p3CompareCandidate = Value(args, "--p3-compare-candidate");
+        string? p3CompareCurrent = Value(args, "--p3-compare-current");
+        if (p3CompareCandidate != null || p3CompareCurrent != null)
+        {
+            if (p3CompareCandidate == null || p3CompareCurrent == null)
+                throw new ArgumentException("P3 quality compare requires candidate and current JSON paths.");
+            P3FinalQualitySnapshot candidate = JsonSerializer.Deserialize<P3FinalQualitySnapshot>(
+                File.ReadAllText(p3CompareCandidate))
+                ?? throw new InvalidOperationException("Could not deserialize P3 candidate quality.");
+            P3FinalQualitySnapshot current = JsonSerializer.Deserialize<P3FinalQualitySnapshot>(
+                File.ReadAllText(p3CompareCurrent))
+                ?? throw new InvalidOperationException("Could not deserialize P3 current quality.");
+            int comparison = CombatSearchCoordinator.CompareP3FinalQualitySnapshotsForTesting(
+                candidate,
+                current);
+            Console.WriteLine($"P3_QUALITY_COMPARE comparison={comparison}");
+            return comparison > 0 ? 1 : 0;
+        }
+
         bool publishProgress = args.Contains(
             "--publish-progress",
             StringComparer.Ordinal);
@@ -53,7 +72,17 @@ internal static class Program
         bool p3CrossFamilyAbReverse = args.Contains(
             "--p3-cross-family-ab-reverse",
             StringComparer.Ordinal);
-        if ((p3Novelty || p3CrossFamily || p3CrossFamilyAb || p3CrossFamilyAbReverse)
+        bool p3SingleBaseline = args.Contains(
+            "--p3-single-baseline",
+            StringComparer.Ordinal);
+        bool p3SingleCross = args.Contains(
+            "--p3-single-cross",
+            StringComparer.Ordinal);
+        bool p3Prewarm = args.Contains(
+            "--p3-prewarm",
+            StringComparer.Ordinal);
+        if ((p3Novelty || p3CrossFamily || p3CrossFamilyAb || p3CrossFamilyAbReverse
+                || p3SingleBaseline || p3SingleCross)
             && !p3SchedulingProbe)
         {
             throw new ArgumentException(
@@ -62,11 +91,13 @@ internal static class Program
         int p3ModeCount = (p3Novelty ? 1 : 0)
             + (p3CrossFamily ? 1 : 0)
             + (p3CrossFamilyAb ? 1 : 0)
-            + (p3CrossFamilyAbReverse ? 1 : 0);
+            + (p3CrossFamilyAbReverse ? 1 : 0)
+            + (p3SingleBaseline ? 1 : 0)
+            + (p3SingleCross ? 1 : 0);
         if (p3ModeCount > 1)
         {
             throw new ArgumentException(
-                "P3 novelty, direct cross-family, A/B, and reverse A/B modes are isolated.");
+                "P3 novelty, cross-family, A/B, and single-run modes are isolated.");
         }
         CombatBeamSolver.UseLegacyActionSearchOrderForTesting(legacyActionOrder);
         bool teammate = string.Equals(scenario, "teammate", StringComparison.Ordinal);
@@ -194,8 +225,13 @@ internal static class Program
                     : SearchRoutePolicy.SinglePlayerFullRoute,
                 CurrentTurnOnly = false,
                 UseNoveltyPortfolio = p3Novelty,
-                UseBeamWidthPortfolio = !(p3CrossFamily || p3CrossFamilyAb || p3CrossFamilyAbReverse),
-                UseP3CrossFamilyScheduling = p3CrossFamily,
+                UseBeamWidthPortfolio = !(
+                    p3CrossFamily
+                    || p3CrossFamilyAb
+                    || p3CrossFamilyAbReverse
+                    || p3SingleBaseline
+                    || p3SingleCross),
+                UseP3CrossFamilyScheduling = p3CrossFamily || p3SingleCross,
                 BeamWidthPortfolioWidths = null,
                 FixedBudget = true,
                 MaxDegreeOfParallelism = 1,
@@ -233,6 +269,21 @@ internal static class Program
                     policy,
                     local.PlayerCombatState!.TurnNumber);
             }
+            if (p3SingleBaseline || p3SingleCross)
+            {
+                if (!teammate || multiplayerPrediction)
+                    throw new InvalidOperationException(
+                        "P3 single-run evidence requires teammate fixture with prediction disabled.");
+                return RunP3Single(
+                    output,
+                    root,
+                    names,
+                    damage,
+                    policy,
+                    crossFamily: p3SingleCross,
+                    prewarm: p3Prewarm);
+            }
+
             if (p3CrossFamilyAb || p3CrossFamilyAbReverse)
             {
                 if (!teammate || multiplayerPrediction)
