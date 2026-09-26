@@ -102,6 +102,18 @@ internal sealed record SearchPolicySnapshot(
     public bool UseE3AdaptivePortfolioScheduling { get; init; }
 
     /// <summary>
+    /// P3 experiment: interleave the ordinary potion-free Beam with an exactly-one-potion
+    /// Beam under one request wall-clock deadline. Default off until fixed-input A/B passes.
+    /// </summary>
+    public bool UseP3CrossFamilyScheduling { get; init; }
+
+    /// <summary>
+    /// Shared wall-clock deadline used only by the P3 fixed-rotation experiment.
+    /// Null preserves the existing per-member exclusive-time budget semantics.
+    /// </summary>
+    public SearchRequestWallClockBudget? P3SharedWallClockBudget { get; init; }
+
+    /// <summary>
     /// 组合成员宽度。首项由 <see cref="BeamWidthPortfolio.ProductionMembers" /> 强制成基线宽度；
     /// 为空时用默认的 [基线, 次段 基线, 基线×2/3, 基线×3/2, 基础分 基线]，显式给出时只有宽度成员。
     /// </summary>
@@ -113,5 +125,12 @@ internal sealed record SearchPolicySnapshot(
     /// </summary>
     public BeamWidthPortfolioTelemetry? PortfolioTelemetry { get; init; }
     public SearchRequestWorkTotals? RequestWorkTotals { get; init; }
+    // Suggestions from the prior turn; replay must evaluate them from the current root.
+    public IReadOnlyList<PlanAction> ContinuationSeedActions { get; init; } = [];
+
+    // P2 experiment: ordering-only suggestions for the ordinary Beam member. These never
+    // authorize an action, seed a frontier, or bypass normal legality/retention/final ranking.
+    // Empty by default so production behavior is unchanged until fixed-work A/B accepts it.
+    public IReadOnlyList<PlanAction> ContinuationEnumerationHintActions { get; init; } = [];
     public SearchInteractionState? Interaction { get; init; }
 }

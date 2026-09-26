@@ -12,9 +12,196 @@ void Check(bool condition, string message)
 StateFingerprint Fingerprint(ulong first, ulong second = 0)
     => new(first, second);
 
+bool replayCandidateRetentionPoliciesAreCorrect =
+    MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore)
+    && MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnProjection(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore)
+    && MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnProjection(
+        SearchRoutePolicy.MultiplayerLocalCrossTurn)
+    && !MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnProjection(
+        SearchRoutePolicy.MultiplayerCurrentTurnOnly)
+    && !MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnProjection(
+        SearchRoutePolicy.SinglePlayerFullRoute)
+    && !MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore,
+        playerCount: 2);
+
+if (args.Length == 1 && args[0] == "--replay-candidate-retention")
+{
+    Check(
+        replayCandidateRetentionPoliciesAreCorrect,
+        "Default multiplayer single-player core retains replay candidates without enabling multiplayer-only route semantics.");
+
+    string p0RefreshBase =
+        "combat_identity=seed=s;players=1,2;enemies=10:A;local_net_id=1;round=1;side=Player;phase=Play;turn=1;" +
+        "hp=80;max_hp=80;block=0;energy=3;stars=0;gold=10;" +
+        "E0=10/A/front/40/50/0/ATTACK;H=A+0;D=B+0;C=;X=;P=;R=1:2:3:4:5/1:2:3:4:5";
+    string p0RefreshEnemyDamage = p0RefreshBase.Replace(
+        "E0=10/A/front/40/50/0/ATTACK",
+        "E0=10/A/front/31/50/0/ATTACK",
+        StringComparison.Ordinal);
+    string p0RefreshEnemyBlock = p0RefreshBase.Replace(
+        "E0=10/A/front/40/50/0/ATTACK",
+        "E0=10/A/front/40/50/7/ATTACK",
+        StringComparison.Ordinal);
+    string p0RefreshTargetDeath = p0RefreshBase.Replace(
+        "E0=10/A/front/40/50/0/ATTACK",
+        "E0=10/A/front/0/50/0/ATTACK",
+        StringComparison.Ordinal);
+    string p0RefreshEnergy = p0RefreshBase.Replace("energy=3", "energy=2", StringComparison.Ordinal);
+    string p0RefreshRng = p0RefreshBase.Replace(
+        "R=1:2:3:4:5/1:2:3:4:5",
+        "R=2:2:3:4:5/1:2:3:4:5",
+        StringComparison.Ordinal);
+
+    Check(
+        MultiplayerPlanRefreshContracts.IsReplayCompatible(
+            p0RefreshBase,
+            p0RefreshBase,
+            out string p0ExactRefreshReason)
+            && p0ExactRefreshReason == "exact_local_root"
+            && MultiplayerPlanRefreshContracts.IsReplayCompatible(
+                p0RefreshBase,
+                p0RefreshEnemyDamage,
+                out string p0DamageRefreshReason)
+            && p0DamageRefreshReason == "living_enemy_hp_or_block_only"
+            && MultiplayerPlanRefreshContracts.IsReplayCompatible(
+                p0RefreshBase,
+                p0RefreshEnemyBlock,
+                out string p0BlockRefreshReason)
+            && p0BlockRefreshReason == "living_enemy_hp_or_block_only",
+        "P0 bounded refresh accepts exact roots plus nonlethal living-enemy HP/block drift.");
+
+    Check(
+        !MultiplayerPlanRefreshContracts.IsReplayCompatible(
+            p0RefreshBase,
+            p0RefreshTargetDeath,
+            out string p0DeathRefreshReason)
+            && p0DeathRefreshReason == "strong_field_change:E0"
+            && !MultiplayerPlanRefreshContracts.IsReplayCompatible(
+                p0RefreshBase,
+                p0RefreshEnergy,
+                out string p0EnergyRefreshReason)
+            && p0EnergyRefreshReason == "strong_field_change:energy"
+            && !MultiplayerPlanRefreshContracts.IsReplayCompatible(
+                p0RefreshBase,
+                p0RefreshRng,
+                out string p0RngRefreshReason)
+            && p0RngRefreshReason == "strong_field_change:R",
+        "P0 bounded refresh rejects target death, local resource drift and RNG drift.");
+    return;
+}
+
+bool continuationSeedActionContractsAreCorrect =
+    MultiplayerLocalCrossTurnContracts.CanReplayContinuationSeedAction(
+        actionTurn: 3,
+        currentTurn: 3,
+        isPlayCard: true,
+        endsPlayerTurn: false,
+        hasChoice: false,
+        hasNestedChoices: false,
+        hasTurnStartChoices: false,
+        hasShadowForecast: false,
+        hasCardStateKey: true)
+    && !MultiplayerLocalCrossTurnContracts.CanReplayContinuationSeedAction(
+        actionTurn: 2,
+        currentTurn: 3,
+        isPlayCard: true,
+        endsPlayerTurn: false,
+        hasChoice: false,
+        hasNestedChoices: false,
+        hasTurnStartChoices: false,
+        hasShadowForecast: false,
+        hasCardStateKey: true)
+    && !MultiplayerLocalCrossTurnContracts.CanReplayContinuationSeedAction(
+        actionTurn: 3,
+        currentTurn: 3,
+        isPlayCard: false,
+        endsPlayerTurn: false,
+        hasChoice: false,
+        hasNestedChoices: false,
+        hasTurnStartChoices: false,
+        hasShadowForecast: false,
+        hasCardStateKey: true)
+    && !MultiplayerLocalCrossTurnContracts.CanReplayContinuationSeedAction(
+        actionTurn: 3,
+        currentTurn: 3,
+        isPlayCard: true,
+        endsPlayerTurn: false,
+        hasChoice: true,
+        hasNestedChoices: false,
+        hasTurnStartChoices: false,
+        hasShadowForecast: false,
+        hasCardStateKey: true)
+    && !MultiplayerLocalCrossTurnContracts.CanReplayContinuationSeedAction(
+        actionTurn: 3,
+        currentTurn: 3,
+        isPlayCard: true,
+        endsPlayerTurn: false,
+        hasChoice: false,
+        hasNestedChoices: false,
+        hasTurnStartChoices: false,
+        hasShadowForecast: false,
+        hasCardStateKey: false);
+
+if (args.Length == 1 && args[0] == "--continuation-seed-contracts")
+{
+    Check(
+        continuationSeedActionContractsAreCorrect,
+        "P1 continuation seeds accept only same-turn ordinary PlayCard actions with exact card-state identity.");
+    return;
+}
+
+Check(
+    continuationSeedActionContractsAreCorrect,
+    "P1 continuation-seed action boundary rejects cross-turn, non-card, choice and ambiguous-card suggestions.");
+
+Check(
+    MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore, false, true, false, false)
+    && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
+        SearchRoutePolicy.SinglePlayerFullRoute, false, true, false, false)
+    && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
+        SearchRoutePolicy.MultiplayerLocalCrossTurn, false, true, false, false)
+    && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore, true, true, false, false)
+    && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore, false, true, true, false)
+    && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore, false, true, false, true)
+    && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore, false, false, false, false),
+    "P3 cross-family scheduling is admitted only for multiplayer local single-player-core Smart search outside turn setup, forced directives and Novelty.");
+
+SolverSearchProfile p2BudgetProfile = SolverSearchProfile.Default with
+{
+    MaxExpandedNodes = 20_000,
+    SoftTimeBudgetMilliseconds = 20_000,
+};
+SolverSearchProfile p2Probe = ContinuationSeedIncumbentBudget.Probe(p2BudgetProfile)
+    ?? throw new InvalidOperationException("P2 seed incumbent budget was unexpectedly unavailable.");
+Check(
+    p2Probe.MaxExpandedNodes == 1_000
+    && p2Probe.SoftTimeBudgetMilliseconds == 1_000,
+    "P2 continuation-seed incumbent is capped at five percent of node/time allowance.");
+SolverSearchProfile p2Remaining = ContinuationSeedIncumbentBudget.Remaining(
+        p2BudgetProfile,
+        elapsedMilliseconds: 400,
+        expandedNodes: 600)
+    ?? throw new InvalidOperationException("P2 measured-work remainder unexpectedly exhausted.");
+Check(
+    p2Remaining.MaxExpandedNodes == 19_400
+    && p2Remaining.SoftTimeBudgetMilliseconds == 19_600,
+    "P2 returns unused seed allowance and deducts only measured work from the ordinary search.");
+
+
 Check(
     ActionSearchOrderingPolicy.VerifyForTesting(),
     "E5 action enumeration prioritizes estimated lethal, urgent defense, strategic value-per-resource, then preserves stable original order for exact ties.");
+Check(
+    ActionSearchOrderingPolicy.VerifyContinuationSeedPriorityForTesting(),
+    "P2 continuation enumeration hint can move the exact next seed action ahead of ordinary action-order heuristics without changing the candidate set.");
 
 MultiplayerContinuationMatchInput Match(
     string combatIdentity = "combat-a",
@@ -39,6 +226,7 @@ Check(
         && !MultiplayerLocalCrossTurnContracts.IsCurrentTurnOnly(SearchRoutePolicy.MultiplayerLocalCrossTurn)
         && MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(SearchRoutePolicy.SinglePlayerFullRoute)
         && !MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(SearchRoutePolicy.MultiplayerCurrentTurnOnly)
+        && replayCandidateRetentionPoliciesAreCorrect
         && MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(SearchRoutePolicy.MultiplayerLocalCrossTurn)
         && !MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(
             SearchRoutePolicy.MultiplayerLocalCrossTurn,
@@ -51,7 +239,7 @@ Check(
             playerCount: 2)
         && MultiplayerLocalCrossTurnContracts.CanUsePersistentRouteCache(SearchRoutePolicy.SinglePlayerFullRoute)
         && !MultiplayerLocalCrossTurnContracts.CanUsePersistentRouteCache(SearchRoutePolicy.MultiplayerLocalCrossTurn),
-    "Full-search route policy alone does not activate multiplayer-only ranking/RNG semantics; those require an actual multiplayer root.");
+    "Local cross-turn projection includes the default single-player core without activating multiplayer-only ranking/RNG semantics.");
 
 Check(
     !MultiplayerLocalCrossTurnContracts.ShouldExcludeMultiplayerOnlyCard(

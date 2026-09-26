@@ -1357,6 +1357,7 @@ $expectedBeamFiles = @(
     "CombatBeamSolver.OpeningExpansion.cs",
     "CombatBeamSolver.Transpositions.cs",
     "CombatBeamSolver.OrderedMutationRetention.cs",
+    "CombatBeamSolver.P3Scheduling.cs",
     "CombatBeamSolver.ParallelExpansion.cs",
     "CombatBeamSolver.PathDiagnostics.cs",
     "CombatBeamSolver.Phases.cs",
@@ -4119,6 +4120,126 @@ foreach ($generatedPrefixMethod in @('Jackpot', 'MadScience', 'ManifestAuthority
 }
 if ($cardGenerationMirrorText.Contains('ApplyMadScienceRider(')) {
     $violations.Add("${cardGenerationMirrorPath}: non-resumable Mad Science rider helper returned")
+}
+
+$p0LocalCoreContractsPath = Join-Path $repositoryRoot 'src/Search/MultiplayerLocalCrossTurnContracts.cs'
+$p0LocalCoreContractsText = [IO.File]::ReadAllText($p0LocalCoreContractsPath)
+foreach ($p0ContractRule in @(
+    '=> policy is SearchRoutePolicy.MultiplayerSinglePlayerCore',
+    'or SearchRoutePolicy.MultiplayerLocalCrossTurn;',
+    '=> policy == SearchRoutePolicy.MultiplayerLocalCrossTurn',
+    '&& playerCount > 1;')) {
+    if (-not $p0LocalCoreContractsText.Contains($p0ContractRule)) {
+        $violations.Add("${p0LocalCoreContractsPath}: P0 local-core projection/semantic boundary drifted '$p0ContractRule'")
+    }
+}
+
+$p0FinalOrderingPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.FinalPlanOrdering.cs'
+$p0FinalOrderingText = [IO.File]::ReadAllText($p0FinalOrderingPath)
+if (-not $p0FinalOrderingText.Contains('if (MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnProjection(routePolicy))')) {
+    $violations.Add("${p0FinalOrderingPath}: P0 default local-core route no longer reaches replay-candidate retention")
+}
+
+$p0PhasesPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Phases.cs'
+$p0PhasesText = [IO.File]::ReadAllText($p0PhasesPath)
+foreach ($p0MaterializationRule in @(
+    'MultiplayerReplayCandidates = blockPotionInsertion == null',
+    '? ordering.ReplayCandidates',
+    ': [],')) {
+    if (-not $p0PhasesText.Contains($p0MaterializationRule)) {
+        $violations.Add("${p0PhasesPath}: P0 replay candidates are not preserved through final result materialization '$p0MaterializationRule'")
+    }
+}
+
+$p0ControllerPath = Join-Path $repositoryRoot 'src/Runtime/SolverController.cs'
+$p0ControllerText = [IO.File]::ReadAllText($p0ControllerPath)
+foreach ($p0RuntimeRule in @(
+    'refreshSource.MultiplayerReplayCandidates.Count > 0',
+    'MultiplayerPlanRefreshContracts.IsReplayCompatible(',
+    'TryBoundedMultiplayerPlanRefresh(host, state, worldVersion);')) {
+    if (-not $p0ControllerText.Contains($p0RuntimeRule)) {
+        $violations.Add("${p0ControllerPath}: P0 Runtime bounded-refresh entry drifted '$p0RuntimeRule'")
+    }
+}
+
+$p0RefreshPath = Join-Path $repositoryRoot 'src/Runtime/SolverController.MultiplayerPlanRefresh.cs'
+$p0RefreshText = [IO.File]::ReadAllText($p0RefreshPath)
+foreach ($p0ReplayRule in @(
+    'source.MultiplayerReplayCandidates.Take(BoundedRefreshCandidateLimit)',
+    'replaySolver.ReplayDiagnosticPrefix(candidate.Prefix)',
+    'source.StartTurnNumber != LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber')) {
+    if (-not $p0RefreshText.Contains($p0ReplayRule)) {
+        $violations.Add("${p0RefreshPath}: P0 bounded replay/new-root guard drifted '$p0ReplayRule'")
+    }
+}
+
+$p1ContinuationContractsPath = Join-Path $repositoryRoot 'src/Search/MultiplayerLocalCrossTurnContracts.cs'
+$p1ContinuationContractsText = [IO.File]::ReadAllText($p1ContinuationContractsPath)
+if (-not $p1ContinuationContractsText.Contains('CanReplayContinuationSeedAction(')) {
+    $violations.Add("${p1ContinuationContractsPath}: P1 continuation seed action boundary is missing")
+}
+
+$p1SearchPolicyPath = Join-Path $repositoryRoot 'src/Search/SearchPolicySnapshot.cs'
+$p1SearchPolicyText = [IO.File]::ReadAllText($p1SearchPolicyPath)
+if (-not $p1SearchPolicyText.Contains('public IReadOnlyList<PlanAction> ContinuationSeedActions { get; init; } = [];')) {
+    $violations.Add("${p1SearchPolicyPath}: P1 continuation seed is not frozen into SearchPolicySnapshot")
+}
+
+$p1LifecyclePath = Join-Path $repositoryRoot 'src/Runtime/SolverController.SearchLifecycle.cs'
+$p1LifecycleText = [IO.File]::ReadAllText($p1LifecyclePath)
+foreach ($p1RuntimeRule in @(
+    'CaptureContinuationSeedActions(',
+    'MultiplayerLocalCrossTurnContracts.CanReplayContinuationSeedAction(',
+    'ContinuationSeedActions = continuationSeedActions',
+    'resume_kind=exact_continuation',
+    'MP_LOCAL_XTURN_RESUME_KIND')) {
+    if (-not $p1LifecycleText.Contains($p1RuntimeRule)) {
+        $violations.Add("${p1LifecyclePath}: P1 Runtime seed/resume boundary drifted '$p1RuntimeRule'")
+    }
+}
+
+$p1CoordinatorPath = Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.cs'
+$p1CoordinatorText = [IO.File]::ReadAllText($p1CoordinatorPath)
+foreach ($p2CoordinatorRule in @(
+    'IReadOnlyList<PlanAction> continuationSeedActions =',
+    'policy = policy with { ContinuationSeedActions = [] };',
+    'ContinuationSeedIncumbentBudget.Probe(passProfile)',
+    'continuationSeedProbe: true',
+    'Interaction = null',
+    'interimResultCallback?.Invoke(seedResult);',
+    'SelectContinuationSeedIncumbent(',
+    'P2_CONTINUATION_SEED_BUDGET')) {
+    if (-not $p1CoordinatorText.Contains($p2CoordinatorRule)) {
+        $violations.Add("${p1CoordinatorPath}: P2 independent continuation-seed incumbent drifted '$p2CoordinatorRule'")
+    }
+}
+
+$p1PhasesPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Phases.cs'
+$p1PhasesText = [IO.File]::ReadAllText($p1PhasesPath)
+foreach ($p2SearchRule in @(
+    'if (_continuationSeedProbe)',
+    'SearchNode? seeded = TryReplayContinuationSeed(',
+    'independent_incumbent=true',
+    'throw new ContinuationSeedRejectedException(continuationSeedRejectReason);',
+    'private SearchNode? TryReplayContinuationSeed(',
+    'private SearchNode? TryApplyPrefixAction(')) {
+    if (-not $p1PhasesText.Contains($p2SearchRule)) {
+        $violations.Add("${p1PhasesPath}: P2 exclusive continuation-seed probe path drifted '$p2SearchRule'")
+    }
+}
+if ($p1PhasesText.Contains('rootCandidates.Count + (policy.ContinuationSeedActions.Count > 0 ? 1 : 0)')) {
+    $violations.Add("${p1PhasesPath}: P2 continuation seed returned to the ordinary Beam initial frontier")
+}
+
+$p2BudgetPath = Join-Path $repositoryRoot 'src/Search/ContinuationSeedIncumbentBudget.cs'
+$p2BudgetText = [IO.File]::ReadAllText($p2BudgetPath)
+foreach ($p2BudgetRule in @(
+    'internal const int WorkDivisor = 20;',
+    'public static SolverSearchProfile? Probe(',
+    'public static SolverSearchProfile? Remaining(')) {
+    if (-not $p2BudgetText.Contains($p2BudgetRule)) {
+        $violations.Add("${p2BudgetPath}: P2 bounded repair budget drifted '$p2BudgetRule'")
+    }
 }
 
 if ($violations.Count -gt 0) {

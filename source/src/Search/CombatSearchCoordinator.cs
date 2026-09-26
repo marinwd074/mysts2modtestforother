@@ -333,6 +333,17 @@ internal static partial class CombatSearchCoordinator
             };
         }
         Stopwatch requestClock = Stopwatch.StartNew();
+        IReadOnlyList<PlanAction> continuationSeedActions =
+            policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
+            && !policy.IncludeTurnSetup
+                ? policy.ContinuationSeedActions
+                : [];
+        if (policy.ContinuationSeedActions.Count > 0)
+        {
+            // P2 owns continuation repair as an independent member. Ordinary Beam, Novelty,
+            // and potion members must never inherit the suggestion into their frontier.
+            policy = policy with { ContinuationSeedActions = [] };
+        }
         bool forcedSmartGradient = policy.PotionPolicy == SolverPotionPolicy.Smart
             && policy.PotionStrategy.HasForcedDirectives;
         SearchPolicySnapshot forcedBaselinePolicy = forcedSmartGradient
@@ -373,6 +384,7 @@ internal static partial class CombatSearchCoordinator
             };
         }
         SmartLayerMemoryForecast memoryForecast = new();
+        bool continuationSeedConsumed = false;
         // One search profile drives primary search and all supplemental audits.
         if (root.IsActEndingBoss && profile.BeamWidth < 45)
         {
@@ -392,11 +404,50 @@ internal static partial class CombatSearchCoordinator
             SearchPolicySnapshot passPolicy = forcedBaselinePolicy;
             SearchPolicySnapshot beamPolicy = passPolicy.NoveltySearch == null
                 ? passPolicy : passPolicy with { NoveltySearch = null };
+            SolverSearchProfile activeProfile = passProfile;
+            Stopwatch activeClock = passClock;
+            SolverResult? continuationSeedIncumbent = null;
+            SolverResult? earlySmartPotionBaseline = null;
+            SolverResult? earlySmartPotionScout = null;
+
+            bool HasOptionalSmartPotionCandidate()
+                => initialPotionPolicyOverride == SolverPotionPolicy.Disabled
+                    && root.SearchablePotions.Any(potion =>
+                        beamPolicy.PotionStrategy.AllowsExplicitUse(
+                            potion.Slot,
+                            potion.PotionId,
+                            SolverPotionPolicy.Smart,
+                            forceAllDisabled: false)
+                        && beamPolicy.PotionStrategy.Resolve(
+                            potion.Slot,
+                            potion.PotionId) != SolverPotionDirective.Force);
+
             SolverResult SolveMember(SolverSearchProfile memberProfile, bool refinement)
             {
                 Action<SolverProgress>? memberProgressCallback = refinement && progressCallback != null
                     ? progress => progressCallback(progress with { Phase = "正在精炼路线" })
                     : progressCallback;
+                if (policy.UseP3CrossFamilyScheduling
+                    && !refinement
+                    && HasOptionalSmartPotionCandidate())
+                {
+                    SolverResult potionFree = RunP3CrossFamilyFixedPass(
+                        root,
+                        displayNames,
+                        battleDamage,
+                        beamPolicy,
+                        memberProfile,
+                        cancellationToken,
+                        memberProgressCallback,
+                        out SolverResult? scout);
+                    if (scout != null)
+                    {
+                        earlySmartPotionBaseline = potionFree;
+                        earlySmartPotionScout = scout;
+                    }
+                    return potionFree;
+                }
+
                 CombatBeamSolver solver = new(
                     root,
                     displayNames,
@@ -425,10 +476,10 @@ internal static partial class CombatSearchCoordinator
                     : null;
             SolverResult RunBaseline(SolverSearchProfile baselineProfile)
                 => RunBeamWidthPortfolioPass(root, beamPolicy, baselineProfile,
-                    ReferenceEquals(baselineProfile, passProfile) ? passClock : Stopwatch.StartNew(),
+                    ReferenceEquals(baselineProfile, activeProfile)
+                        ? activeClock
+                        : Stopwatch.StartNew(),
                     SolveMember, publishBaseline);
-            SolverResult? earlySmartPotionBaseline = null;
-            SolverResult? earlySmartPotionScout = null;
             SolverResult? RunCrossFamilyScout(
                 SolverResult provisionalPotionFree,
                 SolverSearchProfile scoutProfile)
@@ -448,10 +499,109 @@ internal static partial class CombatSearchCoordinator
             }
             SolverResult RunPrimary()
                 => policy.UseNoveltyPortfolio
-                    ? RunNoveltyPortfolioPass(root, displayNames, battleDamage, passPolicy, passProfile,
-                        passClock, initialPotionPolicyOverride, cancellationToken, progressCallback,
+                    ? RunNoveltyPortfolioPass(root, displayNames, battleDamage, passPolicy, activeProfile,
+                        activeClock, initialPotionPolicyOverride, cancellationToken, progressCallback,
                         interimResultCallback, RunCrossFamilyScout, RunBaseline)
-                    : RunBaseline(passProfile);
+                    : RunBaseline(activeProfile);
+
+            if (!continuationSeedConsumed
+                && continuationSeedActions.Count > 0
+                && ContinuationSeedIncumbentBudget.Probe(passProfile) is { } seedProfile)
+            {
+                continuationSeedConsumed = true;
+                SearchRequestWorkTotals totals = policy.RequestWorkTotals
+                    ?? throw new InvalidOperationException(
+                        "P2 continuation-seed incumbent requires request work totals.");
+                SearchRequestWorkSnapshot beforeSeed = totals.Snapshot();
+                long seedStartedMs = passClock.ElapsedMilliseconds;
+                SearchPolicySnapshot seedPolicy = beamPolicy with
+                {
+                    Interaction = null,
+                    NoveltySearch = null,
+                    UseNoveltyPortfolio = false,
+                    ContinuationSeedActions = continuationSeedActions,
+                    ContinuationEnumerationHintActions = [],
+                };
+                try
+                {
+                    CombatBeamSolver seedSolver = new(
+                        root,
+                        displayNames,
+                        battleDamage,
+                        seedPolicy,
+                        cancellationToken,
+                        progressCallback: null,
+                        seedProfile,
+                        potionPolicyOverride: initialPotionPolicyOverride,
+                        reserveScenarioReevaluationBudget: false,
+                        continuationSeedProbe: true);
+                    SolverResult seedResult = RunResumableMemberToCompletion(
+                        seedSolver,
+                        cancellationToken,
+                        seedPolicy.Diagnostics);
+                    seedResult.SingleSessionSearch = true;
+                    PopulateSingleSessionTotals(seedResult);
+                    bool admissible = seedResult.ResultScope == SolverResultScope.SearchCompletion
+                        && IsCompleteVictory(seedResult);
+                    if (admissible)
+                    {
+                        continuationSeedIncumbent = seedResult;
+                        interimResultCallback?.Invoke(seedResult);
+                    }
+                    policy.Diagnostics.Info(
+                        $"[CombatSolver/Test] P2_CONTINUATION_SEED_INCUMBENT " +
+                        $"status={(admissible ? "admissible" : "incomplete")} " +
+                        $"actions={continuationSeedActions.Count} " +
+                        $"expanded={seedResult.ExpandedNodes} transitions={seedResult.TransitionCount} " +
+                        $"elapsed_ms={seedResult.Elapsed.TotalMilliseconds:F1} " +
+                        $"published={admissible.ToString().ToLowerInvariant()}");
+                }
+                catch (ContinuationSeedRejectedException rejected)
+                {
+                    policy.Diagnostics.Info(
+                        $"[CombatSolver/Test] P2_CONTINUATION_SEED_INCUMBENT " +
+                        $"status=rejected reason={rejected.Reason} " +
+                        $"actions={continuationSeedActions.Count} published=false");
+                }
+
+                SearchRequestWorkSnapshot afterSeed = totals.Snapshot();
+                long seedElapsedMs = Math.Max(0, passClock.ElapsedMilliseconds - seedStartedMs);
+                long seedExpanded = Math.Max(
+                    0, afterSeed.ExpandedNodes - beforeSeed.ExpandedNodes);
+                activeProfile = ContinuationSeedIncumbentBudget.Remaining(
+                        passProfile,
+                        seedElapsedMs,
+                        seedExpanded)
+                    ?? throw new InvalidOperationException(
+                        "P2 continuation-seed incumbent exhausted the primary request budget.");
+                activeClock = Stopwatch.StartNew();
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Test] P2_CONTINUATION_SEED_BUDGET " +
+                    $"probe_nodes={seedExpanded}/{seedProfile.MaxExpandedNodes} " +
+                    $"probe_ms={seedElapsedMs}/{seedProfile.SoftTimeBudgetMilliseconds} " +
+                    $"remaining_nodes={activeProfile.MaxExpandedNodes} " +
+                    $"remaining_ms={activeProfile.SoftTimeBudgetMilliseconds}");
+            }
+
+            SolverResult SelectContinuationSeedIncumbent(SolverResult ordinary)
+            {
+                if (continuationSeedIncumbent == null
+                    || ordinary.ResultScope != SolverResultScope.SearchCompletion
+                    || !IsBetterPotionPolicyResult(
+                        root,
+                        policy,
+                        continuationSeedIncumbent,
+                        ordinary))
+                {
+                    return ordinary;
+                }
+
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Test] P2_CONTINUATION_SEED_SELECTED " +
+                    $"seed_hp_lost={continuationSeedIncumbent.ProjectedBattleHpLost} " +
+                    $"ordinary_hp_lost={ordinary.ProjectedBattleHpLost}");
+                return continuationSeedIncumbent;
+            }
 
             bool hasForcedBaseline = forcedSmartGradient;
             SolverResult passResult;
@@ -472,7 +622,7 @@ internal static partial class CombatSearchCoordinator
             NoveltyPortfolioTelemetry? noveltyPass = passResult.NoveltyPortfolio;
             ObserveSmartLayerMemory(
                 policy, memoryForecast, passAllocatedAtStart, passTransitionsAtStart,
-                passResult, passProfile,
+                passResult, activeProfile,
                 completedPotionCount: hasForcedBaseline
                     ? policy.PotionStrategy.ForcedDirectiveCount
                     : 0);
@@ -490,14 +640,14 @@ internal static partial class CombatSearchCoordinator
             if (passResult.DeterministicBlockPotionInserted)
             {
                 passSettled = true;
-                return passResult;
+                return SelectContinuationSeedIncumbent(passResult);
             }
             if (!policy.PotionStrategy.HasForcedDirectives || hasForcedBaseline)
             {
                 if (!hasForcedBaseline && HasReachedAcceptableBattleHpLoss(policy, passResult))
                 {
                     passSettled = true;
-                    return passResult;
+                    return SelectContinuationSeedIncumbent(passResult);
                 }
                 passResult = RunSupplementalAudits(
                     root,
@@ -508,8 +658,8 @@ internal static partial class CombatSearchCoordinator
                         : policy with { NoveltySearch = null },
                     cancellationToken,
                     progressCallback,
-                    passProfile,
-                    passClock,
+                    activeProfile,
+                    activeClock,
                     passResult,
                     memoryForecast,
                     interimResultCallback,
@@ -519,7 +669,7 @@ internal static partial class CombatSearchCoordinator
                 // primary-pass observations alongside the request's final outcome.
                 passResult.NoveltyPortfolio = noveltyPass;
             }
-            return passResult;
+            return SelectContinuationSeedIncumbent(passResult);
         }
 
         SolverResult result = RunSearchPass(profile, requestClock);
@@ -811,10 +961,26 @@ internal static partial class CombatSearchCoordinator
         long remainingMilliseconds = profile.SoftTimeBudgetMilliseconds - requestClock.ElapsedMilliseconds;
         if (remainingMilliseconds <= 0)
         {
+            if (TryReuseEarlySmartPotionScout(
+                    root,
+                    policy,
+                    primary,
+                    earlySmartPotionBaseline,
+                    earlySmartPotionScout,
+                    out SolverResult? deadlineReusedScout))
+            {
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Test] SUPPLEMENTAL_AUDIT_BUDGET exhausted=true " +
+                    $"elapsed_ms={requestClock.ElapsedMilliseconds} " +
+                    $"budget_ms={profile.SoftTimeBudgetMilliseconds} " +
+                    $"reused_early_scout=true");
+                return deadlineReusedScout!;
+            }
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] SUPPLEMENTAL_AUDIT_BUDGET exhausted=true " +
                 $"elapsed_ms={requestClock.ElapsedMilliseconds} " +
-                $"budget_ms={profile.SoftTimeBudgetMilliseconds}");
+                $"budget_ms={profile.SoftTimeBudgetMilliseconds} " +
+                $"reused_early_scout=false");
             return primary;
         }
 

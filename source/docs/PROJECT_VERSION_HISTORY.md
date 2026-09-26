@@ -8,6 +8,13 @@
 
 <!-- project-versions -->
 
+## 3.63 — 搜索：新根热启动与 Snapshot 优化
+
+2026-09-26 · 大更新 · `project-v3.63`
+
+- 新增：提供 local-core 重放边界、新根热启动、独立 continuation incumbent 与通过 A/B 的枚举提示。
+- 优化：提前 Smart 跨家族搜索，复用增量历史计数、减少药水指纹排序和 Snapshot 分配。
+
 ## 3.53 — 搜索：优质路线预览与高血续接
 
 2026-09-26 · 小更新 · `project-v3.53`

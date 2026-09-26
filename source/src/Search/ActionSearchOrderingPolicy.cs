@@ -1,6 +1,7 @@
 namespace CombatSolver;
 
 internal readonly record struct ActionSearchOrderHint(
+    bool ContinuationSeedPreferred,
     bool EstimatedLethal,
     bool UrgentDefense,
     double StrategicValuePerResource,
@@ -12,7 +13,11 @@ internal static class ActionSearchOrderingPolicy
 {
     internal static int Compare(ActionSearchOrderHint left, ActionSearchOrderHint right)
     {
-        int comparison = right.EstimatedLethal.CompareTo(left.EstimatedLethal);
+        int comparison = right.ContinuationSeedPreferred.CompareTo(left.ContinuationSeedPreferred);
+        if (comparison != 0)
+            return comparison;
+
+        comparison = right.EstimatedLethal.CompareTo(left.EstimatedLethal);
         if (comparison != 0)
             return comparison;
 
@@ -38,10 +43,10 @@ internal static class ActionSearchOrderingPolicy
     {
         ActionSearchOrderHint[] values =
         [
-            new(false, false, 4d, 8d, 2, 0),
-            new(false, true, 2d, 5d, 1, 1),
-            new(true, false, 1d, 3d, 1, 2),
-            new(false, false, 4d, 8d, 2, 3),
+            new(false, false, false, 4d, 8d, 2, 0),
+            new(false, false, true, 2d, 5d, 1, 1),
+            new(false, true, false, 1d, 3d, 1, 2),
+            new(false, false, false, 4d, 8d, 2, 3),
         ];
 
         Array.Sort(values, Compare);
@@ -49,5 +54,15 @@ internal static class ActionSearchOrderingPolicy
             && values[1].UrgentDefense
             && values[2].StableOrdinal == 0
             && values[3].StableOrdinal == 3;
+    }
+
+    internal static bool VerifyContinuationSeedPriorityForTesting()
+    {
+        ActionSearchOrderHint preferred =
+            new(true, false, false, 0d, 0d, 9, 1);
+        ActionSearchOrderHint lethal =
+            new(false, true, false, 99d, 99d, 0, 0);
+        return Compare(preferred, lethal) < 0
+            && Compare(lethal, preferred) > 0;
     }
 }
