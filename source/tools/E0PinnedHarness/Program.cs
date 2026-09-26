@@ -379,11 +379,16 @@ internal static class Program
         RunManager.Instance.Launch();
         await RunManager.Instance.EnterAct(0, doTransition: false);
 
-        SetDeck(runState, local, scenario switch
-        {
-            "draw_energy" => ["OFFERING", "BASH", "STRIKE_IRONCLAD", "DEFEND_IRONCLAD", "ANGER"],
-            _ => ["BASH", "STRIKE_IRONCLAD", "STRIKE_IRONCLAD", "DEFEND_IRONCLAD", "DEFEND_IRONCLAD"],
-        });
+        SetDeck(
+            runState,
+            local,
+            p3SchedulingProbe
+                ? ["BASH", "STRIKE_IRONCLAD", "STRIKE_IRONCLAD", "STRIKE_IRONCLAD", "STRIKE_IRONCLAD"]
+                : scenario switch
+                {
+                    "draw_energy" => ["OFFERING", "BASH", "STRIKE_IRONCLAD", "DEFEND_IRONCLAD", "ANGER"],
+                    _ => ["BASH", "STRIKE_IRONCLAD", "STRIKE_IRONCLAD", "DEFEND_IRONCLAD", "DEFEND_IRONCLAD"],
+                });
         if (p3SchedulingProbe)
         {
             PotionModel firePotion = ResolveUnique(
@@ -714,8 +719,15 @@ internal static class Program
         bool crossFamily,
         bool prewarm)
     {
+        SolverSearchProfile p3Profile = policy.Profile with
+        {
+            MaxExpandedNodes = MaxExpandedNodes,
+            SoftTimeBudgetMilliseconds = 10_000,
+        };
         SearchPolicySnapshot baselinePolicy = policy with
         {
+            Profile = p3Profile,
+            BudgetOverrideMilliseconds = 10_000,
             UseNoveltyPortfolio = false,
             UseBeamWidthPortfolio = true,
             UseP3CrossFamilyScheduling = false,
@@ -838,8 +850,15 @@ internal static class Program
         SearchPolicySnapshot policy,
         bool reverseOrder)
     {
+        SolverSearchProfile p3Profile = policy.Profile with
+        {
+            MaxExpandedNodes = MaxExpandedNodes,
+            SoftTimeBudgetMilliseconds = 10_000,
+        };
         SearchPolicySnapshot baselinePolicy = policy with
         {
+            Profile = p3Profile,
+            BudgetOverrideMilliseconds = 10_000,
             UseNoveltyPortfolio = false,
             UseBeamWidthPortfolio = true,
             UseP3CrossFamilyScheduling = false,
