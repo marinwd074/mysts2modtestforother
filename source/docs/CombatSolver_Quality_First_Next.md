@@ -175,6 +175,13 @@
 - 新增 `E3_CROSS_FAMILY_SCOUT` / `E3_CROSS_FAMILY_REUSE` 诊断和 scout 预算合同。目标不是保证固定秒数，而是消除“无药 TimeLimit 完整跑完之后才第一次搜索一药水路线”的结构性等待。
 
 
+### 当前真实样本补充：好路线找到后立即进入 anytime 预览（2026-09-26）
+
+- 问题包 `9607427a06024ec3abf3fc6c269ddd14` 的最终路线并非 80 秒才发现：E0 时间线显示最终候选在约 `20.357s` 已生成，`PRIMARY_INCUMBENT_UPDATE` 在约 `20.361s` 已把战略战损压到 5；但直到约 `80.369s` 才 evaluated/selected/published。
+- 根因在实时 `PublishRoutePreview`：为控制内存，已完成的优质终局节点可以释放 simulator，但预览层此前硬要求 `Snapshot.HasSimulator`，导致这些仍有完整不可变快照和动作链的候选被实时 UI 忽略。最终阶段重新物化后才“突然出现”。
+- 现在实时预览允许 retained/released snapshot 参与同一 FinalOrdering；如果用户采用该路线，正式 `MaterializeSelectedRoute` 仍通过 `RefreshReleasedFallback` 从根重放并重新授权，不直接执行释放后的模拟状态。诊断标记：`SEARCH_ANYTIME_RELEASED_SNAPSHOT_PREVIEW`。
+- 该修复不改变 Beam、评分、节点预算或候选集合，只把“已经找到的更好路线”更早发布。此样本的目标是把最终 5 战损路线的可见时间从约 80 秒推进到约 20 秒量级；仍需实机复测确认。
+
 ### 当前真实样本补充：队友推进共享 Shuffle RNG 不再强制重算（2026-09-26）
 
 - 问题包 `04873fada8174afa84813c0e940eb670` 在 T3 的唯一 continuation 差异为 `R.shuffle`：预测计数 224，实机计数 233；同一时刻日志明确记录 `enemy_hp_route_changed=false`。因此本次每回合 fresh search 与敌方 HP 无关，是共享 Shuffle RNG 被当成本地 exact-state 硬门禁。

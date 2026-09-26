@@ -4318,6 +4318,12 @@ foreach ($p2CoordinatorRule in @(
 
 $p1PhasesPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Phases.cs'
 $p1PhasesText = [IO.File]::ReadAllText($p1PhasesPath)
+if ($p1PhasesText.Contains('.Where(node => node.ActionCount > 0 && node.Snapshot.HasSimulator)')) {
+    $violations.Add("${p1PhasesPath}: anytime route preview must not discard retained candidates only because their simulator was released")
+}
+if (-not $p1PhasesText.Contains('SEARCH_ANYTIME_RELEASED_SNAPSHOT_PREVIEW')) {
+    $violations.Add("${p1PhasesPath}: released-snapshot anytime preview diagnostic is missing")
+}
 foreach ($p2SearchRule in @(
     'if (_continuationSeedProbe)',
     'SearchNode? seeded = TryReplayContinuationSeed(',

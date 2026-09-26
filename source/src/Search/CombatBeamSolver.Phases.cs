@@ -1012,8 +1012,13 @@ internal sealed partial class CombatBeamSolver
             IEnumerable<SearchNode> pool = additional == null
                 ? retained
                 : retained.Concat(additional);
+            // A retained terminal node may have released its simulator to cap memory while
+            // keeping the immutable snapshot/action chain needed for ranking and preview.
+            // Excluding it here delays a better anytime route until final materialization.
+            // Adoption is still safe: MaterializeSelectedRoute replays released candidates
+            // through RefreshReleasedFallback before authorizing the route.
             List<SearchNode> viable = pool
-                .Where(node => node.ActionCount > 0 && node.Snapshot.HasSimulator)
+                .Where(node => node.ActionCount > 0)
                 .DistinctBy(node => node.Snapshot)
                 .ToList();
             if (viable.Count == 0)
@@ -1053,6 +1058,15 @@ internal sealed partial class CombatBeamSolver
             }
             RecordCandidateEvaluated(ordering.Candidate.Node, evaluationContextId);
             RecordCandidateSelected(ordering.Candidate.Node, evaluationContextId);
+            if (!ordering.Candidate.Snapshot.HasSimulator)
+            {
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Test] SEARCH_ANYTIME_RELEASED_SNAPSHOT_PREVIEW " +
+                    $"candidate_id={EnsureCandidateOrigin(ordering.Candidate.Node).CandidateId} " +
+                    $"turn={ordering.Candidate.Node.Turn} " +
+                    $"projected_hp={ordering.Candidate.Snapshot.ProjectedPlayerHp} " +
+                    $"enemy_hp={ordering.Candidate.Snapshot.EnemyHp}");
+            }
             member.SpeculativeRouteOrigin = EnsureCandidateOrigin(ordering.Candidate.Node);
             member.SpeculativeRouteEvaluationContextId = evaluationContextId;
             bool onlyDeathRoutesFound = evaluated.All(candidate =>
