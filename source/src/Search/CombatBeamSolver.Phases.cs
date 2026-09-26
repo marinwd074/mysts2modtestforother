@@ -1591,7 +1591,7 @@ internal sealed partial class CombatBeamSolver
         while (member.Frontier.Count > 0
             && (!policy.VerifyIncrementalSearch
                 || member.SearchedTurnLayers < SolverWeights.IncrementalVerificationMaxTurns)
-            && _run.Expanded < _profile.MaxExpandedNodes
+            && HasExpandedNodeBudgetRemaining()
             && !member.TimeBudgetReached)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -1626,14 +1626,14 @@ internal sealed partial class CombatBeamSolver
             member.TurnLayerStartedExpanded = _run.Expanded;
             int remainingExpandedNodes = Math.Max(
                 1,
-                _profile.MaxExpandedNodes - member.TurnLayerStartedExpanded);
+                EffectiveRemainingExpandedNodes());
             member.TurnLayerNodeBudget = Math.Max(
                 SolverWeights.MinimumTurnLayerExpandedNodes,
                 remainingExpandedNodes / remainingReservedLayers);
             PublishProgress(member.Active.Min(node => node.Turn), member.SearchedTurnLayers, 0, member.Active.Count, 0,
                 "展开回合", force: true);
             for (member.PlayDepth = 0;
-                 member.Active.Count > 0 && _run.Expanded < _profile.MaxExpandedNodes;
+                 member.Active.Count > 0 && HasExpandedNodeBudgetRemaining();
                  member.PlayDepth++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -1829,7 +1829,7 @@ internal sealed partial class CombatBeamSolver
                     SearchMemoryPressureSignal signal = policy.MemoryPressureSignal;
                     bool hasMoreParents = member.ActiveIndex < member.Active.Count
                         && !member.AcceptableBattleHpLossReached
-                        && _run.Expanded < _profile.MaxExpandedNodes;
+                        && HasExpandedNodeBudgetRemaining();
                     // With no further parent admission, prune first. Even an unexpected region
                     // exit can be handled at that smaller graph before the next search layer.
                     if (!hasMoreParents)
@@ -1872,7 +1872,7 @@ internal sealed partial class CombatBeamSolver
                     foreach (SearchNode child in Expand(node))
                     {
                         AcceptExpandedChild(node, child);
-                        if (_run.Expanded >= _profile.MaxExpandedNodes)
+                        if (!HasExpandedNodeBudgetRemaining())
                             break;
                     }
                     FinishExpandedParent(node);
@@ -1885,7 +1885,7 @@ internal sealed partial class CombatBeamSolver
                 {
                     while (member.ActiveIndex < member.Active.Count
                            && !member.AcceptableBattleHpLossReached
-                           && _run.Expanded < _profile.MaxExpandedNodes)
+                           && HasExpandedNodeBudgetRemaining())
                     {
                         member.StepCancellationToken.ThrowIfCancellationRequested();
                         ExpandNextSerially();
@@ -1904,10 +1904,10 @@ internal sealed partial class CombatBeamSolver
                 {
                     while (member.ActiveIndex < member.Active.Count
                            && !member.AcceptableBattleHpLossReached
-                           && _run.Expanded < _profile.MaxExpandedNodes)
+                           && HasExpandedNodeBudgetRemaining())
                     {
                         cancellationToken.ThrowIfCancellationRequested();
-                        int remainingBudget = _profile.MaxExpandedNodes - _run.Expanded;
+                        int remainingBudget = EffectiveRemainingExpandedNodes();
                         if (remainingBudget <= 1)
                         {
                             // The legacy iterator intentionally yields only the first child from the
@@ -1925,7 +1925,7 @@ internal sealed partial class CombatBeamSolver
                                         member.TotalCommittedParents);
                                     stopwatch.Start();
                                 }
-                                if (_run.Expanded >= _profile.MaxExpandedNodes)
+                                if (!HasExpandedNodeBudgetRemaining())
                                     break;
                             }
                             break;
@@ -2104,7 +2104,7 @@ internal sealed partial class CombatBeamSolver
                     SearchNode[] commitments = member.NextPlays.Where(HasPlayableFetchedPower).ToArray();
                     foreach (SearchNode commitment in commitments)
                     {
-                        if (_run.Expanded >= _profile.MaxExpandedNodes || member.AcceptableBattleHpLossReached
+                        if (!HasExpandedNodeBudgetRemaining() || member.AcceptableBattleHpLossReached
                             || !policy.VerifyIncrementalSearch
                                 && EffectiveSearchElapsedMilliseconds(stopwatch) >= _profile.SoftTimeBudgetMilliseconds)
                             break;
@@ -2114,7 +2114,7 @@ internal sealed partial class CombatBeamSolver
                         foreach (SearchNode successor in Expand(commitment))
                         {
                             AcceptExpandedChild(commitment, successor);
-                            if (_run.Expanded >= _profile.MaxExpandedNodes || member.AcceptableBattleHpLossReached)
+                            if (!HasExpandedNodeBudgetRemaining() || member.AcceptableBattleHpLossReached)
                                 break;
                         }
                         member.NextPlays.Remove(commitment);
@@ -2138,7 +2138,7 @@ internal sealed partial class CombatBeamSolver
                 member.ActiveIndex = 0;
                 if (!policy.VerifyIncrementalSearch
                     && member.Active.Count > 0
-                    && _run.Expanded < _profile.MaxExpandedNodes
+                    && HasExpandedNodeBudgetRemaining()
                     && (policy.MemoryPressureSignal.HasUnexpectedNoGcLoss()
                         || policy.MemoryPressureSignal.IsLimitReached()))
                     ReclaimAtCommittedBoundary("after_prune", member.PlayDepth, member.Active.Count, member.Ended.Count);
@@ -2156,7 +2156,7 @@ internal sealed partial class CombatBeamSolver
             if (member.AdoptionReached || member.RequestedRouteAdoptionSeed != null)
                 break;
 
-            if (_run.Expanded >= _profile.MaxExpandedNodes)
+            if (!HasExpandedNodeBudgetRemaining())
             {
                 foreach (SearchNode node in member.Active)
                 {
@@ -2373,7 +2373,7 @@ internal sealed partial class CombatBeamSolver
         // Freeze the main-search stop reason before U3 spends its reserved reevaluation work.
         // Whether the main search exhausted its allocation must not depend on how much of the
         // separate U3 reserve the final candidate matrix later consumes.
-        bool nodeBudgetReached = _run.Expanded >= _profile.MaxExpandedNodes;
+        bool nodeBudgetReached = !HasExpandedNodeBudgetRemaining();
         bool scenarioReevaluation = !member.TimeBudgetReached
             && policy.UseMultiplayerScenarioReevaluation
             && policy.UseMultiplayerTeamObjective
