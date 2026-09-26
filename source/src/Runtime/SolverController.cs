@@ -121,15 +121,34 @@ internal static partial class SolverController
             if (!capabilities.CanDeploySimpleLocalActions)
                 return false;
             LiveCombatStamp current = LiveCombatStamp.Capture(state);
-            bool localCoreCompatible =
-                capabilities.IsMultiplayer
-                && !SolverSettings.Current.UseMultiplayerPrediction
-                && _combat.LatestStamp is { } latestStamp
-                && LiveCombatStamp.IsLocalCoreSearchCompatible(latestStamp, state);
-            return _combat.LatestResult != null
-                    && (_combat.LatestStamp == current || localCoreCompatible)
+            return IsLatestResultDeploymentCompatible(state, capabilities, current)
                 || PlayerTurnSetupCoordinator.CanTakeOverTurnSetup(state);
         }
+    }
+
+    private static bool IsLatestResultDeploymentCompatible(
+        CombatState state,
+        SolverSessionCapabilitySet capabilities,
+        LiveCombatStamp current)
+    {
+        if (_combat.LatestResult == null || _combat.LatestStamp is not { } latestStamp)
+            return false;
+        if (latestStamp == current)
+            return true;
+        return capabilities.IsMultiplayer
+            && !SolverSettings.Current.UseMultiplayerPrediction
+            && _combat.LatestRouteVersion == MultiplayerRouteChangeTracker.Version
+            && LiveCombatStamp.IsLocalCoreSearchCompatible(latestStamp, state);
+    }
+
+    private static void RefreshLatestDeploymentStamp(
+        CombatState state,
+        LiveCombatStamp current)
+    {
+        _combat.LatestStamp = current;
+        _combat.LatestRouteVersion = SolverSessionCapabilities.Capture(state).IsMultiplayer
+            ? MultiplayerRouteChangeTracker.Version
+            : 0;
     }
 
     /// <summary>
@@ -861,16 +880,11 @@ internal static partial class SolverController
         LiveCombatStamp current = LiveCombatStamp.Capture(state);
         bool useLocalSingleCore =
             capabilities.IsMultiplayer && !SolverSettings.Current.UseMultiplayerPrediction;
-        bool retainedRouteCompatible =
-            useLocalSingleCore
-            && _combat.LatestStamp is { } latestStamp
-            && LiveCombatStamp.IsLocalCoreSearchCompatible(latestStamp, state);
-        if (_combat.LatestResult != null
-            && (_combat.LatestStamp == current || retainedRouteCompatible))
+        if (IsLatestResultDeploymentCompatible(state, capabilities, current))
         {
             if (_combat.LatestStamp != current)
             {
-                _combat.LatestStamp = current;
+                RefreshLatestDeploymentStamp(state, current);
                 Entry.Logger.Info(
                     $"[CombatSolver/Test] DEPLOY_COMPATIBLE_WORLD_DELTA " +
                     $"turn={LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0} " +
@@ -878,7 +892,7 @@ internal static partial class SolverController
                     $"route_version={MultiplayerRouteChangeTracker.Version}");
             }
             _combat.MultiplayerSafeExecuteDeploymentRequested = false;
-            StartDeployment(host, state, _combat.LatestResult);
+            StartDeployment(host, state, _combat.LatestResult!);
             return;
         }
 
@@ -889,6 +903,7 @@ internal static partial class SolverController
             && ReferenceEquals(search.State, state)
             && (search.Stamp == current
                 || search.UseRouteScopedCompletion
+                    && search.RouteVersion == MultiplayerRouteChangeTracker.Version
                     && search.LocalCoreSearchStamp == currentLocalCoreStamp))
         {
             search.DeployWhenReady = true;

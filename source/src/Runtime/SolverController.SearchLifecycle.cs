@@ -230,6 +230,7 @@ internal static partial class SolverController
                 _combat.State = state;
                 _combat.LatestResult = reused;
                 _combat.LatestStamp = stamp;
+                _combat.LatestRouteVersion = MultiplayerRouteChangeTracker.Version;
                 _combat.ContinuationSource = reused;
                 _combat.AwaitingMultiplayerContinuation = false;
                 _combat.LastSafeEndTurnWorldVersion = null;
@@ -443,7 +444,8 @@ internal static partial class SolverController
                 searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore;
             if (continuationSeedActions.Count > 0
                 && searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
-                && !searchPolicy.IncludeTurnSetup)
+                && !searchPolicy.IncludeTurnSetup
+                && MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled)
             {
                 searchPolicy = searchPolicy with
                 {
@@ -451,12 +453,20 @@ internal static partial class SolverController
                     ContinuationEnumerationHintActions = continuationSeedActions,
                 };
             }
+            else if (continuationSeedActions.Count > 0
+                     && searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore)
+            {
+                Entry.Logger.Info(
+                    $"[CombatSolver/Test] MP_LOCAL_XTURN_SEED_SKIPPED " +
+                    $"reason=single_player_quality_order actions={continuationSeedActions.Count}");
+            }
             if (continuationStamp != null && capabilities.IsMultiplayer)
             {
                 Entry.Logger.Info(
                     $"[CombatSolver/Test] MP_LOCAL_XTURN_RESUME_KIND " +
                     $"resume_kind={(searchPolicy.ContinuationSeedActions.Count > 0 ? "seeded_search" : "cold_search")} " +
                     $"seed_actions={searchPolicy.ContinuationSeedActions.Count} " +
+                    $"single_player_quality_order={(!MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled).ToString().ToLowerInvariant()} " +
                     $"continuation_reject_reason={continuationRejectReason}");
             }
             search.MaxDegreeOfParallelism = searchPolicy.MaxDegreeOfParallelism;
@@ -895,6 +905,7 @@ internal static partial class SolverController
 
         _combat.LatestResult = result;
         _combat.LatestStamp = currentStamp!;
+        _combat.LatestRouteVersion = currentRouteVersion;
         bool retainCurrentTurnRoute = currentTurnAdopted
             && MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnContinuation(
                 result.MultiplayerScope,

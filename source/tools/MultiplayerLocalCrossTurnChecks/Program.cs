@@ -158,21 +158,14 @@ Check(
     "P1 continuation-seed action boundary rejects cross-turn, non-card, choice and ambiguous-card suggestions.");
 
 Check(
-    MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
+    !MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled
+    && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
         SearchRoutePolicy.MultiplayerSinglePlayerCore, false, true, false, false)
     && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
         SearchRoutePolicy.SinglePlayerFullRoute, false, true, false, false)
     && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
-        SearchRoutePolicy.MultiplayerLocalCrossTurn, false, true, false, false)
-    && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore, true, true, false, false)
-    && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore, false, true, true, false)
-    && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore, false, true, false, true)
-    && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore, false, false, false, false),
-    "P3 cross-family scheduling is admitted only for multiplayer local single-player-core Smart search outside turn setup, forced directives and Novelty.");
+        SearchRoutePolicy.MultiplayerLocalCrossTurn, false, true, false, false),
+    "Default multiplayer local-core disables P1/P2/P3 search accelerators so finite-budget exploration keeps single-player ordering.");
 
 SolverSearchProfile p2BudgetProfile = SolverSearchProfile.Default with
 {

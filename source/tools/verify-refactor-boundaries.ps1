@@ -60,7 +60,9 @@ $solverControllerText = [IO.File]::ReadAllText($solverControllerPath)
 foreach ($routeScopedDeployRule in @(
     'DEPLOY_COMPATIBLE_WORLD_DELTA',
     'deploy_after_local_state_change',
-    'LiveCombatStamp.IsLocalCoreSearchCompatible(latestStamp, state)')) {
+    'IsLatestResultDeploymentCompatible(',
+    '_combat.LatestRouteVersion == MultiplayerRouteChangeTracker.Version',
+    'search.RouteVersion == MultiplayerRouteChangeTracker.Version')) {
     if (-not $solverControllerText.Contains($routeScopedDeployRule)) {
         $violations.Add("${solverControllerPath}: route-scoped deployment drifted '$routeScopedDeployRule'")
     }
@@ -319,7 +321,7 @@ foreach ($liquifyLocalCoreRule in @(
     'foreach (Creature target in simulator.State.PlayerCreatures)',
     '!simulator.State.IsRootCapturedPlayer(targetPlayer)',
     'ConsumeRemoteRandomPileInsertions(simulator, 6)',
-    '_ = simulator.Rng.Shuffle.NextInt(2);')) {
+    'simulator.Rng.Shuffle.Advance(count);')) {
     if (-not $monsterMoveEffectsText.Contains($liquifyLocalCoreRule)) {
         $violations.Add("${monsterMoveEffectsPath}: Liquify Ground local-core multiplayer fanout drifted '$liquifyLocalCoreRule'")
     }
@@ -4263,6 +4265,9 @@ $p1ContinuationContractsText = [IO.File]::ReadAllText($p1ContinuationContractsPa
 if (-not $p1ContinuationContractsText.Contains('CanReplayContinuationSeedAction(')) {
     $violations.Add("${p1ContinuationContractsPath}: P1 continuation seed action boundary is missing")
 }
+if (-not $p1ContinuationContractsText.Contains('internal static bool LocalCoreSearchAcceleratorsEnabled => false;')) {
+    $violations.Add("${p1ContinuationContractsPath}: default local-core must keep multiplayer search accelerators disabled")
+}
 
 $p1SearchPolicyPath = Join-Path $repositoryRoot 'src/Search/SearchPolicySnapshot.cs'
 $p1SearchPolicyText = [IO.File]::ReadAllText($p1SearchPolicyPath)
@@ -4276,6 +4281,9 @@ foreach ($p1RuntimeRule in @(
     'CaptureContinuationSeedActions(',
     'MultiplayerLocalCrossTurnContracts.CanReplayContinuationSeedAction(',
     'ContinuationSeedActions = continuationSeedActions',
+    'LocalCoreSearchAcceleratorsEnabled',
+    'MP_LOCAL_XTURN_SEED_SKIPPED',
+    'single_player_quality_order=',
     'resume_kind=exact_continuation',
     'MP_LOCAL_XTURN_RESUME_KIND')) {
     if (-not $p1LifecycleText.Contains($p1RuntimeRule)) {

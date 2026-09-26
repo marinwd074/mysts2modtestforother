@@ -310,8 +310,7 @@ internal static partial class MonsterMoveEffects
         // CardPilePosition.Random advances the shared Shuffle stream once per inserted
         // card. The remote insertion index is private and discarded; only the exact
         // shared RNG advancement can affect the local player's later pile order.
-        for (int index = 0; index < count; index++)
-            _ = simulator.Rng.Shuffle.NextInt(2);
+        simulator.Rng.Shuffle.Advance(count);
     }
 
     private static bool ApplyPerPlayerThenOwnerOnce(

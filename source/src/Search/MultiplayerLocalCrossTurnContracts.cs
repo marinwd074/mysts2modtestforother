@@ -58,13 +58,21 @@ internal static class MultiplayerLocalCrossTurnContracts
         => policy is SearchRoutePolicy.MultiplayerSinglePlayerCore
             or SearchRoutePolicy.MultiplayerLocalCrossTurn;
 
+    /// <summary>
+    /// Quality-first default: local-core multiplayer keeps the exact single-player
+    /// exploration order. P1/P2 continuation seeds and P3 cross-family scheduling stay
+    /// available as offline experiments but do not influence production search.
+    /// </summary>
+    internal static bool LocalCoreSearchAcceleratorsEnabled => false;
+
     internal static bool ShouldUseP3CrossFamilyScheduling(
         SearchRoutePolicy routePolicy,
         bool includeTurnSetup,
         bool smartPotionPolicy,
         bool hasForcedPotionDirectives,
         bool useNoveltyPortfolio)
-        => routePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
+        => LocalCoreSearchAcceleratorsEnabled
+            && routePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
             && !includeTurnSetup
             && smartPotionPolicy
             && !hasForcedPotionDirectives
