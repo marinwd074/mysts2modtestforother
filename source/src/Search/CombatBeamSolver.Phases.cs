@@ -2855,8 +2855,12 @@ internal sealed partial class CombatBeamSolver
                 _owner._run.TransitionCount);
             try
             {
+                long expandedBefore = _owner._run.Expanded;
+                long transitionsBefore = _owner._run.TransitionCount;
                 bool yielded = MoveNextMeasured();
-                if (_state.CommittedParentsInCurrentStep > 0)
+                if (_state.CommittedParentsInCurrentStep > 0
+                    || _owner._run.Expanded > expandedBefore
+                    || _owner._run.TransitionCount > transitionsBefore)
                 {
                     _owner.RecordSearchEfficiencyFirstWork();
                 }
