@@ -44,8 +44,15 @@ internal static class Program
         bool p3Novelty = args.Contains(
             "--p3-novelty",
             StringComparer.Ordinal);
-        if (p3Novelty && !p3SchedulingProbe)
-            throw new ArgumentException("--p3-novelty requires --p3-scheduling-probe.");
+        bool p3CrossFamily = args.Contains(
+            "--p3-cross-family",
+            StringComparer.Ordinal);
+        if ((p3Novelty || p3CrossFamily) && !p3SchedulingProbe)
+            throw new ArgumentException(
+                "--p3-novelty/--p3-cross-family require --p3-scheduling-probe.");
+        if (p3Novelty && p3CrossFamily)
+            throw new ArgumentException(
+                "--p3-novelty and --p3-cross-family are isolated P3 experiments.");
         CombatBeamSolver.UseLegacyActionSearchOrderForTesting(legacyActionOrder);
         bool teammate = string.Equals(scenario, "teammate", StringComparison.Ordinal);
         if (teammate)
@@ -172,7 +179,8 @@ internal static class Program
                     : SearchRoutePolicy.SinglePlayerFullRoute,
                 CurrentTurnOnly = false,
                 UseNoveltyPortfolio = p3Novelty,
-                UseBeamWidthPortfolio = true,
+                UseBeamWidthPortfolio = !p3CrossFamily,
+                UseP3CrossFamilyScheduling = p3CrossFamily,
                 BeamWidthPortfolioWidths = null,
                 FixedBudget = true,
                 MaxDegreeOfParallelism = 1,
