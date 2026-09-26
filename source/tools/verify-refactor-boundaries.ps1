@@ -27,6 +27,46 @@ $forbiddenSearchReferences = @(
 )
 
 $violations = [System.Collections.Generic.List[string]]::new()
+
+$searchCompletionContractPath = Join-Path $repositoryRoot 'src/Runtime/MultiplayerSearchCompletionContracts.cs'
+$searchCompletionContractText = [IO.File]::ReadAllText($searchCompletionContractPath)
+foreach ($searchCompletionContractRule in @(
+    'if (routeScopedCompletion)',
+    'searchRouteVersion != currentRouteVersion || !localStampMatches',
+    'currentWorldVersion != searchWorldVersion',
+    '|| !fullStampMatches')) {
+    if (-not $searchCompletionContractText.Contains($searchCompletionContractRule)) {
+        $violations.Add("${searchCompletionContractPath}: multiplayer search completion contract drifted '$searchCompletionContractRule'")
+    }
+}
+
+$liveCombatStampPath = Join-Path $repositoryRoot 'src/Runtime/LiveCombatStamp.cs'
+$liveCombatStampText = [IO.File]::ReadAllText($liveCombatStampPath)
+foreach ($localSearchStampRule in @(
+    'CaptureLocalCoreSearchValidity',
+    'name is "P" or "R"',
+    'IsIndexedField(name, "E")',
+    'IsIndexedField(name, "AI")',
+    'IsIndexedField(name, "MS")')) {
+    if (-not $liveCombatStampText.Contains($localSearchStampRule)) {
+        $violations.Add("${liveCombatStampPath}: local-core search validity stamp drifted '$localSearchStampRule'")
+    }
+}
+
+$searchLifecycleCompletionPath = Join-Path $repositoryRoot 'src/Runtime/SolverController.SearchLifecycle.cs'
+$searchLifecycleCompletionText = [IO.File]::ReadAllText($searchLifecycleCompletionPath)
+foreach ($routeScopedCompletionRule in @(
+    'RouteVersion = capabilities.IsMultiplayer',
+    'LiveCombatStamp.CaptureLocalCoreSearchValidity(state)',
+    'searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore',
+    'MultiplayerSearchCompletionContracts.IsStale(',
+    '_combat.LatestStamp = currentStamp!;',
+    'SEARCH_COMPATIBLE_WORLD_DELTA')) {
+    if (-not $searchLifecycleCompletionText.Contains($routeScopedCompletionRule)) {
+        $violations.Add("${searchLifecycleCompletionPath}: route-scoped search completion drifted '$routeScopedCompletionRule'")
+    }
+}
+
 $crossTurnTranspositionPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Expansion.cs'
 $crossTurnTranspositionText = [IO.File]::ReadAllText($crossTurnTranspositionPath)
 foreach ($crossTurnTranspositionRule in @(

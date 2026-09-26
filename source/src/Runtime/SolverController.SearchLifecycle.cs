@@ -387,6 +387,12 @@ internal static partial class SolverController
                 WorldVersion = capabilities.IsMultiplayer
                     ? MultiplayerWorldTracker.WorldVersion
                     : 0,
+                RouteVersion = capabilities.IsMultiplayer
+                    ? MultiplayerRouteChangeTracker.Version
+                    : 0,
+                LocalCoreSearchStamp = capabilities.IsMultiplayer
+                    ? LiveCombatStamp.CaptureLocalCoreSearchValidity(state)
+                    : null,
             };
             _search = search;
             CancellationToken token = search.Cancellation.Token;
@@ -433,6 +439,8 @@ internal static partial class SolverController
                 includeTurnSetup: false,
                 theftPolicy: theftPolicy,
                 interaction: search.Interaction);
+            search.UseRouteScopedCompletion =
+                searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore;
             if (continuationSeedActions.Count > 0
                 && searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
                 && !searchPolicy.IncludeTurnSetup)
@@ -780,11 +788,29 @@ internal static partial class SolverController
         CombatState searchedState = search.State;
         LiveCombatStamp searchedStamp = search.Stamp;
         CombatState? currentState = CombatManager.Instance.DebugOnlyGetState();
-        if (!ReferenceEquals(currentState, searchedState)
-            || !CanSolve(searchedState, out _)
-            || search.WorldVersion != 0
-                && MultiplayerWorldTracker.WorldVersion != search.WorldVersion
-            || LiveCombatStamp.Capture(searchedState) != searchedStamp)
+        bool sameCombatState = ReferenceEquals(currentState, searchedState);
+        bool stillSearchable = sameCombatState && CanSolve(searchedState, out _);
+        LiveCombatStamp? currentStamp = stillSearchable
+            ? LiveCombatStamp.Capture(searchedState)
+            : null;
+        LiveCombatStamp? currentLocalCoreStamp = stillSearchable
+            && search.UseRouteScopedCompletion
+                ? LiveCombatStamp.CaptureLocalCoreSearchValidity(searchedState)
+                : null;
+        long currentWorldVersion = MultiplayerWorldTracker.WorldVersion;
+        long currentRouteVersion = MultiplayerRouteChangeTracker.Version;
+        bool fullStampMatches = currentStamp == searchedStamp;
+        bool localCoreStampMatches = !search.UseRouteScopedCompletion
+            || currentLocalCoreStamp == search.LocalCoreSearchStamp;
+        bool completionStale = MultiplayerSearchCompletionContracts.IsStale(
+            search.UseRouteScopedCompletion,
+            search.WorldVersion,
+            currentWorldVersion,
+            search.RouteVersion,
+            currentRouteVersion,
+            fullStampMatches,
+            localCoreStampMatches);
+        if (!stillSearchable || completionStale)
         {
             _combat.BugReportIssues.Record(
                 CombatBugReportIssueKind.SearchResultStale,
@@ -805,8 +831,24 @@ internal static partial class SolverController
                     $"generation={generation} search_world_version={search.WorldVersion} " +
                     $"current_world_version={MultiplayerWorldTracker.WorldVersion}");
             }
+            Entry.Logger.Info(
+                $"[CombatSolver/Test] SEARCH_STALE_DETAIL generation={generation} " +
+                $"route_scoped={search.UseRouteScopedCompletion.ToString().ToLowerInvariant()} " +
+                $"search_world_version={search.WorldVersion} current_world_version={currentWorldVersion} " +
+                $"search_route_version={search.RouteVersion} current_route_version={currentRouteVersion} " +
+                $"full_stamp_match={fullStampMatches.ToString().ToLowerInvariant()} " +
+                $"local_stamp_match={localCoreStampMatches.ToString().ToLowerInvariant()}");
             Entry.Logger.Info($"[CombatSolver/Test] SEARCH_STALE generation={generation}");
             return;
+        }
+
+        if (search.UseRouteScopedCompletion
+            && search.WorldVersion != currentWorldVersion)
+        {
+            Entry.Logger.Info(
+                $"[CombatSolver/Test] SEARCH_COMPATIBLE_WORLD_DELTA generation={generation} " +
+                $"search_world_version={search.WorldVersion} current_world_version={currentWorldVersion} " +
+                $"route_version={currentRouteVersion} local_stamp_match=true");
         }
 
         SolverResult result = task.Result;
@@ -835,7 +877,7 @@ internal static partial class SolverController
         if (stopped)
         {
             result.ResultScope = SolverResultScope.RouteAdoption;
-            search.Interaction.PreserveStoppedResult(result, searchedStamp);
+            search.Interaction.PreserveStoppedResult(result, currentStamp!);
             _combat.StoppedSearch = search.Interaction;
             SolverOverlay.ShowResult(
                 host,
@@ -852,7 +894,7 @@ internal static partial class SolverController
         }
 
         _combat.LatestResult = result;
-        _combat.LatestStamp = searchedStamp;
+        _combat.LatestStamp = currentStamp!;
         bool retainCurrentTurnRoute = currentTurnAdopted
             && MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnContinuation(
                 result.MultiplayerScope,
