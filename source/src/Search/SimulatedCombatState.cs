@@ -2478,15 +2478,27 @@ internal sealed partial class SimulatedCombatState
         p4Measurement = P4CombatFingerprintProfiler.Begin();
         AppendRelicResourceFingerprint(ref fingerprint);
         AppendPotionFingerprint(ref fingerprint);
+        P4CombatFingerprintProfiler.End(P4CombatFingerprintPhase.RelicPotion, p4Measurement);
+
+        p4Measurement = P4CombatFingerprintProfiler.Begin();
         AppendMonsterAiFingerprint(ref fingerprint);
+        P4CombatFingerprintProfiler.End(P4CombatFingerprintPhase.MonsterAi, p4Measurement);
+
+        p4Measurement = P4CombatFingerprintProfiler.Begin();
         AppendMonsterStateFingerprint(ref fingerprint);
+        P4CombatFingerprintProfiler.End(P4CombatFingerprintPhase.MonsterState, p4Measurement);
+
+        p4Measurement = P4CombatFingerprintProfiler.Begin();
         AppendDampenFingerprint(ref fingerprint);
         AppendDeathLifecycleFingerprint(ref fingerprint);
         AppendPossessFingerprint(ref fingerprint);
         AppendAutoPlayFingerprint(ref fingerprint);
+        P4CombatFingerprintProfiler.End(P4CombatFingerprintPhase.DeathAndOtherLifecycle, p4Measurement);
+
+        p4Measurement = P4CombatFingerprintProfiler.Begin();
         fingerprint.Add('T');
         fingerprint.Add(OutstandingStolenResource(simulator));
-        P4CombatFingerprintProfiler.End(P4CombatFingerprintPhase.Tail, p4Measurement);
+        P4CombatFingerprintProfiler.End(P4CombatFingerprintPhase.StolenResource, p4Measurement);
     }
 
     private static StateFingerprint GetPowerFingerprint(PowerModel power, CombatPredictionSimulator simulator)

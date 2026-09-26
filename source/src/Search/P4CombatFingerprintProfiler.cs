@@ -7,7 +7,11 @@ internal enum P4CombatFingerprintPhase
     Powers,
     TurnState,
     Lifecycle,
-    Tail,
+    RelicPotion,
+    MonsterAi,
+    MonsterState,
+    DeathAndOtherLifecycle,
+    StolenResource,
 }
 
 internal readonly record struct P4FingerprintMeasurement(long Timestamp, long AllocatedBytes)
@@ -23,8 +27,10 @@ internal readonly record struct P4FingerprintPhaseSnapshot(
 internal static class P4CombatFingerprintProfiler
 {
     private static bool _enabled;
-    private static readonly long[] Ticks = new long[4];
-    private static readonly long[] Allocated = new long[4];
+    private static readonly long[] Ticks =
+        new long[Enum.GetValues<P4CombatFingerprintPhase>().Length];
+    private static readonly long[] Allocated =
+        new long[Enum.GetValues<P4CombatFingerprintPhase>().Length];
 
     public static void Reset(bool enabled)
     {
