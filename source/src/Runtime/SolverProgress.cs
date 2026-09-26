@@ -175,25 +175,44 @@ internal sealed record SolverFrontierTurn(
     bool CombatEnded)
 {
     public IReadOnlyList<PlanCardChoice> TurnStartChoices { get; init; } = [];
+    public IReadOnlyDictionary<int, IReadOnlyList<string>> KillsAfterAction { get; init; }
+        = new Dictionary<int, IReadOnlyList<string>>();
 
     public static IReadOnlyList<SolverFrontierTurn> FromResult(SolverResult result)
         => result.BestNode.Actions
-            .GroupBy(action => action.Turn)
+            .Select((action, index) => (Action: action, Index: index))
+            .GroupBy(item => item.Action.Turn)
             .OrderBy(group => group.Key)
-            .Select(group => new SolverFrontierTurn(
-                group.Key,
-                group.ToArray(),
-                result.HpLostByTurn.GetValueOrDefault(group.Key),
-                result.HpRecoveredByTurn.GetValueOrDefault(group.Key),
-                result.EnemyHpLostByTurn.GetValueOrDefault(group.Key),
-                result.EnergyLeftByTurn.GetValueOrDefault(group.Key),
-                result.CombatEndedTurn == group.Key)
+            .Select(group =>
             {
-                TurnStartChoices = TurnStartChoicePreviewPolicy.ChoicesForTurn(
+                var indexed = group.ToArray();
+                Dictionary<int, IReadOnlyList<string>> kills = [];
+                for (int localIndex = 0; localIndex < indexed.Length; localIndex++)
+                {
+                    if (result.KillsAfterAction.TryGetValue(
+                            indexed[localIndex].Index,
+                            out IReadOnlyList<string>? actionKills)
+                        && actionKills.Count > 0)
+                    {
+                        kills[localIndex] = actionKills;
+                    }
+                }
+                return new SolverFrontierTurn(
                     group.Key,
-                    result.StartTurnNumber,
-                    result.WasReused ? [] : result.TurnSetupChoices,
-                    result.BestNode.Actions),
+                    indexed.Select(item => item.Action).ToArray(),
+                    result.HpLostByTurn.GetValueOrDefault(group.Key),
+                    result.HpRecoveredByTurn.GetValueOrDefault(group.Key),
+                    result.EnemyHpLostByTurn.GetValueOrDefault(group.Key),
+                    result.EnergyLeftByTurn.GetValueOrDefault(group.Key),
+                    result.CombatEndedTurn == group.Key)
+                {
+                    TurnStartChoices = TurnStartChoicePreviewPolicy.ChoicesForTurn(
+                        group.Key,
+                        result.StartTurnNumber,
+                        result.WasReused ? [] : result.TurnSetupChoices,
+                        result.BestNode.Actions),
+                    KillsAfterAction = kills,
+                };
             })
             .ToArray();
 }

@@ -7,6 +7,8 @@ namespace CombatSolver;
 internal sealed partial class SolverRouteRow : PanelContainer
 {
     private readonly List<CanvasItem> _deploymentActions = [];
+    private readonly List<List<CanvasItem>> _deploymentTriggeredActions = [];
+    private readonly List<CanvasItem> _endTurnTriggeredActions = [];
     private CanvasItem? _endTurnAction;
     private SolverOverlayTurnSnapshot? _populatedTurn;
     private string? _populatedLanguage;
@@ -145,6 +147,15 @@ internal sealed partial class SolverRouteRow : PanelContainer
                 : SolverActionPill.Create(turn.EndTurnAction);
             ActionFlow.AddChild(endTurn);
             _endTurnAction = endTurn;
+            if (turn.EndTurnAction is { } directEndTurn)
+            {
+                foreach (SolverOverlayActionSnapshot triggered in directEndTurn.TriggeredActions)
+                {
+                    Control triggeredPill = SolverActionPill.Create(triggered);
+                    ActionFlow.AddChild(triggeredPill);
+                    _endTurnTriggeredActions.Add(triggeredPill);
+                }
+            }
             RememberPopulated(turn);
             return;
         }
@@ -154,13 +165,28 @@ internal sealed partial class SolverRouteRow : PanelContainer
             Control pill = SolverActionPill.Create(action);
             ActionFlow.AddChild(pill);
             _deploymentActions.Add(pill);
+            List<CanvasItem> triggeredPills = [];
+            foreach (SolverOverlayActionSnapshot triggered in action.TriggeredActions)
+            {
+                Control triggeredPill = SolverActionPill.Create(triggered);
+                ActionFlow.AddChild(triggeredPill);
+                triggeredPills.Add(triggeredPill);
+            }
+            _deploymentTriggeredActions.Add(triggeredPills);
         }
 
-        if (turn.EndTurnAction is { Kills.Count: > 0 } endTurnAction)
+        if (turn.EndTurnAction is { } endTurnAction
+            && (endTurnAction.Kills.Count > 0 || endTurnAction.TriggeredActions.Count > 0))
         {
             Control endTurn = SolverActionPill.Create(endTurnAction);
             ActionFlow.AddChild(endTurn);
             _endTurnAction = endTurn;
+            foreach (SolverOverlayActionSnapshot triggered in endTurnAction.TriggeredActions)
+            {
+                Control triggeredPill = SolverActionPill.Create(triggered);
+                ActionFlow.AddChild(triggeredPill);
+                _endTurnTriggeredActions.Add(triggeredPill);
+            }
         }
         RememberPopulated(turn);
     }
@@ -206,11 +232,17 @@ internal sealed partial class SolverRouteRow : PanelContainer
 
         for (int index = 0; index < actionCount; index++)
         {
-            _deploymentActions[index].Modulate = index < completedActions
+            Color modulate = index < completedActions
                 ? SolverUiTokens.Palette.CompletedActionModulate
                 : index == activeActionIndex
                     ? SolverUiTokens.Palette.ActiveActionModulate
                     : Colors.White;
+            _deploymentActions[index].Modulate = modulate;
+            if (index < _deploymentTriggeredActions.Count)
+            {
+                foreach (CanvasItem triggered in _deploymentTriggeredActions[index])
+                    triggered.Modulate = modulate;
+            }
         }
     }
 
@@ -226,18 +258,29 @@ internal sealed partial class SolverRouteRow : PanelContainer
 
         _deploymentActionLimit = actionCount;
         for (int index = 0; index < _deploymentActions.Count; index++)
-            _deploymentActions[index].Visible = index < actionCount;
+        {
+            bool visible = index < actionCount;
+            _deploymentActions[index].Visible = visible;
+            if (index < _deploymentTriggeredActions.Count)
+            {
+                foreach (CanvasItem triggered in _deploymentTriggeredActions[index])
+                    triggered.Visible = visible;
+            }
+        }
     }
 
     public void SetEndTurnDeploymentState(bool active, bool completed)
     {
         if (_endTurnAction == null)
             return;
-        _endTurnAction.Modulate = completed
+        Color modulate = completed
             ? SolverUiTokens.Palette.CompletedActionModulate
             : active
                 ? SolverUiTokens.Palette.ActiveActionModulate
                 : Colors.White;
+        _endTurnAction.Modulate = modulate;
+        foreach (CanvasItem triggered in _endTurnTriggeredActions)
+            triggered.Modulate = modulate;
     }
 
     public void ShowStatus(string text)
@@ -264,6 +307,8 @@ internal sealed partial class SolverRouteRow : PanelContainer
         _populatedLanguage = null;
         _deploymentActionLimit = -1;
         _deploymentActions.Clear();
+        _deploymentTriggeredActions.Clear();
+        _endTurnTriggeredActions.Clear();
         _endTurnAction = null;
         foreach (Node child in ActionFlow.GetChildren())
         {
@@ -277,5 +322,8 @@ internal sealed partial class SolverRouteRow : PanelContainer
         _deploymentActionLimit = -1;
         foreach (CanvasItem action in _deploymentActions)
             action.Visible = true;
+        foreach (List<CanvasItem> triggeredActions in _deploymentTriggeredActions)
+            foreach (CanvasItem triggered in triggeredActions)
+                triggered.Visible = true;
     }
 }

@@ -78,6 +78,34 @@ foreach ($routeScopedDeployRule in @(
 
 $solverProgressPath = Join-Path $repositoryRoot 'src/Runtime/SolverProgress.cs'
 $solverProgressText = [IO.File]::ReadAllText($solverProgressPath)
+foreach ($routeAnnotationUiRule in @(
+    'KillsAfterAction { get; init; }',
+    'result.KillsAfterAction.TryGetValue(')) {
+    if (-not $solverProgressText.Contains($routeAnnotationUiRule)) {
+        $violations.Add("${solverProgressPath}: route-preview kill annotations drifted '$routeAnnotationUiRule'")
+    }
+}
+$actionTriggerRecorderPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Simulation/ActionRelicTriggerRecorder.cs'
+$actionTriggerRecorderText = [IO.File]::ReadAllText($actionTriggerRecorderPath)
+foreach ($implicitAutoPlayRule in @(
+    'RecordedAutoPlay(',
+    'RecordAutoPlay(',
+    'AutoPlaysForAction(',
+    'KillsForAutoPlay(')) {
+    if (-not $actionTriggerRecorderText.Contains($implicitAutoPlayRule)) {
+        $violations.Add("${actionTriggerRecorderPath}: final-replay autoplay annotation drifted '$implicitAutoPlayRule'")
+    }
+}
+$cardExecutionContinuationPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.CardExecutionContinuation.cs'
+$cardExecutionContinuationText = [IO.File]::ReadAllText($cardExecutionContinuationPath)
+if (-not $cardExecutionContinuationText.Contains('ActionRelicTriggers?.RecordAutoPlay(')) {
+    $violations.Add("${cardExecutionContinuationPath}: implicit card starts are no longer recorded for final-route UI")
+}
+$solverRouteRowPath = Join-Path $repositoryRoot 'src/UI/SolverRouteRow.cs'
+$solverRouteRowText = [IO.File]::ReadAllText($solverRouteRowPath)
+if (-not $solverRouteRowText.Contains('TriggeredActions')) {
+    $violations.Add("${solverRouteRowPath}: implicit autoplay child pills are no longer rendered")
+}
 $searchCoordinatorPath = Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.cs'
 $searchCoordinatorText = [IO.File]::ReadAllText($searchCoordinatorPath)
 foreach ($retiredPreviewLockRule in @(

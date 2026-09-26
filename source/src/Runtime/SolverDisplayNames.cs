@@ -165,6 +165,21 @@ internal sealed class SolverDisplayNames
     public string Relic(string relicId)
         => _relics.GetValueOrDefault(relicId, relicId);
 
+    public string EffectSource(string sourceId)
+    {
+        if (string.IsNullOrEmpty(sourceId))
+            return _english ? "Auto-play" : "自动打出";
+        if (_powers.TryGetValue(sourceId, out string? power))
+            return power;
+        if (_relics.TryGetValue(sourceId, out string? relic))
+            return relic;
+        if (_cards.TryGetValue((sourceId, 0), out string? card))
+            return card;
+        if (_potions.TryGetValue(sourceId, out string? potion))
+            return potion;
+        return sourceId;
+    }
+
     public string Monster(string monsterId)
         => _monsters.GetValueOrDefault(monsterId, monsterId);
 
@@ -193,6 +208,11 @@ internal sealed class SolverDisplayNames
             ? _creatures.GetValueOrDefault(combatId, fallback)
             : fallback;
     }
+
+    public string CreatureByCombatId(uint? combatId)
+        => combatId is uint id
+            ? _creatures.GetValueOrDefault(id, $"#{id}")
+            : string.Empty;
 
     private static string CreatureTypeKey(Creature creature)
         => creature.Monster?.Id.Entry ?? creature.Player?.Character?.Id.Entry ?? "PLAYER";

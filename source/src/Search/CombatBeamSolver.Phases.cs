@@ -255,22 +255,43 @@ internal sealed partial class CombatBeamSolver
             if (candidate.ActionCount == 0)
                 return null;
             Dictionary<int, (TurnOutcome Outcome, bool CombatEnded)> outcomesByTurn = [];
-            for (SearchNode? node = candidate; node != null; node = node.Parent)
+            List<SearchNode> path = [];
+            for (SearchNode? node = candidate; node?.Parent != null; node = node.Parent)
             {
+                path.Add(node);
                 if (node.Outcome is { } outcome)
                     outcomesByTurn.TryAdd(outcome.Turn, (outcome, node.Snapshot.AllEnemiesDead));
             }
             if (outcomesByTurn.Count == 0)
                 return null;
+            path.Reverse();
 
             List<SolverFrontierTurn> turns = new(outcomesByTurn.Count);
-            foreach (IGrouping<int, PlanAction> actions in candidate.Actions.GroupBy(action => action.Turn))
+            foreach (IGrouping<int, SearchNode> group in path.GroupBy(node => node.Action!.Turn))
             {
-                if (!outcomesByTurn.TryGetValue(actions.Key, out var materialized))
+                if (!outcomesByTurn.TryGetValue(group.Key, out var materialized))
                     continue;
+                SearchNode[] nodes = group.ToArray();
+                Dictionary<int, IReadOnlyList<string>> kills = [];
+                for (int localIndex = 0; localIndex < nodes.Length; localIndex++)
+                {
+                    SearchNode node = nodes[localIndex];
+                    ulong newlyKilledMask =
+                        node.Parent!.Snapshot.AliveEnemyMask & ~node.Snapshot.AliveEnemyMask;
+                    if (newlyKilledMask == 0)
+                        continue;
+                    List<string> names = [];
+                    for (int enemyIndex = 0; enemyIndex < root.Enemies.Count; enemyIndex++)
+                    {
+                        if ((newlyKilledMask & (1UL << enemyIndex)) != 0)
+                            names.Add(displayNames.Creature(root.Enemies[enemyIndex]));
+                    }
+                    if (names.Count > 0)
+                        kills[localIndex] = names;
+                }
                 turns.Add(new SolverFrontierTurn(
-                    actions.Key,
-                    actions.Select(WithDisplayNames).ToArray(),
+                    group.Key,
+                    nodes.Select(node => WithDisplayNames(node.Action!)).ToArray(),
                     materialized.Outcome.HpLost,
                     materialized.Outcome.HpRecovered,
                     materialized.Outcome.EnemyHpLost,
@@ -278,12 +299,13 @@ internal sealed partial class CombatBeamSolver
                     materialized.CombatEnded)
                 {
                     TurnStartChoices = TurnStartChoicePreviewPolicy.ChoicesForTurn(
-                        actions.Key,
+                        group.Key,
                         _startTurnNumber,
                         candidate.GetTurnSetupChoices(),
                         candidate.Actions)
                         .Select(WithDisplayNames)
                         .ToArray(),
+                    KillsAfterAction = kills,
                 });
             }
             turns.Sort((a, b) => a.Turn.CompareTo(b.Turn));
@@ -305,12 +327,21 @@ internal sealed partial class CombatBeamSolver
                 if (a.Turn != b.Turn || a.HpLost != b.HpLost || a.EnemyHpLost != b.EnemyHpLost
                     || a.EnergyLeft != b.EnergyLeft || a.CombatEnded != b.CombatEnded
                     || !a.Actions.SequenceEqual(b.Actions)
-                    || !a.TurnStartChoices.SequenceEqual(b.TurnStartChoices))
+                    || !a.TurnStartChoices.SequenceEqual(b.TurnStartChoices)
+                    || !KillsEqual(a.KillsAfterAction, b.KillsAfterAction))
                 {
                     return false;
                 }
             }
             return true;
+
+            static bool KillsEqual(
+                IReadOnlyDictionary<int, IReadOnlyList<string>> left,
+                IReadOnlyDictionary<int, IReadOnlyList<string>> right)
+                => left.Count == right.Count
+                    && left.All(item =>
+                        right.TryGetValue(item.Key, out IReadOnlyList<string>? value)
+                        && item.Value.SequenceEqual(value));
         }
 
         SearchNode? FindCurrentTurnBoundary(SearchNode node)
@@ -653,6 +684,19 @@ internal sealed partial class CombatBeamSolver
                                     displayNames.Relic(trigger.RelicId),
                                     trigger.Summary))
                                 .ToArray(),
+                            AutoPlayedCards = relicTriggerRecorder.AutoPlaysForAction(actionIndex)
+                                .Select(autoPlay => new PlanAutoPlayedCard(
+                                    autoPlay.SourceId,
+                                    displayNames.EffectSource(autoPlay.SourceId),
+                                    autoPlay.CardId,
+                                    autoPlay.UpgradeLevel,
+                                    displayNames.Card(autoPlay.CardId, autoPlay.UpgradeLevel),
+                                    displayNames.CreatureByCombatId(autoPlay.TargetCombatId),
+                                    autoPlay.ReplayCount,
+                                    relicTriggerRecorder.KillsForAutoPlay(actionIndex, autoPlay)
+                                        .Select(DescribeRecordedKill)
+                                        .ToArray()))
+                                .ToArray(),
                         })
                         .ToArray();
             _run.Performance.End(SearchMetricPhase.FinalSelection, finalMeasurement);
@@ -977,6 +1021,18 @@ internal sealed partial class CombatBeamSolver
                         out int annotatedEnergyLeft)
                             ? annotatedEnergyLeft
                             : last.Snapshot.Energy;
+                    Dictionary<int, IReadOnlyList<string>> turnKills = [];
+                    for (int localIndex = 0; localIndex < nodes.Length; localIndex++)
+                    {
+                        int globalActionIndex = nodes[localIndex].ActionCount - 1;
+                        if (annotations.KillsAfterAction.TryGetValue(
+                                globalActionIndex,
+                                out IReadOnlyList<string>? actionKills)
+                            && actionKills.Count > 0)
+                        {
+                            turnKills[localIndex] = actionKills;
+                        }
+                    }
                     return new SolverFrontierTurn(
                         group.Key,
                         nodes.Select(node => WithDisplayNames(node.Action!)).ToArray(),
@@ -993,6 +1049,7 @@ internal sealed partial class CombatBeamSolver
                             selected.Node.Actions)
                             .Select(WithDisplayNames)
                             .ToArray(),
+                        KillsAfterAction = turnKills,
                     };
                 })
                 .ToArray();

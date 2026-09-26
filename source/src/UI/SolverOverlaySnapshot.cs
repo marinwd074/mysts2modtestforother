@@ -32,14 +32,28 @@ internal sealed record SolverOverlayActionSnapshot(
     int ReplayCount,
     SolverActionTextIdentity? TextIdentity = null)
 {
+    public IReadOnlyList<SolverOverlayActionSnapshot> TriggeredActions { get; init; } = [];
+
     public bool HasSamePresentation(SolverOverlayActionSnapshot other)
-        => Title == other.Title && TargetName == other.TargetName
-            && ChoiceText == other.ChoiceText && Tooltip == other.Tooltip
-            && VisualKind == other.VisualKind && ReplayCount == other.ReplayCount
-            && RelicLabels.SequenceEqual(other.RelicLabels)
-            && Kills.SequenceEqual(other.Kills)
-            && (ReferenceEquals(TextIdentity, other.TextIdentity)
-                || TextIdentity?.HasSameIdentity(other.TextIdentity) == true);
+    {
+        if (Title != other.Title || TargetName != other.TargetName
+            || ChoiceText != other.ChoiceText || Tooltip != other.Tooltip
+            || VisualKind != other.VisualKind || ReplayCount != other.ReplayCount
+            || !RelicLabels.SequenceEqual(other.RelicLabels)
+            || !Kills.SequenceEqual(other.Kills)
+            || !(ReferenceEquals(TextIdentity, other.TextIdentity)
+                || TextIdentity?.HasSameIdentity(other.TextIdentity) == true)
+            || TriggeredActions.Count != other.TriggeredActions.Count)
+        {
+            return false;
+        }
+        for (int index = 0; index < TriggeredActions.Count; index++)
+        {
+            if (!TriggeredActions[index].HasSamePresentation(other.TriggeredActions[index]))
+                return false;
+        }
+        return true;
+    }
 }
 
 internal sealed record SolverOverlayTurnSnapshot(
@@ -180,16 +194,30 @@ internal sealed record SolverOverlaySnapshot(
     private static SolverOverlayTurnSnapshot BuildOverlayTurn(SolverFrontierTurn frontier)
     {
         SolverOverlayActionSnapshot[] frontierActions = frontier.Actions
-            .Where(action => action.IsExecutable)
-            .Select(action => CaptureAction(action, []))
+            .Select((action, index) => (Action: action, Index: index))
+            .Where(item => item.Action.IsExecutable)
+            .Select(item => CaptureAction(
+                item.Action,
+                frontier.KillsAfterAction.GetValueOrDefault(item.Index) ?? []))
             .ToArray();
-        PlanAction? frontierEndTurn = frontier.Actions
-            .LastOrDefault(action => action.Kind == PlanActionKind.EndTurn);
+        int endTurnIndex = -1;
+        for (int index = frontier.Actions.Count - 1; index >= 0; index--)
+        {
+            if (frontier.Actions[index].Kind == PlanActionKind.EndTurn)
+            {
+                endTurnIndex = index;
+                break;
+            }
+        }
+        PlanAction? frontierEndTurn = endTurnIndex >= 0 ? frontier.Actions[endTurnIndex] : null;
+        IReadOnlyList<string> endTurnKills = endTurnIndex >= 0
+            ? frontier.KillsAfterAction.GetValueOrDefault(endTurnIndex) ?? []
+            : [];
         return new SolverOverlayTurnSnapshot(
             frontier.Turn,
             TurnStartChoices: FormatTurnStartChoices(frontier.TurnStartChoices),
             frontierActions,
-            frontierEndTurn == null ? null : CaptureAction(frontierEndTurn, [], frontierActions.Length == 0),
+            frontierEndTurn == null ? null : CaptureAction(frontierEndTurn, endTurnKills, frontierActions.Length == 0),
             EnemyHpDamageLost: frontier.EnemyHpLost,
             frontier.HpLost,
             frontier.HpRecovered,
@@ -365,7 +393,35 @@ internal sealed record SolverOverlaySnapshot(
                         new SolverCardTextIdentity(card.CardId, card.UpgradeLevel, card.Title)).ToArray()).ToArray(),
                 action.RelicEffects?.Select(effect => new SolverRelicTextIdentity(effect.RelicId, effect.RelicTitle, effect.Summary)).ToArray() ?? [])
                 { CardEnchantmentId = action.CardEnchantmentId });
+        snapshot = snapshot with
+        {
+            TriggeredActions = (action.AutoPlayedCards ?? [])
+                .Select(CaptureAutoPlayedCard)
+                .ToArray(),
+        };
         return SolverActionTextIdentity.Refresh(snapshot);
+    }
+
+    private static SolverOverlayActionSnapshot CaptureAutoPlayedCard(
+        PlanAutoPlayedCard autoPlay)
+    {
+        PlanAction visual = new(
+            PlanActionKind.PlayCard,
+            Turn: 0,
+            CardId: autoPlay.CardId,
+            TargetName: autoPlay.TargetName,
+            CardUpgradeLevel: autoPlay.CardUpgradeLevel);
+        return new SolverOverlayActionSnapshot(
+            $"{autoPlay.SourceTitle} → {autoPlay.CardTitle}",
+            autoPlay.TargetName,
+            null,
+            [],
+            autoPlay.Kills,
+            $"{autoPlay.SourceTitle} → {autoPlay.CardTitle}" +
+                (string.IsNullOrEmpty(autoPlay.TargetName) ? "" : $"→{autoPlay.TargetName}") +
+                (autoPlay.Kills.Count == 0 ? "" : SolverText.Format($"，击杀 {string.Join("、", autoPlay.Kills)}")),
+            ResolveVisualKind(visual),
+            autoPlay.ReplayCount);
     }
 
     // ModelDb.AllCards 是惰性 LINQ 查询，每次枚举都重跑 SelectMany/Distinct 并分配整套 HashSet；

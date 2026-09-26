@@ -220,6 +220,15 @@
 - 单人 `SinglePlayerFullRoute` 完全不变；开启实验 team-prediction 的 `MultiplayerLocalCrossTurn` 也暂不受这个 3 回合限制。
 - 新诊断：`MP_LOCAL_CORE_PREDICTION_HORIZON`（Beam 到达 3 层）和 `MP_LOCAL_CORE_HORIZON_COMPLETE ... escalation=false`（请求按预测窗结束而不重新加深）。
 
+### PHROG：击杀与地狱狂徒自动出牌 UI 补全（2026-09-27）
+
+- 问题包 `PHROG_PARASITE_ELITE-c7a50b81804d4f0eb85fee119340925d` 证明模拟器并未漏算击杀或 Hellraiser：最终回放已记录 `STOMP` 击杀一只扭动虫，`FORGOTTEN_RITUAL` 与 `STOKE` 期间由 `STRIKE` 来源击杀另外三只。
+- 第一处缺口在 UI 投影：`SolverFrontierTurn` 原先没有 kills 字段，`BuildOverlayTurn` 对动态 current/speculative route 固定传空数组，因此搜索中的路线即使状态已经判定敌人死亡也不会显示“击杀”。
+- 第二处缺口在最终回放：Hellraiser 通过 `AutoPlay(... nestedChoiceSourceId: HELLRAISER_POWER)` 精确执行，但计划模型只保存玩家显式 `PlanAction`，隐式自动牌只作为伤害来源写进父动作的 kill 文本。现在最终 annotation replay 记录每次自动牌的来源、卡牌、目标、重放次数，并把它作为父计划动作下的**非执行子动作**交给 UI；它不进入 Safe Execute 的动作计数，也不会被部署器重复打出。
+- 自动牌造成的击杀从父动作 kill 标签中分离，并归到对应自动牌子胶囊。例如 Hellraiser 抽到 Strike 时 UI 可显示 `地狱狂徒 → 打击 → 扭动虫`，若该 Strike 致死则同一子胶囊显示击杀。
+- 动态路线现在按每个 SearchNode 的敌方 alive-mask 变化携带基础击杀标记；最终路线仍以精确 annotation replay 的 `RecordedKill` 来源覆盖它，因此普通显式卡牌、结束回合触发与隐式自动牌统一走同一套击杀展示链。
+- 该改动只增加路线注释/展示，不改变 Beam 评分、3 回合预测窗、动作合法性或部署授权。
+
 ### 当前真实样本补充：多人战损只统计本地玩家（2026-09-26）
 
 - 问题包 `1cd414aa66e94546bd9713630077d99c` 的 MAWLER 首回合实机记录显示：敌人两次 4 点攻击都对本地玩家结算为 `BlockedDamage=4 / UnblockedDamage=0`，50 格挡最终剩 42；队友则两次各承受 4 点。敌人对本地造成的实际 HP 伤害为 0。
