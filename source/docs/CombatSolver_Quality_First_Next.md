@@ -186,6 +186,15 @@
 - 问题包 `PHROG_PARASITE_ELITE-a39294cfc795445ba37aee48f82932e2` 进一步证明只保护 UI 仍不够：手牌为 `BARRICADE / FORGOTTEN_RITUAL / NOT_YET / STRIKE / NOT_YET`、4 费；约 5 秒时搜索已经出现以 `STRIKE` 开始的首回合候选，但 120 秒正式结果退化成 `BARRICADE → EndTurn`，并明确记录 `energy_left=1`。这不是“打击没进候选”，而是完整胜利的长尾排序最终覆盖了更好的首回合边界。
 - 正式结果现在与 anytime UI 使用同一原则：`MultiplayerSinglePlayerCore` 在最终完整路线选出后，再把它的首回合边界与搜索过程中保留的 current-turn incumbent 用既有 `SolverInterimResultOrdering` 比较；若 incumbent 严格更优，则最终物化为 `CurrentTurnAdoption`，下一回合从真实多人状态重新建根。不会增加“必须把能量花光”的规则；同战损/资源下，原排序已经会让更低敌方 HP（例如可合法补一张 Strike）的边界优先。诊断：`MP_LOCAL_CORE_CURRENT_TURN_PRIORITY`。
 
+### VINE_SHAMBLER 七包历史回归收口（2026-09-26）
+
+- `5cb164c8...` / `880808d2...`：搜索在根捕获阶段拒绝 TheBookOfAges 的 `ChronicleHandLimitPillagePatch`。当前生产代码已经用精确 owner / patch type / target type、且仅多人模式的惰性例外修复；本轮新增结构门禁，防止 Pillage / Scrawl 例外在重构中丢失。
+- `521b4365...` / `bafb159c...`：manual card choice 分支 Fork 时，正在执行且已离开普通牌堆的 `PredictedCard` 没有 remap。当前 `ForkManualCardChoice` 已先走 `PrepareExecutionCardPlay` 再 `RequireRemap`，原有 refactor gate 已固定这条所有权边界。
+- `7732e936...` / `cb8061a4...`：旧多人 continuation 因 `remote_public_mismatch` 在本地状态完全一致时仍重算。默认 `MultiplayerSinglePlayerCore` 已不再携带/比较队友公开 fingerprint；本轮增加 production source 禁止门禁，防止该依赖回流。
+- `cb8061a4...`：T2 路线明确为连续 `OFFERING` 后再打后续抽到的牌，但旧 Safe Execute 在部署开始时按根手牌检查整条路线，提前以 `local_card_missing` 截断。当前预检只看结构，真正的手牌存在性在每一步抵达时再检查；新增 Offering-style 回归合同固定这一分层。
+- `04606558...`：连续动作执行到 `PACTS_END` 后，旧 post-action gate 把本地合法连锁变化归为 `RemoteOrUnknownChange` 并触发 `DeploymentDrift`。当前 revalidation 只保留原生本地动作归因、队列稳定与 WorldVersion 前进/稳定，旧 decision 已删除；本轮新增禁止其重新出现的合同。
+- 因此这七包暴露的生产根因在当前 `main` 均已有行为修复。本轮不再叠加第二套补丁，只补齐缺失的回归合同与结构门禁，避免未来清理/重构把旧问题重新引入。
+
 ### 当前真实样本补充：多人战损只统计本地玩家（2026-09-26）
 
 - 问题包 `1cd414aa66e94546bd9713630077d99c` 的 MAWLER 首回合实机记录显示：敌人两次 4 点攻击都对本地玩家结算为 `BlockedDamage=4 / UnblockedDamage=0`，50 格挡最终剩 42；队友则两次各承受 4 点。敌人对本地造成的实际 HP 伤害为 0。

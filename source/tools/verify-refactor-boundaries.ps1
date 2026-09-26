@@ -4420,6 +4420,40 @@ foreach ($deathHorizonRule in @(
     }
 }
 
+# Historical VINE_SHAMBLER regression bundle: keep the already-fixed production
+# boundaries explicit so future cleanup cannot revive the old failures.
+$mpSafeClassifierPath = Join-Path $repositoryRoot 'src/Runtime/MultiplayerSafeLocalActionClassifier.cs'
+$mpSafeClassifierText = [IO.File]::ReadAllText($mpSafeClassifierPath)
+$boundedDeploymentPattern =
+    '(?s)TakeBoundedDeploymentSlice\(.*?return MultiplayerSafeExecutePolicy\.TakeBoundedSafePrefix\(\s*actions,\s*ClassifyStructural,\s*out stop\);'
+if (-not [regex]::IsMatch($mpSafeClassifierText, $boundedDeploymentPattern)) {
+    $violations.Add("${mpSafeClassifierPath}: future-drawn actions must use structural-only Safe Execute preflight")
+}
+
+$mpSafePolicyPath = Join-Path $repositoryRoot 'src/Runtime/MultiplayerSafeExecutePolicy.cs'
+$mpSafePolicyText = [IO.File]::ReadAllText($mpSafePolicyPath)
+if ($mpSafePolicyText.Contains('RemoteOrUnknownChange')) {
+    $violations.Add("${mpSafePolicyPath}: retired RemoteOrUnknownChange post-action abort was reintroduced")
+}
+
+$patchAuditPath = Join-Path $repositoryRoot 'src/Prediction/PredictionModPatchAudit.cs'
+$patchAuditText = [IO.File]::ReadAllText($patchAuditPath)
+foreach ($chronicleRule in @(
+    'ChronicleHandLimitPillagePatch',
+    'ChronicleHandLimitScrawlPatch',
+    'isMultiplayer && IsKnownMultiplayerNeutralOnPlayPatch')) {
+    if (-not $patchAuditText.Contains($chronicleRule)) {
+        $violations.Add("${patchAuditPath}: TheBookOfAges multiplayer-neutral Chronicle exception drifted '$chronicleRule'")
+    }
+}
+
+if ($p1ContinuationContractsText.Contains('RemotePublicFingerprint')) {
+    $violations.Add("${p1ContinuationContractsPath}: local-core continuation must not gate reuse on teammate public fingerprint")
+}
+if ($p1LifecycleText.Contains('remote_public_mismatch')) {
+    $violations.Add("${p1LifecyclePath}: production local-core continuation reintroduced teammate-public mismatch replans")
+}
+
 $p2BudgetPath = Join-Path $repositoryRoot 'src/Search/ContinuationSeedIncumbentBudget.cs'
 $p2BudgetText = [IO.File]::ReadAllText($p2BudgetPath)
 foreach ($p2BudgetRule in @(
