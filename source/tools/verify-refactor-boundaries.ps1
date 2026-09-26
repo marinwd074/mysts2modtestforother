@@ -4294,17 +4294,10 @@ if (-not $p1ContinuationContractsText.Contains('CanReplayContinuationSeedAction(
 if (-not $p1ContinuationContractsText.Contains('internal static bool LocalCoreSearchAcceleratorsEnabled => false;')) {
     $violations.Add("${p1ContinuationContractsPath}: default local-core must keep multiplayer search accelerators disabled")
 }
-if (-not $p1ContinuationContractsText.Contains('ShouldUseLocalCoreDeathHorizonFallback(')) {
-    $violations.Add("${p1ContinuationContractsPath}: local-core death-horizon fallback contract is missing")
-}
-if (-not $p1ContinuationContractsText.Contains('ShouldPreferLocalCoreCurrentTurnResult(')) {
-    $violations.Add("${p1ContinuationContractsPath}: local-core final current-turn priority contract is missing")
-}
 if (-not $p1ContinuationContractsText.Contains('IsLocalCoreContinuationStateCompatible(')) {
     $violations.Add("${p1ContinuationContractsPath}: local-core shared-state continuation compatibility contract is missing")
 }
 foreach ($localCoreQualityRule in @(
-    'ShouldRunLocalCoreCurrentTurnQualityScout(',
     'sharedFinishedCardPlayDrift',
     'HistoryCountersMatchExceptFinishedCardPlays(',
     'GOLD_AXE')) {
@@ -4342,23 +4335,23 @@ foreach ($p1RuntimeRule in @(
 
 $localCoreNoveltyPath = Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.NoveltyPortfolio.cs'
 $localCoreNoveltyText = [IO.File]::ReadAllText($localCoreNoveltyPath)
-foreach ($currentTurnScoutRule in @(
-    'RunLocalCoreCurrentTurnQualityFirst(',
-    'CurrentTurnOnly = true',
-    'MP_LOCAL_CURRENT_TURN_QUALITY_SCOUT',
-    'NoveltyPortfolioBudget.Remaining(')) {
-    if (-not $localCoreNoveltyText.Contains($currentTurnScoutRule)) {
-        $violations.Add("${localCoreNoveltyPath}: current-turn-first local-core search drifted '$currentTurnScoutRule'")
-    }
-}
-
 $p1CoordinatorPath = Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.cs'
 $p1CoordinatorText = [IO.File]::ReadAllText($p1CoordinatorPath)
-foreach ($localCorePrimaryRule in @(
+foreach ($retiredLocalCoreSearchRule in @(
+    'RunLocalCoreCurrentTurnQualityFirst(',
     'ShouldRunLocalCoreCurrentTurnQualityScout(',
-    'RunLocalCoreCurrentTurnQualityFirst(')) {
-    if (-not $p1CoordinatorText.Contains($localCorePrimaryRule)) {
-        $violations.Add("${p1CoordinatorPath}: local-core current-turn quality scout is no longer a primary-search behavior '$localCorePrimaryRule'")
+    'MP_LOCAL_CURRENT_TURN_QUALITY_SCOUT')) {
+    if ($localCoreNoveltyText.Contains($retiredLocalCoreSearchRule)
+        -or $p1CoordinatorText.Contains($retiredLocalCoreSearchRule)) {
+        $violations.Add("Retired multiplayer current-turn scout returned: '$retiredLocalCoreSearchRule'")
+    }
+}
+foreach ($singlePlayerPrimaryRule in @(
+    'policy.UseNoveltyPortfolio',
+    'RunNoveltyPortfolioPass(',
+    'RunBaseline(activeProfile)')) {
+    if (-not $p1CoordinatorText.Contains($singlePlayerPrimaryRule)) {
+        $violations.Add("${p1CoordinatorPath}: shared single-player primary pipeline drifted '$singlePlayerPrimaryRule'")
     }
 }
 foreach ($p2CoordinatorRule in @(
@@ -4383,12 +4376,15 @@ if ($p1PhasesText.Contains('.Where(node => node.ActionCount > 0 && node.Snapshot
 if (-not $p1PhasesText.Contains('SEARCH_ANYTIME_RELEASED_SNAPSHOT_PREVIEW')) {
     $violations.Add("${p1PhasesPath}: released-snapshot anytime preview diagnostic is missing")
 }
-foreach ($currentTurnFinalRule in @(
+foreach ($retiredLocalCoreFinalRule in @(
     'ShouldPreferLocalCoreCurrentTurnResult(',
     'MP_LOCAL_CORE_CURRENT_TURN_PRIORITY',
-    'completion: "final_current_turn_priority"')) {
-    if (-not $p1PhasesText.Contains($currentTurnFinalRule)) {
-        $violations.Add("${p1PhasesPath}: final current-turn quality priority drifted '$currentTurnFinalRule'")
+    'final_current_turn_priority',
+    'ShouldUseLocalCoreDeathHorizonFallback(',
+    'MP_LOCAL_CORE_DEATH_HORIZON_FALLBACK')) {
+    if ($p1PhasesText.Contains($retiredLocalCoreFinalRule)
+        -or $p1ContinuationContractsText.Contains($retiredLocalCoreFinalRule)) {
+        $violations.Add("Retired multiplayer final-result override returned: '$retiredLocalCoreFinalRule'")
     }
 }
 if (-not $p1PhasesText.Contains('MultiplayerScope = policy.CurrentTurnOnly')) {
@@ -4410,14 +4406,6 @@ foreach ($p2SearchRule in @(
 }
 if ($p1PhasesText.Contains('rootCandidates.Count + (policy.ContinuationSeedActions.Count > 0 ? 1 : 0)')) {
     $violations.Add("${p1PhasesPath}: P2 continuation seed returned to the ordinary Beam initial frontier")
-}
-foreach ($deathHorizonRule in @(
-    'ShouldUseLocalCoreDeathHorizonFallback(',
-    'MP_LOCAL_CORE_DEATH_HORIZON_FALLBACK',
-    'member.CurrentTurnAdoptionReached = true;')) {
-    if (-not $p1PhasesText.Contains($deathHorizonRule)) {
-        $violations.Add("${p1PhasesPath}: local-core death-horizon fallback drifted '$deathHorizonRule'")
-    }
 }
 
 # Historical VINE_SHAMBLER regression bundle: keep the already-fixed production

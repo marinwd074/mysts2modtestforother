@@ -238,37 +238,6 @@ Check(
     "Local-core continuation ignores only remote Shuffle/global finished-play drift; local history, piles and Gold Axe-sensitive history remain exact.");
 
 Check(
-    MultiplayerLocalCrossTurnContracts.ShouldRunLocalCoreCurrentTurnQualityScout(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore,
-        includeTurnSetup: false)
-    && !MultiplayerLocalCrossTurnContracts.ShouldRunLocalCoreCurrentTurnQualityScout(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore,
-        includeTurnSetup: true)
-    && !MultiplayerLocalCrossTurnContracts.ShouldRunLocalCoreCurrentTurnQualityScout(
-        SearchRoutePolicy.SinglePlayerFullRoute,
-        includeTurnSetup: false),
-    "Default local-core spends the former novelty-first window on current-turn quality before long-horizon search.");
-
-Check(
-    MultiplayerLocalCrossTurnContracts.ShouldPreferLocalCoreCurrentTurnResult(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore,
-        playerCount: 2,
-        currentTurnStrictlyBetter: true)
-    && !MultiplayerLocalCrossTurnContracts.ShouldPreferLocalCoreCurrentTurnResult(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore,
-        playerCount: 1,
-        currentTurnStrictlyBetter: true)
-    && !MultiplayerLocalCrossTurnContracts.ShouldPreferLocalCoreCurrentTurnResult(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore,
-        playerCount: 2,
-        currentTurnStrictlyBetter: false)
-    && !MultiplayerLocalCrossTurnContracts.ShouldPreferLocalCoreCurrentTurnResult(
-        SearchRoutePolicy.SinglePlayerFullRoute,
-        playerCount: 2,
-        currentTurnStrictlyBetter: true),
-    "Default local-core formal result keeps a strictly better current-turn incumbent over a worse long-horizon first turn.");
-
-Check(
     !MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled
     && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
         SearchRoutePolicy.MultiplayerSinglePlayerCore, false, true, false, false)
@@ -279,32 +248,11 @@ Check(
     "Default multiplayer local-core disables P1/P2/P3 search accelerators so finite-budget exploration keeps single-player ordering.");
 
 Check(
-    MultiplayerLocalCrossTurnContracts.ShouldUseLocalCoreDeathHorizonFallback(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore,
-        playerCount: 2,
-        onlyDeathRoutesFound: true,
-        hasSurvivingCurrentTurnCandidate: true)
-    && !MultiplayerLocalCrossTurnContracts.ShouldUseLocalCoreDeathHorizonFallback(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore,
-        playerCount: 1,
-        onlyDeathRoutesFound: true,
-        hasSurvivingCurrentTurnCandidate: true)
-    && !MultiplayerLocalCrossTurnContracts.ShouldUseLocalCoreDeathHorizonFallback(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore,
-        playerCount: 2,
-        onlyDeathRoutesFound: false,
-        hasSurvivingCurrentTurnCandidate: true)
-    && !MultiplayerLocalCrossTurnContracts.ShouldUseLocalCoreDeathHorizonFallback(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore,
-        playerCount: 2,
-        onlyDeathRoutesFound: true,
-        hasSurvivingCurrentTurnCandidate: false)
-    && !MultiplayerLocalCrossTurnContracts.ShouldUseLocalCoreDeathHorizonFallback(
-        SearchRoutePolicy.SinglePlayerFullRoute,
-        playerCount: 2,
-        onlyDeathRoutesFound: true,
-        hasSurvivingCurrentTurnCandidate: true),
-    "Local-core multiplayer falls back to the best surviving current-turn boundary only when every full local-only projection dies.");
+    MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore)
+        && MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(
+            SearchRoutePolicy.SinglePlayerFullRoute),
+    "Default multiplayer local-core enters the same full Beam/retention/final-ordering search class as singleplayer; multiplayer differences remain state/runtime boundaries.");
 
 SolverSearchProfile p2BudgetProfile = SolverSearchProfile.Default with
 {

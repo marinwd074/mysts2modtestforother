@@ -2378,33 +2378,6 @@ internal sealed partial class CombatBeamSolver
         List<SearchNode> finalCandidates = Retention.RankFinal(finalPool);
         ReleaseDroppedSnapshots(finalPool, finalCandidates);
 
-        bool fullProjectionOnlyDeathRoutes = finalCandidates.Count > 0
-            && finalCandidates.All(candidate =>
-                candidate.Snapshot.PlayerDead || candidate.Snapshot.ProjectedPlayerHp <= 0);
-        SearchNode? currentTurnFallback = member.CurrentTurnCandidateNode;
-        bool currentTurnFallbackSurvives = currentTurnFallback != null
-            && !currentTurnFallback.Snapshot.PlayerDead
-            && currentTurnFallback.Snapshot.ProjectedPlayerHp > 0;
-        if (MultiplayerLocalCrossTurnContracts.ShouldUseLocalCoreDeathHorizonFallback(
-                policy.RoutePolicy,
-                root.PlayerCount,
-                fullProjectionOnlyDeathRoutes,
-                currentTurnFallbackSurvives))
-        {
-            SearchNode adoptedCurrentTurn = RefreshReleasedFallback(currentTurnFallback!);
-            foreach (SearchNode candidate in finalCandidates)
-                candidate.Snapshot.ReleaseSimulator();
-            finalCandidates = [adoptedCurrentTurn];
-            member.CurrentTurnCandidateNode = adoptedCurrentTurn;
-            member.CurrentTurnAdoptionReached = true;
-            policy.Diagnostics.Info(
-                $"[CombatSolver/Multiplayer] MP_LOCAL_CORE_DEATH_HORIZON_FALLBACK " +
-                $"turn={_startTurnNumber} player_count={root.PlayerCount} " +
-                $"future_death_routes=true projected_hp={adoptedCurrentTurn.Snapshot.ProjectedPlayerHp} " +
-                $"enemy_hp={adoptedCurrentTurn.Snapshot.EnemyHp} " +
-                $"actions={string.Join(',', adoptedCurrentTurn.Actions.Select(PolicyActionToken))}");
-        }
-
         ValidateHistoricalSimulatorsReleased(finalCandidates);
         PublishProgress(_startTurnNumber + member.SearchedTurnLayers, member.SearchedTurnLayers, 0,
             finalCandidates.Count, member.Completed.Count, "复核最终候选", force: true);
@@ -2433,71 +2406,6 @@ internal sealed partial class CombatBeamSolver
             emitDiagnostics: true,
             reevaluateScenarios: !member.TimeBudgetReached,
             allowScenarioRerank: !member.TimeBudgetReached);
-
-        if (!member.CurrentTurnAdoptionReached
-            && member.CurrentTurnCandidateNode is { } currentTurnCandidate
-            && member.CurrentTurnCandidateResult is { } currentTurnResult
-            && FindCurrentTurnBoundary(ordering.Candidate.Node) is { } selectedCurrentTurnBoundary)
-        {
-            SolverInterimResult selectedCurrentTurnResult = SummarizeCandidate(
-                selectedCurrentTurnBoundary,
-                selectedCurrentTurnBoundary.Snapshot.AllEnemiesDead);
-            bool currentTurnStrictlyBetter = SolverInterimResultOrdering.IsBetter(
-                currentTurnResult,
-                selectedCurrentTurnResult);
-            if (MultiplayerLocalCrossTurnContracts.ShouldPreferLocalCoreCurrentTurnResult(
-                    policy.RoutePolicy,
-                    root.PlayerCount,
-                    currentTurnStrictlyBetter))
-            {
-                SearchNode adoptedCurrentTurn = RefreshReleasedFallback(currentTurnCandidate);
-                EnsureCandidateOrigin(adoptedCurrentTurn);
-                FinalPlanSelection? currentTurnOrdering = null;
-                try
-                {
-                    currentTurnOrdering = FinalOrdering.Select(
-                        [(adoptedCurrentTurn, adoptedCurrentTurn.Snapshot)],
-                        initialHp,
-                        emitDiagnostics: false,
-                        reevaluateScenarios: false,
-                        allowScenarioRerank: false);
-                }
-                catch (PotionPolicyUnsatisfiedException)
-                {
-                    adoptedCurrentTurn.Snapshot.ReleaseSimulator();
-                    policy.Diagnostics.Info(
-                        $"[CombatSolver/Multiplayer] MP_LOCAL_CORE_CURRENT_TURN_PRIORITY " +
-                        $"turn={_startTurnNumber} adopted=false reason=potion_policy");
-                }
-
-                if (currentTurnOrdering != null)
-                {
-                    string replacedCurrentTurn = string.Join(
-                        ',',
-                        ordering.Candidate.Node.Actions
-                            .Where(action => action.Turn == _startTurnNumber)
-                            .Select(PolicyActionToken));
-                    ordering = currentTurnOrdering;
-                    member.CurrentTurnCandidateNode = adoptedCurrentTurn;
-                    member.CurrentTurnAdoptionReached = true;
-                    onlyDeathRoutesFound = false;
-                    finalEvaluationContextId = SearchEfficiencyEvaluationContextId(
-                        scenarioReevaluation: false,
-                        completion: "final_current_turn_priority");
-                    policy.Diagnostics.Info(
-                        $"[CombatSolver/Multiplayer] MP_LOCAL_CORE_CURRENT_TURN_PRIORITY " +
-                        $"turn={_startTurnNumber} adopted=true " +
-                        $"incumbent_hp_lost={currentTurnResult.ProjectedBattleHpLost} " +
-                        $"selected_hp_lost={selectedCurrentTurnResult.ProjectedBattleHpLost} " +
-                        $"incumbent_enemy_hp={currentTurnResult.EnemyHp} " +
-                        $"selected_enemy_hp={selectedCurrentTurnResult.EnemyHp} " +
-                        $"incumbent_energy_left={adoptedCurrentTurn.Outcome?.EnergyLeft.ToString() ?? "-"} " +
-                        $"selected_energy_left={selectedCurrentTurnBoundary.Outcome?.EnergyLeft.ToString() ?? "-"} " +
-                        $"actions={string.Join(',', adoptedCurrentTurn.Actions.Select(PolicyActionToken))} " +
-                        $"replaced_current_turn={replacedCurrentTurn}");
-                }
-            }
-        }
 
         RecordCandidateEvaluated(ordering.Candidate.Node, finalEvaluationContextId);
         RecordCandidateSelected(ordering.Candidate.Node, finalEvaluationContextId);

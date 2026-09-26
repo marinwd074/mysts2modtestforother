@@ -65,26 +65,6 @@ internal static class MultiplayerLocalCrossTurnContracts
     /// </summary>
     internal static bool LocalCoreSearchAcceleratorsEnabled => false;
 
-    internal static bool ShouldRunLocalCoreCurrentTurnQualityScout(
-        SearchRoutePolicy routePolicy,
-        bool includeTurnSetup)
-        => routePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
-            && !includeTurnSetup;
-
-    /// <summary>
-    /// The complete local-only projection is advisory for future turns because teammates can
-    /// change that future before it is executed. If the retained current-turn incumbent is
-    /// strictly better than the selected full-route first-turn boundary, deploy the incumbent
-    /// and re-root next turn instead of sacrificing the immediate decision for distant quality.
-    /// </summary>
-    internal static bool ShouldPreferLocalCoreCurrentTurnResult(
-        SearchRoutePolicy routePolicy,
-        int playerCount,
-        bool currentTurnStrictlyBetter)
-        => routePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
-            && playerCount > 1
-            && currentTurnStrictlyBetter;
-
     internal static bool ShouldUseP3CrossFamilyScheduling(
         SearchRoutePolicy routePolicy,
         bool includeTurnSetup,
@@ -122,22 +102,6 @@ internal static class MultiplayerLocalCrossTurnContracts
         int playerCount)
         => policy == SearchRoutePolicy.MultiplayerLocalCrossTurn
             && playerCount > 1;
-
-    /// <summary>
-    /// Local-core multiplayer deliberately does not predict teammate actions. If every full
-    /// local-only projection eventually dies but the current turn has a legal surviving boundary,
-    /// prefer that current-turn decision and re-root next turn instead of ranking fabricated
-    /// "solo the whole multiplayer encounter" death routes.
-    /// </summary>
-    internal static bool ShouldUseLocalCoreDeathHorizonFallback(
-        SearchRoutePolicy policy,
-        int playerCount,
-        bool onlyDeathRoutesFound,
-        bool hasSurvivingCurrentTurnCandidate)
-        => policy == SearchRoutePolicy.MultiplayerSinglePlayerCore
-            && playerCount > 1
-            && onlyDeathRoutesFound
-            && hasSurvivingCurrentTurnCandidate;
 
     internal static bool DelayAngerCopyPreferenceUntilAfterEnemyHp(
         bool multiplayerRouteSemanticsActive,

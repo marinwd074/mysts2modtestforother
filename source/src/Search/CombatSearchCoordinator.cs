@@ -584,25 +584,11 @@ internal static partial class CombatSearchCoordinator
                 return earlySmartPotionScout;
             }
             SolverResult RunPrimary()
-                => MultiplayerLocalCrossTurnContracts.ShouldRunLocalCoreCurrentTurnQualityScout(
-                        passPolicy.RoutePolicy,
-                        passPolicy.IncludeTurnSetup)
-                    ? RunLocalCoreCurrentTurnQualityFirst(
-                        root,
-                        displayNames,
-                        battleDamage,
-                        passPolicy,
-                        activeProfile,
-                        activeClock,
-                        initialPotionPolicyOverride,
-                        cancellationToken,
-                        progressCallback,
-                        RunBaseline)
-                    : policy.UseNoveltyPortfolio
-                        ? RunNoveltyPortfolioPass(root, displayNames, battleDamage, passPolicy, activeProfile,
-                            activeClock, initialPotionPolicyOverride, cancellationToken, progressCallback,
-                            interimResultCallback, RunCrossFamilyScout, RunBaseline)
-                        : RunBaseline(activeProfile);
+                => policy.UseNoveltyPortfolio
+                    ? RunNoveltyPortfolioPass(root, displayNames, battleDamage, passPolicy, activeProfile,
+                        activeClock, initialPotionPolicyOverride, cancellationToken, progressCallback,
+                        interimResultCallback, RunCrossFamilyScout, RunBaseline)
+                    : RunBaseline(activeProfile);
 
             if (!continuationSeedConsumed
                 && continuationSeedActions.Count > 0

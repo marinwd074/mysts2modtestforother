@@ -195,6 +195,14 @@
 - `04606558...`：连续动作执行到 `PACTS_END` 后，旧 post-action gate 把本地合法连锁变化归为 `RemoteOrUnknownChange` 并触发 `DeploymentDrift`。当前 revalidation 只保留原生本地动作归因、队列稳定与 WorldVersion 前进/稳定，旧 decision 已删除；本轮新增禁止其重新出现的合同。
 - 因此这七包暴露的生产根因在当前 `main` 均已有行为修复。本轮不再叠加第二套补丁，只补齐缺失的回归合同与结构门禁，避免未来清理/重构把旧问题重新引入。
 
+### MultiplayerSinglePlayerCore 改为直接使用单人搜索模式（2026-09-26）
+
+- 根据 PHROG_PARASITE 的实机反馈，撤销此前为多人增加的独立 current-turn quality scout。该 scout 会先消耗一段请求预算并发布简单当前回合 incumbent，造成前段时间长期只显示 `STRIKE`，随后完整 Beam 才发现 `BARRICADE / FORGOTTEN_RITUAL / 资源组合`。
+- `MultiplayerSinglePlayerCore` 现在与 `SinglePlayerFullRoute` 进入同一个主搜索流水线：相同 Beam 动作展开、Novelty 开关、Beam retention、药水补充审计和 `FinalPlanOrdering`。不再先跑 `CurrentTurnOnly=true` scout。
+- 同时移除两个多人专属最终结果替换：`MP_LOCAL_CORE_CURRENT_TURN_PRIORITY` 与 `MP_LOCAL_CORE_DEATH_HORIZON_FALLBACK`。完整 Beam 的最终选择不再被另一个 current-turn incumbent 在最后阶段覆盖。
+- 保留的多人差异只在搜索输入/运行时边界：只授权本地玩家动作、不预测队友动作、多人专属牌规则、continuation validity、WorldVersion / Safe Execute。通用 current-turn UI preview 仍保留，因为单人和多人共用同一 progress 机制，它不再拥有多人专属搜索预算或最终排序权。
+- 预期效果：第一回合的 Strike、能力、抽牌、药水、防御和组合路线从一开始就在同一个 Beam 中竞争；不会再出现“前几十秒由独立 scout 的一张 Strike 占据显示，最后再切换到另一套算法”的两阶段行为。
+
 ### 当前真实样本补充：多人战损只统计本地玩家（2026-09-26）
 
 - 问题包 `1cd414aa66e94546bd9713630077d99c` 的 MAWLER 首回合实机记录显示：敌人两次 4 点攻击都对本地玩家结算为 `BlockedDamage=4 / UnblockedDamage=0`，50 格挡最终剩 42；队友则两次各承受 4 点。敌人对本地造成的实际 HP 伤害为 0。
