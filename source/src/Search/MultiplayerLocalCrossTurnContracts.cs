@@ -103,6 +103,22 @@ internal static class MultiplayerLocalCrossTurnContracts
         => policy == SearchRoutePolicy.MultiplayerLocalCrossTurn
             && playerCount > 1;
 
+    /// <summary>
+    /// Local-core multiplayer deliberately does not predict teammate actions. If every full
+    /// local-only projection eventually dies but the current turn has a legal surviving boundary,
+    /// prefer that current-turn decision and re-root next turn instead of ranking fabricated
+    /// "solo the whole multiplayer encounter" death routes.
+    /// </summary>
+    internal static bool ShouldUseLocalCoreDeathHorizonFallback(
+        SearchRoutePolicy policy,
+        int playerCount,
+        bool onlyDeathRoutesFound,
+        bool hasSurvivingCurrentTurnCandidate)
+        => policy == SearchRoutePolicy.MultiplayerSinglePlayerCore
+            && playerCount > 1
+            && onlyDeathRoutesFound
+            && hasSurvivingCurrentTurnCandidate;
+
     internal static bool DelayAngerCopyPreferenceUntilAfterEnemyHp(
         bool multiplayerRouteSemanticsActive,
         bool completeVictory)

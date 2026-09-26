@@ -167,6 +167,34 @@ Check(
         SearchRoutePolicy.MultiplayerLocalCrossTurn, false, true, false, false),
     "Default multiplayer local-core disables P1/P2/P3 search accelerators so finite-budget exploration keeps single-player ordering.");
 
+Check(
+    MultiplayerLocalCrossTurnContracts.ShouldUseLocalCoreDeathHorizonFallback(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore,
+        playerCount: 2,
+        onlyDeathRoutesFound: true,
+        hasSurvivingCurrentTurnCandidate: true)
+    && !MultiplayerLocalCrossTurnContracts.ShouldUseLocalCoreDeathHorizonFallback(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore,
+        playerCount: 1,
+        onlyDeathRoutesFound: true,
+        hasSurvivingCurrentTurnCandidate: true)
+    && !MultiplayerLocalCrossTurnContracts.ShouldUseLocalCoreDeathHorizonFallback(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore,
+        playerCount: 2,
+        onlyDeathRoutesFound: false,
+        hasSurvivingCurrentTurnCandidate: true)
+    && !MultiplayerLocalCrossTurnContracts.ShouldUseLocalCoreDeathHorizonFallback(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore,
+        playerCount: 2,
+        onlyDeathRoutesFound: true,
+        hasSurvivingCurrentTurnCandidate: false)
+    && !MultiplayerLocalCrossTurnContracts.ShouldUseLocalCoreDeathHorizonFallback(
+        SearchRoutePolicy.SinglePlayerFullRoute,
+        playerCount: 2,
+        onlyDeathRoutesFound: true,
+        hasSurvivingCurrentTurnCandidate: true),
+    "Local-core multiplayer falls back to the best surviving current-turn boundary only when every full local-only projection dies.");
+
 SolverSearchProfile p2BudgetProfile = SolverSearchProfile.Default with
 {
     MaxExpandedNodes = 20_000,

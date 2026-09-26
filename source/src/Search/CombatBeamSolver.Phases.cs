@@ -2359,6 +2359,34 @@ internal sealed partial class CombatBeamSolver
         }
         List<SearchNode> finalCandidates = Retention.RankFinal(finalPool);
         ReleaseDroppedSnapshots(finalPool, finalCandidates);
+
+        bool fullProjectionOnlyDeathRoutes = finalCandidates.Count > 0
+            && finalCandidates.All(candidate =>
+                candidate.Snapshot.PlayerDead || candidate.Snapshot.ProjectedPlayerHp <= 0);
+        SearchNode? currentTurnFallback = member.CurrentTurnCandidateNode;
+        bool currentTurnFallbackSurvives = currentTurnFallback != null
+            && !currentTurnFallback.Snapshot.PlayerDead
+            && currentTurnFallback.Snapshot.ProjectedPlayerHp > 0;
+        if (MultiplayerLocalCrossTurnContracts.ShouldUseLocalCoreDeathHorizonFallback(
+                policy.RoutePolicy,
+                root.PlayerCount,
+                fullProjectionOnlyDeathRoutes,
+                currentTurnFallbackSurvives))
+        {
+            SearchNode adoptedCurrentTurn = RefreshReleasedFallback(currentTurnFallback!);
+            foreach (SearchNode candidate in finalCandidates)
+                candidate.Snapshot.ReleaseSimulator();
+            finalCandidates = [adoptedCurrentTurn];
+            member.CurrentTurnCandidateNode = adoptedCurrentTurn;
+            member.CurrentTurnAdoptionReached = true;
+            policy.Diagnostics.Info(
+                $"[CombatSolver/Multiplayer] MP_LOCAL_CORE_DEATH_HORIZON_FALLBACK " +
+                $"turn={_startTurnNumber} player_count={root.PlayerCount} " +
+                $"future_death_routes=true projected_hp={adoptedCurrentTurn.Snapshot.ProjectedPlayerHp} " +
+                $"enemy_hp={adoptedCurrentTurn.Snapshot.EnemyHp} " +
+                $"actions={string.Join(',', adoptedCurrentTurn.Actions.Select(PolicyActionToken))}");
+        }
+
         ValidateHistoricalSimulatorsReleased(finalCandidates);
         PublishProgress(_startTurnNumber + member.SearchedTurnLayers, member.SearchedTurnLayers, 0,
             finalCandidates.Count, member.Completed.Count, "复核最终候选", force: true);

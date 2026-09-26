@@ -4268,6 +4268,9 @@ if (-not $p1ContinuationContractsText.Contains('CanReplayContinuationSeedAction(
 if (-not $p1ContinuationContractsText.Contains('internal static bool LocalCoreSearchAcceleratorsEnabled => false;')) {
     $violations.Add("${p1ContinuationContractsPath}: default local-core must keep multiplayer search accelerators disabled")
 }
+if (-not $p1ContinuationContractsText.Contains('ShouldUseLocalCoreDeathHorizonFallback(')) {
+    $violations.Add("${p1ContinuationContractsPath}: local-core death-horizon fallback contract is missing")
+}
 
 $p1SearchPolicyPath = Join-Path $repositoryRoot 'src/Search/SearchPolicySnapshot.cs'
 $p1SearchPolicyText = [IO.File]::ReadAllText($p1SearchPolicyPath)
@@ -4322,6 +4325,14 @@ foreach ($p2SearchRule in @(
 }
 if ($p1PhasesText.Contains('rootCandidates.Count + (policy.ContinuationSeedActions.Count > 0 ? 1 : 0)')) {
     $violations.Add("${p1PhasesPath}: P2 continuation seed returned to the ordinary Beam initial frontier")
+}
+foreach ($deathHorizonRule in @(
+    'ShouldUseLocalCoreDeathHorizonFallback(',
+    'MP_LOCAL_CORE_DEATH_HORIZON_FALLBACK',
+    'member.CurrentTurnAdoptionReached = true;')) {
+    if (-not $p1PhasesText.Contains($deathHorizonRule)) {
+        $violations.Add("${p1PhasesPath}: local-core death-horizon fallback drifted '$deathHorizonRule'")
+    }
 }
 
 $p2BudgetPath = Join-Path $repositoryRoot 'src/Search/ContinuationSeedIncumbentBudget.cs'

@@ -175,6 +175,13 @@
 - 新增 `E3_CROSS_FAMILY_SCOUT` / `E3_CROSS_FAMILY_REUSE` 诊断和 scout 预算合同。目标不是保证固定秒数，而是消除“无药 TimeLimit 完整跑完之后才第一次搜索一药水路线”的结构性等待。
 
 
+### 当前真实样本补充：未来死亡不再污染当前牌序（2026-09-26）
+
+- 最新无厌沙虫多人问题包出现明确世界模型偏差：本地玩家约 90 HP、累计战损仅约 19 HP，但 local-core 在不预测队友出牌的情况下要求本地单独处理多人实际 770 HP Boss，最终受 `Sandpit` 未来处决影响，结果落入 `final_hp=0 / only_death_routes=true`。
+- 不修改多人真实敌方 HP，也不虚构队友伤害。完整搜索仍照常寻找真实本地斩杀；仅当 `MultiplayerSinglePlayerCore` 的完整候选全部死亡、而当前回合存在合法存活边界时，最终改用搜索过程中保留的最佳当前回合候选，并以 `CurrentTurnAdoption` 结束本次结果。下一回合从真实多人状态重新建根。
+- 该回退不会作用于单人、当前回合本身会死、已找到完整胜利或仍存在存活完整候选的情况。诊断标记：`MP_LOCAL_CORE_DEATH_HORIZON_FALLBACK`。
+- 目标是保持“当前回合像单人一样选牌”，同时承认未建模的队友未来动作不能被当作本地玩家未来必然不作为。
+
 ### 第三项生产策略收口：多人使用单人质量核心（2026-09-25）
 
 - 新增 5 份连续实战问题包：`OVICOPTER_NORMAL-6796...` 与四份 `DECIMILLIPEDE_ELITE`。千足虫四包共记录 307 次 `FINAL_SELECTION`；其中 233 次（约 76%）`scenario_rerank=false && chance_rerank=false`，说明多数差路线不是 Robust/Chance 后置推翻，而是多人 baseline 本身已经这样排序。
