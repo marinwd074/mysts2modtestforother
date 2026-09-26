@@ -82,10 +82,21 @@ internal sealed partial class CombatPredictionHistory(PredictionTrace trace, Pla
 
     internal CombatHistoryCounters GetCounters(Player owner)
     {
-        if (!ReferenceEquals(owner, _counterOwner))
+        if (!TryGetCounters(owner, out CombatHistoryCounters counters))
             throw new InvalidOperationException("History counters require the captured local search owner.");
+        return counters;
+    }
+
+    internal bool TryGetCounters(Player owner, out CombatHistoryCounters counters)
+    {
+        if (!ReferenceEquals(owner, _counterOwner))
+        {
+            counters = default;
+            return false;
+        }
         VerifyCounters();
-        return _counters;
+        counters = _counters;
+        return true;
     }
 
     [System.Diagnostics.Conditional("VERIFY_HISTORY_COUNTERS")]

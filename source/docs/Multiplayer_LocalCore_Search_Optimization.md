@@ -181,6 +181,10 @@ RepairResult ReplaySeed(CombatRootSnapshot root, RouteSeed seed,
 
 ### P4：最后处理模拟热点和严格复用
 
+进度（2026-09-26，P4-B1）：已完成第一项严格等价热点优化。固定输入 profiler 先定位到 `combat_fingerprint` 的 TurnState 热区；其中 calculated-history 原实现会在每次 fingerprint 反复扫描 prediction history。现在本地单玩家根优先复用 `CombatPredictionHistory` 已维护的六项增量计数；owner 不匹配或无法证明计数可用时自动回退原扫描，不引入跨根缓存、近似 key 或语义字段删减。
+
+验证证据见 [P4 hotspot profile run #11](https://github.com/marinwd074/mysts2modtestforother/actions/runs/36230706828)：Release 0 warning / 0 error，`HistoryCounterKeyChecks` 11 项通过；teammate 与 draw_energy 的 fixed-work A/B 均 `same_route=True / same_quality=True / same_work=True`。teammate TurnState 约 297→57ms、12.34→3.09MB，combat fingerprint 约 407→184ms、18.44→9.19MB；draw_energy TurnState 约 197→71ms、11.37→3.00MB，combat fingerprint 约 157→71ms、8.00→3.64MB。P4 尚未完成，下一项继续从剩余已证实热点中选择严格优化。
+
 只有 P0–P3 的 current-HEAD 分项数据证明收益空间后才做。优先现有 Fork/COW、指纹、Hook 枚举、排序/分配热区；每项单独提交、固定输入比结果与工作。
 
 首版不做跨根 transposition table、整棵搜索树 re-root、经验性动作可交换剪枝、额外 DFS 或整套 MCTS 替换。旧节点的累计战损、药水成本、历史、策略、根归一化评分及 RNG 可能不再成立，搬树并非只改根指针。
