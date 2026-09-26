@@ -45,6 +45,20 @@ internal static class Program
             return comparison > 0 ? 1 : 0;
         }
 
+        int requestedMaxExpandedNodes = int.TryParse(
+                Value(args, "--max-nodes"),
+                out int parsedMaxExpandedNodes)
+            ? parsedMaxExpandedNodes
+            : MaxExpandedNodes;
+        int requestedBudgetMilliseconds = int.TryParse(
+                Value(args, "--budget-ms"),
+                out int parsedBudgetMilliseconds)
+            ? parsedBudgetMilliseconds
+            : BudgetMilliseconds;
+        if (requestedMaxExpandedNodes < 1 || requestedBudgetMilliseconds < 1)
+            throw new ArgumentOutOfRangeException(
+                "P4 harness max-nodes and budget-ms must be positive.");
+
         bool publishProgress = args.Contains(
             "--publish-progress",
             StringComparer.Ordinal);
@@ -205,8 +219,8 @@ internal static class Program
             SolverSearchProfile profile = settings.Profile with
             {
                 BeamWidth = BeamWidth,
-                MaxExpandedNodes = MaxExpandedNodes,
-                SoftTimeBudgetMilliseconds = BudgetMilliseconds,
+                MaxExpandedNodes = requestedMaxExpandedNodes,
+                SoftTimeBudgetMilliseconds = requestedBudgetMilliseconds,
             };
             SearchRoutePolicy expectedMultiplayerRoute = multiplayerPrediction
                 ? SearchRoutePolicy.MultiplayerLocalCrossTurn
@@ -243,7 +257,7 @@ internal static class Program
                 FixedBudget = true,
                 MeasurePhasePerformance = p4Profile,
                 MaxDegreeOfParallelism = 1,
-                BudgetOverrideMilliseconds = BudgetMilliseconds,
+                BudgetOverrideMilliseconds = requestedBudgetMilliseconds,
                 Interaction = null,
             };
 
