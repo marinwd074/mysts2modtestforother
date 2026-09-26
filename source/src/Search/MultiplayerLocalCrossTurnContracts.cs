@@ -58,6 +58,18 @@ internal static class MultiplayerLocalCrossTurnContracts
         => policy is SearchRoutePolicy.MultiplayerSinglePlayerCore
             or SearchRoutePolicy.MultiplayerLocalCrossTurn;
 
+    internal static bool ShouldUseP3CrossFamilyScheduling(
+        SearchRoutePolicy routePolicy,
+        bool includeTurnSetup,
+        SolverPotionPolicy potionPolicy,
+        bool hasForcedPotionDirectives,
+        bool useNoveltyPortfolio)
+        => routePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
+            && !includeTurnSetup
+            && potionPolicy == SolverPotionPolicy.Smart
+            && !hasForcedPotionDirectives
+            && !useNoveltyPortfolio;
+
     internal static bool CanReplayContinuationSeedAction(
         int actionTurn,
         int currentTurn,

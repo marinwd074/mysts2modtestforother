@@ -157,6 +157,23 @@ Check(
     continuationSeedActionContractsAreCorrect,
     "P1 continuation-seed action boundary rejects cross-turn, non-card, choice and ambiguous-card suggestions.");
 
+Check(
+    MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore, false, SolverPotionPolicy.Smart, false, false)
+    && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
+        SearchRoutePolicy.SinglePlayerFullRoute, false, SolverPotionPolicy.Smart, false, false)
+    && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
+        SearchRoutePolicy.MultiplayerLocalCrossTurn, false, SolverPotionPolicy.Smart, false, false)
+    && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore, true, SolverPotionPolicy.Smart, false, false)
+    && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore, false, SolverPotionPolicy.Smart, true, false)
+    && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore, false, SolverPotionPolicy.Smart, false, true)
+    && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore, false, SolverPotionPolicy.Disabled, false, false),
+    "P3 cross-family scheduling is admitted only for multiplayer local single-player-core Smart search outside turn setup, forced directives and Novelty.");
+
 SolverSearchProfile p2BudgetProfile = SolverSearchProfile.Default with
 {
     MaxExpandedNodes = 20_000,

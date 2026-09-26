@@ -65,6 +65,11 @@ jobs:
           $gameData = (Resolve-Path '.\game-body\data_sts2_windows_x86_64').Path
           dotnet build '.\source\tools\E0PinnedHarness\E0PinnedHarness.csproj' -c Release -p:Sts2DataDir="$gameData" -p:RitsuLibReferencesProps="$env:RITSU_PROPS" -p:RitsuWorkshopRoot="$env:RITSU_ROOT" -p:RitsuLibReferenceTarget='0.107.1' -p:TreatWarningsAsErrors=true --nologo
 
+      - name: P3 production gate contracts
+        shell: pwsh
+        run: |
+          dotnet run --project '.\source\tools\MultiplayerLocalCrossTurnChecks\MultiplayerLocalCrossTurnChecks.csproj' -c Release --nologo
+
       - name: Run P3 fresh-process cold and warm pairs
         shell: pwsh
         run: |
