@@ -1,18 +1,60 @@
 namespace CombatSolver;
 
+internal sealed record P3FinalQualitySnapshot(
+    SolverInterimResult Interim,
+    bool MultiplayerRouteSemanticsActive,
+    bool HasCurrentTurnCardAction);
+
 internal static partial class CombatSearchCoordinator
 {
+    internal static P3FinalQualitySnapshot CaptureP3FinalQualityForTesting(
+        CombatRootSnapshot root,
+        SearchPolicySnapshot policy,
+        SolverResult result)
+        => new(
+            BuildInterimResult(root, policy, result),
+            MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(
+                policy.RoutePolicy,
+                root.PlayerCount),
+            HasCurrentTurnCardAction(result));
+
+    internal static int CompareP3FinalQualitySnapshotsForTesting(
+        P3FinalQualitySnapshot candidate,
+        P3FinalQualitySnapshot current)
+    {
+        int quality = ComparePotionPolicyQuality(
+            candidate.Interim.TheftPolicy,
+            candidate.Interim,
+            current.Interim);
+        if (quality != 0)
+            return quality;
+
+        if (MultiplayerLocalCrossTurnContracts.PreferCurrentTurnPlayableRoute(
+                candidate.MultiplayerRouteSemanticsActive,
+                candidate.HasCurrentTurnCardAction,
+                current.HasCurrentTurnCardAction))
+        {
+            return -1;
+        }
+        if (MultiplayerLocalCrossTurnContracts.PreferCurrentTurnPlayableRoute(
+                current.MultiplayerRouteSemanticsActive,
+                current.HasCurrentTurnCardAction,
+                candidate.HasCurrentTurnCardAction))
+        {
+            return 1;
+        }
+        return current.Interim.Score.CompareTo(candidate.Interim.Score);
+    }
+
     internal static int CompareP3FinalQualityForTesting(
         CombatRootSnapshot root,
         SearchPolicySnapshot policy,
         SolverResult candidate,
         SolverResult current)
     {
-        if (IsBetterPotionPolicyResult(root, policy, candidate, current))
-            return -1;
-        if (IsBetterPotionPolicyResult(root, policy, current, candidate))
-            return 1;
-        return 0;
+        return CompareP3FinalQualitySnapshotsForTesting(
+            CaptureP3FinalQualityForTesting(root, policy, candidate),
+            CaptureP3FinalQualityForTesting(root, policy, current));
     }
 
     private static SolverResult RunP3CrossFamilyFixedPass(
