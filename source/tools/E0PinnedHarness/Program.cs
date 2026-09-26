@@ -81,6 +81,9 @@ internal static class Program
         bool p3Prewarm = args.Contains(
             "--p3-prewarm",
             StringComparer.Ordinal);
+        bool p4Profile = args.Contains(
+            "--p4-profile",
+            StringComparer.Ordinal);
         if ((p3Novelty || p3CrossFamily || p3CrossFamilyAb || p3CrossFamilyAbReverse
                 || p3SingleBaseline || p3SingleCross)
             && !p3SchedulingProbe)
@@ -234,6 +237,7 @@ internal static class Program
                 UseP3CrossFamilyScheduling = p3CrossFamily || p3SingleCross,
                 BeamWidthPortfolioWidths = null,
                 FixedBudget = true,
+                MeasurePhasePerformance = p4Profile,
                 MaxDegreeOfParallelism = 1,
                 BudgetOverrideMilliseconds = BudgetMilliseconds,
                 Interaction = null,
@@ -1102,7 +1106,40 @@ internal static class Program
                 item.SearchMemberId,
                 item.Phase,
                 item.CallCount,
-                BeamWidthPortfolioTelemetry.DurationMilliseconds(item.ExclusiveTicks))).ToArray());
+                BeamWidthPortfolioTelemetry.DurationMilliseconds(item.ExclusiveTicks))).ToArray(),
+            Performance:
+            [
+                Metric("fork", result.ForkMetric),
+                Metric("action", result.ActionMetric),
+                Metric("execution_resume", result.ExecutionChoiceResumeMetric),
+                Metric("card_exec", result.CardExecutionMetric),
+                Metric("card_post", result.CardPostProcessingMetric),
+                Metric("potion_exec", result.PotionExecutionMetric),
+                Metric("round", result.RoundAdvanceMetric),
+                Metric("round_player_end", result.RoundPlayerEndMetric),
+                Metric("round_end_sim", result.RoundEndSimulationMetric),
+                Metric("round_flush", result.RoundFlushMetric),
+                Metric("round_player_end_powers", result.RoundPlayerEndPowersMetric),
+                Metric("round_enemy_turn", result.RoundEnemyTurnMetric),
+                Metric("round_enemy_start", result.RoundEnemyStartMetric),
+                Metric("round_enemy_moves", result.RoundEnemyMovesMetric),
+                Metric("round_enemy_end_powers", result.RoundEnemyEndPowersMetric),
+                Metric("round_player_start", result.RoundPlayerStartMetric),
+                Metric("round_draw", result.RoundDrawMetric),
+                Metric("snapshot", result.SnapshotMetric),
+                Metric("threat_projection", result.ThreatProjectionMetric),
+                Metric("fingerprint", result.FingerprintMetric),
+                Metric("projected_shuffle", result.ProjectedShuffleMetric),
+                Metric("pile_fingerprint", result.PileFingerprintMetric),
+                Metric("pile_fingerprint_miss", result.PileFingerprintMissMetric),
+                Metric("card_fingerprint_miss", result.CardFingerprintMissMetric),
+                Metric("combat_fingerprint", result.CombatFingerprintMetric),
+                Metric("prune", result.PruneMetric),
+                Metric("final_selection", result.FinalSelectionMetric),
+            ]);
+
+        static PerformanceEvidence Metric(string name, SearchPhaseMetric metric)
+            => new(name, metric.Elapsed.TotalMilliseconds, metric.AllocatedBytes);
     }
 
     private static T ResolveUnique<T>(IEnumerable<T> values, string id, string domain)
@@ -1147,7 +1184,8 @@ internal static class Program
         int TurnDepth,
         string EvaluationContextId,
         MemberEvidence[] Members,
-        PhaseEvidence[] Phases);
+        PhaseEvidence[] Phases,
+        PerformanceEvidence[] Performance);
 
     private sealed record MemberEvidence(
         int MemberId,
@@ -1168,4 +1206,9 @@ internal static class Program
         string Phase,
         int CallCount,
         double ExclusiveMs);
+
+    private sealed record PerformanceEvidence(
+        string Name,
+        double ElapsedMs,
+        long AllocatedBytes);
 }
