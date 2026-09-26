@@ -115,5 +115,10 @@ internal sealed record SearchPolicySnapshot(
     public SearchRequestWorkTotals? RequestWorkTotals { get; init; }
     // Suggestions from the prior turn; replay must evaluate them from the current root.
     public IReadOnlyList<PlanAction> ContinuationSeedActions { get; init; } = [];
+
+    // P2 experiment: ordering-only suggestions for the ordinary Beam member. These never
+    // authorize an action, seed a frontier, or bypass normal legality/retention/final ranking.
+    // Empty by default so production behavior is unchanged until fixed-work A/B accepts it.
+    public IReadOnlyList<PlanAction> ContinuationEnumerationHintActions { get; init; } = [];
     public SearchInteractionState? Interaction { get; init; }
 }

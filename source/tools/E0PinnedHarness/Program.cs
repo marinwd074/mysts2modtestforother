@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using CombatSolver;
 using MegaCrit.Sts2.Core.Combat;
@@ -33,6 +34,9 @@ internal static class Program
             StringComparer.Ordinal);
         bool multiplayerPrediction = args.Contains(
             "--multiplayer-prediction",
+            StringComparer.Ordinal);
+        bool p2Ab = args.Contains(
+            "--p2-ab",
             StringComparer.Ordinal);
         CombatBeamSolver.UseLegacyActionSearchOrderForTesting(legacyActionOrder);
         bool teammate = string.Equals(scenario, "teammate", StringComparison.Ordinal);
@@ -135,15 +139,19 @@ internal static class Program
                 MaxExpandedNodes = MaxExpandedNodes,
                 SoftTimeBudgetMilliseconds = BudgetMilliseconds,
             };
+            SearchRoutePolicy expectedMultiplayerRoute = multiplayerPrediction
+                ? SearchRoutePolicy.MultiplayerLocalCrossTurn
+                : SearchRoutePolicy.MultiplayerSinglePlayerCore;
             if (teammate
-                && (captured.RoutePolicy != SearchRoutePolicy.MultiplayerLocalCrossTurn
+                && (captured.RoutePolicy != expectedMultiplayerRoute
                     || captured.UseMultiplayerTeamObjective != multiplayerPrediction
                     || captured.UseMultiplayerTeammateForecast != multiplayerPrediction
                     || captured.UseMultiplayerScenarioReevaluation != multiplayerPrediction))
             {
                 throw new InvalidOperationException(
                     $"Production teammate fixture did not capture requested multiplayer prediction mode: " +
-                    $"requested={multiplayerPrediction} team={captured.UseMultiplayerTeamObjective} " +
+                    $"requested={multiplayerPrediction} route={captured.RoutePolicy} " +
+                    $"expected_route={expectedMultiplayerRoute} team={captured.UseMultiplayerTeamObjective} " +
                     $"forecast={captured.UseMultiplayerTeammateForecast} " +
                     $"scenario={captured.UseMultiplayerScenarioReevaluation}.");
             }
@@ -151,7 +159,7 @@ internal static class Program
             {
                 Profile = profile,
                 RoutePolicy = teammate
-                    ? SearchRoutePolicy.MultiplayerLocalCrossTurn
+                    ? expectedMultiplayerRoute
                     : SearchRoutePolicy.SinglePlayerFullRoute,
                 CurrentTurnOnly = false,
                 UseNoveltyPortfolio = false,
@@ -179,6 +187,19 @@ internal static class Program
                 _ = historyProbe.History.GetCounters(local);
                 var historyFork = historyProbe.Fork();
                 _ = historyFork.History.GetCounters(local);
+            }
+
+            if (p2Ab)
+            {
+                if (!teammate || multiplayerPrediction)
+                    throw new InvalidOperationException("P2 A/B requires teammate fixture with multiplayer prediction disabled.");
+                return RunP2ContinuationSeedAb(
+                    output,
+                    root,
+                    names,
+                    damage,
+                    policy,
+                    local.PlayerCombatState!.TurnNumber);
             }
 
             string[] rootHand = local.PlayerCombatState!.Hand.Cards.Select(card => card.Id.Entry).ToArray();
@@ -296,6 +317,276 @@ internal static class Program
         }
         if (player.Deck.Cards.Count != cardIds.Count)
             throw new InvalidOperationException("E0 fixture deck setup failed.");
+    }
+
+    private static int RunP2ContinuationSeedAb(
+        string output,
+        CombatRootSnapshot root,
+        SolverDisplayNames names,
+        BattleDamageSnapshot damage,
+        SearchPolicySnapshot basePolicy,
+        int currentTurn)
+    {
+        SolverSearchProfile profile = basePolicy.Profile with
+        {
+            BeamWidth = BeamWidth,
+            MaxExpandedNodes = MaxExpandedNodes,
+            SoftTimeBudgetMilliseconds = 15_000,
+        };
+
+        SearchPolicySnapshot CommonPolicy(SearchInteractionState interaction)
+            => basePolicy with
+            {
+                Profile = profile,
+                RoutePolicy = SearchRoutePolicy.MultiplayerSinglePlayerCore,
+                CurrentTurnOnly = false,
+                UseMultiplayerTeamObjective = false,
+                UseMultiplayerTeammateForecast = false,
+                UseMultiplayerScenarioReevaluation = false,
+                PotionPolicy = SolverPotionPolicy.Disabled,
+                PotionStrategy = new PotionStrategySnapshot(SolverPotionPolicy.Disabled, []),
+                UseNoveltyPortfolio = false,
+                NoveltySearch = null,
+                UseBeamWidthPortfolio = false,
+                UseE3FixedPortfolioScheduling = false,
+                UseE3AdaptivePortfolioScheduling = false,
+                StopAtAcceptableBattleHpLoss = false,
+                FixedBudget = true,
+                MaxDegreeOfParallelism = 1,
+                BudgetOverrideMilliseconds = null,
+                Interaction = interaction,
+                ContinuationSeedActions = [],
+            };
+
+        static string[] Route(SolverResult result)
+            => result.BestNode.Actions.Select(action =>
+                $"{action.Turn}:{action.Kind}:{action.CardId ?? action.PotionId ?? "-"}").ToArray();
+
+        static bool CompleteVictory(SolverResult result)
+            => SolverInterimResultOrdering.IsCompleteVictory(
+                result.BestNode.ActionCount,
+                result.Snapshot.AllEnemiesDead,
+                result.Snapshot.PlayerDead,
+                result.Snapshot.ProjectedPlayerHp);
+
+        static bool SameQuality(SolverResult left, SolverResult right)
+            => CompleteVictory(left) == CompleteVictory(right)
+                && left.ProjectedBattleHpLost == right.ProjectedBattleHpLost
+                && left.ProjectedBattlePotionCount == right.ProjectedBattlePotionCount
+                && left.CombatEndedTurn == right.CombatEndedTurn
+                && left.Snapshot.EnemyHp == right.Snapshot.EnemyHp
+                && left.Snapshot.PlayerHp == right.Snapshot.PlayerHp
+                && left.BoundaryReason == right.BoundaryReason;
+
+        static double FinalCandidatePublishedMs(SolverResult result)
+        {
+            BeamWidthPortfolioTelemetry telemetry = result.PortfolioTelemetry
+                ?? throw new InvalidOperationException("P2 A/B result has no request telemetry.");
+            CandidateOrigin origin = result.SearchEfficiencyOrigin
+                ?? throw new InvalidOperationException("P2 A/B final result has no candidate origin.");
+            string context = result.SearchEfficiencyEvaluationContextId
+                ?? throw new InvalidOperationException("P2 A/B final result has no evaluation context.");
+            CandidateMilestones milestones = telemetry.FindCandidateMilestones(origin, context)
+                ?? throw new InvalidOperationException("P2 A/B final candidate has no milestones.");
+            long published = milestones.PublishedTicks
+                ?? throw new InvalidOperationException("P2 A/B final candidate was never published.");
+            return telemetry.ToRequestMilliseconds(published);
+        }
+
+        static (SolverResult Result, double? FirstAdoptableMs) Run(
+            CombatRootSnapshot root,
+            SolverDisplayNames names,
+            BattleDamageSnapshot damage,
+            SearchPolicySnapshot policy)
+        {
+            long started = Stopwatch.GetTimestamp();
+            double? firstAdoptableMs = null;
+            Action<SolverProgress> progress = item =>
+            {
+                if (firstAdoptableMs == null && item.RouteAdoptionSeed != null)
+                    firstAdoptableMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            };
+            SolverResult result = CombatSearchCoordinator.Solve(
+                root,
+                names,
+                damage,
+                policy,
+                CancellationToken.None,
+                progress);
+            return (result, firstAdoptableMs);
+        }
+
+        SearchInteractionState coldInteraction = new();
+        SearchPolicySnapshot coldPolicy = CommonPolicy(coldInteraction);
+        (SolverResult cold, double? coldAdoptableMs) = Run(
+            root, names, damage, coldPolicy);
+
+        PlanAction[] seed = cold.BestNode.Actions
+            .TakeWhile(action => MultiplayerLocalCrossTurnContracts.CanReplayContinuationSeedAction(
+                action.Turn,
+                currentTurn,
+                action.Kind == PlanActionKind.PlayCard,
+                action.EndsPlayerTurn,
+                action.Choice != null,
+                action.NestedChoices is { Count: > 0 },
+                action.TurnStartChoices is { Count: > 0 },
+                action.ShadowForecast != null,
+                !string.IsNullOrEmpty(action.CardStateKey)))
+            .Take(2)
+            .ToArray();
+        if (seed.Length == 0)
+            throw new InvalidOperationException("P2 A/B cold route produced no replayable current-turn seed.");
+
+        SearchInteractionState seededInteraction = new();
+        SearchPolicySnapshot seededPolicy = CommonPolicy(seededInteraction) with
+        {
+            ContinuationSeedActions = seed,
+        };
+        (SolverResult seeded, double? seededAdoptableMs) = Run(
+            root, names, damage, seededPolicy);
+
+        SearchEfficiencyMemberReport? seedMember = seeded.PortfolioTelemetry?.SearchMembers
+            .FirstOrDefault(member => string.Equals(
+                member.Kind,
+                "continuation_seed_incumbent",
+                StringComparison.Ordinal));
+        if (seedMember == null)
+            throw new InvalidOperationException("P2 A/B did not execute continuation_seed_incumbent member.");
+
+        string[] coldRoute = Route(cold);
+        string[] seededRoute = Route(seeded);
+        bool sameRoute = coldRoute.SequenceEqual(seededRoute, StringComparer.Ordinal);
+        bool sameQuality = SameQuality(cold, seeded);
+        bool seededEarlier = coldAdoptableMs.HasValue
+            && seededAdoptableMs.HasValue
+            && seededAdoptableMs.Value < coldAdoptableMs.Value;
+        bool withinNodeBudget = seeded.TotalExpandedNodes <= MaxExpandedNodes;
+        bool probeWithinFivePercent = seedMember.ExpandedNodes
+            <= Math.Max(1, MaxExpandedNodes / ContinuationSeedIncumbentBudget.WorkDivisor);
+
+        SearchInteractionState hintedInteraction = new();
+        SearchPolicySnapshot hintedPolicy = CommonPolicy(hintedInteraction) with
+        {
+            ContinuationEnumerationHintActions = seed,
+        };
+        (SolverResult hinted, double? hintedAdoptableMs) = Run(
+            root, names, damage, hintedPolicy);
+        string[] hintedRoute = Route(hinted);
+        bool hintSameRoute = coldRoute.SequenceEqual(hintedRoute, StringComparer.Ordinal);
+        bool hintSameQuality = SameQuality(cold, hinted);
+        bool hintWithinNodeBudget = hinted.TotalExpandedNodes <= MaxExpandedNodes;
+        double coldReferencePublishedMs = FinalCandidatePublishedMs(cold);
+        double hintedReferencePublishedMs = FinalCandidatePublishedMs(hinted);
+        bool hintReachedReferenceEarlier =
+            hintedReferencePublishedMs < coldReferencePublishedMs;
+
+        var evidence = new
+        {
+            schemaVersion = 1,
+            source = "pinned-0.107.1-p2-independent-incumbent-ab",
+            routePolicy = seededPolicy.RoutePolicy.ToString(),
+            seed = seed.Select(action =>
+                $"{action.Turn}:{action.Kind}:{action.CardId}:{action.CardStateKey}").ToArray(),
+            cold = new
+            {
+                route = coldRoute,
+                completeVictory = CompleteVictory(cold),
+                cold.ProjectedBattleHpLost,
+                cold.ProjectedBattlePotionCount,
+                cold.CombatEndedTurn,
+                cold.BoundaryReason,
+                finalEnemyHp = cold.Snapshot.EnemyHp,
+                finalPlayerHp = cold.Snapshot.PlayerHp,
+                cold.TotalExpandedNodes,
+                cold.TotalTransitionCount,
+                firstAdoptableMs = coldAdoptableMs,
+            },
+            seeded = new
+            {
+                route = seededRoute,
+                completeVictory = CompleteVictory(seeded),
+                seeded.ProjectedBattleHpLost,
+                seeded.ProjectedBattlePotionCount,
+                seeded.CombatEndedTurn,
+                seeded.BoundaryReason,
+                finalEnemyHp = seeded.Snapshot.EnemyHp,
+                finalPlayerHp = seeded.Snapshot.PlayerHp,
+                seeded.TotalExpandedNodes,
+                seeded.TotalTransitionCount,
+                firstAdoptableMs = seededAdoptableMs,
+                probeExpandedNodes = seedMember.ExpandedNodes,
+                probeTransitionCount = seedMember.TransitionCount,
+            },
+            hinted = new
+            {
+                route = hintedRoute,
+                completeVictory = CompleteVictory(hinted),
+                hinted.ProjectedBattleHpLost,
+                hinted.ProjectedBattlePotionCount,
+                hinted.CombatEndedTurn,
+                hinted.BoundaryReason,
+                finalEnemyHp = hinted.Snapshot.EnemyHp,
+                finalPlayerHp = hinted.Snapshot.PlayerHp,
+                hinted.TotalExpandedNodes,
+                hinted.TotalTransitionCount,
+                firstAdoptableMs = hintedAdoptableMs,
+                finalCandidatePublishedMs = hintedReferencePublishedMs,
+            },
+            acceptance = new
+            {
+                sameRoute,
+                sameQuality,
+                seededEarlier,
+                withinNodeBudget,
+                probeWithinFivePercent,
+                hintSameRoute,
+                hintSameQuality,
+                hintWithinNodeBudget,
+                coldFinalCandidatePublishedMs = coldReferencePublishedMs,
+                hintedFinalCandidatePublishedMs = hintedReferencePublishedMs,
+                hintReachedReferenceEarlier,
+            },
+        };
+
+        string path = Path.Combine(output, "p2-continuation-seed-ab.json");
+        File.WriteAllText(
+            path,
+            JsonSerializer.Serialize(evidence, new JsonSerializerOptions { WriteIndented = true }));
+
+        if (!sameQuality || !withinNodeBudget || !probeWithinFivePercent)
+        {
+            throw new InvalidOperationException(
+                $"P2 A/B failed hard gates: same_quality={sameQuality} " +
+                $"within_budget={withinNodeBudget} probe_5pct={probeWithinFivePercent} " +
+                $"same_route={sameRoute} seeded_earlier={seededEarlier}.");
+        }
+        if (!seededEarlier)
+        {
+            throw new InvalidOperationException(
+                $"P2 A/B did not improve first adoptable timing: " +
+                $"cold_ms={coldAdoptableMs?.ToString("F3") ?? "-"} " +
+                $"seeded_ms={seededAdoptableMs?.ToString("F3") ?? "-"}.");
+        }
+        if (!hintSameQuality || !hintWithinNodeBudget)
+        {
+            throw new InvalidOperationException(
+                $"P2 enumeration-hint A/B regressed a hard gate: " +
+                $"same_quality={hintSameQuality} within_budget={hintWithinNodeBudget} " +
+                $"same_route={hintSameRoute}.");
+        }
+
+        Console.WriteLine(
+            $"P2_AB_PASS same_route={sameRoute} same_quality={sameQuality} " +
+            $"cold_adoptable_ms={coldAdoptableMs:F3} seeded_adoptable_ms={seededAdoptableMs:F3} " +
+            $"seed_probe_nodes={seedMember.ExpandedNodes} total_nodes={seeded.TotalExpandedNodes}");
+        Console.WriteLine(
+            $"P2_HINT_AB_{(hintReachedReferenceEarlier ? "GO" : "NO_GO")} " +
+            $"same_route={hintSameRoute} same_quality={hintSameQuality} " +
+            $"cold_reference_ms={coldReferencePublishedMs:F3} " +
+            $"hinted_reference_ms={hintedReferencePublishedMs:F3} " +
+            $"cold_nodes={cold.TotalExpandedNodes} hinted_nodes={hinted.TotalExpandedNodes}");
+        Console.WriteLine($"evidence={path}");
+        return 0;
     }
 
     private static Evidence CaptureEvidence(

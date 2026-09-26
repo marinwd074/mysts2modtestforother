@@ -466,6 +466,7 @@ internal sealed partial class CombatBeamSolver
         if (snapshot.PlayerDead || snapshot.AllEnemiesDead)
             return [];
 
+        PlanAction? continuationEnumerationHint = ResolveContinuationEnumerationHint(node);
         SimPlayerCombatState playerState = simulator.State.GetPlayerCombatState(_player);
         IReadOnlyList<PredictedCard> hand = playerState.Hand.Cards;
         List<PreparedCardAction> actions = new(hand.Count);
@@ -544,6 +545,10 @@ internal sealed partial class CombatBeamSolver
                         simulator,
                         card.Preview,
                         target,
+                        continuationEnumerationHint != null
+                            && MatchesContinuationEnumerationHint(
+                                planAction,
+                                continuationEnumerationHint),
                         actions.Count)));
             }
         }
@@ -555,11 +560,60 @@ internal sealed partial class CombatBeamSolver
         return actions;
     }
 
+    private PlanAction? ResolveContinuationEnumerationHint(SearchNode node)
+    {
+        IReadOnlyList<PlanAction> hints = policy.ContinuationEnumerationHintActions;
+        if (hints.Count == 0
+            || _routePolicy != SearchRoutePolicy.MultiplayerSinglePlayerCore
+            || _includeTurnSetup
+            || node.Turn != _startTurnNumber
+            || node.ActionCount >= hints.Count)
+        {
+            return null;
+        }
+
+        SearchNode? cursor = node;
+        for (int index = node.ActionCount - 1; index >= 0; index--)
+        {
+            if (cursor?.Action is not { } actual
+                || !MatchesContinuationEnumerationHint(actual, hints[index]))
+            {
+                return null;
+            }
+            cursor = cursor.Parent;
+        }
+        return hints[node.ActionCount];
+    }
+
+    private static bool MatchesContinuationEnumerationHint(
+        PlanAction actual,
+        PlanAction expected)
+        => actual.Kind == PlanActionKind.PlayCard
+            && expected.Kind == PlanActionKind.PlayCard
+            && actual.Turn == expected.Turn
+            && string.Equals(actual.CardId, expected.CardId, StringComparison.Ordinal)
+            && actual.CardOccurrence == expected.CardOccurrence
+            && string.Equals(actual.CardStateKey, expected.CardStateKey, StringComparison.Ordinal)
+            && actual.CardStateOccurrence == expected.CardStateOccurrence
+            && actual.CardUpgradeLevel == expected.CardUpgradeLevel
+            && string.Equals(
+                actual.CardEnchantmentId,
+                expected.CardEnchantmentId,
+                StringComparison.Ordinal)
+            && actual.TargetCombatId == expected.TargetCombatId
+            && actual.TargetIndex == expected.TargetIndex
+            && !actual.EndsPlayerTurn
+            && actual.Choice == null
+            && actual.NestedChoices is not { Count: > 0 }
+            && actual.TurnStartChoices is not { Count: > 0 }
+            && actual.ShadowForecast == null;
+
     private static ActionSearchOrderHint BuildActionSearchOrderHint(
         SimulationSnapshot snapshot,
         CombatPredictionSimulator simulator,
         CardModel card,
         Creature? target,
+        bool continuationSeedPreferred,
         int stableOrdinal)
     {
         double damage = Math.Max(
@@ -587,6 +641,7 @@ internal sealed partial class CombatBeamSolver
             && snapshot.ProjectedPlayerHp < snapshot.PlayerHp;
 
         return new ActionSearchOrderHint(
+            continuationSeedPreferred,
             estimatedLethal,
             urgentDefense,
             strategicValuePerResource,
