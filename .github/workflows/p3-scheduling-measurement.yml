@@ -106,6 +106,8 @@ jobs:
           )
           $scheduledWarmPairs = 0
           $earlierWarmPairs = 0
+          $smartReferenceWarmPairs = 0
+          $earlierReferenceWarmPairs = 0
           foreach ($pair in $pairs) {
             $baselineDir = Join-Path $env:RUNNER_TEMP $pair.Baseline
             $crossDir = Join-Path $env:RUNNER_TEMP $pair.Cross
@@ -131,11 +133,24 @@ jobs:
                 throw "P3 $($pair.Name) did not start potion work earlier than baseline."
               }
             }
+            if ($pair.Name -like 'warm*'
+                -and $baseline.ProjectedBattlePotionCount -gt 0
+                -and $cross.ProjectedBattlePotionCount -gt 0) {
+              $smartReferenceWarmPairs++
+              if ($cross.publishedMs -lt $baseline.publishedMs) {
+                $earlierReferenceWarmPairs++
+              } else {
+                throw "P3 $($pair.Name) did not publish the Smart reference quality earlier."
+              }
+            }
 
-            "P3_FRESH_PAIR name=$($pair.Name) baseline_hp=$($baseline.ProjectedBattleHpLost) cross_hp=$($cross.ProjectedBattleHpLost) baseline_potion_first_ms=$($baseline.firstPotionWorkMs) cross_potion_first_ms=$($cross.firstPotionWorkMs) baseline_nodes=$($baseline.TotalExpandedNodes) cross_nodes=$($cross.TotalExpandedNodes) baseline_published_ms=$($baseline.publishedMs) cross_published_ms=$($cross.publishedMs)"
+            "P3_FRESH_PAIR name=$($pair.Name) baseline_hp=$($baseline.ProjectedBattleHpLost) cross_hp=$($cross.ProjectedBattleHpLost) baseline_potions=$($baseline.ProjectedBattlePotionCount) cross_potions=$($cross.ProjectedBattlePotionCount) baseline_potion_first_ms=$($baseline.firstPotionWorkMs) cross_potion_first_ms=$($cross.firstPotionWorkMs) baseline_nodes=$($baseline.TotalExpandedNodes) cross_nodes=$($cross.TotalExpandedNodes) baseline_published_ms=$($baseline.publishedMs) cross_published_ms=$($cross.publishedMs)"
           }
 
           if ($scheduledWarmPairs -lt 1 -or $earlierWarmPairs -ne $scheduledWarmPairs) {
             throw "P3 warm evidence did not demonstrate earlier potion work."
           }
-          "P3_FRESH_SUMMARY pairs=3 searches=10 warm_potion_scheduled=$scheduledWarmPairs warm_potion_earlier=$earlierWarmPairs"
+          if ($smartReferenceWarmPairs -lt 2 -or $earlierReferenceWarmPairs -ne $smartReferenceWarmPairs) {
+            throw "P3 target bad-case did not demonstrate earlier Smart reference quality in both warm pairs."
+          }
+          "P3_FRESH_SUMMARY pairs=3 searches=10 warm_potion_scheduled=$scheduledWarmPairs warm_potion_earlier=$earlierWarmPairs smart_reference_warm=$smartReferenceWarmPairs smart_reference_earlier=$earlierReferenceWarmPairs"
