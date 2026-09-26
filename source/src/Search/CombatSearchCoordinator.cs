@@ -222,12 +222,12 @@ internal static partial class CombatSearchCoordinator
                     && acceptsGlobalResultUpdate
                     && currentTurnDisplayedResult == null)
                 {
-                    if (progress.CurrentTurnPreview is { } current)
+                    if (progress.CurrentTurnPreview is { } currentPreview)
                     {
-                        currentTurnPreview = current;
+                        currentTurnPreview = currentPreview;
                         currentTurnPreviewVersion = Math.Max(
                             currentTurnPreviewVersion,
-                            current.CandidateVersion);
+                            currentPreview.CandidateVersion);
                     }
                     if (progress.SpeculativeRoutePreview is { } speculative)
                     {
