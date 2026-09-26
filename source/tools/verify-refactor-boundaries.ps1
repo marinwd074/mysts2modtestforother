@@ -78,19 +78,25 @@ foreach ($routeScopedDeployRule in @(
 
 $solverProgressPath = Join-Path $repositoryRoot 'src/Runtime/SolverProgress.cs'
 $solverProgressText = [IO.File]::ReadAllText($solverProgressPath)
-if (-not $solverProgressText.Contains('public SolverInterimResult? CurrentTurnBestResult { get; init; }')) {
-    $violations.Add("${solverProgressPath}: current-turn anytime result is no longer carried independently")
-}
-
 $searchCoordinatorPath = Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.cs'
 $searchCoordinatorText = [IO.File]::ReadAllText($searchCoordinatorPath)
-foreach ($currentTurnPromotionRule in @(
+foreach ($retiredPreviewLockRule in @(
+    'CurrentTurnBestResult',
     'SEARCH_CURRENT_TURN_PROMOTED',
     'TryPromoteCurrentTurn(',
     'RouteStartsWithCurrentTurn(',
     'currentTurnDisplayedResult')) {
-    if (-not $searchCoordinatorText.Contains($currentTurnPromotionRule)) {
-        $violations.Add("${searchCoordinatorPath}: current-turn/global anytime separation drifted '$currentTurnPromotionRule'")
+    if ($solverProgressText.Contains($retiredPreviewLockRule)
+        -or $searchCoordinatorText.Contains($retiredPreviewLockRule)) {
+        $violations.Add("Retired independent current-turn preview lock returned: '$retiredPreviewLockRule'")
+    }
+}
+foreach ($coupledPreviewRule in @(
+    'bool acceptsRouteUpdate = currentDisplayedResult == null;',
+    'if (acceptsRouteUpdate)',
+    'SpeculativeRoutePreview = speculativeRoutePreview')) {
+    if (-not $searchCoordinatorText.Contains($coupledPreviewRule)) {
+        $violations.Add("${searchCoordinatorPath}: coupled Beam preview drifted '$coupledPreviewRule'")
     }
 }
 
@@ -4390,8 +4396,8 @@ foreach ($retiredLocalCoreFinalRule in @(
 if (-not $p1PhasesText.Contains('MultiplayerScope = policy.CurrentTurnOnly')) {
     $violations.Add("${p1PhasesPath}: current-turn quality scout must materialize as CurrentTurnOnly multiplayer scope")
 }
-if (-not $p1PhasesText.Contains('SearchNode? candidate = member.CurrentTurnPreviewNode')) {
-    $violations.Add("${p1PhasesPath}: current-turn preview must prefer the dedicated current-turn candidate over the long-horizon incumbent")
+if (-not $p1PhasesText.Contains('SearchNode? candidate = member.CurrentBestNode')) {
+    $violations.Add("${p1PhasesPath}: current-turn preview must follow the globally promoted Beam route before fallback candidates")
 }
 foreach ($p2SearchRule in @(
     'if (_continuationSeedProbe)',

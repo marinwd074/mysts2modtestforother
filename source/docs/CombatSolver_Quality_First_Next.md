@@ -203,6 +203,14 @@
 - 保留的多人差异只在搜索输入/运行时边界：只授权本地玩家动作、不预测队友动作、多人专属牌规则、continuation validity、WorldVersion / Safe Execute。通用 current-turn UI preview 仍保留，因为单人和多人共用同一 progress 机制，它不再拥有多人专属搜索预算或最终排序权。
 - 预期效果：第一回合的 Strike、能力、抽牌、药水、防御和组合路线从一开始就在同一个 Beam 中竞争；不会再出现“前几十秒由独立 scout 的一张 Strike 占据显示，最后再切换到另一套算法”的两阶段行为。
 
+### PHROG 预览锁：Strike 早期候选隐藏后续回合（2026-09-26）
+
+- 问题包 `PHROG_PARASITE_ELITE-5ae37dffbf5247b0a10d1f8381a211ff` 证明切换到单人主搜索后，搜索核心已经较早产生更完整路线，但 UI 仍被旧 current-turn scout 时代的独立预览锁卡住。
+- generation 1 在约 0.43 秒记录 `SEARCH_CURRENT_TURN_PROMOTED ... actions=STRIKE_IRONCLAD`；约 4.7 秒时 `FINAL_SELECTION` 已经是 `STRIKE → FORGOTTEN_RITUAL → NOT_YET → EndTurn` 并包含 T2–T6；约 26 秒完整胜利结果的 T1 已改为 `BARRICADE → EndTurn`，且包含到 T13。搜索并没有“只找到 Strike”。
+- 根因是协调器保留独立 `currentTurnDisplayedResult`，并要求 speculative route 的首回合动作与早期 current-turn preview **完全相等**；早期 `[STRIKE]` 因而拒绝了后续 `[STRIKE, FORGOTTEN_RITUAL, NOT_YET]` 和 `[BARRICADE]` 两条更完整路线，同时把未来回合预览清空。
+- 现在移除该独立 current-turn 显示通道及 `RouteStartsWithCurrentTurn` 门禁。当前回合和后续回合重新绑定到同一个全局 Beam incumbent：全局路线提升时，两者一起更新。Beam 内部仍可保留 current-turn candidate 作为搜索/交互数据，但它不再单独锁住 UI。
+- `RefreshCurrentTurnPreview` 恢复优先使用 `member.CurrentBestNode`，只有没有全局 incumbent 时才退回 current-turn candidate。这样 Strike 可以作为几百毫秒级早期临时预览，但一旦更好的完整路线出现就必须被替换。
+
 ### 当前真实样本补充：多人战损只统计本地玩家（2026-09-26）
 
 - 问题包 `1cd414aa66e94546bd9713630077d99c` 的 MAWLER 首回合实机记录显示：敌人两次 4 点攻击都对本地玩家结算为 `BlockedDamage=4 / UnblockedDamage=0`，50 格挡最终剩 42；队友则两次各承受 4 点。敌人对本地造成的实际 HP 伤害为 0。

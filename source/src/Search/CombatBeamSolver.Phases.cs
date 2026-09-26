@@ -420,9 +420,9 @@ internal sealed partial class CombatBeamSolver
 
         void RefreshCurrentTurnPreview()
         {
-            SearchNode? candidate = member.CurrentTurnPreviewNode
-                ?? member.CurrentTurnCandidateNode
-                ?? member.CurrentBestNode;
+            SearchNode? candidate = member.CurrentBestNode
+                ?? member.CurrentTurnPreviewNode
+                ?? member.CurrentTurnCandidateNode;
             SearchNode? boundary = candidate == null
                 ? null
                 : FindCurrentTurnBoundary(candidate);
@@ -1139,7 +1139,6 @@ internal sealed partial class CombatBeamSolver
                 member.SpeculativeRoutePreview,
                 member.RouteAdoptionSeed)
             {
-                CurrentTurnBestResult = member.CurrentTurnCandidateResult,
                 OfficialPublishedOrigin = officialPublishedOrigin,
                 OfficialPublishedEvaluationContextId =
                     officialPublishedEvaluationContextId,
