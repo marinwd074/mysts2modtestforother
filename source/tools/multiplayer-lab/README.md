@@ -151,6 +151,19 @@ pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
 同一 Host 上启动第二个本地 Client 时，必须使用不同的 ID，例如
 `-ClientId 1001`；否则 Host 会按重复 peer ID 拒绝连接。
 
+构建 `source` 目录后，也可以用一个入口增量准备并同时启动 Host 与 Solver Client：
+
+~~~powershell
+pwsh -NoLogo -NoProfile -File .\start-host-client.ps1
+~~~
+
+该脚本从 `artifacts/CombatSolver` 读取生产 DLL，准备独立的 Host/Client 实例，默认关闭
+Steam transport。首次安装或更新 RitsuLib / CombatSolver payload 时，Client 先以
+`safe-execute` 启动并输出 `WARMUP_REQUIRED`；完成 Mod 加载和游戏重启后，若 Client
+仍开着先关闭，再运行同一命令，Client 会以 `safe-execute-lab` 启动。需要重新 warm-up
+时可传 `-ForceWarmup`。此流程只更新 `.local/multiplayer-lab` 私有实例，不写入 Steam
+安装目录的 `MODS`。
+
 手动完成 Host/Join、角色和 Ready 后，停止时只传入本次准备过的 root：
 
 ~~~powershell
