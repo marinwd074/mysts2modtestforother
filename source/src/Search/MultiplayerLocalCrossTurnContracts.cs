@@ -96,6 +96,15 @@ internal static class MultiplayerLocalCrossTurnContracts
             && !hasForcedPotionDirectives
             && !useNoveltyPortfolio;
 
+    /// <summary>
+    /// The three-turn local-core needs one stable potion-free baseline before optional Smart
+    /// potion search. The Novelty-era provisional cross-family scout is redundant here because
+    /// it is benchmarked against a temporary baseline and may have to be rerun after Beam.
+    /// Singleplayer and the experimental team route keep their existing scheduler behavior.
+    /// </summary>
+    internal static bool ShouldRunEarlySmartPotionScout(SearchRoutePolicy routePolicy)
+        => routePolicy != SearchRoutePolicy.MultiplayerSinglePlayerCore;
+
     internal static bool CanReplayContinuationSeedAction(
         int actionTurn,
         int currentTurn,

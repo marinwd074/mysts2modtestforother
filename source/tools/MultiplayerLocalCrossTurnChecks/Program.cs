@@ -310,6 +310,15 @@ Check(
     "Default multiplayer local-core disables P1/P2/P3 search accelerators so finite-budget exploration keeps single-player ordering.");
 
 Check(
+    !MultiplayerLocalCrossTurnContracts.ShouldRunEarlySmartPotionScout(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore)
+    && MultiplayerLocalCrossTurnContracts.ShouldRunEarlySmartPotionScout(
+        SearchRoutePolicy.SinglePlayerFullRoute)
+    && MultiplayerLocalCrossTurnContracts.ShouldRunEarlySmartPotionScout(
+        SearchRoutePolicy.MultiplayerLocalCrossTurn),
+    "Three-turn multiplayer local-core waits for the stable potion-free Beam baseline before its single Smart potion audit; other route policies keep the existing early scout.");
+
+Check(
     MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(
         SearchRoutePolicy.MultiplayerSinglePlayerCore)
         && MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(

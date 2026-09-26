@@ -237,6 +237,14 @@
 - 若设置 `UseMultiplayerLethalHpRecalculation` 开启且实机已进入已有 `IsInLethalRecalculationWindow`，即使只是 HP 向下变化也不放宽，仍按原逻辑重算；因此 continuation 与现有“普通 HP 变化忽略、斩杀窗口重算”的 route-version 策略一致。
 - 成功复用时日志标记 `validation=exact_except_remote_enemy_hp`、`living_enemy_hp_decrease_drift=true`、`reason=remote_enemy_hp_decrease`。
 
+### THE_OBSCURA：多人 Smart Potion 去掉重复提前审计（2026-09-27）
+
+- 问题包 `THE_OBSCURA_NORMAL-ecc2f56a93bd4867a5c329299563792e` 一次请求依次运行了：Novelty 无药 5.00s → `E3_CROSS_FAMILY_SCOUT` 有药 5.23s → 正式无药 Beam 8.66s → Smart Potion 有药 10.43s。两个有药成员合计约 15.66s，最终仍选择 0 瓶。
+- 原因不是 P3 accelerator 重新开启。即使 `LocalCoreSearchAcceleratorsEnabled=false`，`RunNoveltyPortfolioPass` 仍会在 Novelty 后调用传入的 `runCrossFamilyScout`；该 scout 基于临时无药基线，正式 Beam 改善基线后经常无法复用，于是 supplemental Smart audit 再搜索一次。
+- 默认 `MultiplayerSinglePlayerCore` 现在不再向 Novelty portfolio 提供 early Smart scout。流程固定为：**Novelty/Beam 都按无主动用药建立稳定基线 → supplemental 阶段最多一次正式 Smart Potion 审计**。
+- 这次只改药水调度；Offering/祭品、自损估值、Beam/FinalOrdering 均不改变。
+- 单人 `SinglePlayerFullRoute` 和实验 `MultiplayerLocalCrossTurn` 保留原 early scout 行为，避免把本次多人 3 回合优化扩散到其他模式。
+
 ### 当前真实样本补充：多人战损只统计本地玩家（2026-09-26）
 
 - 问题包 `1cd414aa66e94546bd9713630077d99c` 的 MAWLER 首回合实机记录显示：敌人两次 4 点攻击都对本地玩家结算为 `BlockedDamage=4 / UnblockedDamage=0`，50 格挡最终剩 42；队友则两次各承受 4 点。敌人对本地造成的实际 HP 伤害为 0。

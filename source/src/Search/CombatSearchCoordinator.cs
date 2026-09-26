@@ -502,7 +502,12 @@ internal static partial class CombatSearchCoordinator
                 => policy.UseNoveltyPortfolio
                     ? RunNoveltyPortfolioPass(root, displayNames, battleDamage, passPolicy, activeProfile,
                         activeClock, initialPotionPolicyOverride, cancellationToken, progressCallback,
-                        interimResultCallback, RunCrossFamilyScout, RunBaseline)
+                        interimResultCallback,
+                        MultiplayerLocalCrossTurnContracts.ShouldRunEarlySmartPotionScout(
+                            policy.RoutePolicy)
+                                ? RunCrossFamilyScout
+                                : null,
+                        RunBaseline)
                     : RunBaseline(activeProfile);
 
             if (!continuationSeedConsumed

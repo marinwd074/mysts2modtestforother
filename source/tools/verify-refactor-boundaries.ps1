@@ -4337,6 +4337,9 @@ if (-not $p1ContinuationContractsText.Contains('CanReplayContinuationSeedAction(
 if (-not $p1ContinuationContractsText.Contains('internal static bool LocalCoreSearchAcceleratorsEnabled => false;')) {
     $violations.Add("${p1ContinuationContractsPath}: default local-core must keep multiplayer search accelerators disabled")
 }
+if (-not $p1ContinuationContractsText.Contains('ShouldRunEarlySmartPotionScout(')) {
+    $violations.Add("${p1ContinuationContractsPath}: local-core single Smart-potion-audit gate is missing")
+}
 foreach ($localCoreHorizonRule in @(
     'internal const int LocalCorePredictionTurnLayers = 3;',
     'PredictionTurnLayerLimit(',
@@ -4405,6 +4408,9 @@ foreach ($localCoreNoveltyHorizonRule in @(
 }
 $p1CoordinatorPath = Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.cs'
 $p1CoordinatorText = [IO.File]::ReadAllText($p1CoordinatorPath)
+if (-not $p1CoordinatorText.Contains('ShouldRunEarlySmartPotionScout(')) {
+    $violations.Add("${p1CoordinatorPath}: Novelty must gate the provisional Smart-potion scout for local-core")
+}
 foreach ($retiredLocalCoreSearchRule in @(
     'RunLocalCoreCurrentTurnQualityFirst(',
     'ShouldRunLocalCoreCurrentTurnQualityScout(',
