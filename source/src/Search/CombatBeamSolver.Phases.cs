@@ -1092,7 +1092,7 @@ internal sealed partial class CombatBeamSolver
             CandidateOrigin? officialPublishedOrigin = null,
             string? officialPublishedEvaluationContextId = null)
         {
-            long elapsedMs = stopwatch.ElapsedMilliseconds;
+            long elapsedMs = EffectiveSearchElapsedMilliseconds(stopwatch);
             if (!force && elapsedMs - lastProgressMs < 100)
                 return;
             lastProgressMs = elapsedMs;
@@ -1563,7 +1563,7 @@ internal sealed partial class CombatBeamSolver
             {
                 ObserveParentAllocation(Math.Max(0,
                     policy.MemoryPressureSignal.AllocatedBytes - noveltyParentAllocatedAtStart));
-                if (progressCallback != null && stopwatch.ElapsedMilliseconds - lastProgressMs >= 100)
+                if (progressCallback != null && EffectiveSearchElapsedMilliseconds(stopwatch) - lastProgressMs >= 100)
                 {
                     RefreshCurrentTurnPreview();
                     PublishRoutePreview(member.Completed);
@@ -1607,7 +1607,7 @@ internal sealed partial class CombatBeamSolver
             }
 
             member.Ended = [];
-            member.TurnLayerStartedMs = stopwatch.ElapsedMilliseconds;
+            member.TurnLayerStartedMs = EffectiveSearchElapsedMilliseconds(stopwatch);
             int remainingReservedLayers = Math.Max(1, reservedTurnLayers - member.SearchedTurnLayers);
             long remainingSearchMs = Math.Max(
                 1,
@@ -1655,7 +1655,7 @@ internal sealed partial class CombatBeamSolver
                     member.TimeBudgetReached = true;
                     break;
                 }
-                long turnLayerElapsedMs = stopwatch.ElapsedMilliseconds - member.TurnLayerStartedMs;
+                long turnLayerElapsedMs = EffectiveSearchElapsedMilliseconds(stopwatch) - member.TurnLayerStartedMs;
                 int turnLayerExpanded = _run.Expanded - member.TurnLayerStartedExpanded;
                 // Boss setup chains use the existing per-layer node share. A local wall-clock
                 // slice otherwise cuts different action depths under JIT/GC load, even when
@@ -1738,7 +1738,7 @@ internal sealed partial class CombatBeamSolver
                 }
                 if (!policy.VerifyIncrementalSearch
                     && member.PlayDepth > 0
-                    && stopwatch.ElapsedMilliseconds >= _profile.SoftTimeBudgetMilliseconds)
+                    && EffectiveSearchElapsedMilliseconds(stopwatch) >= _profile.SoftTimeBudgetMilliseconds)
                 {
                     member.TimeBudgetReached = true;
                     int forcedEndTurnCandidates = 0;
@@ -1754,7 +1754,7 @@ internal sealed partial class CombatBeamSolver
                     policy.Diagnostics.Info(
                         $"[CombatSolver/Test] SEARCH_TIME_BUDGET " +
                         $"completed_turns={member.SearchedTurnLayers} play_depth={member.PlayDepth} " +
-                        $"elapsed_ms={stopwatch.ElapsedMilliseconds} " +
+                        $"elapsed_ms={EffectiveSearchElapsedMilliseconds(stopwatch)} " +
                         $"budget_ms={_profile.SoftTimeBudgetMilliseconds} " +
                         $"forced_end_turn={forcedEndTurnCandidates}");
                     member.Active = [];
@@ -2106,7 +2106,7 @@ internal sealed partial class CombatBeamSolver
                     {
                         if (_run.Expanded >= _profile.MaxExpandedNodes || member.AcceptableBattleHpLossReached
                             || !policy.VerifyIncrementalSearch
-                                && stopwatch.ElapsedMilliseconds >= _profile.SoftTimeBudgetMilliseconds)
+                                && EffectiveSearchElapsedMilliseconds(stopwatch) >= _profile.SoftTimeBudgetMilliseconds)
                             break;
                         EnsureMemoryForIndivisibleCommit(ParentAllocationReserve(),
                             "before_fetched_power_followup", member.PlayDepth, member.NextPlays.Count, member.Ended.Count);
@@ -2454,7 +2454,7 @@ internal sealed partial class CombatBeamSolver
         foreach (PlanAction action in actions)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (stopwatch.ElapsedMilliseconds >= _profile.SoftTimeBudgetMilliseconds)
+            if (EffectiveSearchElapsedMilliseconds(stopwatch) >= _profile.SoftTimeBudgetMilliseconds)
             {
                 reason = "time_budget";
                 break;
