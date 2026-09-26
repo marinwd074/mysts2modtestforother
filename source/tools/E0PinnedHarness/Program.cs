@@ -38,6 +38,14 @@ internal static class Program
         bool p2Ab = args.Contains(
             "--p2-ab",
             StringComparer.Ordinal);
+        bool p3SchedulingProbe = args.Contains(
+            "--p3-scheduling-probe",
+            StringComparer.Ordinal);
+        bool p3Novelty = args.Contains(
+            "--p3-novelty",
+            StringComparer.Ordinal);
+        if (p3Novelty && !p3SchedulingProbe)
+            throw new ArgumentException("--p3-novelty requires --p3-scheduling-probe.");
         CombatBeamSolver.UseLegacyActionSearchOrderForTesting(legacyActionOrder);
         bool teammate = string.Equals(scenario, "teammate", StringComparison.Ordinal);
         if (teammate)
@@ -68,11 +76,12 @@ internal static class Program
                     PotionPolicy = SolverPotionPolicy.Smart,
                     SearchMaxDegreeOfParallelism = 1,
                     UseMultiplayerPrediction = teammate && multiplayerPrediction,
+                    UseNoveltyPortfolio = p3Novelty,
                 },
                 SolverPerformancePreset.Medium);
             SolverSettings.ApplyForTesting(settingsData);
 
-            Task enter = EnterCombatAsync(scenario);
+            Task enter = EnterCombatAsync(scenario, p3SchedulingProbe);
             loop.RunUntilCompleted(enter, TimeSpan.FromSeconds(180), $"E0 {scenario} enter combat");
             CombatState combat = OfflineCombat.WaitForPlayableCombat(loop);
             Player local = LocalContext.GetMe(combat)
@@ -162,7 +171,7 @@ internal static class Program
                     ? expectedMultiplayerRoute
                     : SearchRoutePolicy.SinglePlayerFullRoute,
                 CurrentTurnOnly = false,
-                UseNoveltyPortfolio = false,
+                UseNoveltyPortfolio = p3Novelty,
                 UseBeamWidthPortfolio = true,
                 BeamWidthPortfolioWidths = null,
                 FixedBudget = true,
@@ -253,7 +262,9 @@ internal static class Program
         }
     }
 
-    private static async Task EnterCombatAsync(string scenario)
+    private static async Task EnterCombatAsync(
+        string scenario,
+        bool p3SchedulingProbe)
     {
         bool teammate = string.Equals(scenario, "teammate", StringComparison.Ordinal);
         string encounterId = string.Equals(scenario, "simple", StringComparison.Ordinal)
@@ -286,6 +297,24 @@ internal static class Program
             "draw_energy" => ["OFFERING", "BASH", "STRIKE_IRONCLAD", "DEFEND_IRONCLAD", "ANGER"],
             _ => ["BASH", "STRIKE_IRONCLAD", "STRIKE_IRONCLAD", "DEFEND_IRONCLAD", "DEFEND_IRONCLAD"],
         });
+        if (p3SchedulingProbe)
+        {
+            PotionModel firePotion = ResolveUnique(
+                ModelDb.AllPotions,
+                "FIRE_POTION",
+                "potion").ToMutable();
+            PotionModel blockPotion = ResolveUnique(
+                ModelDb.AllPotions,
+                "BLOCK_POTION",
+                "potion").ToMutable();
+            if (!local.AddPotionInternal(firePotion, 0, silent: false).success
+                || !local.AddPotionInternal(blockPotion, 1, silent: false).success)
+            {
+                throw new InvalidOperationException(
+                    "Could not add P3 local FIRE_POTION/BLOCK_POTION fixture.");
+            }
+        }
+
         if (teammate)
         {
             Player remote = players[1];
@@ -649,6 +678,13 @@ internal static class Program
                 item.SecondRankBand,
                 item.BaseScoreOnly,
                 item.Novelty,
+                telemetry.ToRequestMilliseconds(item.StartedTicks),
+                item.FirstWorkTicks.HasValue
+                    ? telemetry.ToRequestMilliseconds(item.FirstWorkTicks.Value)
+                    : null,
+                item.CompletedTicks.HasValue
+                    ? telemetry.ToRequestMilliseconds(item.CompletedTicks.Value)
+                    : null,
                 item.CompletedTicks.HasValue
                     ? BeamWidthPortfolioTelemetry.DurationMilliseconds(
                         Math.Max(0, item.CompletedTicks.Value - item.StartedTicks))
@@ -713,6 +749,9 @@ internal static class Program
         bool SecondRankBand,
         bool BaseScoreOnly,
         bool Novelty,
+        double StartedMs,
+        double? FirstWorkMs,
+        double? CompletedMs,
         double? ElapsedMs,
         long ExpandedNodes,
         long TransitionCount);
