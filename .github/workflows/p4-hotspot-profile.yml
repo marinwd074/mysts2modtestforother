@@ -134,3 +134,49 @@ jobs:
               throw "P4 calculated-history fast path did not reduce TurnState allocations for $scenario."
             }
           }
+
+      - name: P4 local potion fingerprint fresh-process A/B
+        shell: pwsh
+        run: |
+          $harness = '.\source\tools\E0PinnedHarness\bin\Release\net9.0\E0PinnedHarness.dll'
+          foreach ($scenario in @('teammate', 'draw_energy')) {
+            $baselineDir = Join-Path $env:RUNNER_TEMP "p4-potion-$scenario-baseline"
+            $candidateDir = Join-Path $env:RUNNER_TEMP "p4-potion-$scenario-candidate"
+            New-Item -ItemType Directory -Force -Path $baselineDir,$candidateDir | Out-Null
+
+            $baselineLines = @(& dotnet $harness --scenario $scenario --out $baselineDir --p4-profile --p4-legacy-potion-sort --max-nodes 2000 --budget-ms 15000 2>&1)
+            $baselineExit = $LASTEXITCODE
+            $baselineLines | ForEach-Object { Write-Host $_ }
+            if ($baselineExit -ne 0) { throw "P4 potion baseline failed for $scenario." }
+
+            $candidateLines = @(& dotnet $harness --scenario $scenario --out $candidateDir --p4-profile --max-nodes 2000 --budget-ms 15000 2>&1)
+            $candidateExit = $LASTEXITCODE
+            $candidateLines | ForEach-Object { Write-Host $_ }
+            if ($candidateExit -ne 0) { throw "P4 potion candidate failed for $scenario." }
+
+            $baseline = Get-Content -LiteralPath (Join-Path $baselineDir "e0-$scenario.json") -Raw | ConvertFrom-Json
+            $candidate = Get-Content -LiteralPath (Join-Path $candidateDir "e0-$scenario.json") -Raw | ConvertFrom-Json
+            $sameRoute = (@($baseline.route) -join [char]31) -eq (@($candidate.route) -join [char]31)
+            $sameQuality = $baseline.projectedBattleHpLost -eq $candidate.projectedBattleHpLost -and
+              $baseline.projectedBattlePotionCount -eq $candidate.projectedBattlePotionCount -and
+              $baseline.combatEndedTurn -eq $candidate.combatEndedTurn -and
+              $baseline.boundaryReason -eq $candidate.boundaryReason
+            $sameWork = $baseline.totalExpandedNodes -eq $candidate.totalExpandedNodes -and
+              $baseline.totalTransitionCount -eq $candidate.totalTransitionCount
+
+            $baselineDetailLine = @($baselineLines | Where-Object { "$_" -like 'P4_FINGERPRINT_DETAIL*' })[-1]
+            $candidateDetailLine = @($candidateLines | Where-Object { "$_" -like 'P4_FINGERPRINT_DETAIL*' })[-1]
+            $baselineDetail = ("$baselineDetailLine" -split ' data=',2)[1] | ConvertFrom-Json
+            $candidateDetail = ("$candidateDetailLine" -split ' data=',2)[1] | ConvertFrom-Json
+            $baselinePhase = @($baselineDetail | Where-Object phase -eq 'RelicPotion')[0]
+            $candidatePhase = @($candidateDetail | Where-Object phase -eq 'RelicPotion')[0]
+
+            "P4_POTION_AB scenario=$scenario same_route=$sameRoute same_quality=$sameQuality same_work=$sameWork baseline_nodes=$($baseline.totalExpandedNodes) candidate_nodes=$($candidate.totalExpandedNodes) baseline_ms=$($baselinePhase.elapsedMs) candidate_ms=$($candidatePhase.elapsedMs) baseline_alloc=$($baselinePhase.allocatedBytes) candidate_alloc=$($candidatePhase.allocatedBytes)"
+
+            if (-not $sameRoute -or -not $sameQuality -or -not $sameWork) {
+              throw "P4 potion fingerprint fast path changed route/quality/work for $scenario."
+            }
+            if ($scenario -eq 'teammate' -and $candidatePhase.allocatedBytes -ge $baselinePhase.allocatedBytes) {
+              throw "P4 local multiplayer potion fingerprint fast path did not reduce allocations."
+            }
+          }
