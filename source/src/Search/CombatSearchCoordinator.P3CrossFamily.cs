@@ -110,7 +110,7 @@ internal static partial class CombatSearchCoordinator
         int rounds = 0;
 
         const int beamSlicesPerPotionSlice = 4;
-        int minimumBeamWarmupNodes = Math.Max(1, profile.MaxExpandedNodes / 3);
+        int minimumBeamWarmupNodes = Math.Max(1, profile.MaxExpandedNodes / 4);
         long warmupDeadlineMs = Math.Max(
             1,
             profile.SoftTimeBudgetMilliseconds * 3L / 5L);
