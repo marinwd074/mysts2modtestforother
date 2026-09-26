@@ -602,11 +602,13 @@ foreach ($fixedPowerUnitRule in @(
     }
 }
 foreach ($fixedPowerUnitRule in @(
-    'combat.Apply<AggressionPower>(owner, 1, owner);',
-    'combat.Apply<DarkEmbracePower>(owner, 1, owner);')) {
+    'combat.Apply<AggressionPower>(owner, 1, owner);')) {
     if (-not $corePowerSupportText.Contains($fixedPowerUnitRule)) {
         $violations.Add("${corePowerSupportPath}: audited 0.107.1 fixed Power unit drifted '$fixedPowerUnitRule'")
     }
+}
+if (-not $cardEffectSpecText.Contains('[typeof(DarkEmbrace)] = [Owner<DarkEmbracePower>(_ => 1)]')) {
+    $violations.Add("${cardEffectSpecPath}: audited 0.107.1 Dark Embrace fixed Power unit drifted")
 }
 foreach ($fixedPowerUnitRule in @(
     'combat.Apply<CalamityPower>(owner, 1, owner);',
