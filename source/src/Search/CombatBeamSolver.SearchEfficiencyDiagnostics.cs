@@ -22,13 +22,15 @@ internal sealed partial class CombatBeamSolver
             return;
         string kind = policy.NoveltySearch != null
             ? "novelty"
-            : _fixedPrefixActions.Count > 0
-                ? "fixed_prefix"
-                : _forceAllPotionsDisabled
-                    ? "potion_disabled"
-                    : _minimumPotionUses > 0
-                        ? "potion_required"
-                        : "beam";
+            : _continuationSeedProbe
+                ? "continuation_seed_incumbent"
+                : _fixedPrefixActions.Count > 0
+                    ? "fixed_prefix"
+                    : _forceAllPotionsDisabled
+                        ? "potion_disabled"
+                        : _minimumPotionUses > 0
+                            ? "potion_required"
+                            : "beam";
         _searchEfficiencyMemberId = telemetry.BeginSearchMember(
             kind,
             _profile.BeamWidth,

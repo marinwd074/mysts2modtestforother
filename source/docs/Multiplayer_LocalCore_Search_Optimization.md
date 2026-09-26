@@ -11,7 +11,9 @@
 - P1 种子只在每个请求的首个 Beam baseline 成员消费一次，Novelty、精炼成员、强制药水/Choice、既有 fixed-prefix 专项搜索不重复花这份工作；重放转移计入原搜索的 transition/elapsed 账户。所有后续排序、药水资格、最终物化和 Safe Execute 仍走现有流程，不直接部署旧结果，也不改变自动采用时机。
 - 首版继续只支持同一新根当前回合、带精确 `CardStateKey` 的普通 PlayCard；药水、Choice、TurnStart Choice、Shadow forecast 和跨越下一个回合边界仍明确停在建议重放边界。RNG/手牌变化允许从新根重新尝试建议，但牌实例不存在、不可出或动作语义异常时停止，不猜同名替代。
 - P1 已加入 `resume_kind=exact_continuation|seeded_search|cold_search` 诊断和专用 action-boundary 合同；真实 Host/Client 的跨回合等待收益与最终质量仍需实机/固定输入 A/B 证明，本阶段不宣称性能收益。
-- P2 的独立 incumbent/自动提前采用、P3 调度扩展和 P4 热点优化不在本次实现范围。真实 Host/Client 的等待收益仍需实机验证。
+- P2 已进入实现：continuation seed 不再进入普通 Beam 初始 Frontier。Coordinator 先以独立 `continuation_seed_incumbent` 成员重放同一新根建议，探针最多使用当前节点/时间额度的 5%，实际消耗从后续普通搜索余额扣除；中途失效继续沿 P1 的已验证前缀语义。普通 Beam、Novelty、药水审计收到的 policy 均清空 seed，因此候选集合、Beam retention 和动作枚举不因 P2 占槽或变序。
+- P2 独立成员只有得到完整胜利结果后才通过现有 `PublishAdoptableResult` / `SolverRouteAdoptionSeed` 发布为可手动采用 incumbent；随后正常搜索继续并用现有正式质量排序决定是否提升。未增加按钮，也未改变 Full Auto / Multiplayer Safe Auto 的默认提前采用时机。
+- P2 的“旧动作作为枚举提示”仍保持关闭；这是会改变有限预算探索次序的质量敏感实验，必须等独立 incumbent A/B 后再决定。P3 调度扩展和 P4 热点优化仍未进入。
 
 ## 1. 项目决策
 

@@ -157,6 +157,27 @@ Check(
     continuationSeedActionContractsAreCorrect,
     "P1 continuation-seed action boundary rejects cross-turn, non-card, choice and ambiguous-card suggestions.");
 
+SolverSearchProfile p2BudgetProfile = SolverSearchProfile.Default with
+{
+    MaxExpandedNodes = 20_000,
+    SoftTimeBudgetMilliseconds = 20_000,
+};
+SolverSearchProfile p2Probe = ContinuationSeedIncumbentBudget.Probe(p2BudgetProfile)
+    ?? throw new InvalidOperationException("P2 seed incumbent budget was unexpectedly unavailable.");
+Check(
+    p2Probe.MaxExpandedNodes == 1_000
+    && p2Probe.SoftTimeBudgetMilliseconds == 1_000,
+    "P2 continuation-seed incumbent is capped at five percent of node/time allowance.");
+SolverSearchProfile p2Remaining = ContinuationSeedIncumbentBudget.Remaining(
+        p2BudgetProfile,
+        elapsedMilliseconds: 400,
+        expandedNodes: 600)
+    ?? throw new InvalidOperationException("P2 measured-work remainder unexpectedly exhausted.");
+Check(
+    p2Remaining.MaxExpandedNodes == 19_400
+    && p2Remaining.SoftTimeBudgetMilliseconds == 19_600,
+    "P2 returns unused seed allowance and deducts only measured work from the ordinary search.");
+
 
 Check(
     ActionSearchOrderingPolicy.VerifyForTesting(),

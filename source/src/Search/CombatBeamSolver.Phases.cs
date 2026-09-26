@@ -1147,8 +1147,18 @@ internal sealed partial class CombatBeamSolver
         _run.InitialRetainedAttackValue = _includeTurnSetup
             ? 0
             : rootCandidates[0].Snapshot.RetainedAttackValue;
-        member.Frontier = new List<SearchNode>(
-            rootCandidates.Count + (policy.ContinuationSeedActions.Count > 0 ? 1 : 0));
+        if (_continuationSeedProbe
+            && (_includeTurnSetup
+                || _fixedPrefixActions.Count > 0
+                || policy.RoutePolicy != SearchRoutePolicy.MultiplayerSinglePlayerCore
+                || policy.ContinuationSeedActions.Count == 0))
+        {
+            throw new InvalidOperationException(
+                "P2 continuation-seed incumbent probe requires a Play-phase multiplayer local-core seed.");
+        }
+
+        member.Frontier = new List<SearchNode>(rootCandidates.Count);
+        string continuationSeedRejectReason = "none";
 
         SearchNode CreateInitialRoot(
             SimulationSnapshot snapshot,
@@ -1212,40 +1222,20 @@ internal sealed partial class CombatBeamSolver
                     _startTurnNumber)
                 : null;
             SearchNode root = CreateInitialRoot(snapshot, choices, turnSetupPlayState);
-            // Setup roots are observed only after their existing choice budget selected them.
-            // This hook does not claim coverage of the initial Start-phase choice enumeration.
             ObserveSearchPath(root, SearchPathObservationStage.Root,
                 _includeTurnSetup ? "turn_setup_root_after_choice_budget" : "play_root");
-            SearchNode? compatibleRoot = ApplyFixedPrefix(root);
-            if (compatibleRoot == null)
-                continue;
-            RegisterInitialFrontierNode(compatibleRoot);
-        }
 
-        bool canReplayContinuationSeed =
-            !_includeTurnSetup
-            && _fixedPrefixActions.Count == 0
-            && policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
-            && policy.ContinuationSeedActions.Count > 0
-            && policy.NoveltySearch == null
-            && _minimumPotionUses == 0
-            && _potionPolicy != SolverPotionPolicy.RequireAtLeastOne
-            && !_enforcePotionDirectives;
-        if (canReplayContinuationSeed)
-        {
-            SearchNode seedRoot = CreateInitialRoot(Replay([]), [], turnSetupPlayState: null);
-            ObserveSearchPath(
-                seedRoot,
-                SearchPathObservationStage.Root,
-                "continuation_seed_root");
-            SearchNode? seeded = TryReplayContinuationSeed(
-                seedRoot,
-                policy.ContinuationSeedActions,
-                stopwatch,
-                out int replayedSeedActions,
-                out string seedReason);
-            if (seeded != null)
+            if (_continuationSeedProbe)
             {
+                SearchNode? seeded = TryReplayContinuationSeed(
+                    root,
+                    policy.ContinuationSeedActions,
+                    stopwatch,
+                    out int replayedSeedActions,
+                    out continuationSeedRejectReason);
+                if (seeded == null)
+                    continue;
+
                 RegisterInitialFrontierNode(seeded);
                 string seedStatus = replayedSeedActions == policy.ContinuationSeedActions.Count
                     ? "full"
@@ -1254,19 +1244,22 @@ internal sealed partial class CombatBeamSolver
                     $"[CombatSolver/Test] SEARCH_CONTINUATION_SEED " +
                     $"resume_kind=seeded_search status={seedStatus} " +
                     $"requested={policy.ContinuationSeedActions.Count} replayed={replayedSeedActions} " +
-                    $"reason={seedReason}");
+                    $"reason={continuationSeedRejectReason} independent_incumbent=true");
+                continue;
             }
-            else
-            {
-                policy.Diagnostics.Info(
-                    $"[CombatSolver/Test] SEARCH_CONTINUATION_SEED " +
-                    $"resume_kind=cold_search status=rejected " +
-                    $"requested={policy.ContinuationSeedActions.Count} replayed={replayedSeedActions} " +
-                    $"reason={seedReason}");
-            }
+
+            SearchNode? compatibleRoot = ApplyFixedPrefix(root);
+            if (compatibleRoot == null)
+                continue;
+            RegisterInitialFrontierNode(compatibleRoot);
         }
+
         if (member.Frontier.Count == 0)
+        {
+            if (_continuationSeedProbe)
+                throw new ContinuationSeedRejectedException(continuationSeedRejectReason);
             throw new InvalidOperationException("固定搜索前缀与全部回合准备选牌分支都不相容。");
+        }
 
         member.Completed = [];
         member.Fallback = member.Frontier.MaxBy(static node => node.Score)!;

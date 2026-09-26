@@ -4199,28 +4199,45 @@ foreach ($p1RuntimeRule in @(
 
 $p1CoordinatorPath = Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.cs'
 $p1CoordinatorText = [IO.File]::ReadAllText($p1CoordinatorPath)
-foreach ($p1CoordinatorRule in @(
-    'bool continuationSeedConsumed = false;',
-    'if (refinement || continuationSeedConsumed)',
-    'ContinuationSeedActions = [],',
-    'continuationSeedConsumed = true;')) {
-    if (-not $p1CoordinatorText.Contains($p1CoordinatorRule)) {
-        $violations.Add("${p1CoordinatorPath}: P1 seed must be consumed by only the first Beam baseline member '$p1CoordinatorRule'")
+foreach ($p2CoordinatorRule in @(
+    'IReadOnlyList<PlanAction> continuationSeedActions =',
+    'policy = policy with { ContinuationSeedActions = [] };',
+    'ContinuationSeedIncumbentBudget.Probe(passProfile)',
+    'continuationSeedProbe: true',
+    'Interaction = null',
+    'interimResultCallback?.Invoke(seedResult);',
+    'SelectContinuationSeedIncumbent(',
+    'P2_CONTINUATION_SEED_BUDGET')) {
+    if (-not $p1CoordinatorText.Contains($p2CoordinatorRule)) {
+        $violations.Add("${p1CoordinatorPath}: P2 independent continuation-seed incumbent drifted '$p2CoordinatorRule'")
     }
 }
 
 $p1PhasesPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Phases.cs'
 $p1PhasesText = [IO.File]::ReadAllText($p1PhasesPath)
-foreach ($p1SearchRule in @(
+foreach ($p2SearchRule in @(
+    'if (_continuationSeedProbe)',
     'SearchNode? seeded = TryReplayContinuationSeed(',
-    'RegisterInitialFrontierNode(compatibleRoot);',
-    'RegisterInitialFrontierNode(seeded);',
+    'independent_incumbent=true',
+    'throw new ContinuationSeedRejectedException(continuationSeedRejectReason);',
     'private SearchNode? TryReplayContinuationSeed(',
-    'private SearchNode? TryApplyPrefixAction(',
-    'resume_kind=seeded_search',
-    'resume_kind=cold_search status=rejected')) {
-    if (-not $p1PhasesText.Contains($p1SearchRule)) {
-        $violations.Add("${p1PhasesPath}: P1 cold-root + seeded-root search path drifted '$p1SearchRule'")
+    'private SearchNode? TryApplyPrefixAction(')) {
+    if (-not $p1PhasesText.Contains($p2SearchRule)) {
+        $violations.Add("${p1PhasesPath}: P2 exclusive continuation-seed probe path drifted '$p2SearchRule'")
+    }
+}
+if ($p1PhasesText.Contains('rootCandidates.Count + (policy.ContinuationSeedActions.Count > 0 ? 1 : 0)')) {
+    $violations.Add("${p1PhasesPath}: P2 continuation seed returned to the ordinary Beam initial frontier")
+}
+
+$p2BudgetPath = Join-Path $repositoryRoot 'src/Search/ContinuationSeedIncumbentBudget.cs'
+$p2BudgetText = [IO.File]::ReadAllText($p2BudgetPath)
+foreach ($p2BudgetRule in @(
+    'internal const int WorkDivisor = 20;',
+    'public static SolverSearchProfile? Probe(',
+    'public static SolverSearchProfile? Remaining(')) {
+    if (-not $p2BudgetText.Contains($p2BudgetRule)) {
+        $violations.Add("${p2BudgetPath}: P2 bounded repair budget drifted '$p2BudgetRule'")
     }
 }
 

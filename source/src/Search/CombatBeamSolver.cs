@@ -25,6 +25,12 @@ internal readonly record struct PrimarySearchIncumbent(
     int StrategicHpDeficit,
     int CombatEndedTurn);
 
+internal sealed class ContinuationSeedRejectedException(string reason)
+    : InvalidOperationException($"Continuation seed rejected: {reason}.")
+{
+    public string Reason { get; } = reason;
+}
+
 internal sealed partial class CombatBeamSolver(
     CombatRootSnapshot root,
     SolverDisplayNames displayNames,
@@ -39,7 +45,8 @@ internal sealed partial class CombatBeamSolver(
     IReadOnlyList<PlanAction>? fixedPrefixActions = null,
     int? minimumPotionUses = null,
     PrimarySearchIncumbent? primaryIncumbent = null,
-    bool reserveScenarioReevaluationBudget = true)
+    bool reserveScenarioReevaluationBudget = true,
+    bool continuationSeedProbe = false)
 {
     private readonly int _totalExpandedNodeBudget =
         (searchProfile ?? SolverSearchProfile.Default).MaxExpandedNodes;
@@ -103,6 +110,7 @@ internal sealed partial class CombatBeamSolver(
     private PrimarySearchIncumbent? _primaryIncumbent = primaryIncumbent;
     private readonly SearchInteractionState? _interaction = policy.Interaction;
     private readonly IReadOnlyList<PlanAction> _fixedPrefixActions = fixedPrefixActions ?? [];
+    private readonly bool _continuationSeedProbe = continuationSeedProbe;
     private readonly string? _progressPhaseOverride = DescribePotionProgressPhase(
         displayNames,
         potionPolicyOverride,
