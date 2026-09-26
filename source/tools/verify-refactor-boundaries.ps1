@@ -4121,6 +4121,57 @@ if ($cardGenerationMirrorText.Contains('ApplyMadScienceRider(')) {
     $violations.Add("${cardGenerationMirrorPath}: non-resumable Mad Science rider helper returned")
 }
 
+$p0LocalCoreContractsPath = Join-Path $repositoryRoot 'src/Search/MultiplayerLocalCrossTurnContracts.cs'
+$p0LocalCoreContractsText = [IO.File]::ReadAllText($p0LocalCoreContractsPath)
+foreach ($p0ContractRule in @(
+    '=> policy is SearchRoutePolicy.MultiplayerSinglePlayerCore',
+    'or SearchRoutePolicy.MultiplayerLocalCrossTurn;',
+    '=> policy == SearchRoutePolicy.MultiplayerLocalCrossTurn',
+    '&& playerCount > 1;')) {
+    if (-not $p0LocalCoreContractsText.Contains($p0ContractRule)) {
+        $violations.Add("${p0LocalCoreContractsPath}: P0 local-core projection/semantic boundary drifted '$p0ContractRule'")
+    }
+}
+
+$p0FinalOrderingPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.FinalPlanOrdering.cs'
+$p0FinalOrderingText = [IO.File]::ReadAllText($p0FinalOrderingPath)
+if (-not $p0FinalOrderingText.Contains('if (MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnProjection(routePolicy))')) {
+    $violations.Add("${p0FinalOrderingPath}: P0 default local-core route no longer reaches replay-candidate retention")
+}
+
+$p0PhasesPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Phases.cs'
+$p0PhasesText = [IO.File]::ReadAllText($p0PhasesPath)
+foreach ($p0MaterializationRule in @(
+    'MultiplayerReplayCandidates = blockPotionInsertion == null',
+    '? ordering.ReplayCandidates',
+    ': [],')) {
+    if (-not $p0PhasesText.Contains($p0MaterializationRule)) {
+        $violations.Add("${p0PhasesPath}: P0 replay candidates are not preserved through final result materialization '$p0MaterializationRule'")
+    }
+}
+
+$p0ControllerPath = Join-Path $repositoryRoot 'src/Runtime/SolverController.cs'
+$p0ControllerText = [IO.File]::ReadAllText($p0ControllerPath)
+foreach ($p0RuntimeRule in @(
+    'refreshSource.MultiplayerReplayCandidates.Count > 0',
+    'MultiplayerPlanRefreshContracts.IsReplayCompatible(',
+    'TryBoundedMultiplayerPlanRefresh(host, state, worldVersion);')) {
+    if (-not $p0ControllerText.Contains($p0RuntimeRule)) {
+        $violations.Add("${p0ControllerPath}: P0 Runtime bounded-refresh entry drifted '$p0RuntimeRule'")
+    }
+}
+
+$p0RefreshPath = Join-Path $repositoryRoot 'src/Runtime/SolverController.MultiplayerPlanRefresh.cs'
+$p0RefreshText = [IO.File]::ReadAllText($p0RefreshPath)
+foreach ($p0ReplayRule in @(
+    'source.MultiplayerReplayCandidates.Take(BoundedRefreshCandidateLimit)',
+    'replaySolver.ReplayDiagnosticPrefix(candidate.Prefix)',
+    'source.StartTurnNumber != LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber')) {
+    if (-not $p0RefreshText.Contains($p0ReplayRule)) {
+        $violations.Add("${p0RefreshPath}: P0 bounded replay/new-root guard drifted '$p0ReplayRule'")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."

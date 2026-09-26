@@ -6,7 +6,7 @@
 
 2026-09-26 用户要求执行最难的跨回合复用部分。本次实现基于 `9390af5`，保留远端已加入的路线提前发布和续接误判修复。
 
-- P0 已实现：默认本地核心模式共用候选前缀保留入口；单项 `--replay-candidate-retention` 合同通过。
+- P0 已收尾：默认 `MultiplayerSinglePlayerCore` 共用候选前缀保留入口；最终排序 → 结果物化 → Runtime Pending refresh → 新根 bounded replay 调用链加入快速结构门禁。`--replay-candidate-retention` 专用合同同时覆盖 exact / 存活目标 HP/Block 可重放，以及目标死亡 / 本地资源 / RNG 变化拒绝。候选仍最多 3 条、每条最多 2 个当前回合普通 PlayCard；未开启 Shadow/Team/Scenario/Carry，未修改预算、评分或 UI。
 - P1 已落盘部分：Runtime 在精确续接失败后提取同一战斗/本地玩家的当前回合连续普通牌建议，并传入 `SearchPolicySnapshot.ContinuationSeedActions`。
 - **P1 尚未完成：Search 新根重放、种子消费和行为验证尚未落盘；当前提交不会带来跨回合热启动收益。未运行整体构建、游戏或性能测试。** 药水、Choice 和新回合边界暂不跨越。
 - 本次 Runtime 入口覆盖 Safe Execute 已结束上一回合、且旧结果包含当前回合 continuation 的情况。缺少该 continuation、Advisor 手动结束回合已清空旧源、或旧路线以药水/Choice 开头时仍正常重新搜索，不宣称这些路径已有复用。
