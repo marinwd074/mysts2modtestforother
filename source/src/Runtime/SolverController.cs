@@ -507,6 +507,13 @@ internal static partial class SolverController
                 && useFullSearchKernel,
             UseBeamWidthPortfolio = settings.UseBeamWidthPortfolio
                 || UnattendedTestRunner.UseBeamWidthPortfolioOverride,
+            UseP3CrossFamilyScheduling =
+                routePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
+                && !includeTurnSetup
+                && effectivePotionPolicy == SolverPotionPolicy.Smart
+                && !effectivePotionStrategy.HasForcedDirectives
+                && !(settings.UseNoveltyPortfolio
+                    || UnattendedTestRunner.UseNoveltyPortfolioOverride),
             BeamWidthPortfolioWidths = UnattendedTestRunner.BeamWidthPortfolioWidthsOverride,
             // E3A passed deterministic serial/fixed quality and work-equivalence gates.
             // Keep adaptive E3B experimental until it demonstrates a stable time-to-quality

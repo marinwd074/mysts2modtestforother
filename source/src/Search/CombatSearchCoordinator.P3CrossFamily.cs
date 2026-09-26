@@ -72,11 +72,10 @@ internal static partial class CombatSearchCoordinator
             throw new InvalidOperationException("P3 cross-family scheduler was not enabled.");
         if (policy.PotionPolicy != SolverPotionPolicy.Smart
             || policy.PotionStrategy.HasForcedDirectives
-            || policy.UseNoveltyPortfolio
-            || policy.UseBeamWidthPortfolio)
+            || policy.UseNoveltyPortfolio)
         {
             throw new InvalidOperationException(
-                "P3 cross-family experiment requires Smart/no-forced, Novelty off, Beam portfolio off.");
+                "P3 cross-family scheduling requires Smart/no-forced and Novelty off.");
         }
 
         SearchRequestWallClockBudget sharedBudget = new(

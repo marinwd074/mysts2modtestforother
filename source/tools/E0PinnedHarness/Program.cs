@@ -717,7 +717,7 @@ internal static class Program
         SearchPolicySnapshot baselinePolicy = policy with
         {
             UseNoveltyPortfolio = false,
-            UseBeamWidthPortfolio = false,
+            UseBeamWidthPortfolio = true,
             UseP3CrossFamilyScheduling = false,
             P3SharedWallClockBudget = null,
             Interaction = null,
@@ -841,7 +841,7 @@ internal static class Program
         SearchPolicySnapshot baselinePolicy = policy with
         {
             UseNoveltyPortfolio = false,
-            UseBeamWidthPortfolio = false,
+            UseBeamWidthPortfolio = true,
             UseP3CrossFamilyScheduling = false,
             P3SharedWallClockBudget = null,
             Interaction = null,

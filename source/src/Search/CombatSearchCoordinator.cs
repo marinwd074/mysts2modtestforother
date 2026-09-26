@@ -407,12 +407,47 @@ internal static partial class CombatSearchCoordinator
             SolverSearchProfile activeProfile = passProfile;
             Stopwatch activeClock = passClock;
             SolverResult? continuationSeedIncumbent = null;
+            SolverResult? earlySmartPotionBaseline = null;
+            SolverResult? earlySmartPotionScout = null;
+
+            bool HasOptionalSmartPotionCandidate()
+                => initialPotionPolicyOverride == SolverPotionPolicy.Disabled
+                    && root.SearchablePotions.Any(potion =>
+                        beamPolicy.PotionStrategy.AllowsExplicitUse(
+                            potion.Slot,
+                            potion.PotionId,
+                            SolverPotionPolicy.Smart,
+                            forceAllDisabled: false)
+                        && beamPolicy.PotionStrategy.Resolve(
+                            potion.Slot,
+                            potion.PotionId) != SolverPotionDirective.Force);
 
             SolverResult SolveMember(SolverSearchProfile memberProfile, bool refinement)
             {
                 Action<SolverProgress>? memberProgressCallback = refinement && progressCallback != null
                     ? progress => progressCallback(progress with { Phase = "正在精炼路线" })
                     : progressCallback;
+                if (policy.UseP3CrossFamilyScheduling
+                    && !refinement
+                    && HasOptionalSmartPotionCandidate())
+                {
+                    SolverResult potionFree = RunP3CrossFamilyFixedPass(
+                        root,
+                        displayNames,
+                        battleDamage,
+                        beamPolicy,
+                        memberProfile,
+                        cancellationToken,
+                        memberProgressCallback,
+                        out SolverResult? scout);
+                    if (scout != null)
+                    {
+                        earlySmartPotionBaseline = potionFree;
+                        earlySmartPotionScout = scout;
+                    }
+                    return potionFree;
+                }
+
                 CombatBeamSolver solver = new(
                     root,
                     displayNames,
@@ -445,8 +480,6 @@ internal static partial class CombatSearchCoordinator
                         ? activeClock
                         : Stopwatch.StartNew(),
                     SolveMember, publishBaseline);
-            SolverResult? earlySmartPotionBaseline = null;
-            SolverResult? earlySmartPotionScout = null;
             SolverResult? RunCrossFamilyScout(
                 SolverResult provisionalPotionFree,
                 SolverSearchProfile scoutProfile)
@@ -464,33 +497,12 @@ internal static partial class CombatSearchCoordinator
                     interimResultCallback);
                 return earlySmartPotionScout;
             }
-            SolverResult RunP3Primary()
-            {
-                SolverResult potionFree = RunP3CrossFamilyFixedPass(
-                    root,
-                    displayNames,
-                    battleDamage,
-                    beamPolicy,
-                    activeProfile,
-                    cancellationToken,
-                    progressCallback,
-                    out SolverResult? scout);
-                if (scout != null)
-                {
-                    earlySmartPotionBaseline = potionFree;
-                    earlySmartPotionScout = scout;
-                }
-                return potionFree;
-            }
-
             SolverResult RunPrimary()
-                => policy.UseP3CrossFamilyScheduling
-                    ? RunP3Primary()
-                    : policy.UseNoveltyPortfolio
-                        ? RunNoveltyPortfolioPass(root, displayNames, battleDamage, passPolicy, activeProfile,
-                            activeClock, initialPotionPolicyOverride, cancellationToken, progressCallback,
-                            interimResultCallback, RunCrossFamilyScout, RunBaseline)
-                        : RunBaseline(activeProfile);
+                => policy.UseNoveltyPortfolio
+                    ? RunNoveltyPortfolioPass(root, displayNames, battleDamage, passPolicy, activeProfile,
+                        activeClock, initialPotionPolicyOverride, cancellationToken, progressCallback,
+                        interimResultCallback, RunCrossFamilyScout, RunBaseline)
+                    : RunBaseline(activeProfile);
 
             if (!continuationSeedConsumed
                 && continuationSeedActions.Count > 0
