@@ -2392,6 +2392,7 @@ internal sealed partial class SimulatedCombatState
         ref StateFingerprintBuilder fingerprint,
         CombatPredictionSimulator simulator)
     {
+        P4FingerprintMeasurement p4Measurement = P4CombatFingerprintProfiler.Begin();
         if (AdaptedOnPlay is { } adaptedOnPlay)
         {
             fingerprint.Add("onplay_configuration");
@@ -2412,7 +2413,9 @@ internal sealed partial class SimulatedCombatState
         }
         fingerprint.Add(powerCount);
         AddCreatureTypeSet(ref fingerprint, 'r', _retiredRootPowerSlots);
+        P4CombatFingerprintProfiler.End(P4CombatFingerprintPhase.Powers, p4Measurement);
 
+        p4Measurement = P4CombatFingerprintProfiler.Begin();
         AddPlayerIntMap(ref fingerprint, 'D', _drawNextTurn);
         AddCreatureTypeSet(ref fingerprint, 'K', _skipNextDurationTick);
         AddCreatureSet(ref fingerprint, 'S', _skipNextMove);
@@ -2458,6 +2461,9 @@ internal sealed partial class SimulatedCombatState
         fingerprint.Add(_deathSavePotionHpRestored);
         fingerprint.Add('V');
         fingerprint.Add(_deathSaveUseCount);
+        P4CombatFingerprintProfiler.End(P4CombatFingerprintPhase.TurnState, p4Measurement);
+
+        p4Measurement = P4CombatFingerprintProfiler.Begin();
         AddFeralStates(ref fingerprint, simulator, effectivePowers);
         AddJugglingStates(ref fingerprint, simulator, effectivePowers);
         AddTurnStartStates(ref fingerprint, simulator, effectivePowers);
@@ -2467,6 +2473,9 @@ internal sealed partial class SimulatedCombatState
         AppendCardLifecycleFingerprint(ref fingerprint, simulator);
         AppendStatefulRelicFingerprint(ref fingerprint, simulator);
         ModelPredictionStateMirrors.AppendPredicted(ref fingerprint, null, simulator, this);
+        P4CombatFingerprintProfiler.End(P4CombatFingerprintPhase.Lifecycle, p4Measurement);
+
+        p4Measurement = P4CombatFingerprintProfiler.Begin();
         AppendRelicResourceFingerprint(ref fingerprint);
         AppendPotionFingerprint(ref fingerprint);
         AppendMonsterAiFingerprint(ref fingerprint);
@@ -2477,6 +2486,7 @@ internal sealed partial class SimulatedCombatState
         AppendAutoPlayFingerprint(ref fingerprint);
         fingerprint.Add('T');
         fingerprint.Add(OutstandingStolenResource(simulator));
+        P4CombatFingerprintProfiler.End(P4CombatFingerprintPhase.Tail, p4Measurement);
     }
 
     private static StateFingerprint GetPowerFingerprint(PowerModel power, CombatPredictionSimulator simulator)
