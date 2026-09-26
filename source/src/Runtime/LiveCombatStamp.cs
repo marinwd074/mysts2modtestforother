@@ -69,7 +69,7 @@ internal sealed record LiveCombatStamp(string StateText)
         int slash = value.IndexOf('/');
         return slash < 0
             ? field
-            : string.Concat(field.AsSpan(0, separator + 1), "*", value.AsSpan(slash));
+            : field[..(separator + 1)] + "*" + value[slash..];
     }
 
     private static bool IsSharedMutableSearchField(string name)

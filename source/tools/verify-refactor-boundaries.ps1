@@ -4333,6 +4333,13 @@ foreach ($currentTurnScoutRule in @(
 
 $p1CoordinatorPath = Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.cs'
 $p1CoordinatorText = [IO.File]::ReadAllText($p1CoordinatorPath)
+foreach ($localCorePrimaryRule in @(
+    'ShouldRunLocalCoreCurrentTurnQualityScout(',
+    'RunLocalCoreCurrentTurnQualityFirst(')) {
+    if (-not $p1CoordinatorText.Contains($localCorePrimaryRule)) {
+        $violations.Add("${p1CoordinatorPath}: local-core current-turn quality scout is no longer a primary-search behavior '$localCorePrimaryRule'")
+    }
+}
 foreach ($p2CoordinatorRule in @(
     'IReadOnlyList<PlanAction> continuationSeedActions =',
     'policy = policy with { ContinuationSeedActions = [] };',

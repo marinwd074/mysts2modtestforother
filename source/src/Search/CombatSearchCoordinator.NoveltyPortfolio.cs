@@ -12,23 +12,6 @@ internal static partial class CombatSearchCoordinator
         Func<SolverResult, SolverSearchProfile, SolverResult?>? runCrossFamilyScout,
         Func<SolverSearchProfile, SolverResult> solveBaseline)
     {
-        if (MultiplayerLocalCrossTurnContracts.ShouldRunLocalCoreCurrentTurnQualityScout(
-                policy.RoutePolicy,
-                policy.IncludeTurnSetup))
-        {
-            return RunLocalCoreCurrentTurnQualityFirst(
-                root,
-                names,
-                damage,
-                policy,
-                profile,
-                clock,
-                potionOverride,
-                cancellation,
-                progress,
-                solveBaseline);
-        }
-
         SolverSearchProfile? explorationProfile = policy.NoveltyBudget.Exploration(profile, root.IsActEndingBoss);
         if (explorationProfile == null)
         {
