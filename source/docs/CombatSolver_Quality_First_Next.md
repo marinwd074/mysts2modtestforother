@@ -175,6 +175,13 @@
 - 新增 `E3_CROSS_FAMILY_SCOUT` / `E3_CROSS_FAMILY_REUSE` 诊断和 scout 预算合同。目标不是保证固定秒数，而是消除“无药 TimeLimit 完整跑完之后才第一次搜索一药水路线”的结构性等待。
 
 
+### 当前真实样本补充：多人战损只统计本地玩家（2026-09-26）
+
+- 问题包 `1cd414aa66e94546bd9713630077d99c` 的 MAWLER 首回合实机记录显示：敌人两次 4 点攻击都对本地玩家结算为 `BlockedDamage=4 / UnblockedDamage=0`，50 格挡最终剩 42；队友则两次各承受 4 点。敌人对本地造成的实际 HP 伤害为 0。
+- 本地 HP 从 91 降到 85 的 6 点来自本地牌自身的 HP 消耗；这与怪物攻击的 0 穿透伤害是两个不同口径。
+- 根因之一是 `BattleDamageTracker` 仍使用旧单人假设：`Players.Count == 1` 才返回玩家。多人日志因此出现 `BATTLE_DAMAGE_RESET start_hp=-`，导致实际本地战损、卖血提交和重算基线全部失去真实起点。
+- 现在多人也通过 `LocalContext.GetMe(state)` 只追踪本地玩家。历史伤害继续按 receiver 精确过滤，因此队友的 4+4 不会进入本地战损；新增 `BATTLE_DAMAGE_OBSERVED` 记录 HP 实际下降、历史未格挡伤害和累计值，便于区分牌自损与怪物穿透伤害。
+
 ### 当前真实样本补充：好路线找到后立即进入 anytime 预览（2026-09-26）
 
 - 问题包 `9607427a06024ec3abf3fc6c269ddd14` 的最终路线并非 80 秒才发现：E0 时间线显示最终候选在约 `20.357s` 已生成，`PRIMARY_INCUMBENT_UPDATE` 在约 `20.361s` 已把战略战损压到 5；但直到约 `80.369s` 才 evaluated/selected/published。

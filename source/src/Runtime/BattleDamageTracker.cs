@@ -1,6 +1,7 @@
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Combat.History.Entries;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Context;
 
 namespace CombatSolver;
 
@@ -25,7 +26,7 @@ internal static class BattleDamageTracker
     {
         Reset();
         _combat = combat;
-        _lastObservedHp = GetSinglePlayer(combat)?.Creature.CurrentHp;
+        _lastObservedHp = GetTrackedPlayer(combat)?.Creature.CurrentHp;
         _potionHistoryCountAtStart = CountPotionHistoryEntries();
         _historyEntryCountAtLastObservation = CombatManager.Instance.History.Entries.Count();
         Entry.Logger.Info($"[CombatSolver/Test] BATTLE_DAMAGE_RESET start_hp={_lastObservedHp?.ToString() ?? "-"}");
@@ -36,7 +37,7 @@ internal static class BattleDamageTracker
         if (!ReferenceEquals(_combat, combat))
             Begin(combat);
 
-        Player? player = GetSinglePlayer(combat);
+        Player? player = GetTrackedPlayer(combat);
         if (player == null)
             return new BattleDamageSnapshot(_hpLostSoFar, _soldHpCommitted, PotionsUsedSoFar());
 
@@ -61,7 +62,15 @@ internal static class BattleDamageTracker
         int observedHpDrop = _lastObservedHp is int previousHp
             ? Math.Max(0, previousHp - currentHp)
             : 0;
-        _hpLostSoFar += Math.Max(observedHpDrop, historyHpLost);
+        int newlyObservedHpLost = Math.Max(observedHpDrop, historyHpLost);
+        _hpLostSoFar += newlyObservedHpLost;
+        if (newlyObservedHpLost > 0)
+        {
+            Entry.Logger.Info(
+                $"[CombatSolver/Test] BATTLE_DAMAGE_OBSERVED turn={turn} local_net_id={player.NetId} " +
+                $"hp_drop={observedHpDrop} history_unblocked={historyHpLost} " +
+                $"added={newlyObservedHpLost} battle_hp_lost={_hpLostSoFar}");
+        }
         _lastObservedHp = currentHp;
         _historyEntryCountAtLastObservation = historyEntries.Count();
         return new BattleDamageSnapshot(_hpLostSoFar, _soldHpCommitted, PotionsUsedSoFar());
@@ -69,7 +78,7 @@ internal static class BattleDamageTracker
 
     public static void RegisterPlan(CombatState combat, SolverResult result)
     {
-        Player? player = GetSinglePlayer(combat);
+        Player? player = GetTrackedPlayer(combat);
         if (player?.PlayerCombatState == null)
             return;
 
@@ -92,8 +101,20 @@ internal static class BattleDamageTracker
         ClearPlan();
     }
 
-    private static Player? GetSinglePlayer(ICombatState? combat)
-        => combat?.Players.Count == 1 ? combat.Players[0] : null;
+    private static Player? GetTrackedPlayer(ICombatState? combat)
+    {
+        if (combat == null)
+            return null;
+        if (combat.Players.Count == 1)
+            return combat.Players[0];
+
+        // Multiplayer battle loss is a local resource metric. Remote teammates may take
+        // damage from the same monster move, but that loss must never enter the local
+        // player's HP budget, sold-HP accounting, or recalculation baseline.
+        return combat is CombatState state
+            ? LocalContext.GetMe(state)
+            : null;
+    }
 
     private static int PotionsUsedSoFar()
         => Math.Max(0, CountPotionHistoryEntries() - _potionHistoryCountAtStart);
