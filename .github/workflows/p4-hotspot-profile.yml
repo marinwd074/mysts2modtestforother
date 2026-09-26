@@ -180,3 +180,40 @@ jobs:
               throw "P4 local multiplayer potion fingerprint fast path did not reduce allocations."
             }
           }
+
+
+      - name: P4 snapshot LINQ fresh-process A/B
+        shell: pwsh
+        run: |
+          $harness = '.\source\tools\E0PinnedHarness\bin\Release\net9.0\E0PinnedHarness.dll'
+          foreach ($scenario in @('teammate', 'draw_energy')) {
+            $baselineDir = Join-Path $env:RUNNER_TEMP "p4-snapshot-$scenario-baseline"
+            $candidateDir = Join-Path $env:RUNNER_TEMP "p4-snapshot-$scenario-candidate"
+            New-Item -ItemType Directory -Force -Path $baselineDir,$candidateDir | Out-Null
+
+            & dotnet $harness --scenario $scenario --out $baselineDir --p4-profile --p4-legacy-snapshot-linq --max-nodes 2000 --budget-ms 15000
+            if ($LASTEXITCODE -ne 0) { throw "P4 snapshot baseline failed for $scenario." }
+            & dotnet $harness --scenario $scenario --out $candidateDir --p4-profile --max-nodes 2000 --budget-ms 15000
+            if ($LASTEXITCODE -ne 0) { throw "P4 snapshot candidate failed for $scenario." }
+
+            $baseline = Get-Content -LiteralPath (Join-Path $baselineDir "e0-$scenario.json") -Raw | ConvertFrom-Json
+            $candidate = Get-Content -LiteralPath (Join-Path $candidateDir "e0-$scenario.json") -Raw | ConvertFrom-Json
+            $sameRoute = (@($baseline.route) -join [char]31) -eq (@($candidate.route) -join [char]31)
+            $sameQuality = $baseline.projectedBattleHpLost -eq $candidate.projectedBattleHpLost -and
+              $baseline.projectedBattlePotionCount -eq $candidate.projectedBattlePotionCount -and
+              $baseline.combatEndedTurn -eq $candidate.combatEndedTurn -and
+              $baseline.boundaryReason -eq $candidate.boundaryReason
+            $sameWork = $baseline.totalExpandedNodes -eq $candidate.totalExpandedNodes -and
+              $baseline.totalTransitionCount -eq $candidate.totalTransitionCount
+            $baselineSnapshot = @($baseline.performance | Where-Object name -eq 'snapshot')[0]
+            $candidateSnapshot = @($candidate.performance | Where-Object name -eq 'snapshot')[0]
+
+            "P4_SNAPSHOT_AB scenario=$scenario same_route=$sameRoute same_quality=$sameQuality same_work=$sameWork baseline_nodes=$($baseline.totalExpandedNodes) candidate_nodes=$($candidate.totalExpandedNodes) baseline_ms=$($baselineSnapshot.elapsedMs) candidate_ms=$($candidateSnapshot.elapsedMs) baseline_alloc=$($baselineSnapshot.allocatedBytes) candidate_alloc=$($candidateSnapshot.allocatedBytes)"
+
+            if (-not $sameRoute -or -not $sameQuality -or -not $sameWork) {
+              throw "P4 snapshot no-LINQ path changed route/quality/work for $scenario."
+            }
+            if ($candidateSnapshot.allocatedBytes -ge $baselineSnapshot.allocatedBytes) {
+              throw "P4 snapshot no-LINQ path did not reduce allocations for $scenario."
+            }
+          }

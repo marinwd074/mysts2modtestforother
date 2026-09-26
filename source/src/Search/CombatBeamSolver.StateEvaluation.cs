@@ -31,6 +31,8 @@ namespace CombatSolver;
 
 internal sealed partial class CombatBeamSolver
 {
+    internal static bool UseLegacySnapshotLinqForTesting { get; set; }
+
     private static bool HasUncompensatedDeathGap(IReadOnlyList<PredictionGap> gaps)
     {
         for (int index = 0; index < gaps.Count; index++)
@@ -183,7 +185,21 @@ internal sealed partial class CombatBeamSolver
         // actually taking it, or retention keeps the route that plans to die and drops the one that does not.
         score -= ActEndingBossPolicy.DeathSaveBeamCost(
             deathSaveHpRestored + threat.DeathSaveHpRestored) * hpWeight;
-        int exhaustedTheHunts = playerState.ExhaustPile.Cards.Count(card => card.Preview is TheHunt);
+        int exhaustedTheHunts;
+        if (UseLegacySnapshotLinqForTesting)
+        {
+            exhaustedTheHunts = playerState.ExhaustPile.Cards.Count(card => card.Preview is TheHunt);
+        }
+        else
+        {
+            exhaustedTheHunts = 0;
+            IReadOnlyList<PredictedCard> exhaustPileCards = playerState.ExhaustPile.Cards;
+            for (int cardIndex = 0; cardIndex < exhaustPileCards.Count; cardIndex++)
+            {
+                if (exhaustPileCards[cardIndex].Preview is TheHunt)
+                    exhaustedTheHunts++;
+            }
+        }
         int rewardedTheHunts = Math.Max(0, combat.GetAmount<TheHuntPower>(_player.Creature));
         int missedTheHuntRewards = Math.Max(0, exhaustedTheHunts - rewardedTheHunts);
         // 「不考虑局外收益」在快照源头把这两个量清零，下游十几处读到的是同一个 0。
@@ -229,10 +245,28 @@ internal sealed partial class CombatBeamSolver
         // 项（retainedAttackValue 有上限，攻击牌多的时候早就顶满，少一张也不掉），于是「打出净化
         // 消耗两张废牌」严格劣于「不打净化」——省下那点能量总是更划算。移除估值的偏置只排选择
         // 分支的先后，排不出一个本来就没有的收益。这就是玩家实测里净化根本不被打出的原因。
-        int liveDeckClutter = liveCards.Count(card =>
-            (card.Preview.Type is CardType.Status or CardType.Curse
-                || CardRemovalValueMirrors.Offset(card.Preview) < 0d)
-            && !LeavesHandAtTurnEnd(simulator, playerState, card));
+        int liveDeckClutter;
+        if (UseLegacySnapshotLinqForTesting)
+        {
+            liveDeckClutter = liveCards.Count(card =>
+                (card.Preview.Type is CardType.Status or CardType.Curse
+                    || CardRemovalValueMirrors.Offset(card.Preview) < 0d)
+                && !LeavesHandAtTurnEnd(simulator, playerState, card));
+        }
+        else
+        {
+            liveDeckClutter = 0;
+            for (int cardIndex = 0; cardIndex < liveCards.Count; cardIndex++)
+            {
+                PredictedCard card = liveCards[cardIndex];
+                if ((card.Preview.Type is CardType.Status or CardType.Curse
+                        || CardRemovalValueMirrors.Offset(card.Preview) < 0d)
+                    && !LeavesHandAtTurnEnd(simulator, playerState, card))
+                {
+                    liveDeckClutter++;
+                }
+            }
+        }
         score += liveDeckClutter * SolverWeights.LiveDeckClutterPenalty;
         int outstandingStolenResource = TheftEncounterStrategy.OutstandingStolenResource(simulator, combat);
         if (_theftPolicy == SolverTheftPolicy.PreserveResources)
@@ -390,11 +424,29 @@ internal sealed partial class CombatBeamSolver
             }
         }
         int replayPotentialValue = ReplayPotentialValue(liveCards);
-        int retainedHandValue = playerState.Hand.Cards
-            .Where(card => card.Preview.ShouldRetainThisTurn)
-            .Sum(card => Math.Max(
-                1,
-                (int)Math.Ceiling(CardChoiceSupport.CardValue(card.Preview) * 2d)));
+        int retainedHandValue;
+        if (UseLegacySnapshotLinqForTesting)
+        {
+            retainedHandValue = playerState.Hand.Cards
+                .Where(card => card.Preview.ShouldRetainThisTurn)
+                .Sum(card => Math.Max(
+                    1,
+                    (int)Math.Ceiling(CardChoiceSupport.CardValue(card.Preview) * 2d)));
+        }
+        else
+        {
+            retainedHandValue = 0;
+            IReadOnlyList<PredictedCard> handCards = playerState.Hand.Cards;
+            for (int cardIndex = 0; cardIndex < handCards.Count; cardIndex++)
+            {
+                PredictedCard card = handCards[cardIndex];
+                if (!card.Preview.ShouldRetainThisTurn)
+                    continue;
+                retainedHandValue = checked(retainedHandValue + Math.Max(
+                    1,
+                    (int)Math.Ceiling(CardChoiceSupport.CardValue(card.Preview) * 2d)));
+            }
+        }
         int freeCardOpportunityValue = FreeCardOpportunityValue(
             simulator,
             combat,
@@ -408,11 +460,28 @@ internal sealed partial class CombatBeamSolver
                 _player.Creature,
                 _routePolicy);
         int summonNextTurn = combat.GetAmount<SummonNextTurnPower>(_player.Creature);
-        int summonNextTurnValue = summonNextTurn == 0
-            ? 0
-            : summonNextTurn
+        int summonNextTurnValue;
+        if (summonNextTurn == 0)
+        {
+            summonNextTurnValue = 0;
+        }
+        else if (UseLegacySnapshotLinqForTesting)
+        {
+            summonNextTurnValue = summonNextTurn
                 * (4 + Math.Min(12, liveCards.Count(card =>
                     card.Preview.Tags.Contains(CardTag.OstyAttack)) * 2));
+        }
+        else
+        {
+            int ostyAttackCardCount = 0;
+            for (int cardIndex = 0; cardIndex < liveCards.Count; cardIndex++)
+            {
+                if (liveCards[cardIndex].Preview.Tags.Contains(CardTag.OstyAttack))
+                    ostyAttackCardCount++;
+            }
+            summonNextTurnValue = summonNextTurn
+                * (4 + Math.Min(12, ostyAttackCardCount * 2));
+        }
         int futureResourceValue = combat.GetAmount<EnergyNextTurnPower>(_player.Creature) * 16
             + combat.GetAmount<DrawCardsNextTurnPower>(_player.Creature) * 8
             + combat.GetAmount<StarNextTurnPower>(_player.Creature) * 8
@@ -425,7 +494,20 @@ internal sealed partial class CombatBeamSolver
             ? 0
             : simulator.State.GetCreature(currentOsty).CurrentHp;
         int ostyMaxHp = combat.GetOstyMaxHp(simulator, _player);
-        persistentBuffValue += liveCards.Count(card => card.Preview is Soul);
+        if (UseLegacySnapshotLinqForTesting)
+        {
+            persistentBuffValue += liveCards.Count(card => card.Preview is Soul);
+        }
+        else
+        {
+            int soulCount = 0;
+            for (int cardIndex = 0; cardIndex < liveCards.Count; cardIndex++)
+            {
+                if (liveCards[cardIndex].Preview is Soul)
+                    soulCount++;
+            }
+            persistentBuffValue += soulCount;
+        }
         // Where + Sum 两个闭包加一个装箱的 ForkableList 枚举器，换成按下标累加：
         // 筛选条件、累加顺序与每项的整数运算完全不变。
         IReadOnlyList<Creature> knownEnemies = combat.KnownEnemies;
@@ -449,7 +531,22 @@ internal sealed partial class CombatBeamSolver
         int reactiveDamageValue = Math.Max(
             0,
             combat.GetAmount<SleightOfFleshPower>(_player.Creature));
-        bool hasBlockDamagePayoff = liveCards.Any(card => card.Preview is BodySlam);
+        bool hasBlockDamagePayoff;
+        if (UseLegacySnapshotLinqForTesting)
+        {
+            hasBlockDamagePayoff = liveCards.Any(card => card.Preview is BodySlam);
+        }
+        else
+        {
+            hasBlockDamagePayoff = false;
+            for (int cardIndex = 0; cardIndex < liveCards.Count; cardIndex++)
+            {
+                if (liveCards[cardIndex].Preview is not BodySlam)
+                    continue;
+                hasBlockDamagePayoff = true;
+                break;
+            }
+        }
         int offensiveProgressValue = offensivePersistentBuffValue
             + delayedDamageValue
             + reactiveDamageValue
@@ -485,11 +582,29 @@ internal sealed partial class CombatBeamSolver
             enemyControlDistribution.Add(vulnerableTurns);
         }
         StateFingerprint enemyControlDistributionKey = enemyControlDistribution.Finish();
-        int sandpitRemaining = combat.EffectivePowers()
-            .OfType<SandpitPower>()
-            .Where(power => ReferenceEquals(power.Target, _player.Creature)
-                && simulator.State.GetCreature(power.Owner).IsAlive)
-            .Sum(power => Math.Max(0, power.Amount));
+        int sandpitRemaining;
+        if (UseLegacySnapshotLinqForTesting)
+        {
+            sandpitRemaining = combat.EffectivePowers()
+                .OfType<SandpitPower>()
+                .Where(power => ReferenceEquals(power.Target, _player.Creature)
+                    && simulator.State.GetCreature(power.Owner).IsAlive)
+                .Sum(power => Math.Max(0, power.Amount));
+        }
+        else
+        {
+            sandpitRemaining = 0;
+            for (int powerIndex = 0; powerIndex < effectivePowers.Count; powerIndex++)
+            {
+                if (effectivePowers[powerIndex] is not SandpitPower sandpit
+                    || !ReferenceEquals(sandpit.Target, _player.Creature)
+                    || !simulator.State.GetCreature(sandpit.Owner).IsAlive)
+                {
+                    continue;
+                }
+                sandpitRemaining = checked(sandpitRemaining + Math.Max(0, sandpit.Amount));
+            }
+        }
         int vulnerableAttackWindow = Math.Min(
             SolverWeights.VulnerableAttackWindowCap,
             retainedAttackValue);
@@ -509,8 +624,26 @@ internal sealed partial class CombatBeamSolver
             out int pocketwatchCardsPlayedLastTurn,
             out int pocketwatchCardThreshold);
         int potionUseCount = combat.PotionUses.Count;
-        int potionStrategicCost = combat.PotionUses.Sum(use => use.StrategicHpCost);
-        int automaticPotionUseCount = combat.PotionUses.Count(use => use.Automatic);
+        int potionStrategicCost;
+        int automaticPotionUseCount;
+        if (UseLegacySnapshotLinqForTesting)
+        {
+            potionStrategicCost = combat.PotionUses.Sum(use => use.StrategicHpCost);
+            automaticPotionUseCount = combat.PotionUses.Count(use => use.Automatic);
+        }
+        else
+        {
+            potionStrategicCost = 0;
+            automaticPotionUseCount = 0;
+            IReadOnlyList<PredictedPotionUse> potionUses = combat.PotionUses;
+            for (int potionIndex = 0; potionIndex < potionUses.Count; potionIndex++)
+            {
+                PredictedPotionUse use = potionUses[potionIndex];
+                potionStrategicCost = checked(potionStrategicCost + use.StrategicHpCost);
+                if (use.Automatic)
+                    automaticPotionUseCount++;
+            }
+        }
         (int reachableHandValue, int zeroCostPlayableCount) =
             CalculateReachableHandPotential(simulator, combat, playerState, _routePolicy);
         StateFingerprint potionInventoryKey = BuildPotionInventoryKey(combat);

@@ -104,8 +104,12 @@ internal static class Program
         bool p4LegacyPotionSort = args.Contains(
             "--p4-legacy-potion-sort",
             StringComparer.Ordinal);
+        bool p4LegacySnapshotLinq = args.Contains(
+            "--p4-legacy-snapshot-linq",
+            StringComparer.Ordinal);
         SimulatedCombatState.UseLegacyCalculatedHistoryScanForTesting = p4LegacyHistoryScan;
         SimulatedCombatState.UseLegacyPotionFingerprintSortForTesting = p4LegacyPotionSort;
+        CombatBeamSolver.UseLegacySnapshotLinqForTesting = p4LegacySnapshotLinq;
         if ((p3Novelty || p3CrossFamily || p3CrossFamilyAb || p3CrossFamilyAbReverse
                 || p3SingleBaseline || p3SingleCross)
             && !p3SchedulingProbe)
