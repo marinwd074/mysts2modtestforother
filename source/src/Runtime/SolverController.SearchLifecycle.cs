@@ -269,7 +269,7 @@ internal static partial class SolverController
                         $"source_world_version={expectedMultiplayer?.SourceWorldVersion.ToString() ?? "-"} " +
                         $"minimum_world_version={multiplayerValidation?.MinimumWorldVersion.ToString() ?? "-"} " +
                         $"actual_world_version={multiplayerValidation?.CurrentWorldVersion.ToString() ?? "-"} " +
-                        $"local_state_exact=true reason=exact");
+                        $"local_state_exact=true reason=exact resume_kind=exact_continuation");
                 }
                 Entry.Logger.Info(SolverDiagnostics.DescribeResult(reused));
                 if (_combat.FullAutoEnabled)
@@ -441,6 +441,14 @@ internal static partial class SolverController
                 {
                     ContinuationSeedActions = continuationSeedActions,
                 };
+            }
+            if (continuationStamp != null && capabilities.IsMultiplayer)
+            {
+                Entry.Logger.Info(
+                    $"[CombatSolver/Test] MP_LOCAL_XTURN_RESUME_KIND " +
+                    $"resume_kind={(searchPolicy.ContinuationSeedActions.Count > 0 ? "seeded_search" : "cold_search")} " +
+                    $"seed_actions={searchPolicy.ContinuationSeedActions.Count} " +
+                    $"continuation_reject_reason={continuationRejectReason}");
             }
             search.MaxDegreeOfParallelism = searchPolicy.MaxDegreeOfParallelism;
             search.MemoryPressureSignal = searchPolicy.MemoryPressureSignal;
@@ -1076,14 +1084,16 @@ internal static partial class SolverController
         {
             if (action.Turn < currentTurn)
                 continue;
-            if (action.Turn != currentTurn
-                || action.Kind != PlanActionKind.PlayCard
-                || action.EndsPlayerTurn
-                || action.Choice != null
-                || action.NestedChoices is { Count: > 0 }
-                || action.TurnStartChoices is { Count: > 0 }
-                || action.ShadowForecast != null
-                || string.IsNullOrEmpty(action.CardStateKey))
+            if (!MultiplayerLocalCrossTurnContracts.CanReplayContinuationSeedAction(
+                    action.Turn,
+                    currentTurn,
+                    action.Kind == PlanActionKind.PlayCard,
+                    action.EndsPlayerTurn,
+                    action.Choice != null,
+                    action.NestedChoices is { Count: > 0 },
+                    action.TurnStartChoices is { Count: > 0 },
+                    action.ShadowForecast != null,
+                    !string.IsNullOrEmpty(action.CardStateKey)))
             {
                 break;
             }

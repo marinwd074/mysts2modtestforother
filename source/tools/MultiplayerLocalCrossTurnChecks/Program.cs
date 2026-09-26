@@ -93,6 +93,71 @@ if (args.Length == 1 && args[0] == "--replay-candidate-retention")
     return;
 }
 
+bool continuationSeedActionContractsAreCorrect =
+    MultiplayerLocalCrossTurnContracts.CanReplayContinuationSeedAction(
+        actionTurn: 3,
+        currentTurn: 3,
+        isPlayCard: true,
+        endsPlayerTurn: false,
+        hasChoice: false,
+        hasNestedChoices: false,
+        hasTurnStartChoices: false,
+        hasShadowForecast: false,
+        hasCardStateKey: true)
+    && !MultiplayerLocalCrossTurnContracts.CanReplayContinuationSeedAction(
+        actionTurn: 2,
+        currentTurn: 3,
+        isPlayCard: true,
+        endsPlayerTurn: false,
+        hasChoice: false,
+        hasNestedChoices: false,
+        hasTurnStartChoices: false,
+        hasShadowForecast: false,
+        hasCardStateKey: true)
+    && !MultiplayerLocalCrossTurnContracts.CanReplayContinuationSeedAction(
+        actionTurn: 3,
+        currentTurn: 3,
+        isPlayCard: false,
+        endsPlayerTurn: false,
+        hasChoice: false,
+        hasNestedChoices: false,
+        hasTurnStartChoices: false,
+        hasShadowForecast: false,
+        hasCardStateKey: true)
+    && !MultiplayerLocalCrossTurnContracts.CanReplayContinuationSeedAction(
+        actionTurn: 3,
+        currentTurn: 3,
+        isPlayCard: true,
+        endsPlayerTurn: false,
+        hasChoice: true,
+        hasNestedChoices: false,
+        hasTurnStartChoices: false,
+        hasShadowForecast: false,
+        hasCardStateKey: true)
+    && !MultiplayerLocalCrossTurnContracts.CanReplayContinuationSeedAction(
+        actionTurn: 3,
+        currentTurn: 3,
+        isPlayCard: true,
+        endsPlayerTurn: false,
+        hasChoice: false,
+        hasNestedChoices: false,
+        hasTurnStartChoices: false,
+        hasShadowForecast: false,
+        hasCardStateKey: false);
+
+if (args.Length == 1 && args[0] == "--continuation-seed-contracts")
+{
+    Check(
+        continuationSeedActionContractsAreCorrect,
+        "P1 continuation seeds accept only same-turn ordinary PlayCard actions with exact card-state identity.");
+    return;
+}
+
+Check(
+    continuationSeedActionContractsAreCorrect,
+    "P1 continuation-seed action boundary rejects cross-turn, non-card, choice and ambiguous-card suggestions.");
+
+
 Check(
     ActionSearchOrderingPolicy.VerifyForTesting(),
     "E5 action enumeration prioritizes estimated lethal, urgent defense, strategic value-per-resource, then preserves stable original order for exact ties.");

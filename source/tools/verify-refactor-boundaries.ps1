@@ -4172,6 +4172,58 @@ foreach ($p0ReplayRule in @(
     }
 }
 
+$p1ContinuationContractsPath = Join-Path $repositoryRoot 'src/Search/MultiplayerLocalCrossTurnContracts.cs'
+$p1ContinuationContractsText = [IO.File]::ReadAllText($p1ContinuationContractsPath)
+if (-not $p1ContinuationContractsText.Contains('CanReplayContinuationSeedAction(')) {
+    $violations.Add("${p1ContinuationContractsPath}: P1 continuation seed action boundary is missing")
+}
+
+$p1SearchPolicyPath = Join-Path $repositoryRoot 'src/Search/SearchPolicySnapshot.cs'
+$p1SearchPolicyText = [IO.File]::ReadAllText($p1SearchPolicyPath)
+if (-not $p1SearchPolicyText.Contains('public IReadOnlyList<PlanAction> ContinuationSeedActions { get; init; } = [];')) {
+    $violations.Add("${p1SearchPolicyPath}: P1 continuation seed is not frozen into SearchPolicySnapshot")
+}
+
+$p1LifecyclePath = Join-Path $repositoryRoot 'src/Runtime/SolverController.SearchLifecycle.cs'
+$p1LifecycleText = [IO.File]::ReadAllText($p1LifecyclePath)
+foreach ($p1RuntimeRule in @(
+    'CaptureContinuationSeedActions(',
+    'MultiplayerLocalCrossTurnContracts.CanReplayContinuationSeedAction(',
+    'ContinuationSeedActions = continuationSeedActions',
+    'resume_kind=exact_continuation',
+    'MP_LOCAL_XTURN_RESUME_KIND')) {
+    if (-not $p1LifecycleText.Contains($p1RuntimeRule)) {
+        $violations.Add("${p1LifecyclePath}: P1 Runtime seed/resume boundary drifted '$p1RuntimeRule'")
+    }
+}
+
+$p1CoordinatorPath = Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.cs'
+$p1CoordinatorText = [IO.File]::ReadAllText($p1CoordinatorPath)
+foreach ($p1CoordinatorRule in @(
+    'bool continuationSeedConsumed = false;',
+    'if (refinement || continuationSeedConsumed)',
+    'ContinuationSeedActions = [],',
+    'continuationSeedConsumed = true;')) {
+    if (-not $p1CoordinatorText.Contains($p1CoordinatorRule)) {
+        $violations.Add("${p1CoordinatorPath}: P1 seed must be consumed by only the first Beam baseline member '$p1CoordinatorRule'")
+    }
+}
+
+$p1PhasesPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Phases.cs'
+$p1PhasesText = [IO.File]::ReadAllText($p1PhasesPath)
+foreach ($p1SearchRule in @(
+    'SearchNode? seeded = TryReplayContinuationSeed(',
+    'RegisterInitialFrontierNode(compatibleRoot);',
+    'RegisterInitialFrontierNode(seeded);',
+    'private SearchNode? TryReplayContinuationSeed(',
+    'private SearchNode? TryApplyPrefixAction(',
+    'resume_kind=seeded_search',
+    'resume_kind=cold_search status=rejected')) {
+    if (-not $p1PhasesText.Contains($p1SearchRule)) {
+        $violations.Add("${p1PhasesPath}: P1 cold-root + seeded-root search path drifted '$p1SearchRule'")
+    }
+}
+
 if ($violations.Count -gt 0) {
     $violations | ForEach-Object { Write-Error $_ }
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."

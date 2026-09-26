@@ -373,6 +373,7 @@ internal static partial class CombatSearchCoordinator
             };
         }
         SmartLayerMemoryForecast memoryForecast = new();
+        bool continuationSeedConsumed = false;
         // One search profile drives primary search and all supplemental audits.
         if (root.IsActEndingBoss && profile.BeamWidth < 45)
         {
@@ -397,11 +398,26 @@ internal static partial class CombatSearchCoordinator
                 Action<SolverProgress>? memberProgressCallback = refinement && progressCallback != null
                     ? progress => progressCallback(progress with { Phase = "正在精炼路线" })
                     : progressCallback;
+                SearchPolicySnapshot memberPolicy = beamPolicy;
+                if (memberPolicy.ContinuationSeedActions.Count > 0)
+                {
+                    if (refinement || continuationSeedConsumed)
+                    {
+                        memberPolicy = memberPolicy with
+                        {
+                            ContinuationSeedActions = [],
+                        };
+                    }
+                    else
+                    {
+                        continuationSeedConsumed = true;
+                    }
+                }
                 CombatBeamSolver solver = new(
                     root,
                     displayNames,
                     battleDamage,
-                    beamPolicy,
+                    memberPolicy,
                     cancellationToken,
                     memberProgressCallback,
                     memberProfile,
@@ -409,7 +425,7 @@ internal static partial class CombatSearchCoordinator
                 return RunResumableMemberToCompletion(
                     solver,
                     cancellationToken,
-                    beamPolicy.Diagnostics);
+                    memberPolicy.Diagnostics);
             }
             // 基线成员一跑完就按今天的方式把完整结果发布给覆盖层（覆盖层的中途路线走
             // SolverProgress，见 RunBeamWidthPortfolioPass 的注释）；精炼成员只有更优时才会

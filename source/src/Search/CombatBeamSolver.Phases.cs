@@ -1147,18 +1147,14 @@ internal sealed partial class CombatBeamSolver
         _run.InitialRetainedAttackValue = _includeTurnSetup
             ? 0
             : rootCandidates[0].Snapshot.RetainedAttackValue;
-        member.Frontier = new List<SearchNode>(rootCandidates.Count);
-        foreach ((IReadOnlyList<PlanCardChoice> choices, SimulationSnapshot snapshot) in rootCandidates)
-        {
-            ContinuationStamp? turnSetupPlayState = _includeTurnSetup
-                ? ContinuationStamp.CapturePredicted(
-                    _player,
-                    snapshot.Simulator,
-                    _startTurnNumber,
-                    _forecast,
-                    _startTurnNumber)
-                : null;
-            SearchNode root = new(
+        member.Frontier = new List<SearchNode>(
+            rootCandidates.Count + (policy.ContinuationSeedActions.Count > 0 ? 1 : 0));
+
+        SearchNode CreateInitialRoot(
+            SimulationSnapshot snapshot,
+            IReadOnlyList<PlanCardChoice> choices,
+            ContinuationStamp? turnSetupPlayState)
+            => new(
                 null,
                 0,
                 snapshot.PotionUseCount,
@@ -1178,6 +1174,44 @@ internal sealed partial class CombatBeamSolver
                 CombatProgressState.Capture(snapshot),
                 TurnSetupChoices: choices,
                 TurnSetupPlayState: turnSetupPlayState);
+
+        void RegisterInitialFrontierNode(SearchNode node)
+        {
+            member.Frontier.Add(node);
+            TranspositionLabel label = new(
+                node.PotionCount,
+                node.PotionStrategicCost,
+                node.FutureSoldHp,
+                node.Snapshot.CumulativePlayerHpLost,
+                node.Snapshot.AllPlayersAlive,
+                node.Snapshot.TeamLossRatio,
+                node.Snapshot.WorstPlayerLossRatio,
+                node.ActionCount,
+                node.Score,
+                node.Traits,
+                node.HasNonPotionAction,
+                node.BoundaryReason,
+                node.Snapshot.PlayerDead,
+                node.Snapshot.AllEnemiesDead,
+                node.Snapshot.PredictionGaps,
+                node.CombatProgress);
+            if (_run.Transpositions.TryGetValue(node.StateKey, out TranspositionFrontier? existing))
+                _ = existing.TryAccept(label);
+            else
+                _run.Transpositions.Add(node.StateKey, new TranspositionFrontier(label));
+        }
+
+        foreach ((IReadOnlyList<PlanCardChoice> choices, SimulationSnapshot snapshot) in rootCandidates)
+        {
+            ContinuationStamp? turnSetupPlayState = _includeTurnSetup
+                ? ContinuationStamp.CapturePredicted(
+                    _player,
+                    snapshot.Simulator,
+                    _startTurnNumber,
+                    _forecast,
+                    _startTurnNumber)
+                : null;
+            SearchNode root = CreateInitialRoot(snapshot, choices, turnSetupPlayState);
             // Setup roots are observed only after their existing choice budget selected them.
             // This hook does not claim coverage of the initial Start-phase choice enumeration.
             ObserveSearchPath(root, SearchPathObservationStage.Root,
@@ -1185,46 +1219,51 @@ internal sealed partial class CombatBeamSolver
             SearchNode? compatibleRoot = ApplyFixedPrefix(root);
             if (compatibleRoot == null)
                 continue;
-            root = compatibleRoot;
-            member.Frontier.Add(root);
-            if (_run.Transpositions.TryGetValue(root.StateKey, out TranspositionFrontier? existing))
-                existing.TryAccept(new TranspositionLabel(
-                    root.PotionCount,
-                    root.PotionStrategicCost,
-                    root.FutureSoldHp,
-                    root.Snapshot.CumulativePlayerHpLost,
-                    root.Snapshot.AllPlayersAlive,
-                    root.Snapshot.TeamLossRatio,
-                    root.Snapshot.WorstPlayerLossRatio,
-                    root.ActionCount,
-                    root.Score,
-                    root.Traits,
-                    root.HasNonPotionAction,
-                    root.BoundaryReason,
-                    root.Snapshot.PlayerDead,
-                    root.Snapshot.AllEnemiesDead,
-                    root.Snapshot.PredictionGaps,
-                    root.CombatProgress));
+            RegisterInitialFrontierNode(compatibleRoot);
+        }
+
+        bool canReplayContinuationSeed =
+            !_includeTurnSetup
+            && _fixedPrefixActions.Count == 0
+            && policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
+            && policy.ContinuationSeedActions.Count > 0
+            && policy.NoveltySearch == null
+            && _minimumPotionUses == 0
+            && _potionPolicy != SolverPotionPolicy.RequireAtLeastOne
+            && !_enforcePotionDirectives;
+        if (canReplayContinuationSeed)
+        {
+            SearchNode seedRoot = CreateInitialRoot(Replay([]), [], turnSetupPlayState: null);
+            ObserveSearchPath(
+                seedRoot,
+                SearchPathObservationStage.Root,
+                "continuation_seed_root");
+            SearchNode? seeded = TryReplayContinuationSeed(
+                seedRoot,
+                policy.ContinuationSeedActions,
+                stopwatch,
+                out int replayedSeedActions,
+                out string seedReason);
+            if (seeded != null)
+            {
+                RegisterInitialFrontierNode(seeded);
+                string seedStatus = replayedSeedActions == policy.ContinuationSeedActions.Count
+                    ? "full"
+                    : "partial";
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Test] SEARCH_CONTINUATION_SEED " +
+                    $"resume_kind=seeded_search status={seedStatus} " +
+                    $"requested={policy.ContinuationSeedActions.Count} replayed={replayedSeedActions} " +
+                    $"reason={seedReason}");
+            }
             else
-                _run.Transpositions.Add(
-                    root.StateKey,
-                    new TranspositionFrontier(new TranspositionLabel(
-                        root.PotionCount,
-                        root.PotionStrategicCost,
-                        root.FutureSoldHp,
-                        root.Snapshot.CumulativePlayerHpLost,
-                        root.Snapshot.AllPlayersAlive,
-                        root.Snapshot.TeamLossRatio,
-                        root.Snapshot.WorstPlayerLossRatio,
-                        root.ActionCount,
-                        root.Score,
-                        root.Traits,
-                        root.HasNonPotionAction,
-                        root.BoundaryReason,
-                        root.Snapshot.PlayerDead,
-                        root.Snapshot.AllEnemiesDead,
-                        root.Snapshot.PredictionGaps,
-                        root.CombatProgress)));
+            {
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Test] SEARCH_CONTINUATION_SEED " +
+                    $"resume_kind=cold_search status=rejected " +
+                    $"requested={policy.ContinuationSeedActions.Count} replayed={replayedSeedActions} " +
+                    $"reason={seedReason}");
+            }
         }
         if (member.Frontier.Count == 0)
             throw new InvalidOperationException("固定搜索前缀与全部回合准备选牌分支都不相容。");
@@ -2398,46 +2437,129 @@ internal sealed partial class CombatBeamSolver
                     $"potion={(string.IsNullOrEmpty(action.PotionId) ? "-" : action.PotionId)}。");
             }
 
-            if (!CanApplyFixedPrefixAction(node, action))
+            SearchNode? next = TryApplyPrefixAction(node, action);
+            if (next == null)
             {
                 node.Snapshot.ReleaseSimulator();
                 return null;
             }
-
-            SimulationSnapshot snapshot = Replay(
-                [action],
-                node.Snapshot,
-                node.Turn,
-                node.ActionCount);
-            bool terminal = snapshot.PlayerDead
-                || snapshot.AllEnemiesDead
-                || snapshot.BoundaryReason != SearchBoundaryReason.None;
-            SearchRouteTraits traits = action.Kind == PlanActionKind.UsePotion
-                ? ClassifyPotionTraits(node.Traits, node.Snapshot, snapshot)
-                : node.Traits;
-            node = new SearchNode(
-                action,
-                node.ActionCount + 1,
-                snapshot.PotionUseCount,
-                snapshot.PotionStrategicCost,
-                node.Turn,
-                traits,
-                node.FutureSoldHp,
-                ApplySoldHpPenalty(snapshot.Score, node.FutureSoldHp),
-                snapshot.StateKey,
-                snapshot.HasRisk,
-                snapshot.BoundaryReason,
-                terminal,
-                node,
-                snapshot,
-                node.CombatProgress)
-            {
-                CumulativeEnemyHpLost = AccumulateEnemyHpLost(node, snapshot),
-            };
-            node = AttachOrderedMutationLineage(node);
-            node.Parent!.Snapshot.ReleaseSimulator();
+            node = next;
         }
         return node;
+    }
+
+    private SearchNode? TryReplayContinuationSeed(
+        SearchNode seed,
+        IReadOnlyList<PlanAction> actions,
+        Stopwatch stopwatch,
+        out int replayedActions,
+        out string reason)
+    {
+        replayedActions = 0;
+        reason = actions.Count == 0 ? "empty_seed" : "full";
+        SearchNode node = seed;
+        foreach (PlanAction action in actions)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (stopwatch.ElapsedMilliseconds >= _profile.SoftTimeBudgetMilliseconds)
+            {
+                reason = "time_budget";
+                break;
+            }
+            if (node.IsTerminal)
+            {
+                reason = "terminal_state";
+                break;
+            }
+            if (!MultiplayerLocalCrossTurnContracts.CanReplayContinuationSeedAction(
+                    action.Turn,
+                    node.Turn,
+                    action.Kind == PlanActionKind.PlayCard,
+                    action.EndsPlayerTurn,
+                    action.Choice != null,
+                    action.NestedChoices is { Count: > 0 },
+                    action.TurnStartChoices is { Count: > 0 },
+                    action.ShadowForecast != null,
+                    !string.IsNullOrEmpty(action.CardStateKey)))
+            {
+                reason = "unsupported_action";
+                break;
+            }
+
+            SearchNode? next;
+            try
+            {
+                next = TryApplyPrefixAction(node, action);
+            }
+            catch (Exception ex)
+                when (ex is not OperationCanceledException
+                      && ex is not OutOfMemoryException)
+            {
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Test] SEARCH_CONTINUATION_SEED_EXCEPTION " +
+                    $"replayed={replayedActions} exception={ex.GetType().Name}");
+                node.Snapshot.ReleaseSimulator();
+                reason = $"simulation_exception:{ex.GetType().Name}";
+                return null;
+            }
+
+            if (next == null)
+            {
+                reason = "action_unavailable";
+                break;
+            }
+            node = next;
+            replayedActions++;
+        }
+
+        if (replayedActions == 0)
+        {
+            node.Snapshot.ReleaseSimulator();
+            return null;
+        }
+        if (replayedActions == actions.Count)
+            reason = "full";
+        return node;
+    }
+
+    private SearchNode? TryApplyPrefixAction(SearchNode node, PlanAction action)
+    {
+        if (!CanApplyFixedPrefixAction(node, action))
+            return null;
+
+        SimulationSnapshot snapshot = Replay(
+            [action],
+            node.Snapshot,
+            node.Turn,
+            node.ActionCount);
+        bool terminal = snapshot.PlayerDead
+            || snapshot.AllEnemiesDead
+            || snapshot.BoundaryReason != SearchBoundaryReason.None;
+        SearchRouteTraits traits = action.Kind == PlanActionKind.UsePotion
+            ? ClassifyPotionTraits(node.Traits, node.Snapshot, snapshot)
+            : node.Traits;
+        SearchNode child = new(
+            action,
+            node.ActionCount + 1,
+            snapshot.PotionUseCount,
+            snapshot.PotionStrategicCost,
+            node.Turn,
+            traits,
+            node.FutureSoldHp,
+            ApplySoldHpPenalty(snapshot.Score, node.FutureSoldHp),
+            snapshot.StateKey,
+            snapshot.HasRisk,
+            snapshot.BoundaryReason,
+            terminal,
+            node,
+            snapshot,
+            node.CombatProgress)
+        {
+            CumulativeEnemyHpLost = AccumulateEnemyHpLost(node, snapshot),
+        };
+        child = AttachOrderedMutationLineage(child);
+        node.Snapshot.ReleaseSimulator();
+        return child;
     }
 
     private bool CanApplyFixedPrefixAction(SearchNode node, PlanAction action)
