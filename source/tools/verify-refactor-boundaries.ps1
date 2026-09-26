@@ -42,6 +42,14 @@ foreach ($searchCompletionContractRule in @(
 
 $liveCombatStampPath = Join-Path $repositoryRoot 'src/Runtime/LiveCombatStamp.cs'
 $liveCombatStampText = [IO.File]::ReadAllText($liveCombatStampPath)
+foreach ($sharedHistoryRule in @(
+    'requiresGlobalFinishedCardPlays',
+    'NormalizeSharedFinishedCardPlayCount(',
+    'GOLD_AXE')) {
+    if (-not $liveCombatStampText.Contains($sharedHistoryRule)) {
+        $violations.Add("${liveCombatStampPath}: local-core shared card-history normalization drifted '$sharedHistoryRule'")
+    }
+}
 foreach ($localSearchStampRule in @(
     'CaptureLocalCoreSearchValidity',
     'ProjectLocalCoreSearchValidity',
@@ -4272,7 +4280,16 @@ if (-not $p1ContinuationContractsText.Contains('ShouldUseLocalCoreDeathHorizonFa
     $violations.Add("${p1ContinuationContractsPath}: local-core death-horizon fallback contract is missing")
 }
 if (-not $p1ContinuationContractsText.Contains('IsLocalCoreContinuationStateCompatible(')) {
-    $violations.Add("${p1ContinuationContractsPath}: local-core Shuffle-only continuation compatibility contract is missing")
+    $violations.Add("${p1ContinuationContractsPath}: local-core shared-state continuation compatibility contract is missing")
+}
+foreach ($localCoreQualityRule in @(
+    'ShouldRunLocalCoreCurrentTurnQualityScout(',
+    'sharedFinishedCardPlayDrift',
+    'HistoryCountersMatchExceptFinishedCardPlays(',
+    'GOLD_AXE')) {
+    if (-not $p1ContinuationContractsText.Contains($localCoreQualityRule)) {
+        $violations.Add("${p1ContinuationContractsPath}: local-core quality/reuse contract drifted '$localCoreQualityRule'")
+    }
 }
 
 $p1SearchPolicyPath = Join-Path $repositoryRoot 'src/Search/SearchPolicySnapshot.cs'
@@ -4291,12 +4308,26 @@ foreach ($p1RuntimeRule in @(
     'MP_LOCAL_XTURN_SEED_SKIPPED',
     'IsLocalCoreContinuationStateCompatible(',
     'exact_except_shared_shuffle_rng',
+    'exact_except_remote_card_history',
     'shared_shuffle_rng_drift=',
+    'shared_finished_card_play_drift=',
     'single_player_quality_order=',
     'resume_kind=exact_continuation',
     'MP_LOCAL_XTURN_RESUME_KIND')) {
     if (-not $p1LifecycleText.Contains($p1RuntimeRule)) {
         $violations.Add("${p1LifecyclePath}: P1 Runtime seed/resume boundary drifted '$p1RuntimeRule'")
+    }
+}
+
+$localCoreNoveltyPath = Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.NoveltyPortfolio.cs'
+$localCoreNoveltyText = [IO.File]::ReadAllText($localCoreNoveltyPath)
+foreach ($currentTurnScoutRule in @(
+    'RunLocalCoreCurrentTurnQualityFirst(',
+    'CurrentTurnOnly = true',
+    'MP_LOCAL_CURRENT_TURN_QUALITY_SCOUT',
+    'NoveltyPortfolioBudget.Remaining(')) {
+    if (-not $localCoreNoveltyText.Contains($currentTurnScoutRule)) {
+        $violations.Add("${localCoreNoveltyPath}: current-turn-first local-core search drifted '$currentTurnScoutRule'")
     }
 }
 
@@ -4323,6 +4354,9 @@ if ($p1PhasesText.Contains('.Where(node => node.ActionCount > 0 && node.Snapshot
 }
 if (-not $p1PhasesText.Contains('SEARCH_ANYTIME_RELEASED_SNAPSHOT_PREVIEW')) {
     $violations.Add("${p1PhasesPath}: released-snapshot anytime preview diagnostic is missing")
+}
+if (-not $p1PhasesText.Contains('MultiplayerScope = policy.CurrentTurnOnly')) {
+    $violations.Add("${p1PhasesPath}: current-turn quality scout must materialize as CurrentTurnOnly multiplayer scope")
 }
 foreach ($p2SearchRule in @(
     'if (_continuationSeedProbe)',

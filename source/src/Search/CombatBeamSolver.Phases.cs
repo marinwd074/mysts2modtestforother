@@ -710,7 +710,10 @@ internal sealed partial class CombatBeamSolver
                 ResultScope = resultScope,
                 SearchEfficiencyOrigin = TryGetCandidateOrigin(best),
                 SearchEfficiencyEvaluationContextId = evaluationContextId,
-                MultiplayerScope = policy.RoutePolicy switch
+                MultiplayerScope = policy.CurrentTurnOnly
+                    && policy.RoutePolicy != SearchRoutePolicy.SinglePlayerFullRoute
+                        ? MultiplayerSearchResultScope.CurrentTurnOnly
+                        : policy.RoutePolicy switch
                 {
                     SearchRoutePolicy.MultiplayerCurrentTurnOnly
                         => MultiplayerSearchResultScope.CurrentTurnOnly,

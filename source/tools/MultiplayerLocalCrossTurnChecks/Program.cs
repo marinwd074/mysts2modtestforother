@@ -172,27 +172,82 @@ string continuationHandDrift = continuationExact.Replace(
     ";H=A;",
     ";H=C;",
     StringComparison.Ordinal);
+string continuationHistoryBase = continuationExact.Replace(
+    ";R=",
+    ";HC=10/2/0/1/0/8;R=",
+    StringComparison.Ordinal);
+string continuationFinishedPlayDrift = continuationHistoryBase.Replace(
+    ";HC=10/",
+    ";HC=14/",
+    StringComparison.Ordinal);
+string continuationLocalHistoryDrift = continuationHistoryBase.Replace(
+    "/2/0/1/0/8;",
+    "/3/0/1/0/8;",
+    StringComparison.Ordinal);
+string continuationGoldAxe = continuationHistoryBase.Replace(
+    ";H=A;",
+    ";H=GOLD_AXE+0,A;",
+    StringComparison.Ordinal);
+string continuationGoldAxeHistoryDrift = continuationGoldAxe.Replace(
+    ";HC=10/",
+    ";HC=14/",
+    StringComparison.Ordinal);
 
 Check(
     MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
         continuationExact,
         continuationExact,
-        out bool exactShuffleDrift)
+        out bool exactShuffleDrift,
+        out bool exactHistoryDrift)
     && !exactShuffleDrift
+    && !exactHistoryDrift
     && MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
         continuationExact,
         continuationShuffleDrift,
-        out bool acceptedShuffleDrift)
+        out bool acceptedShuffleDrift,
+        out bool shuffleHistoryDrift)
     && acceptedShuffleDrift
+    && !shuffleHistoryDrift
+    && MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationHistoryBase,
+        continuationFinishedPlayDrift,
+        out bool historyShuffleDrift,
+        out bool acceptedHistoryDrift)
+    && !historyShuffleDrift
+    && acceptedHistoryDrift
+    && !MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationHistoryBase,
+        continuationLocalHistoryDrift,
+        out _,
+        out _)
+    && !MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationGoldAxe,
+        continuationGoldAxeHistoryDrift,
+        out _,
+        out _)
     && !MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
         continuationExact,
         continuationCardGenerationDrift,
+        out _,
         out _)
     && !MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
         continuationExact,
         continuationHandDrift,
+        out _,
         out _),
-    "Local-core continuation ignores only shared Shuffle RNG drift; local piles and every other RNG stream remain exact.");
+    "Local-core continuation ignores only remote Shuffle/global finished-play drift; local history, piles and Gold Axe-sensitive history remain exact.");
+
+Check(
+    MultiplayerLocalCrossTurnContracts.ShouldRunLocalCoreCurrentTurnQualityScout(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore,
+        includeTurnSetup: false)
+    && !MultiplayerLocalCrossTurnContracts.ShouldRunLocalCoreCurrentTurnQualityScout(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore,
+        includeTurnSetup: true)
+    && !MultiplayerLocalCrossTurnContracts.ShouldRunLocalCoreCurrentTurnQualityScout(
+        SearchRoutePolicy.SinglePlayerFullRoute,
+        includeTurnSetup: false),
+    "Default local-core spends the former novelty-first window on current-turn quality before long-horizon search.");
 
 Check(
     !MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled

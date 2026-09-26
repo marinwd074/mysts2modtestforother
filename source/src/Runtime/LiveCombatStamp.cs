@@ -27,6 +27,7 @@ internal sealed record LiveCombatStamp(string StateText)
     private static string NormalizeLocalCoreSearchValidity(string stateText)
     {
         string[] fields = stateText.Split(';');
+        bool requiresGlobalFinishedCardPlays = HasGlobalFinishedCardPlayDependentLocalCard(fields);
         StringBuilder normalized = new(stateText.Length);
         bool first = true;
         for (int index = 0; index < fields.Length; index++)
@@ -36,12 +37,39 @@ internal sealed record LiveCombatStamp(string StateText)
             string name = separator < 0 ? field : field[..separator];
             if (IsSharedMutableSearchField(name))
                 continue;
+            if (string.Equals(name, "HC", StringComparison.Ordinal)
+                && !requiresGlobalFinishedCardPlays)
+            {
+                field = NormalizeSharedFinishedCardPlayCount(field);
+            }
             if (!first)
                 normalized.Append(';');
             normalized.Append(field);
             first = false;
         }
         return normalized.ToString();
+    }
+
+    private static bool HasGlobalFinishedCardPlayDependentLocalCard(
+        IReadOnlyList<string> fields)
+        => fields.Any(field =>
+            field.StartsWith("H=", StringComparison.Ordinal)
+                || field.StartsWith("D=", StringComparison.Ordinal)
+                || field.StartsWith("C=", StringComparison.Ordinal)
+                || field.StartsWith("X=", StringComparison.Ordinal)
+            ? field.Contains("GOLD_AXE", StringComparison.Ordinal)
+            : false);
+
+    private static string NormalizeSharedFinishedCardPlayCount(string field)
+    {
+        int separator = field.IndexOf('=');
+        if (separator < 0)
+            return field;
+        string value = field[(separator + 1)..];
+        int slash = value.IndexOf('/');
+        return slash < 0
+            ? field
+            : string.Concat(field.AsSpan(0, separator + 1), "*", value.AsSpan(slash));
     }
 
     private static bool IsSharedMutableSearchField(string name)

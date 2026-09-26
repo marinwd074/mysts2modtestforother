@@ -205,6 +205,7 @@ internal static partial class SolverController
             MultiplayerContinuationExpectation? expectedMultiplayer =
                 expectedContinuation?.MultiplayerExpectation;
             bool sharedShuffleRngDrift = false;
+            bool sharedFinishedCardPlayDrift = false;
             ContinuationStamp? continuationValidationStamp = continuationStamp;
             if (continuationStamp != null
                 && expectedContinuation != null
@@ -213,11 +214,12 @@ internal static partial class SolverController
                 && MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
                     expectedContinuation.ExpectedState.StateText,
                     continuationStamp.StateText,
-                    out sharedShuffleRngDrift)
-                && sharedShuffleRngDrift)
+                    out sharedShuffleRngDrift,
+                    out sharedFinishedCardPlayDrift)
+                && (sharedShuffleRngDrift || sharedFinishedCardPlayDrift))
             {
-                // TryCreateContinuation remains exact by contract. We substitute the cached
-                // stamp only after the pure boundary above proved that Shuffle is the sole drift.
+                // TryCreateContinuation remains exact by contract. Substitute the cached stamp
+                // only after the local-core boundary proved all drift is remote-only shared state.
                 continuationValidationStamp = expectedContinuation.ExpectedState;
             }
             string continuationRejectReason = "none";
@@ -231,6 +233,7 @@ internal static partial class SolverController
                     $"minimum_world_version={multiplayerValidation?.MinimumWorldVersion.ToString() ?? "-"} " +
                     $"actual_world_version={multiplayerValidation?.CurrentWorldVersion.ToString() ?? "-"} " +
                     $"shared_shuffle_rng_drift={sharedShuffleRngDrift.ToString().ToLowerInvariant()} " +
+                    $"shared_finished_card_play_drift={sharedFinishedCardPlayDrift.ToString().ToLowerInvariant()} " +
                     $"fresh_probe_changed={freshProbeChanged.ToString().ToLowerInvariant()}");
             }
             if (continuationValidationStamp != null
@@ -272,9 +275,13 @@ internal static partial class SolverController
                         reused!,
                         UnexpectedReplanCount > 0,
                         _combat.ReviewedWorldlinesTotal));
-                string reuseValidation = sharedShuffleRngDrift
-                    ? "exact_except_shared_shuffle_rng"
-                    : "exact_state_text";
+                string reuseValidation = (sharedShuffleRngDrift, sharedFinishedCardPlayDrift) switch
+                {
+                    (true, true) => "exact_except_shared_shuffle_and_card_history",
+                    (true, false) => "exact_except_shared_shuffle_rng",
+                    (false, true) => "exact_except_remote_card_history",
+                    _ => "exact_state_text",
+                };
                 Entry.Logger.Info(
                     $"[CombatSolver/Test] SEARCH_REUSED from_turn={reused!.ReusedFromTurn} " +
                     $"turn={reused.StartTurnNumber} validation={reuseValidation} " +
@@ -289,10 +296,11 @@ internal static partial class SolverController
                         $"source_world_version={expectedMultiplayer?.SourceWorldVersion.ToString() ?? "-"} " +
                         $"minimum_world_version={multiplayerValidation?.MinimumWorldVersion.ToString() ?? "-"} " +
                         $"actual_world_version={multiplayerValidation?.CurrentWorldVersion.ToString() ?? "-"} " +
-                        $"local_state_exact={(!sharedShuffleRngDrift).ToString().ToLowerInvariant()} " +
+                        $"local_state_exact={(!sharedShuffleRngDrift && !sharedFinishedCardPlayDrift).ToString().ToLowerInvariant()} " +
                         $"local_state_compatible=true " +
                         $"shared_shuffle_rng_drift={sharedShuffleRngDrift.ToString().ToLowerInvariant()} " +
-                        $"reason={(sharedShuffleRngDrift ? "shared_shuffle_rng_drift" : "exact")} " +
+                        $"shared_finished_card_play_drift={sharedFinishedCardPlayDrift.ToString().ToLowerInvariant()} " +
+                        $"reason={(sharedShuffleRngDrift || sharedFinishedCardPlayDrift ? "remote_shared_state_drift" : "exact")} " +
                         $"resume_kind=exact_continuation");
                 }
                 Entry.Logger.Info(SolverDiagnostics.DescribeResult(reused));

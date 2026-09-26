@@ -65,6 +65,12 @@ internal static class MultiplayerLocalCrossTurnContracts
     /// </summary>
     internal static bool LocalCoreSearchAcceleratorsEnabled => false;
 
+    internal static bool ShouldRunLocalCoreCurrentTurnQualityScout(
+        SearchRoutePolicy routePolicy,
+        bool includeTurnSetup)
+        => routePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
+            && !includeTurnSetup;
+
     internal static bool ShouldUseP3CrossFamilyScheduling(
         SearchRoutePolicy routePolicy,
         bool includeTurnSetup,
@@ -217,18 +223,20 @@ internal static class MultiplayerLocalCrossTurnContracts
             && willShuffle;
 
     /// <summary>
-    /// Default local-core multiplayer treats the shared Shuffle RNG as advisory at a
-    /// cross-turn continuation boundary. Remote actions may legitimately advance that
-    /// shared stream without changing the local player's already-materialized hand/piles.
-    /// Every other continuation field remains exact; if the RNG drift later changes a
-    /// local pile, H/D/C/X will differ and the route will be rejected then.
+    /// Default local-core multiplayer treats remote-only shared counters as advisory at a
+    /// cross-turn continuation boundary. Shuffle may advance remotely, and the global
+    /// finished-card-play count HC[0] may advance while the local hand/piles stay unchanged.
+    /// HC[0] remains strict when a local Gold Axe is present because that card reads it.
+    /// Every other continuation field remains exact.
     /// </summary>
     internal static bool IsLocalCoreContinuationStateCompatible(
         string expectedStateText,
         string actualStateText,
-        out bool sharedShuffleRngDrift)
+        out bool sharedShuffleRngDrift,
+        out bool sharedFinishedCardPlayDrift)
     {
         sharedShuffleRngDrift = false;
+        sharedFinishedCardPlayDrift = false;
         if (string.Equals(expectedStateText, actualStateText, StringComparison.Ordinal))
             return true;
 
@@ -236,6 +244,10 @@ internal static class MultiplayerLocalCrossTurnContracts
         string[] actualFields = actualStateText.Split(';');
         if (expectedFields.Length != actualFields.Length)
             return false;
+
+        bool requiresGlobalFinishedCardPlays =
+            StateContainsGlobalFinishedCardPlayDependentLocalCard(expectedFields)
+            || StateContainsGlobalFinishedCardPlayDependentLocalCard(actualFields);
 
         for (int index = 0; index < expectedFields.Length; index++)
         {
@@ -251,31 +263,78 @@ internal static class MultiplayerLocalCrossTurnContracts
                 || !string.Equals(
                     expectedField[..expectedSeparator],
                     actualField[..actualSeparator],
-                    StringComparison.Ordinal)
-                || !string.Equals(
-                    expectedField[..expectedSeparator],
-                    "R",
                     StringComparison.Ordinal))
             {
                 return false;
             }
 
-            string[] expectedRng = expectedField[(expectedSeparator + 1)..].Split('/');
-            string[] actualRng = actualField[(actualSeparator + 1)..].Split('/');
-            if (expectedRng.Length != actualRng.Length || expectedRng.Length == 0)
-                return false;
-            for (int rngIndex = 1; rngIndex < expectedRng.Length; rngIndex++)
+            string name = expectedField[..expectedSeparator];
+            if (string.Equals(name, "R", StringComparison.Ordinal))
             {
-                if (!string.Equals(expectedRng[rngIndex], actualRng[rngIndex], StringComparison.Ordinal))
+                string[] expectedRng = expectedField[(expectedSeparator + 1)..].Split('/');
+                string[] actualRng = actualField[(actualSeparator + 1)..].Split('/');
+                if (expectedRng.Length != actualRng.Length || expectedRng.Length == 0)
                     return false;
+                for (int rngIndex = 1; rngIndex < expectedRng.Length; rngIndex++)
+                {
+                    if (!string.Equals(expectedRng[rngIndex], actualRng[rngIndex], StringComparison.Ordinal))
+                        return false;
+                }
+                if (string.Equals(expectedRng[0], actualRng[0], StringComparison.Ordinal))
+                    return false;
+                sharedShuffleRngDrift = true;
+                continue;
             }
-            if (string.Equals(expectedRng[0], actualRng[0], StringComparison.Ordinal))
-                return false;
 
-            sharedShuffleRngDrift = true;
+            if (string.Equals(name, "HC", StringComparison.Ordinal)
+                && !requiresGlobalFinishedCardPlays
+                && HistoryCountersMatchExceptFinishedCardPlays(
+                    expectedField[(expectedSeparator + 1)..],
+                    actualField[(actualSeparator + 1)..]))
+            {
+                sharedFinishedCardPlayDrift = true;
+                continue;
+            }
+
+            return false;
         }
 
-        return sharedShuffleRngDrift;
+        return sharedShuffleRngDrift || sharedFinishedCardPlayDrift;
+    }
+
+    private static bool StateContainsGlobalFinishedCardPlayDependentLocalCard(
+        IReadOnlyList<string> fields)
+        => fields.Any(field =>
+            (field.StartsWith("H=", StringComparison.Ordinal)
+                || field.StartsWith("D=", StringComparison.Ordinal)
+                || field.StartsWith("C=", StringComparison.Ordinal)
+                || field.StartsWith("X=", StringComparison.Ordinal))
+            && field.Contains("GOLD_AXE", StringComparison.Ordinal));
+
+    private static bool HistoryCountersMatchExceptFinishedCardPlays(
+        string expected,
+        string actual)
+    {
+        string[] expectedCounters = expected.Split('/');
+        string[] actualCounters = actual.Split('/');
+        if (expectedCounters.Length != actualCounters.Length
+            || expectedCounters.Length == 0
+            || string.Equals(expectedCounters[0], actualCounters[0], StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        for (int index = 1; index < expectedCounters.Length; index++)
+        {
+            if (!string.Equals(
+                    expectedCounters[index],
+                    actualCounters[index],
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     internal static bool IsExactContinuation(MultiplayerContinuationMatchInput input)

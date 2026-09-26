@@ -175,6 +175,14 @@
 - 新增 `E3_CROSS_FAMILY_SCOUT` / `E3_CROSS_FAMILY_REUSE` 诊断和 scout 预算合同。目标不是保证固定秒数，而是消除“无药 TimeLimit 完整跑完之后才第一次搜索一药水路线”的结构性等待。
 
 
+### 当前真实样本补充：当前回合质量优先 + 队友普通出牌不再打断复用（2026-09-26）
+
+- 问题包 `44da26159c5e4e4e939e5a4d43ca1580` 证明首回合优质前缀并未缺失：完整搜索最终明确得到 `UNMOVABLE → OFFERING → SECOND_WIND → EndTurn`，重振后为 85 HP / 50 Block；但首次请求在约 56 秒完成后因为 `route_version=2→2` 不变时的 local stamp 漂移被 `SEARCH_STALE` 丢弃，随后人工重算才重新找到。
+- 同一包 T2/T3/T4 都先成功 `SEARCH_REUSED`，队友普通出牌期间 `enemy_hp_route_changed=false` 且 RouteVersion 不变，但点击执行仍触发 `manual_divergence` fresh search。根因是 local-core validity stamp 仍保留 `HC[0]`（全局已完成出牌数）；队友每打一张牌都会改变它，即使本地 H/D/C/X、HP、费用和 RouteVersion 全没变。
+- local-core 搜索/执行 validity 现在忽略 `HC[0]` 的远端增长；跨回合 continuation 同样允许只发生该字段和/或 shared Shuffle 漂移。其余 HC 分量仍精确。本地牌堆含 `GOLD_AXE` 时继续严格比较，因为它的数值明确读取全局 finished-card-play 计数。
+- 默认 `MultiplayerSinglePlayerCore` 不再把 Novelty 放在最前面。原 Novelty exploration envelope 改作**当前回合质量 scout**：同一 Beam/模拟内核、同一总请求预算，只设置 `CurrentTurnOnly=true` 先搜索固定手牌的低战损前缀；实际消耗从完整跨回合 Beam 的剩余预算扣除。诊断：`MP_LOCAL_CURRENT_TURN_QUALITY_SCOUT`。
+- 目的不是把当前回合硬编码成最终路线，而是先把像 `Offering → Second Wind` 这类近回合防御/资源组合展示出来，再继续完整路线；完整搜索仍可在后续发现更好的长期方案。
+
 ### 当前真实样本补充：多人战损只统计本地玩家（2026-09-26）
 
 - 问题包 `1cd414aa66e94546bd9713630077d99c` 的 MAWLER 首回合实机记录显示：敌人两次 4 点攻击都对本地玩家结算为 `BlockedDamage=4 / UnblockedDamage=0`，50 格挡最终剩 42；队友则两次各承受 4 点。敌人对本地造成的实际 HP 伤害为 0。
