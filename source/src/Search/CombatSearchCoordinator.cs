@@ -63,6 +63,7 @@ internal static partial class CombatSearchCoordinator
         SearchInteractionState? interaction = policy.Interaction;
         SolverResult? currentCompleteAdoptableResult = null;
         SolverInterimResult? currentDisplayedResult = null;
+        SolverInterimResult? currentTurnDisplayedResult = null;
         SolverProgress? lastProgress = null;
         int currentTurnPreviewVersion = 0;
         int speculativeRouteVersion = 0;
@@ -82,6 +83,40 @@ internal static partial class CombatSearchCoordinator
                     return false;
             }
             currentDisplayedResult = candidate;
+            return true;
+        }
+
+        static bool RouteStartsWithCurrentTurn(
+            SolverCurrentTurnPreview current,
+            SolverSpeculativeRoutePreview speculative)
+        {
+            SolverFrontierTurn? first = speculative.Turns.FirstOrDefault(turn =>
+                turn.Turn == current.Turn);
+            return first != null && first.Actions.SequenceEqual(current.Actions);
+        }
+
+        bool TryPromoteCurrentTurn(
+            SolverInterimResult candidate,
+            SolverCurrentTurnPreview preview)
+        {
+            if (currentTurnDisplayedResult != null
+                && !SolverInterimResultOrdering.CanPromoteDisplayedResult(
+                    candidate,
+                    currentTurnDisplayedResult))
+            {
+                return false;
+            }
+
+            currentTurnDisplayedResult = candidate;
+            currentTurnPreview = preview;
+            currentTurnPreviewVersion = Math.Max(
+                currentTurnPreviewVersion,
+                preview.CandidateVersion);
+            policy.Diagnostics.Info(
+                $"[CombatSolver/Test] SEARCH_CURRENT_TURN_PROMOTED " +
+                $"hp_lost={preview.HpLost} hp_recovered={preview.HpRecovered} " +
+                $"enemy_hp_lost={preview.EnemyHpLost} energy_left={preview.EnergyLeft} " +
+                $"actions={string.Join(',', preview.Actions.Select(action => action.CardId ?? action.Kind.ToString()))}");
             return true;
         }
 
@@ -105,17 +140,24 @@ internal static partial class CombatSearchCoordinator
             portfolioTelemetry.RecordCandidatePublished(
                 result.SearchEfficiencyOrigin,
                 result.SearchEfficiencyEvaluationContextId ?? string.Empty);
-            currentTurnPreview = SolverCurrentTurnPreview.FromResult(
+            SolverCurrentTurnPreview fullCurrentTurn = SolverCurrentTurnPreview.FromResult(
                 result,
                 ++currentTurnPreviewVersion);
-            speculativeRoutePreview = SolverSpeculativeRoutePreview.FromResult(
+            if (currentTurnDisplayedResult == null)
+                currentTurnPreview = fullCurrentTurn;
+
+            SolverSpeculativeRoutePreview fullSpeculative = SolverSpeculativeRoutePreview.FromResult(
                 result,
                 ++speculativeRouteVersion);
-            SolverRouteAdoptionSeed seed = new(
-                speculativeRoutePreview.CandidateVersion,
-                result.BestNode.Actions,
-                () => result);
-            currentRouteAdoptionSeed = seed;
+            if (currentTurnPreview == null
+                || RouteStartsWithCurrentTurn(currentTurnPreview, fullSpeculative))
+            {
+                speculativeRoutePreview = fullSpeculative;
+                currentRouteAdoptionSeed = new SolverRouteAdoptionSeed(
+                    fullSpeculative.CandidateVersion,
+                    result.BestNode.Actions,
+                    () => result);
+            }
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] SEARCH_INTERIM_RESULT potions={result.ProjectedBattlePotionCount} " +
                 $"projected_battle_hp_lost={result.ProjectedBattleHpLost}");
@@ -137,19 +179,48 @@ internal static partial class CombatSearchCoordinator
             : progress =>
             {
                 lastProgress = progress;
-                // Supplemental searches publish their own local previews. Once a global best exists,
-                // keep those previews and their adoption seed together unless that local result wins globally.
-                bool acceptsRouteUpdate = currentDisplayedResult == null;
+                // Whole-battle and current-turn quality are independent anytime incumbents.
+                // The dedicated current-turn scout may therefore remain visible while the
+                // long-horizon search continues to improve a different route.
+                bool acceptsGlobalResultUpdate = currentDisplayedResult == null;
                 if (progress.CurrentBestResult is { } candidate)
                 {
-                    acceptsRouteUpdate = TryPromoteDisplayedResult(candidate);
+                    acceptsGlobalResultUpdate = TryPromoteDisplayedResult(candidate);
                 }
                 else if (currentDisplayedResult != null)
                 {
-                    acceptsRouteUpdate = false;
+                    acceptsGlobalResultUpdate = false;
                 }
 
-                if (acceptsRouteUpdate)
+                bool promotedCurrentTurn = false;
+                if (progress.CurrentTurnPreview is { } current
+                    && progress.CurrentTurnBestResult is { } currentTurnResult)
+                {
+                    promotedCurrentTurn = TryPromoteCurrentTurn(
+                        currentTurnResult,
+                        current);
+                    if (promotedCurrentTurn)
+                    {
+                        if (progress.SpeculativeRoutePreview is { } speculative
+                            && RouteStartsWithCurrentTurn(current, speculative))
+                        {
+                            speculativeRoutePreview = speculative;
+                            currentRouteAdoptionSeed = progress.RouteAdoptionSeed;
+                            speculativeRouteVersion = Math.Max(
+                                speculativeRouteVersion,
+                                speculative.CandidateVersion);
+                        }
+                        else
+                        {
+                            speculativeRoutePreview = null;
+                            currentRouteAdoptionSeed = null;
+                        }
+                    }
+                }
+
+                if (!promotedCurrentTurn
+                    && acceptsGlobalResultUpdate
+                    && currentTurnDisplayedResult == null)
                 {
                     if (progress.CurrentTurnPreview is { } current)
                     {
@@ -166,18 +237,33 @@ internal static partial class CombatSearchCoordinator
                             speculativeRouteVersion,
                             speculative.CandidateVersion);
                     }
-                    if (progress.OfficialPublishedOrigin is { } officialOrigin
-                        && !string.IsNullOrWhiteSpace(
-                            progress.OfficialPublishedEvaluationContextId))
-                    {
-                        portfolioTelemetry.RecordCandidatePublished(
-                            officialOrigin,
-                            progress.OfficialPublishedEvaluationContextId);
-                        policy.Diagnostics.Info(
-                            $"[CombatSolver/Test] SEARCH_E1_EARLY_PUBLISH " +
-                            $"candidate_id={officialOrigin.CandidateId} " +
-                            $"context={progress.OfficialPublishedEvaluationContextId}");
-                    }
+                }
+                else if (acceptsGlobalResultUpdate
+                         && currentTurnPreview != null
+                         && progress.SpeculativeRoutePreview is { } alignedSpeculative
+                         && RouteStartsWithCurrentTurn(
+                             currentTurnPreview,
+                             alignedSpeculative))
+                {
+                    speculativeRoutePreview = alignedSpeculative;
+                    currentRouteAdoptionSeed = progress.RouteAdoptionSeed;
+                    speculativeRouteVersion = Math.Max(
+                        speculativeRouteVersion,
+                        alignedSpeculative.CandidateVersion);
+                }
+
+                if (acceptsGlobalResultUpdate
+                    && progress.OfficialPublishedOrigin is { } officialOrigin
+                    && !string.IsNullOrWhiteSpace(
+                        progress.OfficialPublishedEvaluationContextId))
+                {
+                    portfolioTelemetry.RecordCandidatePublished(
+                        officialOrigin,
+                        progress.OfficialPublishedEvaluationContextId);
+                    policy.Diagnostics.Info(
+                        $"[CombatSolver/Test] SEARCH_E1_EARLY_PUBLISH " +
+                        $"candidate_id={officialOrigin.CandidateId} " +
+                        $"context={progress.OfficialPublishedEvaluationContextId}");
                 }
                 progressCallback(progress with
                 {

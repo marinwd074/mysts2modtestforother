@@ -182,6 +182,7 @@
 - local-core 搜索/执行 validity 现在忽略 `HC[0]` 的远端增长；跨回合 continuation 同样允许只发生该字段和/或 shared Shuffle 漂移。其余 HC 分量仍精确。本地牌堆含 `GOLD_AXE` 时继续严格比较，因为它的数值明确读取全局 finished-card-play 计数。
 - 默认 `MultiplayerSinglePlayerCore` 不再把 Novelty 放在最前面。原 Novelty exploration envelope 改作**当前回合质量 scout**：同一 Beam/模拟内核、同一总请求预算，只设置 `CurrentTurnOnly=true` 先搜索固定手牌的低战损前缀；实际消耗从完整跨回合 Beam 的剩余预算扣除。诊断：`MP_LOCAL_CURRENT_TURN_QUALITY_SCOUT`。
 - 目的不是把当前回合硬编码成最终路线，而是先把像 `Offering → Second Wind` 这类近回合防御/资源组合展示出来，再继续完整路线；完整搜索仍可在后续发现更好的长期方案。
+- 补充协调器边界：current-turn scout 与整场 complete-victory incumbent 分开维护。后续完整路线只有在首回合与当前更优候选一致时才接管 speculative route；否则后台继续深化，但 UI 不再从低战损首回合回跳到更差的首回合。诊断：`SEARCH_CURRENT_TURN_PROMOTED`。
 
 ### 当前真实样本补充：多人战损只统计本地玩家（2026-09-26）
 

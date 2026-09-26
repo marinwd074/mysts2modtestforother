@@ -76,6 +76,24 @@ foreach ($routeScopedDeployRule in @(
     }
 }
 
+$solverProgressPath = Join-Path $repositoryRoot 'src/Runtime/SolverProgress.cs'
+$solverProgressText = [IO.File]::ReadAllText($solverProgressPath)
+if (-not $solverProgressText.Contains('public SolverInterimResult? CurrentTurnBestResult { get; init; }')) {
+    $violations.Add("${solverProgressPath}: current-turn anytime result is no longer carried independently")
+}
+
+$searchCoordinatorPath = Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.cs'
+$searchCoordinatorText = [IO.File]::ReadAllText($searchCoordinatorPath)
+foreach ($currentTurnPromotionRule in @(
+    'SEARCH_CURRENT_TURN_PROMOTED',
+    'TryPromoteCurrentTurn(',
+    'RouteStartsWithCurrentTurn(',
+    'currentTurnDisplayedResult')) {
+    if (-not $searchCoordinatorText.Contains($currentTurnPromotionRule)) {
+        $violations.Add("${searchCoordinatorPath}: current-turn/global anytime separation drifted '$currentTurnPromotionRule'")
+    }
+}
+
 $searchLifecycleCompletionPath = Join-Path $repositoryRoot 'src/Runtime/SolverController.SearchLifecycle.cs'
 $searchLifecycleCompletionText = [IO.File]::ReadAllText($searchLifecycleCompletionPath)
 foreach ($routeScopedCompletionRule in @(
@@ -4364,6 +4382,9 @@ if (-not $p1PhasesText.Contains('SEARCH_ANYTIME_RELEASED_SNAPSHOT_PREVIEW')) {
 }
 if (-not $p1PhasesText.Contains('MultiplayerScope = policy.CurrentTurnOnly')) {
     $violations.Add("${p1PhasesPath}: current-turn quality scout must materialize as CurrentTurnOnly multiplayer scope")
+}
+if (-not $p1PhasesText.Contains('SearchNode? candidate = member.CurrentTurnPreviewNode')) {
+    $violations.Add("${p1PhasesPath}: current-turn preview must prefer the dedicated current-turn candidate over the long-horizon incumbent")
 }
 foreach ($p2SearchRule in @(
     'if (_continuationSeedProbe)',
