@@ -47,12 +47,18 @@ internal static class Program
         bool p3CrossFamily = args.Contains(
             "--p3-cross-family",
             StringComparer.Ordinal);
-        if ((p3Novelty || p3CrossFamily) && !p3SchedulingProbe)
+        bool p3CrossFamilyAb = args.Contains(
+            "--p3-cross-family-ab",
+            StringComparer.Ordinal);
+        if ((p3Novelty || p3CrossFamily || p3CrossFamilyAb) && !p3SchedulingProbe)
             throw new ArgumentException(
                 "--p3-novelty/--p3-cross-family require --p3-scheduling-probe.");
-        if (p3Novelty && p3CrossFamily)
+        if (p3Novelty && (p3CrossFamily || p3CrossFamilyAb)
+            || p3CrossFamily && p3CrossFamilyAb)
+        {
             throw new ArgumentException(
-                "--p3-novelty and --p3-cross-family are isolated P3 experiments.");
+                "P3 novelty, direct cross-family, and cross-family A/B modes are isolated.");
+        }
         CombatBeamSolver.UseLegacyActionSearchOrderForTesting(legacyActionOrder);
         bool teammate = string.Equals(scenario, "teammate", StringComparison.Ordinal);
         if (teammate)
@@ -179,7 +185,7 @@ internal static class Program
                     : SearchRoutePolicy.SinglePlayerFullRoute,
                 CurrentTurnOnly = false,
                 UseNoveltyPortfolio = p3Novelty,
-                UseBeamWidthPortfolio = !p3CrossFamily,
+                UseBeamWidthPortfolio = !(p3CrossFamily || p3CrossFamilyAb),
                 UseP3CrossFamilyScheduling = p3CrossFamily,
                 BeamWidthPortfolioWidths = null,
                 FixedBudget = true,
@@ -217,6 +223,13 @@ internal static class Program
                     damage,
                     policy,
                     local.PlayerCombatState!.TurnNumber);
+            }
+            if (p3CrossFamilyAb)
+            {
+                if (!teammate || multiplayerPrediction)
+                    throw new InvalidOperationException(
+                        "P3 A/B requires teammate fixture with multiplayer prediction disabled.");
+                return RunP3CrossFamilyAb(output, root, names, damage, policy);
             }
 
             string[] rootHand = local.PlayerCombatState!.Hand.Cards.Select(card => card.Id.Entry).ToArray();
@@ -622,6 +635,148 @@ internal static class Program
             $"cold_reference_ms={coldReferencePublishedMs:F3} " +
             $"hinted_reference_ms={hintedReferencePublishedMs:F3} " +
             $"cold_nodes={cold.TotalExpandedNodes} hinted_nodes={hinted.TotalExpandedNodes}");
+        Console.WriteLine($"evidence={path}");
+        return 0;
+    }
+
+    private static int RunP3CrossFamilyAb(
+        string output,
+        CombatRootSnapshot root,
+        SolverDisplayNames names,
+        BattleDamageSnapshot damage,
+        SearchPolicySnapshot policy)
+    {
+        SearchPolicySnapshot baselinePolicy = policy with
+        {
+            UseNoveltyPortfolio = false,
+            UseBeamWidthPortfolio = false,
+            UseP3CrossFamilyScheduling = false,
+            P3SharedWallClockBudget = null,
+            Interaction = null,
+        };
+        SearchPolicySnapshot crossPolicy = baselinePolicy with
+        {
+            UseP3CrossFamilyScheduling = true,
+        };
+
+        SolverResult baseline = CombatSearchCoordinator.Solve(
+            root,
+            names,
+            damage,
+            baselinePolicy,
+            CancellationToken.None,
+            progressCallback: null);
+        SolverResult cross = CombatSearchCoordinator.Solve(
+            root,
+            names,
+            damage,
+            crossPolicy,
+            CancellationToken.None,
+            progressCallback: null);
+
+        static double PublishedMs(SolverResult result)
+        {
+            BeamWidthPortfolioTelemetry telemetry = result.PortfolioTelemetry
+                ?? throw new InvalidOperationException("P3 A/B result has no telemetry.");
+            CandidateOrigin origin = result.SearchEfficiencyOrigin
+                ?? throw new InvalidOperationException("P3 A/B result has no candidate origin.");
+            string context = result.SearchEfficiencyEvaluationContextId
+                ?? throw new InvalidOperationException("P3 A/B result has no evaluation context.");
+            CandidateMilestones milestones = telemetry.FindCandidateMilestones(origin, context)
+                ?? throw new InvalidOperationException("P3 A/B final candidate has no milestones.");
+            long published = milestones.PublishedTicks
+                ?? throw new InvalidOperationException("P3 A/B final candidate was not published.");
+            return telemetry.ToRequestMilliseconds(published);
+        }
+
+        static double? FirstPotionWorkMs(SolverResult result)
+        {
+            BeamWidthPortfolioTelemetry telemetry = result.PortfolioTelemetry
+                ?? throw new InvalidOperationException("P3 A/B result has no telemetry.");
+            long? first = telemetry.SearchMembers
+                .Where(member => string.Equals(
+                    member.Kind,
+                    "potion_required",
+                    StringComparison.Ordinal))
+                .Where(member => member.FirstWorkTicks.HasValue)
+                .Select(member => member.FirstWorkTicks)
+                .Min();
+            return first.HasValue ? telemetry.ToRequestMilliseconds(first.Value) : null;
+        }
+
+        int comparison = CombatSearchCoordinator.CompareP3FinalQualityForTesting(
+            root,
+            baselinePolicy,
+            cross,
+            baseline);
+        double baselinePublishedMs = PublishedMs(baseline);
+        double crossPublishedMs = PublishedMs(cross);
+        double? baselinePotionWorkMs = FirstPotionWorkMs(baseline);
+        double? crossPotionWorkMs = FirstPotionWorkMs(cross);
+
+        var evidence = new
+        {
+            schemaVersion = 1,
+            source = "pinned-0.107.1-p3-cross-family-ab",
+            comparison,
+            baseline = new
+            {
+                baseline.ProjectedBattleHpLost,
+                baseline.ProjectedBattlePotionCount,
+                baseline.CombatEndedTurn,
+                baseline.BoundaryReason,
+                baseline.TotalExpandedNodes,
+                baseline.TotalTransitionCount,
+                publishedMs = baselinePublishedMs,
+                firstPotionWorkMs = baselinePotionWorkMs,
+            },
+            cross = new
+            {
+                cross.ProjectedBattleHpLost,
+                cross.ProjectedBattlePotionCount,
+                cross.CombatEndedTurn,
+                cross.BoundaryReason,
+                cross.TotalExpandedNodes,
+                cross.TotalTransitionCount,
+                publishedMs = crossPublishedMs,
+                firstPotionWorkMs = crossPotionWorkMs,
+            },
+            acceptance = new
+            {
+                finalQualityNotWorse = comparison <= 0,
+                potionStartedEarlier = crossPotionWorkMs.HasValue
+                    && (!baselinePotionWorkMs.HasValue
+                        || crossPotionWorkMs.Value < baselinePotionWorkMs.Value),
+                referencePublishedEarlierOrEqual = crossPublishedMs <= baselinePublishedMs,
+                totalExpandedNotHigher = cross.TotalExpandedNodes <= baseline.TotalExpandedNodes,
+            },
+        };
+
+        string path = Path.Combine(output, "p3-cross-family-ab.json");
+        File.WriteAllText(
+            path,
+            JsonSerializer.Serialize(
+                evidence,
+                new JsonSerializerOptions { WriteIndented = true }));
+
+        Console.WriteLine(
+            $"P3_CROSS_AB comparison={comparison} " +
+            $"baseline_hp={baseline.ProjectedBattleHpLost} cross_hp={cross.ProjectedBattleHpLost} " +
+            $"baseline_published_ms={baselinePublishedMs:F3} cross_published_ms={crossPublishedMs:F3} " +
+            $"baseline_potion_first_ms={baselinePotionWorkMs?.ToString("F3") ?? "-"} " +
+            $"cross_potion_first_ms={crossPotionWorkMs?.ToString("F3") ?? "-"} " +
+            $"baseline_nodes={baseline.TotalExpandedNodes} cross_nodes={cross.TotalExpandedNodes}");
+
+        if (comparison > 0)
+            throw new InvalidOperationException("P3 cross-family A/B regressed formal final quality.");
+        if (!crossPotionWorkMs.HasValue
+            || baselinePotionWorkMs.HasValue
+                && crossPotionWorkMs.Value >= baselinePotionWorkMs.Value)
+        {
+            throw new InvalidOperationException(
+                "P3 cross-family A/B did not start potion work earlier.");
+        }
+
         Console.WriteLine($"evidence={path}");
         return 0;
     }
