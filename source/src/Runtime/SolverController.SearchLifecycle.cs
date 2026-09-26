@@ -205,6 +205,7 @@ internal static partial class SolverController
             MultiplayerContinuationExpectation? expectedMultiplayer =
                 expectedContinuation?.MultiplayerExpectation;
             string continuationRejectReason = "none";
+            IReadOnlyList<PlanAction> continuationSeedActions = Array.Empty<PlanAction>();
             if (continuationStamp != null && capabilities.IsMultiplayer)
             {
                 Entry.Logger.Info(
@@ -344,6 +345,27 @@ internal static partial class SolverController
                         $"local_state_exact={localStateExact.ToString().ToLowerInvariant()} " +
                         $"reason={continuationRejectReason}");
                 }
+
+                if (expectedMultiplayer is { } seedExpectation
+                    && multiplayerValidation is { } seedValidation
+                    && MultiplayerLocalCrossTurnContracts.DescribeContinuationMismatch(
+                        new MultiplayerContinuationMatchInput(
+                            seedExpectation.CombatIdentity,
+                            seedValidation.CombatIdentity,
+                            seedExpectation.LocalNetId,
+                            seedValidation.LocalNetId,
+                            seedExpectation.MultiplayerScalingHooks,
+                            seedValidation.MultiplayerScalingHooks,
+                            seedExpectation.CardMultiplayerConstraint,
+                            seedValidation.CardMultiplayerConstraint,
+                            seedExpectation.SourceWorldVersion,
+                            seedValidation.MinimumWorldVersion,
+                            seedValidation.CurrentWorldVersion)) is null)
+                {
+                    continuationSeedActions = CaptureContinuationSeedActions(
+                        source.BestNode.Actions,
+                        currentTurn);
+                }
             }
 
             if (_combat.ShowcaseMode)
@@ -411,6 +433,15 @@ internal static partial class SolverController
                 includeTurnSetup: false,
                 theftPolicy: theftPolicy,
                 interaction: search.Interaction);
+            if (continuationSeedActions.Count > 0
+                && searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
+                && !searchPolicy.IncludeTurnSetup)
+            {
+                searchPolicy = searchPolicy with
+                {
+                    ContinuationSeedActions = continuationSeedActions,
+                };
+            }
             search.MaxDegreeOfParallelism = searchPolicy.MaxDegreeOfParallelism;
             search.MemoryPressureSignal = searchPolicy.MemoryPressureSignal;
             setupStage = "combat_root_snapshot";
@@ -1034,6 +1065,38 @@ internal static partial class SolverController
             return;
         _deferredSearchId++;
         cancellation.Cancel();
+    }
+
+    private static IReadOnlyList<PlanAction> CaptureContinuationSeedActions(
+        IReadOnlyList<PlanAction> actions,
+        int currentTurn)
+    {
+        List<PlanAction> prefix = [];
+        foreach (PlanAction action in actions)
+        {
+            if (action.Turn < currentTurn)
+                continue;
+            if (action.Turn != currentTurn
+                || action.Kind != PlanActionKind.PlayCard
+                || action.EndsPlayerTurn
+                || action.Choice != null
+                || action.NestedChoices is { Count: > 0 }
+                || action.TurnStartChoices is { Count: > 0 }
+                || action.ShadowForecast != null
+                || string.IsNullOrEmpty(action.CardStateKey))
+            {
+                break;
+            }
+
+            prefix.Add(action with
+            {
+                RelicEffects = null,
+                NestedChoices = null,
+                TurnStartChoices = null,
+            });
+        }
+
+        return prefix.ToArray();
     }
 
     private static Task DrainDeferredSearchReleases()

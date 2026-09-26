@@ -12,6 +12,29 @@ void Check(bool condition, string message)
 StateFingerprint Fingerprint(ulong first, ulong second = 0)
     => new(first, second);
 
+bool replayCandidateRetentionPoliciesAreCorrect =
+    MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore)
+    && MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnProjection(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore)
+    && MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnProjection(
+        SearchRoutePolicy.MultiplayerLocalCrossTurn)
+    && !MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnProjection(
+        SearchRoutePolicy.MultiplayerCurrentTurnOnly)
+    && !MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnProjection(
+        SearchRoutePolicy.SinglePlayerFullRoute)
+    && !MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore,
+        playerCount: 2);
+
+if (args.Length == 1 && args[0] == "--replay-candidate-retention")
+{
+    Check(
+        replayCandidateRetentionPoliciesAreCorrect,
+        "Default multiplayer single-player core retains replay candidates without enabling multiplayer-only route semantics.");
+    return;
+}
+
 Check(
     ActionSearchOrderingPolicy.VerifyForTesting(),
     "E5 action enumeration prioritizes estimated lethal, urgent defense, strategic value-per-resource, then preserves stable original order for exact ties.");
@@ -39,6 +62,7 @@ Check(
         && !MultiplayerLocalCrossTurnContracts.IsCurrentTurnOnly(SearchRoutePolicy.MultiplayerLocalCrossTurn)
         && MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(SearchRoutePolicy.SinglePlayerFullRoute)
         && !MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(SearchRoutePolicy.MultiplayerCurrentTurnOnly)
+        && replayCandidateRetentionPoliciesAreCorrect
         && MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(SearchRoutePolicy.MultiplayerLocalCrossTurn)
         && !MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(
             SearchRoutePolicy.MultiplayerLocalCrossTurn,
@@ -51,7 +75,7 @@ Check(
             playerCount: 2)
         && MultiplayerLocalCrossTurnContracts.CanUsePersistentRouteCache(SearchRoutePolicy.SinglePlayerFullRoute)
         && !MultiplayerLocalCrossTurnContracts.CanUsePersistentRouteCache(SearchRoutePolicy.MultiplayerLocalCrossTurn),
-    "Full-search route policy alone does not activate multiplayer-only ranking/RNG semantics; those require an actual multiplayer root.");
+    "Local cross-turn projection includes the default single-player core without activating multiplayer-only ranking/RNG semantics.");
 
 Check(
     !MultiplayerLocalCrossTurnContracts.ShouldExcludeMultiplayerOnlyCard(

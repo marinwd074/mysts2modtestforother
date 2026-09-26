@@ -1243,7 +1243,7 @@ internal sealed partial class CombatBeamSolver
                     potionHpRequired);
             }
             List<MultiplayerReplayCandidate> replayCandidates = [];
-            if (routePolicy == SearchRoutePolicy.MultiplayerLocalCrossTurn)
+            if (MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnProjection(routePolicy))
             {
                 HashSet<string> retainedFirstActions = [];
                 for (int index = 0; index < selected.Count && replayCandidates.Count < 3; index++)

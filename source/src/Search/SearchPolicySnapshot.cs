@@ -113,5 +113,7 @@ internal sealed record SearchPolicySnapshot(
     /// </summary>
     public BeamWidthPortfolioTelemetry? PortfolioTelemetry { get; init; }
     public SearchRequestWorkTotals? RequestWorkTotals { get; init; }
+    // Suggestions from the prior turn; replay must evaluate them from the current root.
+    public IReadOnlyList<PlanAction> ContinuationSeedActions { get; init; } = [];
     public SearchInteractionState? Interaction { get; init; }
 }
