@@ -2,6 +2,19 @@ namespace CombatSolver;
 
 internal static partial class CombatSearchCoordinator
 {
+    internal static int CompareP3FinalQualityForTesting(
+        CombatRootSnapshot root,
+        SearchPolicySnapshot policy,
+        SolverResult candidate,
+        SolverResult current)
+    {
+        if (IsBetterPotionPolicyResult(root, policy, candidate, current))
+            return -1;
+        if (IsBetterPotionPolicyResult(root, policy, current, candidate))
+            return 1;
+        return 0;
+    }
+
     private static SolverResult RunP3CrossFamilyFixedPass(
         CombatRootSnapshot root,
         SolverDisplayNames displayNames,
