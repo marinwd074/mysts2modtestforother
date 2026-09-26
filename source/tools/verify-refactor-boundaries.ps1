@@ -141,6 +141,29 @@ foreach ($capturedDeathRule in @(
     }
 }
 
+$continuationStampPath = Join-Path $repositoryRoot 'src/Runtime/ContinuationStamp.cs'
+$continuationStampText = [IO.File]::ReadAllText($continuationStampPath)
+foreach ($continuationPowerBoundaryRule in @(
+    'IReadOnlyList<Player> powerCapturedPlayers = capturedPlayers ?? state.Players;',
+    'MultiplayerAdvisorBoundaryContracts.IsCapturedPlayerOwnedCreature(',
+    'powerCapturedPlayers,',
+    'power.Owner')) {
+    if (-not $continuationStampText.Contains($continuationPowerBoundaryRule)) {
+        $violations.Add("${continuationStampPath}: live continuation Power scope drifted '$continuationPowerBoundaryRule'")
+    }
+}
+
+$advisorBoundaryPath = Join-Path $repositoryRoot 'src/Engine/Common/MultiplayerAdvisorBoundaryContracts.cs'
+$advisorBoundaryText = [IO.File]::ReadAllText($advisorBoundaryPath)
+foreach ($sharedCreatureBoundaryRule in @(
+    'internal static bool IsCapturedPlayerOwnedCreature(',
+    'Player? owner = creature.Player ?? creature.PetOwner;',
+    'return owner == null || IsCapturedPlayer(capturedPlayers, owner);')) {
+    if (-not $advisorBoundaryText.Contains($sharedCreatureBoundaryRule)) {
+        $violations.Add("${advisorBoundaryPath}: shared captured-creature boundary drifted '$sharedCreatureBoundaryRule'")
+    }
+}
+
 $simulatedCombatStatePath = Join-Path $repositoryRoot 'src/Search/SimulatedCombatState.cs'
 $simulatedCombatStateText = [IO.File]::ReadAllText($simulatedCombatStatePath)
 foreach ($localSingleCorePrivateRule in @(

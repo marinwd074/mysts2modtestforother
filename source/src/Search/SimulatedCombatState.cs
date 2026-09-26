@@ -2144,10 +2144,9 @@ internal sealed partial class SimulatedCombatState
     }
 
     private bool IsCapturedPlayerOwnedCreature(Creature creature)
-    {
-        Player? owner = creature.Player ?? creature.PetOwner;
-        return owner == null || IsRootCapturedPlayer(owner);
-    }
+        => MultiplayerAdvisorBoundaryContracts.IsCapturedPlayerOwnedCreature(
+            _rootCapturedPlayers,
+            creature);
 
     internal void MaterializeRoot(CombatPredictionSimulator simulator)
     {
