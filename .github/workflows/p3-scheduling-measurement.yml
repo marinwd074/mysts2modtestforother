@@ -65,44 +65,13 @@ jobs:
           $gameData = (Resolve-Path '.\game-body\data_sts2_windows_x86_64').Path
           dotnet build '.\source\tools\E0PinnedHarness\E0PinnedHarness.csproj' -c Release -p:Sts2DataDir="$gameData" -p:RitsuLibReferencesProps="$env:RITSU_PROPS" -p:RitsuWorkshopRoot="$env:RITSU_ROOT" -p:RitsuLibReferenceTarget='0.107.1' -p:TreatWarningsAsErrors=true --nologo
 
-      - name: Measure production-default families
+      - name: Run P3 formal cross-family A/B
         shell: pwsh
         run: |
-          $workspace = Join-Path $env:RUNNER_TEMP 'p3-default'
+          $workspace = Join-Path $env:RUNNER_TEMP 'p3-cross-family-ab'
           New-Item -ItemType Directory -Force -Path $workspace | Out-Null
-          & dotnet '.\source\tools\E0PinnedHarness\bin\Release\net9.0\E0PinnedHarness.dll' --scenario teammate --out $workspace --p3-scheduling-probe
+          & dotnet '.\source\tools\E0PinnedHarness\bin\Release\net9.0\E0PinnedHarness.dll' --scenario teammate --out $workspace --p3-scheduling-probe --p3-cross-family-ab
           if ($LASTEXITCODE -ne 0) {
-            throw "P3 default scheduling probe failed with exit $LASTEXITCODE."
+            throw "P3 formal cross-family A/B failed with exit $LASTEXITCODE."
           }
-          $evidence = Get-Content -LiteralPath (Join-Path $workspace 'e0-teammate.json') -Raw | ConvertFrom-Json
-          'P3_DEFAULT_SUMMARY=' + (([pscustomobject]@{
-            projectedBattleHpLost = $evidence.projectedBattleHpLost
-            projectedBattlePotionCount = $evidence.projectedBattlePotionCount
-            combatEndedTurn = $evidence.combatEndedTurn
-            boundaryReason = $evidence.boundaryReason
-            totalExpandedNodes = $evidence.totalExpandedNodes
-            totalTransitionCount = $evidence.totalTransitionCount
-            memberCount = @($evidence.members).Count
-          }) | ConvertTo-Json -Compress)
-          'P3_DEFAULT_MEMBERS=' + (($evidence.members | Select-Object memberId,kind,beamWidth,secondRankBand,baseScoreOnly,novelty,startedMs,firstWorkMs,completedMs,elapsedMs,expandedNodes,transitionCount) | ConvertTo-Json -Depth 4 -Compress)
-
-      - name: Measure P3 cross-family fixed rotation
-        shell: pwsh
-        run: |
-          $workspace = Join-Path $env:RUNNER_TEMP 'p3-cross-family'
-          New-Item -ItemType Directory -Force -Path $workspace | Out-Null
-          & dotnet '.\source\tools\E0PinnedHarness\bin\Release\net9.0\E0PinnedHarness.dll' --scenario teammate --out $workspace --p3-scheduling-probe --p3-cross-family
-          if ($LASTEXITCODE -ne 0) {
-            throw "P3 cross-family scheduling probe failed with exit $LASTEXITCODE."
-          }
-          $evidence = Get-Content -LiteralPath (Join-Path $workspace 'e0-teammate.json') -Raw | ConvertFrom-Json
-          'P3_CROSS_SUMMARY=' + (([pscustomobject]@{
-            projectedBattleHpLost = $evidence.projectedBattleHpLost
-            projectedBattlePotionCount = $evidence.projectedBattlePotionCount
-            combatEndedTurn = $evidence.combatEndedTurn
-            boundaryReason = $evidence.boundaryReason
-            totalExpandedNodes = $evidence.totalExpandedNodes
-            totalTransitionCount = $evidence.totalTransitionCount
-            memberCount = @($evidence.members).Count
-          }) | ConvertTo-Json -Compress)
-          'P3_CROSS_MEMBERS=' + (($evidence.members | Select-Object memberId,kind,beamWidth,secondRankBand,baseScoreOnly,novelty,startedMs,firstWorkMs,completedMs,elapsedMs,expandedNodes,transitionCount) | ConvertTo-Json -Depth 4 -Compress)
+          Get-Content -LiteralPath (Join-Path $workspace 'p3-cross-family-ab.json')
