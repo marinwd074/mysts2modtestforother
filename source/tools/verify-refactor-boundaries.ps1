@@ -4297,6 +4297,9 @@ if (-not $p1ContinuationContractsText.Contains('internal static bool LocalCoreSe
 if (-not $p1ContinuationContractsText.Contains('ShouldUseLocalCoreDeathHorizonFallback(')) {
     $violations.Add("${p1ContinuationContractsPath}: local-core death-horizon fallback contract is missing")
 }
+if (-not $p1ContinuationContractsText.Contains('ShouldPreferLocalCoreCurrentTurnResult(')) {
+    $violations.Add("${p1ContinuationContractsPath}: local-core final current-turn priority contract is missing")
+}
 if (-not $p1ContinuationContractsText.Contains('IsLocalCoreContinuationStateCompatible(')) {
     $violations.Add("${p1ContinuationContractsPath}: local-core shared-state continuation compatibility contract is missing")
 }
@@ -4379,6 +4382,14 @@ if ($p1PhasesText.Contains('.Where(node => node.ActionCount > 0 && node.Snapshot
 }
 if (-not $p1PhasesText.Contains('SEARCH_ANYTIME_RELEASED_SNAPSHOT_PREVIEW')) {
     $violations.Add("${p1PhasesPath}: released-snapshot anytime preview diagnostic is missing")
+}
+foreach ($currentTurnFinalRule in @(
+    'ShouldPreferLocalCoreCurrentTurnResult(',
+    'MP_LOCAL_CORE_CURRENT_TURN_PRIORITY',
+    'completion: "final_current_turn_priority"')) {
+    if (-not $p1PhasesText.Contains($currentTurnFinalRule)) {
+        $violations.Add("${p1PhasesPath}: final current-turn quality priority drifted '$currentTurnFinalRule'")
+    }
 }
 if (-not $p1PhasesText.Contains('MultiplayerScope = policy.CurrentTurnOnly')) {
     $violations.Add("${p1PhasesPath}: current-turn quality scout must materialize as CurrentTurnOnly multiplayer scope")

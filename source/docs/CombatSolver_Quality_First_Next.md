@@ -183,6 +183,8 @@
 - 默认 `MultiplayerSinglePlayerCore` 不再把 Novelty 放在最前面。原 Novelty exploration envelope 改作**当前回合质量 scout**：同一 Beam/模拟内核、同一总请求预算，只设置 `CurrentTurnOnly=true` 先搜索固定手牌的低战损前缀；实际消耗从完整跨回合 Beam 的剩余预算扣除。诊断：`MP_LOCAL_CURRENT_TURN_QUALITY_SCOUT`。
 - 目的不是把当前回合硬编码成最终路线，而是先把像 `Offering → Second Wind` 这类近回合防御/资源组合展示出来，再继续完整路线；完整搜索仍可在后续发现更好的长期方案。
 - 补充协调器边界：current-turn scout 与整场 complete-victory incumbent 分开维护。后续完整路线只有在首回合与当前更优候选一致时才接管 speculative route；否则后台继续深化，但 UI 不再从低战损首回合回跳到更差的首回合。诊断：`SEARCH_CURRENT_TURN_PROMOTED`。
+- 问题包 `PHROG_PARASITE_ELITE-a39294cfc795445ba37aee48f82932e2` 进一步证明只保护 UI 仍不够：手牌为 `BARRICADE / FORGOTTEN_RITUAL / NOT_YET / STRIKE / NOT_YET`、4 费；约 5 秒时搜索已经出现以 `STRIKE` 开始的首回合候选，但 120 秒正式结果退化成 `BARRICADE → EndTurn`，并明确记录 `energy_left=1`。这不是“打击没进候选”，而是完整胜利的长尾排序最终覆盖了更好的首回合边界。
+- 正式结果现在与 anytime UI 使用同一原则：`MultiplayerSinglePlayerCore` 在最终完整路线选出后，再把它的首回合边界与搜索过程中保留的 current-turn incumbent 用既有 `SolverInterimResultOrdering` 比较；若 incumbent 严格更优，则最终物化为 `CurrentTurnAdoption`，下一回合从真实多人状态重新建根。不会增加“必须把能量花光”的规则；同战损/资源下，原排序已经会让更低敌方 HP（例如可合法补一张 Strike）的边界优先。诊断：`MP_LOCAL_CORE_CURRENT_TURN_PRIORITY`。
 
 ### 当前真实样本补充：多人战损只统计本地玩家（2026-09-26）
 

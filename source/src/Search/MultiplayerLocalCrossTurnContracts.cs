@@ -71,6 +71,20 @@ internal static class MultiplayerLocalCrossTurnContracts
         => routePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
             && !includeTurnSetup;
 
+    /// <summary>
+    /// The complete local-only projection is advisory for future turns because teammates can
+    /// change that future before it is executed. If the retained current-turn incumbent is
+    /// strictly better than the selected full-route first-turn boundary, deploy the incumbent
+    /// and re-root next turn instead of sacrificing the immediate decision for distant quality.
+    /// </summary>
+    internal static bool ShouldPreferLocalCoreCurrentTurnResult(
+        SearchRoutePolicy routePolicy,
+        int playerCount,
+        bool currentTurnStrictlyBetter)
+        => routePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
+            && playerCount > 1
+            && currentTurnStrictlyBetter;
+
     internal static bool ShouldUseP3CrossFamilyScheduling(
         SearchRoutePolicy routePolicy,
         bool includeTurnSetup,

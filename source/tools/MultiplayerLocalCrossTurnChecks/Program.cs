@@ -250,6 +250,25 @@ Check(
     "Default local-core spends the former novelty-first window on current-turn quality before long-horizon search.");
 
 Check(
+    MultiplayerLocalCrossTurnContracts.ShouldPreferLocalCoreCurrentTurnResult(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore,
+        playerCount: 2,
+        currentTurnStrictlyBetter: true)
+    && !MultiplayerLocalCrossTurnContracts.ShouldPreferLocalCoreCurrentTurnResult(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore,
+        playerCount: 1,
+        currentTurnStrictlyBetter: true)
+    && !MultiplayerLocalCrossTurnContracts.ShouldPreferLocalCoreCurrentTurnResult(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore,
+        playerCount: 2,
+        currentTurnStrictlyBetter: false)
+    && !MultiplayerLocalCrossTurnContracts.ShouldPreferLocalCoreCurrentTurnResult(
+        SearchRoutePolicy.SinglePlayerFullRoute,
+        playerCount: 2,
+        currentTurnStrictlyBetter: true),
+    "Default local-core formal result keeps a strictly better current-turn incumbent over a worse long-horizon first turn.");
+
+Check(
     !MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled
     && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
         SearchRoutePolicy.MultiplayerSinglePlayerCore, false, true, false, false)
