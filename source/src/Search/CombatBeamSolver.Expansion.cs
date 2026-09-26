@@ -58,6 +58,8 @@ internal sealed partial class CombatBeamSolver
             ObserveSearchPath(node, SearchPathObservationStage.ExpansionBlocked, "cycle_exit_budget");
             yield break;
         }
+        if (!TryConsumeExpandedNodeBudget())
+            yield break;
         _run.Expanded++;
         ObserveSearchPath(node, SearchPathObservationStage.Expanded, "serial_parent");
         CombatPredictionSimulator simulator = (CombatPredictionSimulator)snapshot.Simulator;
