@@ -75,6 +75,15 @@ jobs:
             throw "P3 default scheduling probe failed with exit $LASTEXITCODE."
           }
           $evidence = Get-Content -LiteralPath (Join-Path $workspace 'e0-teammate.json') -Raw | ConvertFrom-Json
+          'P3_DEFAULT_SUMMARY=' + (([pscustomobject]@{
+            projectedBattleHpLost = $evidence.projectedBattleHpLost
+            projectedBattlePotionCount = $evidence.projectedBattlePotionCount
+            combatEndedTurn = $evidence.combatEndedTurn
+            boundaryReason = $evidence.boundaryReason
+            totalExpandedNodes = $evidence.totalExpandedNodes
+            totalTransitionCount = $evidence.totalTransitionCount
+            memberCount = @($evidence.members).Count
+          }) | ConvertTo-Json -Compress)
           'P3_DEFAULT_MEMBERS=' + (($evidence.members | Select-Object memberId,kind,beamWidth,secondRankBand,baseScoreOnly,novelty,startedMs,firstWorkMs,completedMs,elapsedMs,expandedNodes,transitionCount) | ConvertTo-Json -Depth 4 -Compress)
 
       - name: Measure optional Novelty families
@@ -87,4 +96,13 @@ jobs:
             throw "P3 novelty scheduling probe failed with exit $LASTEXITCODE."
           }
           $evidence = Get-Content -LiteralPath (Join-Path $workspace 'e0-teammate.json') -Raw | ConvertFrom-Json
+          'P3_NOVELTY_SUMMARY=' + (([pscustomobject]@{
+            projectedBattleHpLost = $evidence.projectedBattleHpLost
+            projectedBattlePotionCount = $evidence.projectedBattlePotionCount
+            combatEndedTurn = $evidence.combatEndedTurn
+            boundaryReason = $evidence.boundaryReason
+            totalExpandedNodes = $evidence.totalExpandedNodes
+            totalTransitionCount = $evidence.totalTransitionCount
+            memberCount = @($evidence.members).Count
+          }) | ConvertTo-Json -Compress)
           'P3_NOVELTY_MEMBERS=' + (($evidence.members | Select-Object memberId,kind,beamWidth,secondRankBand,baseScoreOnly,novelty,startedMs,firstWorkMs,completedMs,elapsedMs,expandedNodes,transitionCount) | ConvertTo-Json -Depth 4 -Compress)
