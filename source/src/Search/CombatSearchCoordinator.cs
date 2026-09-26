@@ -487,6 +487,7 @@ internal static partial class CombatSearchCoordinator
                     NoveltySearch = null,
                     UseNoveltyPortfolio = false,
                     ContinuationSeedActions = continuationSeedActions,
+                    ContinuationEnumerationHintActions = [],
                 };
                 try
                 {

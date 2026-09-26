@@ -369,6 +369,30 @@ internal static class Program
                 result.Snapshot.PlayerDead,
                 result.Snapshot.ProjectedPlayerHp);
 
+        static bool SameQuality(SolverResult left, SolverResult right)
+            => CompleteVictory(left) == CompleteVictory(right)
+                && left.ProjectedBattleHpLost == right.ProjectedBattleHpLost
+                && left.ProjectedBattlePotionCount == right.ProjectedBattlePotionCount
+                && left.CombatEndedTurn == right.CombatEndedTurn
+                && left.Snapshot.EnemyHp == right.Snapshot.EnemyHp
+                && left.Snapshot.PlayerHp == right.Snapshot.PlayerHp
+                && left.BoundaryReason == right.BoundaryReason;
+
+        static double FinalCandidatePublishedMs(SolverResult result)
+        {
+            BeamWidthPortfolioTelemetry telemetry = result.PortfolioTelemetry
+                ?? throw new InvalidOperationException("P2 A/B result has no request telemetry.");
+            CandidateOrigin origin = result.SearchEfficiencyOrigin
+                ?? throw new InvalidOperationException("P2 A/B final result has no candidate origin.");
+            string context = result.SearchEfficiencyEvaluationContextId
+                ?? throw new InvalidOperationException("P2 A/B final result has no evaluation context.");
+            CandidateMilestones milestones = telemetry.FindCandidateMilestones(origin, context)
+                ?? throw new InvalidOperationException("P2 A/B final candidate has no milestones.");
+            long published = milestones.PublishedTicks
+                ?? throw new InvalidOperationException("P2 A/B final candidate was never published.");
+            return telemetry.ToRequestMilliseconds(published);
+        }
+
         static (SolverResult Result, double? FirstAdoptableMs) Run(
             CombatRootSnapshot root,
             SolverDisplayNames names,
@@ -432,20 +456,29 @@ internal static class Program
         string[] coldRoute = Route(cold);
         string[] seededRoute = Route(seeded);
         bool sameRoute = coldRoute.SequenceEqual(seededRoute, StringComparer.Ordinal);
-        bool sameQuality =
-            CompleteVictory(cold) == CompleteVictory(seeded)
-            && cold.ProjectedBattleHpLost == seeded.ProjectedBattleHpLost
-            && cold.ProjectedBattlePotionCount == seeded.ProjectedBattlePotionCount
-            && cold.CombatEndedTurn == seeded.CombatEndedTurn
-            && cold.Snapshot.EnemyHp == seeded.Snapshot.EnemyHp
-            && cold.Snapshot.PlayerHp == seeded.Snapshot.PlayerHp
-            && cold.BoundaryReason == seeded.BoundaryReason;
+        bool sameQuality = SameQuality(cold, seeded);
         bool seededEarlier = coldAdoptableMs.HasValue
             && seededAdoptableMs.HasValue
             && seededAdoptableMs.Value < coldAdoptableMs.Value;
         bool withinNodeBudget = seeded.TotalExpandedNodes <= MaxExpandedNodes;
         bool probeWithinFivePercent = seedMember.ExpandedNodes
             <= Math.Max(1, MaxExpandedNodes / ContinuationSeedIncumbentBudget.WorkDivisor);
+
+        SearchInteractionState hintedInteraction = new();
+        SearchPolicySnapshot hintedPolicy = CommonPolicy(hintedInteraction) with
+        {
+            ContinuationEnumerationHintActions = seed,
+        };
+        (SolverResult hinted, double? hintedAdoptableMs) = Run(
+            root, names, damage, hintedPolicy);
+        string[] hintedRoute = Route(hinted);
+        bool hintSameRoute = coldRoute.SequenceEqual(hintedRoute, StringComparer.Ordinal);
+        bool hintSameQuality = SameQuality(cold, hinted);
+        bool hintWithinNodeBudget = hinted.TotalExpandedNodes <= MaxExpandedNodes;
+        double coldReferencePublishedMs = FinalCandidatePublishedMs(cold);
+        double hintedReferencePublishedMs = FinalCandidatePublishedMs(hinted);
+        bool hintReachedReferenceEarlier =
+            hintedReferencePublishedMs < coldReferencePublishedMs;
 
         var evidence = new
         {
@@ -484,6 +517,21 @@ internal static class Program
                 probeExpandedNodes = seedMember.ExpandedNodes,
                 probeTransitionCount = seedMember.TransitionCount,
             },
+            hinted = new
+            {
+                route = hintedRoute,
+                completeVictory = CompleteVictory(hinted),
+                hinted.ProjectedBattleHpLost,
+                hinted.ProjectedBattlePotionCount,
+                hinted.CombatEndedTurn,
+                hinted.BoundaryReason,
+                finalEnemyHp = hinted.Snapshot.EnemyHp,
+                finalPlayerHp = hinted.Snapshot.PlayerHp,
+                hinted.TotalExpandedNodes,
+                hinted.TotalTransitionCount,
+                firstAdoptableMs = hintedAdoptableMs,
+                finalCandidatePublishedMs = hintedReferencePublishedMs,
+            },
             acceptance = new
             {
                 sameRoute,
@@ -491,6 +539,12 @@ internal static class Program
                 seededEarlier,
                 withinNodeBudget,
                 probeWithinFivePercent,
+                hintSameRoute,
+                hintSameQuality,
+                hintWithinNodeBudget,
+                coldFinalCandidatePublishedMs = coldReferencePublishedMs,
+                hintedFinalCandidatePublishedMs = hintedReferencePublishedMs,
+                hintReachedReferenceEarlier,
             },
         };
 
@@ -513,11 +567,24 @@ internal static class Program
                 $"cold_ms={coldAdoptableMs?.ToString("F3") ?? "-"} " +
                 $"seeded_ms={seededAdoptableMs?.ToString("F3") ?? "-"}.");
         }
+        if (!hintSameQuality || !hintWithinNodeBudget)
+        {
+            throw new InvalidOperationException(
+                $"P2 enumeration-hint A/B regressed a hard gate: " +
+                $"same_quality={hintSameQuality} within_budget={hintWithinNodeBudget} " +
+                $"same_route={hintSameRoute}.");
+        }
 
         Console.WriteLine(
             $"P2_AB_PASS same_route={sameRoute} same_quality={sameQuality} " +
             $"cold_adoptable_ms={coldAdoptableMs:F3} seeded_adoptable_ms={seededAdoptableMs:F3} " +
             $"seed_probe_nodes={seedMember.ExpandedNodes} total_nodes={seeded.TotalExpandedNodes}");
+        Console.WriteLine(
+            $"P2_HINT_AB_{(hintReachedReferenceEarlier ? "GO" : "NO_GO")} " +
+            $"same_route={hintSameRoute} same_quality={hintSameQuality} " +
+            $"cold_reference_ms={coldReferencePublishedMs:F3} " +
+            $"hinted_reference_ms={hintedReferencePublishedMs:F3} " +
+            $"cold_nodes={cold.TotalExpandedNodes} hinted_nodes={hinted.TotalExpandedNodes}");
         Console.WriteLine($"evidence={path}");
         return 0;
     }
