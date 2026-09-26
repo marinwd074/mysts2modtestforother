@@ -2,7 +2,7 @@
 
 日期：2026-09-26；原方案审查基线：`fe966f5`。下文设计和源码事实表记录该基线，实施进度见本节；不是性能收益承诺。后续 GPT 开工必须刷新 HEAD、核对下列符号，已经存在的能力不得重复实现。
 
-### 当前实施进度（中间提交）
+### 当前实施进度（P0–P4 已完成）
 
 2026-09-26 用户要求执行最难的跨回合复用部分。本次实现基于 `9390af5`，保留远端已加入的路线提前发布和续接误判修复。
 
@@ -15,7 +15,7 @@
 - P2 独立成员只有得到完整胜利结果后才通过现有 `PublishAdoptableResult` / `SolverRouteAdoptionSeed` 发布为可手动采用 incumbent；随后正常搜索继续并用现有正式质量排序决定是否提升。未增加按钮，也未改变 Full Auto / Multiplayer Safe Auto 的默认提前采用时机。
 - P2 固定输入验证已通过。独立 incumbent 在同一路线、同质量下三次均更早得到可采用结果；枚举提示随后做了独立 fixed-work A/B，三次都保持同一路线、同最终质量和相同节点数（7536 vs 7536），`time_to_reference_quality` 分别为 6163→2113ms、6726→2477ms、7730→3667ms，中位数 6726→2477ms。样本仅 3 对，不宣称统计显著或可靠 P95；证据见 [P2 targeted validation run 7](https://github.com/marinwd074/mysts2modtestforother/actions/runs/36222967258) 的 3 次 attempt。
 - P2 枚举提示因此只接入已有合法 continuation seed 的 `MultiplayerSinglePlayerCore` 路径：它仅提高与已实现前缀严格一致的“下一动作”枚举优先级；一旦前缀偏离、跨回合、Choice/目标/卡实例不匹配就停止提示。候选集合、合法性、Beam retention、最终排序、预算和 Safe Execute 授权均不放宽；没有 seed 时行为不变。独立 incumbent 的 5% 预算和普通 Beam 的提示仍是两个隔离机制。
-- P2 至此按离线固定输入收尾；真实 Host/Client 的累计等待与跨连续本地回合收益仍需实机证据。P3 调度扩展和 P4 热点优化仍未进入。
+- P2 至此按离线固定输入收尾；真实 Host/Client 的累计等待与跨连续本地回合收益仍需实机证据。P3 已完成 Smart 跨家族调度准入，P4 已完成三项严格热点优化；专项实施阶段 P0–P4 至此关闭，后续只在新 profiler / 实机证据证明新的等价优化空间时重开。
 
 ## 1. 项目决策
 
@@ -183,7 +183,11 @@ RepairResult ReplaySeed(CombatRootSnapshot root, RouteSeed seed,
 
 进度（2026-09-26，P4-B1）：已完成第一项严格等价热点优化。固定输入 profiler 先定位到 `combat_fingerprint` 的 TurnState 热区；其中 calculated-history 原实现会在每次 fingerprint 反复扫描 prediction history。现在本地单玩家根优先复用 `CombatPredictionHistory` 已维护的六项增量计数；owner 不匹配或无法证明计数可用时自动回退原扫描，不引入跨根缓存、近似 key 或语义字段删减。
 
-验证证据见 [P4 hotspot profile run #11](https://github.com/marinwd074/mysts2modtestforother/actions/runs/36230706828)：Release 0 warning / 0 error，`HistoryCounterKeyChecks` 11 项通过；teammate 与 draw_energy 的 fixed-work A/B 均 `same_route=True / same_quality=True / same_work=True`。teammate TurnState 约 297→57ms、12.34→3.09MB，combat fingerprint 约 407→184ms、18.44→9.19MB；draw_energy TurnState 约 197→71ms、11.37→3.00MB，combat fingerprint 约 157→71ms、8.00→3.64MB。P4-B2 继续处理 Tail 中的 `RelicPotion`：多人本地核心虽然 live roster 有多名玩家，但 fingerprint 只捕获 1 个本地可读玩家；原代码仍按 live `Players.Count` 进入单元素 `OrderBy`。现在按 `_rootCapturedPlayers.Count == 1` 走同序快路径，多捕获玩家仍保留原排序。验证见 [P4 hotspot profile run #13](https://github.com/marinwd074/mysts2modtestforother/actions/runs/36231148451)：teammate `RelicPotion` 约 27.9→14.6ms、1.91→0.18MB；draw_energy 约 27.7→13.6ms、1.85→0.18MB，两者均 `same_route=True / same_quality=True / same_work=True`。P4 尚未完成，下一项继续从剩余已证实热点中选择严格优化。
+验证证据见 [P4 hotspot profile run #11](https://github.com/marinwd074/mysts2modtestforother/actions/runs/36230706828)：Release 0 warning / 0 error，`HistoryCounterKeyChecks` 11 项通过；teammate 与 draw_energy 的 fixed-work A/B 均 `same_route=True / same_quality=True / same_work=True`。teammate TurnState 约 297→57ms、12.34→3.09MB，combat fingerprint 约 407→184ms、18.44→9.19MB；draw_energy TurnState 约 197→71ms、11.37→3.00MB，combat fingerprint 约 157→71ms、8.00→3.64MB。P4-B2 继续处理 Tail 中的 `RelicPotion`：多人本地核心虽然 live roster 有多名玩家，但 fingerprint 只捕获 1 个本地可读玩家；原代码仍按 live `Players.Count` 进入单元素 `OrderBy`。现在按 `_rootCapturedPlayers.Count == 1` 走同序快路径，多捕获玩家仍保留原排序。验证见 [P4 hotspot profile run #13](https://github.com/marinwd074/mysts2modtestforother/actions/runs/36231148451)：teammate `RelicPotion` 约 27.9→14.6ms、1.91→0.18MB；draw_energy 约 27.7→13.6ms、1.85→0.18MB，两者均 `same_route=True / same_quality=True / same_work=True`。
+
+P4-B3 处理剩余 `snapshot` 分配热点：把每个快照中的 `Count/Any/Where+Sum` 卡牌/药水/Power 枚举改为等序下标循环，并复用同一快照已经取得的 `effectivePowers` 只读视图；`Enumerable.Sum(int)` 的 checked 溢出语义、`Any` 的短路和所有评分字段保持不变。验证见 [P4 snapshot A/B run](https://github.com/marinwd074/mysts2modtestforother/actions/runs/36231318859)：Release 0 warning / 0 error；teammate `snapshot` 约 837.4→820.6ms、35.94→34.03MB，draw_energy 约 376.7→353.4ms、17.05→16.08MB，两组均 `same_route=True / same_quality=True / same_work=True`。
+
+**P4 已完成。** 本轮只合入有 fixed-work 等价证据的冗余扫描/排序/分配优化。剩余 `action / round / card_exec / fork / prune` 主要对应真实模拟、COW 或候选保留工作，当前证据不足以证明可严格复用；不为阶段编号强行加入跨根 transition cache、整树 re-root、近似动作可交换剪枝、额外 DFS/MCTS。未来只有新的 current-HEAD profiler 或实机坏例能证明完整等价和收益时才重新开启该类优化。
 
 只有 P0–P3 的 current-HEAD 分项数据证明收益空间后才做。优先现有 Fork/COW、指纹、Hook 枚举、排序/分配热区；每项单独提交、固定输入比结果与工作。
 
