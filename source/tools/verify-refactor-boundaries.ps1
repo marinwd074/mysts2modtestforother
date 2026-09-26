@@ -4415,8 +4415,8 @@ foreach ($retiredLocalCoreSearchRule in @(
     'RunLocalCoreCurrentTurnQualityFirst(',
     'ShouldRunLocalCoreCurrentTurnQualityScout(',
     'MP_LOCAL_CURRENT_TURN_QUALITY_SCOUT')) {
-    if ($localCoreNoveltyText.Contains($retiredLocalCoreSearchRule)
-        -or $p1CoordinatorText.Contains($retiredLocalCoreSearchRule)) {
+    if ($localCoreNoveltyText.Contains($retiredLocalCoreSearchRule) -or
+        $p1CoordinatorText.Contains($retiredLocalCoreSearchRule)) {
         $violations.Add("Retired multiplayer current-turn scout returned: '$retiredLocalCoreSearchRule'")
     }
 }
@@ -4464,8 +4464,8 @@ foreach ($retiredLocalCoreFinalRule in @(
     'final_current_turn_priority',
     'ShouldUseLocalCoreDeathHorizonFallback(',
     'MP_LOCAL_CORE_DEATH_HORIZON_FALLBACK')) {
-    if ($p1PhasesText.Contains($retiredLocalCoreFinalRule)
-        -or $p1ContinuationContractsText.Contains($retiredLocalCoreFinalRule)) {
+    if ($p1PhasesText.Contains($retiredLocalCoreFinalRule) -or
+        $p1ContinuationContractsText.Contains($retiredLocalCoreFinalRule)) {
         $violations.Add("Retired multiplayer final-result override returned: '$retiredLocalCoreFinalRule'")
     }
 }
