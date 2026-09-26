@@ -303,6 +303,8 @@ internal sealed partial class CombatBeamSolver
                     priorActionCount: prefix.Count,
                     countTransition: false,
                     allowExecutionCapture: false);
+                if (!TryConsumeExpandedNodeBudget())
+                    break;
                 _run.Expanded++;
                 _run.TransitionCount = checked(
                     _run.TransitionCount + route.Actions.Count + 1);
