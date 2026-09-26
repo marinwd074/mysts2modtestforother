@@ -181,6 +181,12 @@ RepairResult ReplaySeed(CombatRootSnapshot root, RouteSeed seed,
 
 ### P4：最后处理模拟热点和严格复用
 
+状态（2026-09-26，进行中）：P4-A 已用现有 `SearchPerformanceMetrics` 对 fixed input 做热点定位；teammate 与 draw_energy 均显示 action 为外层总热点，而 snapshot/fingerprint 是可独立优化的主要子热点。进一步把 `combat_fingerprint` 分段后，TurnState 在优化前占 teammate 约 633/808ms、15.2/22.6MB，draw_energy 约 105/164ms、5.45/7.36MB。
+
+P4-B 第一项已通过 fixed-work A/B：calculated-card history 改为优先复用 `CombatPredictionHistory` 已维护的六项增量 `CombatHistoryCounters`，不再在每次 fingerprint 对预测历史做多次 `OfType().Count(...)` 全扫描；唯一 local owner 时也跳过不必要的玩家排序，不支持 counter owner 的路径继续使用原扫描。验证证据：[P4 hotspot run #10](https://github.com/marinwd074/mysts2modtestforother/actions/runs/36230541894)。teammate 在相同路线、质量、2000 expanded nodes 和 transitions 下，TurnState 389.1→67.7ms、12.34→3.09MB，combat fingerprint 510.5→202.9ms、18.44→9.19MB；draw_energy 在相同路线、质量、1727 nodes 和 transitions 下，TurnState 215.9→57.4ms、11.37→3.00MB，combat fingerprint 161.5→81.8ms、8.00→3.64MB。样本量小，不声称统计显著；这里的强准入依据是 fixed-work 完全等价与确定性的分配下降。
+
+该项之后重新 profiling，TurnState 已不再是最大的 `combat_fingerprint` 子段：teammate TurnState 约 115ms、Tail 约 138ms；draw_energy TurnState 约 28ms、Tail 约 37ms。P4 下一项因此转向 Tail，而不是继续压 TurnState。跨根 transposition、整树 re-root、经验性动作可交换剪枝、额外 DFS 仍保持关闭。
+
 只有 P0–P3 的 current-HEAD 分项数据证明收益空间后才做。优先现有 Fork/COW、指纹、Hook 枚举、排序/分配热区；每项单独提交、固定输入比结果与工作。
 
 首版不做跨根 transposition table、整棵搜索树 re-root、经验性动作可交换剪枝、额外 DFS 或整套 MCTS 替换。旧节点的累计战损、药水成本、历史、策略、根归一化评分及 RNG 可能不再成立，搬树并非只改根指针。
