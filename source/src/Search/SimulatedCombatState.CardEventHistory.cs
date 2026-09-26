@@ -29,38 +29,81 @@ internal sealed partial class SimulatedCombatState
     public int GetCardsDrawnBeforePrediction(Player player)
         => _rootHistory.CardsDrawn.Count(entry => entry.Actor.Player == player);
 
+    internal static bool UseLegacyCalculatedHistoryScanForTesting { get; set; }
+
     public int GetFinishedCardPlaysForCalculatedVar(CombatPredictionSimulator simulator)
-        => _rootHistory.CardPlaysFinished.Length
-           + simulator.History.OfType<CombatPredictionCardPlayFinishedEntry>().Count();
+    {
+        if (!UseLegacyCalculatedHistoryScanForTesting
+            && _rootCapturedPlayers.Count == 1
+            && simulator.History.TryGetCounters(
+                _rootCapturedPlayers[0],
+                out CombatHistoryCounters counters))
+        {
+            return _rootHistory.CardPlaysFinished.Length + counters.FinishedPlays;
+        }
+        return _rootHistory.CardPlaysFinished.Length
+            + simulator.History.OfType<CombatPredictionCardPlayFinishedEntry>().Count();
+    }
 
     public int GetGeneratedCardsForCalculatedVar(CombatPredictionSimulator simulator, Player player)
-        => _rootHistory.CardsGenerated.Count(entry => entry.Creator == player)
-           + simulator.History.OfType<CombatPredictionCardGeneratedEntry>()
-               .Count(entry => entry.Creator == player);
+    {
+        int predicted = !UseLegacyCalculatedHistoryScanForTesting
+            && simulator.History.TryGetCounters(player, out CombatHistoryCounters counters)
+                ? counters.CardsGenerated
+                : simulator.History.OfType<CombatPredictionCardGeneratedEntry>()
+                    .Count(entry => entry.Creator == player);
+        return _rootHistory.CardsGenerated.Count(entry => entry.Creator == player) + predicted;
+    }
 
     public int GetLightningChannelsForCalculatedVar(CombatPredictionSimulator simulator, Player player)
-        => _rootHistory.OrbsChanneled.Count(entry => entry.Actor.Player == player && entry.Orb is LightningOrb)
-           + simulator.History.OfType<CombatPredictionOrbChanneledEntry>()
-               .Count(entry => entry.Orb.Owner == player && entry.Orb is LightningOrb);
+    {
+        int predicted = !UseLegacyCalculatedHistoryScanForTesting
+            && simulator.History.TryGetCounters(player, out CombatHistoryCounters counters)
+                ? counters.LightningChannels
+                : simulator.History.OfType<CombatPredictionOrbChanneledEntry>()
+                    .Count(entry => entry.Orb.Owner == player && entry.Orb is LightningOrb);
+        return _rootHistory.OrbsChanneled.Count(entry =>
+                entry.Actor.Player == player && entry.Orb is LightningOrb)
+            + predicted;
+    }
 
     public int GetUnblockedDamageEventsForCalculatedVar(
         CombatPredictionSimulator simulator,
         Creature receiver)
-        => _rootHistory.DamageReceived.Count(entry =>
-               entry.Receiver == receiver && entry.Result.UnblockedDamage > 0)
-           + simulator.History.OfType<CombatPredictionDamageReceivedEntry>()
-               .Count(entry => entry.Receiver == receiver && entry.Result.UnblockedDamage > 0);
+    {
+        Player? player = receiver.Player;
+        int predicted = player != null
+            && !UseLegacyCalculatedHistoryScanForTesting
+            && simulator.History.TryGetCounters(player, out CombatHistoryCounters counters)
+                ? counters.UnblockedHitsReceived
+                : simulator.History.OfType<CombatPredictionDamageReceivedEntry>()
+                    .Count(entry => entry.Receiver == receiver && entry.Result.UnblockedDamage > 0);
+        return _rootHistory.DamageReceived.Count(entry =>
+                entry.Receiver == receiver && entry.Result.UnblockedDamage > 0)
+            + predicted;
+    }
 
     public int GetEtherealPlaysForCalculatedVar(CombatPredictionSimulator simulator, Player player)
-        => _rootHistory.CardPlaysFinished.Count(entry =>
-               entry.CardPlay.Card.Owner == player && entry.WasEthereal)
-           + simulator.History.OfType<CombatPredictionCardPlayFinishedEntry>()
-               .Count(entry => entry.CardPlay.Card.Owner == player && entry.WasEthereal);
+    {
+        int predicted = !UseLegacyCalculatedHistoryScanForTesting
+            && simulator.History.TryGetCounters(player, out CombatHistoryCounters counters)
+                ? counters.EtherealPlays
+                : simulator.History.OfType<CombatPredictionCardPlayFinishedEntry>()
+                    .Count(entry => entry.CardPlay.Card.Owner == player && entry.WasEthereal);
+        return _rootHistory.CardPlaysFinished.Count(entry =>
+                entry.CardPlay.Card.Owner == player && entry.WasEthereal)
+            + predicted;
+    }
 
     public int GetCardsDrawnForCalculatedVar(CombatPredictionSimulator simulator, Player player)
-        => GetCardsDrawnBeforePrediction(player)
-           + simulator.History.OfType<CombatPredictionCardDrawnEntry>()
-               .Count(entry => entry.Card.Owner == player);
+    {
+        int predicted = !UseLegacyCalculatedHistoryScanForTesting
+            && simulator.History.TryGetCounters(player, out CombatHistoryCounters counters)
+                ? counters.CardsDrawn
+                : simulator.History.OfType<CombatPredictionCardDrawnEntry>()
+                    .Count(entry => entry.Card.Owner == player);
+        return GetCardsDrawnBeforePrediction(player) + predicted;
+    }
 
     public static void AppendLiveCalculatedCardHistory(StringBuilder text, Player player)
     {
@@ -97,7 +140,15 @@ internal sealed partial class SimulatedCombatState
     {
         fingerprint.Add("history_sensitive_calculated_cards");
         fingerprint.Add(GetFinishedCardPlaysForCalculatedVar(simulator));
+        if (!UseLegacyCalculatedHistoryScanForTesting && _rootCapturedPlayers.Count == 1)
+        {
+            AppendPlayer(_rootCapturedPlayers[0]);
+            return;
+        }
         foreach (Player player in _rootCapturedPlayers.OrderBy(player => player.NetId))
+            AppendPlayer(player);
+
+        void AppendPlayer(Player player)
         {
             fingerprint.Add(player.NetId);
             fingerprint.Add(GetGeneratedCardsForCalculatedVar(simulator, player));
