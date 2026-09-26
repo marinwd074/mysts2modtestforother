@@ -142,21 +142,32 @@ internal sealed partial class SimulatedCombatState
         fingerprint.Add(GetFinishedCardPlaysForCalculatedVar(simulator));
         if (!UseLegacyCalculatedHistoryScanForTesting && _rootCapturedPlayers.Count == 1)
         {
-            AppendPlayer(_rootCapturedPlayers[0]);
+            AppendCalculatedCardHistoryPlayerFingerprint(
+                ref fingerprint,
+                simulator,
+                _rootCapturedPlayers[0]);
             return;
         }
         foreach (Player player in _rootCapturedPlayers.OrderBy(player => player.NetId))
-            AppendPlayer(player);
-
-        void AppendPlayer(Player player)
         {
-            fingerprint.Add(player.NetId);
-            fingerprint.Add(GetGeneratedCardsForCalculatedVar(simulator, player));
-            fingerprint.Add(GetLightningChannelsForCalculatedVar(simulator, player));
-            fingerprint.Add(GetUnblockedDamageEventsForCalculatedVar(simulator, player.Creature));
-            fingerprint.Add(GetEtherealPlaysForCalculatedVar(simulator, player));
-            fingerprint.Add(GetCardsDrawnForCalculatedVar(simulator, player));
+            AppendCalculatedCardHistoryPlayerFingerprint(
+                ref fingerprint,
+                simulator,
+                player);
         }
+    }
+
+    private void AppendCalculatedCardHistoryPlayerFingerprint(
+        ref StateFingerprintBuilder fingerprint,
+        CombatPredictionSimulator simulator,
+        Player player)
+    {
+        fingerprint.Add(player.NetId);
+        fingerprint.Add(GetGeneratedCardsForCalculatedVar(simulator, player));
+        fingerprint.Add(GetLightningChannelsForCalculatedVar(simulator, player));
+        fingerprint.Add(GetUnblockedDamageEventsForCalculatedVar(simulator, player.Creature));
+        fingerprint.Add(GetEtherealPlaysForCalculatedVar(simulator, player));
+        fingerprint.Add(GetCardsDrawnForCalculatedVar(simulator, player));
     }
 
     private static void AppendCalculatedCardHistory(
