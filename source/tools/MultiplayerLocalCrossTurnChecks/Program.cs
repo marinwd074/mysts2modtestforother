@@ -159,19 +159,19 @@ Check(
 
 Check(
     MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore, false, SolverPotionPolicy.Smart, false, false)
+        SearchRoutePolicy.MultiplayerSinglePlayerCore, false, true, false, false)
     && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
-        SearchRoutePolicy.SinglePlayerFullRoute, false, SolverPotionPolicy.Smart, false, false)
+        SearchRoutePolicy.SinglePlayerFullRoute, false, true, false, false)
     && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
-        SearchRoutePolicy.MultiplayerLocalCrossTurn, false, SolverPotionPolicy.Smart, false, false)
+        SearchRoutePolicy.MultiplayerLocalCrossTurn, false, true, false, false)
     && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore, true, SolverPotionPolicy.Smart, false, false)
+        SearchRoutePolicy.MultiplayerSinglePlayerCore, true, true, false, false)
     && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore, false, SolverPotionPolicy.Smart, true, false)
+        SearchRoutePolicy.MultiplayerSinglePlayerCore, false, true, true, false)
     && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore, false, SolverPotionPolicy.Smart, false, true)
+        SearchRoutePolicy.MultiplayerSinglePlayerCore, false, true, false, true)
     && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore, false, SolverPotionPolicy.Disabled, false, false),
+        SearchRoutePolicy.MultiplayerSinglePlayerCore, false, false, false, false),
     "P3 cross-family scheduling is admitted only for multiplayer local single-player-core Smart search outside turn setup, forced directives and Novelty.");
 
 SolverSearchProfile p2BudgetProfile = SolverSearchProfile.Default with

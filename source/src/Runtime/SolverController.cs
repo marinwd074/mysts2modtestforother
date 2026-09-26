@@ -511,7 +511,7 @@ internal static partial class SolverController
                 MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
                     routePolicy,
                     includeTurnSetup,
-                    effectivePotionPolicy,
+                    effectivePotionPolicy == SolverPotionPolicy.Smart,
                     effectivePotionStrategy.HasForcedDirectives,
                     (settings.UseNoveltyPortfolio
                         || UnattendedTestRunner.UseNoveltyPortfolioOverride)
