@@ -55,12 +55,20 @@ foreach ($localSearchStampRule in @(
     }
 }
 
+$solverControllerPath = Join-Path $repositoryRoot 'src/Runtime/SolverController.cs'
+$solverControllerText = [IO.File]::ReadAllText($solverControllerPath)
+foreach ($routeScopedDeployRule in @(
+    'DEPLOY_COMPATIBLE_WORLD_DELTA',
+    'deploy_after_local_state_change',
+    'LiveCombatStamp.IsLocalCoreSearchCompatible(latestStamp, state)')) {
+    if (-not $solverControllerText.Contains($routeScopedDeployRule)) {
+        $violations.Add("${solverControllerPath}: route-scoped deployment drifted '$routeScopedDeployRule'")
+    }
+}
+
 $searchLifecycleCompletionPath = Join-Path $repositoryRoot 'src/Runtime/SolverController.SearchLifecycle.cs'
 $searchLifecycleCompletionText = [IO.File]::ReadAllText($searchLifecycleCompletionPath)
 foreach ($routeScopedCompletionRule in @(
-    'DEPLOY_COMPATIBLE_WORLD_DELTA',
-    'deploy_after_local_state_change',
-    'LiveCombatStamp.IsLocalCoreSearchCompatible(latestStamp, state)',
     'RouteVersion = capabilities.IsMultiplayer',
     'LiveCombatStamp.CaptureLocalCoreSearchValidity(state)',
     'searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore',
