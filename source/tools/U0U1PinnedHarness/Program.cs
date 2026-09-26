@@ -1206,7 +1206,7 @@ internal static class Program
                 $"Outmaneuver next-turn energy benefit was lost: outmaneuver={outmaneuverSettledCoverage.Outcome.Energy} "
                 + $"stand_pat={standPatCoverage.Outcome.Energy}.");
 
-            Creature enemy = combat.Enemies.Single();
+            var enemy = combat.Enemies.Single();
             int originalEnemyHp = enemy.CurrentHp;
             try
             {
