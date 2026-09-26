@@ -157,6 +157,43 @@ Check(
     continuationSeedActionContractsAreCorrect,
     "P1 continuation-seed action boundary rejects cross-turn, non-card, choice and ambiguous-card suggestions.");
 
+string continuationExact =
+    "combat_identity=seed=s;players=1,2;enemies=4:A;local_net_id=2;turn=3;hp=77;H=A;D=B;C=;X=;" +
+    "R=224:shuffle/0:cardgen/4:potion/2:select/0:energy/5:targets/0:orbs/10:ai/8:niche";
+string continuationShuffleDrift = continuationExact.Replace(
+    "R=224:shuffle/",
+    "R=233:shuffle/",
+    StringComparison.Ordinal);
+string continuationCardGenerationDrift = continuationExact.Replace(
+    "/0:cardgen/",
+    "/1:cardgen/",
+    StringComparison.Ordinal);
+string continuationHandDrift = continuationExact.Replace(
+    ";H=A;",
+    ";H=C;",
+    StringComparison.Ordinal);
+
+Check(
+    MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationExact,
+        continuationExact,
+        out bool exactShuffleDrift)
+    && !exactShuffleDrift
+    && MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationExact,
+        continuationShuffleDrift,
+        out bool acceptedShuffleDrift)
+    && acceptedShuffleDrift
+    && !MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationExact,
+        continuationCardGenerationDrift,
+        out _)
+    && !MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationExact,
+        continuationHandDrift,
+        out _),
+    "Local-core continuation ignores only shared Shuffle RNG drift; local piles and every other RNG stream remain exact.");
+
 Check(
     !MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled
     && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(

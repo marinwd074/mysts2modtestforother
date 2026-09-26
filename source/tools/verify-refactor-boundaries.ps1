@@ -4271,6 +4271,9 @@ if (-not $p1ContinuationContractsText.Contains('internal static bool LocalCoreSe
 if (-not $p1ContinuationContractsText.Contains('ShouldUseLocalCoreDeathHorizonFallback(')) {
     $violations.Add("${p1ContinuationContractsPath}: local-core death-horizon fallback contract is missing")
 }
+if (-not $p1ContinuationContractsText.Contains('IsLocalCoreContinuationStateCompatible(')) {
+    $violations.Add("${p1ContinuationContractsPath}: local-core Shuffle-only continuation compatibility contract is missing")
+}
 
 $p1SearchPolicyPath = Join-Path $repositoryRoot 'src/Search/SearchPolicySnapshot.cs'
 $p1SearchPolicyText = [IO.File]::ReadAllText($p1SearchPolicyPath)
@@ -4286,6 +4289,9 @@ foreach ($p1RuntimeRule in @(
     'ContinuationSeedActions = continuationSeedActions',
     'LocalCoreSearchAcceleratorsEnabled',
     'MP_LOCAL_XTURN_SEED_SKIPPED',
+    'IsLocalCoreContinuationStateCompatible(',
+    'exact_except_shared_shuffle_rng',
+    'shared_shuffle_rng_drift=',
     'single_player_quality_order=',
     'resume_kind=exact_continuation',
     'MP_LOCAL_XTURN_RESUME_KIND')) {

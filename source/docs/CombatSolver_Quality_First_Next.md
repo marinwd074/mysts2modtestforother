@@ -175,6 +175,12 @@
 - 新增 `E3_CROSS_FAMILY_SCOUT` / `E3_CROSS_FAMILY_REUSE` 诊断和 scout 预算合同。目标不是保证固定秒数，而是消除“无药 TimeLimit 完整跑完之后才第一次搜索一药水路线”的结构性等待。
 
 
+### 当前真实样本补充：队友推进共享 Shuffle RNG 不再强制重算（2026-09-26）
+
+- 问题包 `04873fada8174afa84813c0e940eb670` 在 T3 的唯一 continuation 差异为 `R.shuffle`：预测计数 224，实机计数 233；同一时刻日志明确记录 `enemy_hp_route_changed=false`。因此本次每回合 fresh search 与敌方 HP 无关，是共享 Shuffle RNG 被当成本地 exact-state 硬门禁。
+- 默认 `MultiplayerSinglePlayerCore` 现在允许**仅 Shuffle RNG** 漂移的 continuation 继续复用；H/D/C/X、HP、能量、Power、敌人状态以及其他 RNG 流仍全部要求精确一致。队友 RNG 真正改变本地抽牌结果后，牌堆字段自然失配并触发重算。
+- 完整多人预测模式继续严格比较全部 RNG，不使用该放宽。成功复用时记录 `validation=exact_except_shared_shuffle_rng` 与 `shared_shuffle_rng_drift=true`。
+
 ### 当前真实样本补充：未来死亡不再污染当前牌序（2026-09-26）
 
 - 最新无厌沙虫多人问题包出现明确世界模型偏差：本地玩家约 90 HP、累计战损仅约 19 HP，但 local-core 在不预测队友出牌的情况下要求本地单独处理多人实际 770 HP Boss，最终受 `Sandpit` 未来处决影响，结果落入 `final_hp=0 / only_death_routes=true`。

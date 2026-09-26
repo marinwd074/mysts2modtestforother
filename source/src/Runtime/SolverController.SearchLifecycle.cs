@@ -204,6 +204,22 @@ internal static partial class SolverController
                 : null;
             MultiplayerContinuationExpectation? expectedMultiplayer =
                 expectedContinuation?.MultiplayerExpectation;
+            bool sharedShuffleRngDrift = false;
+            ContinuationStamp? continuationValidationStamp = continuationStamp;
+            if (continuationStamp != null
+                && expectedContinuation != null
+                && capabilities.IsMultiplayer
+                && !SolverSettings.Current.UseMultiplayerPrediction
+                && MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+                    expectedContinuation.ExpectedState.StateText,
+                    continuationStamp.StateText,
+                    out sharedShuffleRngDrift)
+                && sharedShuffleRngDrift)
+            {
+                // TryCreateContinuation remains exact by contract. We substitute the cached
+                // stamp only after the pure boundary above proved that Shuffle is the sole drift.
+                continuationValidationStamp = expectedContinuation.ExpectedState;
+            }
             string continuationRejectReason = "none";
             IReadOnlyList<PlanAction> continuationSeedActions = Array.Empty<PlanAction>();
             if (continuationStamp != null && capabilities.IsMultiplayer)
@@ -214,11 +230,12 @@ internal static partial class SolverController
                     $"source_world_version={expectedMultiplayer?.SourceWorldVersion.ToString() ?? "-"} " +
                     $"minimum_world_version={multiplayerValidation?.MinimumWorldVersion.ToString() ?? "-"} " +
                     $"actual_world_version={multiplayerValidation?.CurrentWorldVersion.ToString() ?? "-"} " +
+                    $"shared_shuffle_rng_drift={sharedShuffleRngDrift.ToString().ToLowerInvariant()} " +
                     $"fresh_probe_changed={freshProbeChanged.ToString().ToLowerInvariant()}");
             }
-            if (continuationStamp != null
+            if (continuationValidationStamp != null
                 && continuationSource!.TryCreateContinuation(
-                    continuationStamp,
+                    continuationValidationStamp,
                     continuationTurn!.Value,
                     LocalContext.GetMe(state)!.Creature.CurrentHp,
                     battleDamage,
@@ -255,7 +272,9 @@ internal static partial class SolverController
                         reused!,
                         UnexpectedReplanCount > 0,
                         _combat.ReviewedWorldlinesTotal));
-                const string reuseValidation = "exact_state_text";
+                string reuseValidation = sharedShuffleRngDrift
+                    ? "exact_except_shared_shuffle_rng"
+                    : "exact_state_text";
                 Entry.Logger.Info(
                     $"[CombatSolver/Test] SEARCH_REUSED from_turn={reused!.ReusedFromTurn} " +
                     $"turn={reused.StartTurnNumber} validation={reuseValidation} " +
@@ -270,7 +289,11 @@ internal static partial class SolverController
                         $"source_world_version={expectedMultiplayer?.SourceWorldVersion.ToString() ?? "-"} " +
                         $"minimum_world_version={multiplayerValidation?.MinimumWorldVersion.ToString() ?? "-"} " +
                         $"actual_world_version={multiplayerValidation?.CurrentWorldVersion.ToString() ?? "-"} " +
-                        $"local_state_exact=true reason=exact resume_kind=exact_continuation");
+                        $"local_state_exact={(!sharedShuffleRngDrift).ToString().ToLowerInvariant()} " +
+                        $"local_state_compatible=true " +
+                        $"shared_shuffle_rng_drift={sharedShuffleRngDrift.ToString().ToLowerInvariant()} " +
+                        $"reason={(sharedShuffleRngDrift ? "shared_shuffle_rng_drift" : "exact")} " +
+                        $"resume_kind=exact_continuation");
                 }
                 Entry.Logger.Info(SolverDiagnostics.DescribeResult(reused));
                 if (_combat.FullAutoEnabled)

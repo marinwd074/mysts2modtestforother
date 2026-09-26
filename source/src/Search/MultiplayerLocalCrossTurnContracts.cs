@@ -216,6 +216,68 @@ internal static class MultiplayerLocalCrossTurnContracts
             && !sharedShuffleForecastTrusted
             && willShuffle;
 
+    /// <summary>
+    /// Default local-core multiplayer treats the shared Shuffle RNG as advisory at a
+    /// cross-turn continuation boundary. Remote actions may legitimately advance that
+    /// shared stream without changing the local player's already-materialized hand/piles.
+    /// Every other continuation field remains exact; if the RNG drift later changes a
+    /// local pile, H/D/C/X will differ and the route will be rejected then.
+    /// </summary>
+    internal static bool IsLocalCoreContinuationStateCompatible(
+        string expectedStateText,
+        string actualStateText,
+        out bool sharedShuffleRngDrift)
+    {
+        sharedShuffleRngDrift = false;
+        if (string.Equals(expectedStateText, actualStateText, StringComparison.Ordinal))
+            return true;
+
+        string[] expectedFields = expectedStateText.Split(';');
+        string[] actualFields = actualStateText.Split(';');
+        if (expectedFields.Length != actualFields.Length)
+            return false;
+
+        for (int index = 0; index < expectedFields.Length; index++)
+        {
+            string expectedField = expectedFields[index];
+            string actualField = actualFields[index];
+            if (string.Equals(expectedField, actualField, StringComparison.Ordinal))
+                continue;
+
+            int expectedSeparator = expectedField.IndexOf('=');
+            int actualSeparator = actualField.IndexOf('=');
+            if (expectedSeparator <= 0
+                || actualSeparator <= 0
+                || !string.Equals(
+                    expectedField[..expectedSeparator],
+                    actualField[..actualSeparator],
+                    StringComparison.Ordinal)
+                || !string.Equals(
+                    expectedField[..expectedSeparator],
+                    "R",
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            string[] expectedRng = expectedField[(expectedSeparator + 1)..].Split('/');
+            string[] actualRng = actualField[(actualSeparator + 1)..].Split('/');
+            if (expectedRng.Length != actualRng.Length || expectedRng.Length == 0)
+                return false;
+            for (int rngIndex = 1; rngIndex < expectedRng.Length; rngIndex++)
+            {
+                if (!string.Equals(expectedRng[rngIndex], actualRng[rngIndex], StringComparison.Ordinal))
+                    return false;
+            }
+            if (string.Equals(expectedRng[0], actualRng[0], StringComparison.Ordinal))
+                return false;
+
+            sharedShuffleRngDrift = true;
+        }
+
+        return sharedShuffleRngDrift;
+    }
+
     internal static bool IsExactContinuation(MultiplayerContinuationMatchInput input)
         => DescribeContinuationMismatch(input) is null;
 
