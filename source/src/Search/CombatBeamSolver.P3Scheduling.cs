@@ -11,7 +11,14 @@ internal sealed partial class CombatBeamSolver
     private bool TryConsumeExpandedNodeBudget()
         => policy.P3SharedWallClockBudget?.TryConsumeExpandedNode() ?? true;
 
+    private int EffectiveRemainingExpandedNodes()
+    {
+        int localRemaining = Math.Max(0, _profile.MaxExpandedNodes - _run.Expanded);
+        return policy.P3SharedWallClockBudget is { } shared
+            ? Math.Min(localRemaining, shared.RemainingExpandedNodes)
+            : localRemaining;
+    }
+
     private bool HasExpandedNodeBudgetRemaining()
-        => policy.P3SharedWallClockBudget?.HasExpandedNodeBudgetRemaining
-            ?? _run.Expanded < _profile.MaxExpandedNodes;
+        => EffectiveRemainingExpandedNodes() > 0;
 }
