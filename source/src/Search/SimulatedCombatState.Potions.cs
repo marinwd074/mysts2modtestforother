@@ -118,10 +118,11 @@ internal sealed partial class SimulatedCombatState
     private void AppendPotionFingerprint(ref StateFingerprintBuilder fingerprint)
     {
         fingerprint.Add('p');
-        // 单人战斗是唯一支持的模式；只有多名玩家时才需要按 NetId 排序，避免每次快照都走 LINQ。
-        if (Players.Count == 1)
+        // Fingerprint contains captured/readable players, not the entire live multiplayer roster.
+        // A local multiplayer core captures exactly one player, so sorting that one element is redundant.
+        if (_rootCapturedPlayers.Count == 1)
         {
-            AppendPlayerPotionFingerprint(ref fingerprint, Players[0]);
+            AppendPlayerPotionFingerprint(ref fingerprint, _rootCapturedPlayers[0]);
             return;
         }
         foreach (Player player in _rootCapturedPlayers.OrderBy(player => player.NetId))
