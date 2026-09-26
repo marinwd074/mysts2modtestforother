@@ -254,6 +254,23 @@ Check(
             SearchRoutePolicy.SinglePlayerFullRoute),
     "Default multiplayer local-core enters the same full Beam/retention/final-ordering search class as singleplayer; multiplayer differences remain state/runtime boundaries.");
 
+Check(
+    MultiplayerLocalCrossTurnContracts.PredictionTurnLayerLimit(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore)
+        == MultiplayerLocalCrossTurnContracts.LocalCorePredictionTurnLayers
+    && MultiplayerLocalCrossTurnContracts.LocalCorePredictionTurnLayers == 3
+    && MultiplayerLocalCrossTurnContracts.HasReachedPredictionTurnLayerLimit(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore,
+        searchedTurnLayers: 3)
+    && !MultiplayerLocalCrossTurnContracts.HasReachedPredictionTurnLayerLimit(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore,
+        searchedTurnLayers: 2)
+    && MultiplayerLocalCrossTurnContracts.PredictionTurnLayerLimit(
+        SearchRoutePolicy.SinglePlayerFullRoute) == null
+    && MultiplayerLocalCrossTurnContracts.PredictionTurnLayerLimit(
+        SearchRoutePolicy.MultiplayerLocalCrossTurn) == null,
+    "Default multiplayer local-core predicts the current turn plus exactly two future turns; singleplayer and team-prediction horizons are unchanged.");
+
 SolverSearchProfile p2BudgetProfile = SolverSearchProfile.Default with
 {
     MaxExpandedNodes = 20_000,

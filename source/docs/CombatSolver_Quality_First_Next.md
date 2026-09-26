@@ -211,6 +211,15 @@
 - 现在移除该独立 current-turn 显示通道及 `RouteStartsWithCurrentTurn` 门禁。当前回合和后续回合重新绑定到同一个全局 Beam incumbent：全局路线提升时，两者一起更新。Beam 内部仍可保留 current-turn candidate 作为搜索/交互数据，但它不再单独锁住 UI。
 - `RefreshCurrentTurnPreview` 恢复优先使用 `member.CurrentBestNode`，只有没有全局 incumbent 时才退回 current-turn candidate。这样 Strike 可以作为几百毫秒级早期临时预览，但一旦更好的完整路线出现就必须被替换。
 
+### MultiplayerSinglePlayerCore：当前回合 + 后两回合预测窗（2026-09-27）
+
+- 默认多人 local-core 的搜索目标改为固定 **3 个 turn layer**：当前回合 T0，以及 T+1、T+2。它仍使用单人 Beam / Retention / FinalOrdering，不建立第二套 current-turn scout。
+- 目的：多人当前决策只需要足够的短期 lookahead 判断能力牌、抽牌、能量和两回合组合；不再要求本地玩家独自把多人血量怪从当前状态模拟到 T13–T18 才形成可比较路线。
+- Beam 与 Novelty 使用同一个 3 层硬边界。到 T+2 回合结束后，保留 frontier 直接进入既有 FinalOrdering；结果边界明确标记为 `TurnLimit`，MultiplayerScope 保持 `PartialLocalCrossTurnProjection`。
+- 由于该 `TurnLimit` 是主动预测窗而不是搜索失败，协调器不会再执行 no-victory escalation。BeamWidthPortfolio 也会把基线视为被预测边界截断，不继续串行跑 SecondRank / 窄宽 / 宽宽 / BaseScore refinement。
+- 单人 `SinglePlayerFullRoute` 完全不变；开启实验 team-prediction 的 `MultiplayerLocalCrossTurn` 也暂不受这个 3 回合限制。
+- 新诊断：`MP_LOCAL_CORE_PREDICTION_HORIZON`（Beam 到达 3 层）和 `MP_LOCAL_CORE_HORIZON_COMPLETE ... escalation=false`（请求按预测窗结束而不重新加深）。
+
 ### 当前真实样本补充：多人战损只统计本地玩家（2026-09-26）
 
 - 问题包 `1cd414aa66e94546bd9713630077d99c` 的 MAWLER 首回合实机记录显示：敌人两次 4 点攻击都对本地玩家结算为 `BlockedDamage=4 / UnblockedDamage=0`，50 格挡最终剩 42；队友则两次各承受 4 点。敌人对本地造成的实际 HP 伤害为 0。

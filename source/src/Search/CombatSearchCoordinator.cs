@@ -679,6 +679,16 @@ internal static partial class CombatSearchCoordinator
         // 打到可接受战损就收手那一条和改动之前一样直接返回，连 SEARCH_SESSION 都不打。
         if (passSettled || policy.FixedBudget)
             return result;
+        if (result.BoundaryReason == SearchBoundaryReason.TurnLimit
+            && MultiplayerLocalCrossTurnContracts.HasReachedPredictionTurnLayerLimit(
+                policy.RoutePolicy,
+                result.SearchedTurns))
+        {
+            policy.Diagnostics.Info(
+                $"[CombatSolver/Multiplayer] MP_LOCAL_CORE_HORIZON_COMPLETE " +
+                $"searched_turns={result.SearchedTurns} escalation=false");
+            return result;
+        }
         result = EscalateSearchWhenNoVictory(
             root,
             policy,

@@ -58,6 +58,24 @@ internal static class MultiplayerLocalCrossTurnContracts
         => policy is SearchRoutePolicy.MultiplayerSinglePlayerCore
             or SearchRoutePolicy.MultiplayerLocalCrossTurn;
 
+    internal const int LocalCorePredictionTurnLayers = 3;
+
+    /// <summary>
+    /// Default multiplayer local-core optimizes the current turn with exactly two future
+    /// local turns of lookahead. Singleplayer and the experimental team-prediction route
+    /// retain their existing unbounded-by-policy search horizon.
+    /// </summary>
+    internal static int? PredictionTurnLayerLimit(SearchRoutePolicy policy)
+        => policy == SearchRoutePolicy.MultiplayerSinglePlayerCore
+            ? LocalCorePredictionTurnLayers
+            : null;
+
+    internal static bool HasReachedPredictionTurnLayerLimit(
+        SearchRoutePolicy policy,
+        int searchedTurnLayers)
+        => PredictionTurnLayerLimit(policy) is { } limit
+            && searchedTurnLayers >= limit;
+
     /// <summary>
     /// Quality-first default: local-core multiplayer keeps the exact single-player
     /// exploration order. P1/P2 continuation seeds and P3 cross-family scheduling stay

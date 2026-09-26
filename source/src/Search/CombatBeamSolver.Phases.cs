@@ -574,6 +574,11 @@ internal sealed partial class CombatBeamSolver
                          && candidateNodeBudgetReached)
                     boundary = SearchBoundaryReason.NodeLimit;
                 else if (boundary == SearchBoundaryReason.None
+                         && MultiplayerLocalCrossTurnContracts.HasReachedPredictionTurnLayerLimit(
+                             policy.RoutePolicy,
+                             candidateSearchedTurnLayers))
+                    boundary = SearchBoundaryReason.TurnLimit;
+                else if (boundary == SearchBoundaryReason.None
                          && policy.VerifyIncrementalSearch
                          && candidateSearchedTurnLayers >= SolverWeights.IncrementalVerificationMaxTurns)
                     boundary = SearchBoundaryReason.TurnLimit;
@@ -1542,11 +1547,14 @@ internal sealed partial class CombatBeamSolver
             }
         }
 
+        int? predictionTurnLayerLimit =
+            MultiplayerLocalCrossTurnContracts.PredictionTurnLayerLimit(policy.RoutePolicy);
         int reservedTurnLayers = policy.CurrentTurnOnly
             ? 1
-            : root.EncounterRoomType == RoomType.Boss
-                ? SolverWeights.BossEnemyStrengthSuppressionHorizon
-                : SolverWeights.StandardEnemyStrengthSuppressionHorizon;
+            : predictionTurnLayerLimit
+                ?? (root.EncounterRoomType == RoomType.Boss
+                    ? SolverWeights.BossEnemyStrengthSuppressionHorizon
+                    : SolverWeights.StandardEnemyStrengthSuppressionHorizon);
 
         if (policy.NoveltySearch != null)
         {
@@ -1608,6 +1616,8 @@ internal sealed partial class CombatBeamSolver
         while (member.Frontier.Count > 0
             && (!policy.VerifyIncrementalSearch
                 || member.SearchedTurnLayers < SolverWeights.IncrementalVerificationMaxTurns)
+            && (predictionTurnLayerLimit is not { } predictionLimit
+                || member.SearchedTurnLayers < predictionLimit)
             && HasExpandedNodeBudgetRemaining()
             && !member.TimeBudgetReached)
         {
@@ -2251,6 +2261,15 @@ internal sealed partial class CombatBeamSolver
             }
             PublishProgress(_startTurnNumber + member.SearchedTurnLayers, member.SearchedTurnLayers, 0,
                 member.Frontier.Count, member.Completed.Count, "回合层完成", force: true);
+            if (predictionTurnLayerLimit is { } completedPredictionLimit
+                && member.SearchedTurnLayers >= completedPredictionLimit)
+            {
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Multiplayer] MP_LOCAL_CORE_PREDICTION_HORIZON " +
+                    $"start_turn={_startTurnNumber} searched_turn_layers={member.SearchedTurnLayers} " +
+                    $"last_planned_turn={_startTurnNumber + member.SearchedTurnLayers - 1} " +
+                    $"frontier={member.Frontier.Count} completed={member.Completed.Count}");
+            }
             if (policy.CurrentTurnOnly)
             {
                 // Current-turn multiplayer routes are useful as advice even when no

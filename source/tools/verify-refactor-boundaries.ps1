@@ -4300,6 +4300,14 @@ if (-not $p1ContinuationContractsText.Contains('CanReplayContinuationSeedAction(
 if (-not $p1ContinuationContractsText.Contains('internal static bool LocalCoreSearchAcceleratorsEnabled => false;')) {
     $violations.Add("${p1ContinuationContractsPath}: default local-core must keep multiplayer search accelerators disabled")
 }
+foreach ($localCoreHorizonRule in @(
+    'internal const int LocalCorePredictionTurnLayers = 3;',
+    'PredictionTurnLayerLimit(',
+    'HasReachedPredictionTurnLayerLimit(')) {
+    if (-not $p1ContinuationContractsText.Contains($localCoreHorizonRule)) {
+        $violations.Add("${p1ContinuationContractsPath}: three-turn local-core horizon drifted '$localCoreHorizonRule'")
+    }
+}
 if (-not $p1ContinuationContractsText.Contains('IsLocalCoreContinuationStateCompatible(')) {
     $violations.Add("${p1ContinuationContractsPath}: local-core shared-state continuation compatibility contract is missing")
 }
@@ -4341,6 +4349,15 @@ foreach ($p1RuntimeRule in @(
 
 $localCoreNoveltyPath = Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.NoveltyPortfolio.cs'
 $localCoreNoveltyText = [IO.File]::ReadAllText($localCoreNoveltyPath)
+$beamNoveltyPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.NoveltySearch.cs'
+$beamNoveltyText = [IO.File]::ReadAllText($beamNoveltyPath)
+foreach ($localCoreNoveltyHorizonRule in @(
+    'PredictionTurnLayerLimit(policy.RoutePolicy)',
+    'parent.Turn >= _startTurnNumber + maxTurns')) {
+    if (-not $beamNoveltyText.Contains($localCoreNoveltyHorizonRule)) {
+        $violations.Add("${beamNoveltyPath}: Novelty must share the three-turn local-core horizon '$localCoreNoveltyHorizonRule'")
+    }
+}
 $p1CoordinatorPath = Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.cs'
 $p1CoordinatorText = [IO.File]::ReadAllText($p1CoordinatorPath)
 foreach ($retiredLocalCoreSearchRule in @(
@@ -4350,6 +4367,14 @@ foreach ($retiredLocalCoreSearchRule in @(
     if ($localCoreNoveltyText.Contains($retiredLocalCoreSearchRule)
         -or $p1CoordinatorText.Contains($retiredLocalCoreSearchRule)) {
         $violations.Add("Retired multiplayer current-turn scout returned: '$retiredLocalCoreSearchRule'")
+    }
+}
+foreach ($localCoreHorizonCoordinatorRule in @(
+    'MP_LOCAL_CORE_HORIZON_COMPLETE',
+    'result.BoundaryReason == SearchBoundaryReason.TurnLimit',
+    'escalation=false')) {
+    if (-not $p1CoordinatorText.Contains($localCoreHorizonCoordinatorRule)) {
+        $violations.Add("${p1CoordinatorPath}: local-core horizon completion must bypass no-victory escalation '$localCoreHorizonCoordinatorRule'")
     }
 }
 foreach ($singlePlayerPrimaryRule in @(
@@ -4398,6 +4423,14 @@ if (-not $p1PhasesText.Contains('MultiplayerScope = policy.CurrentTurnOnly')) {
 }
 if (-not $p1PhasesText.Contains('SearchNode? candidate = member.CurrentBestNode')) {
     $violations.Add("${p1PhasesPath}: current-turn preview must follow the globally promoted Beam route before fallback candidates")
+}
+foreach ($localCoreHorizonPhaseRule in @(
+    'PredictionTurnLayerLimit(policy.RoutePolicy)',
+    'MP_LOCAL_CORE_PREDICTION_HORIZON',
+    'HasReachedPredictionTurnLayerLimit(')) {
+    if (-not $p1PhasesText.Contains($localCoreHorizonPhaseRule)) {
+        $violations.Add("${p1PhasesPath}: three-turn Beam horizon drifted '$localCoreHorizonPhaseRule'")
+    }
 }
 foreach ($p2SearchRule in @(
     'if (_continuationSeedProbe)',
