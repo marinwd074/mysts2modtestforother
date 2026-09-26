@@ -11,6 +11,16 @@
 - 多人部署权限只属于本地玩家；不会部署队友动作。
 - MultiplayerOnly 牌保留真实牌堆状态与抽牌距离，但不进入主动搜索/自动执行。
 
+## 当前主目标：Rolling Horizon Reuse（2026-09-27）
+
+- 用户已将 `docs/Rolling_Horizon_Reuse_Architecture.md` 设为新的主执行目标；其阶段顺序 A → B → C → D → E → F → G → H 优先于下方历史 Quality-first “下一任务”描述。既有质量与执行保护继续作为约束，不重复施工。
+- 阶段 A“现状与测量”已按 current HEAD `2c0c9274c5d83519e67ed4933ea5f37024e47239` 完成定向核对。设计文档最初基线 `eb70db3` 到 current HEAD 仅前进 2 个提交；其中生产代码变化是默认 multiplayer local-core 的 Smart Potion 调度去掉重复 early scout，不改变阶段 A 的 continuation / refresh / publication 分类合同。
+- 候选发布时间已有 `SEARCH_E0_TIMELINE`，覆盖首次生成、完成评估、最终选中和首次发布；请求成员/阶段另有 `SEARCH_E0_MEMBER` / `SEARCH_E0_PHASE`。因此阶段 A 不新增另一套计时器。
+- 跨根恢复已有明确分类：精确 continuation 记录 `resume_kind=exact_continuation`；精确失败后建议重放记录 `resume_kind=seeded_search`；无可复用建议记录 `resume_kind=cold_search`。P2 continuation-seed incumbent 仍从真实新根重放，不能原样部署旧结果。
+- 同回合轻微 drift 已由 bounded refresh 记录 `MP_PLAN_REFRESH`，包含 `full_restart`、`prefix_replay`、`first_action_changed`、bounded work 与 `replay_latency_ms`；真正 fresh search 由 `MP_REACTIVE_FRESH_SEARCH reason=...` 保留触发原因。由此已能区分冷搜、精确续用、建议/前缀重放和完整重启。
+- 对照固定上游 `Torch1230/CombatSolver@d231e9e51a0e58d6bfa1373c6265cce13ffd9a45`：Beam/portfolio、CrossTurn stand-pat/probe 与 value-only `SolvedRouteCache` 属共同或可移植基础；WorldVersion 驱动的多人重规划、bounded multiplayer refresh、continuation-seed 新根重放及 local-core 多人边界属于本 fork 现有扩展。
+- 阶段 A **不修改搜索结果、预算、排序、并发或 Safe Execute 行为**，因此以现有诊断/合同作为基线闭合，不重复实现。下一阶段为 **B：延迟影响合同**；先审计上游 CrossTurnProbe / PowerCommitment 与本 fork 已模拟的下一回合效果，再只补缺失的负债/覆盖元数据。
+
 ## 当前多人架构
 
 1. **共同搜索核心**：单人完整路线与多人本地跨回合共用 Beam、Novelty、成长、遗物、药水和长期收益基础。

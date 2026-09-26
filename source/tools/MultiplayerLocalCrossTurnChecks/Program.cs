@@ -193,6 +193,27 @@ string continuationGoldAxeHistoryDrift = continuationGoldAxe.Replace(
     ";HC=14/",
     StringComparison.Ordinal);
 
+string continuationEnemyBase = continuationExact.Replace(
+    ";H=A;",
+    ";E0=10/TUNNELER_WEAK/front/181/220/0/ATTACK;H=A;",
+    StringComparison.Ordinal);
+string continuationEnemyHpDecrease = continuationEnemyBase.Replace(
+    "/181/220/0/",
+    "/161/220/0/",
+    StringComparison.Ordinal);
+string continuationEnemyHpIncrease = continuationEnemyBase.Replace(
+    "/181/220/0/",
+    "/191/220/0/",
+    StringComparison.Ordinal);
+string continuationEnemyDeath = continuationEnemyBase.Replace(
+    "/181/220/0/",
+    "/0/220/0/",
+    StringComparison.Ordinal);
+string continuationEnemyBlockDrift = continuationEnemyBase.Replace(
+    "/181/220/0/",
+    "/181/220/5/",
+    StringComparison.Ordinal);
+
 Check(
     MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
         continuationExact,
@@ -238,35 +259,45 @@ Check(
     "Local-core continuation ignores only remote Shuffle/global finished-play drift; local history, piles and Gold Axe-sensitive history remain exact.");
 
 Check(
-    MultiplayerLocalCrossTurnContracts.ShouldRunLocalCoreCurrentTurnQualityScout(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore,
-        includeTurnSetup: false)
-    && !MultiplayerLocalCrossTurnContracts.ShouldRunLocalCoreCurrentTurnQualityScout(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore,
-        includeTurnSetup: true)
-    && !MultiplayerLocalCrossTurnContracts.ShouldRunLocalCoreCurrentTurnQualityScout(
-        SearchRoutePolicy.SinglePlayerFullRoute,
-        includeTurnSetup: false),
-    "Default local-core spends the former novelty-first window on current-turn quality before long-horizon search.");
-
-Check(
-    MultiplayerLocalCrossTurnContracts.ShouldPreferLocalCoreCurrentTurnResult(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore,
-        playerCount: 2,
-        currentTurnStrictlyBetter: true)
-    && !MultiplayerLocalCrossTurnContracts.ShouldPreferLocalCoreCurrentTurnResult(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore,
-        playerCount: 1,
-        currentTurnStrictlyBetter: true)
-    && !MultiplayerLocalCrossTurnContracts.ShouldPreferLocalCoreCurrentTurnResult(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore,
-        playerCount: 2,
-        currentTurnStrictlyBetter: false)
-    && !MultiplayerLocalCrossTurnContracts.ShouldPreferLocalCoreCurrentTurnResult(
-        SearchRoutePolicy.SinglePlayerFullRoute,
-        playerCount: 2,
-        currentTurnStrictlyBetter: true),
-    "Default local-core formal result keeps a strictly better current-turn incumbent over a worse long-horizon first turn.");
+    MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationEnemyBase,
+        continuationEnemyHpDecrease,
+        allowLivingEnemyHpDecrease: true,
+        out bool enemyHpShuffleDrift,
+        out bool enemyHpHistoryDrift,
+        out bool acceptedEnemyHpDecrease)
+    && !enemyHpShuffleDrift
+    && !enemyHpHistoryDrift
+    && acceptedEnemyHpDecrease
+    && !MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationEnemyBase,
+        continuationEnemyHpDecrease,
+        allowLivingEnemyHpDecrease: false,
+        out _,
+        out _,
+        out _)
+    && !MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationEnemyBase,
+        continuationEnemyHpIncrease,
+        allowLivingEnemyHpDecrease: true,
+        out _,
+        out _,
+        out _)
+    && !MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationEnemyBase,
+        continuationEnemyDeath,
+        allowLivingEnemyHpDecrease: true,
+        out _,
+        out _,
+        out _)
+    && !MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+        continuationEnemyBase,
+        continuationEnemyBlockDrift,
+        allowLivingEnemyHpDecrease: true,
+        out _,
+        out _,
+        out _),
+    "Local-core continuation may ignore only downward HP drift on a still-living enemy; lethal-window gating, HP increases, death and block changes remain strict.");
 
 Check(
     !MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled
@@ -279,32 +310,37 @@ Check(
     "Default multiplayer local-core disables P1/P2/P3 search accelerators so finite-budget exploration keeps single-player ordering.");
 
 Check(
-    MultiplayerLocalCrossTurnContracts.ShouldUseLocalCoreDeathHorizonFallback(
+    !MultiplayerLocalCrossTurnContracts.ShouldRunEarlySmartPotionScout(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore)
+    && MultiplayerLocalCrossTurnContracts.ShouldRunEarlySmartPotionScout(
+        SearchRoutePolicy.SinglePlayerFullRoute)
+    && MultiplayerLocalCrossTurnContracts.ShouldRunEarlySmartPotionScout(
+        SearchRoutePolicy.MultiplayerLocalCrossTurn),
+    "Three-turn multiplayer local-core waits for the stable potion-free Beam baseline before its single Smart potion audit; other route policies keep the existing early scout.");
+
+Check(
+    MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore)
+        && MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(
+            SearchRoutePolicy.SinglePlayerFullRoute),
+    "Default multiplayer local-core enters the same full Beam/retention/final-ordering search class as singleplayer; multiplayer differences remain state/runtime boundaries.");
+
+Check(
+    MultiplayerLocalCrossTurnContracts.PredictionTurnLayerLimit(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore)
+        == MultiplayerLocalCrossTurnContracts.LocalCorePredictionTurnLayers
+    && MultiplayerLocalCrossTurnContracts.LocalCorePredictionTurnLayers == 3
+    && MultiplayerLocalCrossTurnContracts.HasReachedPredictionTurnLayerLimit(
         SearchRoutePolicy.MultiplayerSinglePlayerCore,
-        playerCount: 2,
-        onlyDeathRoutesFound: true,
-        hasSurvivingCurrentTurnCandidate: true)
-    && !MultiplayerLocalCrossTurnContracts.ShouldUseLocalCoreDeathHorizonFallback(
+        searchedTurnLayers: 3)
+    && !MultiplayerLocalCrossTurnContracts.HasReachedPredictionTurnLayerLimit(
         SearchRoutePolicy.MultiplayerSinglePlayerCore,
-        playerCount: 1,
-        onlyDeathRoutesFound: true,
-        hasSurvivingCurrentTurnCandidate: true)
-    && !MultiplayerLocalCrossTurnContracts.ShouldUseLocalCoreDeathHorizonFallback(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore,
-        playerCount: 2,
-        onlyDeathRoutesFound: false,
-        hasSurvivingCurrentTurnCandidate: true)
-    && !MultiplayerLocalCrossTurnContracts.ShouldUseLocalCoreDeathHorizonFallback(
-        SearchRoutePolicy.MultiplayerSinglePlayerCore,
-        playerCount: 2,
-        onlyDeathRoutesFound: true,
-        hasSurvivingCurrentTurnCandidate: false)
-    && !MultiplayerLocalCrossTurnContracts.ShouldUseLocalCoreDeathHorizonFallback(
-        SearchRoutePolicy.SinglePlayerFullRoute,
-        playerCount: 2,
-        onlyDeathRoutesFound: true,
-        hasSurvivingCurrentTurnCandidate: true),
-    "Local-core multiplayer falls back to the best surviving current-turn boundary only when every full local-only projection dies.");
+        searchedTurnLayers: 2)
+    && MultiplayerLocalCrossTurnContracts.PredictionTurnLayerLimit(
+        SearchRoutePolicy.SinglePlayerFullRoute) == null
+    && MultiplayerLocalCrossTurnContracts.PredictionTurnLayerLimit(
+        SearchRoutePolicy.MultiplayerLocalCrossTurn) == null,
+    "Default multiplayer local-core predicts the current turn plus exactly two future turns; singleplayer and team-prediction horizons are unchanged.");
 
 SolverSearchProfile p2BudgetProfile = SolverSearchProfile.Default with
 {

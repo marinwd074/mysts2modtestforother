@@ -351,6 +351,12 @@ internal static class SolverDiagnostics
                 text.Append(" kills=").Append(result.KillsAfterAction.TryGetValue(actionIndex, out IReadOnlyList<string>? kills)
                     ? string.Join(',', kills)
                     : "-");
+            if (action.AutoPlayedCards is { Count: > 0 } autoPlayed)
+            {
+                text.Append(" autoplay=").Append(string.Join(';', autoPlayed.Select(card =>
+                    $"{card.SourceId}>{card.CardId}>{card.TargetName}" +
+                    (card.Kills.Count == 0 ? "" : $">kills:{string.Join(',', card.Kills)}"))));
+            }
             if (isLastActionInTurn && result.CombatEndedTurn == action.Turn)
                 text.Append(" combat_ended=true");
             text.AppendLine();

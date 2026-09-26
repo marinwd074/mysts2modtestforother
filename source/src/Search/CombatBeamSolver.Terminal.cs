@@ -216,7 +216,7 @@ internal sealed partial class CombatBeamSolver
             if (potionCost > 0)
                 potionCosts[action.Turn] = potionCosts.GetValueOrDefault(action.Turn) + potionCost;
             ulong newlyKilledMask = aliveMask & ~node.Snapshot.AliveEnemyMask;
-            if (action.IsExecutable && newlyKilledMask != 0)
+            if (newlyKilledMask != 0)
             {
                 List<string> newlyKilled = [];
                 for (int enemyIndex = 0; enemyIndex < root.Enemies.Count; enemyIndex++)
@@ -258,20 +258,17 @@ internal sealed partial class CombatBeamSolver
             {
                 int actionIndex = node.ActionCount - 1;
                 IReadOnlyList<RecordedKill> recorded = killRecorder.KillsForAction(actionIndex);
-                if (recorded.Count > 0)
+                RecordedKill[] directKills = recorded
+                    .Where(kill => !killRecorder.IsKillAttributedToAutoPlay(actionIndex, kill))
+                    .ToArray();
+                if (directKills.Length > 0)
                 {
-                    attributedKills[actionIndex] = recorded
-                        .Select(kill =>
-                        {
-                            Creature? enemy = root.Enemies.FirstOrDefault(candidate => candidate.CombatId == kill.CombatId);
-                            string targetName = enemy is null ? displayNames.Monster(kill.TargetId) : displayNames.Creature(enemy);
-                            if (string.IsNullOrEmpty(targetName))
-                                targetName = kill.TargetId;
-                            return $"{targetName}（{displayNames.DamageSource(kill.Source)}）";
-                        })
+                    attributedKills[actionIndex] = directKills
+                        .Select(DescribeRecordedKill)
                         .ToArray();
                 }
-                else if (kills.TryGetValue(actionIndex, out IReadOnlyList<string>? fallback))
+                else if (recorded.Count == 0
+                         && kills.TryGetValue(actionIndex, out IReadOnlyList<string>? fallback))
                 {
                     attributedKills[actionIndex] = fallback
                         .Select(name => $"{name}（{displayNames.DamageSource(CombatDamageSource.Unknown)}）")
@@ -294,6 +291,18 @@ internal sealed partial class CombatBeamSolver
             kills,
             combatEndedTurn,
             deathTurn);
+    }
+
+    private string DescribeRecordedKill(RecordedKill kill)
+    {
+        Creature? enemy = root.Enemies.FirstOrDefault(
+            candidate => candidate.CombatId == kill.CombatId);
+        string targetName = enemy is null
+            ? displayNames.Monster(kill.TargetId)
+            : displayNames.Creature(enemy);
+        if (string.IsNullOrEmpty(targetName))
+            targetName = kill.TargetId;
+        return $"{targetName}（{displayNames.DamageSource(kill.Source)}）";
     }
 
     private static SearchNode FindTurnStart(SearchNode node)

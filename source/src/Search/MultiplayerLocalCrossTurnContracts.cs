@@ -58,32 +58,30 @@ internal static class MultiplayerLocalCrossTurnContracts
         => policy is SearchRoutePolicy.MultiplayerSinglePlayerCore
             or SearchRoutePolicy.MultiplayerLocalCrossTurn;
 
+    internal const int LocalCorePredictionTurnLayers = 3;
+
+    /// <summary>
+    /// Default multiplayer local-core optimizes the current turn with exactly two future
+    /// local turns of lookahead. Singleplayer and the experimental team-prediction route
+    /// retain their existing unbounded-by-policy search horizon.
+    /// </summary>
+    internal static int? PredictionTurnLayerLimit(SearchRoutePolicy policy)
+        => policy == SearchRoutePolicy.MultiplayerSinglePlayerCore
+            ? LocalCorePredictionTurnLayers
+            : null;
+
+    internal static bool HasReachedPredictionTurnLayerLimit(
+        SearchRoutePolicy policy,
+        int searchedTurnLayers)
+        => PredictionTurnLayerLimit(policy) is { } limit
+            && searchedTurnLayers >= limit;
+
     /// <summary>
     /// Quality-first default: local-core multiplayer keeps the exact single-player
     /// exploration order. P1/P2 continuation seeds and P3 cross-family scheduling stay
     /// available as offline experiments but do not influence production search.
     /// </summary>
     internal static bool LocalCoreSearchAcceleratorsEnabled => false;
-
-    internal static bool ShouldRunLocalCoreCurrentTurnQualityScout(
-        SearchRoutePolicy routePolicy,
-        bool includeTurnSetup)
-        => routePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
-            && !includeTurnSetup;
-
-    /// <summary>
-    /// The complete local-only projection is advisory for future turns because teammates can
-    /// change that future before it is executed. If the retained current-turn incumbent is
-    /// strictly better than the selected full-route first-turn boundary, deploy the incumbent
-    /// and re-root next turn instead of sacrificing the immediate decision for distant quality.
-    /// </summary>
-    internal static bool ShouldPreferLocalCoreCurrentTurnResult(
-        SearchRoutePolicy routePolicy,
-        int playerCount,
-        bool currentTurnStrictlyBetter)
-        => routePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
-            && playerCount > 1
-            && currentTurnStrictlyBetter;
 
     internal static bool ShouldUseP3CrossFamilyScheduling(
         SearchRoutePolicy routePolicy,
@@ -97,6 +95,15 @@ internal static class MultiplayerLocalCrossTurnContracts
             && smartPotionPolicy
             && !hasForcedPotionDirectives
             && !useNoveltyPortfolio;
+
+    /// <summary>
+    /// The three-turn local-core needs one stable potion-free baseline before optional Smart
+    /// potion search. The Novelty-era provisional cross-family scout is redundant here because
+    /// it is benchmarked against a temporary baseline and may have to be rerun after Beam.
+    /// Singleplayer and the experimental team route keep their existing scheduler behavior.
+    /// </summary>
+    internal static bool ShouldRunEarlySmartPotionScout(SearchRoutePolicy routePolicy)
+        => routePolicy != SearchRoutePolicy.MultiplayerSinglePlayerCore;
 
     internal static bool CanReplayContinuationSeedAction(
         int actionTurn,
@@ -122,22 +129,6 @@ internal static class MultiplayerLocalCrossTurnContracts
         int playerCount)
         => policy == SearchRoutePolicy.MultiplayerLocalCrossTurn
             && playerCount > 1;
-
-    /// <summary>
-    /// Local-core multiplayer deliberately does not predict teammate actions. If every full
-    /// local-only projection eventually dies but the current turn has a legal surviving boundary,
-    /// prefer that current-turn decision and re-root next turn instead of ranking fabricated
-    /// "solo the whole multiplayer encounter" death routes.
-    /// </summary>
-    internal static bool ShouldUseLocalCoreDeathHorizonFallback(
-        SearchRoutePolicy policy,
-        int playerCount,
-        bool onlyDeathRoutesFound,
-        bool hasSurvivingCurrentTurnCandidate)
-        => policy == SearchRoutePolicy.MultiplayerSinglePlayerCore
-            && playerCount > 1
-            && onlyDeathRoutesFound
-            && hasSurvivingCurrentTurnCandidate;
 
     internal static bool DelayAngerCopyPreferenceUntilAfterEnemyHp(
         bool multiplayerRouteSemanticsActive,
@@ -248,9 +239,31 @@ internal static class MultiplayerLocalCrossTurnContracts
         string actualStateText,
         out bool sharedShuffleRngDrift,
         out bool sharedFinishedCardPlayDrift)
+        => IsLocalCoreContinuationStateCompatible(
+            expectedStateText,
+            actualStateText,
+            allowLivingEnemyHpDecrease: false,
+            out sharedShuffleRngDrift,
+            out sharedFinishedCardPlayDrift,
+            out _);
+
+    /// <summary>
+    /// Default multiplayer local-core may reuse a predicted next-turn route when remote play only
+    /// dealt additional damage to an enemy that is still alive. Enemy identity, max HP, block,
+    /// next move and every local field remain exact. HP increases and alive/dead transitions are
+    /// never soft drift.
+    /// </summary>
+    internal static bool IsLocalCoreContinuationStateCompatible(
+        string expectedStateText,
+        string actualStateText,
+        bool allowLivingEnemyHpDecrease,
+        out bool sharedShuffleRngDrift,
+        out bool sharedFinishedCardPlayDrift,
+        out bool livingEnemyHpDecreaseDrift)
     {
         sharedShuffleRngDrift = false;
         sharedFinishedCardPlayDrift = false;
+        livingEnemyHpDecreaseDrift = false;
         if (string.Equals(expectedStateText, actualStateText, StringComparison.Ordinal))
             return true;
 
@@ -310,10 +323,62 @@ internal static class MultiplayerLocalCrossTurnContracts
                 continue;
             }
 
+            if (allowLivingEnemyHpDecrease
+                && IsIndexedEnemyField(name)
+                && IsLivingEnemyHpDecreaseOnly(
+                    expectedField[(expectedSeparator + 1)..],
+                    actualField[(actualSeparator + 1)..]))
+            {
+                livingEnemyHpDecreaseDrift = true;
+                continue;
+            }
+
             return false;
         }
 
-        return sharedShuffleRngDrift || sharedFinishedCardPlayDrift;
+        return sharedShuffleRngDrift
+            || sharedFinishedCardPlayDrift
+            || livingEnemyHpDecreaseDrift;
+    }
+
+    private static bool IsIndexedEnemyField(string name)
+    {
+        if (!name.StartsWith('E') || name.Length == 1)
+            return false;
+        for (int index = 1; index < name.Length; index++)
+        {
+            if (!char.IsAsciiDigit(name[index]))
+                return false;
+        }
+        return true;
+    }
+
+    private static bool IsLivingEnemyHpDecreaseOnly(
+        string expectedValue,
+        string actualValue)
+    {
+        string[] expectedParts = expectedValue.Split('/');
+        string[] actualParts = actualValue.Split('/');
+        if (expectedParts.Length != 7 || actualParts.Length != 7)
+            return false;
+
+        // combat id, monster id, slot, max HP, block and move remain exact.
+        foreach (int fixedIndex in new[] { 0, 1, 2, 4, 5, 6 })
+        {
+            if (!string.Equals(
+                    expectedParts[fixedIndex],
+                    actualParts[fixedIndex],
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return int.TryParse(expectedParts[3], out int expectedHp)
+            && int.TryParse(actualParts[3], out int actualHp)
+            && expectedHp > 0
+            && actualHp > 0
+            && actualHp < expectedHp;
     }
 
     private static bool StateContainsGlobalFinishedCardPlayDependentLocalCard(

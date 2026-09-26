@@ -255,22 +255,43 @@ internal sealed partial class CombatBeamSolver
             if (candidate.ActionCount == 0)
                 return null;
             Dictionary<int, (TurnOutcome Outcome, bool CombatEnded)> outcomesByTurn = [];
-            for (SearchNode? node = candidate; node != null; node = node.Parent)
+            List<SearchNode> path = [];
+            for (SearchNode? node = candidate; node?.Parent != null; node = node.Parent)
             {
+                path.Add(node);
                 if (node.Outcome is { } outcome)
                     outcomesByTurn.TryAdd(outcome.Turn, (outcome, node.Snapshot.AllEnemiesDead));
             }
             if (outcomesByTurn.Count == 0)
                 return null;
+            path.Reverse();
 
             List<SolverFrontierTurn> turns = new(outcomesByTurn.Count);
-            foreach (IGrouping<int, PlanAction> actions in candidate.Actions.GroupBy(action => action.Turn))
+            foreach (IGrouping<int, SearchNode> group in path.GroupBy(node => node.Action!.Turn))
             {
-                if (!outcomesByTurn.TryGetValue(actions.Key, out var materialized))
+                if (!outcomesByTurn.TryGetValue(group.Key, out var materialized))
                     continue;
+                SearchNode[] nodes = group.ToArray();
+                Dictionary<int, IReadOnlyList<string>> kills = [];
+                for (int localIndex = 0; localIndex < nodes.Length; localIndex++)
+                {
+                    SearchNode node = nodes[localIndex];
+                    ulong newlyKilledMask =
+                        node.Parent!.Snapshot.AliveEnemyMask & ~node.Snapshot.AliveEnemyMask;
+                    if (newlyKilledMask == 0)
+                        continue;
+                    List<string> names = [];
+                    for (int enemyIndex = 0; enemyIndex < root.Enemies.Count; enemyIndex++)
+                    {
+                        if ((newlyKilledMask & (1UL << enemyIndex)) != 0)
+                            names.Add(displayNames.Creature(root.Enemies[enemyIndex]));
+                    }
+                    if (names.Count > 0)
+                        kills[localIndex] = names;
+                }
                 turns.Add(new SolverFrontierTurn(
-                    actions.Key,
-                    actions.Select(WithDisplayNames).ToArray(),
+                    group.Key,
+                    nodes.Select(node => WithDisplayNames(node.Action!)).ToArray(),
                     materialized.Outcome.HpLost,
                     materialized.Outcome.HpRecovered,
                     materialized.Outcome.EnemyHpLost,
@@ -278,12 +299,13 @@ internal sealed partial class CombatBeamSolver
                     materialized.CombatEnded)
                 {
                     TurnStartChoices = TurnStartChoicePreviewPolicy.ChoicesForTurn(
-                        actions.Key,
+                        group.Key,
                         _startTurnNumber,
                         candidate.GetTurnSetupChoices(),
                         candidate.Actions)
                         .Select(WithDisplayNames)
                         .ToArray(),
+                    KillsAfterAction = kills,
                 });
             }
             turns.Sort((a, b) => a.Turn.CompareTo(b.Turn));
@@ -305,12 +327,21 @@ internal sealed partial class CombatBeamSolver
                 if (a.Turn != b.Turn || a.HpLost != b.HpLost || a.EnemyHpLost != b.EnemyHpLost
                     || a.EnergyLeft != b.EnergyLeft || a.CombatEnded != b.CombatEnded
                     || !a.Actions.SequenceEqual(b.Actions)
-                    || !a.TurnStartChoices.SequenceEqual(b.TurnStartChoices))
+                    || !a.TurnStartChoices.SequenceEqual(b.TurnStartChoices)
+                    || !KillsEqual(a.KillsAfterAction, b.KillsAfterAction))
                 {
                     return false;
                 }
             }
             return true;
+
+            static bool KillsEqual(
+                IReadOnlyDictionary<int, IReadOnlyList<string>> left,
+                IReadOnlyDictionary<int, IReadOnlyList<string>> right)
+                => left.Count == right.Count
+                    && left.All(item =>
+                        right.TryGetValue(item.Key, out IReadOnlyList<string>? value)
+                        && item.Value.SequenceEqual(value));
         }
 
         SearchNode? FindCurrentTurnBoundary(SearchNode node)
@@ -420,9 +451,9 @@ internal sealed partial class CombatBeamSolver
 
         void RefreshCurrentTurnPreview()
         {
-            SearchNode? candidate = member.CurrentTurnPreviewNode
-                ?? member.CurrentTurnCandidateNode
-                ?? member.CurrentBestNode;
+            SearchNode? candidate = member.CurrentBestNode
+                ?? member.CurrentTurnPreviewNode
+                ?? member.CurrentTurnCandidateNode;
             SearchNode? boundary = candidate == null
                 ? null
                 : FindCurrentTurnBoundary(candidate);
@@ -574,6 +605,11 @@ internal sealed partial class CombatBeamSolver
                          && candidateNodeBudgetReached)
                     boundary = SearchBoundaryReason.NodeLimit;
                 else if (boundary == SearchBoundaryReason.None
+                         && MultiplayerLocalCrossTurnContracts.HasReachedPredictionTurnLayerLimit(
+                             policy.RoutePolicy,
+                             candidateSearchedTurnLayers))
+                    boundary = SearchBoundaryReason.TurnLimit;
+                else if (boundary == SearchBoundaryReason.None
                          && policy.VerifyIncrementalSearch
                          && candidateSearchedTurnLayers >= SolverWeights.IncrementalVerificationMaxTurns)
                     boundary = SearchBoundaryReason.TurnLimit;
@@ -647,6 +683,19 @@ internal sealed partial class CombatBeamSolver
                                     trigger.RelicId,
                                     displayNames.Relic(trigger.RelicId),
                                     trigger.Summary))
+                                .ToArray(),
+                            AutoPlayedCards = relicTriggerRecorder.AutoPlaysForAction(actionIndex)
+                                .Select(autoPlay => new PlanAutoPlayedCard(
+                                    autoPlay.SourceId,
+                                    displayNames.EffectSource(autoPlay.SourceId),
+                                    autoPlay.CardId,
+                                    autoPlay.UpgradeLevel,
+                                    displayNames.Card(autoPlay.CardId, autoPlay.UpgradeLevel),
+                                    displayNames.CreatureByCombatId(autoPlay.TargetCombatId),
+                                    autoPlay.ReplayCount,
+                                    relicTriggerRecorder.KillsForAutoPlay(actionIndex, autoPlay)
+                                        .Select(DescribeRecordedKill)
+                                        .ToArray()))
                                 .ToArray(),
                         })
                         .ToArray();
@@ -972,6 +1021,18 @@ internal sealed partial class CombatBeamSolver
                         out int annotatedEnergyLeft)
                             ? annotatedEnergyLeft
                             : last.Snapshot.Energy;
+                    Dictionary<int, IReadOnlyList<string>> turnKills = [];
+                    for (int localIndex = 0; localIndex < nodes.Length; localIndex++)
+                    {
+                        int globalActionIndex = nodes[localIndex].ActionCount - 1;
+                        if (annotations.KillsAfterAction.TryGetValue(
+                                globalActionIndex,
+                                out IReadOnlyList<string>? actionKills)
+                            && actionKills.Count > 0)
+                        {
+                            turnKills[localIndex] = actionKills;
+                        }
+                    }
                     return new SolverFrontierTurn(
                         group.Key,
                         nodes.Select(node => WithDisplayNames(node.Action!)).ToArray(),
@@ -988,6 +1049,7 @@ internal sealed partial class CombatBeamSolver
                             selected.Node.Actions)
                             .Select(WithDisplayNames)
                             .ToArray(),
+                        KillsAfterAction = turnKills,
                     };
                 })
                 .ToArray();
@@ -1139,7 +1201,6 @@ internal sealed partial class CombatBeamSolver
                 member.SpeculativeRoutePreview,
                 member.RouteAdoptionSeed)
             {
-                CurrentTurnBestResult = member.CurrentTurnCandidateResult,
                 OfficialPublishedOrigin = officialPublishedOrigin,
                 OfficialPublishedEvaluationContextId =
                     officialPublishedEvaluationContextId,
@@ -1543,11 +1604,14 @@ internal sealed partial class CombatBeamSolver
             }
         }
 
+        int? predictionTurnLayerLimit =
+            MultiplayerLocalCrossTurnContracts.PredictionTurnLayerLimit(policy.RoutePolicy);
         int reservedTurnLayers = policy.CurrentTurnOnly
             ? 1
-            : root.EncounterRoomType == RoomType.Boss
-                ? SolverWeights.BossEnemyStrengthSuppressionHorizon
-                : SolverWeights.StandardEnemyStrengthSuppressionHorizon;
+            : predictionTurnLayerLimit
+                ?? (root.EncounterRoomType == RoomType.Boss
+                    ? SolverWeights.BossEnemyStrengthSuppressionHorizon
+                    : SolverWeights.StandardEnemyStrengthSuppressionHorizon);
 
         if (policy.NoveltySearch != null)
         {
@@ -1609,6 +1673,8 @@ internal sealed partial class CombatBeamSolver
         while (member.Frontier.Count > 0
             && (!policy.VerifyIncrementalSearch
                 || member.SearchedTurnLayers < SolverWeights.IncrementalVerificationMaxTurns)
+            && (predictionTurnLayerLimit is not { } predictionLimit
+                || member.SearchedTurnLayers < predictionLimit)
             && HasExpandedNodeBudgetRemaining()
             && !member.TimeBudgetReached)
         {
@@ -2252,6 +2318,15 @@ internal sealed partial class CombatBeamSolver
             }
             PublishProgress(_startTurnNumber + member.SearchedTurnLayers, member.SearchedTurnLayers, 0,
                 member.Frontier.Count, member.Completed.Count, "回合层完成", force: true);
+            if (predictionTurnLayerLimit is { } completedPredictionLimit
+                && member.SearchedTurnLayers >= completedPredictionLimit)
+            {
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Multiplayer] MP_LOCAL_CORE_PREDICTION_HORIZON " +
+                    $"start_turn={_startTurnNumber} searched_turn_layers={member.SearchedTurnLayers} " +
+                    $"last_planned_turn={_startTurnNumber + member.SearchedTurnLayers - 1} " +
+                    $"frontier={member.Frontier.Count} completed={member.Completed.Count}");
+            }
             if (policy.CurrentTurnOnly)
             {
                 // Current-turn multiplayer routes are useful as advice even when no
@@ -2378,33 +2453,6 @@ internal sealed partial class CombatBeamSolver
         List<SearchNode> finalCandidates = Retention.RankFinal(finalPool);
         ReleaseDroppedSnapshots(finalPool, finalCandidates);
 
-        bool fullProjectionOnlyDeathRoutes = finalCandidates.Count > 0
-            && finalCandidates.All(candidate =>
-                candidate.Snapshot.PlayerDead || candidate.Snapshot.ProjectedPlayerHp <= 0);
-        SearchNode? currentTurnFallback = member.CurrentTurnCandidateNode;
-        bool currentTurnFallbackSurvives = currentTurnFallback != null
-            && !currentTurnFallback.Snapshot.PlayerDead
-            && currentTurnFallback.Snapshot.ProjectedPlayerHp > 0;
-        if (MultiplayerLocalCrossTurnContracts.ShouldUseLocalCoreDeathHorizonFallback(
-                policy.RoutePolicy,
-                root.PlayerCount,
-                fullProjectionOnlyDeathRoutes,
-                currentTurnFallbackSurvives))
-        {
-            SearchNode adoptedCurrentTurn = RefreshReleasedFallback(currentTurnFallback!);
-            foreach (SearchNode candidate in finalCandidates)
-                candidate.Snapshot.ReleaseSimulator();
-            finalCandidates = [adoptedCurrentTurn];
-            member.CurrentTurnCandidateNode = adoptedCurrentTurn;
-            member.CurrentTurnAdoptionReached = true;
-            policy.Diagnostics.Info(
-                $"[CombatSolver/Multiplayer] MP_LOCAL_CORE_DEATH_HORIZON_FALLBACK " +
-                $"turn={_startTurnNumber} player_count={root.PlayerCount} " +
-                $"future_death_routes=true projected_hp={adoptedCurrentTurn.Snapshot.ProjectedPlayerHp} " +
-                $"enemy_hp={adoptedCurrentTurn.Snapshot.EnemyHp} " +
-                $"actions={string.Join(',', adoptedCurrentTurn.Actions.Select(PolicyActionToken))}");
-        }
-
         ValidateHistoricalSimulatorsReleased(finalCandidates);
         PublishProgress(_startTurnNumber + member.SearchedTurnLayers, member.SearchedTurnLayers, 0,
             finalCandidates.Count, member.Completed.Count, "复核最终候选", force: true);
@@ -2433,71 +2481,6 @@ internal sealed partial class CombatBeamSolver
             emitDiagnostics: true,
             reevaluateScenarios: !member.TimeBudgetReached,
             allowScenarioRerank: !member.TimeBudgetReached);
-
-        if (!member.CurrentTurnAdoptionReached
-            && member.CurrentTurnCandidateNode is { } currentTurnCandidate
-            && member.CurrentTurnCandidateResult is { } currentTurnResult
-            && FindCurrentTurnBoundary(ordering.Candidate.Node) is { } selectedCurrentTurnBoundary)
-        {
-            SolverInterimResult selectedCurrentTurnResult = SummarizeCandidate(
-                selectedCurrentTurnBoundary,
-                selectedCurrentTurnBoundary.Snapshot.AllEnemiesDead);
-            bool currentTurnStrictlyBetter = SolverInterimResultOrdering.IsBetter(
-                currentTurnResult,
-                selectedCurrentTurnResult);
-            if (MultiplayerLocalCrossTurnContracts.ShouldPreferLocalCoreCurrentTurnResult(
-                    policy.RoutePolicy,
-                    root.PlayerCount,
-                    currentTurnStrictlyBetter))
-            {
-                SearchNode adoptedCurrentTurn = RefreshReleasedFallback(currentTurnCandidate);
-                EnsureCandidateOrigin(adoptedCurrentTurn);
-                FinalPlanSelection? currentTurnOrdering = null;
-                try
-                {
-                    currentTurnOrdering = FinalOrdering.Select(
-                        [(adoptedCurrentTurn, adoptedCurrentTurn.Snapshot)],
-                        initialHp,
-                        emitDiagnostics: false,
-                        reevaluateScenarios: false,
-                        allowScenarioRerank: false);
-                }
-                catch (PotionPolicyUnsatisfiedException)
-                {
-                    adoptedCurrentTurn.Snapshot.ReleaseSimulator();
-                    policy.Diagnostics.Info(
-                        $"[CombatSolver/Multiplayer] MP_LOCAL_CORE_CURRENT_TURN_PRIORITY " +
-                        $"turn={_startTurnNumber} adopted=false reason=potion_policy");
-                }
-
-                if (currentTurnOrdering != null)
-                {
-                    string replacedCurrentTurn = string.Join(
-                        ',',
-                        ordering.Candidate.Node.Actions
-                            .Where(action => action.Turn == _startTurnNumber)
-                            .Select(PolicyActionToken));
-                    ordering = currentTurnOrdering;
-                    member.CurrentTurnCandidateNode = adoptedCurrentTurn;
-                    member.CurrentTurnAdoptionReached = true;
-                    onlyDeathRoutesFound = false;
-                    finalEvaluationContextId = SearchEfficiencyEvaluationContextId(
-                        scenarioReevaluation: false,
-                        completion: "final_current_turn_priority");
-                    policy.Diagnostics.Info(
-                        $"[CombatSolver/Multiplayer] MP_LOCAL_CORE_CURRENT_TURN_PRIORITY " +
-                        $"turn={_startTurnNumber} adopted=true " +
-                        $"incumbent_hp_lost={currentTurnResult.ProjectedBattleHpLost} " +
-                        $"selected_hp_lost={selectedCurrentTurnResult.ProjectedBattleHpLost} " +
-                        $"incumbent_enemy_hp={currentTurnResult.EnemyHp} " +
-                        $"selected_enemy_hp={selectedCurrentTurnResult.EnemyHp} " +
-                        $"incumbent_energy_left={adoptedCurrentTurn.Outcome?.EnergyLeft.ToString() ?? "-"} " +
-                        $"selected_energy_left={selectedCurrentTurnBoundary.Outcome?.EnergyLeft.ToString() ?? "-"} " +
-                        $"actions={string.Join(',', adoptedCurrentTurn.Actions.Select(PolicyActionToken))} " +
-                        $"replaced_current_turn={replacedCurrentTurn}");
-                }
-            }
-        }
 
         RecordCandidateEvaluated(ordering.Candidate.Node, finalEvaluationContextId);
         RecordCandidateSelected(ordering.Candidate.Node, finalEvaluationContextId);

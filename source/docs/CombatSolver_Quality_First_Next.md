@@ -195,6 +195,56 @@
 - `04606558...`：连续动作执行到 `PACTS_END` 后，旧 post-action gate 把本地合法连锁变化归为 `RemoteOrUnknownChange` 并触发 `DeploymentDrift`。当前 revalidation 只保留原生本地动作归因、队列稳定与 WorldVersion 前进/稳定，旧 decision 已删除；本轮新增禁止其重新出现的合同。
 - 因此这七包暴露的生产根因在当前 `main` 均已有行为修复。本轮不再叠加第二套补丁，只补齐缺失的回归合同与结构门禁，避免未来清理/重构把旧问题重新引入。
 
+### MultiplayerSinglePlayerCore 改为直接使用单人搜索模式（2026-09-26）
+
+- 根据 PHROG_PARASITE 的实机反馈，撤销此前为多人增加的独立 current-turn quality scout。该 scout 会先消耗一段请求预算并发布简单当前回合 incumbent，造成前段时间长期只显示 `STRIKE`，随后完整 Beam 才发现 `BARRICADE / FORGOTTEN_RITUAL / 资源组合`。
+- `MultiplayerSinglePlayerCore` 现在与 `SinglePlayerFullRoute` 进入同一个主搜索流水线：相同 Beam 动作展开、Novelty 开关、Beam retention、药水补充审计和 `FinalPlanOrdering`。不再先跑 `CurrentTurnOnly=true` scout。
+- 同时移除两个多人专属最终结果替换：`MP_LOCAL_CORE_CURRENT_TURN_PRIORITY` 与 `MP_LOCAL_CORE_DEATH_HORIZON_FALLBACK`。完整 Beam 的最终选择不再被另一个 current-turn incumbent 在最后阶段覆盖。
+- 保留的多人差异只在搜索输入/运行时边界：只授权本地玩家动作、不预测队友动作、多人专属牌规则、continuation validity、WorldVersion / Safe Execute。通用 current-turn UI preview 仍保留，因为单人和多人共用同一 progress 机制，它不再拥有多人专属搜索预算或最终排序权。
+- 预期效果：第一回合的 Strike、能力、抽牌、药水、防御和组合路线从一开始就在同一个 Beam 中竞争；不会再出现“前几十秒由独立 scout 的一张 Strike 占据显示，最后再切换到另一套算法”的两阶段行为。
+
+### PHROG 预览锁：Strike 早期候选隐藏后续回合（2026-09-26）
+
+- 问题包 `PHROG_PARASITE_ELITE-5ae37dffbf5247b0a10d1f8381a211ff` 证明切换到单人主搜索后，搜索核心已经较早产生更完整路线，但 UI 仍被旧 current-turn scout 时代的独立预览锁卡住。
+- generation 1 在约 0.43 秒记录 `SEARCH_CURRENT_TURN_PROMOTED ... actions=STRIKE_IRONCLAD`；约 4.7 秒时 `FINAL_SELECTION` 已经是 `STRIKE → FORGOTTEN_RITUAL → NOT_YET → EndTurn` 并包含 T2–T6；约 26 秒完整胜利结果的 T1 已改为 `BARRICADE → EndTurn`，且包含到 T13。搜索并没有“只找到 Strike”。
+- 根因是协调器保留独立 `currentTurnDisplayedResult`，并要求 speculative route 的首回合动作与早期 current-turn preview **完全相等**；早期 `[STRIKE]` 因而拒绝了后续 `[STRIKE, FORGOTTEN_RITUAL, NOT_YET]` 和 `[BARRICADE]` 两条更完整路线，同时把未来回合预览清空。
+- 现在移除该独立 current-turn 显示通道及 `RouteStartsWithCurrentTurn` 门禁。当前回合和后续回合重新绑定到同一个全局 Beam incumbent：全局路线提升时，两者一起更新。Beam 内部仍可保留 current-turn candidate 作为搜索/交互数据，但它不再单独锁住 UI。
+- `RefreshCurrentTurnPreview` 恢复优先使用 `member.CurrentBestNode`，只有没有全局 incumbent 时才退回 current-turn candidate。这样 Strike 可以作为几百毫秒级早期临时预览，但一旦更好的完整路线出现就必须被替换。
+
+### MultiplayerSinglePlayerCore：当前回合 + 后两回合预测窗（2026-09-27）
+
+- 默认多人 local-core 的搜索目标改为固定 **3 个 turn layer**：当前回合 T0，以及 T+1、T+2。它仍使用单人 Beam / Retention / FinalOrdering，不建立第二套 current-turn scout。
+- 目的：多人当前决策只需要足够的短期 lookahead 判断能力牌、抽牌、能量和两回合组合；不再要求本地玩家独自把多人血量怪从当前状态模拟到 T13–T18 才形成可比较路线。
+- Beam 与 Novelty 使用同一个 3 层硬边界。到 T+2 回合结束后，保留 frontier 直接进入既有 FinalOrdering；结果边界明确标记为 `TurnLimit`，MultiplayerScope 保持 `PartialLocalCrossTurnProjection`。
+- 由于该 `TurnLimit` 是主动预测窗而不是搜索失败，协调器不会再执行 no-victory escalation。BeamWidthPortfolio 也会把基线视为被预测边界截断，不继续串行跑 SecondRank / 窄宽 / 宽宽 / BaseScore refinement。
+- 单人 `SinglePlayerFullRoute` 完全不变；开启实验 team-prediction 的 `MultiplayerLocalCrossTurn` 也暂不受这个 3 回合限制。
+- 新诊断：`MP_LOCAL_CORE_PREDICTION_HORIZON`（Beam 到达 3 层）和 `MP_LOCAL_CORE_HORIZON_COMPLETE ... escalation=false`（请求按预测窗结束而不重新加深）。
+
+### PHROG：击杀与地狱狂徒自动出牌 UI 补全（2026-09-27）
+
+- 问题包 `PHROG_PARASITE_ELITE-c7a50b81804d4f0eb85fee119340925d` 证明模拟器并未漏算击杀或 Hellraiser：最终回放已记录 `STOMP` 击杀一只扭动虫，`FORGOTTEN_RITUAL` 与 `STOKE` 期间由 `STRIKE` 来源击杀另外三只。
+- 第一处缺口在 UI 投影：`SolverFrontierTurn` 原先没有 kills 字段，`BuildOverlayTurn` 对动态 current/speculative route 固定传空数组，因此搜索中的路线即使状态已经判定敌人死亡也不会显示“击杀”。
+- 第二处缺口在最终回放：Hellraiser 通过 `AutoPlay(... nestedChoiceSourceId: HELLRAISER_POWER)` 精确执行，但计划模型只保存玩家显式 `PlanAction`，隐式自动牌只作为伤害来源写进父动作的 kill 文本。现在最终 annotation replay 记录每次自动牌的来源、卡牌、目标、重放次数，并把它作为父计划动作下的**非执行子动作**交给 UI；它不进入 Safe Execute 的动作计数，也不会被部署器重复打出。
+- 自动牌造成的击杀从父动作 kill 标签中分离，并归到对应自动牌子胶囊。例如 Hellraiser 抽到 Strike 时 UI 可显示 `地狱狂徒 → 打击 → 扭动虫`，若该 Strike 致死则同一子胶囊显示击杀。
+- 动态路线现在按每个 SearchNode 的敌方 alive-mask 变化携带基础击杀标记；最终路线仍以精确 annotation replay 的 `RecordedKill` 来源覆盖它，因此普通显式卡牌、结束回合触发与隐式自动牌统一走同一套击杀展示链。
+- 该改动只增加路线注释/展示，不改变 Beam 评分、3 回合预测窗、动作合法性或部署授权。
+
+### TUNNELER：第二回合不再因队友非斩杀伤害冷重算（2026-09-27）
+
+- 问题包 `TUNNELER_WEAK-7116f29c223e431089f215e845817983` 的第一回合路线已经生成 T2/T3 continuation，但第二回合开始时预测敌人 HP 为 181、实机为 161；日志同时记录 `enemy_hp_route_changed=false`、`in_lethal_window=false`。Route tracker 认为无需失效，但 continuation 的 exact-state 门禁仍以 `field=E0.hp` 拒绝复用并触发 cold search。
+- 默认 `MultiplayerSinglePlayerCore` 现在允许一种新的软漂移：**同一只仍存活敌人的当前 HP 只向下变化**。combat id、怪物 id、slot、max HP、block、next move 必须完全一致，本地 HP/能量/手牌/牌堆/Power/RNG 等其余字段继续沿用原严格规则。
+- HP 上升、敌人从存活跨到死亡、Block 改变或任何其他敌人字段变化都会拒绝 continuation。不会把实际已死目标继续按旧路线执行。
+- 若设置 `UseMultiplayerLethalHpRecalculation` 开启且实机已进入已有 `IsInLethalRecalculationWindow`，即使只是 HP 向下变化也不放宽，仍按原逻辑重算；因此 continuation 与现有“普通 HP 变化忽略、斩杀窗口重算”的 route-version 策略一致。
+- 成功复用时日志标记 `validation=exact_except_remote_enemy_hp`、`living_enemy_hp_decrease_drift=true`、`reason=remote_enemy_hp_decrease`。
+
+### THE_OBSCURA：多人 Smart Potion 去掉重复提前审计（2026-09-27）
+
+- 问题包 `THE_OBSCURA_NORMAL-ecc2f56a93bd4867a5c329299563792e` 一次请求依次运行了：Novelty 无药 5.00s → `E3_CROSS_FAMILY_SCOUT` 有药 5.23s → 正式无药 Beam 8.66s → Smart Potion 有药 10.43s。两个有药成员合计约 15.66s，最终仍选择 0 瓶。
+- 原因不是 P3 accelerator 重新开启。即使 `LocalCoreSearchAcceleratorsEnabled=false`，`RunNoveltyPortfolioPass` 仍会在 Novelty 后调用传入的 `runCrossFamilyScout`；该 scout 基于临时无药基线，正式 Beam 改善基线后经常无法复用，于是 supplemental Smart audit 再搜索一次。
+- 默认 `MultiplayerSinglePlayerCore` 现在不再向 Novelty portfolio 提供 early Smart scout。流程固定为：**Novelty/Beam 都按无主动用药建立稳定基线 → supplemental 阶段最多一次正式 Smart Potion 审计**。
+- 这次只改药水调度；Offering/祭品、自损估值、Beam/FinalOrdering 均不改变。
+- 单人 `SinglePlayerFullRoute` 和实验 `MultiplayerLocalCrossTurn` 保留原 early scout 行为，避免把本次多人 3 回合优化扩散到其他模式。
+
 ### 当前真实样本补充：多人战损只统计本地玩家（2026-09-26）
 
 - 问题包 `1cd414aa66e94546bd9713630077d99c` 的 MAWLER 首回合实机记录显示：敌人两次 4 点攻击都对本地玩家结算为 `BlockedDamage=4 / UnblockedDamage=0`，50 格挡最终剩 42；队友则两次各承受 4 点。敌人对本地造成的实际 HP 伤害为 0。

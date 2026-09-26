@@ -62,6 +62,10 @@ internal sealed partial class CombatBeamSolver
     {
         NoveltySearchOptions options = policy.NoveltySearch!;
         options.Validate();
+        int maxTurns = Math.Min(
+            options.MaxTurns,
+            MultiplayerLocalCrossTurnContracts.PredictionTurnLayerLimit(policy.RoutePolicy)
+                ?? options.MaxTurns);
         var open = new BfwsBoundedOpen<(SearchNode Node, BfwsEscapeBudget? Escape)>(options.MaxOpen);
         var novelty = new BfwsPackedNovelty(options.Width, options.MaxNoveltyEntries);
         long sequence = 0;
@@ -98,7 +102,7 @@ internal sealed partial class CombatBeamSolver
                 var (parent, escape) = open.Dequeue();
                 try
                 {
-                    if (parent.ActionCount >= options.MaxActions || parent.Turn >= _startTurnNumber + options.MaxTurns)
+                    if (parent.ActionCount >= options.MaxActions || parent.Turn >= _startTurnNumber + maxTurns)
                     { _novelty.HorizonLeaves++; continue; }
                     if (!beforeParent(parent, open.Count, completed.Count))
                     { _novelty.Stop = "adoption"; stopped = true; break; }

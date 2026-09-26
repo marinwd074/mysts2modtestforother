@@ -37,6 +37,15 @@ internal sealed partial class CombatPredictionSimulator
                 activePlay = new CardPlay { Card = preview, Target = target,
                     ResultPile = result.pileType, Resources = resources, IsAutoPlay = isAutoPlay,
                     PlayIndex = index, PlayCount = playCount };
+                if (isAutoPlay && activePlay.IsFirstInSeries)
+                {
+                    ActionRelicTriggers?.RecordAutoPlay(
+                        choiceSource ?? string.Empty,
+                        preview.Id.Entry,
+                        preview.CurrentUpgradeLevel,
+                        target?.CombatId,
+                        Math.Max(0, playCount - 1));
+                }
                 HookMirrors.BeforeCardPlayed(this, card, activePlay);
                 if (HasPendingChoice)
                 {

@@ -134,6 +134,16 @@ internal sealed record PlanRelicEffect(
     string RelicTitle,
     string Summary);
 
+internal sealed record PlanAutoPlayedCard(
+    string SourceId,
+    string SourceTitle,
+    string CardId,
+    int CardUpgradeLevel,
+    string CardTitle,
+    string TargetName,
+    int ReplayCount,
+    IReadOnlyList<string> Kills);
+
 /// <summary>
 /// Forecast-only metadata for multiplayer EndTurn replay. Deployment never executes these actions.
 /// </summary>
@@ -179,7 +189,8 @@ internal sealed record PlanAction(
     bool EndsPlayerTurn = false,
     int CardUpgradeLevel = 0,
     string CardEnchantmentId = "",
-    ShadowForecastPlan? ShadowForecast = null)
+    ShadowForecastPlan? ShadowForecast = null,
+    IReadOnlyList<PlanAutoPlayedCard>? AutoPlayedCards = null)
 {
     public bool IsExecutable => Kind is PlanActionKind.PlayCard or PlanActionKind.UsePotion;
     public bool IsForecastOnlyObservation => Kind == PlanActionKind.TeammateForecast;
@@ -1984,8 +1995,19 @@ internal sealed class SolverResult
     public string DescribeWithKills(PlanAction action, int actionIndex)
     {
         string text = Describe(action);
-        if (!KillsAfterAction.TryGetValue(actionIndex, out IReadOnlyList<string>? kills) || kills.Count == 0)
-            return text;
-        return $"{text} [color=#73c991][b]击杀 {string.Join("、", kills)}[/b][/color]";
+        if (KillsAfterAction.TryGetValue(actionIndex, out IReadOnlyList<string>? kills)
+            && kills.Count > 0)
+        {
+            text += $" [color=#73c991][b]击杀 {string.Join("、", kills)}[/b][/color]";
+        }
+        if (action.AutoPlayedCards is { Count: > 0 } autoPlayed)
+        {
+            text += " [color=#d5b46a]" + string.Join("；", autoPlayed.Select(card =>
+                $"{card.SourceTitle}→{card.CardTitle}" +
+                (string.IsNullOrEmpty(card.TargetName) ? "" : $"→{card.TargetName}") +
+                (card.Kills.Count == 0 ? "" : $"（击杀 {string.Join("、", card.Kills)}）"))) +
+                "[/color]";
+        }
+        return text;
     }
 }
