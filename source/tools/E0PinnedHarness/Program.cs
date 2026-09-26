@@ -305,6 +305,7 @@ internal static class Program
             string[] rootHand = local.PlayerCombatState!.Hand.Cards.Select(card => card.Id.Entry).ToArray();
             Action<SolverProgress>? progressCallback =
                 publishProgress ? static _ => { } : null;
+            P4CombatFingerprintProfiler.Reset(p4Profile);
             SolverResult result = CombatSearchCoordinator.Solve(
                 root,
                 names,
@@ -318,6 +319,12 @@ internal static class Program
                 combat,
                 rootHand,
                 result);
+            if (p4Profile)
+            {
+                Console.WriteLine(
+                    $"P4_FINGERPRINT_DETAIL scenario={scenario} data=" +
+                    JsonSerializer.Serialize(P4CombatFingerprintProfiler.Snapshot()));
+            }
 
             if (string.Equals(scenario, "draw_energy", StringComparison.Ordinal)
                 && (!rootHand.Contains("OFFERING", StringComparer.Ordinal)
