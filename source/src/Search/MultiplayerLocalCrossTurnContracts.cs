@@ -130,6 +130,33 @@ internal static class MultiplayerLocalCrossTurnContracts
             && !hasShadowForecast
             && hasCardStateKey;
 
+    internal static IReadOnlyList<PlanAction> CaptureR1ValidatedEnumerationHintActions(
+        IReadOnlyList<PlanAction> actions,
+        int currentTurn)
+    {
+        List<PlanAction> prefix = [];
+        foreach (PlanAction action in actions)
+        {
+            if (action.Turn < currentTurn)
+                continue;
+            if (!CanReplayContinuationSeedAction(
+                    action.Turn,
+                    currentTurn,
+                    action.Kind == PlanActionKind.PlayCard,
+                    action.EndsPlayerTurn,
+                    action.Choice != null,
+                    action.NestedChoices is { Count: > 0 },
+                    action.TurnStartChoices is { Count: > 0 },
+                    action.ShadowForecast != null,
+                    !string.IsNullOrEmpty(action.CardStateKey)))
+            {
+                break;
+            }
+            prefix.Add(action);
+        }
+        return prefix.ToArray();
+    }
+
     internal static bool HasActiveMultiplayerRouteSemantics(
         SearchRoutePolicy policy,
         int playerCount)

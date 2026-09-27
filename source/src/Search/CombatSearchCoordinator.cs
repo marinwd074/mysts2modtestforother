@@ -435,6 +435,7 @@ internal static partial class CombatSearchCoordinator
             Stopwatch activeClock = passClock;
             SolverResult? continuationSeedIncumbent = null;
             PrimarySearchIncumbent? r1RecoveryIncumbent = null;
+            IReadOnlyList<PlanAction> r1ValidatedEnumerationHints = [];
             SolverResult? earlySmartPotionBaseline = null;
             SolverResult? earlySmartPotionScout = null;
 
@@ -476,11 +477,15 @@ internal static partial class CombatSearchCoordinator
                     return potionFree;
                 }
 
+                SearchPolicySnapshot memberPolicy = refinement
+                    && beamPolicy.ContinuationEnumerationHintActions.Count > 0
+                        ? beamPolicy with { ContinuationEnumerationHintActions = [] }
+                        : beamPolicy;
                 CombatBeamSolver solver = new(
                     root,
                     displayNames,
                     battleDamage,
-                    beamPolicy,
+                    memberPolicy,
                     cancellationToken,
                     memberProgressCallback,
                     memberProfile,
@@ -489,7 +494,7 @@ internal static partial class CombatSearchCoordinator
                 return RunResumableMemberToCompletion(
                     solver,
                     cancellationToken,
-                    beamPolicy.Diagnostics);
+                    memberPolicy.Diagnostics);
             }
             // 基线成员一跑完就按今天的方式把完整结果发布给覆盖层（覆盖层的中途路线走
             // SolverProgress，见 RunBeamWidthPortfolioPass 的注释）；精炼成员只有更优时才会
@@ -577,6 +582,24 @@ internal static partial class CombatSearchCoordinator
                     PopulateSingleSessionTotals(seedResult);
                     bool admissible = seedResult.ResultScope == SolverResultScope.SearchCompletion
                         && IsCompleteVictory(seedResult);
+                    bool reusablePartial =
+                        seedResult.ResultScope == SolverResultScope.SearchCompletion
+                        && !seedResult.Snapshot.PlayerDead
+                        && seedResult.Snapshot.ProjectedPlayerHp > 0;
+                    if (reusablePartial)
+                    {
+                        r1ValidatedEnumerationHints =
+                            MultiplayerLocalCrossTurnContracts.CaptureR1ValidatedEnumerationHintActions(
+                                seedResult.BestNode.Actions,
+                                root.StartTurnNumber);
+                        if (r1ValidatedEnumerationHints.Count > 0)
+                        {
+                            beamPolicy = beamPolicy with
+                            {
+                                ContinuationEnumerationHintActions = r1ValidatedEnumerationHints,
+                            };
+                        }
+                    }
                     if (admissible)
                     {
                         continuationSeedIncumbent = seedResult;
@@ -593,10 +616,16 @@ internal static partial class CombatSearchCoordinator
                         $"r1_bound={(r1RecoveryIncumbent.HasValue ? "established" : "none")}");
                     policy.Diagnostics.Info(
                         $"[CombatSolver/Test] R1_REROOT_RECOVERY " +
-                        $"status={(r1RecoveryIncumbent.HasValue ? "bound_established" : "replayed_only")} " +
+                        $"status={(r1RecoveryIncumbent.HasValue
+                            ? "bound_established"
+                            : r1ValidatedEnumerationHints.Count > 0
+                                ? "partial_hint"
+                                : "replayed_only")} " +
                         $"actions={continuationSeedActions.Count} " +
+                        $"validated_hint_actions={r1ValidatedEnumerationHints.Count} " +
                         $"complete_victory={admissible.ToString().ToLowerInvariant()} " +
-                        $"primary_budget_unchanged=true");
+                        $"primary_budget_unchanged=true candidate_set_unchanged=true " +
+                        $"refinement_hint=false");
                 }
                 catch (ContinuationSeedRejectedException rejected)
                 {
@@ -622,7 +651,8 @@ internal static partial class CombatSearchCoordinator
                     $"probe_ms={seedElapsedMs}/{seedProfile.SoftTimeBudgetMilliseconds} " +
                     $"primary_nodes_unchanged={activeProfile.MaxExpandedNodes} " +
                     $"primary_ms_unchanged={activeProfile.SoftTimeBudgetMilliseconds} " +
-                    $"r1_bound={(r1RecoveryIncumbent.HasValue ? "established" : "none")}");
+                    $"r1_bound={(r1RecoveryIncumbent.HasValue ? "established" : "none")} " +
+                    $"r1_hint_actions={r1ValidatedEnumerationHints.Count}");
             }
 
             SolverResult SelectContinuationSeedIncumbent(SolverResult ordinary)

@@ -128,9 +128,9 @@ internal sealed record SearchPolicySnapshot(
     // Suggestions from the prior turn; replay must evaluate them from the current root.
     public IReadOnlyList<PlanAction> ContinuationSeedActions { get; init; } = [];
 
-    // P2 experiment: ordering-only suggestions for the ordinary Beam member. These never
-    // authorize an action, seed a frontier, or bypass normal legality/retention/final ranking.
-    // Empty by default so production behavior is unchanged until fixed-work A/B accepts it.
+    // Ordering-only suggestions for the ordinary Beam baseline. Phase D may populate this only
+    // after the R1 probe has re-simulated the prefix from the new live root. It never authorizes
+    // an action, seeds a frontier, changes the candidate set, or bypasses legality/retention/final ranking.
     public IReadOnlyList<PlanAction> ContinuationEnumerationHintActions { get; init; } = [];
     public SearchInteractionState? Interaction { get; init; }
 

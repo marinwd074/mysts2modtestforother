@@ -157,6 +157,31 @@ Check(
     continuationSeedActionContractsAreCorrect,
     "P1 continuation-seed action boundary rejects cross-turn, non-card, choice and ambiguous-card suggestions.");
 
+PlanAction[] r1ValidatedPath =
+[
+    new(PlanActionKind.PlayCard, 3, CardId: "A", CardStateKey: "a"),
+    new(PlanActionKind.PlayCard, 3, CardId: "B", CardStateKey: "b"),
+    new(PlanActionKind.EndTurn, 3),
+    new(PlanActionKind.PlayCard, 4, CardId: "C", CardStateKey: "c"),
+];
+IReadOnlyList<PlanAction> r1ValidatedHints =
+    MultiplayerLocalCrossTurnContracts.CaptureR1ValidatedEnumerationHintActions(
+        r1ValidatedPath,
+        currentTurn: 3);
+Check(
+    r1ValidatedHints.Count == 2
+    && r1ValidatedHints[0].CardId == "A"
+    && r1ValidatedHints[1].CardId == "B",
+    "Phase D2 keeps only the newly validated current-turn plain-card prefix as an ordering hint.");
+Check(
+    MultiplayerLocalCrossTurnContracts.CaptureR1ValidatedEnumerationHintActions(
+        [
+            new(PlanActionKind.PlayCard, 3, CardId: "A", CardStateKey: "a"),
+            new(PlanActionKind.PlayCard, 3, CardId: "AMBIGUOUS", CardStateKey: ""),
+        ],
+        currentTurn: 3).Count == 1,
+    "Phase D2 stops the validated hint before ambiguous or unsupported semantics.");
+
 string continuationExact =
     "combat_identity=seed=s;players=1,2;enemies=4:A;local_net_id=2;turn=3;hp=77;H=A;D=B;C=;X=;" +
     "R=224:shuffle/0:cardgen/4:potion/2:select/0:energy/5:targets/0:orbs/10:ai/8:niche";
@@ -370,7 +395,7 @@ Check(
     "E5 action enumeration prioritizes estimated lethal, urgent defense, strategic value-per-resource, then preserves stable original order for exact ties.");
 Check(
     ActionSearchOrderingPolicy.VerifyContinuationSeedPriorityForTesting(),
-    "P2 continuation enumeration hint can move the exact next seed action ahead of ordinary action-order heuristics without changing the candidate set.");
+    "Phase D2 R1 hint outranks ordinary heuristic ties but never outranks estimated lethal or urgent defense.");
 
 MultiplayerContinuationMatchInput Match(
     string combatIdentity = "combat-a",
