@@ -754,6 +754,8 @@ internal sealed partial class CombatBeamSolver
                 UnrecoveredCards = finalSnapshot.UnrecoveredCards,
             };
             ValidateOrderedMutationAdmissionLedger(_run);
+            ShadowReplaySamplingSnapshot? shadowSampling =
+                policy.ShadowReplaySamplingBudget?.Capture();
             SolverResult result = new()
             {
                 ResultScope = resultScope,
@@ -900,17 +902,26 @@ internal sealed partial class CombatBeamSolver
                     _run.MaxParallelRoundChoiceReplayConcurrency,
                 NodeLimitSnapshotsReleased = _run.NodeLimitSnapshotsReleased,
                 TransitionCacheHits = _run.TransitionCacheHits,
-                ShadowReplayObservations = _run.ShadowReplayObservations,
-                ShadowReplayStores = _run.ShadowReplayStores,
-                ShadowReplayValidatedHits = _run.ShadowReplayValidatedHits,
-                ShadowReplayCollisionRejects = _run.ShadowReplayCollisionRejects,
-                ShadowReplayOutputMismatches = _run.ShadowReplayOutputMismatches,
-                ShadowReplayDroppedStores = _run.ShadowReplayDroppedStores,
-                ShadowReplaySamplingCapped = _run.ShadowReplaySamplingCapped,
+                ShadowReplayObservations =
+                    shadowSampling?.Observations ?? _run.ShadowReplayObservations,
+                ShadowReplayStores =
+                    shadowSampling?.Stores ?? _run.ShadowReplayStores,
+                ShadowReplayValidatedHits =
+                    shadowSampling?.ValidatedHits ?? _run.ShadowReplayValidatedHits,
+                ShadowReplayCollisionRejects =
+                    shadowSampling?.CollisionRejects ?? _run.ShadowReplayCollisionRejects,
+                ShadowReplayOutputMismatches =
+                    shadowSampling?.OutputMismatches ?? _run.ShadowReplayOutputMismatches,
+                ShadowReplayDroppedStores =
+                    shadowSampling?.DroppedStores ?? _run.ShadowReplayDroppedStores,
+                ShadowReplaySamplingCapped =
+                    shadowSampling?.Capped ?? _run.ShadowReplaySamplingCapped,
                 ShadowReplayValidationDuration = TimeSpan.FromSeconds(
-                    _run.ShadowReplayValidationTicks / (double)Stopwatch.Frequency),
+                    (shadowSampling?.ValidationTicks ?? _run.ShadowReplayValidationTicks)
+                    / (double)Stopwatch.Frequency),
                 ShadowReplayPotentialSavedDuration = TimeSpan.FromSeconds(
-                    _run.ShadowReplayPotentialSavedTicks / (double)Stopwatch.Frequency),
+                    (shadowSampling?.PotentialSavedTicks ?? _run.ShadowReplayPotentialSavedTicks)
+                    / (double)Stopwatch.Frequency),
                 WorkerAllocatedBytes = workerAllocatedBytes,
                 Gen0Collections = gen0Collections,
                 Gen1Collections = gen1Collections,

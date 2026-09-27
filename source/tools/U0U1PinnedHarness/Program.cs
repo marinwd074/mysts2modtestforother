@@ -1336,21 +1336,22 @@ internal static class Program
                 R0TransitionMemo = null,
                 R0TransitionPolicyIdentity = string.Empty,
             };
+            ShadowReplaySamplingBudget productionSampling =
+                new(CombatBeamSolver.ProductionShadowReplayObservationLimit);
+            for (int index = 0;
+                 index < CombatBeamSolver.ProductionShadowReplayObservationLimit;
+                 index++)
+            {
+                Require(
+                    productionSampling.TryAcquire(),
+                    $"Phase C production shadow sampling ended early at {index}.");
+            }
             Require(
-                !CombatBeamSolver.ShouldObserveR0ShadowReplayForTesting(
-                    detailedDiagnostics: false, playerCount: 1, observations: 0)
-                && CombatBeamSolver.ShouldObserveR0ShadowReplayForTesting(
-                    detailedDiagnostics: false, playerCount: 2, observations: 0)
-                && CombatBeamSolver.ShouldObserveR0ShadowReplayForTesting(
-                    detailedDiagnostics: false, playerCount: 2,
-                    observations: CombatBeamSolver.ProductionShadowReplayObservationLimit - 1)
-                && !CombatBeamSolver.ShouldObserveR0ShadowReplayForTesting(
-                    detailedDiagnostics: false, playerCount: 2,
-                    observations: CombatBeamSolver.ProductionShadowReplayObservationLimit)
-                && CombatBeamSolver.ShouldObserveR0ShadowReplayForTesting(
-                    detailedDiagnostics: true, playerCount: 1,
-                    observations: CombatBeamSolver.ProductionShadowReplayObservationLimit),
-                "Phase C production shadow sampling gate drifted.");
+                !productionSampling.TryAcquire()
+                    && productionSampling.Capture().Used
+                        == CombatBeamSolver.ProductionShadowReplayObservationLimit
+                    && productionSampling.Capture().Capped,
+                "Phase C production shadow sampling request-wide cap drifted.");
             string policyIdentity = CombatTransitionMemo.CapturePolicyIdentity(basePolicy);
             CombatTransitionMemo memo = new();
             memo.BindCombat(root.ContinuationStamp.CombatIdentity);

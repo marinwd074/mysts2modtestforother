@@ -516,6 +516,11 @@ internal static partial class SolverController
             new SearchMemoryPressureSignal())
         {
             Interaction = interaction,
+            ShadowReplaySamplingBudget = capabilities.IsMultiplayer
+                && !settings.EnableDetailedDiagnosticLogs
+                    ? new ShadowReplaySamplingBudget(
+                        CombatBeamSolver.ProductionShadowReplayObservationLimit)
+                    : null,
             RoutePolicy = routePolicy,
             CurrentTurnOnly = MultiplayerLocalCrossTurnContracts.IsCurrentTurnOnly(routePolicy),
             // Multiplayer always uses the real multiplayer combat root. The user-facing

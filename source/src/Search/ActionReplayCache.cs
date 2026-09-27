@@ -87,6 +87,102 @@ internal sealed class ActionReplayCache
     }
 }
 
+internal sealed class ShadowReplaySamplingBudget
+{
+    private readonly int _limit;
+    private int _used;
+    private int _observations;
+    private int _stores;
+    private int _validatedHits;
+    private int _collisionRejects;
+    private int _outputMismatches;
+    private int _droppedStores;
+    private int _capped;
+    private long _validationTicks;
+    private long _potentialSavedTicks;
+
+    internal ShadowReplaySamplingBudget(int limit)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        _limit = limit;
+    }
+
+    internal int Limit => _limit;
+
+    internal bool TryAcquire()
+    {
+        while (true)
+        {
+            int observed = Volatile.Read(ref _used);
+            if (observed >= _limit)
+            {
+                Volatile.Write(ref _capped, 1);
+                return false;
+            }
+            if (Interlocked.CompareExchange(ref _used, observed + 1, observed) == observed)
+                return true;
+        }
+    }
+
+    internal void Record(
+        ReplayCacheValidationResult validation,
+        long validationTicks,
+        long potentialSavedTicks)
+    {
+        Interlocked.Increment(ref _observations);
+        switch (validation)
+        {
+            case ReplayCacheValidationResult.Stored:
+                Interlocked.Increment(ref _stores);
+                break;
+            case ReplayCacheValidationResult.ValidatedHit:
+                Interlocked.Increment(ref _validatedHits);
+                break;
+            case ReplayCacheValidationResult.CollisionRejected:
+                Interlocked.Increment(ref _collisionRejects);
+                break;
+            case ReplayCacheValidationResult.OutputMismatch:
+                Interlocked.Increment(ref _outputMismatches);
+                break;
+            case ReplayCacheValidationResult.DroppedStore:
+                Interlocked.Increment(ref _droppedStores);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(validation), validation, null);
+        }
+        Interlocked.Add(ref _validationTicks, validationTicks);
+        if (potentialSavedTicks > 0)
+            Interlocked.Add(ref _potentialSavedTicks, potentialSavedTicks);
+    }
+
+    internal ShadowReplaySamplingSnapshot Capture()
+        => new(
+            Limit: _limit,
+            Used: Math.Min(_limit, Volatile.Read(ref _used)),
+            Observations: Volatile.Read(ref _observations),
+            Stores: Volatile.Read(ref _stores),
+            ValidatedHits: Volatile.Read(ref _validatedHits),
+            CollisionRejects: Volatile.Read(ref _collisionRejects),
+            OutputMismatches: Volatile.Read(ref _outputMismatches),
+            DroppedStores: Volatile.Read(ref _droppedStores),
+            Capped: Volatile.Read(ref _capped) != 0,
+            ValidationTicks: Interlocked.Read(ref _validationTicks),
+            PotentialSavedTicks: Interlocked.Read(ref _potentialSavedTicks));
+}
+
+internal readonly record struct ShadowReplaySamplingSnapshot(
+    int Limit,
+    int Used,
+    int Observations,
+    int Stores,
+    int ValidatedHits,
+    int CollisionRejects,
+    int OutputMismatches,
+    int DroppedStores,
+    bool Capped,
+    long ValidationTicks,
+    long PotentialSavedTicks);
+
 internal readonly record struct ReplayCacheKey(
     StateFingerprint ParentState,
     string ActionIdentity,
