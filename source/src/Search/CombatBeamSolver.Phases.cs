@@ -1137,12 +1137,13 @@ internal sealed partial class CombatBeamSolver
             bool onlyDeathRoutesFound = evaluated.All(candidate =>
                 candidate.Snapshot.PlayerDead || candidate.Snapshot.ProjectedPlayerHp <= 0);
             int candidateVersion = ++member.RoutePreviewVersion;
-            member.SpeculativeRoutePreview = BuildRoutePreview(
+            SolverSpeculativeRoutePreview speculativeRoutePreview = BuildRoutePreview(
                 ordering,
                 onlyDeathRoutesFound,
                 candidateVersion);
+            member.SpeculativeRoutePreview = speculativeRoutePreview;
             int candidateSearchedTurnLayers = member.SearchedTurnLayers;
-            PlanAction[] adoptionActions = member.SpeculativeRoutePreview.Turns
+            PlanAction[] adoptionActions = speculativeRoutePreview.Turns
                 .SelectMany(turn => turn.Actions)
                 .ToArray();
             member.RouteAdoptionSeed = new SolverRouteAdoptionSeed(
