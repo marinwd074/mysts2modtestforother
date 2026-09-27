@@ -1075,20 +1075,22 @@ internal static class Program
             RequestWorkTotals = new SearchRequestWorkTotals(),
         };
 
+        CardModel biasedCognitionModel = ModelDb.AllCards
+            .Single(static card => card is BiasedCognition);
         SetLiveEnergyForU5(player, 3);
         playerState.Hand.AddInternal(
-            combat.CreateCard(ResolveCard("BORROWED_TIME"), player), -1);
+            combat.CreateCard(biasedCognitionModel, player), -1);
         playerState.Hand.AddInternal(
             combat.CreateCard(ResolveCard("OUTMANEUVER"), player), -1);
 
         int turn = playerState.TurnNumber;
         PlanAction endTurn = new(PlanActionKind.EndTurn, turn);
-        PlanAction borrowedTime = new(
+        PlanAction biasedCognition = new(
             PlanActionKind.PlayCard,
             turn,
-            CardId: "BORROWED_TIME",
+            CardId: biasedCognitionModel.Id.Entry,
             CardOccurrence: 0,
-            CardTitle: "Borrowed Time");
+            CardTitle: "Biased Cognition");
         PlanAction outmaneuver = new(
             PlanActionKind.PlayCard,
             turn,
@@ -1099,10 +1101,10 @@ internal static class Program
         CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
         SimulationSnapshot standPat = ReplayPhaseB(
             root, names, damage, replayPolicy, profile, [endTurn]);
-        SimulationSnapshot borrowedPending = ReplayPhaseB(
-            root, names, damage, replayPolicy, profile, [borrowedTime]);
-        SimulationSnapshot borrowedSettled = ReplayPhaseB(
-            root, names, damage, replayPolicy, profile, [borrowedTime, endTurn]);
+        SimulationSnapshot biasedPending = ReplayPhaseB(
+            root, names, damage, replayPolicy, profile, [biasedCognition]);
+        SimulationSnapshot biasedSettled = ReplayPhaseB(
+            root, names, damage, replayPolicy, profile, [biasedCognition, endTurn]);
         SimulationSnapshot outmaneuverPending = ReplayPhaseB(
             root, names, damage, replayPolicy, profile, [outmaneuver]);
         SimulationSnapshot outmaneuverSettled = ReplayPhaseB(
@@ -1112,22 +1114,31 @@ internal static class Program
         {
             Require(
                 standPat.BoundaryReason == SearchBoundaryReason.None
-                    && borrowedPending.BoundaryReason == SearchBoundaryReason.None
-                    && borrowedSettled.BoundaryReason == SearchBoundaryReason.None
+                    && biasedPending.BoundaryReason == SearchBoundaryReason.None
+                    && biasedSettled.BoundaryReason == SearchBoundaryReason.None
                     && outmaneuverPending.BoundaryReason == SearchBoundaryReason.None
                     && outmaneuverSettled.BoundaryReason == SearchBoundaryReason.None,
                 "Phase B deferred-effect replay reached an unexpected search boundary.");
 
-            SimulatedCombatState borrowedPendingState =
-                (SimulatedCombatState)borrowedPending.Simulator.State.CombatState;
-            SimulatedCombatState borrowedSettledState =
-                (SimulatedCombatState)borrowedSettled.Simulator.State.CombatState;
+            SimulatedCombatState biasedPendingState =
+                (SimulatedCombatState)biasedPending.Simulator.State.CombatState;
+            SimulatedCombatState biasedSettledState =
+                (SimulatedCombatState)biasedSettled.Simulator.State.CombatState;
+            int biasedDecay =
+                biasedPendingState.GetAmount<BiasedCognitionPower>(player.Creature);
+            int biasedPendingFocus =
+                biasedPendingState.GetAmount<FocusPower>(player.Creature);
+            int biasedSettledFocus =
+                biasedSettledState.GetAmount<FocusPower>(player.Creature);
             Require(
-                borrowedPendingState.GetAmount<BorrowedTimePower>(player.Creature) > 0,
-                "Borrowed Time debt was not present before the turn transition.");
+                biasedDecay > 0
+                    && biasedSettledState.GetAmount<BiasedCognitionPower>(player.Creature)
+                        == biasedDecay,
+                "Biased Cognition deferred Focus loss power was not retained.");
             Require(
-                borrowedSettledState.GetAmount<BorrowedTimePower>(player.Creature) == 0,
-                "Borrowed Time debt did not settle at the turn transition.");
+                biasedSettledFocus == biasedPendingFocus - biasedDecay,
+                $"Biased Cognition deferred Focus loss did not settle exactly once: "
+                + $"pending={biasedPendingFocus} decay={biasedDecay} settled={biasedSettledFocus}.");
 
             SimulatedCombatState outmaneuverPendingState =
                 (SimulatedCombatState)outmaneuverPending.Simulator.State.CombatState;
@@ -1147,17 +1158,17 @@ internal static class Program
                 semanticEvidenceAvailable: true,
                 semanticStateChanged: false,
                 modeledQualityDominatedByStandPat: false);
-            DeferredImpactCoverage borrowedPendingCoverage = DeferredImpactCoverage.Capture(
+            DeferredImpactCoverage biasedPendingCoverage = DeferredImpactCoverage.Capture(
                 default,
                 turn,
-                borrowedPending,
+                biasedPending,
                 semanticEvidenceAvailable: true,
                 semanticStateChanged: true,
                 modeledQualityDominatedByStandPat: false);
-            DeferredImpactCoverage borrowedSettledCoverage = DeferredImpactCoverage.Capture(
+            DeferredImpactCoverage biasedSettledCoverage = DeferredImpactCoverage.Capture(
                 default,
                 turn,
-                borrowedSettled,
+                biasedSettled,
                 semanticEvidenceAvailable: true,
                 semanticStateChanged: true,
                 modeledQualityDominatedByStandPat: false);
@@ -1177,19 +1188,15 @@ internal static class Program
                 modeledQualityDominatedByStandPat: false);
 
             Require(
-                borrowedPendingCoverage.CoverageThrough
+                biasedPendingCoverage.CoverageThrough
                     == DeferredImpactCoverageBoundary.CurrentTurn
-                    && borrowedPendingCoverage.RequiresFurtherClosure,
-                "Borrowed Time pending debt was incorrectly marked closed.");
+                    && biasedPendingCoverage.RequiresFurtherClosure,
+                "Biased Cognition deferred cost was incorrectly marked closed.");
             Require(
-                borrowedSettledCoverage.CoverageThrough
+                biasedSettledCoverage.CoverageThrough
                     == DeferredImpactCoverageBoundary.NextLocalTurnStart
-                    && !borrowedSettledCoverage.RequiresFurtherClosure,
-                "Borrowed Time settled debt did not reach a closed next-turn boundary.");
-            Require(
-                borrowedSettledCoverage.Outcome.Energy < standPatCoverage.Outcome.Energy,
-                $"Borrowed Time next-turn energy debt was lost: borrowed={borrowedSettledCoverage.Outcome.Energy} "
-                + $"stand_pat={standPatCoverage.Outcome.Energy}.");
+                    && !biasedSettledCoverage.RequiresFurtherClosure,
+                "Biased Cognition deferred cost did not reach a closed next-turn boundary.");
 
             Require(
                 outmaneuverPendingCoverage.CoverageThrough
@@ -1250,13 +1257,13 @@ internal static class Program
                     return new PhaseBEvidence(
                         Status: "PASS",
                         EvidenceLevel: "pinned_exact_simulation_plus_sidecar_contract",
-                        BorrowedTimePendingCoverage:
-                            borrowedPendingCoverage.CoverageThrough.ToString(),
-                        BorrowedTimeSettledCoverage:
-                            borrowedSettledCoverage.CoverageThrough.ToString(),
+                        BiasedCognitionPendingCoverage:
+                            biasedPendingCoverage.CoverageThrough.ToString(),
+                        BiasedCognitionSettledCoverage:
+                            biasedSettledCoverage.CoverageThrough.ToString(),
+                        BiasedCognitionPendingFocus: biasedPendingFocus,
+                        BiasedCognitionSettledFocus: biasedSettledFocus,
                         StandPatNextTurnEnergy: standPatCoverage.Outcome.Energy,
-                        BorrowedTimeNextTurnEnergy:
-                            borrowedSettledCoverage.Outcome.Energy,
                         OutmaneuverPendingCoverage:
                             outmaneuverPendingCoverage.CoverageThrough.ToString(),
                         OutmaneuverSettledCoverage:
@@ -1280,8 +1287,8 @@ internal static class Program
         finally
         {
             standPat.ReleaseSimulator();
-            borrowedPending.ReleaseSimulator();
-            borrowedSettled.ReleaseSimulator();
+            biasedPending.ReleaseSimulator();
+            biasedSettled.ReleaseSimulator();
             outmaneuverPending.ReleaseSimulator();
             outmaneuverSettled.ReleaseSimulator();
         }
@@ -1466,10 +1473,11 @@ internal static class Program
     internal sealed record PhaseBEvidence(
         string Status,
         string EvidenceLevel,
-        string BorrowedTimePendingCoverage,
-        string BorrowedTimeSettledCoverage,
+        string BiasedCognitionPendingCoverage,
+        string BiasedCognitionSettledCoverage,
+        int BiasedCognitionPendingFocus,
+        int BiasedCognitionSettledFocus,
         int StandPatNextTurnEnergy,
-        int BorrowedTimeNextTurnEnergy,
         string OutmaneuverPendingCoverage,
         string OutmaneuverSettledCoverage,
         int OutmaneuverNextTurnEnergy,
