@@ -85,7 +85,7 @@ internal sealed partial class CombatBeamSolver
         if (hydrated.StateKey != seed.ExpectedOutputStateKey)
         {
             hydrated.ReleaseSimulator();
-            cache.RecordOutputMismatch();
+            cache.RecordOutputMismatch(key);
             return false;
         }
 

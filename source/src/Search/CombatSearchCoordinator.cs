@@ -779,8 +779,15 @@ internal static partial class CombatSearchCoordinator
                     $"collision_rejects={hydration.CollisionRejects} " +
                     $"hydration_hits={hydration.HydrationHits} " +
                     $"output_mismatches={hydration.OutputMismatches} " +
+                    $"rejected_keys={hydration.RejectedKeys} " +
                     $"reuse_disabled={hydration.ReuseDisabled.ToString().ToLowerInvariant()} " +
                     $"behavioral_reuse=exact_nonterminal_transition");
+                foreach (R1TransitionHydrationRejectSample rejected in hydration.RejectSamples)
+                {
+                    policy.Diagnostics.Info(
+                        $"[CombatSolver/Test] R1_HYDRATION_REJECTED_KEY " +
+                        $"action={rejected.ActionIdentity} reason={rejected.Reason}");
+                }
                 r1TransitionHydrationCache.Release();
                 r1TransitionHydrationCache = null;
             }

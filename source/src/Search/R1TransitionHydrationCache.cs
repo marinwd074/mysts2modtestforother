@@ -2,6 +2,10 @@ using CombatSolver.Engine.InCombat.Simulation;
 
 namespace CombatSolver;
 
+internal readonly record struct R1TransitionHydrationRejectSample(
+    string ActionIdentity,
+    string Reason);
+
 internal readonly record struct R1TransitionHydrationSnapshot(
     int EntryLimit,
     int Entries,
@@ -15,7 +19,9 @@ internal readonly record struct R1TransitionHydrationSnapshot(
     int CollisionRejects,
     int HydrationHits,
     int OutputMismatches,
-    bool ReuseDisabled);
+    int RejectedKeys,
+    bool ReuseDisabled,
+    IReadOnlyList<R1TransitionHydrationRejectSample> RejectSamples);
 
 internal sealed class R1TransitionHydrationSeed(
     CombatPredictionSimulator simulator,
@@ -61,6 +67,8 @@ internal sealed class R1TransitionHydrationCache(int entryLimit = 32)
     private readonly object _gate = new();
     private readonly Dictionary<ReplayCacheKey, Entry> _entries = [];
     private readonly HashSet<ReplayCacheKey> _validatedKeys = [];
+    private readonly HashSet<ReplayCacheKey> _rejectedKeys = [];
+    private readonly List<R1TransitionHydrationRejectSample> _rejectSamples = [];
     private readonly int _entryLimit = entryLimit > 0
         ? entryLimit
         : throw new ArgumentOutOfRangeException(nameof(entryLimit));
@@ -75,6 +83,7 @@ internal sealed class R1TransitionHydrationCache(int entryLimit = 32)
     private int _collisionRejects;
     private int _hydrationHits;
     private int _outputMismatches;
+    private int _rejectedKeysCount;
     private int _reuseDisabled;
 
     internal int EntryCount
@@ -97,7 +106,7 @@ internal sealed class R1TransitionHydrationCache(int entryLimit = 32)
         if (Volatile.Read(ref _reuseDisabled) != 0)
             return false;
         lock (_gate)
-            return _entries.ContainsKey(key);
+            return _entries.ContainsKey(key) && !_rejectedKeys.Contains(key);
     }
 
     internal void Store(
@@ -136,7 +145,7 @@ internal sealed class R1TransitionHydrationCache(int entryLimit = 32)
                 else
                 {
                     _storeConflicts++;
-                    Volatile.Write(ref _reuseDisabled, 1);
+                    RejectKeyNoLock(key, "store_conflict");
                 }
                 return;
             }
@@ -181,6 +190,7 @@ internal sealed class R1TransitionHydrationCache(int entryLimit = 32)
         lock (_gate)
         {
             if (_reuseDisabled != 0
+                || _rejectedKeys.Contains(key)
                 || _validatedKeys.Contains(key)
                 || !_entries.TryGetValue(key, out Entry? entry))
             {
@@ -192,14 +202,18 @@ internal sealed class R1TransitionHydrationCache(int entryLimit = 32)
                 || !string.Equals(entry.ParentStateText, parentStateText, StringComparison.Ordinal))
             {
                 _collisionRejects++;
-                _reuseDisabled = 1;
+                RejectKeyNoLock(key, "parent_collision");
                 return;
             }
             if (entry.OutputStateKey != outputStateKey
                 || !string.Equals(entry.OutputStateText, outputStateText, StringComparison.Ordinal))
             {
                 _outputMismatches++;
-                _reuseDisabled = 1;
+                RejectKeyNoLock(
+                    key,
+                    entry.OutputStateKey != outputStateKey
+                        ? "output_state_key"
+                        : "output_state_text");
                 return;
             }
 
@@ -235,7 +249,7 @@ internal sealed class R1TransitionHydrationCache(int entryLimit = 32)
                 || !string.Equals(entry.ParentStateText, parentStateText, StringComparison.Ordinal))
             {
                 _collisionRejects++;
-                _reuseDisabled = 1;
+                RejectKeyNoLock(key, "fork_parent_collision");
                 return false;
             }
         }
@@ -258,15 +272,32 @@ internal sealed class R1TransitionHydrationCache(int entryLimit = 32)
     internal void RecordHydrationHit()
         => Interlocked.Increment(ref _hydrationHits);
 
-    internal void RecordOutputMismatch()
+    internal void RecordOutputMismatch(ReplayCacheKey key)
     {
-        Interlocked.Increment(ref _outputMismatches);
-        Volatile.Write(ref _reuseDisabled, 1);
+        lock (_gate)
+        {
+            _outputMismatches++;
+            RejectKeyNoLock(key, "hydrated_state_key");
+        }
+    }
+
+    private void RejectKeyNoLock(ReplayCacheKey key, string reason)
+    {
+        if (_rejectedKeys.Add(key))
+        {
+            _rejectedKeysCount++;
+            if (_rejectSamples.Count < 8)
+                _rejectSamples.Add(new R1TransitionHydrationRejectSample(
+                    key.ActionIdentity,
+                    reason));
+        }
+        _validatedKeys.Remove(key);
     }
 
     private bool IsReusableKeyNoLock(ReplayCacheKey key)
         => _frozen != 0
             && _reuseDisabled == 0
+            && !_rejectedKeys.Contains(key)
             && _validatedKeys.Contains(key)
             && _entries.ContainsKey(key);
 
@@ -282,6 +313,8 @@ internal sealed class R1TransitionHydrationCache(int entryLimit = 32)
         {
             _entries.Clear();
             _validatedKeys.Clear();
+            _rejectedKeys.Clear();
+            _rejectSamples.Clear();
             Volatile.Write(ref _reuseDisabled, 1);
         }
     }
@@ -304,71 +337,67 @@ internal sealed class R1TransitionHydrationCache(int entryLimit = 32)
             Volatile.Read(ref _collisionRejects),
             Volatile.Read(ref _hydrationHits),
             Volatile.Read(ref _outputMismatches),
-            Volatile.Read(ref _reuseDisabled) != 0);
+            Volatile.Read(ref _rejectedKeysCount),
+            Volatile.Read(ref _reuseDisabled) != 0,
+            _rejectSamples.ToArray());
     }
 
     internal static bool VerifyExactReuseGateForTesting()
     {
-        ReplayCacheKey key = new(
+        ReplayCacheKey goodKey = new(
             new StateFingerprint(1, 2),
-            "PlayCard:TEST",
+            "PlayCard:GOOD",
+            "policy",
+            ActionReplayCache.CurrentContractVersion);
+        ReplayCacheKey badKey = new(
+            new StateFingerprint(5, 6),
+            "PlayCard:BAD",
             "policy",
             ActionReplayCache.CurrentContractVersion);
 
-        R1TransitionHydrationCache accepted = new(entryLimit: 1);
-        accepted._entries.Add(key, new Entry(
+        R1TransitionHydrationCache cache = new(entryLimit: 2);
+        cache._entries.Add(goodKey, new Entry(
             "combat",
-            "parent",
-            "output",
+            "parent-good",
+            "output-good",
             outputSimulator: null!,
             processedEnemyDeaths: [],
             turn: 3,
             shufflesCrossed: 0,
             boundaryReason: SearchBoundaryReason.None,
             outputStateKey: new StateFingerprint(3, 4)));
-
-        if (accepted.IsReusableKeyForTesting(key))
-            return false;
-        accepted.FreezeStores();
-        if (accepted.IsReusableKeyForTesting(key))
-            return false;
-        accepted.ValidateRealReplay(
-            key,
+        cache._entries.Add(badKey, new Entry(
             "combat",
-            "parent",
+            "parent-bad",
+            "output-bad",
+            outputSimulator: null!,
+            processedEnemyDeaths: [],
+            turn: 3,
+            shufflesCrossed: 0,
+            boundaryReason: SearchBoundaryReason.None,
+            outputStateKey: new StateFingerprint(7, 8)));
+
+        cache.FreezeStores();
+        cache.ValidateRealReplay(
+            goodKey,
+            "combat",
+            "parent-good",
             new StateFingerprint(3, 4),
-            "output");
-        if (!accepted.IsReusableKeyForTesting(key))
-            return false;
-
-        R1TransitionHydrationSnapshot acceptedSnapshot = accepted.Capture();
-        if (acceptedSnapshot.FirstValidations != 1
-            || acceptedSnapshot.ValidatedKeys != 1
-            || acceptedSnapshot.ReuseDisabled)
-        {
-            return false;
-        }
-
-        R1TransitionHydrationCache rejected = new(entryLimit: 1);
-        rejected._entries.Add(key, new Entry(
+            "output-good");
+        cache.ValidateRealReplay(
+            badKey,
             "combat",
-            "parent",
-            "output",
-            outputSimulator: null!,
-            processedEnemyDeaths: [],
-            turn: 3,
-            shufflesCrossed: 0,
-            boundaryReason: SearchBoundaryReason.None,
-            outputStateKey: new StateFingerprint(3, 4)));
-        rejected.FreezeStores();
-        rejected.ValidateRealReplay(
-            key,
-            "combat",
-            "parent",
+            "parent-bad",
             new StateFingerprint(9, 9),
             "different");
-        return rejected.Capture().ReuseDisabled
-            && rejected.Capture().OutputMismatches == 1
-            && !rejected.IsReusableKeyForTesting(key);
+
+        R1TransitionHydrationSnapshot snapshot = cache.Capture();
+        return cache.IsReusableKeyForTesting(goodKey)
+            && !cache.IsReusableKeyForTesting(badKey)
+            && snapshot.FirstValidations == 2
+            && snapshot.ValidatedKeys == 1
+            && snapshot.OutputMismatches == 1
+            && snapshot.RejectedKeys == 1
+            && !snapshot.ReuseDisabled;
     }
 }

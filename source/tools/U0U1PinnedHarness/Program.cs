@@ -62,7 +62,7 @@ internal static class Program
                 "R1 Beam-rank reuse requires first exact validation and disables reuse on mismatch.");
             Require(
                 R1TransitionHydrationCache.VerifyExactReuseGateForTesting(),
-                "R1 transition hydration requires first exact replay validation and disables reuse on mismatch.");
+                "R1 transition hydration requires first exact replay validation and rejects only the mismatching key.");
             Require(
                 R1FrontierShadowCache.VerifyShadowGateForTesting(),
                 "R1 frontier shadow distinguishes exact retained-frontier matches, mismatches and missing depth keys.");
