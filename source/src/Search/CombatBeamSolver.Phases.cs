@@ -245,6 +245,9 @@ internal sealed partial class CombatBeamSolver
                 GrowthRewardCount = node.Snapshot.StrategyGoalCount,
                 Survives = !node.Snapshot.PlayerDead && node.Snapshot.ProjectedPlayerHp > 0,
                 DeathSaveUseCount = node.Snapshot.ProjectedDeathSaveUseCount,
+                RollingHorizonLossFirst =
+                    MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(
+                        _routePolicy),
             };
         }
 
@@ -477,7 +480,7 @@ internal sealed partial class CombatBeamSolver
             }
 
             member.PublishedCurrentTurnActions = actions;
-            member.CurrentTurnPreview = new SolverCurrentTurnPreview(
+            SolverCurrentTurnPreview preview = new(
                 ++member.CurrentTurnPreviewVersion,
                 _startTurnNumber,
                 actions.Select(WithDisplayNames).ToArray(),
@@ -492,6 +495,38 @@ internal sealed partial class CombatBeamSolver
                     .Select(WithDisplayNames)
                     .ToArray(),
             };
+            member.CurrentTurnPreview = preview;
+
+            SearchNode displayedCandidate = candidate;
+            int displayedSearchedTurnLayers = member.SearchedTurnLayers;
+            string displayedEvaluationContextId = SearchEfficiencyEvaluationContextId(
+                scenarioReevaluation: false,
+                completion: "displayed_current_turn");
+            member.CurrentTurnAdoptionSeed = new SolverRouteAdoptionSeed(
+                preview.CandidateVersion,
+                preview.Actions,
+                () =>
+                {
+                    FinalPlanSelection displayedOrdering = FinalOrdering.Select(
+                        [(displayedCandidate, displayedCandidate.Snapshot)],
+                        root.InitialPlayerHp,
+                        emitDiagnostics: false,
+                        reevaluateScenarios: false,
+                        allowScenarioRerank: false);
+                    bool displayedOnlyDeath =
+                        displayedCandidate.Snapshot.PlayerDead
+                        || displayedCandidate.Snapshot.ProjectedPlayerHp <= 0;
+                    SolverResult exactDisplayed = MaterializeSelectedRoute(
+                        displayedOrdering,
+                        displayedOnlyDeath,
+                        SolverResultScope.CurrentTurnAdoption,
+                        displayedSearchedTurnLayers,
+                        candidateTimeBudgetReached: false,
+                        candidateNodeBudgetReached: false,
+                        displayedEvaluationContextId);
+                    exactDisplayed.ResultScope = SolverResultScope.CurrentTurnAdoption;
+                    return exactDisplayed;
+                });
         }
 
 
@@ -754,6 +789,8 @@ internal sealed partial class CombatBeamSolver
                 UnrecoveredCards = finalSnapshot.UnrecoveredCards,
             };
             ValidateOrderedMutationAdmissionLedger(_run);
+            ShadowReplaySamplingSnapshot? shadowSampling =
+                policy.ShadowReplaySamplingBudget?.Capture();
             SolverResult result = new()
             {
                 ResultScope = resultScope,
@@ -900,16 +937,45 @@ internal sealed partial class CombatBeamSolver
                     _run.MaxParallelRoundChoiceReplayConcurrency,
                 NodeLimitSnapshotsReleased = _run.NodeLimitSnapshotsReleased,
                 TransitionCacheHits = _run.TransitionCacheHits,
-                ShadowReplayObservations = _run.ShadowReplayObservations,
-                ShadowReplayStores = _run.ShadowReplayStores,
-                ShadowReplayValidatedHits = _run.ShadowReplayValidatedHits,
-                ShadowReplayCollisionRejects = _run.ShadowReplayCollisionRejects,
-                ShadowReplayOutputMismatches = _run.ShadowReplayOutputMismatches,
-                ShadowReplayDroppedStores = _run.ShadowReplayDroppedStores,
+                ShadowReplayObservations =
+                    shadowSampling?.Observations ?? _run.ShadowReplayObservations,
+                ShadowReplayStores =
+                    shadowSampling?.Stores ?? _run.ShadowReplayStores,
+                ShadowReplayValidatedHits =
+                    shadowSampling?.ValidatedHits ?? _run.ShadowReplayValidatedHits,
+                ShadowReplayCollisionRejects =
+                    shadowSampling?.CollisionRejects ?? _run.ShadowReplayCollisionRejects,
+                ShadowReplayOutputMismatches =
+                    shadowSampling?.OutputMismatches ?? _run.ShadowReplayOutputMismatches,
+                ShadowReplayDroppedStores =
+                    shadowSampling?.DroppedStores ?? _run.ShadowReplayDroppedStores,
+                ShadowLocalCoreObservations =
+                    shadowSampling?.LocalCoreObservations ?? _run.ShadowLocalCoreObservations,
+                ShadowLocalCoreStores =
+                    shadowSampling?.LocalCoreStores ?? _run.ShadowLocalCoreStores,
+                ShadowLocalCoreValidatedHits =
+                    shadowSampling?.LocalCoreValidatedHits ?? _run.ShadowLocalCoreValidatedHits,
+                ShadowLocalCoreCollisionRejects =
+                    shadowSampling?.LocalCoreCollisionRejects
+                    ?? _run.ShadowLocalCoreCollisionRejects,
+                ShadowLocalCoreOutputMismatches =
+                    shadowSampling?.LocalCoreOutputMismatches
+                    ?? _run.ShadowLocalCoreOutputMismatches,
+                ShadowLocalCoreDroppedStores =
+                    shadowSampling?.LocalCoreDroppedStores ?? _run.ShadowLocalCoreDroppedStores,
+                ShadowReplaySampleCurrentTurn = shadowSampling?.CurrentTurnUsed ?? 0,
+                ShadowReplaySampleFutureTurn = shadowSampling?.FutureTurnUsed ?? 0,
+                ShadowReplaySampleFutureTurnReserve = shadowSampling?.FutureTurnReserve ?? 0,
+                ShadowReplaySampleCurrentTurnLimited =
+                    shadowSampling?.CurrentTurnLimited ?? false,
+                ShadowReplaySamplingCapped =
+                    shadowSampling?.Capped ?? _run.ShadowReplaySamplingCapped,
                 ShadowReplayValidationDuration = TimeSpan.FromSeconds(
-                    _run.ShadowReplayValidationTicks / (double)Stopwatch.Frequency),
+                    (shadowSampling?.ValidationTicks ?? _run.ShadowReplayValidationTicks)
+                    / (double)Stopwatch.Frequency),
                 ShadowReplayPotentialSavedDuration = TimeSpan.FromSeconds(
-                    _run.ShadowReplayPotentialSavedTicks / (double)Stopwatch.Frequency),
+                    (shadowSampling?.PotentialSavedTicks ?? _run.ShadowReplayPotentialSavedTicks)
+                    / (double)Stopwatch.Frequency),
                 WorkerAllocatedBytes = workerAllocatedBytes,
                 Gen0Collections = gen0Collections,
                 Gen1Collections = gen1Collections,
@@ -1213,6 +1279,7 @@ internal sealed partial class CombatBeamSolver
                 member.SpeculativeRoutePreview,
                 member.RouteAdoptionSeed)
             {
+                CurrentTurnAdoptionSeed = member.CurrentTurnAdoptionSeed,
                 OfficialPublishedOrigin = officialPublishedOrigin,
                 OfficialPublishedEvaluationContextId =
                     officialPublishedEvaluationContextId,
@@ -1426,16 +1493,56 @@ internal sealed partial class CombatBeamSolver
                 $"prune_sample_allocated={member.PruneHighWaterAllocatedBytes} " +
                 $"expanded={_run.Expanded} " +
                 $"turn_layer={member.SearchedTurnLayers} play_depth={playDepth}");
+            bool repeatedSystemPressureFallback =
+                ShouldFallbackFromRepeatedSystemPressure(
+                    signal.IsEnabled,
+                    signal.SystemPressureDominates,
+                    signal.ReclaimCount);
             PublishProgress(
                 _startTurnNumber + member.SearchedTurnLayers,
                 member.SearchedTurnLayers,
                 playDepth,
                 frontierNodes,
                 endedNodes,
-                "内存压力较高，正在整理内存",
+                repeatedSystemPressureFallback
+                    ? "持续内存压力，正在切换常规 GC"
+                    : "内存压力较高，正在整理内存",
                 force: true);
             _run.ResetReclaimableCaches();
             parallelExpansionExecutor?.ResetRebuildableCaches();
+            if (repeatedSystemPressureFallback)
+            {
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Test] SEARCH_MEMORY_DEFAULT_GC_FALLBACK " +
+                    $"reason=repeated_system_pressure trigger={reason} " +
+                    $"checkpoint={signal.ReclaimCount} allocated={signal.AllocatedBytes} " +
+                    $"limit={signal.AllocationLimitBytes} remaining={signal.RemainingBytes} " +
+                    $"expanded={_run.Expanded} turn_layer={member.SearchedTurnLayers} " +
+                    $"play_depth={playDepth}");
+                try
+                {
+                    signal.UseDefaultGcAndContinue(cancellationToken);
+                }
+                finally
+                {
+                    _run.WorkPacer.ObserveGcPause(signal.LastReclaimMaxObservedGcPause);
+                }
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Test] SEARCH_MEMORY_RESUMED " +
+                    $"reason={reason}_default_gc checkpoint={signal.ReclaimCount} " +
+                    $"frontier={frontierNodes} ended={endedNodes} expanded={_run.Expanded} " +
+                    $"turn_layer={member.SearchedTurnLayers} play_depth={playDepth}");
+                PublishProgress(
+                    _startTurnNumber + member.SearchedTurnLayers,
+                    member.SearchedTurnLayers,
+                    playDepth,
+                    frontierNodes,
+                    endedNodes,
+                    "已切换常规 GC，继续搜索",
+                    force: true);
+                return;
+            }
+
             try
             {
                 signal.ReclaimAndContinue(cancellationToken, reason);
@@ -1637,6 +1744,13 @@ internal sealed partial class CombatBeamSolver
                     return false;
                 }
                 if (request?.Kind == SearchTakeoverKind.ApplyCurrentTurn
+                    && request.CurrentTurnAdoptionSeed != null)
+                {
+                    member.RequestedCurrentTurnAdoptionSeed =
+                        request.CurrentTurnAdoptionSeed;
+                    return false;
+                }
+                if (request?.Kind == SearchTakeoverKind.ApplyCurrentTurn
                     && (member.CurrentBestNode != null || member.CurrentTurnCandidateNode != null))
                 {
                     member.AdoptionReached = true;
@@ -1744,6 +1858,15 @@ internal sealed partial class CombatBeamSolver
                     break;
                 }
                 SearchNode? adoptableNode = member.CurrentBestNode ?? member.CurrentTurnCandidateNode;
+                if (takeover?.Kind == SearchTakeoverKind.ApplyCurrentTurn
+                    && takeover.CurrentTurnAdoptionSeed != null)
+                {
+                    member.RequestedCurrentTurnAdoptionSeed =
+                        takeover.CurrentTurnAdoptionSeed;
+                    member.InterruptedActive = member.Active;
+                    member.TimeBudgetReached = true;
+                    break;
+                }
                 if (takeover?.Kind == SearchTakeoverKind.ApplyCurrentTurn && adoptableNode != null)
                 {
                     member.AdoptionReached = true;
@@ -2358,6 +2481,14 @@ internal sealed partial class CombatBeamSolver
                 break;
             }
             if (layerTakeover?.Kind == SearchTakeoverKind.ApplyCurrentTurn
+                && layerTakeover.CurrentTurnAdoptionSeed != null)
+            {
+                member.RequestedCurrentTurnAdoptionSeed =
+                    layerTakeover.CurrentTurnAdoptionSeed;
+                member.TimeBudgetReached = true;
+                break;
+            }
+            if (layerTakeover?.Kind == SearchTakeoverKind.ApplyCurrentTurn
                 && (member.CurrentBestNode != null || member.CurrentTurnCandidateNode != null))
             {
                 member.AdoptionReached = true;
@@ -2388,6 +2519,29 @@ internal sealed partial class CombatBeamSolver
                 member.Frontier = [];
                 break;
             }
+        }
+
+        if (member.RequestedCurrentTurnAdoptionSeed != null)
+        {
+            foreach (SearchNode candidate in member.Completed)
+                candidate.Snapshot.ReleaseSimulator();
+            foreach (SearchNode candidate in member.Frontier)
+                candidate.Snapshot.ReleaseSimulator();
+            if (member.InterruptedActive != null)
+            {
+                foreach (SearchNode candidate in member.InterruptedActive)
+                    candidate.Snapshot.ReleaseSimulator();
+            }
+            policy.Diagnostics.Info(
+                $"[CombatSolver/Test] SEARCH_CURRENT_TURN_DISPLAYED_CHECKPOINT " +
+                $"candidate_version={member.RequestedCurrentTurnAdoptionSeed.CandidateVersion} " +
+                $"displayed_actions={member.RequestedCurrentTurnAdoptionSeed.Actions.Count} " +
+                $"expanded={_run.Expanded}");
+            SolverResult exactDisplayed =
+                member.RequestedCurrentTurnAdoptionSeed.Materialize();
+            exactDisplayed.ResultScope = SolverResultScope.CurrentTurnAdoption;
+            execution.Result = exactDisplayed;
+            yield break;
         }
 
         if (member.RequestedRouteAdoptionSeed != null)
@@ -2821,6 +2975,8 @@ internal sealed partial class CombatBeamSolver
         public SolverSpeculativeRoutePreview? SpeculativeRoutePreview { get; set; }
         public CandidateOrigin? SpeculativeRouteOrigin { get; set; }
         public string? SpeculativeRouteEvaluationContextId { get; set; }
+        public SolverRouteAdoptionSeed? CurrentTurnAdoptionSeed { get; set; }
+        public SolverRouteAdoptionSeed? RequestedCurrentTurnAdoptionSeed { get; set; }
         public SolverRouteAdoptionSeed? RouteAdoptionSeed { get; set; }
         public SolverRouteAdoptionSeed? RequestedRouteAdoptionSeed { get; set; }
         public IReadOnlyList<SearchNode>? InterruptedActive { get; set; }
@@ -3283,8 +3439,39 @@ internal sealed partial class CombatBeamSolver
         return MemoryCommitPreparation.Reclaim;
     }
 
+    private static bool ShouldFallbackFromRepeatedSystemPressure(
+        bool signalEnabled,
+        bool systemPressureDominates,
+        int reclaimCount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(reclaimCount);
+        return signalEnabled
+            && systemPressureDominates
+            && reclaimCount >= 2;
+    }
+
     internal static void VerifyPruneMemoryCheckpointPolicyForTesting()
     {
+        if (!ShouldFallbackFromRepeatedSystemPressure(
+                signalEnabled: true,
+                systemPressureDominates: true,
+                reclaimCount: 2)
+            || ShouldFallbackFromRepeatedSystemPressure(
+                signalEnabled: true,
+                systemPressureDominates: true,
+                reclaimCount: 1)
+            || ShouldFallbackFromRepeatedSystemPressure(
+                signalEnabled: true,
+                systemPressureDominates: false,
+                reclaimCount: 2)
+            || ShouldFallbackFromRepeatedSystemPressure(
+                signalEnabled: false,
+                systemPressureDominates: true,
+                reclaimCount: 2))
+        {
+            throw new InvalidOperationException(
+                "持续系统内存压力没有在两次 NoGC 回收后切换 CLR 常规 GC。");
+        }
         if (ResolveStandPatBatchSize(100, 600, 100) != 6
             || ResolveStandPatBatchSize(3, 600, 100) != 3
             || ResolveStandPatBatchSize(100, 99, 100) != 1

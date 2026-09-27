@@ -98,10 +98,12 @@ internal static class MultiplayerRouteChangeTracker
     private static StateFingerprint? _lastEnemyHpFingerprint;
     private static string _lastReason = "reset";
     private static long _version;
+    private static long _invalidationVersion;
     private static long _stableAfter;
     private static bool _dirty;
 
     internal static long Version => _version;
+    internal static long InvalidationVersion => _invalidationVersion;
     internal static string LastReason => _lastReason;
 
     internal static void Reset()
@@ -109,6 +111,7 @@ internal static class MultiplayerRouteChangeTracker
         _lastEnemyHpFingerprint = null;
         _lastReason = "reset";
         _version = 0;
+        _invalidationVersion = 0;
         _stableAfter = 0;
         _dirty = false;
     }
@@ -123,7 +126,7 @@ internal static class MultiplayerRouteChangeTracker
 
         _lastEnemyHpFingerprint = fingerprint;
         if (allowInvalidation)
-            Signal(reason);
+            SignalInvalidation(reason);
         return allowInvalidation;
     }
 
@@ -131,7 +134,7 @@ internal static class MultiplayerRouteChangeTracker
         => _lastEnemyHpFingerprint = fingerprint;
 
     internal static void SignalSchedulingBoundary(string reason)
-        => Signal(reason);
+        => SignalScheduling(reason);
 
     internal static bool TryTakeStable(out long version)
     {
@@ -143,7 +146,13 @@ internal static class MultiplayerRouteChangeTracker
         return true;
     }
 
-    private static void Signal(string reason)
+    private static void SignalInvalidation(string reason)
+    {
+        _invalidationVersion = checked(_invalidationVersion + 1);
+        SignalScheduling(reason);
+    }
+
+    private static void SignalScheduling(string reason)
     {
         _lastReason = reason;
         _version = checked(_version + 1);

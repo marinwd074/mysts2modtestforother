@@ -87,8 +87,10 @@ internal sealed partial class SimulatedCombatState
 
     private static bool ReadPaleBlueDotActivated(PaleBlueDotPower power)
     {
-        object data = PowerInternalDataField.GetValue(power)
-            ?? throw new InvalidOperationException("苍蓝星球没有内部回合状态。");
+        object? data = PowerInternalDataField.GetValue(power);
+        // Native internal data is lazy; an absent instance still has the default inactive state.
+        if (data is null)
+            return false;
         FieldInfo field = data.GetType().GetField(
             "alreadyActivatedThisTurn",
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)

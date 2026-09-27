@@ -32,7 +32,7 @@ $searchCompletionContractPath = Join-Path $repositoryRoot 'src/Runtime/Multiplay
 $searchCompletionContractText = [IO.File]::ReadAllText($searchCompletionContractPath)
 foreach ($searchCompletionContractRule in @(
     'if (routeScopedCompletion)',
-    'searchRouteVersion != currentRouteVersion || !localStampMatches',
+    'searchRouteInvalidationVersion != currentRouteInvalidationVersion || !localStampMatches',
     'currentWorldVersion != searchWorldVersion',
     '|| !fullStampMatches')) {
     if (-not $searchCompletionContractText.Contains($searchCompletionContractRule)) {
@@ -65,14 +65,34 @@ foreach ($localSearchStampRule in @(
 
 $solverControllerPath = Join-Path $repositoryRoot 'src/Runtime/SolverController.cs'
 $solverControllerText = [IO.File]::ReadAllText($solverControllerPath)
+$solverControllerAutomationPath = Join-Path $repositoryRoot 'src/Runtime/SolverController.Automation.cs'
+$solverControllerAutomationText = [IO.File]::ReadAllText($solverControllerAutomationPath)
 foreach ($routeScopedDeployRule in @(
     'DEPLOY_COMPATIBLE_WORLD_DELTA',
     'deploy_after_local_state_change',
     'IsLatestResultDeploymentCompatible(',
-    '_combat.LatestRouteVersion == MultiplayerRouteChangeTracker.Version',
-    'search.RouteVersion == MultiplayerRouteChangeTracker.Version')) {
+    '_combat.LatestRouteInvalidationVersion',
+    'search.RouteInvalidationVersion',
+    'MultiplayerRouteChangeTracker.InvalidationVersion')) {
     if (-not $solverControllerText.Contains($routeScopedDeployRule)) {
         $violations.Add("${solverControllerPath}: route-scoped deployment drifted '$routeScopedDeployRule'")
+    }
+}
+
+foreach ($displayedCurrentTurnRule in @(
+    'RenderedCurrentTurnAdoptionSeed',
+    'progress.CurrentTurnAdoptionSeed',
+    'search.Interaction.RenderedCurrentTurnAdoptionSeed != null')) {
+    if (-not $solverControllerText.Contains($displayedCurrentTurnRule)) {
+        $violations.Add("${solverControllerPath}: rendered current-turn takeover drifted '$displayedCurrentTurnRule'")
+    }
+}
+foreach ($displayedCurrentTurnRule in @(
+    'search.Interaction.RenderedCurrentTurnAdoptionSeed',
+    'RequestApplyCurrentTurn(renderedSeed)',
+    'candidate_version={renderedSeed.CandidateVersion}')) {
+    if (-not $solverControllerAutomationText.Contains($displayedCurrentTurnRule)) {
+        $violations.Add("${solverControllerAutomationPath}: apply-current-turn no longer consumes the rendered seed '$displayedCurrentTurnRule'")
     }
 }
 
@@ -80,7 +100,9 @@ $solverProgressPath = Join-Path $repositoryRoot 'src/Runtime/SolverProgress.cs'
 $solverProgressText = [IO.File]::ReadAllText($solverProgressPath)
 foreach ($routeAnnotationUiRule in @(
     'KillsAfterAction { get; init; }',
-    'result.KillsAfterAction.TryGetValue(')) {
+    'result.KillsAfterAction.TryGetValue(',
+    'RenderedCurrentTurnAdoptionSeed',
+    'CurrentTurnAdoptionSeed: renderedSeed')) {
     if (-not $solverProgressText.Contains($routeAnnotationUiRule)) {
         $violations.Add("${solverProgressPath}: route-preview kill annotations drifted '$routeAnnotationUiRule'")
     }
@@ -140,7 +162,7 @@ foreach ($enemyHpReuseRule in @(
     }
 }
 foreach ($routeScopedCompletionRule in @(
-    'RouteVersion = capabilities.IsMultiplayer',
+    'RouteInvalidationVersion = capabilities.IsMultiplayer',
     'LiveCombatStamp.CaptureLocalCoreSearchValidity(state)',
     'searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore',
     'MultiplayerSearchCompletionContracts.IsStale(',

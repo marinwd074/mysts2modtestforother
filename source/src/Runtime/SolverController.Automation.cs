@@ -329,17 +329,19 @@ internal static partial class SolverController
             PlayerTurnSetupCoordinator.ApplyCurrentTurn();
             return;
         }
-        if (search.Interaction.CurrentTakeoverRequest != null
-            || Volatile.Read(ref search.Interaction.Progress)?.CurrentTurnPreview == null)
-        {
+        SolverRouteAdoptionSeed? renderedSeed =
+            search.Interaction.RenderedCurrentTurnAdoptionSeed;
+        if (search.Interaction.CurrentTakeoverRequest != null || renderedSeed == null)
             return;
-        }
 
         search.DeployWhenReady = true;
-        if (!search.Interaction.RequestApplyCurrentTurn())
+        if (!search.Interaction.RequestApplyCurrentTurn(renderedSeed))
             return;
         SolverOverlay.RefreshControls();
-        Entry.Logger.Info("[CombatSolver/Test] UI_ACTION action=apply_current_turn");
+        Entry.Logger.Info(
+            $"[CombatSolver/Test] UI_ACTION action=apply_current_turn " +
+            $"candidate_version={renderedSeed.CandidateVersion} " +
+            $"displayed_actions={renderedSeed.Actions.Count}");
     }
 
     public static void AdoptCurrentRoute()

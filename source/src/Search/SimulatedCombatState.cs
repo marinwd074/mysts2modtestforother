@@ -1628,10 +1628,18 @@ internal sealed partial class SimulatedCombatState
     }
 
     public IEnumerable<AbstractModel> IterateHookListeners()
-        => GetActiveHookListeners();
+        => GetHandDrawHookListeners();
 
     IReadOnlyList<AbstractModel> ICombatPredictionHookListenerSource.HookListeners
-        => GetActiveHookListeners();
+        => GetHandDrawHookListeners();
+
+    private IReadOnlyList<AbstractModel> GetHandDrawHookListeners()
+    {
+        IReadOnlyList<AbstractModel> listeners = GetActiveHookListeners();
+        if (!PaleBlueDotHandDrawScope.Active)
+            return listeners;
+        return listeners.Where(static listener => listener is not PaleBlueDotPower).ToArray();
+    }
 
     IReadOnlyList<AbstractModel> ICombatPredictionHookListenerSource.RunHookListeners
         => GetEffectiveRunHookListeners();

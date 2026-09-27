@@ -68,6 +68,7 @@ internal static partial class CombatSearchCoordinator
         int speculativeRouteVersion = 0;
         SolverCurrentTurnPreview? currentTurnPreview = null;
         SolverSpeculativeRoutePreview? speculativeRoutePreview = null;
+        SolverRouteAdoptionSeed? currentTurnAdoptionSeed = null;
         SolverRouteAdoptionSeed? currentRouteAdoptionSeed = null;
 
         bool TryPromoteDisplayedResult(SolverInterimResult candidate)
@@ -111,6 +112,14 @@ internal static partial class CombatSearchCoordinator
             speculativeRoutePreview = SolverSpeculativeRoutePreview.FromResult(
                 result,
                 ++speculativeRouteVersion);
+            currentTurnAdoptionSeed = new SolverRouteAdoptionSeed(
+                currentTurnPreview.CandidateVersion,
+                currentTurnPreview.Actions,
+                () =>
+                {
+                    result.ResultScope = SolverResultScope.CurrentTurnAdoption;
+                    return result;
+                });
             currentRouteAdoptionSeed = new SolverRouteAdoptionSeed(
                 speculativeRoutePreview.CandidateVersion,
                 result.BestNode.Actions,
@@ -126,6 +135,7 @@ internal static partial class CombatSearchCoordinator
                     CurrentTurnPreview = currentTurnPreview,
                     SpeculativeRoutePreview = speculativeRoutePreview,
                     RouteAdoptionSeed = currentRouteAdoptionSeed,
+                    CurrentTurnAdoptionSeed = currentTurnAdoptionSeed,
                 };
                 progressCallback(lastProgress);
             }
@@ -154,6 +164,7 @@ internal static partial class CombatSearchCoordinator
                     if (progress.CurrentTurnPreview is { } current)
                     {
                         currentTurnPreview = current;
+                        currentTurnAdoptionSeed = progress.CurrentTurnAdoptionSeed;
                         currentTurnPreviewVersion = Math.Max(
                             currentTurnPreviewVersion,
                             current.CandidateVersion);
@@ -186,6 +197,7 @@ internal static partial class CombatSearchCoordinator
                     CurrentTurnPreview = currentTurnPreview,
                     SpeculativeRoutePreview = speculativeRoutePreview,
                     RouteAdoptionSeed = currentRouteAdoptionSeed,
+                    CurrentTurnAdoptionSeed = currentTurnAdoptionSeed,
                 });
             };
         try
@@ -215,23 +227,30 @@ internal static partial class CombatSearchCoordinator
         }
         catch (OperationCanceledException)
             when (interaction?.CurrentTakeoverRequest?.Kind == SearchTakeoverKind.ApplyCurrentTurn
-                  && currentCompleteAdoptableResult != null)
+                  && (interaction.CurrentTakeoverRequest.CurrentTurnAdoptionSeed != null
+                      || currentCompleteAdoptableResult != null))
         {
+            SolverResult adopted =
+                interaction.CurrentTakeoverRequest.CurrentTurnAdoptionSeed?.Materialize()
+                ?? currentCompleteAdoptableResult!;
+            adopted.ResultScope = SolverResultScope.CurrentTurnAdoption;
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] SEARCH_INTERIM_ADOPTED " +
-                $"potions={currentCompleteAdoptableResult.ProjectedBattlePotionCount} " +
-                $"projected_battle_hp_lost={currentCompleteAdoptableResult.ProjectedBattleHpLost}");
+                $"candidate_version=" +
+                $"{interaction.CurrentTakeoverRequest.CurrentTurnAdoptionSeed?.CandidateVersion.ToString() ?? "-"} " +
+                $"potions={adopted.ProjectedBattlePotionCount} " +
+                $"projected_battle_hp_lost={adopted.ProjectedBattleHpLost}");
             portfolioTelemetry.RecordCandidatePublished(
-                currentCompleteAdoptableResult.SearchEfficiencyOrigin,
-                currentCompleteAdoptableResult.SearchEfficiencyEvaluationContextId ?? string.Empty);
-            PopulateRequestWorkTotals(currentCompleteAdoptableResult, requestWorkTotals);
-            currentCompleteAdoptableResult.PortfolioTelemetry = portfolioTelemetry;
+                adopted.SearchEfficiencyOrigin,
+                adopted.SearchEfficiencyEvaluationContextId ?? string.Empty);
+            PopulateRequestWorkTotals(adopted, requestWorkTotals);
+            adopted.PortfolioTelemetry = portfolioTelemetry;
             LogSearchEfficiencySummary(
                 root,
                 policy.Diagnostics,
-                currentCompleteAdoptableResult,
+                adopted,
                 portfolioTelemetry);
-            return currentCompleteAdoptableResult;
+            return adopted;
         }
     }
 
@@ -311,6 +330,13 @@ internal static partial class CombatSearchCoordinator
         }
         if (request.Kind == SearchTakeoverKind.AdoptRoute)
             return request.RouteAdoptionSeed?.Materialize();
+        if (request.Kind == SearchTakeoverKind.ApplyCurrentTurn
+            && request.CurrentTurnAdoptionSeed != null)
+        {
+            SolverResult exactDisplayed = request.CurrentTurnAdoptionSeed.Materialize();
+            exactDisplayed.ResultScope = SolverResultScope.CurrentTurnAdoption;
+            return exactDisplayed;
+        }
         return IsAdoptionResult(result) ? result : null;
     }
 
@@ -2674,6 +2700,9 @@ internal static partial class CombatSearchCoordinator
             GrowthRewardCount = result.Snapshot.StrategyGoalCount,
             Survives = !result.Snapshot.PlayerDead && result.Snapshot.ProjectedPlayerHp > 0,
             DeathSaveUseCount = result.Snapshot.ProjectedDeathSaveUseCount,
+            RollingHorizonLossFirst =
+                MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(
+                    policy.RoutePolicy),
         };
 
 
@@ -2732,9 +2761,14 @@ internal static partial class CombatSearchCoordinator
         SolverInterimResult candidate,
         SolverInterimResult current)
     {
-        int victoryComparison = current.Won.CompareTo(candidate.Won);
-        if (victoryComparison != 0)
-            return victoryComparison;
+        bool rollingHorizonLossFirst =
+            candidate.RollingHorizonLossFirst && current.RollingHorizonLossFirst;
+        if (!rollingHorizonLossFirst)
+        {
+            int victoryComparison = current.Won.CompareTo(candidate.Won);
+            if (victoryComparison != 0)
+                return victoryComparison;
+        }
         int survivalComparison = current.Survives.CompareTo(candidate.Survives);
         if (survivalComparison != 0)
             return survivalComparison;
@@ -2756,7 +2790,8 @@ internal static partial class CombatSearchCoordinator
             candidate.GrowthRewardCount,
             current.GrowthRewardCount,
             candidate.DeathSaveUseCount,
-            current.DeathSaveUseCount);
+            current.DeathSaveUseCount,
+            rollingHorizonLossFirst);
         if (primaryQuality != 0)
             return primaryQuality;
         if (theftPolicy == SolverTheftPolicy.PreserveResources
@@ -2796,9 +2831,15 @@ internal static partial class CombatSearchCoordinator
     {
         bool candidateWon = IsCompleteVictory(candidate);
         bool currentWon = IsCompleteVictory(current);
-        int victoryComparison = currentWon.CompareTo(candidateWon);
-        if (victoryComparison != 0)
-            return victoryComparison;
+        bool rollingHorizonLossFirst =
+            MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(
+                policy.RoutePolicy);
+        if (!rollingHorizonLossFirst)
+        {
+            int victoryComparison = currentWon.CompareTo(candidateWon);
+            if (victoryComparison != 0)
+                return victoryComparison;
+        }
         bool candidateSurvives = !candidate.Snapshot.PlayerDead
             && candidate.Snapshot.ProjectedPlayerHp > 0;
         bool currentSurvives = !current.Snapshot.PlayerDead
@@ -2827,7 +2868,8 @@ internal static partial class CombatSearchCoordinator
             candidate.Snapshot.StrategyGoalCount,
             current.Snapshot.StrategyGoalCount,
             candidate.Snapshot.ProjectedDeathSaveUseCount,
-            current.Snapshot.ProjectedDeathSaveUseCount);
+            current.Snapshot.ProjectedDeathSaveUseCount,
+            rollingHorizonLossFirst);
     }
 
     private static bool IsCompleteVictory(SolverResult result)

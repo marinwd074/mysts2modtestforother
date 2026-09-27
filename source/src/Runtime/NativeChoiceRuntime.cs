@@ -267,6 +267,29 @@ internal sealed class NativeChoiceSession : IDisposable
     public string Owner { get; }
     public bool HasVisibleRequest => _firstVisibleRequest.Task.IsCompletedSuccessfully;
     public long FirstVisibleSequence => HasVisibleRequest ? _firstVisibleRequest.Task.Result.Sequence : 0;
+    public bool FirstVisibleChoiceMatches(IReadOnlyList<PlanCardChoice> plans, out string mismatch)
+    {
+        mismatch = "";
+        if (!HasVisibleRequest || !_firstVisibleRequest.Task.Result.IsPending)
+            return true;
+        NativeChoiceRequest request = _firstVisibleRequest.Task.Result;
+        PlanCardChoice? plan = plans.FirstOrDefault(candidate => candidate.SourceId == request.SourceId);
+        if (plan == null)
+        {
+            mismatch = $"原生选牌来源 {request.SourceId} 不在续用路线中。";
+            return false;
+        }
+        try
+        {
+            _ = ResolvePlannedCards(plan, request, useObservedIdentity: false);
+            return true;
+        }
+        catch (NativeChoicePlanMismatchException ex)
+        {
+            mismatch = ex.Message;
+            return false;
+        }
+    }
     public long LatestVisibleSequence { get; private set; }
     public bool IsVisibleSurfaceOpen
         => _firstVisibleRequest.Task.IsCompletedSuccessfully

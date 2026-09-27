@@ -6,13 +6,13 @@ internal static class MultiplayerSearchCompletionContracts
         bool routeScopedCompletion,
         long searchWorldVersion,
         long currentWorldVersion,
-        long searchRouteVersion,
-        long currentRouteVersion,
+        long searchRouteInvalidationVersion,
+        long currentRouteInvalidationVersion,
         bool fullStampMatches,
         bool localStampMatches)
     {
         if (routeScopedCompletion)
-            return searchRouteVersion != currentRouteVersion || !localStampMatches;
+            return searchRouteInvalidationVersion != currentRouteInvalidationVersion || !localStampMatches;
 
         return searchWorldVersion != 0
             && currentWorldVersion != searchWorldVersion

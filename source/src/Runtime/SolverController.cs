@@ -85,7 +85,7 @@ internal static partial class SolverController
            && (_search is { } search
                && search.Interaction.CurrentTakeoverRequest == null
                && search.Interaction.CanAcceptTakeover
-               && Volatile.Read(ref search.Interaction.Progress)?.CurrentTurnPreview != null
+               && search.Interaction.RenderedCurrentTurnAdoptionSeed != null
            || PlayerTurnSetupCoordinator.CanApplyCurrentTurn);
     public static bool IsApplyingCurrentTurn
         => _search?.Interaction.IsApplyingCurrentTurn == true
@@ -106,7 +106,10 @@ internal static partial class SolverController
     internal static void InvalidateRenderedRouteAdoptionSeed()
     {
         if (_search != null)
+        {
+            _search.Interaction.RenderedCurrentTurnAdoptionSeed = null;
             _search.Interaction.RenderedRouteAdoptionSeed = null;
+        }
         PlayerTurnSetupCoordinator.InvalidateRenderedRouteAdoptionSeed();
     }
 
@@ -137,7 +140,8 @@ internal static partial class SolverController
             return true;
         return capabilities.IsMultiplayer
             && !SolverSettings.Current.UseMultiplayerPrediction
-            && _combat.LatestRouteVersion == MultiplayerRouteChangeTracker.Version
+            && _combat.LatestRouteInvalidationVersion
+                == MultiplayerRouteChangeTracker.InvalidationVersion
             && LiveCombatStamp.IsLocalCoreSearchCompatible(latestStamp, state);
     }
 
@@ -146,8 +150,8 @@ internal static partial class SolverController
         LiveCombatStamp current)
     {
         _combat.LatestStamp = current;
-        _combat.LatestRouteVersion = SolverSessionCapabilities.Capture(state).IsMultiplayer
-            ? MultiplayerRouteChangeTracker.Version
+        _combat.LatestRouteInvalidationVersion = SolverSessionCapabilities.Capture(state).IsMultiplayer
+            ? MultiplayerRouteChangeTracker.InvalidationVersion
             : 0;
     }
 
@@ -516,6 +520,12 @@ internal static partial class SolverController
             new SearchMemoryPressureSignal())
         {
             Interaction = interaction,
+            ShadowReplaySamplingBudget = capabilities.IsMultiplayer
+                && !settings.EnableDetailedDiagnosticLogs
+                    ? new ShadowReplaySamplingBudget(
+                        CombatBeamSolver.ProductionShadowReplayObservationLimit,
+                        CombatBeamSolver.ProductionShadowReplayFutureTurnReserve)
+                    : null,
             RoutePolicy = routePolicy,
             CurrentTurnOnly = MultiplayerLocalCrossTurnContracts.IsCurrentTurnOnly(routePolicy),
             // Multiplayer always uses the real multiplayer combat root. The user-facing
@@ -889,7 +899,8 @@ internal static partial class SolverController
                     $"[CombatSolver/Test] DEPLOY_COMPATIBLE_WORLD_DELTA " +
                     $"turn={LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0} " +
                     $"world_version={MultiplayerWorldTracker.WorldVersion} " +
-                    $"route_version={MultiplayerRouteChangeTracker.Version}");
+                    $"route_version={MultiplayerRouteChangeTracker.Version} " +
+                    $"route_invalidation_version={MultiplayerRouteChangeTracker.InvalidationVersion}");
             }
             _combat.MultiplayerSafeExecuteDeploymentRequested = false;
             StartDeployment(host, state, _combat.LatestResult!);
@@ -903,7 +914,8 @@ internal static partial class SolverController
             && ReferenceEquals(search.State, state)
             && (search.Stamp == current
                 || search.UseRouteScopedCompletion
-                    && search.RouteVersion == MultiplayerRouteChangeTracker.Version
+                    && search.RouteInvalidationVersion
+                        == MultiplayerRouteChangeTracker.InvalidationVersion
                     && search.LocalCoreSearchStamp == currentLocalCoreStamp))
         {
             search.DeployWhenReady = true;
@@ -1729,6 +1741,9 @@ internal static partial class SolverController
             : progress.CurrentTurnPreview is { } currentTurn
                 ? SolverOverlaySnapshot.CaptureCurrentTurn(currentTurn)
                 : null;
+        search.Interaction.RenderedCurrentTurnAdoptionSeed = preview == null
+            ? null
+            : progress.CurrentTurnAdoptionSeed;
         search.Interaction.RenderedRouteAdoptionSeed = progress.SpeculativeRoutePreview == null
             ? null
             : progress.RouteAdoptionSeed;

@@ -134,6 +134,10 @@ internal sealed record SearchPolicySnapshot(
     public IReadOnlyList<PlanAction> ContinuationEnumerationHintActions { get; init; } = [];
     public SearchInteractionState? Interaction { get; init; }
 
+    // Production multiplayer shadow validation shares one atomic request budget across
+    // portfolio members and all parallel lanes. Null means no production sampling.
+    public ShadowReplaySamplingBudget? ShadowReplaySamplingBudget { get; init; }
+
     // Null is the exact cache-off A/B path.
     public CombatTransitionMemo? R0TransitionMemo { get; init; }
     public string R0TransitionPolicyIdentity { get; init; } = string.Empty;

@@ -54,6 +54,10 @@ internal static class Program
             Console.WriteLine($"search_patches={patchCount}");
             ValidateDarkEmbracePredictionCoverage();
             ValidateViciousStrategicValue();
+            ValidateRollingHorizonQualityContract();
+            ValidateRouteInvalidationVersionContract();
+            ValidateLocalCoreShadowNormalizationContract();
+            ValidateRenderedCurrentTurnTakeoverContract();
 
             HarnessScenario scenario = new(
                 "IRONCLAD",
@@ -188,6 +192,189 @@ internal static class Program
                 && value.ResourcePotential == 0
                 && value.ScalingPotential == 0,
             $"Vicious strategic value drifted: {value}.");
+    }
+
+    private static void ValidateRenderedCurrentTurnTakeoverContract()
+    {
+        SearchInteractionState interaction = new();
+        PlanAction displayedAction = new(PlanActionKind.EndTurn, 1);
+        SolverRouteAdoptionSeed displayedSeed = new(
+            candidateVersion: 17,
+            actions: [displayedAction],
+            materialize: static () => null!);
+
+        interaction.RenderedCurrentTurnAdoptionSeed = displayedSeed;
+        Require(
+            interaction.RequestApplyCurrentTurn(
+                interaction.RenderedCurrentTurnAdoptionSeed),
+            "Rendered current-turn takeover request was rejected.");
+        SearchTakeoverRequest? request = interaction.CurrentTakeoverRequest;
+        Require(
+            request?.Kind == SearchTakeoverKind.ApplyCurrentTurn
+                && ReferenceEquals(request.CurrentTurnAdoptionSeed, displayedSeed)
+                && request.CurrentTurnAdoptionSeed.CandidateVersion == 17
+                && request.CurrentTurnAdoptionSeed.Actions.SequenceEqual([displayedAction]),
+            "Apply-current-turn did not freeze the exact rendered candidate.");
+        _ = interaction.CompleteTakeover();
+        Require(
+            interaction.RenderedCurrentTurnAdoptionSeed == null,
+            "Rendered current-turn seed survived takeover completion.");
+    }
+
+    private static void ValidateLocalCoreShadowNormalizationContract()
+    {
+        const string parentA =
+            "L=local;HC=4/0/0/1/0/11;P=remote-a;R=shared-a;E0=enemy-a;AI0=ai-a;MS0=multi-a";
+        const string parentB =
+            "L=local;HC=6/0/0/1/0/11;P=remote-b;R=shared-b;E0=enemy-b;AI0=ai-b;MS0=multi-b";
+        const string outputA =
+            "L=local-after;HC=5/0/0/1/0/11;P=remote-c;R=shared-c;E0=enemy-c;AI0=ai-c;MS0=multi-c";
+        const string outputB =
+            "L=local-after;HC=7/0/0/1/0/11;P=remote-d;R=shared-d;E0=enemy-d;AI0=ai-d;MS0=multi-d";
+
+        string normalizedParentA =
+            LiveCombatStamp.NormalizeLocalCoreSearchValidityText(parentA);
+        string normalizedParentB =
+            LiveCombatStamp.NormalizeLocalCoreSearchValidityText(parentB);
+        string normalizedOutputA =
+            LiveCombatStamp.NormalizeLocalCoreSearchValidityText(outputA);
+        string normalizedOutputB =
+            LiveCombatStamp.NormalizeLocalCoreSearchValidityText(outputB);
+        Require(
+            normalizedParentA == normalizedParentB
+                && normalizedOutputA == normalizedOutputB,
+            "Local-core shadow normalization did not remove explicitly allowed remote/shared drift.");
+
+        CombatTransitionMemo owner = new();
+        ActionReplayCache cache = ActionReplayCache.ForLocalCoreShadow(owner);
+        cache.BindCombat("pinned-local-core-shadow");
+        ReplayCacheKey key = new(
+            LiveCombatStamp.FingerprintStateText(normalizedParentA),
+            "PlayCard:BASH",
+            "pinned-policy",
+            ActionReplayCache.CurrentLocalCoreContractVersion);
+        ReplayCacheObservation firstOutput = new(
+            LiveCombatStamp.FingerprintStateText(normalizedOutputA),
+            normalizedOutputA,
+            Score: 0d,
+            SearchBoundaryReason.None,
+            Turn: 1,
+            PlayerDead: false,
+            AllEnemiesDead: false,
+            HasRisk: false,
+            PredictionGapCount: 0);
+        ReplayCacheObservation secondOutput = firstOutput with
+        {
+            OutputState = LiveCombatStamp.FingerprintStateText(normalizedOutputB),
+            OutputStateText = normalizedOutputB,
+        };
+        Require(
+            cache.Observe(key, normalizedParentA, firstOutput)
+                == ReplayCacheValidationResult.Stored
+                && cache.Observe(key, normalizedParentB, secondOutput)
+                    == ReplayCacheValidationResult.ValidatedHit,
+            "Local-core normalized shadow cache did not validate equivalent remote/shared drift.");
+    }
+
+    private static void ValidateRouteInvalidationVersionContract()
+    {
+        MultiplayerRouteChangeTracker.Reset();
+        try
+        {
+            MultiplayerRouteChangeTracker.SignalSchedulingBoundary("pinned_local_turn_boundary");
+            Require(
+                MultiplayerRouteChangeTracker.Version == 1
+                    && MultiplayerRouteChangeTracker.InvalidationVersion == 0,
+                "Scheduling-only multiplayer boundary invalidated the current route.");
+
+            MultiplayerRouteChangeTracker.ObserveEnemyHp(
+                new StateFingerprint(1, 1),
+                allowInvalidation: false,
+                "pinned_enemy_baseline");
+            bool invalidated = MultiplayerRouteChangeTracker.ObserveEnemyHp(
+                new StateFingerprint(2, 2),
+                allowInvalidation: true,
+                "pinned_enemy_hp_invalidation");
+            Require(
+                invalidated
+                    && MultiplayerRouteChangeTracker.Version == 2
+                    && MultiplayerRouteChangeTracker.InvalidationVersion == 1,
+                "Enemy-HP route invalidation did not advance both scheduling and invalidation versions.");
+
+            Require(
+                !MultiplayerSearchCompletionContracts.IsStale(
+                    routeScopedCompletion: true,
+                    searchWorldVersion: 7,
+                    currentWorldVersion: 22,
+                    searchRouteInvalidationVersion: 0,
+                    currentRouteInvalidationVersion: 0,
+                    fullStampMatches: false,
+                    localStampMatches: true),
+                "Route-scoped completion rejected scheduling/remote-only drift with an unchanged local core.");
+            Require(
+                MultiplayerSearchCompletionContracts.IsStale(
+                    routeScopedCompletion: true,
+                    searchWorldVersion: 7,
+                    currentWorldVersion: 22,
+                    searchRouteInvalidationVersion: 0,
+                    currentRouteInvalidationVersion: 1,
+                    fullStampMatches: false,
+                    localStampMatches: true),
+                "Route-scoped completion accepted a real route invalidation.");
+        }
+        finally
+        {
+            MultiplayerRouteChangeTracker.Reset();
+        }
+    }
+
+    private static void ValidateRollingHorizonQualityContract()
+    {
+        Require(
+            SolverInterimResultOrdering.ComparePrimaryQuality(
+                candidateCompleteVictory: true,
+                candidateStrategicHpDeficit: 24,
+                candidateCombatEndedTurn: 6,
+                currentCompleteVictory: false,
+                currentStrategicHpDeficit: 0,
+                currentCombatEndedTurn: null,
+                rollingHorizonLossFirst: true) > 0,
+            "Rolling horizon allowed a 24-HP terminal route to outrank a 0-HP live horizon route.");
+        Require(
+            SolverInterimResultOrdering.ComparePrimaryQuality(
+                candidateCompleteVictory: true,
+                candidateStrategicHpDeficit: 0,
+                candidateCombatEndedTurn: 6,
+                currentCompleteVictory: false,
+                currentStrategicHpDeficit: 0,
+                currentCombatEndedTurn: null,
+                rollingHorizonLossFirst: true) < 0,
+            "Rolling horizon did not prefer victory when strategic HP loss tied.");
+
+        SolverInterimResult live = new(
+            Won: false,
+            OutstandingStolenResource: 0,
+            ProjectedBattleHpLost: 0,
+            StrategicHpDeficit: 0,
+            PotionStrategicCost: 0,
+            ProjectedBattlePotionCount: 0,
+            EnemyHp: 300,
+            Score: 0d)
+        {
+            Survives = true,
+            RollingHorizonLossFirst = true,
+        };
+        SolverInterimResult costlyVictory = live with
+        {
+            Won = true,
+            ProjectedBattleHpLost = 24,
+            StrategicHpDeficit = 24,
+            EnemyHp = 0,
+            CombatEndedTurn = 6,
+        };
+        Require(
+            !SolverInterimResultOrdering.CanPromoteDisplayedResult(costlyVictory, live),
+            "Rolling horizon display replaced a 0-HP live route with a 24-HP terminal route.");
     }
 
     private static void ValidateDarkEmbracePredictionCoverage()
@@ -1336,6 +1523,56 @@ internal static class Program
                 R0TransitionMemo = null,
                 R0TransitionPolicyIdentity = string.Empty,
             };
+            ShadowReplaySamplingBudget productionSampling =
+                new(CombatBeamSolver.ProductionShadowReplayObservationLimit);
+            for (int index = 0;
+                 index < CombatBeamSolver.ProductionShadowReplayObservationLimit;
+                 index++)
+            {
+                Require(
+                    productionSampling.TryAcquire(),
+                    $"Phase C production shadow sampling ended early at {index}.");
+            }
+            Require(
+                !productionSampling.TryAcquire()
+                    && productionSampling.Capture().Used
+                        == CombatBeamSolver.ProductionShadowReplayObservationLimit
+                    && productionSampling.Capture().Capped,
+                "Phase C production shadow sampling request-wide cap drifted.");
+            ShadowReplaySamplingBudget horizonSampling = new(
+                CombatBeamSolver.ProductionShadowReplayObservationLimit,
+                CombatBeamSolver.ProductionShadowReplayFutureTurnReserve);
+            int currentTurnQuota =
+                CombatBeamSolver.ProductionShadowReplayObservationLimit
+                - CombatBeamSolver.ProductionShadowReplayFutureTurnReserve;
+            for (int index = 0; index < currentTurnQuota; index++)
+            {
+                Require(
+                    horizonSampling.TryAcquire(ShadowReplaySampleClass.CurrentTurn),
+                    $"Phase C current-turn shadow reserve ended early at {index}.");
+            }
+            Require(
+                !horizonSampling.TryAcquire(ShadowReplaySampleClass.CurrentTurn)
+                    && horizonSampling.CurrentTurnLimited
+                    && horizonSampling.Capture().Used == currentTurnQuota
+                    && !horizonSampling.Capture().Capped,
+                "Phase C future-turn reserve was consumed by current-turn sampling.");
+            for (int index = 0;
+                 index < CombatBeamSolver.ProductionShadowReplayFutureTurnReserve;
+                 index++)
+            {
+                Require(
+                    horizonSampling.TryAcquire(ShadowReplaySampleClass.FutureTurn),
+                    $"Phase C future-turn shadow reserve ended early at {index}.");
+            }
+            ShadowReplaySamplingSnapshot horizonSnapshot = horizonSampling.Capture();
+            Require(
+                !horizonSampling.TryAcquire(ShadowReplaySampleClass.FutureTurn)
+                    && horizonSampling.Capture().Capped
+                    && horizonSnapshot.CurrentTurnUsed == currentTurnQuota
+                    && horizonSnapshot.FutureTurnUsed
+                        == CombatBeamSolver.ProductionShadowReplayFutureTurnReserve,
+                "Phase C horizon-aware sampling did not preserve the 48/16 request budget.");
             string policyIdentity = CombatTransitionMemo.CapturePolicyIdentity(basePolicy);
             CombatTransitionMemo memo = new();
             memo.BindCombat(root.ContinuationStamp.CombatIdentity);

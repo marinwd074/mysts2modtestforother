@@ -1255,7 +1255,11 @@ internal static partial class SolverOverlay
                 ? false
                 : SolverSettings.Current.AutoEnableFullAuto;
         }
-        _actionBar?.Refresh(new SolverActionBarState(_collapsed, searching, canAdoptRoute || adoptingRoute));
+        _actionBar?.Refresh(new SolverActionBarState(
+            _collapsed,
+            searching,
+            canAdoptRoute || adoptingRoute,
+            canApplyCurrentTurn || SolverController.IsApplyingCurrentTurn));
         _executeButton.TooltipText = SolverText.Get(solverDisabled ? "求解器已关闭，请从标题栏开启。"
             : adoptingRoute ? "正在采用路线，请等待完成。"
             : SolverController.IsDeploying ? "正在执行当前回合。"
@@ -2351,8 +2355,11 @@ internal static partial class SolverOverlay
 
     private static void ApplyContentVisibility()
     {
-        _actionBar?.Refresh(new SolverActionBarState(_collapsed, SolverController.IsSearching,
-            SolverController.CanAdoptCurrentRoute || SolverController.IsAdoptingCurrentRoute));
+        _actionBar?.Refresh(new SolverActionBarState(
+            _collapsed,
+            SolverController.IsSearching,
+            SolverController.CanAdoptCurrentRoute || SolverController.IsAdoptingCurrentRoute,
+            SolverController.CanApplyCurrentTurn || SolverController.IsApplyingCurrentTurn));
         if (_potionStrategyButton != null)
             _potionStrategyButton.Visible = !_collapsed;
         if (_growthStrategyButton != null)

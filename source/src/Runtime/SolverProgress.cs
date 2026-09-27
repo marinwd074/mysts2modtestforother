@@ -9,7 +9,8 @@ internal enum SearchTakeoverKind
 internal sealed record SearchTakeoverRequest(
     SearchTakeoverKind Kind,
     SolverRouteAdoptionSeed? RouteAdoptionSeed = null,
-    bool StopAfterResult = false);
+    bool StopAfterResult = false,
+    SolverRouteAdoptionSeed? CurrentTurnAdoptionSeed = null);
 
 internal sealed class SolverRouteAdoptionSeed(
     int candidateVersion,
@@ -36,6 +37,7 @@ internal sealed class SearchInteractionState
     public SearchProgressDisplayState ProgressDisplay { get; } = new();
     public SolverProgress? Progress;
     public SolverProgress? RenderedProgress { get; private set; }
+    public SolverRouteAdoptionSeed? RenderedCurrentTurnAdoptionSeed { get; set; }
     public SolverRouteAdoptionSeed? RenderedRouteAdoptionSeed { get; set; }
     public SolverResult? StoppedResult { get; private set; }
     public LiveCombatStamp? StoppedStamp { get; private set; }
@@ -76,14 +78,17 @@ internal sealed class SearchInteractionState
         }
         Progress = null;
         RenderedProgress = null;
+        RenderedCurrentTurnAdoptionSeed = null;
         RenderedRouteAdoptionSeed = null;
         StoppedResult = null;
         StoppedStamp = null;
         ProgressDisplay.Restart(Environment.TickCount64);
     }
 
-    public bool RequestApplyCurrentTurn()
-        => RequestTakeover(new SearchTakeoverRequest(SearchTakeoverKind.ApplyCurrentTurn));
+    public bool RequestApplyCurrentTurn(SolverRouteAdoptionSeed? renderedSeed = null)
+        => RequestTakeover(new SearchTakeoverRequest(
+            SearchTakeoverKind.ApplyCurrentTurn,
+            CurrentTurnAdoptionSeed: renderedSeed));
 
     public bool RequestAdoptRoute(SolverRouteAdoptionSeed seed, bool stopAfterResult = false)
         => RequestTakeover(new SearchTakeoverRequest(
@@ -114,6 +119,14 @@ internal sealed class SearchInteractionState
             {
                 return request.RouteAdoptionSeed.Materialize();
             }
+            if (request?.Kind == SearchTakeoverKind.ApplyCurrentTurn
+                && request.CurrentTurnAdoptionSeed != null
+                && result.ResultScope != SolverResultScope.CurrentTurnAdoption)
+            {
+                SolverResult exactDisplayed = request.CurrentTurnAdoptionSeed.Materialize();
+                exactDisplayed.ResultScope = SolverResultScope.CurrentTurnAdoption;
+                return exactDisplayed;
+            }
             return result;
         }
     }
@@ -141,6 +154,7 @@ internal sealed class SearchInteractionState
             SearchTakeoverRequest? completed = _takeoverRequest;
             Volatile.Write(ref _takeoverRequest, null);
             Volatile.Write(ref _acceptingTakeover, 0);
+            RenderedCurrentTurnAdoptionSeed = null;
             RenderedRouteAdoptionSeed = null;
             return completed;
         }
@@ -163,6 +177,7 @@ internal sealed record SolverInterimResult(
     public int DeathSaveUseCount { get; init; }
     public int GrowthHpCredit { get; init; }
     public int GrowthRewardCount { get; init; }
+    public bool RollingHorizonLossFirst { get; init; }
 }
 
 internal sealed record SolverFrontierTurn(
@@ -292,6 +307,8 @@ internal sealed record SolverProgress(
     SolverRouteAdoptionSeed? RouteAdoptionSeed = null,
     int RequestBudgetMilliseconds = 0)
 {
+    public SolverRouteAdoptionSeed? CurrentTurnAdoptionSeed { get; init; }
+
     // Set only when a member has finished the full production final ordering (including
     // scenario rerank and deterministic block-potion insertion) but is still flattening
     // replay/annotation data. The coordinator records Published only if this route actually

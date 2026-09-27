@@ -4,6 +4,12 @@ namespace CombatSolver;
 
 internal sealed partial class CombatBeamSolver
 {
+    internal const int ProductionShadowReplayObservationLimit = 64;
+    internal const int ProductionShadowReplayFutureTurnReserve = 16;
+
+    private bool WantsR0ShadowReplayTiming()
+        => policy.DetailedDiagnostics || policy.ShadowReplaySamplingBudget != null;
+
     private bool CanUseR0TransitionMemoForReplay(
         PlanAction action,
         ReplayForkSeed? replayForkSeed,

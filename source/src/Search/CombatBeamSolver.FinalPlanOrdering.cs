@@ -427,6 +427,9 @@ internal sealed partial class CombatBeamSolver
                         $"won={baselineOverride.Won} hp_deficit={baselineOverride.HpDeficit}");
                 }
             }
+            bool useRollingHorizonLossFirst =
+                MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(
+                    routePolicy);
             var policyEligibleCandidates = policyCandidates
                 .Where(candidate =>
                 {
@@ -441,7 +444,8 @@ internal sealed partial class CombatBeamSolver
                             potionFreeStrategicHpDeficit,
                             potionFreeCombatEndedTurn,
                             candidateDeathSaveUseCount: candidate.Snapshot.ProjectedDeathSaveUseCount,
-                            currentDeathSaveUseCount: potionFreeDeathSaveUseCount) < 0;
+                            currentDeathSaveUseCount: potionFreeDeathSaveUseCount,
+                            rollingHorizonLossFirst: useRollingHorizonLossFirst) < 0;
                     bool passesSoftPotionPolicy = PotionUsePolicy.IsEligible(
                             candidate.EffectivePotionPolicy,
                             candidate.OptionalPotionCount,
@@ -478,7 +482,24 @@ internal sealed partial class CombatBeamSolver
                 && multiplayerCombatObjectiveStrategy
                     == MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo;
             var selected = policyEligibleCandidates
-                .OrderByDescending(candidate => candidate.CompleteVictory)
+                .OrderBy(candidate => useRollingHorizonLossFirst
+                    && (candidate.Snapshot.PlayerDead
+                        || candidate.Snapshot.ProjectedPlayerHp <= 0)
+                        ? 1
+                        : 0)
+                .ThenBy(candidate => useRollingHorizonLossFirst
+                    ? candidate.Snapshot.ProjectedDeathSaveUseCount
+                    : 0)
+                .ThenBy(candidate => useRollingHorizonLossFirst
+                    ? candidate.StrategicHpDeficit
+                    : 0)
+                .ThenByDescending(candidate => useRollingHorizonLossFirst
+                    ? candidate.Snapshot.StrategyGoalHpCredit
+                    : 0)
+                .ThenByDescending(candidate => useRollingHorizonLossFirst
+                    ? candidate.Snapshot.StrategyGoalCount
+                    : 0)
+                .ThenByDescending(candidate => candidate.CompleteVictory)
                 .ThenBy(candidate => useTeamObjective
                     && !candidate.MultiplayerObjective.AllPlayersAlive ? 1 : 0)
                 .ThenBy(candidate => useTeamObjective

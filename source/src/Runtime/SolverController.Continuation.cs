@@ -44,8 +44,8 @@ internal static partial class SolverController
 
         _combat.LatestResult = result;
         _combat.LatestStamp = stamp;
-        _combat.LatestRouteVersion = SolverSessionCapabilities.Capture(state).IsMultiplayer
-            ? MultiplayerRouteChangeTracker.Version
+        _combat.LatestRouteInvalidationVersion = SolverSessionCapabilities.Capture(state).IsMultiplayer
+            ? MultiplayerRouteChangeTracker.InvalidationVersion
             : 0;
         _combat.ContinuationSource = result;
         BattleDamageTracker.RegisterPlan(state, result);
@@ -103,8 +103,8 @@ internal static partial class SolverController
         _combat.State = state;
         _combat.LatestResult = result;
         _combat.LatestStamp = stamp;
-        _combat.LatestRouteVersion = SolverSessionCapabilities.Capture(state).IsMultiplayer
-            ? MultiplayerRouteChangeTracker.Version
+        _combat.LatestRouteInvalidationVersion = SolverSessionCapabilities.Capture(state).IsMultiplayer
+            ? MultiplayerRouteChangeTracker.InvalidationVersion
             : 0;
         _combat.ContinuationSource = result.ResultScope == SolverResultScope.CurrentTurnAdoption
             ? null

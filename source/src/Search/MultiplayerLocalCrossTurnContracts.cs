@@ -70,6 +70,9 @@ internal static class MultiplayerLocalCrossTurnContracts
             ? LocalCorePredictionTurnLayers
             : null;
 
+    internal static bool UsesRollingHorizonLossFirstQuality(SearchRoutePolicy policy)
+        => policy == SearchRoutePolicy.MultiplayerSinglePlayerCore;
+
     internal static bool HasReachedPredictionTurnLayerLimit(
         SearchRoutePolicy policy,
         int searchedTurnLayers)
