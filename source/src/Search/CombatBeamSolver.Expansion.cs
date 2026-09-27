@@ -2918,10 +2918,11 @@ internal sealed partial class CombatBeamSolver
                         _startTurnNumber);
                     ActionReplayCache replayCache = ActionReplayCache.For(policy.R0TransitionMemo!);
                     replayCache.BindCombat(parentStamp.CombatIdentity);
+                    string actionIdentity = PolicyActionIdentityToken(action);
                     ReplayCacheValidationResult validation = replayCache.Observe(
                         new ReplayCacheKey(
                             parent.StateKey,
-                            PolicyActionIdentityToken(action),
+                            actionIdentity,
                             policy.R0TransitionPolicyIdentity,
                             ActionReplayCache.CurrentContractVersion),
                         parentStamp.StateText,
@@ -2935,6 +2936,58 @@ internal sealed partial class CombatBeamSolver
                             result.AllEnemiesDead,
                             result.HasRisk,
                             result.PredictionGaps.Count));
+                    ReplayCacheValidationResult? localCoreValidation = null;
+                    if (_routePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore)
+                    {
+                        string localParentText =
+                            LiveCombatStamp.NormalizeLocalCoreSearchValidityText(
+                                parentStamp.StateText);
+                        string localOutputText =
+                            LiveCombatStamp.NormalizeLocalCoreSearchValidityText(
+                                outputStamp.StateText);
+                        ActionReplayCache localCoreReplayCache =
+                            ActionReplayCache.ForLocalCoreShadow(policy.R0TransitionMemo!);
+                        localCoreReplayCache.BindCombat(parentStamp.CombatIdentity);
+                        localCoreValidation = localCoreReplayCache.Observe(
+                            new ReplayCacheKey(
+                                LiveCombatStamp.FingerprintStateText(localParentText),
+                                actionIdentity,
+                                policy.R0TransitionPolicyIdentity,
+                                ActionReplayCache.CurrentLocalCoreContractVersion),
+                            localParentText,
+                            new ReplayCacheObservation(
+                                LiveCombatStamp.FingerprintStateText(localOutputText),
+                                localOutputText,
+                                Score: 0d,
+                                result.BoundaryReason,
+                                result.Turn,
+                                result.PlayerDead,
+                                result.AllEnemiesDead,
+                                result.HasRisk,
+                                result.PredictionGaps.Count));
+                        _run.ShadowLocalCoreObservations++;
+                        switch (localCoreValidation.Value)
+                        {
+                            case ReplayCacheValidationResult.Stored:
+                                _run.ShadowLocalCoreStores++;
+                                break;
+                            case ReplayCacheValidationResult.ValidatedHit:
+                                _run.ShadowLocalCoreValidatedHits++;
+                                break;
+                            case ReplayCacheValidationResult.CollisionRejected:
+                                _run.ShadowLocalCoreCollisionRejects++;
+                                break;
+                            case ReplayCacheValidationResult.OutputMismatch:
+                                _run.ShadowLocalCoreOutputMismatches++;
+                                break;
+                            case ReplayCacheValidationResult.DroppedStore:
+                                _run.ShadowLocalCoreDroppedStores++;
+                                break;
+                            default:
+                                throw new ArgumentOutOfRangeException(
+                                    nameof(localCoreValidation), localCoreValidation, null);
+                        }
+                    }
                     _run.ShadowReplayObservations++;
                     long potentialSavedTicks = 0;
                     switch (validation)
@@ -2965,7 +3018,11 @@ internal sealed partial class CombatBeamSolver
                     }
                     long validationTicks = Stopwatch.GetTimestamp() - validationStartedTicks;
                     _run.ShadowReplayValidationTicks += validationTicks;
-                    samplingBudget?.Record(validation, validationTicks, potentialSavedTicks);
+                    samplingBudget?.Record(
+                        validation,
+                        validationTicks,
+                        potentialSavedTicks,
+                        localCoreValidation);
                 }
             }
         }

@@ -12,11 +12,11 @@ internal sealed record LiveCombatStamp(string StateText)
         => new(ContinuationStamp.CaptureLive(state).StateText);
 
     public static LiveCombatStamp CaptureLocalCoreSearchValidity(CombatState state)
-        => new(NormalizeLocalCoreSearchValidity(
+        => new(NormalizeLocalCoreSearchValidityText(
             ContinuationStamp.CaptureLive(state).StateText));
 
     public static LiveCombatStamp ProjectLocalCoreSearchValidity(LiveCombatStamp stamp)
-        => new(NormalizeLocalCoreSearchValidity(stamp.StateText));
+        => new(NormalizeLocalCoreSearchValidityText(stamp.StateText));
 
     public static bool IsLocalCoreSearchCompatible(
         LiveCombatStamp expected,
@@ -24,7 +24,7 @@ internal sealed record LiveCombatStamp(string StateText)
         => ProjectLocalCoreSearchValidity(expected)
             == CaptureLocalCoreSearchValidity(current);
 
-    private static string NormalizeLocalCoreSearchValidity(string stateText)
+    internal static string NormalizeLocalCoreSearchValidityText(string stateText)
     {
         string[] fields = stateText.Split(';');
         bool requiresGlobalFinishedCardPlays = HasGlobalFinishedCardPlayDependentLocalCard(fields);
@@ -48,6 +48,13 @@ internal sealed record LiveCombatStamp(string StateText)
             first = false;
         }
         return normalized.ToString();
+    }
+
+    internal static StateFingerprint FingerprintStateText(string stateText)
+    {
+        StateFingerprintBuilder fingerprint = new();
+        fingerprint.Add(stateText);
+        return fingerprint.Finish();
     }
 
     private static bool HasGlobalFinishedCardPlayDependentLocalCard(

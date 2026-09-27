@@ -56,6 +56,7 @@ internal static class Program
             ValidateViciousStrategicValue();
             ValidateRollingHorizonQualityContract();
             ValidateRouteInvalidationVersionContract();
+            ValidateLocalCoreShadowNormalizationContract();
 
             HarnessScenario scenario = new(
                 "IRONCLAD",
@@ -190,6 +191,61 @@ internal static class Program
                 && value.ResourcePotential == 0
                 && value.ScalingPotential == 0,
             $"Vicious strategic value drifted: {value}.");
+    }
+
+    private static void ValidateLocalCoreShadowNormalizationContract()
+    {
+        const string parentA =
+            "L=local;HC=4/0/0/1/0/11;P=remote-a;R=shared-a;E0=enemy-a;AI0=ai-a;MS0=multi-a";
+        const string parentB =
+            "L=local;HC=6/0/0/1/0/11;P=remote-b;R=shared-b;E0=enemy-b;AI0=ai-b;MS0=multi-b";
+        const string outputA =
+            "L=local-after;HC=5/0/0/1/0/11;P=remote-c;R=shared-c;E0=enemy-c;AI0=ai-c;MS0=multi-c";
+        const string outputB =
+            "L=local-after;HC=7/0/0/1/0/11;P=remote-d;R=shared-d;E0=enemy-d;AI0=ai-d;MS0=multi-d";
+
+        string normalizedParentA =
+            LiveCombatStamp.NormalizeLocalCoreSearchValidityText(parentA);
+        string normalizedParentB =
+            LiveCombatStamp.NormalizeLocalCoreSearchValidityText(parentB);
+        string normalizedOutputA =
+            LiveCombatStamp.NormalizeLocalCoreSearchValidityText(outputA);
+        string normalizedOutputB =
+            LiveCombatStamp.NormalizeLocalCoreSearchValidityText(outputB);
+        Require(
+            normalizedParentA == normalizedParentB
+                && normalizedOutputA == normalizedOutputB,
+            "Local-core shadow normalization did not remove explicitly allowed remote/shared drift.");
+
+        CombatTransitionMemo owner = new();
+        ActionReplayCache cache = ActionReplayCache.ForLocalCoreShadow(owner);
+        cache.BindCombat("pinned-local-core-shadow");
+        ReplayCacheKey key = new(
+            LiveCombatStamp.FingerprintStateText(normalizedParentA),
+            "PlayCard:BASH",
+            "pinned-policy",
+            ActionReplayCache.CurrentLocalCoreContractVersion);
+        ReplayCacheObservation firstOutput = new(
+            LiveCombatStamp.FingerprintStateText(normalizedOutputA),
+            normalizedOutputA,
+            Score: 0d,
+            SearchBoundaryReason.None,
+            Turn: 1,
+            PlayerDead: false,
+            AllEnemiesDead: false,
+            HasRisk: false,
+            PredictionGapCount: 0);
+        ReplayCacheObservation secondOutput = firstOutput with
+        {
+            OutputState = LiveCombatStamp.FingerprintStateText(normalizedOutputB),
+            OutputStateText = normalizedOutputB,
+        };
+        Require(
+            cache.Observe(key, normalizedParentA, firstOutput)
+                == ReplayCacheValidationResult.Stored
+                && cache.Observe(key, normalizedParentB, secondOutput)
+                    == ReplayCacheValidationResult.ValidatedHit,
+            "Local-core normalized shadow cache did not validate equivalent remote/shared drift.");
     }
 
     private static void ValidateRouteInvalidationVersionContract()

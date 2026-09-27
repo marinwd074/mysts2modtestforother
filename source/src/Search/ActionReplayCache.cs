@@ -10,9 +10,11 @@ namespace CombatSolver;
 internal sealed class ActionReplayCache
 {
     internal const int CurrentContractVersion = 1;
+    internal const int CurrentLocalCoreContractVersion = 1;
     private const int MaximumEntries = 4096;
 
     private static readonly ConditionalWeakTable<CombatTransitionMemo, ActionReplayCache> Owners = new();
+    private static readonly ConditionalWeakTable<CombatTransitionMemo, ActionReplayCache> LocalCoreOwners = new();
 
     private readonly object _gate = new();
     private readonly Dictionary<ReplayCacheKey, Entry> _entries = [];
@@ -26,6 +28,9 @@ internal sealed class ActionReplayCache
 
     internal static ActionReplayCache For(CombatTransitionMemo owner)
         => Owners.GetValue(owner, static _ => new ActionReplayCache());
+
+    internal static ActionReplayCache ForLocalCoreShadow(CombatTransitionMemo owner)
+        => LocalCoreOwners.GetValue(owner, static _ => new ActionReplayCache());
 
     internal int Count { get { lock (_gate) return _entries.Count; } }
     internal int ValidatedHits { get { lock (_gate) return _validatedHits; } }
@@ -97,6 +102,12 @@ internal sealed class ShadowReplaySamplingBudget
     private int _collisionRejects;
     private int _outputMismatches;
     private int _droppedStores;
+    private int _localCoreObservations;
+    private int _localCoreStores;
+    private int _localCoreValidatedHits;
+    private int _localCoreCollisionRejects;
+    private int _localCoreOutputMismatches;
+    private int _localCoreDroppedStores;
     private int _capped;
     private long _validationTicks;
     private long _potentialSavedTicks;
@@ -127,7 +138,8 @@ internal sealed class ShadowReplaySamplingBudget
     internal void Record(
         ReplayCacheValidationResult validation,
         long validationTicks,
-        long potentialSavedTicks)
+        long potentialSavedTicks,
+        ReplayCacheValidationResult? localCoreValidation = null)
     {
         Interlocked.Increment(ref _observations);
         switch (validation)
@@ -150,6 +162,31 @@ internal sealed class ShadowReplaySamplingBudget
             default:
                 throw new ArgumentOutOfRangeException(nameof(validation), validation, null);
         }
+        if (localCoreValidation is { } localValidation)
+        {
+            Interlocked.Increment(ref _localCoreObservations);
+            switch (localValidation)
+            {
+                case ReplayCacheValidationResult.Stored:
+                    Interlocked.Increment(ref _localCoreStores);
+                    break;
+                case ReplayCacheValidationResult.ValidatedHit:
+                    Interlocked.Increment(ref _localCoreValidatedHits);
+                    break;
+                case ReplayCacheValidationResult.CollisionRejected:
+                    Interlocked.Increment(ref _localCoreCollisionRejects);
+                    break;
+                case ReplayCacheValidationResult.OutputMismatch:
+                    Interlocked.Increment(ref _localCoreOutputMismatches);
+                    break;
+                case ReplayCacheValidationResult.DroppedStore:
+                    Interlocked.Increment(ref _localCoreDroppedStores);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(
+                        nameof(localCoreValidation), localValidation, null);
+            }
+        }
         Interlocked.Add(ref _validationTicks, validationTicks);
         if (potentialSavedTicks > 0)
             Interlocked.Add(ref _potentialSavedTicks, potentialSavedTicks);
@@ -165,6 +202,12 @@ internal sealed class ShadowReplaySamplingBudget
             CollisionRejects: Volatile.Read(ref _collisionRejects),
             OutputMismatches: Volatile.Read(ref _outputMismatches),
             DroppedStores: Volatile.Read(ref _droppedStores),
+            LocalCoreObservations: Volatile.Read(ref _localCoreObservations),
+            LocalCoreStores: Volatile.Read(ref _localCoreStores),
+            LocalCoreValidatedHits: Volatile.Read(ref _localCoreValidatedHits),
+            LocalCoreCollisionRejects: Volatile.Read(ref _localCoreCollisionRejects),
+            LocalCoreOutputMismatches: Volatile.Read(ref _localCoreOutputMismatches),
+            LocalCoreDroppedStores: Volatile.Read(ref _localCoreDroppedStores),
             Capped: Volatile.Read(ref _capped) != 0,
             ValidationTicks: Interlocked.Read(ref _validationTicks),
             PotentialSavedTicks: Interlocked.Read(ref _potentialSavedTicks));
@@ -179,6 +222,12 @@ internal readonly record struct ShadowReplaySamplingSnapshot(
     int CollisionRejects,
     int OutputMismatches,
     int DroppedStores,
+    int LocalCoreObservations,
+    int LocalCoreStores,
+    int LocalCoreValidatedHits,
+    int LocalCoreCollisionRejects,
+    int LocalCoreOutputMismatches,
+    int LocalCoreDroppedStores,
     bool Capped,
     long ValidationTicks,
     long PotentialSavedTicks);

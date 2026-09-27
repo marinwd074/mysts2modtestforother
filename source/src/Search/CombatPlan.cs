@@ -1775,6 +1775,12 @@ internal sealed class SolverResult
     public int ShadowReplayCollisionRejects { get; init; }
     public int ShadowReplayOutputMismatches { get; init; }
     public int ShadowReplayDroppedStores { get; init; }
+    public int ShadowLocalCoreObservations { get; init; }
+    public int ShadowLocalCoreStores { get; init; }
+    public int ShadowLocalCoreValidatedHits { get; init; }
+    public int ShadowLocalCoreCollisionRejects { get; init; }
+    public int ShadowLocalCoreOutputMismatches { get; init; }
+    public int ShadowLocalCoreDroppedStores { get; init; }
     public bool ShadowReplaySamplingCapped { get; init; }
     public TimeSpan ShadowReplayValidationDuration { get; init; }
     public TimeSpan ShadowReplayPotentialSavedDuration { get; init; }

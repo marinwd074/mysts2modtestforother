@@ -44,6 +44,8 @@ try {
             if ($line -notmatch 'shadow_replay_observations=') { continue }
             $observations = Read-Number $line 'shadow_replay_observations'
             $hits = Read-Number $line 'shadow_replay_validated_hits'
+            $localCoreObservations = Read-Number $line 'shadow_local_core_observations'
+            $localCoreHits = Read-Number $line 'shadow_local_core_validated_hits'
             $rows.Add([pscustomobject]@{
                 file = $file.FullName
                 transitions = [long](Read-Number $line 'transitions')
@@ -54,6 +56,15 @@ try {
                 collisionRejects = [long](Read-Number $line 'shadow_replay_collision_rejects')
                 outputMismatches = [long](Read-Number $line 'shadow_replay_output_mismatches')
                 droppedStores = [long](Read-Number $line 'shadow_replay_dropped_stores')
+                localCoreObservations = [long]$localCoreObservations
+                localCoreStores = [long](Read-Number $line 'shadow_local_core_stores')
+                localCoreValidatedHits = [long]$localCoreHits
+                localCoreCollisionRejects = [long](Read-Number $line 'shadow_local_core_collision_rejects')
+                localCoreOutputMismatches = [long](Read-Number $line 'shadow_local_core_output_mismatches')
+                localCoreDroppedStores = [long](Read-Number $line 'shadow_local_core_dropped_stores')
+                localCoreHitRatio = if ($localCoreObservations -gt 0) {
+                    $localCoreHits / $localCoreObservations
+                } else { 0.0 }
                 sampleLimit = [long](Read-Number $line 'shadow_replay_sample_limit')
                 sampleCapped = $line -match 'shadow_replay_sample_capped=true'
                 validationMs = Read-Number $line 'shadow_replay_validation_ms'
@@ -75,6 +86,13 @@ try {
         collisionRejects = [long](($rows | Measure-Object collisionRejects -Sum).Sum)
         outputMismatches = [long](($rows | Measure-Object outputMismatches -Sum).Sum)
         droppedStores = [long](($rows | Measure-Object droppedStores -Sum).Sum)
+        localCoreObservations = [long](($rows | Measure-Object localCoreObservations -Sum).Sum)
+        localCoreStores = [long](($rows | Measure-Object localCoreStores -Sum).Sum)
+        localCoreValidatedHits = [long](($rows | Measure-Object localCoreValidatedHits -Sum).Sum)
+        localCoreCollisionRejects = [long](($rows | Measure-Object localCoreCollisionRejects -Sum).Sum)
+        localCoreOutputMismatches = [long](($rows | Measure-Object localCoreOutputMismatches -Sum).Sum)
+        localCoreDroppedStores = [long](($rows | Measure-Object localCoreDroppedStores -Sum).Sum)
+        localCoreHitRatio = 0.0
         validationMs = [double](($rows | Measure-Object validationMs -Sum).Sum)
         potentialSavedMs = [double](($rows | Measure-Object potentialSavedMs -Sum).Sum)
         hitRatio = 0.0
@@ -82,6 +100,10 @@ try {
     }
     if ($totals.observations -gt 0) {
         $totals.hitRatio = $totals.validatedHits / [double]$totals.observations
+    }
+    if ($totals.localCoreObservations -gt 0) {
+        $totals.localCoreHitRatio =
+            $totals.localCoreValidatedHits / [double]$totals.localCoreObservations
     }
     $totals.potentialNetSavedMs = $totals.potentialSavedMs - $totals.validationMs
 

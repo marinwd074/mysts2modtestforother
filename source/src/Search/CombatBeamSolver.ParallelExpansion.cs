@@ -1106,6 +1106,12 @@ internal sealed partial class CombatBeamSolver
         _run.ShadowReplayCollisionRejects += source.ShadowReplayCollisionRejects;
         _run.ShadowReplayOutputMismatches += source.ShadowReplayOutputMismatches;
         _run.ShadowReplayDroppedStores += source.ShadowReplayDroppedStores;
+        _run.ShadowLocalCoreObservations += source.ShadowLocalCoreObservations;
+        _run.ShadowLocalCoreStores += source.ShadowLocalCoreStores;
+        _run.ShadowLocalCoreValidatedHits += source.ShadowLocalCoreValidatedHits;
+        _run.ShadowLocalCoreCollisionRejects += source.ShadowLocalCoreCollisionRejects;
+        _run.ShadowLocalCoreOutputMismatches += source.ShadowLocalCoreOutputMismatches;
+        _run.ShadowLocalCoreDroppedStores += source.ShadowLocalCoreDroppedStores;
         _run.ShadowReplaySamplingCapped |= source.ShadowReplaySamplingCapped;
         _run.ShadowReplayValidationTicks += source.ShadowReplayValidationTicks;
         _run.ShadowReplayPotentialSavedTicks += source.ShadowReplayPotentialSavedTicks;
@@ -1161,6 +1167,12 @@ internal sealed partial class CombatBeamSolver
         source.ShadowReplayCollisionRejects = 0;
         source.ShadowReplayOutputMismatches = 0;
         source.ShadowReplayDroppedStores = 0;
+        source.ShadowLocalCoreObservations = 0;
+        source.ShadowLocalCoreStores = 0;
+        source.ShadowLocalCoreValidatedHits = 0;
+        source.ShadowLocalCoreCollisionRejects = 0;
+        source.ShadowLocalCoreOutputMismatches = 0;
+        source.ShadowLocalCoreDroppedStores = 0;
         source.ShadowReplaySamplingCapped = false;
         source.ShadowReplayValidationTicks = 0;
         source.ShadowReplayPotentialSavedTicks = 0;

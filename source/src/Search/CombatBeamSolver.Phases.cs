@@ -917,6 +917,20 @@ internal sealed partial class CombatBeamSolver
                     shadowSampling?.OutputMismatches ?? _run.ShadowReplayOutputMismatches,
                 ShadowReplayDroppedStores =
                     shadowSampling?.DroppedStores ?? _run.ShadowReplayDroppedStores,
+                ShadowLocalCoreObservations =
+                    shadowSampling?.LocalCoreObservations ?? _run.ShadowLocalCoreObservations,
+                ShadowLocalCoreStores =
+                    shadowSampling?.LocalCoreStores ?? _run.ShadowLocalCoreStores,
+                ShadowLocalCoreValidatedHits =
+                    shadowSampling?.LocalCoreValidatedHits ?? _run.ShadowLocalCoreValidatedHits,
+                ShadowLocalCoreCollisionRejects =
+                    shadowSampling?.LocalCoreCollisionRejects
+                    ?? _run.ShadowLocalCoreCollisionRejects,
+                ShadowLocalCoreOutputMismatches =
+                    shadowSampling?.LocalCoreOutputMismatches
+                    ?? _run.ShadowLocalCoreOutputMismatches,
+                ShadowLocalCoreDroppedStores =
+                    shadowSampling?.LocalCoreDroppedStores ?? _run.ShadowLocalCoreDroppedStores,
                 ShadowReplaySamplingCapped =
                     shadowSampling?.Capped ?? _run.ShadowReplaySamplingCapped,
                 ShadowReplayValidationDuration = TimeSpan.FromSeconds(
