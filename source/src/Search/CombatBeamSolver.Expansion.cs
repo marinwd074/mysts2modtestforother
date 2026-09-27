@@ -3186,15 +3186,25 @@ internal sealed partial class CombatBeamSolver
         int block = Math.Max(0, after.PlayerBlock - before.PlayerBlock);
         double resource = Math.Max(0.5d, energy + stars * 0.5d);
         double normalized = (damage + block * 0.8d) / resource;
-        CombatPredictionSimulator simulator = (CombatPredictionSimulator)after.Simulator;
-        bool pure = true;
-        foreach (CombatPredictionHistoryEntry entry in
-                 simulator.History.EntriesFrom(before.HistoryEntryCount))
+        bool pure;
+        if (after.HasSimulator)
         {
-            if (IsPureHistoryEntry(entry))
-                continue;
-            pure = false;
-            break;
+            CombatPredictionSimulator simulator = (CombatPredictionSimulator)after.Simulator;
+            pure = true;
+            foreach (CombatPredictionHistoryEntry entry in
+                     simulator.History.EntriesFrom(before.HistoryEntryCount))
+            {
+                if (IsPureHistoryEntry(entry))
+                    continue;
+                pure = false;
+                break;
+            }
+        }
+        else
+        {
+            pure = after.CachedTransitionIsPure
+                ?? throw new InvalidOperationException(
+                    "Simulator-free transition memo snapshot is missing frozen purity metadata.");
         }
         SimulatedCombatState beforeCombat = (SimulatedCombatState)
             ((CombatPredictionSimulator)before.Simulator).State.CombatState;
