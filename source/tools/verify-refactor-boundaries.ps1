@@ -1678,6 +1678,7 @@ $beamStructureChecks = @(
     @{ File = "SearchPolicySnapshot.cs"; Text = "public bool UseNoveltyPortfolio { get; init; }" },
     @{ File = "CombatBeamSolver.Models.cs"; Text = "public NoveltySearchRun? Novelty;" },
     @{ File = "CombatBeamSolver.NoveltySearch.cs"; Text = "private bool RunNoveltyOpen(" },
+    @{ File = "CombatBeamSolver.NoveltySearch.cs"; Text = "CanSkipNoveltyFactsForValueOnlyTerminalForTesting(" },
     @{ File = "CombatBeamSolver.NoveltySearch.cs"; Text = "CaptureNoveltyFacts(SearchNode node)" },
     @{ File = "CombatSearchCoordinator.NoveltyPortfolio.cs"; Text = "NoveltyPortfolioBudget.Remaining(profile," },
     @{ File = "CombatSearchCoordinator.NoveltyPortfolio.cs"; Text = "IsBetterPotionPolicyResult(root, policy, exploration, baseline)" },

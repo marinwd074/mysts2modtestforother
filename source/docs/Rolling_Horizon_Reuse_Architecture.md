@@ -211,6 +211,7 @@ GPU、学习型价值网络和 MCTS 可作为以后独立实验：现有 C# 规�
 
 - **D3.4C 已落地**：整 frontier key 不重合后，改测同 `turn + actionCount` 的 exact retained-node 集合交集；记录 R1 是否为 baseline 的稳定子集。当前仍 `behavioral_reuse=false`，不恢复节点、不减少展开。D3.5 的候选设计由该证据决定，优先考虑 exact 子集/子树恢复，而非整 frontier 替换。
 - **D3.4C admission 修正**：R1 seed 不再继承 exact continuation 的完整 enemy-roster CombatIdentity 门禁。仅允许同一战斗 seed/玩家集合下 enemy roster 由 expected 缩成 actual 子集；这是为了覆盖队友提前击杀导致的 fresh re-root。Exact continuation 仍保持完整 identity 严格一致，R1 仍必须从新 live root 逐动作 replay，失效动作自然截断/拒绝。
+- **D3.4C blocker 修复**：实机 R1 已能建立 incumbent，但 R0 terminal memo 的 simulator-free terminal snapshot 被 Novelty 当作可读取 simulator 的节点，导致搜索失败。修复只跳过 terminal value-only 节点的 novelty fact capture；nonterminal 缺 simulator 仍 fail-fast。D3.5 在该修复通过实机前继续暂停。
 
 建议实施顺序 A → B → C → D → E → F → G → H；先收获正确的短期评价和同战斗复用，再投入昂贵持久化。R2 依赖闭包复用是 D 后的可选独立阶段，未证明可靠时不影响主线交付。
 

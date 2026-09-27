@@ -66,6 +66,17 @@ internal static class Program
             Require(
                 R1FrontierShadowCache.VerifyShadowGateForTesting(),
                 "R1 frontier shadow distinguishes exact retained-frontier matches, mismatches and missing depth keys.");
+            Require(
+                CombatBeamSolver.CanSkipNoveltyFactsForValueOnlyTerminalForTesting(
+                    isTerminal: true,
+                    hasSimulator: false)
+                && !CombatBeamSolver.CanSkipNoveltyFactsForValueOnlyTerminalForTesting(
+                    isTerminal: false,
+                    hasSimulator: false)
+                && !CombatBeamSolver.CanSkipNoveltyFactsForValueOnlyTerminalForTesting(
+                    isTerminal: true,
+                    hasSimulator: true),
+                "Novelty skips fact capture only for simulator-free terminal memo snapshots.");
             ValidateRenderedCurrentTurnTakeoverContract();
 
             HarnessScenario scenario = new(

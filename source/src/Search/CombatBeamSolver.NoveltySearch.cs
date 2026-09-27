@@ -174,7 +174,26 @@ internal sealed partial class CombatBeamSolver
             _novelty.Familiar = novelty.Familiar;
         }
         int NoveltyFor(SearchNode node)
-            => novelty.Evaluate((node.Snapshot.EnemyHp / 10, node.PotionCount), CaptureNoveltyFacts(node));
+        {
+            if (!node.Snapshot.HasSimulator)
+            {
+                if (!CanSkipNoveltyFactsForValueOnlyTerminalForTesting(
+                        node.IsTerminal,
+                        node.Snapshot.HasSimulator))
+                {
+                    throw new InvalidOperationException(
+                        "非终局 Novelty 节点缺少可继续展开的模拟器。");
+                }
+
+                // R0 terminal memo snapshots are intentionally simulator-free. Terminal
+                // novelty is observational only: these nodes go straight to completed and
+                // never enter OPEN, so no novelty rank depends on this return value.
+                return 0;
+            }
+            return novelty.Evaluate(
+                (node.Snapshot.EnemyHp / 10, node.PotionCount),
+                CaptureNoveltyFacts(node));
+        }
         void Enqueue(SearchNode node, bool initialSeed = false, BfwsEscapeBudget? parentEscape = null)
         {
             int w = NoveltyFor(node);
@@ -200,6 +219,11 @@ internal sealed partial class CombatBeamSolver
             _novelty.PeakOpen = Math.Max(_novelty.PeakOpen, open.Count);
         }
     }
+
+    internal static bool CanSkipNoveltyFactsForValueOnlyTerminalForTesting(
+        bool isTerminal,
+        bool hasSimulator)
+        => isTerminal && !hasSimulator;
 
     private IReadOnlyList<BfwsFact> CaptureNoveltyFacts(SearchNode node)
     {
