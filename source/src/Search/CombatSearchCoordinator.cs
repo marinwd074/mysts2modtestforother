@@ -795,10 +795,35 @@ internal static partial class CombatSearchCoordinator
                     $"dropped_stores={frontierShadow.DroppedStores} " +
                     $"baseline_observations={frontierShadow.BaselineObservations} " +
                     $"key_misses={frontierShadow.KeyMisses} " +
+                    $"turn_misses={frontierShadow.TurnMisses} " +
+                    $"action_count_misses={frontierShadow.ActionCountMisses} " +
+                    $"node_count_misses={frontierShadow.NodeCountMisses} " +
                     $"validated_hits={frontierShadow.ValidatedHits} " +
                     $"signature_mismatches={frontierShadow.SignatureMismatches} " +
                     $"skipped_frontiers={frontierShadow.SkippedFrontiers} " +
                     $"behavioral_reuse=false");
+                foreach (R1FrontierMissSample miss in frontierShadow.MissSamples)
+                {
+                    string missKind = miss.Kind switch
+                    {
+                        R1FrontierMissKind.Turn => "turn_miss",
+                        R1FrontierMissKind.ActionCount => "action_count_miss",
+                        R1FrontierMissKind.NodeCount => "node_count_miss",
+                        _ => "unknown",
+                    };
+                    policy.Diagnostics.Info(
+                        $"[CombatSolver/Test] R1_FRONTIER_MISS " +
+                        $"kind={missKind} " +
+                        $"baseline_turn={miss.Baseline.Turn} " +
+                        $"baseline_action_count={miss.Baseline.ActionCount} " +
+                        $"baseline_nodes={miss.Baseline.NodeCount} " +
+                        $"nearest_probe_turn={miss.NearestProbe.Turn} " +
+                        $"nearest_probe_action_count={miss.NearestProbe.ActionCount} " +
+                        $"nearest_probe_nodes={miss.NearestProbe.NodeCount} " +
+                        $"turn_delta={Math.Abs(miss.NearestProbe.Turn - miss.Baseline.Turn)} " +
+                        $"action_count_delta={Math.Abs(miss.NearestProbe.ActionCount - miss.Baseline.ActionCount)} " +
+                        $"node_count_delta={Math.Abs(miss.NearestProbe.NodeCount - miss.Baseline.NodeCount)}");
+                }
             }
             NoveltyPortfolioTelemetry? noveltyPass = passResult.NoveltyPortfolio;
             ObserveSmartLayerMemory(
