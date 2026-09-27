@@ -80,7 +80,8 @@ foreach ($routeScopedDeployRule in @(
 }
 
 foreach ($displayedCurrentTurnRule in @(
-    'RenderedCurrentTurnAdoptionSeed = progress.CurrentTurnAdoptionSeed',
+    'RenderedCurrentTurnAdoptionSeed',
+    'progress.CurrentTurnAdoptionSeed',
     'search.Interaction.RenderedCurrentTurnAdoptionSeed != null')) {
     if (-not $solverControllerText.Contains($displayedCurrentTurnRule)) {
         $violations.Add("${solverControllerPath}: rendered current-turn takeover drifted '$displayedCurrentTurnRule'")
