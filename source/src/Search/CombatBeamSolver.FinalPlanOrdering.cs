@@ -427,6 +427,9 @@ internal sealed partial class CombatBeamSolver
                         $"won={baselineOverride.Won} hp_deficit={baselineOverride.HpDeficit}");
                 }
             }
+            bool useRollingHorizonLossFirst =
+                MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(
+                    routePolicy);
             var policyEligibleCandidates = policyCandidates
                 .Where(candidate =>
                 {
@@ -474,9 +477,6 @@ internal sealed partial class CombatBeamSolver
                 })
                 .ToList();
             bool useTeamObjective = useMultiplayerTeamObjective;
-            bool useRollingHorizonLossFirst =
-                MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(
-                    routePolicy);
             bool useAdaptiveLethalTempo =
                 useMultiplayerTeamObjective
                 && multiplayerCombatObjectiveStrategy
