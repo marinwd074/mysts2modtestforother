@@ -88,4 +88,8 @@ jobs:
           if ($null -eq $evidence.phaseC -or $evidence.phaseC.Status -ne 'PASS') {
             throw 'Phase C R0 transition evidence did not pass.'
           }
+          if ($null -eq $evidence.phaseCFullSearch -or $evidence.phaseCFullSearch.Status -ne 'PASS') {
+            throw 'Phase C full-search cross-request A/B evidence did not pass.'
+          }
           $evidence.phaseC | ConvertTo-Json -Depth 8
+          $evidence.phaseCFullSearch | ConvertTo-Json -Depth 8
