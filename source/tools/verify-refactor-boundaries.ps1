@@ -150,6 +150,16 @@ foreach ($coupledPreviewRule in @(
     }
 }
 
+foreach ($atomicPreviewRule in @(
+    'currentTurnPreview = progress.CurrentTurnPreview;',
+    'currentTurnAdoptionSeed = progress.CurrentTurnAdoptionSeed;',
+    'speculativeRoutePreview = progress.SpeculativeRoutePreview;',
+    'currentRouteAdoptionSeed = progress.RouteAdoptionSeed;')) {
+    if (-not $searchCoordinatorText.Contains($atomicPreviewRule)) {
+        $violations.Add("${searchCoordinatorPath}: current/future displayed candidate bundle is no longer replaced atomically '$atomicPreviewRule'")
+    }
+}
+
 $searchLifecycleCompletionPath = Join-Path $repositoryRoot 'src/Runtime/SolverController.SearchLifecycle.cs'
 $searchLifecycleCompletionText = [IO.File]::ReadAllText($searchLifecycleCompletionPath)
 foreach ($enemyHpReuseRule in @(
@@ -4329,6 +4339,15 @@ foreach ($p0MaterializationRule in @(
     ': [],')) {
     if (-not $p0PhasesText.Contains($p0MaterializationRule)) {
         $violations.Add("${p0PhasesPath}: P0 replay candidates are not preserved through final result materialization '$p0MaterializationRule'")
+    }
+}
+
+foreach ($currentTurnRouteRule in @(
+    '!MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnProjection(',
+    'SolverCurrentTurnPreview alignedCurrentPreview = new(',
+    'speculativeRoutePreview.Turns')) {
+    if (-not $p0PhasesText.Contains($currentTurnRouteRule)) {
+        $violations.Add("${p0PhasesPath}: current-turn adoption no longer preserves one coherent local cross-turn route '$currentTurnRouteRule'")
     }
 }
 

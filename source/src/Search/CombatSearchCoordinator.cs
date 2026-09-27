@@ -161,21 +161,24 @@ internal static partial class CombatSearchCoordinator
 
                 if (acceptsRouteUpdate)
                 {
-                    if (progress.CurrentTurnPreview is { } current)
+                    // Current-turn and future-route previews are one displayed candidate bundle.
+                    // Replace or clear them together so the UI can never combine a newer
+                    // current-turn line with an older speculative future.
+                    currentTurnPreview = progress.CurrentTurnPreview;
+                    currentTurnAdoptionSeed = progress.CurrentTurnAdoptionSeed;
+                    speculativeRoutePreview = progress.SpeculativeRoutePreview;
+                    currentRouteAdoptionSeed = progress.RouteAdoptionSeed;
+                    if (currentTurnPreview != null)
                     {
-                        currentTurnPreview = current;
-                        currentTurnAdoptionSeed = progress.CurrentTurnAdoptionSeed;
                         currentTurnPreviewVersion = Math.Max(
                             currentTurnPreviewVersion,
-                            current.CandidateVersion);
+                            currentTurnPreview.CandidateVersion);
                     }
-                    if (progress.SpeculativeRoutePreview is { } speculative)
+                    if (speculativeRoutePreview != null)
                     {
-                        speculativeRoutePreview = speculative;
-                        currentRouteAdoptionSeed = progress.RouteAdoptionSeed;
                         speculativeRouteVersion = Math.Max(
                             speculativeRouteVersion,
-                            speculative.CandidateVersion);
+                            speculativeRoutePreview.CandidateVersion);
                     }
                     if (progress.OfficialPublishedOrigin is { } officialOrigin
                         && !string.IsNullOrWhiteSpace(

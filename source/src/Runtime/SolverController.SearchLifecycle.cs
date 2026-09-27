@@ -1000,12 +1000,14 @@ internal static partial class SolverController
                     : "search_completed",
             result,
             DescribeReplanAudit());
-        SolverOverlaySnapshot completedSnapshot = currentTurnAdopted
-            ? SolverOverlaySnapshot.CaptureCurrentTurn(SolverCurrentTurnPreview.FromResult(result))
-            : SolverOverlaySnapshot.CaptureWithReviewedWorldlines(
-                result,
-                UnexpectedReplanCount > 0,
-                _combat.ReviewedWorldlinesTotal);
+        SolverOverlaySnapshot completedSnapshot =
+            currentTurnAdopted && !retainCurrentTurnRoute
+                ? SolverOverlaySnapshot.CaptureCurrentTurn(
+                    SolverCurrentTurnPreview.FromResult(result))
+                : SolverOverlaySnapshot.CaptureWithReviewedWorldlines(
+                    result,
+                    UnexpectedReplanCount > 0,
+                    _combat.ReviewedWorldlinesTotal);
         SolverOverlay.ShowResult(
             host,
             routeAdopted ? MarkRouteAdopted(completedSnapshot) : completedSnapshot);
@@ -1024,7 +1026,8 @@ internal static partial class SolverController
                 $"[CombatSolver/Test] SEARCH_CURRENT_TURN_ADOPTED generation={generation} " +
                 $"turn={result.StartTurnNumber} actions={result.BestNode.Actions.Count} " +
                 $"continuations={result.Continuations.Count} " +
-                $"future_route_preserved={retainCurrentTurnRoute.ToString().ToLowerInvariant()}");
+                $"future_route_preserved={retainCurrentTurnRoute.ToString().ToLowerInvariant()} " +
+                $"display_scope={(retainCurrentTurnRoute ? "full_route" : "current_turn")}");
         }
         else if (routeAdopted)
         {

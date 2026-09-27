@@ -638,12 +638,20 @@ internal static partial class SolverController
     {
         AssertMainThread();
         RecordReviewedWorldlines(result);
-        SolverOverlaySnapshot snapshot = result.ResultScope == SolverResultScope.CurrentTurnAdoption
-            ? SolverOverlaySnapshot.CaptureCurrentTurn(SolverCurrentTurnPreview.FromResult(result))
-            : SolverOverlaySnapshot.CaptureWithReviewedWorldlines(
-                result,
-                UnexpectedReplanCount > 0,
-                _combat.ReviewedWorldlinesTotal);
+        bool retainCurrentTurnRoute =
+            result.ResultScope == SolverResultScope.CurrentTurnAdoption
+            && MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnContinuation(
+                result.MultiplayerScope,
+                result.Continuations.Count);
+        SolverOverlaySnapshot snapshot =
+            result.ResultScope == SolverResultScope.CurrentTurnAdoption
+            && !retainCurrentTurnRoute
+                ? SolverOverlaySnapshot.CaptureCurrentTurn(
+                    SolverCurrentTurnPreview.FromResult(result))
+                : SolverOverlaySnapshot.CaptureWithReviewedWorldlines(
+                    result,
+                    UnexpectedReplanCount > 0,
+                    _combat.ReviewedWorldlinesTotal);
         if (result.ResultScope == SolverResultScope.RouteAdoption)
             snapshot = MarkRouteAdopted(snapshot);
         SolverOverlay.ShowResult(host, snapshot);

@@ -352,6 +352,23 @@ Check(
     "Default multiplayer local-core enters the same full Beam/retention/final-ordering search class as singleplayer; multiplayer differences remain state/runtime boundaries.");
 
 Check(
+    MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnProjection(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore)
+    && MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnContinuation(
+        MultiplayerSearchResultScope.PartialLocalCrossTurnProjection,
+        continuationCount: 1)
+    && MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnContinuation(
+        MultiplayerSearchResultScope.CompleteLocalBattleProjection,
+        continuationCount: 1)
+    && !MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnContinuation(
+        MultiplayerSearchResultScope.CurrentTurnOnly,
+        continuationCount: 1)
+    && !MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnContinuation(
+        MultiplayerSearchResultScope.PartialLocalCrossTurnProjection,
+        continuationCount: 0),
+    "Apply-current-turn may retain a validated default local-core future route only when a real cross-turn continuation exists.");
+
+Check(
     MultiplayerLocalCrossTurnContracts.PredictionTurnLayerLimit(
         SearchRoutePolicy.MultiplayerSinglePlayerCore)
         == MultiplayerLocalCrossTurnContracts.LocalCorePredictionTurnLayers
