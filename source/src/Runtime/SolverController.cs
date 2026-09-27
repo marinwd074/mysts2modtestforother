@@ -137,7 +137,8 @@ internal static partial class SolverController
             return true;
         return capabilities.IsMultiplayer
             && !SolverSettings.Current.UseMultiplayerPrediction
-            && _combat.LatestRouteVersion == MultiplayerRouteChangeTracker.Version
+            && _combat.LatestRouteInvalidationVersion
+                == MultiplayerRouteChangeTracker.InvalidationVersion
             && LiveCombatStamp.IsLocalCoreSearchCompatible(latestStamp, state);
     }
 
@@ -146,8 +147,8 @@ internal static partial class SolverController
         LiveCombatStamp current)
     {
         _combat.LatestStamp = current;
-        _combat.LatestRouteVersion = SolverSessionCapabilities.Capture(state).IsMultiplayer
-            ? MultiplayerRouteChangeTracker.Version
+        _combat.LatestRouteInvalidationVersion = SolverSessionCapabilities.Capture(state).IsMultiplayer
+            ? MultiplayerRouteChangeTracker.InvalidationVersion
             : 0;
     }
 
@@ -894,7 +895,8 @@ internal static partial class SolverController
                     $"[CombatSolver/Test] DEPLOY_COMPATIBLE_WORLD_DELTA " +
                     $"turn={LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0} " +
                     $"world_version={MultiplayerWorldTracker.WorldVersion} " +
-                    $"route_version={MultiplayerRouteChangeTracker.Version}");
+                    $"route_version={MultiplayerRouteChangeTracker.Version} " +
+                    $"route_invalidation_version={MultiplayerRouteChangeTracker.InvalidationVersion}");
             }
             _combat.MultiplayerSafeExecuteDeploymentRequested = false;
             StartDeployment(host, state, _combat.LatestResult!);
@@ -908,7 +910,8 @@ internal static partial class SolverController
             && ReferenceEquals(search.State, state)
             && (search.Stamp == current
                 || search.UseRouteScopedCompletion
-                    && search.RouteVersion == MultiplayerRouteChangeTracker.Version
+                    && search.RouteInvalidationVersion
+                        == MultiplayerRouteChangeTracker.InvalidationVersion
                     && search.LocalCoreSearchStamp == currentLocalCoreStamp))
         {
             search.DeployWhenReady = true;

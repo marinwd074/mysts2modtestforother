@@ -69,8 +69,8 @@ foreach ($routeScopedDeployRule in @(
     'DEPLOY_COMPATIBLE_WORLD_DELTA',
     'deploy_after_local_state_change',
     'IsLatestResultDeploymentCompatible(',
-    '_combat.LatestRouteVersion == MultiplayerRouteChangeTracker.Version',
-    'search.RouteVersion == MultiplayerRouteChangeTracker.Version')) {
+    '_combat.LatestRouteInvalidationVersion == MultiplayerRouteChangeTracker.InvalidationVersion',
+    'search.RouteInvalidationVersion == MultiplayerRouteChangeTracker.InvalidationVersion')) {
     if (-not $solverControllerText.Contains($routeScopedDeployRule)) {
         $violations.Add("${solverControllerPath}: route-scoped deployment drifted '$routeScopedDeployRule'")
     }
@@ -140,7 +140,7 @@ foreach ($enemyHpReuseRule in @(
     }
 }
 foreach ($routeScopedCompletionRule in @(
-    'RouteVersion = capabilities.IsMultiplayer',
+    'RouteInvalidationVersion = capabilities.IsMultiplayer',
     'LiveCombatStamp.CaptureLocalCoreSearchValidity(state)',
     'searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore',
     'MultiplayerSearchCompletionContracts.IsStale(',

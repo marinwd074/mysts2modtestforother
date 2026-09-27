@@ -260,7 +260,7 @@ internal static partial class SolverController
                 _combat.State = state;
                 _combat.LatestResult = reused;
                 _combat.LatestStamp = stamp;
-                _combat.LatestRouteVersion = MultiplayerRouteChangeTracker.Version;
+                _combat.LatestRouteInvalidationVersion = MultiplayerRouteChangeTracker.Version;
                 _combat.ContinuationSource = reused;
                 _combat.AwaitingMultiplayerContinuation = false;
                 _combat.LastSafeEndTurnWorldVersion = null;
@@ -438,8 +438,8 @@ internal static partial class SolverController
                 WorldVersion = capabilities.IsMultiplayer
                     ? MultiplayerWorldTracker.WorldVersion
                     : 0,
-                RouteVersion = capabilities.IsMultiplayer
-                    ? MultiplayerRouteChangeTracker.Version
+                RouteInvalidationVersion = capabilities.IsMultiplayer
+                    ? MultiplayerRouteChangeTracker.InvalidationVersion
                     : 0,
                 LocalCoreSearchStamp = capabilities.IsMultiplayer
                     ? LiveCombatStamp.CaptureLocalCoreSearchValidity(state)
@@ -864,7 +864,8 @@ internal static partial class SolverController
                 ? LiveCombatStamp.CaptureLocalCoreSearchValidity(searchedState)
                 : null;
         long currentWorldVersion = MultiplayerWorldTracker.WorldVersion;
-        long currentRouteVersion = MultiplayerRouteChangeTracker.Version;
+        long currentRouteInvalidationVersion =
+            MultiplayerRouteChangeTracker.InvalidationVersion;
         bool fullStampMatches = currentStamp == searchedStamp;
         bool localCoreStampMatches = !search.UseRouteScopedCompletion
             || currentLocalCoreStamp == search.LocalCoreSearchStamp;
@@ -872,8 +873,8 @@ internal static partial class SolverController
             search.UseRouteScopedCompletion,
             search.WorldVersion,
             currentWorldVersion,
-            search.RouteVersion,
-            currentRouteVersion,
+            search.RouteInvalidationVersion,
+            currentRouteInvalidationVersion,
             fullStampMatches,
             localCoreStampMatches);
         if (!stillSearchable || completionStale)
@@ -901,7 +902,9 @@ internal static partial class SolverController
                 $"[CombatSolver/Test] SEARCH_STALE_DETAIL generation={generation} " +
                 $"route_scoped={search.UseRouteScopedCompletion.ToString().ToLowerInvariant()} " +
                 $"search_world_version={search.WorldVersion} current_world_version={currentWorldVersion} " +
-                $"search_route_version={search.RouteVersion} current_route_version={currentRouteVersion} " +
+                $"search_route_invalidation_version={search.RouteInvalidationVersion} " +
+                $"current_route_invalidation_version={currentRouteInvalidationVersion} " +
+                $"current_route_version={MultiplayerRouteChangeTracker.Version} " +
                 $"full_stamp_match={fullStampMatches.ToString().ToLowerInvariant()} " +
                 $"local_stamp_match={localCoreStampMatches.ToString().ToLowerInvariant()}");
             Entry.Logger.Info($"[CombatSolver/Test] SEARCH_STALE generation={generation}");
@@ -914,7 +917,9 @@ internal static partial class SolverController
             Entry.Logger.Info(
                 $"[CombatSolver/Test] SEARCH_COMPATIBLE_WORLD_DELTA generation={generation} " +
                 $"search_world_version={search.WorldVersion} current_world_version={currentWorldVersion} " +
-                $"route_version={currentRouteVersion} local_stamp_match=true");
+                $"route_version={MultiplayerRouteChangeTracker.Version} " +
+                $"route_invalidation_version={currentRouteInvalidationVersion} " +
+                "local_stamp_match=true");
         }
 
         SolverResult result = task.Result;
@@ -961,7 +966,7 @@ internal static partial class SolverController
 
         _combat.LatestResult = result;
         _combat.LatestStamp = currentStamp!;
-        _combat.LatestRouteVersion = currentRouteVersion;
+        _combat.LatestRouteInvalidationVersion = currentRouteInvalidationVersion;
         bool retainCurrentTurnRoute = currentTurnAdopted
             && MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnContinuation(
                 result.MultiplayerScope,

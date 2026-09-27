@@ -55,6 +55,7 @@ internal static class Program
             ValidateDarkEmbracePredictionCoverage();
             ValidateViciousStrategicValue();
             ValidateRollingHorizonQualityContract();
+            ValidateRouteInvalidationVersionContract();
 
             HarnessScenario scenario = new(
                 "IRONCLAD",
@@ -189,6 +190,58 @@ internal static class Program
                 && value.ResourcePotential == 0
                 && value.ScalingPotential == 0,
             $"Vicious strategic value drifted: {value}.");
+    }
+
+    private static void ValidateRouteInvalidationVersionContract()
+    {
+        MultiplayerRouteChangeTracker.Reset();
+        try
+        {
+            MultiplayerRouteChangeTracker.SignalSchedulingBoundary("pinned_local_turn_boundary");
+            Require(
+                MultiplayerRouteChangeTracker.Version == 1
+                    && MultiplayerRouteChangeTracker.InvalidationVersion == 0,
+                "Scheduling-only multiplayer boundary invalidated the current route.");
+
+            MultiplayerRouteChangeTracker.ObserveEnemyHp(
+                new StateFingerprint(1, 1),
+                allowInvalidation: false,
+                "pinned_enemy_baseline");
+            bool invalidated = MultiplayerRouteChangeTracker.ObserveEnemyHp(
+                new StateFingerprint(2, 2),
+                allowInvalidation: true,
+                "pinned_enemy_hp_invalidation");
+            Require(
+                invalidated
+                    && MultiplayerRouteChangeTracker.Version == 2
+                    && MultiplayerRouteChangeTracker.InvalidationVersion == 1,
+                "Enemy-HP route invalidation did not advance both scheduling and invalidation versions.");
+
+            Require(
+                !MultiplayerSearchCompletionContracts.IsStale(
+                    routeScopedCompletion: true,
+                    searchWorldVersion: 7,
+                    currentWorldVersion: 22,
+                    searchRouteInvalidationVersion: 0,
+                    currentRouteInvalidationVersion: 0,
+                    fullStampMatches: false,
+                    localStampMatches: true),
+                "Route-scoped completion rejected scheduling/remote-only drift with an unchanged local core.");
+            Require(
+                MultiplayerSearchCompletionContracts.IsStale(
+                    routeScopedCompletion: true,
+                    searchWorldVersion: 7,
+                    currentWorldVersion: 22,
+                    searchRouteInvalidationVersion: 0,
+                    currentRouteInvalidationVersion: 1,
+                    fullStampMatches: false,
+                    localStampMatches: true),
+                "Route-scoped completion accepted a real route invalidation.");
+        }
+        finally
+        {
+            MultiplayerRouteChangeTracker.Reset();
+        }
     }
 
     private static void ValidateRollingHorizonQualityContract()

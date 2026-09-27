@@ -157,7 +157,7 @@ internal sealed class SolverCombatSession
     public bool AwaitingMultiplayerContinuation { get; set; }
     public bool PendingMultiplayerPlanRefresh { get; set; }
     public long? LastPlanRefreshDecisionTimestampMilliseconds { get; set; }
-    public long LatestRouteVersion { get; set; }
+    public long LatestRouteInvalidationVersion { get; set; }
     public CombatBugReportIssueLedger BugReportIssues { get; } = new();
     public CombatTransitionMemo TransitionMemo { get; } = new();
 }
@@ -176,7 +176,7 @@ internal sealed class SolverSearchSession(
     public int StartTurnNumber { get; init; }
     public ReplanCause ReplanCause { get; init; }
     public long WorldVersion { get; init; }
-    public long RouteVersion { get; init; }
+    public long RouteInvalidationVersion { get; init; }
     public LiveCombatStamp? LocalCoreSearchStamp { get; init; }
     public bool UseRouteScopedCompletion { get; set; }
     public CombatState State { get; } = state;
