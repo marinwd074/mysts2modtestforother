@@ -160,6 +160,16 @@ foreach ($atomicPreviewRule in @(
     }
 }
 
+foreach ($r1RequestTailHydrationRule in @(
+    'R1_TRANSITION_HYDRATION_TAIL',
+    'R1TransitionHydrationCache = r1TransitionHydrationCache',
+    'ReleaseR1TransitionHydration("request_tail", emitTelemetry: true)',
+    'stage=baseline mode=exact_request_local')) {
+    if (-not $searchCoordinatorText.Contains($r1RequestTailHydrationRule)) {
+        $violations.Add("${searchCoordinatorPath}: D3.3C request-tail hydration boundary drifted '$r1RequestTailHydrationRule'")
+    }
+}
+
 $searchLifecycleCompletionPath = Join-Path $repositoryRoot 'src/Runtime/SolverController.SearchLifecycle.cs'
 $searchLifecycleCompletionText = [IO.File]::ReadAllText($searchLifecycleCompletionPath)
 foreach ($enemyHpReuseRule in @(

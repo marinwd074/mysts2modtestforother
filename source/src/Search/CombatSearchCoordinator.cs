@@ -703,6 +703,27 @@ internal static partial class CombatSearchCoordinator
                     $"r1_hint_actions={r1ValidatedEnumerationHints.Count}");
             }
 
+            void ReleaseR1TransitionHydration(string stage, bool emitTelemetry)
+            {
+                if (r1TransitionHydrationCache == null)
+                    return;
+                if (emitTelemetry)
+                {
+                    R1TransitionHydrationSnapshot hydration =
+                        r1TransitionHydrationCache.Capture();
+                    policy.Diagnostics.Info(
+                        $"[CombatSolver/Test] R1_TRANSITION_HYDRATION_TAIL " +
+                        $"stage={stage} entries={hydration.Entries} " +
+                        $"validated_keys={hydration.ValidatedKeys} " +
+                        $"hydration_hits={hydration.HydrationHits} " +
+                        $"output_mismatches={hydration.OutputMismatches} " +
+                        $"rejected_keys={hydration.RejectedKeys} " +
+                        $"reuse_disabled={hydration.ReuseDisabled.ToString().ToLowerInvariant()}");
+                }
+                r1TransitionHydrationCache.Release();
+                r1TransitionHydrationCache = null;
+            }
+
             SolverResult SelectContinuationSeedIncumbent(SolverResult ordinary)
             {
                 if (continuationSeedIncumbent == null
@@ -768,7 +789,7 @@ internal static partial class CombatSearchCoordinator
                     r1TransitionHydrationCache.Capture();
                 policy.Diagnostics.Info(
                     $"[CombatSolver/Test] R1_TRANSITION_HYDRATION " +
-                    $"mode=exact_request_local entry_limit={hydration.EntryLimit} " +
+                    $"stage=baseline mode=exact_request_local entry_limit={hydration.EntryLimit} " +
                     $"entries={hydration.Entries} stores={hydration.Stores} " +
                     $"duplicate_stores={hydration.DuplicateStores} " +
                     $"dropped_stores={hydration.DroppedStores} " +
@@ -788,8 +809,7 @@ internal static partial class CombatSearchCoordinator
                         $"[CombatSolver/Test] R1_HYDRATION_REJECTED_KEY " +
                         $"action={rejected.ActionIdentity} reason={rejected.Reason}");
                 }
-                r1TransitionHydrationCache.Release();
-                r1TransitionHydrationCache = null;
+                // D3.3C keeps validated exact hydration alive through request-tail audits.
             }
             if (r1FrontierShadowCache != null)
             {
@@ -863,11 +883,13 @@ internal static partial class CombatSearchCoordinator
             if (ResolveTakeoverResult(passResult, policy.Interaction) is { } passTakeover)
             {
                 takeoverResult = passTakeover;
+                ReleaseR1TransitionHydration("takeover", emitTelemetry: false);
                 return passResult;
             }
             if (passResult.DeterministicBlockPotionInserted)
             {
                 passSettled = true;
+                ReleaseR1TransitionHydration("deterministic_block_potion", emitTelemetry: false);
                 return SelectContinuationSeedIncumbent(passResult);
             }
             if (!policy.PotionStrategy.HasForcedDirectives || hasForcedBaseline)
@@ -875,15 +897,19 @@ internal static partial class CombatSearchCoordinator
                 if (!hasForcedBaseline && HasReachedAcceptableBattleHpLoss(policy, passResult))
                 {
                     passSettled = true;
+                    ReleaseR1TransitionHydration("acceptable_loss", emitTelemetry: false);
                     return SelectContinuationSeedIncumbent(passResult);
                 }
                 passResult = RunSupplementalAudits(
                     root,
                     displayNames,
                     battleDamage,
-                    policy.NoveltySearch == null
+                    (policy.NoveltySearch == null
                         ? policy
-                        : policy with { NoveltySearch = null },
+                        : policy with { NoveltySearch = null }) with
+                    {
+                        R1TransitionHydrationCache = r1TransitionHydrationCache,
+                    },
                     cancellationToken,
                     progressCallback,
                     activeProfile,
@@ -897,6 +923,7 @@ internal static partial class CombatSearchCoordinator
                 // primary-pass observations alongside the request's final outcome.
                 passResult.NoveltyPortfolio = noveltyPass;
             }
+            ReleaseR1TransitionHydration("request_tail", emitTelemetry: true);
             return SelectContinuationSeedIncumbent(passResult);
         }
 
