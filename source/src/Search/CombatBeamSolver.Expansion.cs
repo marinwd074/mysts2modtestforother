@@ -2881,7 +2881,49 @@ internal sealed partial class CombatBeamSolver
         }
 
         if (r0MemoEligible)
+        {
             StoreR0TerminalTransition(parent, action, result);
+            if (policy.DetailedDiagnostics
+                && result.HasSimulator
+                && result.BoundaryReason == SearchBoundaryReason.None
+                && !result.PlayerDead
+                && !result.AllEnemiesDead
+                && !result.HasRisk
+                && result.PredictionGaps.All(static gap => gap.Compensated))
+            {
+                ContinuationStamp parentStamp = ContinuationStamp.CapturePredicted(
+                    _player,
+                    parent.Snapshot.Simulator,
+                    parent.Turn,
+                    _forecast,
+                    _startTurnNumber);
+                ContinuationStamp outputStamp = ContinuationStamp.CapturePredicted(
+                    _player,
+                    result.Simulator,
+                    result.Turn,
+                    _forecast,
+                    _startTurnNumber);
+                ActionReplayCache replayCache = ActionReplayCache.For(policy.R0TransitionMemo!);
+                replayCache.BindCombat(parentStamp.CombatIdentity);
+                replayCache.Observe(
+                    new ReplayCacheKey(
+                        parent.StateKey,
+                        PolicyActionIdentityToken(action),
+                        policy.R0TransitionPolicyIdentity,
+                        ActionReplayCache.CurrentContractVersion),
+                    parentStamp.StateText,
+                    new ReplayCacheObservation(
+                        result.StateKey,
+                        outputStamp.StateText,
+                        result.Score,
+                        result.BoundaryReason,
+                        result.Turn,
+                        result.PlayerDead,
+                        result.AllEnemiesDead,
+                        result.HasRisk,
+                        result.PredictionGaps.Count));
+            }
+        }
         return result;
     }
 
