@@ -4398,6 +4398,10 @@ foreach ($localCoreHorizonRule in @(
 if (-not $p1ContinuationContractsText.Contains('IsLocalCoreContinuationStateCompatible(')) {
     $violations.Add("${p1ContinuationContractsPath}: local-core shared-state continuation compatibility contract is missing")
 }
+if (-not $p1ContinuationContractsText.Contains('DescribeR1SeedAdmissionMismatch(') -or
+    -not $p1ContinuationContractsText.Contains('IsSameCombatLineageWithEnemyRemovalOnly(')) {
+    $violations.Add("${p1ContinuationContractsPath}: R1 enemy-removal lineage admission contract is missing")
+}
 foreach ($enemyHpContinuationRule in @(
     'allowLivingEnemyHpDecrease',
     'IsLivingEnemyHpDecreaseOnly(',
@@ -4426,6 +4430,8 @@ $p1LifecycleText = [IO.File]::ReadAllText($p1LifecyclePath)
 foreach ($p1RuntimeRule in @(
     'CaptureContinuationSeedActions(',
     'MultiplayerLocalCrossTurnContracts.CanReplayContinuationSeedAction(',
+    'DescribeR1SeedAdmissionMismatch(',
+    'MP_LOCAL_XTURN_SEED_CAPTURE',
     'ContinuationSeedActions = continuationSeedActions',
     'LocalCoreR1RecoveryEnabled',
     'LocalCoreSearchAcceleratorsEnabled',

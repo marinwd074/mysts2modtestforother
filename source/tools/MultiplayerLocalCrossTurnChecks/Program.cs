@@ -623,6 +623,47 @@ Check(
             Match(combatIdentity: "combat-without-target")) == "combat_identity_mismatch",
     "A combat identity change such as teammate removal of the planned target rejects the old route.");
 
+string r1ExpectedCombat =
+    "seed=RFE4KDWHUM;players=1,1000;enemies=2:EXOSKELETON,3:EXOSKELETON,4:EXOSKELETON";
+string r1EnemyRemovedCombat =
+    "seed=RFE4KDWHUM;players=1,1000;enemies=3:EXOSKELETON,4:EXOSKELETON";
+string r1EnemyAddedCombat =
+    "seed=RFE4KDWHUM;players=1,1000;enemies=2:EXOSKELETON,3:EXOSKELETON,4:EXOSKELETON,5:EXOSKELETON";
+string r1EnemyReplacedCombat =
+    "seed=RFE4KDWHUM;players=1,1000;enemies=3:EXOSKELETON,9:OTHER";
+MultiplayerContinuationMatchInput R1Lineage(string actualCombat, long actualWorldVersion = 12)
+    => new(
+        ExpectedCombatIdentity: r1ExpectedCombat,
+        ActualCombatIdentity: actualCombat,
+        ExpectedLocalNetId: "1000",
+        ActualLocalNetId: "1000",
+        ExpectedMultiplayerScalingHooks: true,
+        ActualMultiplayerScalingHooks: true,
+        ExpectedCardMultiplayerConstraint: "MultiplayerOnly",
+        ActualCardMultiplayerConstraint: "MultiplayerOnly",
+        ExpectedSourceWorldVersion: 10,
+        MinimumWorldVersion: 10,
+        ActualWorldVersion: actualWorldVersion);
+
+Check(
+    MultiplayerLocalCrossTurnContracts.DescribeContinuationMismatch(
+        R1Lineage(r1EnemyRemovedCombat)) == "combat_identity_mismatch"
+    && MultiplayerLocalCrossTurnContracts.DescribeR1SeedAdmissionMismatch(
+        R1Lineage(r1EnemyRemovedCombat)) is null,
+    "Exact continuation still rejects an enemy removal, while R1 may replay the old plain-card prefix from the new real root.");
+
+Check(
+    MultiplayerLocalCrossTurnContracts.DescribeR1SeedAdmissionMismatch(
+        R1Lineage(r1ExpectedCombat)) is null
+    && MultiplayerLocalCrossTurnContracts.DescribeR1SeedAdmissionMismatch(
+        R1Lineage(r1EnemyAddedCombat)) == "combat_lineage_mismatch"
+    && MultiplayerLocalCrossTurnContracts.DescribeR1SeedAdmissionMismatch(
+        R1Lineage(r1EnemyReplacedCombat)) == "combat_lineage_mismatch"
+    && MultiplayerLocalCrossTurnContracts.DescribeR1SeedAdmissionMismatch(
+        R1Lineage(r1EnemyRemovedCombat, actualWorldVersion: 10))
+            == "world_version_not_advanced",
+    "R1 lineage admission permits only same-battle enemy removal; additions, replacements and stale WorldVersion remain rejected.");
+
 Check(
     MultiplayerLocalCrossTurnContracts.IsCurrentTurnAction(1, 1)
         && !MultiplayerLocalCrossTurnContracts.IsCurrentTurnAction(2, 1)

@@ -398,24 +398,33 @@ internal static partial class SolverController
                 }
 
                 if (expectedMultiplayer is { } seedExpectation
-                    && multiplayerValidation is { } seedValidation
-                    && MultiplayerLocalCrossTurnContracts.DescribeContinuationMismatch(
-                        new MultiplayerContinuationMatchInput(
-                            seedExpectation.CombatIdentity,
-                            seedValidation.CombatIdentity,
-                            seedExpectation.LocalNetId,
-                            seedValidation.LocalNetId,
-                            seedExpectation.MultiplayerScalingHooks,
-                            seedValidation.MultiplayerScalingHooks,
-                            seedExpectation.CardMultiplayerConstraint,
-                            seedValidation.CardMultiplayerConstraint,
-                            seedExpectation.SourceWorldVersion,
-                            seedValidation.MinimumWorldVersion,
-                            seedValidation.CurrentWorldVersion)) is null)
+                    && multiplayerValidation is { } seedValidation)
                 {
-                    continuationSeedActions = CaptureContinuationSeedActions(
-                        source.BestNode.Actions,
-                        currentTurn);
+                    MultiplayerContinuationMatchInput seedMatch = new(
+                        seedExpectation.CombatIdentity,
+                        seedValidation.CombatIdentity,
+                        seedExpectation.LocalNetId,
+                        seedValidation.LocalNetId,
+                        seedExpectation.MultiplayerScalingHooks,
+                        seedValidation.MultiplayerScalingHooks,
+                        seedExpectation.CardMultiplayerConstraint,
+                        seedValidation.CardMultiplayerConstraint,
+                        seedExpectation.SourceWorldVersion,
+                        seedValidation.MinimumWorldVersion,
+                        seedValidation.CurrentWorldVersion);
+                    string? seedAdmissionMismatch =
+                        MultiplayerLocalCrossTurnContracts.DescribeR1SeedAdmissionMismatch(
+                            seedMatch);
+                    if (seedAdmissionMismatch is null)
+                    {
+                        continuationSeedActions = CaptureContinuationSeedActions(
+                            source.BestNode.Actions,
+                            currentTurn);
+                    }
+                    Entry.Logger.Info(
+                        $"[CombatSolver/Test] MP_LOCAL_XTURN_SEED_CAPTURE " +
+                        $"turn={currentTurn} admission_reason={seedAdmissionMismatch ?? "none"} " +
+                        $"captured_actions={continuationSeedActions.Count}");
                 }
             }
 

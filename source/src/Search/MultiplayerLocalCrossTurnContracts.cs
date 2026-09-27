@@ -452,6 +452,65 @@ internal static class MultiplayerLocalCrossTurnContracts
     internal static bool IsExactContinuation(MultiplayerContinuationMatchInput input)
         => DescribeContinuationMismatch(input) is null;
 
+    internal static string? DescribeR1SeedAdmissionMismatch(
+        MultiplayerContinuationMatchInput input)
+    {
+        if (input.ActualWorldVersion <= Math.Max(
+                input.ExpectedSourceWorldVersion,
+                input.MinimumWorldVersion))
+        {
+            return "world_version_not_advanced";
+        }
+        if (!IsSameCombatLineageWithEnemyRemovalOnly(
+                input.ExpectedCombatIdentity,
+                input.ActualCombatIdentity))
+        {
+            return "combat_lineage_mismatch";
+        }
+        if (!string.Equals(
+                input.ExpectedLocalNetId,
+                input.ActualLocalNetId,
+                StringComparison.Ordinal))
+        {
+            return "local_net_id_mismatch";
+        }
+        if (input.ExpectedMultiplayerScalingHooks != input.ActualMultiplayerScalingHooks)
+            return "scaling_mismatch";
+        if (!string.Equals(
+                input.ExpectedCardMultiplayerConstraint,
+                input.ActualCardMultiplayerConstraint,
+                StringComparison.Ordinal))
+        {
+            return "card_constraint_mismatch";
+        }
+        return null;
+    }
+
+    private static bool IsSameCombatLineageWithEnemyRemovalOnly(
+        string expected,
+        string actual)
+    {
+        const string enemySeparator = ";enemies=";
+        int expectedEnemies = expected.IndexOf(enemySeparator, StringComparison.Ordinal);
+        int actualEnemies = actual.IndexOf(enemySeparator, StringComparison.Ordinal);
+        if (expectedEnemies < 0 || actualEnemies < 0)
+            return string.Equals(expected, actual, StringComparison.Ordinal);
+
+        string expectedPrefix = expected[..expectedEnemies];
+        string actualPrefix = actual[..actualEnemies];
+        if (!string.Equals(expectedPrefix, actualPrefix, StringComparison.Ordinal))
+            return false;
+
+        HashSet<string> expectedRoster = expected[(expectedEnemies + enemySeparator.Length)..]
+            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .ToHashSet(StringComparer.Ordinal);
+        HashSet<string> actualRoster = actual[(actualEnemies + enemySeparator.Length)..]
+            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .ToHashSet(StringComparer.Ordinal);
+
+        return actualRoster.IsSubsetOf(expectedRoster);
+    }
+
     internal static string? DescribeContinuationMismatch(
         MultiplayerContinuationMatchInput input)
     {
