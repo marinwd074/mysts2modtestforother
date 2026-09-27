@@ -115,7 +115,8 @@ internal sealed class CombatTransitionMemo
         PlanAction action,
         string policyIdentity,
         string parentStateText,
-        SimulationSnapshot output)
+        SimulationSnapshot output,
+        bool transitionIsPure)
     {
         if (!R0TransitionActionKey.TryCreate(action, out R0TransitionActionKey actionKey)
             || !IsSafeTerminalOutput(output))
@@ -142,7 +143,9 @@ internal sealed class CombatTransitionMemo
             }
             if (!_entries.ContainsKey(key))
                 _entries.Add(key, bucket);
-            bucket.Add(new Entry(parentStateText, output.CloneValueOnlyForTransitionMemo()));
+            bucket.Add(new Entry(
+                parentStateText,
+                output.CloneValueOnlyForTransitionMemo(transitionIsPure)));
             _entryCount++;
         }
     }
