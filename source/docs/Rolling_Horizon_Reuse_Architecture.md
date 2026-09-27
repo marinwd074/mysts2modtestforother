@@ -209,6 +209,8 @@ GPU、学习型价值网络和 MCTS 可作为以后独立实验：现有 C# 规�
 - **D3.4 shadow 已落地**：对 R1 probe 与 baseline 的 plain `PruneFinal` retained frontier 做 exact ordered 语义签名对照；不恢复 SearchNode、不跳过展开、不影响 Beam。签名严格包含路径与父链 retention 语义，复杂 Cycle/CrossTurn/OrderedMutation frontier 直接跳过。真实 fresh re-root 出现 exact frontier hit 后，D3.5 才允许尝试恢复 frontier 来减少 expanded nodes。
 - **D3.4B 已落地**：对 exact frontier key miss 做 turn / actionCount / nodeCount 三层互斥分类，并记录最近 R1 probe key；仍为 `behavioral_reuse=false`。只有分类证据证明 frontier 差异可安全收敛后才设计 D3.5，禁止为了命中率直接放宽等价性。
 
+- **D3.4C 已落地**：整 frontier key 不重合后，改测同 `turn + actionCount` 的 exact retained-node 集合交集；记录 R1 是否为 baseline 的稳定子集。当前仍 `behavioral_reuse=false`，不恢复节点、不减少展开。D3.5 的候选设计由该证据决定，优先考虑 exact 子集/子树恢复，而非整 frontier 替换。
+
 建议实施顺序 A → B → C → D → E → F → G → H；先收获正确的短期评价和同战斗复用，再投入昂贵持久化。R2 依赖闭包复用是 D 后的可选独立阶段，未证明可靠时不影响主线交付。
 
 给 GPT 的通用任务模板：

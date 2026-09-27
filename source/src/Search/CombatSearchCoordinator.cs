@@ -801,7 +801,22 @@ internal static partial class CombatSearchCoordinator
                     $"validated_hits={frontierShadow.ValidatedHits} " +
                     $"signature_mismatches={frontierShadow.SignatureMismatches} " +
                     $"skipped_frontiers={frontierShadow.SkippedFrontiers} " +
+                    $"subset_observations={frontierShadow.SubsetObservations} " +
+                    $"probe_subset_hits={frontierShadow.ProbeSubsetHits} " +
+                    $"exact_set_hits={frontierShadow.ExactSetHits} " +
+                    $"partial_overlap_hits={frontierShadow.PartialOverlapHits} " +
+                    $"zero_overlap_hits={frontierShadow.ZeroOverlapHits} " +
                     $"behavioral_reuse=false");
+                foreach (R1FrontierSubsetSample subset in frontierShadow.SubsetSamples)
+                {
+                    policy.Diagnostics.Info(
+                        $"[CombatSolver/Test] R1_FRONTIER_SUBSET " +
+                        $"turn={subset.Depth.Turn} action_count={subset.Depth.ActionCount} " +
+                        $"probe_nodes={subset.ProbeNodes} baseline_nodes={subset.BaselineNodes} " +
+                        $"intersection_nodes={subset.IntersectionNodes} " +
+                        $"probe_subset={subset.ProbeSubsetOfBaseline.ToString().ToLowerInvariant()} " +
+                        $"exact_set={subset.ExactSetMatch.ToString().ToLowerInvariant()}");
+                }
                 foreach (R1FrontierMissSample miss in frontierShadow.MissSamples)
                 {
                     string missKind = miss.Kind switch

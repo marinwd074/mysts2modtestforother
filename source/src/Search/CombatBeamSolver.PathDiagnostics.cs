@@ -533,17 +533,43 @@ internal sealed partial class CombatBeamSolver
             }
         }
 
-        if (!_continuationSeedProbe && !cache.TryBeginBaselineObservation(key))
+        R1FrontierDepthKey depth = new(first.Turn, first.ActionCount);
+        bool exactRequested = _continuationSeedProbe
+            || cache.TryBeginBaselineObservation(key);
+        bool subsetRequested = _continuationSeedProbe
+            || cache.WantsSubsetObservation(depth);
+        if (!exactRequested && !subsetRequested)
             return;
 
-        System.Text.StringBuilder signature = new(nodes.Count * 192);
-        signature.Append("frontier-v1|");
+        IReadOnlyList<StateFingerprint> nodeFingerprints = subsetRequested
+            ? CaptureFrontierNodeFingerprints(nodes)
+            : [];
+        if (_continuationSeedProbe)
+        {
+            System.Text.StringBuilder signature = new(nodes.Count * 192);
+            signature.Append("frontier-v1|");
+            foreach (SearchNode node in nodes)
+            {
+                AppendFrontierNodeSignature(signature, node);
+                signature.Append("||");
+            }
+            cache.StoreProbe(key, signature.ToString(), nodeFingerprints);
+            return;
+        }
+
+        if (subsetRequested)
+            cache.ObserveSubset(depth, nodeFingerprints);
+        if (!exactRequested)
+            return;
+
+        System.Text.StringBuilder exactSignature = new(nodes.Count * 192);
+        exactSignature.Append("frontier-v1|");
         foreach (SearchNode node in nodes)
         {
-            AppendFrontierNodeSignature(signature, node);
-            signature.Append("||");
+            AppendFrontierNodeSignature(exactSignature, node);
+            exactSignature.Append("||");
         }
-        cache.Observe(key, signature.ToString(), _continuationSeedProbe);
+        cache.ValidateExact(key, exactSignature.ToString());
     }
 
     private static bool CanObservePlainR1FrontierNode(SearchNode node)
@@ -573,6 +599,21 @@ internal sealed partial class CombatBeamSolver
             && !node.HasPredictionRisk
             && !node.Snapshot.HasRisk
             && node.Snapshot.PredictionGaps.All(static gap => gap.Compensated);
+
+    private static IReadOnlyList<StateFingerprint> CaptureFrontierNodeFingerprints(
+        IReadOnlyList<SearchNode> nodes)
+    {
+        StateFingerprint[] fingerprints = new StateFingerprint[nodes.Count];
+        for (int index = 0; index < nodes.Count; index++)
+        {
+            System.Text.StringBuilder builder = new(192);
+            AppendFrontierNodeSignature(builder, nodes[index]);
+            StateFingerprintBuilder fingerprint = new();
+            fingerprint.Add(builder.ToString());
+            fingerprints[index] = fingerprint.Finish();
+        }
+        return fingerprints;
+    }
 
     private static void AppendFrontierNodeSignature(
         System.Text.StringBuilder builder,
