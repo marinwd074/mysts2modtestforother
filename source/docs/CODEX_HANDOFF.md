@@ -27,7 +27,10 @@
 - Phase C pinned 0.107.1 定向验收 run `36296652325` 通过：CombatSolver Release 与 pinned harness 均 0 warning / 0 error；terminal memo 为 `entries=1 hits=1`，cache on/off StateKey 一致，dynamics/policy/Choice 变化均拒绝；nonterminal shadow 为 `entries=1 validated_hits=1 collision=0 mismatch=0`，cache-off StateKey 一致。兼容静态门禁漏登记 `CombatBeamSolver.R0TransitionMemo.cs` 已补齐，run `36296743107` 通过。
 - 阶段 C 的 shadow telemetry 已接入搜索结果与问题包诊断：独立记录 observations/stores/validated hits/collision rejects/output mismatches/dropped stores，并记录 validation 开销与“若未来允许命中可省掉的真实 replay 时间”。这些指标也进入 OfflineSearchHarness fixed-work metrics；不混入真正的 `TransitionCacheHits`。
 - telemetry 定向验收 commit `a3be9c42`：compatibility run `36297242489` PASS，Phase C run `36297242539` PASS；Release 与 pinned harness 均通过。重复非终局 Bash 得到 `ShadowSolverObservations=1`、`ShadowSolverValidatedHits=1`、0 collision、0 mismatch，并确认 validation cost / potential-saved cost 均有记录。
-- 阶段 C 下一小步仍不直接开启非终局命中：先做**完整搜索级跨请求 fixed-work A/B**，让同一 combat/root 连续两次求解共享 shadow cache，量化重复转移比例、0-mismatch 稳定性及潜在节省时间；之后再用真实多人问题包补运行时证据。只有持续 0 mismatch 且收益足够，才设计不持有 live simulator/GameObject 的纯值恢复格式。
+- 阶段 C 完整搜索级跨请求 fixed-work A/B 已通过（run `36298685076`）。同一 combat/root 的 cache-off、warm、repeated 三次完整搜索均保持 `SameRoute=true`、`SameQuality=true`、`SameFixedWork=true`；三者均为 `306 expanded / 1352 transitions`。warm 写入 770 个非终局 shadow entry；repeated 得到 `770/770` validated hit（hit ratio 100%）、0 collision、0 output mismatch、0 dropped store。该样本中 shadow validation 自身约 `58.0932 ms`，对应可避免的重复真实 replay 约 `192.3156 ms`，另有 11 次 terminal R0 真命中。
+- A/B 首次完整 Beam 运行暴露并修复了一个真实 R0 所有权缺口：terminal memo 返回 simulator-free snapshot 后，`BuildCandidate` 原本仍读取 `after.Simulator` 来计算 transition purity。现在 terminal memo 在存储时冻结该 purity 元数据，cache hit 后从 value snapshot 读取，不重新持有/恢复 simulator；parent 侧真实 simulator 仍负责遗物与动作分类。Release/pinned full-search 合同覆盖该路径。
+- Phase C CI 已把 `phaseCFullSearch.Status == PASS` 固化为硬门槛并打印完整 A/B evidence；workflow concurrency group 升级为 `phase-c-validation-v2` 以绕过一次卡住的旧并发槽，仍保持 `cancel-in-progress: true`。
+- 阶段 C 的 pinned 证据已经足够证明“同根跨请求非终局转移高度可复用且当前 key/output 合同稳定”，但**仍不直接开启非终局真实命中**。下一小步是用当前诊断字段收集真实多人问题包的 `shadow_replay_*` 运行时分布，确认实际 replan/root drift 下命中率与 mismatch；只有真实运行也持续 0 mismatch 且收益显著，才设计不持有 live simulator/GameObject 的非终局纯值恢复格式。
 
 ## 当前多人架构
 
