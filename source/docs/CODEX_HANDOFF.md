@@ -22,7 +22,10 @@
 - 阶段 A **不修改搜索结果、预算、排序、并发或 Safe Execute 行为**，因此以现有诊断/合同作为基线闭合，不重复实现。
 - 阶段 B“延迟影响合同”已完成：新增 `DeferredImpactCoverage` / `DeferredImpactOutcome` 旁路元数据，并挂到已有 `TurnOutcome` 与 Smart Block Potion 确定性重放路径；覆盖边界明确为 `CurrentTurn`、`NextLocalTurnStart`、`CombatTerminal`、`Incomplete`。该元数据**不进入 Score、Beam retention、FinalOrdering 或执行权限**，真实未来效果仍由模拟器唯一结算，避免重复扣费/重复加收益。
 - 阶段 B pinned 0.107.1 定向验收通过（Actions run `36291423215`）：Release 与 `U0U1PinnedHarness` 均 0 warning / 0 error；Biased Cognition `Focus 4 → 3` 且覆盖从 `CurrentTurn → NextLocalTurnStart`，Outmaneuver 下一回合 Energy `3 → 5` 且覆盖闭合，当前回合 Bash 斩杀为 `CombatTerminal` 且 `ProjectedHp == PlayerHp == 80`。测试中确认 Borrowed Time 在 0.107.1 是**本回合牌费用 +1 的即时负担**，不是下一回合能量债务，因此不再用错误语义作延迟合同样本。
-- 下一阶段为 **C：战斗级 R0 转移缓存**。先审计纯值转移结果的状态所有权、键与失效条件；首版只允许同一战斗内跨请求复用，必须有开/关缓存逐状态一致性对照。
+- 阶段 C“战斗级 R0 转移缓存”已进入受控落地：生产侧已有同战斗共享的 exact terminal R0 memo，只允许普通无 Choice `PlayCard`、无 checkpoint/fork-seed 的安全终局边；命中返回 simulator-free value snapshot，不持有可部署权限。键包含 parent `StateFingerprint`、完整动作身份和 policy/version identity，并用 parent semantic `StateText` 二次校验碰撞。
+- 阶段 C 的非终局普通 `PlayCard` 暂时只启用 **shadow validation**：真实 replay 每次仍执行，`ActionReplayCache` 只记录 exact parent/action/policy 的 immutable output 是否一致，不改变 Score、Beam、预算、路线选择或 Safe Execute。这样先证明可复用性，再决定是否设计非终局纯值 hydration；当前明确禁止直接把 simulator-free snapshot 当作可继续展开节点。
+- Phase C pinned 0.107.1 定向验收 run `36296652325` 通过：CombatSolver Release 与 pinned harness 均 0 warning / 0 error；terminal memo 为 `entries=1 hits=1`，cache on/off StateKey 一致，dynamics/policy/Choice 变化均拒绝；nonterminal shadow 为 `entries=1 validated_hits=1 collision=0 mismatch=0`，cache-off StateKey 一致。兼容静态门禁漏登记 `CombatBeamSolver.R0TransitionMemo.cs` 已补齐，run `36296743107` 通过。
+- 阶段 C 下一小步不是直接开启非终局命中，而是收集 shadow hit/mismatch 与成本证据；只有持续 0 mismatch 且命中收益足够，才设计不持有 live simulator/GameObject 的纯值恢复格式。
 
 ## 当前多人架构
 
