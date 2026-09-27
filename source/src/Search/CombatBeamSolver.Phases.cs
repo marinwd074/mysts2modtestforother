@@ -899,7 +899,7 @@ internal sealed partial class CombatBeamSolver
                 MaxParallelRoundChoiceReplayConcurrency =
                     _run.MaxParallelRoundChoiceReplayConcurrency,
                 NodeLimitSnapshotsReleased = _run.NodeLimitSnapshotsReleased,
-                TransitionCacheHits = 0,
+                TransitionCacheHits = _run.TransitionCacheHits,
                 WorkerAllocatedBytes = workerAllocatedBytes,
                 Gen0Collections = gen0Collections,
                 Gen1Collections = gen1Collections,

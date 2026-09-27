@@ -93,6 +93,8 @@ internal static class Program
             U5Evidence u5 = RunU5(combat, names, damage, captured, profile);
             PhaseBEvidence phaseB = RunDeferredImpactContract(
                 combat, names, damage, captured, profile);
+            PhaseCEvidence phaseC = RunR0TransitionMemoContract(
+                combat, names, captured, profile);
 
             var evidence = new
             {
@@ -115,6 +117,7 @@ internal static class Program
                 u1,
                 u5,
                 phaseB,
+                phaseC,
                 remainingRuntimeSmoke = new[]
                 {
                     "real multiplayer Heavy Blade + native Choice/Brand + following card",
@@ -1294,6 +1297,138 @@ internal static class Program
         }
     }
 
+    private static PhaseCEvidence RunR0TransitionMemoContract(
+        CombatState combat,
+        SolverDisplayNames names,
+        SearchPolicySnapshot captured,
+        SolverSearchProfile profile)
+    {
+        Player player = LocalContext.GetMe(combat)
+            ?? throw new InvalidOperationException("Phase C fixture has no local player.");
+        var enemy = combat.Enemies.Single();
+        int originalEnemyHp = enemy.CurrentHp;
+        try
+        {
+            enemy.SetCurrentHpInternal(7);
+            SetLiveEnergyForU5(player, 3);
+            BattleDamageSnapshot damage = BattleDamageTracker.Observe(combat);
+            CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
+            SearchPolicySnapshot basePolicy = captured with
+            {
+                Profile = profile,
+                RoutePolicy = SearchRoutePolicy.SinglePlayerFullRoute,
+                CurrentTurnOnly = false,
+                UseMultiplayerTeamObjective = false,
+                DetailedDiagnostics = false,
+                VerifyIncrementalSearch = false,
+                FixedBudget = true,
+                MaxDegreeOfParallelism = 1,
+                BudgetOverrideMilliseconds = null,
+                UseNoveltyPortfolio = false,
+                NoveltySearch = null,
+                UseBeamWidthPortfolio = false,
+                BeamWidthPortfolioWidths = null,
+                Interaction = null,
+                RequestWorkTotals = new SearchRequestWorkTotals(),
+                R0TransitionMemo = null,
+                R0TransitionPolicyIdentity = string.Empty,
+            };
+            string policyIdentity = CombatTransitionMemo.CapturePolicyIdentity(basePolicy);
+            CombatTransitionMemo memo = new();
+            memo.BindCombat(root.ContinuationStamp.CombatIdentity);
+            SearchPolicySnapshot memoPolicy = basePolicy with
+            {
+                R0TransitionMemo = memo,
+                R0TransitionPolicyIdentity = policyIdentity,
+            };
+
+            uint targetCombatId = enemy.CombatId
+                ?? throw new InvalidOperationException("Phase C enemy has no CombatId.");
+            PlanAction bash = new(
+                PlanActionKind.PlayCard,
+                root.StartTurnNumber,
+                CardId: "BASH",
+                CardOccurrence: 0,
+                TargetIndex: 0,
+                TargetCombatId: targetCombatId,
+                CardTitle: "Bash");
+
+            CombatBeamSolver first = new(root, names, damage, memoPolicy, searchProfile: profile);
+            SimulationSnapshot parent = first.ReplayDiagnosticPrefix([]);
+            StateFingerprint parentKey = parent.StateKey;
+            parent.ReleaseSimulator();
+
+            SimulationSnapshot fresh = first.ReplayDiagnosticActionWithR0Memo(bash);
+            CombatBeamSolver second = new(root, names, damage, memoPolicy, searchProfile: profile);
+            SimulationSnapshot cached = second.ReplayDiagnosticActionWithR0Memo(bash);
+            CombatBeamSolver cacheOff = new(root, names, damage, basePolicy, searchProfile: profile);
+            SimulationSnapshot uncached = cacheOff.ReplayDiagnosticActionWithR0Memo(bash);
+            try
+            {
+                Require(fresh.AllEnemiesDead && cached.AllEnemiesDead && uncached.AllEnemiesDead,
+                    "Phase C terminal fixture did not remain terminal across cache modes.");
+                Require(
+                    fresh.StateKey == cached.StateKey
+                        && fresh.StateKey == uncached.StateKey
+                        && fresh.Score == cached.Score
+                        && fresh.Score == uncached.Score
+                        && DeferredImpactOutcome.Capture(fresh) == DeferredImpactOutcome.Capture(cached)
+                        && DeferredImpactOutcome.Capture(fresh) == DeferredImpactOutcome.Capture(uncached),
+                    "Phase C cache on/off output state or evaluation differs.");
+                Require(fresh.HasSimulator && !cached.HasSimulator && uncached.HasSimulator,
+                    "Phase C hit did not use the simulator-free value snapshot boundary.");
+                Require(second.R0TransitionCacheHitsForTesting == 1 && memo.Hits == 1,
+                    $"Phase C exact reuse did not register one hit: solver={second.R0TransitionCacheHitsForTesting} memo={memo.Hits}.");
+                Require(memo.ContainsIndexForTesting(parentKey, bash, policyIdentity),
+                    "Phase C exact parent/action/policy index was not stored.");
+
+                StateFingerprint changedDynamicsKey = new(parentKey.First ^ 1UL, parentKey.Second);
+                Require(!memo.ContainsIndexForTesting(changedDynamicsKey, bash, policyIdentity),
+                    "Phase C changed dynamics fingerprint produced a false R0 hit.");
+                Require(!memo.ContainsIndexForTesting(parentKey, bash, policyIdentity + "-other"),
+                    "Phase C policy/version namespace change produced a false R0 hit.");
+
+                PlanAction choiceAction = bash with
+                {
+                    Choice = new PlanCardChoice(
+                        PlanChoiceEffect.MoveToHand,
+                        PileType.Draw,
+                        []),
+                };
+                Require(!CombatTransitionMemo.IsActionEligibleForTesting(choiceAction),
+                    "Phase C choice-bearing action entered the exact terminal memo.");
+                Require(
+                    !memo.TryReadTerminal(
+                        parentKey, bash, policyIdentity, "semantic-collision-fixture", out _)
+                    && memo.CollisionRejects == 1,
+                    "Phase C fingerprint collision verifier did not fail closed.");
+
+                return new PhaseCEvidence(
+                    "PASS",
+                    "pinned_exact_terminal_r0_cross_solver",
+                    memo.EntryCount,
+                    memo.Hits,
+                    memo.CollisionRejects,
+                    cached.HasSimulator,
+                    fresh.StateKey == cached.StateKey,
+                    fresh.StateKey == uncached.StateKey,
+                    !memo.ContainsIndexForTesting(changedDynamicsKey, bash, policyIdentity),
+                    !memo.ContainsIndexForTesting(parentKey, bash, policyIdentity + "-other"),
+                    !CombatTransitionMemo.IsActionEligibleForTesting(choiceAction));
+            }
+            finally
+            {
+                fresh.ReleaseSimulator();
+                cached.ReleaseSimulator();
+                uncached.ReleaseSimulator();
+            }
+        }
+        finally
+        {
+            enemy.SetCurrentHpInternal(originalEnemyHp);
+        }
+    }
+
     private static SimulationSnapshot ReplayPhaseB(
         CombatRootSnapshot root,
         SolverDisplayNames names,
@@ -1469,6 +1604,19 @@ internal static class Program
         int SelectionDiagnosticLines,
         IReadOnlyDictionary<string, int> PathStages,
         string NoTeammateReplayFingerprint);
+
+    internal sealed record PhaseCEvidence(
+        string Status,
+        string EvidenceLevel,
+        int Entries,
+        int Hits,
+        int CollisionRejects,
+        bool CachedHasSimulator,
+        bool StateKeyEqual,
+        bool CacheOffStateKeyEqual,
+        bool DynamicsChangeRejected,
+        bool PolicyChangeRejected,
+        bool ChoiceRejected);
 
     internal sealed record PhaseBEvidence(
         string Status,

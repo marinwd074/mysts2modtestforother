@@ -54,6 +54,22 @@ internal sealed partial class CombatBeamSolver
 
     // The diagnostic caller owns the returned snapshot and releases it after freezing evidence.
     internal SimulationSnapshot ReplayDiagnosticPrefix(IReadOnlyList<PlanAction> actions) => Replay(actions);
+
+    internal SimulationSnapshot ReplayDiagnosticActionWithR0Memo(PlanAction action)
+    {
+        SimulationSnapshot rootSnapshot = Replay([]);
+        SearchNode parent = new(
+            null, 0, rootSnapshot.PotionUseCount, rootSnapshot.PotionStrategicCost,
+            rootSnapshot.Turn, SearchRouteTraits.None, 0, rootSnapshot.Score,
+            rootSnapshot.StateKey, rootSnapshot.HasRisk, rootSnapshot.BoundaryReason,
+            rootSnapshot.PlayerDead || rootSnapshot.AllEnemiesDead, null, rootSnapshot,
+            CombatProgressState.Capture(rootSnapshot));
+        try { return ReplayAction(parent, action); }
+        finally { rootSnapshot.ReleaseSimulator(); }
+    }
+
+    internal int R0TransitionCacheHitsForTesting => _run.TransitionCacheHits;
+
     internal ContinuationStamp CaptureDiagnosticContinuation(SimulationSnapshot snapshot)
         => ContinuationStamp.CapturePredicted(_player, snapshot.Simulator, snapshot.Turn, _forecast, _startTurnNumber);
 

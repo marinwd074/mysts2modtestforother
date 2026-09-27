@@ -1514,6 +1514,19 @@ internal sealed class SimulationSnapshot(
 
     public bool HasSimulator => _simulator != null;
 
+    /// <summary>
+    /// Copy frozen search values while dropping simulator ownership. The referenced collections
+    /// contain primitive/value snapshot data and remain read-only through this type.
+    /// </summary>
+    internal SimulationSnapshot CloneValueOnlyForTransitionMemo()
+    {
+        SimulationSnapshot clone = (SimulationSnapshot)MemberwiseClone();
+        clone._simulator = null;
+        clone._releasedBy = nameof(CloneValueOnlyForTransitionMemo);
+        clone._releasedAtLine = 0;
+        return clone;
+    }
+
     public void SetContinuation(ContinuationStamp continuation)
     {
         Continuation = continuation;

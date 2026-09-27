@@ -709,11 +709,14 @@ internal sealed partial class CombatBeamSolver
             choiceSpec,
             semanticBranchCount);
 
-        SimulatedCombatState probeCombat =
-            (SimulatedCombatState)probeSnapshot.Simulator.State.CombatState;
-        bool unregisteredPendingChoice = probeSnapshot.BoundaryReason == SearchBoundaryReason.PendingChoice
-            && probeCombat.PendingTurnStartChoice == null
-            && probeCombat.PendingKnowledgeDemonChoice == null;
+        bool unregisteredPendingChoice = false;
+        if (probeSnapshot.BoundaryReason == SearchBoundaryReason.PendingChoice)
+        {
+            SimulatedCombatState probeCombat =
+                (SimulatedCombatState)probeSnapshot.Simulator.State.CombatState;
+            unregisteredPendingChoice = probeCombat.PendingTurnStartChoice == null
+                && probeCombat.PendingKnowledgeDemonChoice == null;
+        }
         return new PrimaryCardChoiceLayer(
             choices,
             unregisteredPendingChoice,
@@ -1280,6 +1283,14 @@ internal sealed partial class CombatBeamSolver
 
     private CardChoiceSpec? BuildPrimaryCardChoiceSpec(SimulationSnapshot probeSnapshot)
     {
+        if (!probeSnapshot.HasSimulator)
+        {
+            if (probeSnapshot.BoundaryReason == SearchBoundaryReason.None
+                && (probeSnapshot.PlayerDead || probeSnapshot.AllEnemiesDead))
+                return null;
+            throw new InvalidOperationException(
+                "只有无选择的终局 R0 转移可以在无模拟器快照上解析主选择。");
+        }
         CombatPredictionSimulator probeSimulator =
             (CombatPredictionSimulator)probeSnapshot.Simulator;
         SimulatedCombatState probeCombat =
@@ -2740,6 +2751,16 @@ internal sealed partial class CombatBeamSolver
         RoundReplayCheckpointCapture? roundCheckpointCapture = null,
         CardChoiceReplayCapture? cardChoiceCapture = null)
     {
+        bool r0MemoEligible = CanUseR0TransitionMemoForReplay(
+            action, replayForkSeed, roundCheckpointCapture, cardChoiceCapture);
+        if (r0MemoEligible
+            && TryReadR0TerminalTransition(parent, action, out SimulationSnapshot cachedTerminal))
+        {
+            _run.TransitionCount++;
+            _run.TransitionCacheHits++;
+            return cachedTerminal;
+        }
+
         if (replayForkSeed != null && policy.VerifyIncrementalSearch)
             throw new InvalidOperationException("严格增量回放不能消费并行 Fork seed。");
         ExecutionChoiceReplayCheckpoint? executionCheckpoint = _executionChoiceReplayCheckpoint?.Matches(parent, action) == true
@@ -2753,6 +2774,7 @@ internal sealed partial class CombatBeamSolver
             ? _cardChoiceReplayCheckpoint : null;
         RoundReplayCheckpoint? roundCheckpoint = !policy.VerifyIncrementalSearch
             && _roundReplayCheckpoint?.Matches(parent, action) == true ? _roundReplayCheckpoint : null;
+        SimulationSnapshot result;
         try
         {
             if (executionCheckpoint != null)
@@ -2784,12 +2806,10 @@ internal sealed partial class CombatBeamSolver
             }
             else if (replayForkSeed == null && _parallelActionReplayForkGate != null)
             {
-                gatedSeed = PrepareReplayForkSeed(
-                    parent.Snapshot,
-                    _parallelActionReplayForkGate);
+                gatedSeed = PrepareReplayForkSeed(parent.Snapshot, _parallelActionReplayForkGate);
                 replayForkSeed = gatedSeed;
             }
-            return SearchTransitionGuard.Execute(
+            result = SearchTransitionGuard.Execute(
                 action,
                 parent.StateKey,
                 parent.ActionCount,
@@ -2801,16 +2821,16 @@ internal sealed partial class CombatBeamSolver
                     incremental = executionCheckpoint != null
                     ? ResumeExecutionChoice(executionCheckpoint, parent, action)
                     : Replay(
-                    [action],
-                    parent.Snapshot,
-                    parent.Turn,
-                    parent.ActionCount,
-                    replayForkSeed: replayForkSeed,
-                    roundCheckpoint: roundCheckpoint,
-                    roundCheckpointCapture: roundCheckpointCapture,
-                    cardChoiceCapture: cardChoiceCapture,
-                    cardChoiceFrame: cardChoiceFrame,
-                    potionChoiceFrame: potionChoiceFrame);
+                        [action],
+                        parent.Snapshot,
+                        parent.Turn,
+                        parent.ActionCount,
+                        replayForkSeed: replayForkSeed,
+                        roundCheckpoint: roundCheckpoint,
+                        roundCheckpointCapture: roundCheckpointCapture,
+                        cardChoiceCapture: cardChoiceCapture,
+                        cardChoiceFrame: cardChoiceFrame,
+                        potionChoiceFrame: potionChoiceFrame);
                 }
                 catch (InvalidPlannedChoiceBranchException error) when (_verifyChoiceContinuationStepsForTesting
                     && (executionCheckpoint != null || cardCheckpoint != null || potionCheckpoint != null))
@@ -2837,33 +2857,32 @@ internal sealed partial class CombatBeamSolver
                         fullActions,
                         fullReplayRoot,
                         _startTurnNumber,
-                        priorActionCount: 0, allowExecutionCapture: false);
+                        priorActionCount: 0,
+                        allowExecutionCapture: false);
                 }
                 finally
                 {
                     fullReplayRoot?.ReleaseSimulator();
                 }
-                try
-                {
-                    AssertIncrementalEquivalent(action, fullActions, incremental, replayed);
-                }
-                finally
-                {
-                    replayed.ReleaseSimulator();
-                }
+                try { AssertIncrementalEquivalent(action, fullActions, incremental, replayed); }
+                finally { replayed.ReleaseSimulator(); }
                 return incremental;
             });
         }
         catch (SearchTransitionException error)
         {
-            SearchReplayEvidence.PublishCandidateFailure(policy.Diagnostics, parent,
-                "action_replay:" + error.Message, action);
+            SearchReplayEvidence.PublishCandidateFailure(
+                policy.Diagnostics, parent, "action_replay:" + error.Message, action);
             throw;
         }
         finally
         {
             gatedSeed?.Dispose();
         }
+
+        if (r0MemoEligible)
+            StoreR0TerminalTransition(parent, action, result);
+        return result;
     }
 
     private SimulationSnapshot? ReplayPlannedChoiceBranch(

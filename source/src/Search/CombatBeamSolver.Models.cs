@@ -194,6 +194,7 @@ internal sealed partial class CombatBeamSolver
         public bool HasObservedPostDrawRoundChoice;
         public HashSet<string>? ObservedHandDrawShuffleChoiceSources;
         public int TransitionCount;
+        public int TransitionCacheHits;
         public int ReusedNodeSnapshots;
         public int TranspositionBranchesPruned;
         public int RepeatableNoProgressBranchesPruned;

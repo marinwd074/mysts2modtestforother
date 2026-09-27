@@ -159,6 +159,7 @@ internal sealed class SolverCombatSession
     public long? LastPlanRefreshDecisionTimestampMilliseconds { get; set; }
     public long LatestRouteVersion { get; set; }
     public CombatBugReportIssueLedger BugReportIssues { get; } = new();
+    public CombatTransitionMemo TransitionMemo { get; } = new();
 }
 
 internal sealed class SolverSearchSession(

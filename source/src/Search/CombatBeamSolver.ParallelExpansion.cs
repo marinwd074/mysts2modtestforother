@@ -1099,6 +1099,7 @@ internal sealed partial class CombatBeamSolver
         _run.PotionChoicePrefixReuses += source.PotionChoicePrefixReuses;
         _run.PotionChoicePrefixFallbacks += source.PotionChoicePrefixFallbacks;
         _run.TransitionCount += source.TransitionCount;
+        _run.TransitionCacheHits += source.TransitionCacheHits;
         _run.RepeatableNoProgressBranchesPruned +=
             source.RepeatableNoProgressBranchesPruned;
         _run.CycleShapesDetected += source.CycleShapesDetected;
@@ -1144,6 +1145,7 @@ internal sealed partial class CombatBeamSolver
         source.PotionChoicePrefixReuses = 0;
         source.PotionChoicePrefixFallbacks = 0;
         source.TransitionCount = 0;
+        source.TransitionCacheHits = 0;
         source.RepeatableNoProgressBranchesPruned = 0;
         source.CycleShapesDetected = 0;
         source.CycleProbeContinuationsExpanded = 0;
