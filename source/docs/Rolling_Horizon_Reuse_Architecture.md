@@ -206,6 +206,7 @@ GPU、学习型价值网络和 MCTS 可作为以后独立实验：现有 C# 规�
 - **D3.2 已落地**：只对 Beam retention 的纯 `BeamRankScore` 做 request-local 首验后复用。第一次 baseline 命中仍现算并精确比对；同 key 后续调用才复用。任一冲突或 mismatch 立即关闭该请求的复用。真实 replay、state capture/fingerprint、候选集合和搜索预算均保持原路径。
 
 - **D3.3 已落地**：R1 probe 最多保留 32 个 request-local exact 非终局普通 PlayCard 后态。baseline 首次相同 parent/action 仍真实 replay 并核对完整输出语义，后续重复 key 才可直接 fork 后态并重新 Snapshot/evaluate；冲突或 mismatch fail-closed。缓存只活到 baseline 结束，不进入 refinement/supplemental，不改变 Beam/节点/时间预算。
+- **D3.4 shadow 已落地**：对 R1 probe 与 baseline 的 plain `PruneFinal` retained frontier 做 exact ordered 语义签名对照；不恢复 SearchNode、不跳过展开、不影响 Beam。签名严格包含路径与父链 retention 语义，复杂 Cycle/CrossTurn/OrderedMutation frontier 直接跳过。真实 fresh re-root 出现 exact frontier hit 后，D3.5 才允许尝试恢复 frontier 来减少 expanded nodes。
 
 建议实施顺序 A → B → C → D → E → F → G → H；先收获正确的短期评价和同战斗复用，再投入昂贵持久化。R2 依赖闭包复用是 D 后的可选独立阶段，未证明可靠时不影响主线交付。
 

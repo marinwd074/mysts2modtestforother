@@ -145,6 +145,10 @@ internal sealed record SearchPolicySnapshot(
     // Snapshot/evaluation, transposition, retention and deployment checks still rerun.
     public R1TransitionHydrationCache? R1TransitionHydrationCache { get; init; }
 
+    // Phase D3.4: shadow-only comparison of plain retained frontiers produced by the R1 probe
+    // and the ordinary baseline. It never supplies nodes, simulators, pruning decisions or ordering.
+    public R1FrontierShadowCache? R1FrontierShadowCache { get; init; }
+
     // Production multiplayer shadow validation shares one atomic request budget across
     // portfolio members and all parallel lanes. Null means no production sampling.
     public ShadowReplaySamplingBudget? ShadowReplaySamplingBudget { get; init; }

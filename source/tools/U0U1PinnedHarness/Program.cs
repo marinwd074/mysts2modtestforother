@@ -63,6 +63,9 @@ internal static class Program
             Require(
                 R1TransitionHydrationCache.VerifyExactReuseGateForTesting(),
                 "R1 transition hydration requires first exact replay validation and disables reuse on mismatch.");
+            Require(
+                R1FrontierShadowCache.VerifyShadowGateForTesting(),
+                "R1 frontier shadow distinguishes exact retained-frontier matches, mismatches and missing depth keys.");
             ValidateRenderedCurrentTurnTakeoverContract();
 
             HarnessScenario scenario = new(
