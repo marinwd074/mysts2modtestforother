@@ -31,7 +31,10 @@
 - A/B 首次完整 Beam 运行暴露并修复了一个真实 R0 所有权缺口：terminal memo 返回 simulator-free snapshot 后，`BuildCandidate` 原本仍读取 `after.Simulator` 来计算 transition purity。现在 terminal memo 在存储时冻结该 purity 元数据，cache hit 后从 value snapshot 读取，不重新持有/恢复 simulator；parent 侧真实 simulator 仍负责遗物与动作分类。Release/pinned full-search 合同覆盖该路径。
 - Phase C CI 已把 `phaseCFullSearch.Status == PASS` 固化为硬门槛并打印完整 A/B evidence；workflow concurrency group 升级为 `phase-c-validation-v2` 以绕过一次卡住的旧并发槽，仍保持 `cancel-in-progress: true`。
 - 阶段 C 的 pinned 证据已经足够证明“同根跨请求非终局转移高度可复用且当前 key/output 合同稳定”，但**仍不直接开启非终局真实命中**。下一小步是用当前诊断字段收集真实多人问题包的 `shadow_replay_*` 运行时分布，确认实际 replan/root drift 下命中率与 mismatch；只有真实运行也持续 0 mismatch 且收益显著，才设计不持有 live simulator/GameObject 的非终局纯值恢复格式。
-- 为该实机门槛新增 `source/tools/analyze-phase-c-shadow.ps1`：可直接输入问题包 zip、目录或单日志，汇总 SEARCH_PHASE 中的 observations / validated hits / mismatch / collision / terminal hits / validation ms / potential saved ms，并计算总体 hit ratio 与 potential net saved ms。该脚本只分析证据，不影响游戏运行。
+- 为该实机门槛新增 `source/tools/analyze-phase-c-shadow.ps1`：可直接输入问题包 zip、目录或单日志，汇总 RESULT 中的 observations / validated hits / mismatch / collision / terminal hits / validation ms / potential saved ms，并计算总体 hit ratio 与 potential net saved ms。该脚本只分析证据，不影响游戏运行。
+- 首个真实多人问题包 `CombatSolver-0.40.2-MECHA_KNIGHT_ELITE-f97d6310af4143d6ade754b6f1d7c727.zip` 已核对：telemetry 字段存在，首轮正式搜索为 `6083 expanded / 32762 transitions`，后续有一次 route reuse；但两条 RESULT 都是 `shadow_replay_observations=0`。原因不是旧 DLL，而是生产搜索当时仍要求 `DetailedDiagnostics` 才执行 shadow validation。
+- commit `74876505` 已改为**多人生产轻量采样**：实际 multiplayer root（`playerCount > 1`）即使关闭 DetailedDiagnostics，也会对普通安全非终局 R0 转移做最多 64 个 observation/搜索；单人生产搜索不启用该额外采样，DetailedDiagnostics 仍可全量观测。达到上限后停止额外 validation，并在 RESULT 输出 `shadow_replay_sample_limit=64` 与 `shadow_replay_sample_capped`。同时修正分析脚本原先错误寻找 SEARCH_PHASE 的问题，改为读取实际承载 telemetry 的 RESULT 行。
+- 轻量采样验证：compatibility run `36300466197` PASS；Phase C run `36300466192` PASS。下一步只需要用包含 `74876505` 或更新 HEAD 的构建再打一局多人战斗并导出问题包，观察真实 replan/root drift 下 sampled hit ratio 与 mismatch；仍未开启非终局真实缓存命中。
 
 ## 当前多人架构
 
