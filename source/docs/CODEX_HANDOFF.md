@@ -31,6 +31,7 @@
 - A/B 首次完整 Beam 运行暴露并修复了一个真实 R0 所有权缺口：terminal memo 返回 simulator-free snapshot 后，`BuildCandidate` 原本仍读取 `after.Simulator` 来计算 transition purity。现在 terminal memo 在存储时冻结该 purity 元数据，cache hit 后从 value snapshot 读取，不重新持有/恢复 simulator；parent 侧真实 simulator 仍负责遗物与动作分类。Release/pinned full-search 合同覆盖该路径。
 - Phase C CI 已把 `phaseCFullSearch.Status == PASS` 固化为硬门槛并打印完整 A/B evidence；workflow concurrency group 升级为 `phase-c-validation-v2` 以绕过一次卡住的旧并发槽，仍保持 `cancel-in-progress: true`。
 - 阶段 C 的 pinned 证据已经足够证明“同根跨请求非终局转移高度可复用且当前 key/output 合同稳定”，但**仍不直接开启非终局真实命中**。下一小步是用当前诊断字段收集真实多人问题包的 `shadow_replay_*` 运行时分布，确认实际 replan/root drift 下命中率与 mismatch；只有真实运行也持续 0 mismatch 且收益显著，才设计不持有 live simulator/GameObject 的非终局纯值恢复格式。
+- 为该实机门槛新增 `source/tools/analyze-phase-c-shadow.ps1`：可直接输入问题包 zip、目录或单日志，汇总 SEARCH_PHASE 中的 observations / validated hits / mismatch / collision / terminal hits / validation ms / potential saved ms，并计算总体 hit ratio 与 potential net saved ms。该脚本只分析证据，不影响游戏运行。
 
 ## 当前多人架构
 
