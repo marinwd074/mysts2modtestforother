@@ -1514,14 +1514,20 @@ internal sealed class SimulationSnapshot(
 
     public bool HasSimulator => _simulator != null;
 
+    // Frozen only for simulator-free terminal transition memo snapshots. Ordinary live snapshots
+    // leave this null so consumers cannot accidentally treat a guessed value as authoritative.
+    internal bool? CachedTransitionIsPure { get; private set; }
+
     /// <summary>
     /// Copy frozen search values while dropping simulator ownership. The referenced collections
     /// contain primitive/value snapshot data and remain read-only through this type.
     /// </summary>
-    internal SimulationSnapshot CloneValueOnlyForTransitionMemo()
+    internal SimulationSnapshot CloneValueOnlyForTransitionMemo(bool? transitionIsPure = null)
     {
         SimulationSnapshot clone = (SimulationSnapshot)MemberwiseClone();
         clone._simulator = null;
+        if (transitionIsPure.HasValue)
+            clone.CachedTransitionIsPure = transitionIsPure.Value;
         clone._releasedBy = nameof(CloneValueOnlyForTransitionMemo);
         clone._releasedAtLine = 0;
         return clone;
