@@ -34,7 +34,11 @@
 - 为该实机门槛新增 `source/tools/analyze-phase-c-shadow.ps1`：可直接输入问题包 zip、目录或单日志，汇总 RESULT 中的 observations / validated hits / mismatch / collision / terminal hits / validation ms / potential saved ms，并计算总体 hit ratio 与 potential net saved ms。该脚本只分析证据，不影响游戏运行。
 - 首个真实多人问题包 `CombatSolver-0.40.2-MECHA_KNIGHT_ELITE-f97d6310af4143d6ade754b6f1d7c727.zip` 已核对：telemetry 字段存在，首轮正式搜索为 `6083 expanded / 32762 transitions`，后续有一次 route reuse；但两条 RESULT 都是 `shadow_replay_observations=0`。原因不是旧 DLL，而是生产搜索当时仍要求 `DetailedDiagnostics` 才执行 shadow validation。
 - commit `74876505` 已改为**多人生产轻量采样**：实际 multiplayer root（`playerCount > 1`）即使关闭 DetailedDiagnostics，也会对普通安全非终局 R0 转移做最多 64 个 observation/搜索；单人生产搜索不启用该额外采样，DetailedDiagnostics 仍可全量观测。达到上限后停止额外 validation，并在 RESULT 输出 `shadow_replay_sample_limit=64` 与 `shadow_replay_sample_capped`。同时修正分析脚本原先错误寻找 SEARCH_PHASE 的问题，改为读取实际承载 telemetry 的 RESULT 行。
-- 轻量采样验证：compatibility run `36300466197` PASS；Phase C run `36300466192` PASS。下一步只需要用包含 `74876505` 或更新 HEAD 的构建再打一局多人战斗并导出问题包，观察真实 replan/root drift 下 sampled hit ratio 与 mismatch；仍未开启非终局真实缓存命中。
+- 轻量采样验证：compatibility run `36300466197` PASS；Phase C run `36300466192` PASS。
+- 第二个真实多人问题包 `CombatSolver-0.40.2-OWL_MAGISTRATE_NORMAL-778725cda178458d9415c46cf6bcbade.zip` 暴露了首版采样实现的两个结构问题：第一次正式结果为 `64 observations / 0 stores / 64 dropped`；第 3 回合 fresh search 则膨胀到 `9178 observations / 0 stores / 9178 dropped`，单 shadow validation 即消耗约 `11443.877 ms`。原因是 64 上限是每个 worker 的本地计数，8-lane 并行与 portfolio member 可各自重复采样；同时同一 battle-scoped cache 被前一个 stale/member 搜索灌满 4096 项，后续全部 dropped。该局仍保持 `0 mismatch / 0 collision`。
+- 同一问题包的路线复用表现良好：`searches=3 reused=3`；第 2 回合允许 remote enemy HP decrease 后 exact continuation，第 4、5 回合 exact state-text continuation；只有第 3 回合因真实 local state mismatch fresh search。replan audit 为 `state_mismatch=1 deployment_drift=0 continuation_missing=0 manual_divergence=0`。
+- commit `8ec1a47f` 将生产 shadow sampling 改成**搜索请求级共享原子预算**：同一个 request 中 Novelty/Beam/所有并行 lane 合计最多 64 次；最终 RESULT 读取共享聚合 telemetry，而非仅选中 solver/member 的局部计数。预算只在实际满足安全非终局 observation 条件时消费，避免 terminal/risk 分支浪费额度。这样一次 stale/member 搜索最多向 battle cache 写 64 条，不再能单请求灌满 4096 项。
+- 请求级预算修复验证：compatibility run `36302333294` PASS；Phase C run `36302333296` PASS（Release、pinned harness、R0/full-search contract 全通过）。下一步需要用包含 `8ec1a47f` 或更新 HEAD 的构建再打一局多人战斗；目标是看到 fresh search 的 `shadow_replay_observations <= 64`、`dropped_stores` 不再因单请求爆仓、并开始出现跨请求 validated hits，同时继续要求 mismatch/collision 为 0。仍未开启非终局真实缓存命中。
 
 ## 当前多人架构
 
