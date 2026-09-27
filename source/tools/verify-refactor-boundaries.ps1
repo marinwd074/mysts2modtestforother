@@ -32,7 +32,7 @@ $searchCompletionContractPath = Join-Path $repositoryRoot 'src/Runtime/Multiplay
 $searchCompletionContractText = [IO.File]::ReadAllText($searchCompletionContractPath)
 foreach ($searchCompletionContractRule in @(
     'if (routeScopedCompletion)',
-    'searchRouteVersion != currentRouteVersion || !localStampMatches',
+    'searchRouteInvalidationVersion != currentRouteInvalidationVersion || !localStampMatches',
     'currentWorldVersion != searchWorldVersion',
     '|| !fullStampMatches')) {
     if (-not $searchCompletionContractText.Contains($searchCompletionContractRule)) {
