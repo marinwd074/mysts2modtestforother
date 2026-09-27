@@ -21,6 +21,33 @@ internal static class ContinuationLifecycleGuard
         return false;
     }
 
+    internal static bool CanReuse(
+        ContinuationStamp expected,
+        ContinuationStamp actual,
+        out string reason)
+    {
+        return CanReuse(
+            expected.CombatIdentity,
+            actual.CombatIdentity,
+            out reason)
+            && CanReuseStateText(expected.StateText, actual.StateText, out reason);
+    }
+
+    private static bool CanReuseStateText(
+        string expectedState,
+        string actualState,
+        out string reason)
+    {
+        if (string.Equals(expectedState, actualState, StringComparison.Ordinal))
+        {
+            reason = "exact_state_match";
+            return true;
+        }
+
+        reason = "state_lifecycle_changed";
+        return false;
+    }
+
     internal static bool ShouldRejectContinuation(
         string expectedLifecycle,
         string actualLifecycle)
