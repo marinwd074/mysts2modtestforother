@@ -133,4 +133,8 @@ internal sealed record SearchPolicySnapshot(
     // Empty by default so production behavior is unchanged until fixed-work A/B accepts it.
     public IReadOnlyList<PlanAction> ContinuationEnumerationHintActions { get; init; } = [];
     public SearchInteractionState? Interaction { get; init; }
+
+    // Null is the exact cache-off A/B path.
+    public CombatTransitionMemo? R0TransitionMemo { get; init; }
+    public string R0TransitionPolicyIdentity { get; init; } = string.Empty;
 }

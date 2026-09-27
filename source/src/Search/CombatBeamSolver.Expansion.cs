@@ -709,11 +709,14 @@ internal sealed partial class CombatBeamSolver
             choiceSpec,
             semanticBranchCount);
 
-        SimulatedCombatState probeCombat =
-            (SimulatedCombatState)probeSnapshot.Simulator.State.CombatState;
-        bool unregisteredPendingChoice = probeSnapshot.BoundaryReason == SearchBoundaryReason.PendingChoice
-            && probeCombat.PendingTurnStartChoice == null
-            && probeCombat.PendingKnowledgeDemonChoice == null;
+        bool unregisteredPendingChoice = false;
+        if (probeSnapshot.BoundaryReason == SearchBoundaryReason.PendingChoice)
+        {
+            SimulatedCombatState probeCombat =
+                (SimulatedCombatState)probeSnapshot.Simulator.State.CombatState;
+            unregisteredPendingChoice = probeCombat.PendingTurnStartChoice == null
+                && probeCombat.PendingKnowledgeDemonChoice == null;
+        }
         return new PrimaryCardChoiceLayer(
             choices,
             unregisteredPendingChoice,
@@ -1280,6 +1283,14 @@ internal sealed partial class CombatBeamSolver
 
     private CardChoiceSpec? BuildPrimaryCardChoiceSpec(SimulationSnapshot probeSnapshot)
     {
+        if (!probeSnapshot.HasSimulator)
+        {
+            if (probeSnapshot.BoundaryReason == SearchBoundaryReason.None
+                && (probeSnapshot.PlayerDead || probeSnapshot.AllEnemiesDead))
+                return null;
+            throw new InvalidOperationException(
+                "只有无选择的终局 R0 转移可以在无模拟器快照上解析主选择。");
+        }
         CombatPredictionSimulator probeSimulator =
             (CombatPredictionSimulator)probeSnapshot.Simulator;
         SimulatedCombatState probeCombat =
@@ -2740,6 +2751,19 @@ internal sealed partial class CombatBeamSolver
         RoundReplayCheckpointCapture? roundCheckpointCapture = null,
         CardChoiceReplayCapture? cardChoiceCapture = null)
     {
+        bool r0MemoEligible = CanUseR0TransitionMemoForReplay(
+            action, replayForkSeed, roundCheckpointCapture, cardChoiceCapture);
+        if (r0MemoEligible
+            && TryReadR0TerminalTransition(parent, action, out SimulationSnapshot cachedTerminal))
+        {
+            _run.TransitionCount++;
+            _run.TransitionCacheHits++;
+            return cachedTerminal;
+        }
+
+        long shadowReplayStartedTicks =
+            r0MemoEligible && policy.DetailedDiagnostics ? Stopwatch.GetTimestamp() : 0;
+
         if (replayForkSeed != null && policy.VerifyIncrementalSearch)
             throw new InvalidOperationException("严格增量回放不能消费并行 Fork seed。");
         ExecutionChoiceReplayCheckpoint? executionCheckpoint = _executionChoiceReplayCheckpoint?.Matches(parent, action) == true
@@ -2753,6 +2777,7 @@ internal sealed partial class CombatBeamSolver
             ? _cardChoiceReplayCheckpoint : null;
         RoundReplayCheckpoint? roundCheckpoint = !policy.VerifyIncrementalSearch
             && _roundReplayCheckpoint?.Matches(parent, action) == true ? _roundReplayCheckpoint : null;
+        SimulationSnapshot result;
         try
         {
             if (executionCheckpoint != null)
@@ -2784,12 +2809,10 @@ internal sealed partial class CombatBeamSolver
             }
             else if (replayForkSeed == null && _parallelActionReplayForkGate != null)
             {
-                gatedSeed = PrepareReplayForkSeed(
-                    parent.Snapshot,
-                    _parallelActionReplayForkGate);
+                gatedSeed = PrepareReplayForkSeed(parent.Snapshot, _parallelActionReplayForkGate);
                 replayForkSeed = gatedSeed;
             }
-            return SearchTransitionGuard.Execute(
+            result = SearchTransitionGuard.Execute(
                 action,
                 parent.StateKey,
                 parent.ActionCount,
@@ -2801,16 +2824,16 @@ internal sealed partial class CombatBeamSolver
                     incremental = executionCheckpoint != null
                     ? ResumeExecutionChoice(executionCheckpoint, parent, action)
                     : Replay(
-                    [action],
-                    parent.Snapshot,
-                    parent.Turn,
-                    parent.ActionCount,
-                    replayForkSeed: replayForkSeed,
-                    roundCheckpoint: roundCheckpoint,
-                    roundCheckpointCapture: roundCheckpointCapture,
-                    cardChoiceCapture: cardChoiceCapture,
-                    cardChoiceFrame: cardChoiceFrame,
-                    potionChoiceFrame: potionChoiceFrame);
+                        [action],
+                        parent.Snapshot,
+                        parent.Turn,
+                        parent.ActionCount,
+                        replayForkSeed: replayForkSeed,
+                        roundCheckpoint: roundCheckpoint,
+                        roundCheckpointCapture: roundCheckpointCapture,
+                        cardChoiceCapture: cardChoiceCapture,
+                        cardChoiceFrame: cardChoiceFrame,
+                        potionChoiceFrame: potionChoiceFrame);
                 }
                 catch (InvalidPlannedChoiceBranchException error) when (_verifyChoiceContinuationStepsForTesting
                     && (executionCheckpoint != null || cardCheckpoint != null || potionCheckpoint != null))
@@ -2837,33 +2860,101 @@ internal sealed partial class CombatBeamSolver
                         fullActions,
                         fullReplayRoot,
                         _startTurnNumber,
-                        priorActionCount: 0, allowExecutionCapture: false);
+                        priorActionCount: 0,
+                        allowExecutionCapture: false);
                 }
                 finally
                 {
                     fullReplayRoot?.ReleaseSimulator();
                 }
-                try
-                {
-                    AssertIncrementalEquivalent(action, fullActions, incremental, replayed);
-                }
-                finally
-                {
-                    replayed.ReleaseSimulator();
-                }
+                try { AssertIncrementalEquivalent(action, fullActions, incremental, replayed); }
+                finally { replayed.ReleaseSimulator(); }
                 return incremental;
             });
         }
         catch (SearchTransitionException error)
         {
-            SearchReplayEvidence.PublishCandidateFailure(policy.Diagnostics, parent,
-                "action_replay:" + error.Message, action);
+            SearchReplayEvidence.PublishCandidateFailure(
+                policy.Diagnostics, parent, "action_replay:" + error.Message, action);
             throw;
         }
         finally
         {
             gatedSeed?.Dispose();
         }
+
+        if (r0MemoEligible)
+        {
+            StoreR0TerminalTransition(parent, action, result);
+            if (policy.DetailedDiagnostics
+                && result.HasSimulator
+                && result.BoundaryReason == SearchBoundaryReason.None
+                && !result.PlayerDead
+                && !result.AllEnemiesDead
+                && !result.HasRisk
+                && result.PredictionGaps.All(static gap => gap.Compensated))
+            {
+                long validationStartedTicks = Stopwatch.GetTimestamp();
+                ContinuationStamp parentStamp = ContinuationStamp.CapturePredicted(
+                    _player,
+                    parent.Snapshot.Simulator,
+                    parent.Turn,
+                    _forecast,
+                    _startTurnNumber);
+                ContinuationStamp outputStamp = ContinuationStamp.CapturePredicted(
+                    _player,
+                    result.Simulator,
+                    result.Turn,
+                    _forecast,
+                    _startTurnNumber);
+                ActionReplayCache replayCache = ActionReplayCache.For(policy.R0TransitionMemo!);
+                replayCache.BindCombat(parentStamp.CombatIdentity);
+                ReplayCacheValidationResult validation = replayCache.Observe(
+                    new ReplayCacheKey(
+                        parent.StateKey,
+                        PolicyActionIdentityToken(action),
+                        policy.R0TransitionPolicyIdentity,
+                        ActionReplayCache.CurrentContractVersion),
+                    parentStamp.StateText,
+                    new ReplayCacheObservation(
+                        result.StateKey,
+                        outputStamp.StateText,
+                        result.Score,
+                        result.BoundaryReason,
+                        result.Turn,
+                        result.PlayerDead,
+                        result.AllEnemiesDead,
+                        result.HasRisk,
+                        result.PredictionGaps.Count));
+                _run.ShadowReplayObservations++;
+                switch (validation)
+                {
+                    case ReplayCacheValidationResult.Stored:
+                        _run.ShadowReplayStores++;
+                        break;
+                    case ReplayCacheValidationResult.ValidatedHit:
+                        _run.ShadowReplayValidatedHits++;
+                        if (shadowReplayStartedTicks != 0)
+                            _run.ShadowReplayPotentialSavedTicks +=
+                                validationStartedTicks - shadowReplayStartedTicks;
+                        break;
+                    case ReplayCacheValidationResult.CollisionRejected:
+                        _run.ShadowReplayCollisionRejects++;
+                        break;
+                    case ReplayCacheValidationResult.OutputMismatch:
+                        _run.ShadowReplayOutputMismatches++;
+                        break;
+                    case ReplayCacheValidationResult.DroppedStore:
+                        _run.ShadowReplayDroppedStores++;
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException(nameof(validation), validation, null);
+                }
+                _run.ShadowReplayValidationTicks +=
+                    Stopwatch.GetTimestamp() - validationStartedTicks;
+            }
+        }
+        return result;
     }
 
     private SimulationSnapshot? ReplayPlannedChoiceBranch(
@@ -3095,15 +3186,25 @@ internal sealed partial class CombatBeamSolver
         int block = Math.Max(0, after.PlayerBlock - before.PlayerBlock);
         double resource = Math.Max(0.5d, energy + stars * 0.5d);
         double normalized = (damage + block * 0.8d) / resource;
-        CombatPredictionSimulator simulator = (CombatPredictionSimulator)after.Simulator;
-        bool pure = true;
-        foreach (CombatPredictionHistoryEntry entry in
-                 simulator.History.EntriesFrom(before.HistoryEntryCount))
+        bool pure;
+        if (after.HasSimulator)
         {
-            if (IsPureHistoryEntry(entry))
-                continue;
-            pure = false;
-            break;
+            CombatPredictionSimulator simulator = (CombatPredictionSimulator)after.Simulator;
+            pure = true;
+            foreach (CombatPredictionHistoryEntry entry in
+                     simulator.History.EntriesFrom(before.HistoryEntryCount))
+            {
+                if (IsPureHistoryEntry(entry))
+                    continue;
+                pure = false;
+                break;
+            }
+        }
+        else
+        {
+            pure = after.CachedTransitionIsPure
+                ?? throw new InvalidOperationException(
+                    "Simulator-free transition memo snapshot is missing frozen purity metadata.");
         }
         SimulatedCombatState beforeCombat = (SimulatedCombatState)
             ((CombatPredictionSimulator)before.Simulator).State.CombatState;

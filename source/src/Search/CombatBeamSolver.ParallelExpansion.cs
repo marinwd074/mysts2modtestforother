@@ -1099,6 +1099,15 @@ internal sealed partial class CombatBeamSolver
         _run.PotionChoicePrefixReuses += source.PotionChoicePrefixReuses;
         _run.PotionChoicePrefixFallbacks += source.PotionChoicePrefixFallbacks;
         _run.TransitionCount += source.TransitionCount;
+        _run.TransitionCacheHits += source.TransitionCacheHits;
+        _run.ShadowReplayObservations += source.ShadowReplayObservations;
+        _run.ShadowReplayStores += source.ShadowReplayStores;
+        _run.ShadowReplayValidatedHits += source.ShadowReplayValidatedHits;
+        _run.ShadowReplayCollisionRejects += source.ShadowReplayCollisionRejects;
+        _run.ShadowReplayOutputMismatches += source.ShadowReplayOutputMismatches;
+        _run.ShadowReplayDroppedStores += source.ShadowReplayDroppedStores;
+        _run.ShadowReplayValidationTicks += source.ShadowReplayValidationTicks;
+        _run.ShadowReplayPotentialSavedTicks += source.ShadowReplayPotentialSavedTicks;
         _run.RepeatableNoProgressBranchesPruned +=
             source.RepeatableNoProgressBranchesPruned;
         _run.CycleShapesDetected += source.CycleShapesDetected;
@@ -1144,6 +1153,15 @@ internal sealed partial class CombatBeamSolver
         source.PotionChoicePrefixReuses = 0;
         source.PotionChoicePrefixFallbacks = 0;
         source.TransitionCount = 0;
+        source.TransitionCacheHits = 0;
+        source.ShadowReplayObservations = 0;
+        source.ShadowReplayStores = 0;
+        source.ShadowReplayValidatedHits = 0;
+        source.ShadowReplayCollisionRejects = 0;
+        source.ShadowReplayOutputMismatches = 0;
+        source.ShadowReplayDroppedStores = 0;
+        source.ShadowReplayValidationTicks = 0;
+        source.ShadowReplayPotentialSavedTicks = 0;
         source.RepeatableNoProgressBranchesPruned = 0;
         source.CycleShapesDetected = 0;
         source.CycleProbeContinuationsExpanded = 0;

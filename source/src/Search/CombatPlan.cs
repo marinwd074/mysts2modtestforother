@@ -1514,6 +1514,25 @@ internal sealed class SimulationSnapshot(
 
     public bool HasSimulator => _simulator != null;
 
+    // Frozen only for simulator-free terminal transition memo snapshots. Ordinary live snapshots
+    // leave this null so consumers cannot accidentally treat a guessed value as authoritative.
+    internal bool? CachedTransitionIsPure { get; private set; }
+
+    /// <summary>
+    /// Copy frozen search values while dropping simulator ownership. The referenced collections
+    /// contain primitive/value snapshot data and remain read-only through this type.
+    /// </summary>
+    internal SimulationSnapshot CloneValueOnlyForTransitionMemo(bool? transitionIsPure = null)
+    {
+        SimulationSnapshot clone = (SimulationSnapshot)MemberwiseClone();
+        clone._simulator = null;
+        if (transitionIsPure.HasValue)
+            clone.CachedTransitionIsPure = transitionIsPure.Value;
+        clone._releasedBy = nameof(CloneValueOnlyForTransitionMemo);
+        clone._releasedAtLine = 0;
+        return clone;
+    }
+
     public void SetContinuation(ContinuationStamp continuation)
     {
         Continuation = continuation;
@@ -1750,6 +1769,14 @@ internal sealed class SolverResult
     public int MaxParallelRoundChoiceReplayConcurrency { get; init; }
     public int NodeLimitSnapshotsReleased { get; init; }
     public required int TransitionCacheHits { get; init; }
+    public int ShadowReplayObservations { get; init; }
+    public int ShadowReplayStores { get; init; }
+    public int ShadowReplayValidatedHits { get; init; }
+    public int ShadowReplayCollisionRejects { get; init; }
+    public int ShadowReplayOutputMismatches { get; init; }
+    public int ShadowReplayDroppedStores { get; init; }
+    public TimeSpan ShadowReplayValidationDuration { get; init; }
+    public TimeSpan ShadowReplayPotentialSavedDuration { get; init; }
     public required long WorkerAllocatedBytes { get; init; }
     public required int Gen0Collections { get; init; }
     public required int Gen1Collections { get; init; }

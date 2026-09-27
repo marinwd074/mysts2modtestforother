@@ -559,6 +559,12 @@ internal static partial class SolverController
                 $"run_mod_subscribers={rootSnapshot.CapturedRunModSubscriberCount} " +
                 $"combat_mod_subscribers={rootSnapshot.CapturedCombatModSubscriberCount} " +
                 $"base_lib_card_modifiers={rootSnapshot.CapturedBaseLibCardModifiers}");
+            _combat.TransitionMemo.BindCombat(rootSnapshot.ContinuationStamp.CombatIdentity);
+            searchPolicy = searchPolicy with
+            {
+                R0TransitionMemo = _combat.TransitionMemo,
+                R0TransitionPolicyIdentity = CombatTransitionMemo.CapturePolicyIdentity(searchPolicy),
+            };
             _combat.State = state;
             _combat.LatestResult = null;
             _combat.LatestStamp = null;
