@@ -2897,10 +2897,12 @@ internal sealed partial class CombatBeamSolver
             {
                 ShadowReplaySamplingBudget? samplingBudget =
                     policy.DetailedDiagnostics ? null : policy.ShadowReplaySamplingBudget;
+                ShadowReplaySampleClass sampleClass =
+                    parent.Turn > _startTurnNumber
+                        ? ShadowReplaySampleClass.FutureTurn
+                        : ShadowReplaySampleClass.CurrentTurn;
                 bool observeShadowReplay =
-                    policy.DetailedDiagnostics || samplingBudget?.TryAcquire() == true;
-                if (!observeShadowReplay && samplingBudget != null)
-                    _run.ShadowReplaySamplingCapped = true;
+                    policy.DetailedDiagnostics || samplingBudget?.TryAcquire(sampleClass) == true;
                 if (observeShadowReplay)
                 {
                     long validationStartedTicks = Stopwatch.GetTimestamp();

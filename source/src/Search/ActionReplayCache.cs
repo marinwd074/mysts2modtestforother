@@ -92,10 +92,21 @@ internal sealed class ActionReplayCache
     }
 }
 
+internal enum ShadowReplaySampleClass
+{
+    CurrentTurn,
+    FutureTurn,
+}
+
 internal sealed class ShadowReplaySamplingBudget
 {
     private readonly int _limit;
+    private readonly int _futureTurnReserve;
+    private readonly object _acquireGate = new();
     private int _used;
+    private int _currentTurnUsed;
+    private int _futureTurnUsed;
+    private int _currentTurnLimited;
     private int _observations;
     private int _stores;
     private int _validatedHits;
@@ -112,26 +123,50 @@ internal sealed class ShadowReplaySamplingBudget
     private long _validationTicks;
     private long _potentialSavedTicks;
 
-    internal ShadowReplaySamplingBudget(int limit)
+    internal ShadowReplaySamplingBudget(int limit, int futureTurnReserve = 0)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(futureTurnReserve);
+        if (futureTurnReserve > limit)
+            throw new ArgumentOutOfRangeException(nameof(futureTurnReserve));
         _limit = limit;
+        _futureTurnReserve = futureTurnReserve;
     }
 
     internal int Limit => _limit;
+    internal int FutureTurnReserve => _futureTurnReserve;
+    internal int CurrentTurnUsed => Volatile.Read(ref _currentTurnUsed);
+    internal int FutureTurnUsed => Volatile.Read(ref _futureTurnUsed);
+    internal bool CurrentTurnLimited => Volatile.Read(ref _currentTurnLimited) != 0;
 
     internal bool TryAcquire()
+        => TryAcquireCore(sampleClass: null);
+
+    internal bool TryAcquire(ShadowReplaySampleClass sampleClass)
+        => TryAcquireCore(sampleClass);
+
+    private bool TryAcquireCore(ShadowReplaySampleClass? sampleClass)
     {
-        while (true)
+        lock (_acquireGate)
         {
-            int observed = Volatile.Read(ref _used);
-            if (observed >= _limit)
+            if (_used >= _limit)
             {
                 Volatile.Write(ref _capped, 1);
                 return false;
             }
-            if (Interlocked.CompareExchange(ref _used, observed + 1, observed) == observed)
-                return true;
+            if (sampleClass == ShadowReplaySampleClass.CurrentTurn
+                && _currentTurnUsed >= _limit - _futureTurnReserve)
+            {
+                Volatile.Write(ref _currentTurnLimited, 1);
+                return false;
+            }
+
+            _used++;
+            if (sampleClass == ShadowReplaySampleClass.CurrentTurn)
+                _currentTurnUsed++;
+            else if (sampleClass == ShadowReplaySampleClass.FutureTurn)
+                _futureTurnUsed++;
+            return true;
         }
     }
 
@@ -196,6 +231,10 @@ internal sealed class ShadowReplaySamplingBudget
         => new(
             Limit: _limit,
             Used: Math.Min(_limit, Volatile.Read(ref _used)),
+            FutureTurnReserve: _futureTurnReserve,
+            CurrentTurnUsed: Volatile.Read(ref _currentTurnUsed),
+            FutureTurnUsed: Volatile.Read(ref _futureTurnUsed),
+            CurrentTurnLimited: Volatile.Read(ref _currentTurnLimited) != 0,
             Observations: Volatile.Read(ref _observations),
             Stores: Volatile.Read(ref _stores),
             ValidatedHits: Volatile.Read(ref _validatedHits),
@@ -216,6 +255,10 @@ internal sealed class ShadowReplaySamplingBudget
 internal readonly record struct ShadowReplaySamplingSnapshot(
     int Limit,
     int Used,
+    int FutureTurnReserve,
+    int CurrentTurnUsed,
+    int FutureTurnUsed,
+    bool CurrentTurnLimited,
     int Observations,
     int Stores,
     int ValidatedHits,

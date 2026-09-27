@@ -523,7 +523,8 @@ internal static partial class SolverController
             ShadowReplaySamplingBudget = capabilities.IsMultiplayer
                 && !settings.EnableDetailedDiagnosticLogs
                     ? new ShadowReplaySamplingBudget(
-                        CombatBeamSolver.ProductionShadowReplayObservationLimit)
+                        CombatBeamSolver.ProductionShadowReplayObservationLimit,
+                        CombatBeamSolver.ProductionShadowReplayFutureTurnReserve)
                     : null,
             RoutePolicy = routePolicy,
             CurrentTurnOnly = MultiplayerLocalCrossTurnContracts.IsCurrentTurnOnly(routePolicy),

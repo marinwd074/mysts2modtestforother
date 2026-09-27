@@ -66,6 +66,10 @@ try {
                     $localCoreHits / $localCoreObservations
                 } else { 0.0 }
                 sampleLimit = [long](Read-Number $line 'shadow_replay_sample_limit')
+                sampleCurrentTurn = [long](Read-Number $line 'shadow_replay_sample_current_turn')
+                sampleFutureTurn = [long](Read-Number $line 'shadow_replay_sample_future_turn')
+                sampleFutureTurnReserve = [long](Read-Number $line 'shadow_replay_sample_future_turn_reserve')
+                sampleCurrentTurnLimited = $line -match 'shadow_replay_sample_current_turn_limited=true'
                 sampleCapped = $line -match 'shadow_replay_sample_capped=true'
                 validationMs = Read-Number $line 'shadow_replay_validation_ms'
                 potentialSavedMs = Read-Number $line 'shadow_replay_potential_saved_ms'
@@ -78,6 +82,9 @@ try {
         resultLines = $rows.Count
         sampledSearches = @($rows | Where-Object observations -gt 0).Count
         cappedSearches = @($rows | Where-Object sampleCapped).Count
+        currentTurnLimitedSearches = @($rows | Where-Object sampleCurrentTurnLimited).Count
+        sampleCurrentTurn = [long](($rows | Measure-Object sampleCurrentTurn -Sum).Sum)
+        sampleFutureTurn = [long](($rows | Measure-Object sampleFutureTurn -Sum).Sum)
         transitions = [long](($rows | Measure-Object transitions -Sum).Sum)
         terminalCacheHits = [long](($rows | Measure-Object terminalCacheHits -Sum).Sum)
         observations = [long](($rows | Measure-Object observations -Sum).Sum)

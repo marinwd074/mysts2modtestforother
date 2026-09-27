@@ -963,6 +963,11 @@ internal sealed partial class CombatBeamSolver
                     ?? _run.ShadowLocalCoreOutputMismatches,
                 ShadowLocalCoreDroppedStores =
                     shadowSampling?.LocalCoreDroppedStores ?? _run.ShadowLocalCoreDroppedStores,
+                ShadowReplaySampleCurrentTurn = shadowSampling?.CurrentTurnUsed ?? 0,
+                ShadowReplaySampleFutureTurn = shadowSampling?.FutureTurnUsed ?? 0,
+                ShadowReplaySampleFutureTurnReserve = shadowSampling?.FutureTurnReserve ?? 0,
+                ShadowReplaySampleCurrentTurnLimited =
+                    shadowSampling?.CurrentTurnLimited ?? false,
                 ShadowReplaySamplingCapped =
                     shadowSampling?.Capped ?? _run.ShadowReplaySamplingCapped,
                 ShadowReplayValidationDuration = TimeSpan.FromSeconds(

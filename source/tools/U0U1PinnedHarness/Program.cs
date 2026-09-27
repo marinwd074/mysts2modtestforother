@@ -1539,6 +1539,40 @@ internal static class Program
                         == CombatBeamSolver.ProductionShadowReplayObservationLimit
                     && productionSampling.Capture().Capped,
                 "Phase C production shadow sampling request-wide cap drifted.");
+            ShadowReplaySamplingBudget horizonSampling = new(
+                CombatBeamSolver.ProductionShadowReplayObservationLimit,
+                CombatBeamSolver.ProductionShadowReplayFutureTurnReserve);
+            int currentTurnQuota =
+                CombatBeamSolver.ProductionShadowReplayObservationLimit
+                - CombatBeamSolver.ProductionShadowReplayFutureTurnReserve;
+            for (int index = 0; index < currentTurnQuota; index++)
+            {
+                Require(
+                    horizonSampling.TryAcquire(ShadowReplaySampleClass.CurrentTurn),
+                    $"Phase C current-turn shadow reserve ended early at {index}.");
+            }
+            Require(
+                !horizonSampling.TryAcquire(ShadowReplaySampleClass.CurrentTurn)
+                    && horizonSampling.CurrentTurnLimited
+                    && horizonSampling.Capture().Used == currentTurnQuota
+                    && !horizonSampling.Capture().Capped,
+                "Phase C future-turn reserve was consumed by current-turn sampling.");
+            for (int index = 0;
+                 index < CombatBeamSolver.ProductionShadowReplayFutureTurnReserve;
+                 index++)
+            {
+                Require(
+                    horizonSampling.TryAcquire(ShadowReplaySampleClass.FutureTurn),
+                    $"Phase C future-turn shadow reserve ended early at {index}.");
+            }
+            ShadowReplaySamplingSnapshot horizonSnapshot = horizonSampling.Capture();
+            Require(
+                !horizonSampling.TryAcquire(ShadowReplaySampleClass.FutureTurn)
+                    && horizonSampling.Capture().Capped
+                    && horizonSnapshot.CurrentTurnUsed == currentTurnQuota
+                    && horizonSnapshot.FutureTurnUsed
+                        == CombatBeamSolver.ProductionShadowReplayFutureTurnReserve,
+                "Phase C horizon-aware sampling did not preserve the 48/16 request budget.");
             string policyIdentity = CombatTransitionMemo.CapturePolicyIdentity(basePolicy);
             CombatTransitionMemo memo = new();
             memo.BindCombat(root.ContinuationStamp.CombatIdentity);
