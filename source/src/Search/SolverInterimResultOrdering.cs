@@ -30,11 +30,16 @@ internal static class SolverInterimResultOrdering
         int candidateGrowthRewardCount = 0,
         int currentGrowthRewardCount = 0,
         int candidateDeathSaveUseCount = 0,
-        int currentDeathSaveUseCount = 0)
+        int currentDeathSaveUseCount = 0,
+        bool rollingHorizonLossFirst = false)
     {
-        int comparison = currentCompleteVictory.CompareTo(candidateCompleteVictory);
-        if (comparison != 0)
-            return comparison;
+        int comparison = 0;
+        if (!rollingHorizonLossFirst)
+        {
+            comparison = currentCompleteVictory.CompareTo(candidateCompleteVictory);
+            if (comparison != 0)
+                return comparison;
+        }
         comparison = candidateDeathSaveUseCount.CompareTo(currentDeathSaveUseCount);
         if (comparison != 0)
             return comparison;
@@ -47,6 +52,12 @@ internal static class SolverInterimResultOrdering
         comparison = currentGrowthRewardCount.CompareTo(candidateGrowthRewardCount);
         if (comparison != 0)
             return comparison;
+        if (rollingHorizonLossFirst)
+        {
+            comparison = currentCompleteVictory.CompareTo(candidateCompleteVictory);
+            if (comparison != 0)
+                return comparison;
+        }
         return (candidateCombatEndedTurn ?? int.MaxValue)
             .CompareTo(currentCombatEndedTurn ?? int.MaxValue);
     }
@@ -69,9 +80,15 @@ internal static class SolverInterimResultOrdering
 
     public static bool IsBetter(SolverInterimResult candidate, SolverInterimResult current)
     {
-        int comparison = current.Won.CompareTo(candidate.Won);
-        if (comparison != 0)
-            return comparison < 0;
+        bool rollingHorizonLossFirst =
+            candidate.RollingHorizonLossFirst && current.RollingHorizonLossFirst;
+        int comparison = 0;
+        if (!rollingHorizonLossFirst)
+        {
+            comparison = current.Won.CompareTo(candidate.Won);
+            if (comparison != 0)
+                return comparison < 0;
+        }
         comparison = current.Survives.CompareTo(candidate.Survives);
         if (comparison != 0)
             return comparison < 0;
@@ -88,6 +105,12 @@ internal static class SolverInterimResultOrdering
             return candidate.GrowthHpCredit > current.GrowthHpCredit;
         if (candidate.GrowthRewardCount != current.GrowthRewardCount)
             return candidate.GrowthRewardCount > current.GrowthRewardCount;
+        if (rollingHorizonLossFirst)
+        {
+            comparison = current.Won.CompareTo(candidate.Won);
+            if (comparison != 0)
+                return comparison < 0;
+        }
         comparison = (candidate.CombatEndedTurn ?? int.MaxValue)
             .CompareTo(current.CombatEndedTurn ?? int.MaxValue);
         if (comparison != 0)
@@ -102,7 +125,16 @@ internal static class SolverInterimResultOrdering
     public static bool CanPromoteDisplayedResult(
         SolverInterimResult candidate,
         SolverInterimResult current)
-        => (!candidate.Won
+    {
+        bool rollingHorizonLossFirst =
+            candidate.RollingHorizonLossFirst && current.RollingHorizonLossFirst;
+        if (rollingHorizonLossFirst)
+        {
+            return candidate.ProjectedBattleHpLost - candidate.GrowthHpCredit
+                    <= current.ProjectedBattleHpLost - current.GrowthHpCredit
+                && IsBetter(candidate, current);
+        }
+        return (!candidate.Won
                 || candidate.Survives && !current.Survives
                 || candidate.DeathSaveUseCount < current.DeathSaveUseCount
                 || candidate.TheftPolicy == SolverTheftPolicy.PreserveResources
@@ -111,6 +143,7 @@ internal static class SolverInterimResultOrdering
                 || candidate.ProjectedBattleHpLost - candidate.GrowthHpCredit
                     <= current.ProjectedBattleHpLost - current.GrowthHpCredit)
             && IsBetter(candidate, current);
+    }
 
     internal static bool IsResourceTradeImprovement(
         int candidateHpDeficit,

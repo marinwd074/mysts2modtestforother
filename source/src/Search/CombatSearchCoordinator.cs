@@ -2674,6 +2674,9 @@ internal static partial class CombatSearchCoordinator
             GrowthRewardCount = result.Snapshot.StrategyGoalCount,
             Survives = !result.Snapshot.PlayerDead && result.Snapshot.ProjectedPlayerHp > 0,
             DeathSaveUseCount = result.Snapshot.ProjectedDeathSaveUseCount,
+            RollingHorizonLossFirst =
+                MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(
+                    policy.RoutePolicy),
         };
 
 
@@ -2732,9 +2735,14 @@ internal static partial class CombatSearchCoordinator
         SolverInterimResult candidate,
         SolverInterimResult current)
     {
-        int victoryComparison = current.Won.CompareTo(candidate.Won);
-        if (victoryComparison != 0)
-            return victoryComparison;
+        bool rollingHorizonLossFirst =
+            candidate.RollingHorizonLossFirst && current.RollingHorizonLossFirst;
+        if (!rollingHorizonLossFirst)
+        {
+            int victoryComparison = current.Won.CompareTo(candidate.Won);
+            if (victoryComparison != 0)
+                return victoryComparison;
+        }
         int survivalComparison = current.Survives.CompareTo(candidate.Survives);
         if (survivalComparison != 0)
             return survivalComparison;
@@ -2756,7 +2764,8 @@ internal static partial class CombatSearchCoordinator
             candidate.GrowthRewardCount,
             current.GrowthRewardCount,
             candidate.DeathSaveUseCount,
-            current.DeathSaveUseCount);
+            current.DeathSaveUseCount,
+            rollingHorizonLossFirst);
         if (primaryQuality != 0)
             return primaryQuality;
         if (theftPolicy == SolverTheftPolicy.PreserveResources
@@ -2796,9 +2805,15 @@ internal static partial class CombatSearchCoordinator
     {
         bool candidateWon = IsCompleteVictory(candidate);
         bool currentWon = IsCompleteVictory(current);
-        int victoryComparison = currentWon.CompareTo(candidateWon);
-        if (victoryComparison != 0)
-            return victoryComparison;
+        bool rollingHorizonLossFirst =
+            MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(
+                policy.RoutePolicy);
+        if (!rollingHorizonLossFirst)
+        {
+            int victoryComparison = currentWon.CompareTo(candidateWon);
+            if (victoryComparison != 0)
+                return victoryComparison;
+        }
         bool candidateSurvives = !candidate.Snapshot.PlayerDead
             && candidate.Snapshot.ProjectedPlayerHp > 0;
         bool currentSurvives = !current.Snapshot.PlayerDead
@@ -2827,7 +2842,8 @@ internal static partial class CombatSearchCoordinator
             candidate.Snapshot.StrategyGoalCount,
             current.Snapshot.StrategyGoalCount,
             candidate.Snapshot.ProjectedDeathSaveUseCount,
-            current.Snapshot.ProjectedDeathSaveUseCount);
+            current.Snapshot.ProjectedDeathSaveUseCount,
+            rollingHorizonLossFirst);
     }
 
     private static bool IsCompleteVictory(SolverResult result)

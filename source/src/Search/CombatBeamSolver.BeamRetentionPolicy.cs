@@ -74,6 +74,7 @@ internal sealed partial class CombatBeamSolver
     private sealed partial class BeamRetentionPolicy(
         SolverSearchProfile _profile,
         bool _useMultiplayerRouteSemantics,
+        bool _useRollingHorizonLossFirst,
         bool _useMultiplayerTeamObjective,
         MultiplayerCombatObjectiveStrategy _multiplayerCombatObjectiveStrategy,
         double _multiplayerEnemyDurabilityRatio,
@@ -1683,10 +1684,13 @@ internal sealed partial class CombatBeamSolver
             int comparison = CompareMultiplayerObjective(left, right);
             if (comparison != 0)
                 return comparison;
-            comparison = rightWon.CompareTo(leftWon);
-            if (comparison != 0)
-                return comparison;
-            if (!leftWon && !rightWon)
+            if (!_useRollingHorizonLossFirst)
+            {
+                comparison = rightWon.CompareTo(leftWon);
+                if (comparison != 0)
+                    return comparison;
+            }
+            if (_useRollingHorizonLossFirst || !leftWon && !rightWon)
             {
                 bool leftSurvives = !leftSnapshot.PlayerDead
                     && leftSnapshot.ProjectedPlayerHp > 0;
@@ -1718,7 +1722,8 @@ internal sealed partial class CombatBeamSolver
                 leftSnapshot.StrategyGoalCount,
                 rightSnapshot.StrategyGoalCount,
                 leftSnapshot.ProjectedDeathSaveUseCount,
-                rightSnapshot.ProjectedDeathSaveUseCount);
+                rightSnapshot.ProjectedDeathSaveUseCount,
+                _useRollingHorizonLossFirst);
             if (comparison != 0)
                 return comparison;
 

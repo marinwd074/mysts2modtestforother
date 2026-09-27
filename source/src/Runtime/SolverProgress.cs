@@ -163,6 +163,7 @@ internal sealed record SolverInterimResult(
     public int DeathSaveUseCount { get; init; }
     public int GrowthHpCredit { get; init; }
     public int GrowthRewardCount { get; init; }
+    public bool RollingHorizonLossFirst { get; init; }
 }
 
 internal sealed record SolverFrontierTurn(

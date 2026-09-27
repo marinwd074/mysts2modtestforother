@@ -132,6 +132,8 @@ internal sealed partial class CombatBeamSolver(
     private BeamRetentionPolicy Retention => _retention ??= new BeamRetentionPolicy(
         _profile,
         _useMultiplayerRouteSemantics,
+        MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(
+            policy.RoutePolicy),
         policy.UseMultiplayerTeamObjective,
         policy.MultiplayerCombatObjectiveStrategy,
         policy.MultiplayerEnemyDurabilityRatio,

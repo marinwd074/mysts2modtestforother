@@ -1172,6 +1172,26 @@ internal sealed partial class UnattendedTestRunner
             throw new InvalidOperationException(
                 "完整胜利没有先保留一次性保命资源，或者无替代生还路线时拒绝复活。");
         }
+        if (SolverInterimResultOrdering.ComparePrimaryQuality(
+                candidateCompleteVictory: true,
+                candidateStrategicHpDeficit: 24,
+                candidateCombatEndedTurn: 6,
+                currentCompleteVictory: false,
+                currentStrategicHpDeficit: 0,
+                currentCombatEndedTurn: null,
+                rollingHorizonLossFirst: true) <= 0
+            || SolverInterimResultOrdering.ComparePrimaryQuality(
+                candidateCompleteVictory: true,
+                candidateStrategicHpDeficit: 0,
+                candidateCombatEndedTurn: 6,
+                currentCompleteVictory: false,
+                currentStrategicHpDeficit: 0,
+                currentCombatEndedTurn: null,
+                rollingHorizonLossFirst: true) >= 0)
+        {
+            throw new InvalidOperationException(
+                "多人滚动时域仍让窗口内高战损斩杀压过低战损存活路线，或同战损时没有优先胜利。");
+        }
         if (ActEndingBossPolicy.ResolveStrategicHpRelief(
                 BossHpRelief.ActClearHeal,
                 BossHpStrategy.ProgressionFirst,

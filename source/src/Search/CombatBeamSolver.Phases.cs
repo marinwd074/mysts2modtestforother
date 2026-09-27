@@ -245,6 +245,9 @@ internal sealed partial class CombatBeamSolver
                 GrowthRewardCount = node.Snapshot.StrategyGoalCount,
                 Survives = !node.Snapshot.PlayerDead && node.Snapshot.ProjectedPlayerHp > 0,
                 DeathSaveUseCount = node.Snapshot.ProjectedDeathSaveUseCount,
+                RollingHorizonLossFirst =
+                    MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(
+                        _routePolicy),
             };
         }
 
