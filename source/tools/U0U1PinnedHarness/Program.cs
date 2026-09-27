@@ -54,6 +54,7 @@ internal static class Program
             Console.WriteLine($"search_patches={patchCount}");
             ValidateDarkEmbracePredictionCoverage();
             ValidateViciousStrategicValue();
+            ValidateRollingHorizonQualityContract();
 
             HarnessScenario scenario = new(
                 "IRONCLAD",
@@ -188,6 +189,55 @@ internal static class Program
                 && value.ResourcePotential == 0
                 && value.ScalingPotential == 0,
             $"Vicious strategic value drifted: {value}.");
+    }
+
+    private static void ValidateRollingHorizonQualityContract()
+    {
+        Require(
+            SolverInterimResultOrdering.ComparePrimaryQuality(
+                candidateCompleteVictory: true,
+                candidateStrategicHpDeficit: 24,
+                candidateCombatEndedTurn: 6,
+                currentCompleteVictory: false,
+                currentStrategicHpDeficit: 0,
+                currentCombatEndedTurn: null,
+                rollingHorizonLossFirst: true) > 0,
+            "Rolling horizon allowed a 24-HP terminal route to outrank a 0-HP live horizon route.");
+        Require(
+            SolverInterimResultOrdering.ComparePrimaryQuality(
+                candidateCompleteVictory: true,
+                candidateStrategicHpDeficit: 0,
+                candidateCombatEndedTurn: 6,
+                currentCompleteVictory: false,
+                currentStrategicHpDeficit: 0,
+                currentCombatEndedTurn: null,
+                rollingHorizonLossFirst: true) < 0,
+            "Rolling horizon did not prefer victory when strategic HP loss tied.");
+
+        SolverInterimResult live = new(
+            Won: false,
+            OutstandingStolenResource: 0,
+            ProjectedBattleHpLost: 0,
+            StrategicHpDeficit: 0,
+            PotionStrategicCost: 0,
+            ProjectedBattlePotionCount: 0,
+            EnemyHp: 300,
+            Score: 0d)
+        {
+            Survives = true,
+            RollingHorizonLossFirst = true,
+        };
+        SolverInterimResult costlyVictory = live with
+        {
+            Won = true,
+            ProjectedBattleHpLost = 24,
+            StrategicHpDeficit = 24,
+            EnemyHp = 0,
+            CombatEndedTurn = 6,
+        };
+        Require(
+            !SolverInterimResultOrdering.CanPromoteDisplayedResult(costlyVictory, live),
+            "Rolling horizon display replaced a 0-HP live route with a 24-HP terminal route.");
     }
 
     private static void ValidateDarkEmbracePredictionCoverage()
