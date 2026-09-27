@@ -201,7 +201,14 @@ internal sealed partial class CombatBeamSolver
                         soldThisTurn,
                         actualBlock,
                         actualBlock,
-                        energyLeft);
+                        energyLeft,
+                        DeferredImpactCoverage.Capture(
+                            turnStart.StateKey,
+                            turnStart.Turn,
+                            snapshot,
+                            semanticEvidenceAvailable: false,
+                            semanticStateChanged: turnStart.StateKey != snapshot.StateKey,
+                            modeledQualityDominatedByStandPat: false));
                 }
 
                 current = new SearchNode(

@@ -91,6 +91,8 @@ internal static class Program
             U0Evidence u0 = RunU0(combat, names, damage, captured, profile);
             U1Evidence u1 = RunU1(combat, names, damage, captured, profile, u0.FirstAction);
             U5Evidence u5 = RunU5(combat, names, damage, captured, profile);
+            PhaseBEvidence phaseB = RunDeferredImpactContract(
+                combat, names, damage, captured, profile);
 
             var evidence = new
             {
@@ -112,6 +114,7 @@ internal static class Program
                 u0,
                 u1,
                 u5,
+                phaseB,
                 remainingRuntimeSmoke = new[]
                 {
                     "real multiplayer Heavy Blade + native Choice/Brand + following card",
@@ -1038,6 +1041,276 @@ internal static class Program
         }
     }
 
+    private static PhaseBEvidence RunDeferredImpactContract(
+        CombatState combat,
+        SolverDisplayNames names,
+        BattleDamageSnapshot damage,
+        SearchPolicySnapshot captured,
+        SolverSearchProfile profile)
+    {
+        Player player = LocalContext.GetMe(combat)
+            ?? throw new InvalidOperationException("Phase B fixture has no local player.");
+        var playerState = player.PlayerCombatState
+            ?? throw new InvalidOperationException("Phase B fixture has no local combat state.");
+        Require(
+            combat.Enemies.Count == 1,
+            $"Phase B fixture requires one enemy, got {combat.Enemies.Count}.");
+
+        SearchPolicySnapshot replayPolicy = captured with
+        {
+            Profile = profile,
+            RoutePolicy = SearchRoutePolicy.SinglePlayerFullRoute,
+            CurrentTurnOnly = false,
+            UseMultiplayerTeamObjective = false,
+            DetailedDiagnostics = false,
+            VerifyIncrementalSearch = true,
+            FixedBudget = true,
+            MaxDegreeOfParallelism = 1,
+            BudgetOverrideMilliseconds = null,
+            UseNoveltyPortfolio = false,
+            NoveltySearch = null,
+            UseBeamWidthPortfolio = false,
+            BeamWidthPortfolioWidths = null,
+            Interaction = null,
+            RequestWorkTotals = new SearchRequestWorkTotals(),
+        };
+
+        CardModel biasedCognitionModel = ModelDb.AllCards
+            .Single(static card => card is BiasedCognition);
+        SetLiveEnergyForU5(player, 3);
+        playerState.Hand.AddInternal(
+            combat.CreateCard(biasedCognitionModel, player), -1);
+        playerState.Hand.AddInternal(
+            combat.CreateCard(ResolveCard("OUTMANEUVER"), player), -1);
+
+        int turn = playerState.TurnNumber;
+        PlanAction endTurn = new(PlanActionKind.EndTurn, turn);
+        PlanAction biasedCognition = new(
+            PlanActionKind.PlayCard,
+            turn,
+            CardId: biasedCognitionModel.Id.Entry,
+            CardOccurrence: 0,
+            CardTitle: "Biased Cognition");
+        PlanAction outmaneuver = new(
+            PlanActionKind.PlayCard,
+            turn,
+            CardId: "OUTMANEUVER",
+            CardOccurrence: 0,
+            CardTitle: "Outmaneuver");
+
+        CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
+        SimulationSnapshot standPat = ReplayPhaseB(
+            root, names, damage, replayPolicy, profile, [endTurn]);
+        SimulationSnapshot biasedPending = ReplayPhaseB(
+            root, names, damage, replayPolicy, profile, [biasedCognition]);
+        SimulationSnapshot biasedSettled = ReplayPhaseB(
+            root, names, damage, replayPolicy, profile, [biasedCognition, endTurn]);
+        SimulationSnapshot outmaneuverPending = ReplayPhaseB(
+            root, names, damage, replayPolicy, profile, [outmaneuver]);
+        SimulationSnapshot outmaneuverSettled = ReplayPhaseB(
+            root, names, damage, replayPolicy, profile, [outmaneuver, endTurn]);
+
+        try
+        {
+            Require(
+                standPat.BoundaryReason == SearchBoundaryReason.None
+                    && biasedPending.BoundaryReason == SearchBoundaryReason.None
+                    && biasedSettled.BoundaryReason == SearchBoundaryReason.None
+                    && outmaneuverPending.BoundaryReason == SearchBoundaryReason.None
+                    && outmaneuverSettled.BoundaryReason == SearchBoundaryReason.None,
+                "Phase B deferred-effect replay reached an unexpected search boundary.");
+
+            SimulatedCombatState biasedPendingState =
+                (SimulatedCombatState)biasedPending.Simulator.State.CombatState;
+            SimulatedCombatState biasedSettledState =
+                (SimulatedCombatState)biasedSettled.Simulator.State.CombatState;
+            int biasedDecay =
+                biasedPendingState.GetAmount<BiasedCognitionPower>(player.Creature);
+            int biasedPendingFocus =
+                biasedPendingState.GetAmount<FocusPower>(player.Creature);
+            int biasedSettledFocus =
+                biasedSettledState.GetAmount<FocusPower>(player.Creature);
+            Require(
+                biasedDecay > 0
+                    && biasedSettledState.GetAmount<BiasedCognitionPower>(player.Creature)
+                        == biasedDecay,
+                "Biased Cognition deferred Focus loss power was not retained.");
+            Require(
+                biasedSettledFocus == biasedPendingFocus - biasedDecay,
+                $"Biased Cognition deferred Focus loss did not settle exactly once: "
+                + $"pending={biasedPendingFocus} decay={biasedDecay} settled={biasedSettledFocus}.");
+
+            SimulatedCombatState outmaneuverPendingState =
+                (SimulatedCombatState)outmaneuverPending.Simulator.State.CombatState;
+            SimulatedCombatState outmaneuverSettledState =
+                (SimulatedCombatState)outmaneuverSettled.Simulator.State.CombatState;
+            Require(
+                outmaneuverPendingState.GetAmount<EnergyNextTurnPower>(player.Creature) > 0,
+                "Outmaneuver future energy was not pending before EndTurn.");
+            Require(
+                outmaneuverSettledState.GetAmount<EnergyNextTurnPower>(player.Creature) == 0,
+                "Outmaneuver future energy did not settle at the next turn start.");
+
+            DeferredImpactCoverage standPatCoverage = DeferredImpactCoverage.Capture(
+                default,
+                turn,
+                standPat,
+                semanticEvidenceAvailable: true,
+                semanticStateChanged: false,
+                modeledQualityDominatedByStandPat: false);
+            DeferredImpactCoverage biasedPendingCoverage = DeferredImpactCoverage.Capture(
+                default,
+                turn,
+                biasedPending,
+                semanticEvidenceAvailable: true,
+                semanticStateChanged: true,
+                modeledQualityDominatedByStandPat: false);
+            DeferredImpactCoverage biasedSettledCoverage = DeferredImpactCoverage.Capture(
+                default,
+                turn,
+                biasedSettled,
+                semanticEvidenceAvailable: true,
+                semanticStateChanged: true,
+                modeledQualityDominatedByStandPat: false);
+            DeferredImpactCoverage outmaneuverPendingCoverage = DeferredImpactCoverage.Capture(
+                default,
+                turn,
+                outmaneuverPending,
+                semanticEvidenceAvailable: true,
+                semanticStateChanged: true,
+                modeledQualityDominatedByStandPat: true);
+            DeferredImpactCoverage outmaneuverSettledCoverage = DeferredImpactCoverage.Capture(
+                default,
+                turn,
+                outmaneuverSettled,
+                semanticEvidenceAvailable: true,
+                semanticStateChanged: true,
+                modeledQualityDominatedByStandPat: false);
+
+            Require(
+                biasedPendingCoverage.CoverageThrough
+                    == DeferredImpactCoverageBoundary.CurrentTurn
+                    && biasedPendingCoverage.RequiresFurtherClosure,
+                "Biased Cognition deferred cost was incorrectly marked closed.");
+            Require(
+                biasedSettledCoverage.CoverageThrough
+                    == DeferredImpactCoverageBoundary.NextLocalTurnStart
+                    && !biasedSettledCoverage.RequiresFurtherClosure,
+                "Biased Cognition deferred cost did not reach a closed next-turn boundary.");
+
+            Require(
+                outmaneuverPendingCoverage.CoverageThrough
+                    == DeferredImpactCoverageBoundary.CurrentTurn
+                    && outmaneuverPendingCoverage.RequiresFurtherClosure,
+                "Outmaneuver slow benefit was incorrectly marked closed before EndTurn.");
+            Require(
+                outmaneuverSettledCoverage.CoverageThrough
+                    == DeferredImpactCoverageBoundary.NextLocalTurnStart
+                    && !outmaneuverSettledCoverage.RequiresFurtherClosure,
+                "Outmaneuver did not close at the next local turn start.");
+            Require(
+                outmaneuverSettledCoverage.Outcome.Energy > standPatCoverage.Outcome.Energy,
+                $"Outmaneuver next-turn energy benefit was lost: outmaneuver={outmaneuverSettledCoverage.Outcome.Energy} "
+                + $"stand_pat={standPatCoverage.Outcome.Energy}.");
+
+            var enemy = combat.Enemies.Single();
+            int originalEnemyHp = enemy.CurrentHp;
+            try
+            {
+                enemy.SetCurrentHpInternal(7);
+                SetLiveEnergyForU5(player, 3);
+                CombatRootSnapshot lethalRoot = CombatRootSnapshot.Capture(combat);
+                uint targetCombatId = enemy.CombatId
+                    ?? throw new InvalidOperationException("Phase B lethal enemy has no CombatId.");
+                PlanAction bash = new(
+                    PlanActionKind.PlayCard,
+                    turn,
+                    CardId: "BASH",
+                    CardOccurrence: 0,
+                    TargetIndex: 0,
+                    TargetCombatId: targetCombatId,
+                    CardTitle: "Bash");
+                SimulationSnapshot lethal = ReplayPhaseB(
+                    lethalRoot, names, BattleDamageTracker.Observe(combat),
+                    replayPolicy, profile, [bash]);
+                try
+                {
+                    Require(lethal.AllEnemiesDead,
+                        "Phase B lethal fixture did not end combat.");
+                    DeferredImpactCoverage lethalCoverage = DeferredImpactCoverage.Capture(
+                        default,
+                        turn,
+                        lethal,
+                        semanticEvidenceAvailable: true,
+                        semanticStateChanged: true,
+                        modeledQualityDominatedByStandPat: true);
+                    Require(
+                        lethalCoverage.CoverageThrough
+                            == DeferredImpactCoverageBoundary.CombatTerminal
+                            && !lethalCoverage.RequiresFurtherClosure,
+                        "Current-turn lethal route retained nonexistent combat debt.");
+                    Require(
+                        lethalCoverage.Outcome.ProjectedPlayerHp
+                            == lethalCoverage.Outcome.PlayerHp,
+                        "Current-turn lethal route still charged a future enemy attack.");
+
+                    return new PhaseBEvidence(
+                        Status: "PASS",
+                        EvidenceLevel: "pinned_exact_simulation_plus_sidecar_contract",
+                        BiasedCognitionPendingCoverage:
+                            biasedPendingCoverage.CoverageThrough.ToString(),
+                        BiasedCognitionSettledCoverage:
+                            biasedSettledCoverage.CoverageThrough.ToString(),
+                        BiasedCognitionPendingFocus: biasedPendingFocus,
+                        BiasedCognitionSettledFocus: biasedSettledFocus,
+                        StandPatNextTurnEnergy: standPatCoverage.Outcome.Energy,
+                        OutmaneuverPendingCoverage:
+                            outmaneuverPendingCoverage.CoverageThrough.ToString(),
+                        OutmaneuverSettledCoverage:
+                            outmaneuverSettledCoverage.CoverageThrough.ToString(),
+                        OutmaneuverNextTurnEnergy:
+                            outmaneuverSettledCoverage.Outcome.Energy,
+                        LethalCoverage: lethalCoverage.CoverageThrough.ToString(),
+                        LethalProjectedHp: lethalCoverage.Outcome.ProjectedPlayerHp,
+                        LethalPlayerHp: lethalCoverage.Outcome.PlayerHp);
+                }
+                finally
+                {
+                    lethal.ReleaseSimulator();
+                }
+            }
+            finally
+            {
+                enemy.SetCurrentHpInternal(originalEnemyHp);
+            }
+        }
+        finally
+        {
+            standPat.ReleaseSimulator();
+            biasedPending.ReleaseSimulator();
+            biasedSettled.ReleaseSimulator();
+            outmaneuverPending.ReleaseSimulator();
+            outmaneuverSettled.ReleaseSimulator();
+        }
+    }
+
+    private static SimulationSnapshot ReplayPhaseB(
+        CombatRootSnapshot root,
+        SolverDisplayNames names,
+        BattleDamageSnapshot damage,
+        SearchPolicySnapshot policy,
+        SolverSearchProfile profile,
+        IReadOnlyList<PlanAction> actions)
+    {
+        CombatBeamSolver replay = new(
+            root,
+            names,
+            damage,
+            policy,
+            searchProfile: profile);
+        return replay.ReplayDiagnosticPrefix(actions);
+    }
+
     private static CardModel ResolveCard(string cardId)
     {
         CardModel[] matches = ModelDb.AllCards
@@ -1196,6 +1469,21 @@ internal static class Program
         int SelectionDiagnosticLines,
         IReadOnlyDictionary<string, int> PathStages,
         string NoTeammateReplayFingerprint);
+
+    internal sealed record PhaseBEvidence(
+        string Status,
+        string EvidenceLevel,
+        string BiasedCognitionPendingCoverage,
+        string BiasedCognitionSettledCoverage,
+        int BiasedCognitionPendingFocus,
+        int BiasedCognitionSettledFocus,
+        int StandPatNextTurnEnergy,
+        string OutmaneuverPendingCoverage,
+        string OutmaneuverSettledCoverage,
+        int OutmaneuverNextTurnEnergy,
+        string LethalCoverage,
+        int LethalProjectedHp,
+        int LethalPlayerHp);
 
     internal sealed record U5Evidence(
         string Status,

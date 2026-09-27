@@ -1123,11 +1123,12 @@ internal sealed partial class CombatBeamSolver
             }
             RecordCandidateEvaluated(ordering.Candidate.Node, evaluationContextId);
             RecordCandidateSelected(ordering.Candidate.Node, evaluationContextId);
+            CandidateOrigin? releasedPreviewOrigin = EnsureCandidateOrigin(ordering.Candidate.Node);
             if (!ordering.Candidate.Snapshot.HasSimulator)
             {
                 policy.Diagnostics.Info(
                     $"[CombatSolver/Test] SEARCH_ANYTIME_RELEASED_SNAPSHOT_PREVIEW " +
-                    $"candidate_id={EnsureCandidateOrigin(ordering.Candidate.Node).CandidateId} " +
+                    $"candidate_id={releasedPreviewOrigin?.CandidateId.ToString() ?? "-"} " +
                     $"turn={ordering.Candidate.Node.Turn} " +
                     $"projected_hp={ordering.Candidate.Snapshot.ProjectedPlayerHp} " +
                     $"enemy_hp={ordering.Candidate.Snapshot.EnemyHp}");
@@ -1137,12 +1138,13 @@ internal sealed partial class CombatBeamSolver
             bool onlyDeathRoutesFound = evaluated.All(candidate =>
                 candidate.Snapshot.PlayerDead || candidate.Snapshot.ProjectedPlayerHp <= 0);
             int candidateVersion = ++member.RoutePreviewVersion;
-            member.SpeculativeRoutePreview = BuildRoutePreview(
+            SolverSpeculativeRoutePreview speculativeRoutePreview = BuildRoutePreview(
                 ordering,
                 onlyDeathRoutesFound,
                 candidateVersion);
+            member.SpeculativeRoutePreview = speculativeRoutePreview;
             int candidateSearchedTurnLayers = member.SearchedTurnLayers;
-            PlanAction[] adoptionActions = member.SpeculativeRoutePreview.Turns
+            PlanAction[] adoptionActions = speculativeRoutePreview.Turns
                 .SelectMany(turn => turn.Actions)
                 .ToArray();
             member.RouteAdoptionSeed = new SolverRouteAdoptionSeed(

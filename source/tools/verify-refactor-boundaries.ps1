@@ -114,8 +114,8 @@ foreach ($retiredPreviewLockRule in @(
     'TryPromoteCurrentTurn(',
     'RouteStartsWithCurrentTurn(',
     'currentTurnDisplayedResult')) {
-    if ($solverProgressText.Contains($retiredPreviewLockRule)
-        -or $searchCoordinatorText.Contains($retiredPreviewLockRule)) {
+    if ($solverProgressText.Contains($retiredPreviewLockRule) -or
+        $searchCoordinatorText.Contains($retiredPreviewLockRule)) {
         $violations.Add("Retired independent current-turn preview lock returned: '$retiredPreviewLockRule'")
     }
 }
@@ -602,11 +602,13 @@ foreach ($fixedPowerUnitRule in @(
     }
 }
 foreach ($fixedPowerUnitRule in @(
-    'combat.Apply<AggressionPower>(owner, 1, owner);',
-    'combat.Apply<DarkEmbracePower>(owner, 1, owner);')) {
+    'combat.Apply<AggressionPower>(owner, 1, owner);')) {
     if (-not $corePowerSupportText.Contains($fixedPowerUnitRule)) {
         $violations.Add("${corePowerSupportPath}: audited 0.107.1 fixed Power unit drifted '$fixedPowerUnitRule'")
     }
+}
+if (-not $cardEffectSpecText.Contains('[typeof(DarkEmbrace)] = [Owner<DarkEmbracePower>(_ => 1)]')) {
+    $violations.Add("${cardEffectSpecPath}: audited 0.107.1 Dark Embrace fixed Power unit drifted")
 }
 foreach ($fixedPowerUnitRule in @(
     'combat.Apply<CalamityPower>(owner, 1, owner);',
@@ -4415,8 +4417,8 @@ foreach ($retiredLocalCoreSearchRule in @(
     'RunLocalCoreCurrentTurnQualityFirst(',
     'ShouldRunLocalCoreCurrentTurnQualityScout(',
     'MP_LOCAL_CURRENT_TURN_QUALITY_SCOUT')) {
-    if ($localCoreNoveltyText.Contains($retiredLocalCoreSearchRule)
-        -or $p1CoordinatorText.Contains($retiredLocalCoreSearchRule)) {
+    if ($localCoreNoveltyText.Contains($retiredLocalCoreSearchRule) -or
+        $p1CoordinatorText.Contains($retiredLocalCoreSearchRule)) {
         $violations.Add("Retired multiplayer current-turn scout returned: '$retiredLocalCoreSearchRule'")
     }
 }
@@ -4464,8 +4466,8 @@ foreach ($retiredLocalCoreFinalRule in @(
     'final_current_turn_priority',
     'ShouldUseLocalCoreDeathHorizonFallback(',
     'MP_LOCAL_CORE_DEATH_HORIZON_FALLBACK')) {
-    if ($p1PhasesText.Contains($retiredLocalCoreFinalRule)
-        -or $p1ContinuationContractsText.Contains($retiredLocalCoreFinalRule)) {
+    if ($p1PhasesText.Contains($retiredLocalCoreFinalRule) -or
+        $p1ContinuationContractsText.Contains($retiredLocalCoreFinalRule)) {
         $violations.Add("Retired multiplayer final-result override returned: '$retiredLocalCoreFinalRule'")
     }
 }
