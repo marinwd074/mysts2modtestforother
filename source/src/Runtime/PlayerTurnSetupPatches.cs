@@ -174,12 +174,13 @@ internal static class PlayerTurnSetupCoordinator
         public bool ManualRecalculated { get; set; }
         public int ManualRecalculationCompletedCount { get; set; }
         public bool ReplayDrivingStarted { get; set; }
+        public bool ReplayChoiceStale { get; set; }
         public bool ReplaySurfacePrepared { get; set; }
         public bool TakeoverRequested { get; set; }
         public bool DeployAfterSetup { get; set; }
         public int DisposeState;
         public IReadOnlyList<PlanCardChoice>? PlannedChoices
-            => PlayerAdvancedChoice ? null
+            => PlayerAdvancedChoice || ReplayChoiceStale ? null
                 : Result?.TurnSetupChoices
                     ?? (ManualSearchState == 1 || ManualRecalculationRequested.Task.IsCompleted ? null : ReplayChoices);
         public TaskCompletionSource PlanReady { get; } = new(
@@ -570,7 +571,7 @@ internal static class PlayerTurnSetupCoordinator
     }
 
     private static bool HasUnresolvedVisibleChoice(ActivePlan active)
-        => !active.PlayerAdvancedChoice
+        => !active.PlayerAdvancedChoice && !active.ReplayChoiceStale
            && active.Choices.LatestVisibleSequence == active.Choices.FirstVisibleSequence
            && (active.Choices.IsVisibleChoicePending
            || (active.Result == null
@@ -1375,6 +1376,24 @@ internal static class PlayerTurnSetupCoordinator
             return;
         IReadOnlyList<PlanCardChoice> replayChoices = active.PlannedChoices
             ?? throw new InvalidOperationException("回合准备接管缺少既有路线选择。");
+        if (active.ReplayChoices != null && !active.ManualRecalculated
+            && !active.Choices.FirstVisibleChoiceMatches(replayChoices, out string mismatch))
+        {
+            active.ReplayChoiceStale = true;
+            active.Result = null;
+            active.TakeoverRequested = false;
+            active.DeployAfterSetup = false;
+            active.Choices.ReleaseVisibleSurface();
+            SolverController.RecordTurnSetupStateMismatch(
+                active.Combat, active.LifecycleGeneration, mismatch);
+            SolverOverlay.Show(host,
+                "[b]本回合路线已过期[/b]\n请在游戏选牌页手动选择；完成后将按实际状态重新搜索。");
+            Entry.Logger.Warn(
+                $"[CombatSolver/Test] TURN_SETUP_REPLAY_STALE " +
+                $"turn={active.Player.PlayerCombatState?.TurnNumber ?? -1} " +
+                "reason=visible_choice_options_mismatch action=manual_choice_then_fresh_search");
+            return;
+        }
         active.ReplayDrivingStarted = true;
         active.Choices.SetPlanAndStartDriving(host, replayChoices, active.Token);
     }
