@@ -1493,16 +1493,56 @@ internal sealed partial class CombatBeamSolver
                 $"prune_sample_allocated={member.PruneHighWaterAllocatedBytes} " +
                 $"expanded={_run.Expanded} " +
                 $"turn_layer={member.SearchedTurnLayers} play_depth={playDepth}");
+            bool repeatedSystemPressureFallback =
+                ShouldFallbackFromRepeatedSystemPressure(
+                    signal.IsEnabled,
+                    signal.SystemPressureDominates,
+                    signal.ReclaimCount);
             PublishProgress(
                 _startTurnNumber + member.SearchedTurnLayers,
                 member.SearchedTurnLayers,
                 playDepth,
                 frontierNodes,
                 endedNodes,
-                "内存压力较高，正在整理内存",
+                repeatedSystemPressureFallback
+                    ? "持续内存压力，正在切换常规 GC"
+                    : "内存压力较高，正在整理内存",
                 force: true);
             _run.ResetReclaimableCaches();
             parallelExpansionExecutor?.ResetRebuildableCaches();
+            if (repeatedSystemPressureFallback)
+            {
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Test] SEARCH_MEMORY_DEFAULT_GC_FALLBACK " +
+                    $"reason=repeated_system_pressure trigger={reason} " +
+                    $"checkpoint={signal.ReclaimCount} allocated={signal.AllocatedBytes} " +
+                    $"limit={signal.AllocationLimitBytes} remaining={signal.RemainingBytes} " +
+                    $"expanded={_run.Expanded} turn_layer={member.SearchedTurnLayers} " +
+                    $"play_depth={playDepth}");
+                try
+                {
+                    signal.UseDefaultGcAndContinue(cancellationToken);
+                }
+                finally
+                {
+                    _run.WorkPacer.ObserveGcPause(signal.LastReclaimMaxObservedGcPause);
+                }
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Test] SEARCH_MEMORY_RESUMED " +
+                    $"reason={reason}_default_gc checkpoint={signal.ReclaimCount} " +
+                    $"frontier={frontierNodes} ended={endedNodes} expanded={_run.Expanded} " +
+                    $"turn_layer={member.SearchedTurnLayers} play_depth={playDepth}");
+                PublishProgress(
+                    _startTurnNumber + member.SearchedTurnLayers,
+                    member.SearchedTurnLayers,
+                    playDepth,
+                    frontierNodes,
+                    endedNodes,
+                    "已切换常规 GC，继续搜索",
+                    force: true);
+                return;
+            }
+
             try
             {
                 signal.ReclaimAndContinue(cancellationToken, reason);
@@ -3399,8 +3439,39 @@ internal sealed partial class CombatBeamSolver
         return MemoryCommitPreparation.Reclaim;
     }
 
+    private static bool ShouldFallbackFromRepeatedSystemPressure(
+        bool signalEnabled,
+        bool systemPressureDominates,
+        int reclaimCount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(reclaimCount);
+        return signalEnabled
+            && systemPressureDominates
+            && reclaimCount >= 2;
+    }
+
     internal static void VerifyPruneMemoryCheckpointPolicyForTesting()
     {
+        if (!ShouldFallbackFromRepeatedSystemPressure(
+                signalEnabled: true,
+                systemPressureDominates: true,
+                reclaimCount: 2)
+            || ShouldFallbackFromRepeatedSystemPressure(
+                signalEnabled: true,
+                systemPressureDominates: true,
+                reclaimCount: 1)
+            || ShouldFallbackFromRepeatedSystemPressure(
+                signalEnabled: true,
+                systemPressureDominates: false,
+                reclaimCount: 2)
+            || ShouldFallbackFromRepeatedSystemPressure(
+                signalEnabled: false,
+                systemPressureDominates: true,
+                reclaimCount: 2))
+        {
+            throw new InvalidOperationException(
+                "持续系统内存压力没有在两次 NoGC 回收后切换 CLR 常规 GC。");
+        }
         if (ResolveStandPatBatchSize(100, 600, 100) != 6
             || ResolveStandPatBatchSize(3, 600, 100) != 3
             || ResolveStandPatBatchSize(100, 99, 100) != 1
