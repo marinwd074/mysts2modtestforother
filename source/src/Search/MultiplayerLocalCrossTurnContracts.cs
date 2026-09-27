@@ -80,10 +80,13 @@ internal static class MultiplayerLocalCrossTurnContracts
             && searchedTurnLayers >= limit;
 
     /// <summary>
-    /// Quality-first default: local-core multiplayer keeps the exact single-player
-    /// exploration order. P1/P2 continuation seeds and P3 cross-family scheduling stay
-    /// available as offline experiments but do not influence production search.
+    /// Phase D R1 recovery is allowed to replay a previous local route from the new live root.
+    /// The replay is re-simulated and re-evaluated; it never reuses old scores or deployment
+    /// authority. Enumeration hints and P3 scheduling remain disabled so the ordinary
+    /// single-player Beam order stays unchanged.
     /// </summary>
+    internal static bool LocalCoreR1RecoveryEnabled => true;
+
     internal static bool LocalCoreSearchAcceleratorsEnabled => false;
 
     internal static bool ShouldUseP3CrossFamilyScheduling(
@@ -126,6 +129,33 @@ internal static class MultiplayerLocalCrossTurnContracts
             && !hasTurnStartChoices
             && !hasShadowForecast
             && hasCardStateKey;
+
+    internal static IReadOnlyList<PlanAction> CaptureR1ValidatedEnumerationHintActions(
+        IReadOnlyList<PlanAction> actions,
+        int currentTurn)
+    {
+        List<PlanAction> prefix = [];
+        foreach (PlanAction action in actions)
+        {
+            if (action.Turn < currentTurn)
+                continue;
+            if (!CanReplayContinuationSeedAction(
+                    action.Turn,
+                    currentTurn,
+                    action.Kind == PlanActionKind.PlayCard,
+                    action.EndsPlayerTurn,
+                    action.Choice != null,
+                    action.NestedChoices is { Count: > 0 },
+                    action.TurnStartChoices is { Count: > 0 },
+                    action.ShadowForecast != null,
+                    !string.IsNullOrEmpty(action.CardStateKey)))
+            {
+                break;
+            }
+            prefix.Add(action);
+        }
+        return prefix.ToArray();
+    }
 
     internal static bool HasActiveMultiplayerRouteSemantics(
         SearchRoutePolicy policy,
@@ -421,6 +451,65 @@ internal static class MultiplayerLocalCrossTurnContracts
 
     internal static bool IsExactContinuation(MultiplayerContinuationMatchInput input)
         => DescribeContinuationMismatch(input) is null;
+
+    internal static string? DescribeR1SeedAdmissionMismatch(
+        MultiplayerContinuationMatchInput input)
+    {
+        if (input.ActualWorldVersion <= Math.Max(
+                input.ExpectedSourceWorldVersion,
+                input.MinimumWorldVersion))
+        {
+            return "world_version_not_advanced";
+        }
+        if (!IsSameCombatLineageWithEnemyRemovalOnly(
+                input.ExpectedCombatIdentity,
+                input.ActualCombatIdentity))
+        {
+            return "combat_lineage_mismatch";
+        }
+        if (!string.Equals(
+                input.ExpectedLocalNetId,
+                input.ActualLocalNetId,
+                StringComparison.Ordinal))
+        {
+            return "local_net_id_mismatch";
+        }
+        if (input.ExpectedMultiplayerScalingHooks != input.ActualMultiplayerScalingHooks)
+            return "scaling_mismatch";
+        if (!string.Equals(
+                input.ExpectedCardMultiplayerConstraint,
+                input.ActualCardMultiplayerConstraint,
+                StringComparison.Ordinal))
+        {
+            return "card_constraint_mismatch";
+        }
+        return null;
+    }
+
+    private static bool IsSameCombatLineageWithEnemyRemovalOnly(
+        string expected,
+        string actual)
+    {
+        const string enemySeparator = ";enemies=";
+        int expectedEnemies = expected.IndexOf(enemySeparator, StringComparison.Ordinal);
+        int actualEnemies = actual.IndexOf(enemySeparator, StringComparison.Ordinal);
+        if (expectedEnemies < 0 || actualEnemies < 0)
+            return string.Equals(expected, actual, StringComparison.Ordinal);
+
+        string expectedPrefix = expected[..expectedEnemies];
+        string actualPrefix = actual[..actualEnemies];
+        if (!string.Equals(expectedPrefix, actualPrefix, StringComparison.Ordinal))
+            return false;
+
+        HashSet<string> expectedRoster = expected[(expectedEnemies + enemySeparator.Length)..]
+            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .ToHashSet(StringComparer.Ordinal);
+        HashSet<string> actualRoster = actual[(actualEnemies + enemySeparator.Length)..]
+            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .ToHashSet(StringComparer.Ordinal);
+
+        return actualRoster.IsSubsetOf(expectedRoster);
+    }
 
     internal static string? DescribeContinuationMismatch(
         MultiplayerContinuationMatchInput input)

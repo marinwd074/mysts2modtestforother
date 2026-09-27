@@ -2753,12 +2753,22 @@ internal sealed partial class CombatBeamSolver
     {
         bool r0MemoEligible = CanUseR0TransitionMemoForReplay(
             action, replayForkSeed, roundCheckpointCapture, cardChoiceCapture);
+        bool r1HydrationEligible = CanUseR1TransitionHydration(
+            action, replayForkSeed, roundCheckpointCapture, cardChoiceCapture);
         if (r0MemoEligible
             && TryReadR0TerminalTransition(parent, action, out SimulationSnapshot cachedTerminal))
         {
             _run.TransitionCount++;
             _run.TransitionCacheHits++;
             return cachedTerminal;
+        }
+        if (TryReadR1TransitionHydration(
+                parent,
+                action,
+                r1HydrationEligible,
+                out SimulationSnapshot hydratedTransition))
+        {
+            return hydratedTransition;
         }
 
         long shadowReplayStartedTicks =
@@ -2885,6 +2895,7 @@ internal sealed partial class CombatBeamSolver
             gatedSeed?.Dispose();
         }
 
+        ObserveR1TransitionHydration(parent, action, result, r1HydrationEligible);
         if (r0MemoEligible)
         {
             StoreR0TerminalTransition(parent, action, result);

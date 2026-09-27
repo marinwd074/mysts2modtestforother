@@ -13,15 +13,15 @@ internal static class ActionSearchOrderingPolicy
 {
     internal static int Compare(ActionSearchOrderHint left, ActionSearchOrderHint right)
     {
-        int comparison = right.ContinuationSeedPreferred.CompareTo(left.ContinuationSeedPreferred);
-        if (comparison != 0)
-            return comparison;
-
-        comparison = right.EstimatedLethal.CompareTo(left.EstimatedLethal);
+        int comparison = right.EstimatedLethal.CompareTo(left.EstimatedLethal);
         if (comparison != 0)
             return comparison;
 
         comparison = right.UrgentDefense.CompareTo(left.UrgentDefense);
+        if (comparison != 0)
+            return comparison;
+
+        comparison = right.ContinuationSeedPreferred.CompareTo(left.ContinuationSeedPreferred);
         if (comparison != 0)
             return comparison;
 
@@ -60,9 +60,15 @@ internal static class ActionSearchOrderingPolicy
     {
         ActionSearchOrderHint preferred =
             new(true, false, false, 0d, 0d, 9, 1);
+        ActionSearchOrderHint ordinary =
+            new(false, false, false, 99d, 99d, 0, 0);
         ActionSearchOrderHint lethal =
-            new(false, true, false, 99d, 99d, 0, 0);
-        return Compare(preferred, lethal) < 0
-            && Compare(lethal, preferred) > 0;
+            new(false, true, false, 0d, 0d, 9, 2);
+        ActionSearchOrderHint urgentDefense =
+            new(false, false, true, 0d, 0d, 9, 3);
+        return Compare(preferred, ordinary) < 0
+            && Compare(ordinary, preferred) > 0
+            && Compare(lethal, preferred) < 0
+            && Compare(urgentDefense, preferred) < 0;
     }
 }

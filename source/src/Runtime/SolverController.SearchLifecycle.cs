@@ -398,24 +398,33 @@ internal static partial class SolverController
                 }
 
                 if (expectedMultiplayer is { } seedExpectation
-                    && multiplayerValidation is { } seedValidation
-                    && MultiplayerLocalCrossTurnContracts.DescribeContinuationMismatch(
-                        new MultiplayerContinuationMatchInput(
-                            seedExpectation.CombatIdentity,
-                            seedValidation.CombatIdentity,
-                            seedExpectation.LocalNetId,
-                            seedValidation.LocalNetId,
-                            seedExpectation.MultiplayerScalingHooks,
-                            seedValidation.MultiplayerScalingHooks,
-                            seedExpectation.CardMultiplayerConstraint,
-                            seedValidation.CardMultiplayerConstraint,
-                            seedExpectation.SourceWorldVersion,
-                            seedValidation.MinimumWorldVersion,
-                            seedValidation.CurrentWorldVersion)) is null)
+                    && multiplayerValidation is { } seedValidation)
                 {
-                    continuationSeedActions = CaptureContinuationSeedActions(
-                        source.BestNode.Actions,
-                        currentTurn);
+                    MultiplayerContinuationMatchInput seedMatch = new(
+                        seedExpectation.CombatIdentity,
+                        seedValidation.CombatIdentity,
+                        seedExpectation.LocalNetId,
+                        seedValidation.LocalNetId,
+                        seedExpectation.MultiplayerScalingHooks,
+                        seedValidation.MultiplayerScalingHooks,
+                        seedExpectation.CardMultiplayerConstraint,
+                        seedValidation.CardMultiplayerConstraint,
+                        seedExpectation.SourceWorldVersion,
+                        seedValidation.MinimumWorldVersion,
+                        seedValidation.CurrentWorldVersion);
+                    string? seedAdmissionMismatch =
+                        MultiplayerLocalCrossTurnContracts.DescribeR1SeedAdmissionMismatch(
+                            seedMatch);
+                    if (seedAdmissionMismatch is null)
+                    {
+                        continuationSeedActions = CaptureContinuationSeedActions(
+                            source.BestNode.Actions,
+                            currentTurn);
+                    }
+                    Entry.Logger.Info(
+                        $"[CombatSolver/Test] MP_LOCAL_XTURN_SEED_CAPTURE " +
+                        $"turn={currentTurn} admission_reason={seedAdmissionMismatch ?? "none"} " +
+                        $"captured_actions={continuationSeedActions.Count}");
                 }
             }
 
@@ -495,20 +504,27 @@ internal static partial class SolverController
             if (continuationSeedActions.Count > 0
                 && searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
                 && !searchPolicy.IncludeTurnSetup
-                && MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled)
+                && MultiplayerLocalCrossTurnContracts.LocalCoreR1RecoveryEnabled)
             {
                 searchPolicy = searchPolicy with
                 {
                     ContinuationSeedActions = continuationSeedActions,
-                    ContinuationEnumerationHintActions = continuationSeedActions,
+                    ContinuationEnumerationHintActions =
+                        MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled
+                            ? continuationSeedActions
+                            : [],
                 };
+                Entry.Logger.Info(
+                    $"[CombatSolver/Test] MP_LOCAL_XTURN_R1_RECOVERY " +
+                    $"actions={continuationSeedActions.Count} " +
+                    $"enumeration_hint={MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled.ToString().ToLowerInvariant()}");
             }
             else if (continuationSeedActions.Count > 0
                      && searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore)
             {
                 Entry.Logger.Info(
                     $"[CombatSolver/Test] MP_LOCAL_XTURN_SEED_SKIPPED " +
-                    $"reason=single_player_quality_order actions={continuationSeedActions.Count}");
+                    $"reason=r1_recovery_unavailable actions={continuationSeedActions.Count}");
             }
             if (continuationStamp != null && capabilities.IsMultiplayer)
             {
@@ -517,6 +533,7 @@ internal static partial class SolverController
                     $"resume_kind={(searchPolicy.ContinuationSeedActions.Count > 0 ? "seeded_search" : "cold_search")} " +
                     $"seed_actions={searchPolicy.ContinuationSeedActions.Count} " +
                     $"single_player_quality_order={(!MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled).ToString().ToLowerInvariant()} " +
+                    $"r1_recovery_enabled={MultiplayerLocalCrossTurnContracts.LocalCoreR1RecoveryEnabled.ToString().ToLowerInvariant()} " +
                     $"continuation_reject_reason={continuationRejectReason}");
             }
             search.MaxDegreeOfParallelism = searchPolicy.MaxDegreeOfParallelism;
@@ -992,12 +1009,14 @@ internal static partial class SolverController
                     : "search_completed",
             result,
             DescribeReplanAudit());
-        SolverOverlaySnapshot completedSnapshot = currentTurnAdopted
-            ? SolverOverlaySnapshot.CaptureCurrentTurn(SolverCurrentTurnPreview.FromResult(result))
-            : SolverOverlaySnapshot.CaptureWithReviewedWorldlines(
-                result,
-                UnexpectedReplanCount > 0,
-                _combat.ReviewedWorldlinesTotal);
+        SolverOverlaySnapshot completedSnapshot =
+            currentTurnAdopted && !retainCurrentTurnRoute
+                ? SolverOverlaySnapshot.CaptureCurrentTurn(
+                    SolverCurrentTurnPreview.FromResult(result))
+                : SolverOverlaySnapshot.CaptureWithReviewedWorldlines(
+                    result,
+                    UnexpectedReplanCount > 0,
+                    _combat.ReviewedWorldlinesTotal);
         SolverOverlay.ShowResult(
             host,
             routeAdopted ? MarkRouteAdopted(completedSnapshot) : completedSnapshot);
@@ -1016,7 +1035,8 @@ internal static partial class SolverController
                 $"[CombatSolver/Test] SEARCH_CURRENT_TURN_ADOPTED generation={generation} " +
                 $"turn={result.StartTurnNumber} actions={result.BestNode.Actions.Count} " +
                 $"continuations={result.Continuations.Count} " +
-                $"future_route_preserved={retainCurrentTurnRoute.ToString().ToLowerInvariant()}");
+                $"future_route_preserved={retainCurrentTurnRoute.ToString().ToLowerInvariant()} " +
+                $"display_scope={(retainCurrentTurnRoute ? "full_route" : "current_turn")}");
         }
         else if (routeAdopted)
         {

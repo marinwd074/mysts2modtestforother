@@ -161,3 +161,418 @@ internal sealed record SearchPathObservation(
     public int CumulativePlayerHpLost => PolicyLabel.CumulativePlayerHpLost;
     public double Score => PolicyLabel.Score;
 }
+
+
+internal readonly record struct R1EvaluationShadowSnapshot(
+    int EntryLimit,
+    int Entries,
+    int StoreAttempts,
+    int DuplicateStores,
+    int StoreConflicts,
+    int ValidationObservations,
+    int StateKeyMisses,
+    int FullKeyMisses,
+    int ValidatedHits,
+    int OutputMismatches,
+    int BeamRankStores,
+    int BeamRankFirstValidations,
+    int BeamRankValidated,
+    int BeamRankMismatches,
+    int BeamRankReuses,
+    bool ReuseDisabled,
+    bool Capped);
+
+internal sealed class R1EvaluationShadowCache(
+    int entryLimit = 256,
+    int validationObservationLimit = 4096)
+{
+    private readonly record struct Key(
+        StateFingerprint StateKey,
+        int Turn,
+        int ActionCount,
+        int PotionCount,
+        int PotionStrategicCost,
+        int FutureSoldHp,
+        int CumulativePlayerHpLost,
+        long ScoreBits,
+        SearchRouteTraits Traits,
+        SearchBoundaryReason BoundaryReason,
+        StateFingerprint CombatProgressKey);
+
+    private readonly record struct Value(
+        double Score,
+        bool IsTerminal,
+        bool HasPredictionRisk,
+        int PlayerHp,
+        int PlayerMaxHp,
+        int ProjectedPlayerHp,
+        int PlayerBlock,
+        int EnemyHp,
+        int EnemyBlock,
+        int RawEnemyHp,
+        int AliveEnemyCount,
+        int PersistentBuffValue,
+        int StrategicRetentionValue,
+        int LatentSetupValue,
+        int FutureResourceValue,
+        int RetainedAttackValue,
+        int ReplayPotentialValue,
+        int DelayedDamageValue,
+        int ReactiveDamageValue,
+        int EnemyStrengthSuppression,
+        int EnemyWeakTurns,
+        int EnemyVulnerableTurns,
+        int SandpitRemaining,
+        int LiveDeckClutter,
+        int LiveDeckSize,
+        int OutstandingStolenResource,
+        int Energy,
+        int Stars,
+        int HandCount,
+        int CumulativeEnemyHpLost);
+
+    private readonly object _storeGate = new();
+    private readonly Dictionary<Key, Value> _entries = [];
+    private readonly Dictionary<Key, double> _beamRankScores = [];
+    private readonly HashSet<Key> _validatedBeamRankKeys = [];
+    private readonly HashSet<StateFingerprint> _stateKeys = [];
+    private readonly object _reuseGate = new();
+    private readonly int _entryLimit = entryLimit > 0
+        ? entryLimit
+        : throw new ArgumentOutOfRangeException(nameof(entryLimit));
+    private readonly int _validationObservationLimit = validationObservationLimit > 0
+        ? validationObservationLimit
+        : throw new ArgumentOutOfRangeException(nameof(validationObservationLimit));
+    private int _frozen;
+    private int _storeAttempts;
+    private int _duplicateStores;
+    private int _storeConflicts;
+    private int _validationObservations;
+    private int _stateKeyMisses;
+    private int _fullKeyMisses;
+    private int _validatedHits;
+    private int _outputMismatches;
+    private int _beamRankStores;
+    private int _beamRankFirstValidations;
+    private int _beamRankValidated;
+    private int _beamRankMismatches;
+    private int _beamRankReuses;
+    private int _reuseDisabled;
+    private int _capped;
+
+    internal int EntryCount
+    {
+        get
+        {
+            lock (_storeGate)
+                return _entries.Count;
+        }
+    }
+
+    internal void ObserveRetained(
+        SearchNode node,
+        bool r1Probe,
+        double? r1BeamRankScore = null)
+    {
+        if (r1Probe)
+        {
+            Store(node, r1BeamRankScore);
+            return;
+        }
+        Validate(node);
+    }
+
+    internal bool TryReuseBeamRank(SearchNode node, out double beamRankScore)
+    {
+        beamRankScore = 0d;
+        if (Volatile.Read(ref _frozen) == 0
+            || Volatile.Read(ref _reuseDisabled) != 0
+            || !_stateKeys.Contains(node.StateKey))
+        {
+            return false;
+        }
+
+        return TryReuseBeamRank(CaptureKey(node), out beamRankScore);
+    }
+
+    private bool TryReuseBeamRank(Key key, out double beamRankScore)
+    {
+        beamRankScore = 0d;
+        lock (_reuseGate)
+        {
+            if (_reuseDisabled != 0
+                || !_validatedBeamRankKeys.Contains(key)
+                || !_beamRankScores.TryGetValue(key, out beamRankScore))
+            {
+                return false;
+            }
+        }
+        Interlocked.Increment(ref _beamRankReuses);
+        return true;
+    }
+
+    internal void ValidateBeamRank(SearchNode node, double actual)
+    {
+        if (Volatile.Read(ref _frozen) == 0
+            || Volatile.Read(ref _reuseDisabled) != 0
+            || !_stateKeys.Contains(node.StateKey))
+        {
+            return;
+        }
+        ValidateBeamRank(CaptureKey(node), actual);
+    }
+
+    private void ValidateBeamRank(Key key, double actual)
+    {
+        if (!_beamRankScores.TryGetValue(key, out double expected))
+            return;
+
+        Interlocked.Increment(ref _beamRankFirstValidations);
+        if (BitConverter.DoubleToInt64Bits(expected) != BitConverter.DoubleToInt64Bits(actual))
+        {
+            Interlocked.Increment(ref _beamRankMismatches);
+            Volatile.Write(ref _reuseDisabled, 1);
+            return;
+        }
+
+        lock (_reuseGate)
+        {
+            if (_reuseDisabled == 0 && _validatedBeamRankKeys.Add(key))
+                Interlocked.Increment(ref _beamRankValidated);
+        }
+    }
+
+    internal static bool VerifyBeamRankReuseGateForTesting()
+    {
+        Key key = default;
+        R1EvaluationShadowCache accepted = new(entryLimit: 1, validationObservationLimit: 1);
+        accepted._beamRankScores.Add(key, 42.25d);
+        Volatile.Write(ref accepted._frozen, 1);
+        if (accepted.TryReuseBeamRank(key, out _))
+            return false;
+        accepted.ValidateBeamRank(key, 42.25d);
+        if (!accepted.TryReuseBeamRank(key, out double reused)
+            || BitConverter.DoubleToInt64Bits(reused)
+                != BitConverter.DoubleToInt64Bits(42.25d))
+        {
+            return false;
+        }
+
+        R1EvaluationShadowCache rejected = new(entryLimit: 1, validationObservationLimit: 1);
+        rejected._beamRankScores.Add(key, 11d);
+        Volatile.Write(ref rejected._frozen, 1);
+        rejected.ValidateBeamRank(key, 12d);
+        return rejected.Capture().ReuseDisabled
+            && rejected.Capture().BeamRankMismatches == 1
+            && !rejected.TryReuseBeamRank(key, out _);
+    }
+
+    internal void Freeze()
+    {
+        lock (_storeGate)
+            Volatile.Write(ref _frozen, 1);
+    }
+
+    internal R1EvaluationShadowSnapshot Capture()
+    {
+        int entries;
+        lock (_storeGate)
+            entries = _entries.Count;
+        return new R1EvaluationShadowSnapshot(
+            _entryLimit,
+            entries,
+            Volatile.Read(ref _storeAttempts),
+            Volatile.Read(ref _duplicateStores),
+            Volatile.Read(ref _storeConflicts),
+            Volatile.Read(ref _validationObservations),
+            Volatile.Read(ref _stateKeyMisses),
+            Volatile.Read(ref _fullKeyMisses),
+            Volatile.Read(ref _validatedHits),
+            Volatile.Read(ref _outputMismatches),
+            Volatile.Read(ref _beamRankStores),
+            Volatile.Read(ref _beamRankFirstValidations),
+            Volatile.Read(ref _beamRankValidated),
+            Volatile.Read(ref _beamRankMismatches),
+            Volatile.Read(ref _beamRankReuses),
+            Volatile.Read(ref _reuseDisabled) != 0,
+            Volatile.Read(ref _capped) != 0);
+    }
+
+    private void Store(SearchNode node, double? r1BeamRankScore)
+    {
+        if (Volatile.Read(ref _frozen) != 0 || Volatile.Read(ref _capped) != 0)
+            return;
+
+        Key key = CaptureKey(node);
+        Value value = CaptureValue(node);
+        lock (_storeGate)
+        {
+            if (_frozen != 0 || _capped != 0)
+                return;
+            _storeAttempts++;
+            if (_entries.TryGetValue(key, out Value existing))
+            {
+                if (existing == value)
+                    _duplicateStores++;
+                else
+                {
+                    _storeConflicts++;
+                    Volatile.Write(ref _reuseDisabled, 1);
+                }
+                if (r1BeamRankScore.HasValue)
+                {
+                    if (_beamRankScores.TryGetValue(key, out double existingRank))
+                    {
+                        if (BitConverter.DoubleToInt64Bits(existingRank)
+                            != BitConverter.DoubleToInt64Bits(r1BeamRankScore.Value))
+                        {
+                            _beamRankMismatches++;
+                            Volatile.Write(ref _reuseDisabled, 1);
+                        }
+                    }
+                    else
+                    {
+                        _beamRankScores.Add(key, r1BeamRankScore.Value);
+                        _beamRankStores++;
+                    }
+                }
+                return;
+            }
+            if (_entries.Count >= _entryLimit)
+            {
+                _capped = 1;
+                return;
+            }
+            _entries.Add(key, value);
+            if (r1BeamRankScore.HasValue)
+            {
+                _beamRankScores.Add(key, r1BeamRankScore.Value);
+                _beamRankStores++;
+            }
+            _stateKeys.Add(node.StateKey);
+        }
+    }
+
+    private void Validate(SearchNode node)
+    {
+        if (Volatile.Read(ref _frozen) == 0)
+            return;
+        int observation = Interlocked.Increment(ref _validationObservations);
+        if (observation > _validationObservationLimit)
+            return;
+
+        // After Freeze the dictionaries are immutable; concurrent reads from Beam workers are safe.
+        if (!_stateKeys.Contains(node.StateKey))
+        {
+            Interlocked.Increment(ref _stateKeyMisses);
+            return;
+        }
+
+        Key key = CaptureKey(node);
+        if (!_entries.TryGetValue(key, out Value expected))
+        {
+            Interlocked.Increment(ref _fullKeyMisses);
+            return;
+        }
+
+        Value actual = CaptureValue(node);
+        if (expected == actual)
+            Interlocked.Increment(ref _validatedHits);
+        else
+        {
+            Interlocked.Increment(ref _outputMismatches);
+            Volatile.Write(ref _reuseDisabled, 1);
+        }
+    }
+
+    private static Key CaptureKey(SearchNode node)
+        => new(
+            node.StateKey,
+            node.Turn,
+            node.ActionCount,
+            node.PotionCount,
+            node.PotionStrategicCost,
+            node.FutureSoldHp,
+            node.Snapshot.CumulativePlayerHpLost,
+            BitConverter.DoubleToInt64Bits(node.Score),
+            node.Traits,
+            node.BoundaryReason,
+            CaptureCombatProgressKey(node.CombatProgress));
+
+    private static StateFingerprint CaptureCombatProgressKey(CombatProgressState progress)
+    {
+        StateFingerprintBuilder key = new();
+        key.Add(progress.BestEnemyHp);
+        key.Add(progress.BestEnemyDurability);
+        EnemyDurabilityVector durability = progress.BestEnemyDurabilityByCombatId;
+        key.Add(durability.Count);
+        for (int index = 0; index < durability.Count; index++)
+        {
+            EnemyDurabilityEntry entry = durability[index];
+            key.Add(entry.CombatId);
+            key.Add(entry.Durability);
+        }
+        key.Add(progress.BestAliveEnemyCount);
+        key.Add(progress.BestOffensiveProgressValue);
+        key.Add(progress.BestPersistentBuffValue);
+        key.Add(progress.BestStrategicRetentionValue);
+        key.Add(progress.BestFutureResourceValue);
+        key.Add(progress.BestDelayedDamageValue);
+        key.Add(progress.BestReplayPotentialValue);
+        key.Add(progress.BestRetainedAttackValue);
+        key.Add(progress.BestPlayerMaxHp);
+        key.Add(progress.BestLongTermResourceValue);
+        key.Add(progress.LowestPlayerHp);
+        key.Add(progress.BestPlayerHpRecovery);
+        key.Add(progress.LowestProjectedPlayerHp);
+        key.Add(progress.BestProjectedPlayerHpRecovery);
+        key.Add(progress.BestEnemyStrengthSuppression);
+        key.Add(progress.BestEnemyWeakTurns);
+        key.Add(progress.BestEnemyVulnerableTurns);
+        key.Add(progress.BestOstyHp);
+        key.Add(progress.BestOstyMaxHp);
+        key.Add(progress.BestLiveDeckClutter);
+        key.Add(progress.BestLiveDeckSize);
+        key.Add(progress.BestOutstandingStolenResource);
+        key.Add(progress.BestSandpitRemaining);
+        key.Add(progress.MostProcessedEnemyDeaths);
+        key.Add(progress.TurnsWithoutProgress);
+        return key.Finish();
+    }
+
+    private static Value CaptureValue(SearchNode node)
+    {
+        SimulationSnapshot snapshot = node.Snapshot;
+        return new Value(
+            node.Score,
+            node.IsTerminal,
+            node.HasPredictionRisk,
+            snapshot.PlayerHp,
+            snapshot.PlayerMaxHp,
+            snapshot.ProjectedPlayerHp,
+            snapshot.PlayerBlock,
+            snapshot.EnemyHp,
+            snapshot.EnemyBlock,
+            snapshot.RawEnemyHp,
+            snapshot.AliveEnemyCount,
+            snapshot.PersistentBuffValue,
+            snapshot.StrategicEffects.RetentionValue,
+            snapshot.LatentSetupValue,
+            snapshot.FutureResourceValue,
+            snapshot.RetainedAttackValue,
+            snapshot.ReplayPotentialValue,
+            snapshot.DelayedDamageValue,
+            snapshot.ReactiveDamageValue,
+            snapshot.EnemyStrengthSuppression,
+            snapshot.EnemyWeakTurns,
+            snapshot.EnemyVulnerableTurns,
+            snapshot.SandpitRemaining,
+            snapshot.LiveDeckClutter,
+            snapshot.LiveDeckSize,
+            snapshot.OutstandingStolenResource,
+            snapshot.Energy,
+            snapshot.Stars,
+            snapshot.HandCount,
+            node.CumulativeEnemyHpLost);
+    }
+}

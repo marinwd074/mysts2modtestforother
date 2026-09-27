@@ -486,10 +486,243 @@ internal sealed partial class CombatBeamSolver
         string reason,
         int boundaryId)
     {
+        if (stage == SearchPathObservationStage.PruneFinal)
+        {
+            if (policy.R1EvaluationShadowCache != null)
+            {
+                foreach (SearchNode node in nodes)
+                {
+                    double? r1BeamRankScore = _continuationSeedProbe
+                        ? Retention.ComputeBeamRankScoreForR1Shadow(node)
+                        : null;
+                    policy.R1EvaluationShadowCache.ObserveRetained(
+                        node,
+                        _continuationSeedProbe,
+                        r1BeamRankScore);
+                }
+            }
+            ObserveR1FrontierShadow(nodes);
+        }
+
         if (policy.Diagnostics.PathObserver == null)
             return;
         foreach (SearchNode node in nodes)
             ObserveSearchPath(node, stage, reason, boundaryId);
+    }
+
+    private void ObserveR1FrontierShadow(IReadOnlyList<SearchNode> nodes)
+    {
+        R1FrontierShadowCache? cache = policy.R1FrontierShadowCache;
+        if (cache == null || nodes.Count == 0 || nodes.Count > 128)
+        {
+            if (cache != null && nodes.Count > 128)
+                cache.RecordSkipped();
+            return;
+        }
+
+        SearchNode first = nodes[0];
+        R1FrontierShadowKey key = new(first.Turn, first.ActionCount, nodes.Count);
+        foreach (SearchNode node in nodes)
+        {
+            if (node.Turn != key.Turn
+                || node.ActionCount != key.ActionCount
+                || !CanObservePlainR1FrontierNode(node))
+            {
+                cache.RecordSkipped();
+                return;
+            }
+        }
+
+        R1FrontierDepthKey depth = new(first.Turn, first.ActionCount);
+        bool exactRequested = _continuationSeedProbe
+            || cache.TryBeginBaselineObservation(key);
+        bool subsetRequested = _continuationSeedProbe
+            || cache.WantsSubsetObservation(depth);
+        if (!exactRequested && !subsetRequested)
+            return;
+
+        IReadOnlyList<StateFingerprint> nodeFingerprints = subsetRequested
+            ? CaptureFrontierNodeFingerprints(nodes)
+            : [];
+        if (_continuationSeedProbe)
+        {
+            System.Text.StringBuilder signature = new(nodes.Count * 192);
+            signature.Append("frontier-v1|");
+            foreach (SearchNode node in nodes)
+            {
+                AppendFrontierNodeSignature(signature, node);
+                signature.Append("||");
+            }
+            cache.StoreProbe(key, signature.ToString(), nodeFingerprints);
+            return;
+        }
+
+        if (subsetRequested)
+            cache.ObserveSubset(depth, nodeFingerprints);
+        if (!exactRequested)
+            return;
+
+        System.Text.StringBuilder exactSignature = new(nodes.Count * 192);
+        exactSignature.Append("frontier-v1|");
+        foreach (SearchNode node in nodes)
+        {
+            AppendFrontierNodeSignature(exactSignature, node);
+            exactSignature.Append("||");
+        }
+        cache.ValidateExact(key, exactSignature.ToString());
+    }
+
+    private static bool CanObservePlainR1FrontierNode(SearchNode node)
+        => node.Outcome == null
+            && node.Cycle == null
+            && node.OrderedMutationLineage == null
+            && node.OrderedMutationBoundaryLineage == null
+            && node.OrderedMutationRetentionLease == null
+            && node.OrderedMutationActivationTicket == null
+            && !node.OrderedMutationLeaseTransitionPending
+            && !node.OrderedMutationAdmissionPending
+            && !node.OrderedMutationAdmissionCharged
+            && !node.OrderedMutationContinuationHandoff
+            && !node.OrderedMutationContinuationBridge
+            && !node.OrderedMutationObservationRequested
+            && !node.OrderedMutationObservationDebtSettlementPending
+            && node.OrderedMutationObservationStepsRemaining == 0
+            && node.CycleProbeLease == null
+            && node.CycleExitProbe == null
+            && node.CycleExitObservation == null
+            && node.PendingCycleExitObservation == null
+            && node.CrossTurnProbe == null
+            && node.CrossTurnStandPatBaselines == null
+            && !node.CrossTurnSemanticStateChanged
+            && !node.CrossTurnSemanticEvidenceAttached
+            && !node.CrossTurnSemanticInvisibleToModeledQuality
+            && !node.HasPredictionRisk
+            && !node.Snapshot.HasRisk
+            && node.Snapshot.PredictionGaps.All(static gap => gap.Compensated);
+
+    private static IReadOnlyList<StateFingerprint> CaptureFrontierNodeFingerprints(
+        IReadOnlyList<SearchNode> nodes)
+    {
+        StateFingerprint[] fingerprints = new StateFingerprint[nodes.Count];
+        for (int index = 0; index < nodes.Count; index++)
+        {
+            System.Text.StringBuilder builder = new(192);
+            AppendFrontierNodeSignature(builder, nodes[index]);
+            StateFingerprintBuilder fingerprint = new();
+            fingerprint.Add(builder.ToString());
+            fingerprints[index] = fingerprint.Finish();
+        }
+        return fingerprints;
+    }
+
+    private static void AppendFrontierNodeSignature(
+        System.Text.StringBuilder builder,
+        SearchNode node)
+    {
+        static void Sep(System.Text.StringBuilder value) => value.Append('|');
+        void AddNumber(long value) { builder.Append(value); Sep(builder); }
+        void AddUnsigned(ulong value) { builder.Append(value); Sep(builder); }
+        void AddText(string? value)
+        {
+            value ??= "<null>";
+            builder.Append(value.Length).Append(':').Append(value);
+            Sep(builder);
+        }
+
+        AddUnsigned(node.StateKey.First);
+        AddUnsigned(node.StateKey.Second);
+        AddNumber(node.Turn);
+        AddNumber(node.ActionCount);
+        AddNumber(node.PotionCount);
+        AddNumber(node.PotionStrategicCost);
+        AddNumber(node.FutureSoldHp);
+        AddNumber(node.Snapshot.CumulativePlayerHpLost);
+        AddNumber(BitConverter.DoubleToInt64Bits(node.Snapshot.TeamLossRatio));
+        AddNumber(BitConverter.DoubleToInt64Bits(node.Snapshot.WorstPlayerLossRatio));
+        AddNumber(node.Snapshot.AllPlayersAlive ? 1 : 0);
+        AddNumber(BitConverter.DoubleToInt64Bits(node.Score));
+        AddNumber((int)node.Traits);
+        AddNumber(node.HasNonPotionAction ? 1 : 0);
+        AddNumber((int)node.BoundaryReason);
+        AddNumber(node.IsTerminal ? 1 : 0);
+        AddNumber(node.Snapshot.PlayerDead ? 1 : 0);
+        AddNumber(node.Snapshot.AllEnemiesDead ? 1 : 0);
+        AddNumber(node.CumulativeEnemyHpLost);
+        AddNumber(node.RetentionRank);
+        AddNumber(node.LongTermResourceRetentionRank);
+        AddNumber(node.CycleRetentionRank);
+        AddNumber(node.CycleExitRetentionRank);
+        AddNumber(node.CrossTurnRetentionRank);
+
+        CombatProgressState progress = node.CombatProgress;
+        AddNumber(progress.BestEnemyHp);
+        AddNumber(progress.BestEnemyDurability);
+        AddNumber(progress.BestAliveEnemyCount);
+        AddNumber(progress.BestOffensiveProgressValue);
+        AddNumber(progress.BestPersistentBuffValue);
+        AddNumber(progress.BestStrategicRetentionValue);
+        AddNumber(progress.BestFutureResourceValue);
+        AddNumber(progress.BestDelayedDamageValue);
+        AddNumber(progress.BestReplayPotentialValue);
+        AddNumber(progress.BestRetainedAttackValue);
+        AddNumber(progress.BestPlayerMaxHp);
+        AddNumber(progress.BestLongTermResourceValue);
+        AddNumber(progress.LowestPlayerHp);
+        AddNumber(progress.BestPlayerHpRecovery);
+        AddNumber(progress.LowestProjectedPlayerHp);
+        AddNumber(progress.BestProjectedPlayerHpRecovery);
+        AddNumber(progress.BestEnemyStrengthSuppression);
+        AddNumber(progress.BestEnemyWeakTurns);
+        AddNumber(progress.BestEnemyVulnerableTurns);
+        AddNumber(progress.BestOstyHp);
+        AddNumber(progress.BestOstyMaxHp);
+        AddNumber(progress.BestLiveDeckClutter);
+        AddNumber(progress.BestLiveDeckSize);
+        AddNumber(progress.BestOutstandingStolenResource);
+        AddNumber(progress.BestSandpitRemaining);
+        AddNumber(progress.MostProcessedEnemyDeaths);
+        AddNumber(progress.TurnsWithoutProgress);
+        EnemyDurabilityVector durability = progress.BestEnemyDurabilityByCombatId;
+        AddNumber(durability.Count);
+        for (int index = 0; index < durability.Count; index++)
+        {
+            EnemyDurabilityEntry entry = durability[index];
+            AddUnsigned(entry.CombatId);
+            AddNumber(entry.Durability);
+        }
+
+        IReadOnlyList<PredictionGap> gaps = node.Snapshot.PredictionGaps;
+        AddNumber(gaps.Count);
+        foreach (PredictionGap gap in gaps)
+        {
+            AddText(gap.SourceId);
+            AddText(gap.Method);
+            AddText(gap.Reason);
+            AddNumber(gap.Compensated ? 1 : 0);
+        }
+
+        IReadOnlyList<PlanCardChoice> rootChoices = node.GetTurnSetupChoices();
+        AddNumber(rootChoices.Count);
+        foreach (PlanCardChoice choice in rootChoices)
+            AddText(PolicyChoiceIdentityToken(choice));
+        AddText(node.GetTurnSetupPlayState()?.StateText);
+
+        IReadOnlyList<PlanAction> actions = node.Actions;
+        AddNumber(actions.Count);
+        foreach (PlanAction action in actions)
+            AddText(PolicyActionIdentityToken(action));
+
+        for (SearchNode? cursor = node; cursor != null; cursor = cursor.Parent)
+        {
+            AddUnsigned(cursor.StateKey.First);
+            AddUnsigned(cursor.StateKey.Second);
+            AddNumber(cursor.RetentionRank);
+            AddNumber(cursor.LongTermResourceRetentionRank);
+            AddNumber(cursor.CycleRetentionRank);
+            AddNumber(cursor.CycleExitRetentionRank);
+            AddNumber(cursor.CrossTurnRetentionRank);
+        }
+        builder.Append('#');
     }
 
     private void ObserveSearchPathTurnSelection(

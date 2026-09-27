@@ -157,6 +157,31 @@ Check(
     continuationSeedActionContractsAreCorrect,
     "P1 continuation-seed action boundary rejects cross-turn, non-card, choice and ambiguous-card suggestions.");
 
+PlanAction[] r1ValidatedPath =
+[
+    new(PlanActionKind.PlayCard, 3, CardId: "A", CardStateKey: "a"),
+    new(PlanActionKind.PlayCard, 3, CardId: "B", CardStateKey: "b"),
+    new(PlanActionKind.EndTurn, 3),
+    new(PlanActionKind.PlayCard, 4, CardId: "C", CardStateKey: "c"),
+];
+IReadOnlyList<PlanAction> r1ValidatedHints =
+    MultiplayerLocalCrossTurnContracts.CaptureR1ValidatedEnumerationHintActions(
+        r1ValidatedPath,
+        currentTurn: 3);
+Check(
+    r1ValidatedHints.Count == 2
+    && r1ValidatedHints[0].CardId == "A"
+    && r1ValidatedHints[1].CardId == "B",
+    "Phase D2 keeps only the newly validated current-turn plain-card prefix as an ordering hint.");
+Check(
+    MultiplayerLocalCrossTurnContracts.CaptureR1ValidatedEnumerationHintActions(
+        [
+            new(PlanActionKind.PlayCard, 3, CardId: "A", CardStateKey: "a"),
+            new(PlanActionKind.PlayCard, 3, CardId: "AMBIGUOUS", CardStateKey: ""),
+        ],
+        currentTurn: 3).Count == 1,
+    "Phase D2 stops the validated hint before ambiguous or unsupported semantics.");
+
 string continuationExact =
     "combat_identity=seed=s;players=1,2;enemies=4:A;local_net_id=2;turn=3;hp=77;H=A;D=B;C=;X=;" +
     "R=224:shuffle/0:cardgen/4:potion/2:select/0:energy/5:targets/0:orbs/10:ai/8:niche";
@@ -300,14 +325,15 @@ Check(
     "Local-core continuation may ignore only downward HP drift on a still-living enemy; lethal-window gating, HP increases, death and block changes remain strict.");
 
 Check(
-    !MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled
+    MultiplayerLocalCrossTurnContracts.LocalCoreR1RecoveryEnabled
+    && !MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled
     && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
         SearchRoutePolicy.MultiplayerSinglePlayerCore, false, true, false, false)
     && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
         SearchRoutePolicy.SinglePlayerFullRoute, false, true, false, false)
     && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
         SearchRoutePolicy.MultiplayerLocalCrossTurn, false, true, false, false),
-    "Default multiplayer local-core disables P1/P2/P3 search accelerators so finite-budget exploration keeps single-player ordering.");
+    "Phase D enables validated R1 reroot replay while enumeration hints and P3 remain disabled, preserving ordinary Beam ordering.");
 
 Check(
     !MultiplayerLocalCrossTurnContracts.ShouldRunEarlySmartPotionScout(
@@ -324,6 +350,23 @@ Check(
         && MultiplayerLocalCrossTurnContracts.CanUseFullSearchHeuristics(
             SearchRoutePolicy.SinglePlayerFullRoute),
     "Default multiplayer local-core enters the same full Beam/retention/final-ordering search class as singleplayer; multiplayer differences remain state/runtime boundaries.");
+
+Check(
+    MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnProjection(
+        SearchRoutePolicy.MultiplayerSinglePlayerCore)
+    && MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnContinuation(
+        MultiplayerSearchResultScope.PartialLocalCrossTurnProjection,
+        continuationCount: 1)
+    && MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnContinuation(
+        MultiplayerSearchResultScope.CompleteLocalBattleProjection,
+        continuationCount: 1)
+    && !MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnContinuation(
+        MultiplayerSearchResultScope.CurrentTurnOnly,
+        continuationCount: 1)
+    && !MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnContinuation(
+        MultiplayerSearchResultScope.PartialLocalCrossTurnProjection,
+        continuationCount: 0),
+    "Apply-current-turn may retain a validated default local-core future route only when a real cross-turn continuation exists.");
 
 Check(
     MultiplayerLocalCrossTurnContracts.PredictionTurnLayerLimit(
@@ -369,7 +412,7 @@ Check(
     "E5 action enumeration prioritizes estimated lethal, urgent defense, strategic value-per-resource, then preserves stable original order for exact ties.");
 Check(
     ActionSearchOrderingPolicy.VerifyContinuationSeedPriorityForTesting(),
-    "P2 continuation enumeration hint can move the exact next seed action ahead of ordinary action-order heuristics without changing the candidate set.");
+    "Phase D2 R1 hint outranks ordinary heuristic ties but never outranks estimated lethal or urgent defense.");
 
 MultiplayerContinuationMatchInput Match(
     string combatIdentity = "combat-a",
@@ -579,6 +622,47 @@ Check(
         && MultiplayerLocalCrossTurnContracts.DescribeContinuationMismatch(
             Match(combatIdentity: "combat-without-target")) == "combat_identity_mismatch",
     "A combat identity change such as teammate removal of the planned target rejects the old route.");
+
+string r1ExpectedCombat =
+    "seed=RFE4KDWHUM;players=1,1000;enemies=2:EXOSKELETON,3:EXOSKELETON,4:EXOSKELETON";
+string r1EnemyRemovedCombat =
+    "seed=RFE4KDWHUM;players=1,1000;enemies=3:EXOSKELETON,4:EXOSKELETON";
+string r1EnemyAddedCombat =
+    "seed=RFE4KDWHUM;players=1,1000;enemies=2:EXOSKELETON,3:EXOSKELETON,4:EXOSKELETON,5:EXOSKELETON";
+string r1EnemyReplacedCombat =
+    "seed=RFE4KDWHUM;players=1,1000;enemies=3:EXOSKELETON,9:OTHER";
+MultiplayerContinuationMatchInput R1Lineage(string actualCombat, long actualWorldVersion = 12)
+    => new(
+        ExpectedCombatIdentity: r1ExpectedCombat,
+        ActualCombatIdentity: actualCombat,
+        ExpectedLocalNetId: "1000",
+        ActualLocalNetId: "1000",
+        ExpectedMultiplayerScalingHooks: true,
+        ActualMultiplayerScalingHooks: true,
+        ExpectedCardMultiplayerConstraint: "MultiplayerOnly",
+        ActualCardMultiplayerConstraint: "MultiplayerOnly",
+        ExpectedSourceWorldVersion: 10,
+        MinimumWorldVersion: 10,
+        ActualWorldVersion: actualWorldVersion);
+
+Check(
+    MultiplayerLocalCrossTurnContracts.DescribeContinuationMismatch(
+        R1Lineage(r1EnemyRemovedCombat)) == "combat_identity_mismatch"
+    && MultiplayerLocalCrossTurnContracts.DescribeR1SeedAdmissionMismatch(
+        R1Lineage(r1EnemyRemovedCombat)) is null,
+    "Exact continuation still rejects an enemy removal, while R1 may replay the old plain-card prefix from the new real root.");
+
+Check(
+    MultiplayerLocalCrossTurnContracts.DescribeR1SeedAdmissionMismatch(
+        R1Lineage(r1ExpectedCombat)) is null
+    && MultiplayerLocalCrossTurnContracts.DescribeR1SeedAdmissionMismatch(
+        R1Lineage(r1EnemyAddedCombat)) == "combat_lineage_mismatch"
+    && MultiplayerLocalCrossTurnContracts.DescribeR1SeedAdmissionMismatch(
+        R1Lineage(r1EnemyReplacedCombat)) == "combat_lineage_mismatch"
+    && MultiplayerLocalCrossTurnContracts.DescribeR1SeedAdmissionMismatch(
+        R1Lineage(r1EnemyRemovedCombat, actualWorldVersion: 10))
+            == "world_version_not_advanced",
+    "R1 lineage admission permits only same-battle enemy removal; additions, replacements and stale WorldVersion remain rejected.");
 
 Check(
     MultiplayerLocalCrossTurnContracts.IsCurrentTurnAction(1, 1)

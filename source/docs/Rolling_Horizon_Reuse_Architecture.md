@@ -199,7 +199,21 @@ GPU、学习型价值网络和 MCTS 可作为以后独立实验：现有 C# 规�
 
 - **A 已完成**：沿现有发布/continuation/refresh 调用链完成现状测量，没有另造重复计时或复用层。
 - **B 已完成**：`DeferredImpactCoverage` / `DeferredImpactOutcome` 只记录真实模拟已到达的覆盖边界和绝对结果，不参与生产排序。pinned 0.107.1 定向验收覆盖真实延迟负效应（Biased Cognition Focus `4 → 3`）、慢收益（Outmaneuver 下一回合 Energy `3 → 5`）以及当前回合斩杀（`CombatTerminal`，无未来攻击债务）；Release 与 harness 均 0 warning / 0 error。Borrowed Time 经固定上游/0.107.1 语义核对属于本回合费用修正，不作为跨回合负债样本。
-- **下一阶段 C**：战斗级 R0 转移缓存；先做同战斗、纯值、可禁用、严格失效的旁路缓存，再用开/关逐状态一致性决定是否允许采用。
+- **C 已完成**：战斗级 R0 exact/normalized shadow 已通过同战斗跨请求与真实 fresh re-root 证据；非终局真实 hydration 仍保持关闭，避免把 simulator-free value snapshot 误当可展开节点。
+- **D 进行中**：生产启用 R1 新根路线重放。完整合法胜利可建立安全 incumbent bound；未胜利但仍存活的 probe 结果可抽取新根已验证的当前回合普通牌前缀，仅用于 baseline Beam 枚举顺序提示。冷根、候选集合、普通 Beam 节点/时间预算、P3 与 refinement 冷序均保留；失败继续回到原求解。
+- **D3.1 shadow 已落地**：R1 probe 与 baseline 对 retained-state evaluation 做 request-local exact/path-aware 对照，固定上限 256 entries / 4096 observations；当前 `behavioral_reuse=false`，不跳过任何模拟或评价。D3.2 仅在真实 fresh re-root 证明 hit>0 且 conflict/mismatch 均为 0 后启用。
+
+- **D3.2 已落地**：只对 Beam retention 的纯 `BeamRankScore` 做 request-local 首验后复用。第一次 baseline 命中仍现算并精确比对；同 key 后续调用才复用。任一冲突或 mismatch 立即关闭该请求的复用。真实 replay、state capture/fingerprint、候选集合和搜索预算均保持原路径。
+
+- **D3.3 已落地**：R1 probe 最多保留 32 个 request-local exact 非终局普通 PlayCard 后态。baseline 首次相同 parent/action 仍真实 replay 并核对完整输出语义，后续重复 key 才可直接 fork 后态并重新 Snapshot/evaluate；冲突或 mismatch fail-closed。缓存只活到 baseline 结束，不进入 refinement/supplemental，不改变 Beam/节点/时间预算。
+- **D3.4 shadow 已落地**：对 R1 probe 与 baseline 的 plain `PruneFinal` retained frontier 做 exact ordered 语义签名对照；不恢复 SearchNode、不跳过展开、不影响 Beam。签名严格包含路径与父链 retention 语义，复杂 Cycle/CrossTurn/OrderedMutation frontier 直接跳过。真实 fresh re-root 出现 exact frontier hit 后，D3.5 才允许尝试恢复 frontier 来减少 expanded nodes。
+- **D3.4B 已落地**：对 exact frontier key miss 做 turn / actionCount / nodeCount 三层互斥分类，并记录最近 R1 probe key；仍为 `behavioral_reuse=false`。只有分类证据证明 frontier 差异可安全收敛后才设计 D3.5，禁止为了命中率直接放宽等价性。
+
+- **D3.4C 已落地**：整 frontier key 不重合后，改测同 `turn + actionCount` 的 exact retained-node 集合交集；记录 R1 是否为 baseline 的稳定子集。当前仍 `behavioral_reuse=false`，不恢复节点、不减少展开。D3.5 的候选设计由该证据决定，优先考虑 exact 子集/子树恢复，而非整 frontier 替换。
+- **D3.4C 实机结论更新**：最新完整 fresh re-root 样本在同一 `turn=3/actionCount=4` 下为 R1 4 nodes、baseline 60 nodes、intersection 0。原 D3.5“恢复 retained frontier/subtree”暂停，不再以此作为下一步。当前优先验证 D3.3B：对已首验通过的 exact transition key 继续复用，单个 mismatch key 独立拒绝。
+- **D3.3C 已落地**：ENTOMANCER 实机出现 `validated_keys=2` 但 `hydration_hits=0` 后确认瓶颈是 cache 生命周期而非一致性。已验证的 request-local exact transition cache 现在保留到同一 request 的 supplemental audits 结束；后续成员仅能消费各自首验通过的 exact key，坏 key 仍按 D3.3B 独立拒绝。baseline 与 request-tail 分别记录 hydration telemetry，最终再释放原型 simulator。
+- **D3.4C admission 修正**：R1 seed 不再继承 exact continuation 的完整 enemy-roster CombatIdentity 门禁。仅允许同一战斗 seed/玩家集合下 enemy roster 由 expected 缩成 actual 子集；这是为了覆盖队友提前击杀导致的 fresh re-root。Exact continuation 仍保持完整 identity 严格一致，R1 仍必须从新 live root 逐动作 replay，失效动作自然截断/拒绝。
+- **D3.4C blocker 修复**：实机 R1 已能建立 incumbent，但 R0 terminal memo 的 simulator-free terminal snapshot 被 Novelty 当作可读取 simulator 的节点，导致搜索失败。修复只跳过 terminal value-only 节点的 novelty fact capture；nonterminal 缺 simulator 仍 fail-fast。D3.5 在该修复通过实机前继续暂停。
 
 建议实施顺序 A → B → C → D → E → F → G → H；先收获正确的短期评价和同战斗复用，再投入昂贵持久化。R2 依赖闭包复用是 D 后的可选独立阶段，未证明可靠时不影响主线交付。
 

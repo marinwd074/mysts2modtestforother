@@ -106,9 +106,16 @@ internal static partial class SolverController
         _combat.LatestRouteInvalidationVersion = SolverSessionCapabilities.Capture(state).IsMultiplayer
             ? MultiplayerRouteChangeTracker.InvalidationVersion
             : 0;
-        _combat.ContinuationSource = result.ResultScope == SolverResultScope.CurrentTurnAdoption
-            ? null
-            : result;
+        bool retainCurrentTurnRoute =
+            result.ResultScope == SolverResultScope.CurrentTurnAdoption
+            && MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnContinuation(
+                result.MultiplayerScope,
+                result.Continuations.Count);
+        _combat.ContinuationSource =
+            result.ResultScope != SolverResultScope.CurrentTurnAdoption
+            || retainCurrentTurnRoute
+                ? result
+                : null;
         if (!result.WasRestoredFromCache)
         {
             _combat.SearchesStarted++;
@@ -132,18 +139,21 @@ internal static partial class SolverController
             },
             result,
             DescribeReplanAudit());
-        SolverOverlaySnapshot snapshot = result.ResultScope == SolverResultScope.CurrentTurnAdoption
-            ? SolverOverlaySnapshot.CaptureCurrentTurn(SolverCurrentTurnPreview.FromResult(result))
-            : SolverOverlaySnapshot.CaptureWithReviewedWorldlines(
-                result,
-                UnexpectedReplanCount > 0,
-                _combat.ReviewedWorldlinesTotal);
+        SolverOverlaySnapshot snapshot =
+            result.ResultScope == SolverResultScope.CurrentTurnAdoption
+            && !retainCurrentTurnRoute
+                ? SolverOverlaySnapshot.CaptureCurrentTurn(
+                    SolverCurrentTurnPreview.FromResult(result))
+                : SolverOverlaySnapshot.CaptureWithReviewedWorldlines(
+                    result,
+                    UnexpectedReplanCount > 0,
+                    _combat.ReviewedWorldlinesTotal);
         if (result.ResultScope == SolverResultScope.RouteAdoption)
             snapshot = MarkRouteAdopted(snapshot);
         SolverOverlay.ShowResult(host, snapshot);
         Entry.Logger.Info(
             $"[CombatSolver/Test] TURN_SETUP_RESULT_ACCEPTED turn={player.PlayerCombatState.TurnNumber} " +
-            $"scope={result.ResultScope}");
+            $"scope={result.ResultScope} future_route_preserved={retainCurrentTurnRoute.ToString().ToLowerInvariant()}");
         Entry.Logger.Info(SolverDiagnostics.DescribeResult(result));
         if (_combat.FullAutoEnabled
             && result.ResultScope != SolverResultScope.CurrentTurnAdoption)

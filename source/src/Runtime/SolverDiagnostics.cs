@@ -201,6 +201,7 @@ internal static class SolverDiagnostics
             .Append(" parallel_round_choice_max_concurrency=").Append(result.MaxParallelRoundChoiceReplayConcurrency)
             .Append(" node_limit_snapshots_released=").Append(result.NodeLimitSnapshotsReleased)
             .Append(" transition_cache_hits=").Append(result.TransitionCacheHits)
+            .Append(" r1_transition_hydration_hits=").Append(result.R1TransitionHydrationHits)
             .Append(" shadow_replay_observations=").Append(result.ShadowReplayObservations)
             .Append(" shadow_replay_stores=").Append(result.ShadowReplayStores)
             .Append(" shadow_replay_validated_hits=").Append(result.ShadowReplayValidatedHits)

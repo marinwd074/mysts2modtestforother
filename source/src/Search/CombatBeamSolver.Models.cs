@@ -195,6 +195,7 @@ internal sealed partial class CombatBeamSolver
         public HashSet<string>? ObservedHandDrawShuffleChoiceSources;
         public int TransitionCount;
         public int TransitionCacheHits;
+        public int R1TransitionHydrationHits;
         public int ShadowReplayObservations;
         public int ShadowReplayStores;
         public int ShadowReplayValidatedHits;

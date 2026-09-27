@@ -128,11 +128,26 @@ internal sealed record SearchPolicySnapshot(
     // Suggestions from the prior turn; replay must evaluate them from the current root.
     public IReadOnlyList<PlanAction> ContinuationSeedActions { get; init; } = [];
 
-    // P2 experiment: ordering-only suggestions for the ordinary Beam member. These never
-    // authorize an action, seed a frontier, or bypass normal legality/retention/final ranking.
-    // Empty by default so production behavior is unchanged until fixed-work A/B accepts it.
+    // Ordering-only suggestions for the ordinary Beam baseline. Phase D may populate this only
+    // after the R1 probe has re-simulated the prefix from the new live root. It never authorizes
+    // an action, seeds a frontier, changes the candidate set, or bypasses legality/retention/final ranking.
     public IReadOnlyList<PlanAction> ContinuationEnumerationHintActions { get; init; } = [];
     public SearchInteractionState? Interaction { get; init; }
+
+    // Phase D3: request-local, value-only R1 evaluation cache.
+    // R1 probe stores retained states. The ordinary baseline must validate a Beam-rank value once
+    // for an exact path-aware key before later calls may reuse that same scalar. Replay, snapshot,
+    // state fingerprinting, candidate admission and deployment authorization are never skipped.
+    public R1EvaluationShadowCache? R1EvaluationShadowCache { get; init; }
+
+    // Phase D3.3: request-local exact nonterminal transition hydration sourced only from
+    // the validated R1 probe. The baseline may reuse only a forked predicted post-state;
+    // Snapshot/evaluation, transposition, retention and deployment checks still rerun.
+    public R1TransitionHydrationCache? R1TransitionHydrationCache { get; init; }
+
+    // Phase D3.4: shadow-only comparison of plain retained frontiers produced by the R1 probe
+    // and the ordinary baseline. It never supplies nodes, simulators, pruning decisions or ordering.
+    public R1FrontierShadowCache? R1FrontierShadowCache { get; init; }
 
     // Production multiplayer shadow validation shares one atomic request budget across
     // portfolio members and all parallel lanes. Null means no production sampling.

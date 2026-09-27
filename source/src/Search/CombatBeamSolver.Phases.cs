@@ -467,6 +467,14 @@ internal sealed partial class CombatBeamSolver
                 .ToArray();
             bool combatEnded = boundary.Snapshot.AllEnemiesDead;
             IReadOnlyList<SolverFrontierTurn>? frontierTurns = BuildFrontierTurns(candidate);
+            if (member.SpeculativeRoutePreview is { } displayedRoute
+                && !FrontierTurnsEqual(displayedRoute.Turns, frontierTurns))
+            {
+                // Never splice a newer shallow current-turn candidate onto an older
+                // speculative future. Keep the displayed route bundle atomic until a
+                // new full route preview is published.
+                return;
+            }
             if (member.PublishedCurrentTurnActions != null
                 && member.PublishedCurrentTurnActions.SequenceEqual(actions)
                 && member.CurrentTurnPreview is { } published
@@ -937,6 +945,7 @@ internal sealed partial class CombatBeamSolver
                     _run.MaxParallelRoundChoiceReplayConcurrency,
                 NodeLimitSnapshotsReleased = _run.NodeLimitSnapshotsReleased,
                 TransitionCacheHits = _run.TransitionCacheHits,
+                R1TransitionHydrationHits = _run.R1TransitionHydrationHits,
                 ShadowReplayObservations =
                     shadowSampling?.Observations ?? _run.ShadowReplayObservations,
                 ShadowReplayStores =
@@ -1031,7 +1040,8 @@ internal sealed partial class CombatBeamSolver
                 // takeover still publish no future route; local-cross-turn takeover keeps only
                 // continuations actually materialized from a future-bearing preview node.
                 Continuations = resultScope == SolverResultScope.CurrentTurnAdoption
-                    && policy.RoutePolicy != SearchRoutePolicy.MultiplayerLocalCrossTurn
+                    && !MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnProjection(
+                        policy.RoutePolicy)
                         ? []
                         : continuations,
             };
@@ -1235,6 +1245,39 @@ internal sealed partial class CombatBeamSolver
                     candidateNodeBudgetReached: false,
                     evaluationContextId,
                     routeAdoptionActions: adoptionActions));
+
+            SolverFrontierTurn? displayedCurrentTurn = speculativeRoutePreview.Turns
+                .FirstOrDefault(turn => turn.Turn == _startTurnNumber);
+            if (displayedCurrentTurn != null)
+            {
+                PlanAction[] displayedCurrentActions = displayedCurrentTurn.Actions.ToArray();
+                SolverCurrentTurnPreview alignedCurrentPreview = new(
+                    ++member.CurrentTurnPreviewVersion,
+                    _startTurnNumber,
+                    displayedCurrentActions,
+                    displayedCurrentTurn.HpLost,
+                    displayedCurrentTurn.HpRecovered,
+                    displayedCurrentTurn.EnemyHpLost,
+                    displayedCurrentTurn.EnergyLeft,
+                    displayedCurrentTurn.CombatEnded,
+                    speculativeRoutePreview.Turns)
+                {
+                    TurnStartChoices = displayedCurrentTurn.TurnStartChoices,
+                };
+                member.PublishedCurrentTurnActions = displayedCurrentActions;
+                member.CurrentTurnPreview = alignedCurrentPreview;
+                member.CurrentTurnAdoptionSeed = new SolverRouteAdoptionSeed(
+                    alignedCurrentPreview.CandidateVersion,
+                    displayedCurrentActions,
+                    () => MaterializeSelectedRoute(
+                        ordering,
+                        onlyDeathRoutesFound,
+                        SolverResultScope.CurrentTurnAdoption,
+                        candidateSearchedTurnLayers,
+                        candidateTimeBudgetReached: false,
+                        candidateNodeBudgetReached: false,
+                        evaluationContextId));
+            }
             member.LastRoutePreviewAt = System.Environment.TickCount64;
         }
 
@@ -2784,6 +2827,7 @@ internal sealed partial class CombatBeamSolver
             node.Snapshot,
             node.Turn,
             node.ActionCount);
+        StoreR1TransitionHydration(node, action, snapshot);
         bool terminal = snapshot.PlayerDead
             || snapshot.AllEnemiesDead
             || snapshot.BoundaryReason != SearchBoundaryReason.None;
