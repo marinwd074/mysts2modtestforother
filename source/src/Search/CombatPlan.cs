@@ -1763,6 +1763,14 @@ internal sealed class SolverResult
     public int MaxParallelRoundChoiceReplayConcurrency { get; init; }
     public int NodeLimitSnapshotsReleased { get; init; }
     public required int TransitionCacheHits { get; init; }
+    public int ShadowReplayObservations { get; init; }
+    public int ShadowReplayStores { get; init; }
+    public int ShadowReplayValidatedHits { get; init; }
+    public int ShadowReplayCollisionRejects { get; init; }
+    public int ShadowReplayOutputMismatches { get; init; }
+    public int ShadowReplayDroppedStores { get; init; }
+    public TimeSpan ShadowReplayValidationDuration { get; init; }
+    public TimeSpan ShadowReplayPotentialSavedDuration { get; init; }
     public required long WorkerAllocatedBytes { get; init; }
     public required int Gen0Collections { get; init; }
     public required int Gen1Collections { get; init; }

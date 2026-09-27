@@ -1415,18 +1415,22 @@ internal static class Program
                     Turn = nonterminalRoot.StartTurnNumber,
                 };
                 ActionReplayCache shadowCache = ActionReplayCache.For(memo);
-                SimulationSnapshot shadowFresh = new CombatBeamSolver(
+                CombatBeamSolver shadowFreshSolver = new(
                     nonterminalRoot,
                     names,
                     nonterminalDamage,
                     shadowPolicy,
-                    searchProfile: profile).ReplayDiagnosticActionWithR0Memo(nonterminalBash);
-                SimulationSnapshot shadowRepeated = new CombatBeamSolver(
+                    searchProfile: profile);
+                SimulationSnapshot shadowFresh =
+                    shadowFreshSolver.ReplayDiagnosticActionWithR0Memo(nonterminalBash);
+                CombatBeamSolver shadowRepeatedSolver = new(
                     nonterminalRoot,
                     names,
                     nonterminalDamage,
                     shadowPolicy,
-                    searchProfile: profile).ReplayDiagnosticActionWithR0Memo(nonterminalBash);
+                    searchProfile: profile);
+                SimulationSnapshot shadowRepeated =
+                    shadowRepeatedSolver.ReplayDiagnosticActionWithR0Memo(nonterminalBash);
                 SimulationSnapshot shadowCacheOff = new CombatBeamSolver(
                     nonterminalRoot,
                     names,
@@ -1459,6 +1463,21 @@ internal static class Program
                         $"Phase C shadow replay validation drifted: entries={shadowCache.Count} " +
                         $"hits={shadowCache.ValidatedHits} collisions={shadowCache.CollisionRejects} " +
                         $"mismatches={shadowCache.OutputMismatches}.");
+                    var shadowTelemetry = shadowRepeatedSolver.ShadowReplayTelemetryForTesting;
+                    Require(
+                        shadowTelemetry.Observations == 1
+                            && shadowTelemetry.Stores == 0
+                            && shadowTelemetry.ValidatedHits == 1
+                            && shadowTelemetry.CollisionRejects == 0
+                            && shadowTelemetry.OutputMismatches == 0
+                            && shadowTelemetry.DroppedStores == 0
+                            && shadowTelemetry.ValidationTicks > 0
+                            && shadowTelemetry.PotentialSavedTicks > 0,
+                        $"Phase C shadow telemetry drifted: observations={shadowTelemetry.Observations} " +
+                        $"stores={shadowTelemetry.Stores} hits={shadowTelemetry.ValidatedHits} " +
+                        $"collisions={shadowTelemetry.CollisionRejects} mismatches={shadowTelemetry.OutputMismatches} " +
+                        $"dropped={shadowTelemetry.DroppedStores} validation_ticks={shadowTelemetry.ValidationTicks} " +
+                        $"potential_saved_ticks={shadowTelemetry.PotentialSavedTicks}.");
 
                     return new PhaseCEvidence(
                         "PASS",
@@ -1476,7 +1495,11 @@ internal static class Program
                         shadowCache.ValidatedHits,
                         shadowCache.CollisionRejects,
                         shadowCache.OutputMismatches,
-                        shadowFresh.StateKey == shadowCacheOff.StateKey);
+                        shadowFresh.StateKey == shadowCacheOff.StateKey,
+                        shadowTelemetry.Observations,
+                        shadowTelemetry.ValidatedHits,
+                        shadowTelemetry.ValidationTicks > 0,
+                        shadowTelemetry.PotentialSavedTicks > 0);
                 }
                 finally
                 {
@@ -1690,7 +1713,11 @@ internal static class Program
         int ShadowValidatedHits,
         int ShadowCollisionRejects,
         int ShadowOutputMismatches,
-        bool ShadowCacheOffStateKeyEqual);
+        bool ShadowCacheOffStateKeyEqual,
+        int ShadowSolverObservations,
+        int ShadowSolverValidatedHits,
+        bool ShadowValidationCostRecorded,
+        bool ShadowPotentialSavedCostRecorded);
 
     internal sealed record PhaseBEvidence(
         string Status,

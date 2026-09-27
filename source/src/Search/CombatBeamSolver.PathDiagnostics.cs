@@ -70,6 +70,25 @@ internal sealed partial class CombatBeamSolver
 
     internal int R0TransitionCacheHitsForTesting => _run.TransitionCacheHits;
 
+    internal (
+        int Observations,
+        int Stores,
+        int ValidatedHits,
+        int CollisionRejects,
+        int OutputMismatches,
+        int DroppedStores,
+        long ValidationTicks,
+        long PotentialSavedTicks) ShadowReplayTelemetryForTesting
+        => (
+            _run.ShadowReplayObservations,
+            _run.ShadowReplayStores,
+            _run.ShadowReplayValidatedHits,
+            _run.ShadowReplayCollisionRejects,
+            _run.ShadowReplayOutputMismatches,
+            _run.ShadowReplayDroppedStores,
+            _run.ShadowReplayValidationTicks,
+            _run.ShadowReplayPotentialSavedTicks);
+
     internal ContinuationStamp CaptureDiagnosticContinuation(SimulationSnapshot snapshot)
         => ContinuationStamp.CapturePredicted(_player, snapshot.Simulator, snapshot.Turn, _forecast, _startTurnNumber);
 

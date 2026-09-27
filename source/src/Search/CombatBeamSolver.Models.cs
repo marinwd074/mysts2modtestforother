@@ -195,6 +195,14 @@ internal sealed partial class CombatBeamSolver
         public HashSet<string>? ObservedHandDrawShuffleChoiceSources;
         public int TransitionCount;
         public int TransitionCacheHits;
+        public int ShadowReplayObservations;
+        public int ShadowReplayStores;
+        public int ShadowReplayValidatedHits;
+        public int ShadowReplayCollisionRejects;
+        public int ShadowReplayOutputMismatches;
+        public int ShadowReplayDroppedStores;
+        public long ShadowReplayValidationTicks;
+        public long ShadowReplayPotentialSavedTicks;
         public int ReusedNodeSnapshots;
         public int TranspositionBranchesPruned;
         public int RepeatableNoProgressBranchesPruned;

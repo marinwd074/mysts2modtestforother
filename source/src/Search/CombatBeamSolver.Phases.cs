@@ -900,6 +900,16 @@ internal sealed partial class CombatBeamSolver
                     _run.MaxParallelRoundChoiceReplayConcurrency,
                 NodeLimitSnapshotsReleased = _run.NodeLimitSnapshotsReleased,
                 TransitionCacheHits = _run.TransitionCacheHits,
+                ShadowReplayObservations = _run.ShadowReplayObservations,
+                ShadowReplayStores = _run.ShadowReplayStores,
+                ShadowReplayValidatedHits = _run.ShadowReplayValidatedHits,
+                ShadowReplayCollisionRejects = _run.ShadowReplayCollisionRejects,
+                ShadowReplayOutputMismatches = _run.ShadowReplayOutputMismatches,
+                ShadowReplayDroppedStores = _run.ShadowReplayDroppedStores,
+                ShadowReplayValidationDuration = TimeSpan.FromSeconds(
+                    _run.ShadowReplayValidationTicks / (double)Stopwatch.Frequency),
+                ShadowReplayPotentialSavedDuration = TimeSpan.FromSeconds(
+                    _run.ShadowReplayPotentialSavedTicks / (double)Stopwatch.Frequency),
                 WorkerAllocatedBytes = workerAllocatedBytes,
                 Gen0Collections = gen0Collections,
                 Gen1Collections = gen1Collections,

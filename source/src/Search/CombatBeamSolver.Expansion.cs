@@ -2761,6 +2761,9 @@ internal sealed partial class CombatBeamSolver
             return cachedTerminal;
         }
 
+        long shadowReplayStartedTicks =
+            r0MemoEligible && policy.DetailedDiagnostics ? Stopwatch.GetTimestamp() : 0;
+
         if (replayForkSeed != null && policy.VerifyIncrementalSearch)
             throw new InvalidOperationException("严格增量回放不能消费并行 Fork seed。");
         ExecutionChoiceReplayCheckpoint? executionCheckpoint = _executionChoiceReplayCheckpoint?.Matches(parent, action) == true
@@ -2891,6 +2894,7 @@ internal sealed partial class CombatBeamSolver
                 && !result.HasRisk
                 && result.PredictionGaps.All(static gap => gap.Compensated))
             {
+                long validationStartedTicks = Stopwatch.GetTimestamp();
                 ContinuationStamp parentStamp = ContinuationStamp.CapturePredicted(
                     _player,
                     parent.Snapshot.Simulator,
@@ -2905,7 +2909,7 @@ internal sealed partial class CombatBeamSolver
                     _startTurnNumber);
                 ActionReplayCache replayCache = ActionReplayCache.For(policy.R0TransitionMemo!);
                 replayCache.BindCombat(parentStamp.CombatIdentity);
-                replayCache.Observe(
+                ReplayCacheValidationResult validation = replayCache.Observe(
                     new ReplayCacheKey(
                         parent.StateKey,
                         PolicyActionIdentityToken(action),
@@ -2922,6 +2926,32 @@ internal sealed partial class CombatBeamSolver
                         result.AllEnemiesDead,
                         result.HasRisk,
                         result.PredictionGaps.Count));
+                _run.ShadowReplayObservations++;
+                switch (validation)
+                {
+                    case ReplayCacheValidationResult.Stored:
+                        _run.ShadowReplayStores++;
+                        break;
+                    case ReplayCacheValidationResult.ValidatedHit:
+                        _run.ShadowReplayValidatedHits++;
+                        if (shadowReplayStartedTicks != 0)
+                            _run.ShadowReplayPotentialSavedTicks +=
+                                validationStartedTicks - shadowReplayStartedTicks;
+                        break;
+                    case ReplayCacheValidationResult.CollisionRejected:
+                        _run.ShadowReplayCollisionRejects++;
+                        break;
+                    case ReplayCacheValidationResult.OutputMismatch:
+                        _run.ShadowReplayOutputMismatches++;
+                        break;
+                    case ReplayCacheValidationResult.DroppedStore:
+                        _run.ShadowReplayDroppedStores++;
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException(nameof(validation), validation, null);
+                }
+                _run.ShadowReplayValidationTicks +=
+                    Stopwatch.GetTimestamp() - validationStartedTicks;
             }
         }
         return result;
