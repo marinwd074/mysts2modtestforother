@@ -486,6 +486,13 @@ internal sealed partial class CombatBeamSolver
         string reason,
         int boundaryId)
     {
+        if (stage == SearchPathObservationStage.PruneFinal
+            && policy.R1EvaluationShadowCache != null)
+        {
+            foreach (SearchNode node in nodes)
+                policy.R1EvaluationShadowCache.ObserveRetained(node, _continuationSeedProbe);
+        }
+
         if (policy.Diagnostics.PathObserver == null)
             return;
         foreach (SearchNode node in nodes)

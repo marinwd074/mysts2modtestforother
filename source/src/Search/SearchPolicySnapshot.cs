@@ -134,6 +134,11 @@ internal sealed record SearchPolicySnapshot(
     public IReadOnlyList<PlanAction> ContinuationEnumerationHintActions { get; init; } = [];
     public SearchInteractionState? Interaction { get; init; }
 
+    // Phase D3.1: request-local, value-only R1 evaluation shadow validation.
+    // R1 probe stores retained states; the ordinary baseline only compares recomputed values.
+    // Null means disabled. This never authorizes deployment or skips replay/evaluation.
+    public R1EvaluationShadowCache? R1EvaluationShadowCache { get; init; }
+
     // Production multiplayer shadow validation shares one atomic request budget across
     // portfolio members and all parallel lanes. Null means no production sampling.
     public ShadowReplaySamplingBudget? ShadowReplaySamplingBudget { get; init; }

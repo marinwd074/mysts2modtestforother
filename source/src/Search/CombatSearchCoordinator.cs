@@ -435,6 +435,7 @@ internal static partial class CombatSearchCoordinator
             Stopwatch activeClock = passClock;
             SolverResult? continuationSeedIncumbent = null;
             PrimarySearchIncumbent? r1RecoveryIncumbent = null;
+            R1EvaluationShadowCache? r1EvaluationShadowCache = null;
             IReadOnlyList<PlanAction> r1ValidatedEnumerationHints = [];
             SolverResult? earlySmartPotionBaseline = null;
             SolverResult? earlySmartPotionScout = null;
@@ -478,9 +479,12 @@ internal static partial class CombatSearchCoordinator
                 }
 
                 SearchPolicySnapshot memberPolicy = refinement
-                    && beamPolicy.ContinuationEnumerationHintActions.Count > 0
-                        ? beamPolicy with { ContinuationEnumerationHintActions = [] }
-                        : beamPolicy;
+                    ? beamPolicy with
+                    {
+                        ContinuationEnumerationHintActions = [],
+                        R1EvaluationShadowCache = null,
+                    }
+                    : beamPolicy;
                 CombatBeamSolver solver = new(
                     root,
                     displayNames,
@@ -553,6 +557,7 @@ internal static partial class CombatSearchCoordinator
                         "P2 continuation-seed incumbent requires request work totals.");
                 SearchRequestWorkSnapshot beforeSeed = totals.Snapshot();
                 long seedStartedMs = passClock.ElapsedMilliseconds;
+                r1EvaluationShadowCache = new R1EvaluationShadowCache();
                 SearchPolicySnapshot seedPolicy = beamPolicy with
                 {
                     Interaction = null,
@@ -560,6 +565,7 @@ internal static partial class CombatSearchCoordinator
                     UseNoveltyPortfolio = false,
                     ContinuationSeedActions = continuationSeedActions,
                     ContinuationEnumerationHintActions = [],
+                    R1EvaluationShadowCache = r1EvaluationShadowCache,
                 };
                 try
                 {
@@ -639,6 +645,15 @@ internal static partial class CombatSearchCoordinator
                         $"actions={continuationSeedActions.Count} primary_budget_unchanged=true");
                 }
 
+                r1EvaluationShadowCache.Freeze();
+                if (r1EvaluationShadowCache.EntryCount > 0)
+                {
+                    beamPolicy = beamPolicy with
+                    {
+                        R1EvaluationShadowCache = r1EvaluationShadowCache,
+                    };
+                }
+
                 SearchRequestWorkSnapshot afterSeed = totals.Snapshot();
                 long seedElapsedMs = Math.Max(0, passClock.ElapsedMilliseconds - seedStartedMs);
                 long seedExpanded = Math.Max(
@@ -690,6 +705,23 @@ internal static partial class CombatSearchCoordinator
                 beamPolicy = policy.NoveltySearch == null
                     ? policy : policy with { NoveltySearch = null };
                 passResult = RunPrimary();
+            }
+            if (r1EvaluationShadowCache != null)
+            {
+                R1EvaluationShadowSnapshot r1Shadow = r1EvaluationShadowCache.Capture();
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Test] R1_EVAL_SHADOW " +
+                    $"mode=exact_path_aware entry_limit={r1Shadow.EntryLimit} " +
+                    $"entries={r1Shadow.Entries} store_attempts={r1Shadow.StoreAttempts} " +
+                    $"duplicate_stores={r1Shadow.DuplicateStores} " +
+                    $"store_conflicts={r1Shadow.StoreConflicts} " +
+                    $"observations={r1Shadow.ValidationObservations} " +
+                    $"state_key_misses={r1Shadow.StateKeyMisses} " +
+                    $"full_key_misses={r1Shadow.FullKeyMisses} " +
+                    $"validated_hits={r1Shadow.ValidatedHits} " +
+                    $"output_mismatches={r1Shadow.OutputMismatches} " +
+                    $"capped={r1Shadow.Capped.ToString().ToLowerInvariant()} " +
+                    $"behavioral_reuse=false");
             }
             NoveltyPortfolioTelemetry? noveltyPass = passResult.NoveltyPortfolio;
             ObserveSmartLayerMemory(
