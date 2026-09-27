@@ -174,6 +174,12 @@ internal readonly record struct R1EvaluationShadowSnapshot(
     int FullKeyMisses,
     int ValidatedHits,
     int OutputMismatches,
+    int BeamRankStores,
+    int BeamRankFirstValidations,
+    int BeamRankValidated,
+    int BeamRankMismatches,
+    int BeamRankReuses,
+    bool ReuseDisabled,
     bool Capped);
 
 internal sealed class R1EvaluationShadowCache(
@@ -188,6 +194,7 @@ internal sealed class R1EvaluationShadowCache(
         int PotionStrategicCost,
         int FutureSoldHp,
         int CumulativePlayerHpLost,
+        long ScoreBits,
         SearchRouteTraits Traits,
         SearchBoundaryReason BoundaryReason,
         StateFingerprint CombatProgressKey);
@@ -226,7 +233,10 @@ internal sealed class R1EvaluationShadowCache(
 
     private readonly object _storeGate = new();
     private readonly Dictionary<Key, Value> _entries = [];
+    private readonly Dictionary<Key, double> _beamRankScores = [];
+    private readonly HashSet<Key> _validatedBeamRankKeys = [];
     private readonly HashSet<StateFingerprint> _stateKeys = [];
+    private readonly object _reuseGate = new();
     private readonly int _entryLimit = entryLimit > 0
         ? entryLimit
         : throw new ArgumentOutOfRangeException(nameof(entryLimit));
@@ -242,6 +252,12 @@ internal sealed class R1EvaluationShadowCache(
     private int _fullKeyMisses;
     private int _validatedHits;
     private int _outputMismatches;
+    private int _beamRankStores;
+    private int _beamRankFirstValidations;
+    private int _beamRankValidated;
+    private int _beamRankMismatches;
+    private int _beamRankReuses;
+    private int _reuseDisabled;
     private int _capped;
 
     internal int EntryCount
@@ -253,14 +269,102 @@ internal sealed class R1EvaluationShadowCache(
         }
     }
 
-    internal void ObserveRetained(SearchNode node, bool r1Probe)
+    internal void ObserveRetained(
+        SearchNode node,
+        bool r1Probe,
+        double? r1BeamRankScore = null)
     {
         if (r1Probe)
         {
-            Store(node);
+            Store(node, r1BeamRankScore);
             return;
         }
         Validate(node);
+    }
+
+    internal bool TryReuseBeamRank(SearchNode node, out double beamRankScore)
+    {
+        beamRankScore = 0d;
+        if (Volatile.Read(ref _frozen) == 0
+            || Volatile.Read(ref _reuseDisabled) != 0
+            || !_stateKeys.Contains(node.StateKey))
+        {
+            return false;
+        }
+
+        return TryReuseBeamRank(CaptureKey(node), out beamRankScore);
+    }
+
+    private bool TryReuseBeamRank(Key key, out double beamRankScore)
+    {
+        beamRankScore = 0d;
+        lock (_reuseGate)
+        {
+            if (_reuseDisabled != 0
+                || !_validatedBeamRankKeys.Contains(key)
+                || !_beamRankScores.TryGetValue(key, out beamRankScore))
+            {
+                return false;
+            }
+        }
+        Interlocked.Increment(ref _beamRankReuses);
+        return true;
+    }
+
+    internal void ValidateBeamRank(SearchNode node, double actual)
+    {
+        if (Volatile.Read(ref _frozen) == 0
+            || Volatile.Read(ref _reuseDisabled) != 0
+            || !_stateKeys.Contains(node.StateKey))
+        {
+            return;
+        }
+        ValidateBeamRank(CaptureKey(node), actual);
+    }
+
+    private void ValidateBeamRank(Key key, double actual)
+    {
+        if (!_beamRankScores.TryGetValue(key, out double expected))
+            return;
+
+        Interlocked.Increment(ref _beamRankFirstValidations);
+        if (BitConverter.DoubleToInt64Bits(expected) != BitConverter.DoubleToInt64Bits(actual))
+        {
+            Interlocked.Increment(ref _beamRankMismatches);
+            Volatile.Write(ref _reuseDisabled, 1);
+            return;
+        }
+
+        lock (_reuseGate)
+        {
+            if (_reuseDisabled == 0 && _validatedBeamRankKeys.Add(key))
+                Interlocked.Increment(ref _beamRankValidated);
+        }
+    }
+
+    internal static bool VerifyBeamRankReuseGateForTesting()
+    {
+        Key key = default;
+        R1EvaluationShadowCache accepted = new(entryLimit: 1, validationObservationLimit: 1);
+        accepted._beamRankScores.Add(key, 42.25d);
+        Volatile.Write(ref accepted._frozen, 1);
+        if (accepted.TryReuseBeamRank(key, out _))
+            return false;
+        accepted.ValidateBeamRank(key, 42.25d);
+        if (!accepted.TryReuseBeamRank(key, out double reused)
+            || BitConverter.DoubleToInt64Bits(reused)
+                != BitConverter.DoubleToInt64Bits(42.25d))
+        {
+            return false;
+        }
+
+        R1EvaluationShadowCache rejected = new(entryLimit: 1, validationObservationLimit: 1);
+        rejected._beamRankScores.Add(key, 11d);
+        Volatile.Write(ref rejected._frozen, 1);
+        rejected.ValidateBeamRank(key, 12d);
+        return rejected.Capture().ReuseDisabled
+            && rejected.Capture().BeamRankMismatches == 1
+            && !rejected.TryReuseBeamRank(key, out _);
     }
 
     internal void Freeze()
@@ -285,10 +389,16 @@ internal sealed class R1EvaluationShadowCache(
             Volatile.Read(ref _fullKeyMisses),
             Volatile.Read(ref _validatedHits),
             Volatile.Read(ref _outputMismatches),
+            Volatile.Read(ref _beamRankStores),
+            Volatile.Read(ref _beamRankFirstValidations),
+            Volatile.Read(ref _beamRankValidated),
+            Volatile.Read(ref _beamRankMismatches),
+            Volatile.Read(ref _beamRankReuses),
+            Volatile.Read(ref _reuseDisabled) != 0,
             Volatile.Read(ref _capped) != 0);
     }
 
-    private void Store(SearchNode node)
+    private void Store(SearchNode node, double? r1BeamRankScore)
     {
         if (Volatile.Read(ref _frozen) != 0 || Volatile.Read(ref _capped) != 0)
             return;
@@ -305,7 +415,27 @@ internal sealed class R1EvaluationShadowCache(
                 if (existing == value)
                     _duplicateStores++;
                 else
+                {
                     _storeConflicts++;
+                    Volatile.Write(ref _reuseDisabled, 1);
+                }
+                if (r1BeamRankScore.HasValue)
+                {
+                    if (_beamRankScores.TryGetValue(key, out double existingRank))
+                    {
+                        if (BitConverter.DoubleToInt64Bits(existingRank)
+                            != BitConverter.DoubleToInt64Bits(r1BeamRankScore.Value))
+                        {
+                            _beamRankMismatches++;
+                            Volatile.Write(ref _reuseDisabled, 1);
+                        }
+                    }
+                    else
+                    {
+                        _beamRankScores.Add(key, r1BeamRankScore.Value);
+                        _beamRankStores++;
+                    }
+                }
                 return;
             }
             if (_entries.Count >= _entryLimit)
@@ -314,6 +444,11 @@ internal sealed class R1EvaluationShadowCache(
                 return;
             }
             _entries.Add(key, value);
+            if (r1BeamRankScore.HasValue)
+            {
+                _beamRankScores.Add(key, r1BeamRankScore.Value);
+                _beamRankStores++;
+            }
             _stateKeys.Add(node.StateKey);
         }
     }
@@ -344,7 +479,10 @@ internal sealed class R1EvaluationShadowCache(
         if (expected == actual)
             Interlocked.Increment(ref _validatedHits);
         else
+        {
             Interlocked.Increment(ref _outputMismatches);
+            Volatile.Write(ref _reuseDisabled, 1);
+        }
     }
 
     private static Key CaptureKey(SearchNode node)
@@ -356,6 +494,7 @@ internal sealed class R1EvaluationShadowCache(
             node.PotionStrategicCost,
             node.FutureSoldHp,
             node.Snapshot.CumulativePlayerHpLost,
+            BitConverter.DoubleToInt64Bits(node.Score),
             node.Traits,
             node.BoundaryReason,
             CaptureCombatProgressKey(node.CombatProgress));

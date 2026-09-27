@@ -490,7 +490,15 @@ internal sealed partial class CombatBeamSolver
             && policy.R1EvaluationShadowCache != null)
         {
             foreach (SearchNode node in nodes)
-                policy.R1EvaluationShadowCache.ObserveRetained(node, _continuationSeedProbe);
+            {
+                double? r1BeamRankScore = _continuationSeedProbe
+                    ? Retention.ComputeBeamRankScoreForR1Shadow(node)
+                    : null;
+                policy.R1EvaluationShadowCache.ObserveRetained(
+                    node,
+                    _continuationSeedProbe,
+                    r1BeamRankScore);
+            }
         }
 
         if (policy.Diagnostics.PathObserver == null)

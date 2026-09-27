@@ -152,6 +152,8 @@ internal sealed partial class CombatBeamSolver(
         _enforcePotionDirectives,
         root.HasRenewablePotionShapedRock,
         _run,
+        policy.R1EvaluationShadowCache,
+        _continuationSeedProbe,
         EvaluateStandPat,
         PrepareStandPatProbes);
     private FinalPlanOrdering? _finalOrdering;

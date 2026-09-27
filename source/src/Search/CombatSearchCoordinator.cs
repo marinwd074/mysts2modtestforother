@@ -720,8 +720,14 @@ internal static partial class CombatSearchCoordinator
                     $"full_key_misses={r1Shadow.FullKeyMisses} " +
                     $"validated_hits={r1Shadow.ValidatedHits} " +
                     $"output_mismatches={r1Shadow.OutputMismatches} " +
+                    $"beam_rank_stores={r1Shadow.BeamRankStores} " +
+                    $"beam_rank_first_validations={r1Shadow.BeamRankFirstValidations} " +
+                    $"beam_rank_validated={r1Shadow.BeamRankValidated} " +
+                    $"beam_rank_mismatches={r1Shadow.BeamRankMismatches} " +
+                    $"beam_rank_reuses={r1Shadow.BeamRankReuses} " +
+                    $"reuse_disabled={r1Shadow.ReuseDisabled.ToString().ToLowerInvariant()} " +
                     $"capped={r1Shadow.Capped.ToString().ToLowerInvariant()} " +
-                    $"behavioral_reuse=false");
+                    $"behavioral_reuse=beam_rank_after_first_validation");
             }
             NoveltyPortfolioTelemetry? noveltyPass = passResult.NoveltyPortfolio;
             ObserveSmartLayerMemory(

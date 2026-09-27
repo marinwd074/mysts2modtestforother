@@ -203,6 +203,8 @@ GPU、学习型价值网络和 MCTS 可作为以后独立实验：现有 C# 规�
 - **D 进行中**：生产启用 R1 新根路线重放。完整合法胜利可建立安全 incumbent bound；未胜利但仍存活的 probe 结果可抽取新根已验证的当前回合普通牌前缀，仅用于 baseline Beam 枚举顺序提示。冷根、候选集合、普通 Beam 节点/时间预算、P3 与 refinement 冷序均保留；失败继续回到原求解。
 - **D3.1 shadow 已落地**：R1 probe 与 baseline 对 retained-state evaluation 做 request-local exact/path-aware 对照，固定上限 256 entries / 4096 observations；当前 `behavioral_reuse=false`，不跳过任何模拟或评价。D3.2 仅在真实 fresh re-root 证明 hit>0 且 conflict/mismatch 均为 0 后启用。
 
+- **D3.2 已落地**：只对 Beam retention 的纯 `BeamRankScore` 做 request-local 首验后复用。第一次 baseline 命中仍现算并精确比对；同 key 后续调用才复用。任一冲突或 mismatch 立即关闭该请求的复用。真实 replay、state capture/fingerprint、候选集合和搜索预算均保持原路径。
+
 建议实施顺序 A → B → C → D → E → F → G → H；先收获正确的短期评价和同战斗复用，再投入昂贵持久化。R2 依赖闭包复用是 D 后的可选独立阶段，未证明可靠时不影响主线交付。
 
 给 GPT 的通用任务模板：

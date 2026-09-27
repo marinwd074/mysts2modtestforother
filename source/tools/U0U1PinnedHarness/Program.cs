@@ -57,6 +57,9 @@ internal static class Program
             ValidateRollingHorizonQualityContract();
             ValidateRouteInvalidationVersionContract();
             ValidateLocalCoreShadowNormalizationContract();
+            Require(
+                R1EvaluationShadowCache.VerifyBeamRankReuseGateForTesting(),
+                "R1 Beam-rank reuse requires first exact validation and disables reuse on mismatch.");
             ValidateRenderedCurrentTurnTakeoverContract();
 
             HarnessScenario scenario = new(

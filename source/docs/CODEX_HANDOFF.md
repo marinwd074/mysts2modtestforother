@@ -19,6 +19,9 @@
 - **D2 已实现**：R1 probe 即使没有形成完整胜利，只要结果仍存活且是正常 SearchCompletion，也会从该**新根重新模拟结果**抽取连续的当前回合普通 PlayCard 前缀，回灌为 baseline Beam 的 ordering-only hint。冷根仍是唯一初始根，候选集合/合法性/retention/FinalOrdering 不变；一旦 Beam 偏离该前缀，hint 自动失效。Beam refinement 明确清空该 hint，保留独立冷序作为质量交叉检查。诊断增加 `validated_hint_actions`、`candidate_set_unchanged=true`、`refinement_hint=false`。 R1 hint 的排序优先级低于 `EstimatedLethal` 与 `UrgentDefense`，只高于普通价值启发式，避免旧路线提示压过即时斩杀或必要防御。
 
 - **D3.1 已实现为纯 shadow validation**：R1 probe 在 `PruneFinal` 后最多保存 256 个 retained state 的纯值 evaluation；key 使用 exact `StateFingerprint` 加 turn/actionCount、药水/累计战损、traits/boundary 以及稳定 fingerprint 化的 `CombatProgressState`。baseline 最多观察 4096 个 retained state，先按 StateFingerprint 快速过滤，再对完整 key 比较 Score、HP/Block、敌方状态、资源与主要 retention 标量。没有 SearchNode/snapshot/simulator 跨 solver 保留，也没有跳过 replay/evaluation。
+
+- **D3.2 已实现为首验后复用**：R1 probe 在 retained state 上额外冻结 BeamRankScore；baseline 第一次命中 exact/path-aware key 时仍调用原 `ComputeBeamRankScore` 并按 double bits 精确核对，只有该 key 首验一致后，后续重复 BeamRankScore 调用才直接返回缓存标量。任一 `store_conflict`、value `output_mismatch` 或 `beam_rank_mismatch` 都会把本次请求的复用门禁永久关闭并退回原计算。Replay、Snapshot、StateFingerprint、候选 admission、Beam 宽度/预算、FinalOrdering 与部署权限均不跳过。
+- D3.2 诊断新增 `beam_rank_stores`、`beam_rank_first_validations`、`beam_rank_validated`、`beam_rank_mismatches`、`beam_rank_reuses`、`reuse_disabled`，并标记 `behavioral_reuse=beam_rank_after_first_validation`。Pinned harness 增加状态机合同：未首验不可复用、首验一致后可复用、任一 mismatch 后不可再复用。
 - D3.1 只挂 baseline：Beam refinement 明确 `R1EvaluationShadowCache=null`，Novelty/P3/Smart supplemental 不借此获得候选或执行权限。诊断 `R1_EVAL_SHADOW mode=exact_path_aware ... store_conflicts=... validated_hits=... output_mismatches=... behavioral_reuse=false`。验收要求先看到 `validated_hits>0` 且 `store_conflicts=0`、`output_mismatches=0`，之后才进入 D3.2 真正复用 evaluation。
 
 - 用户已将 `docs/Rolling_Horizon_Reuse_Architecture.md` 设为新的主执行目标；其阶段顺序 A → B → C → D → E → F → G → H 优先于下方历史 Quality-first “下一任务”描述。既有质量与执行保护继续作为约束，不重复施工。

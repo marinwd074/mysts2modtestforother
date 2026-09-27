@@ -134,9 +134,10 @@ internal sealed record SearchPolicySnapshot(
     public IReadOnlyList<PlanAction> ContinuationEnumerationHintActions { get; init; } = [];
     public SearchInteractionState? Interaction { get; init; }
 
-    // Phase D3.1: request-local, value-only R1 evaluation shadow validation.
-    // R1 probe stores retained states; the ordinary baseline only compares recomputed values.
-    // Null means disabled. This never authorizes deployment or skips replay/evaluation.
+    // Phase D3: request-local, value-only R1 evaluation cache.
+    // R1 probe stores retained states. The ordinary baseline must validate a Beam-rank value once
+    // for an exact path-aware key before later calls may reuse that same scalar. Replay, snapshot,
+    // state fingerprinting, candidate admission and deployment authorization are never skipped.
     public R1EvaluationShadowCache? R1EvaluationShadowCache { get; init; }
 
     // Production multiplayer shadow validation shares one atomic request budget across

@@ -24,7 +24,8 @@ def block(source, signature):
         end += 1
     return source[start:end]
 
-score = block(retention_source, 'private double BeamRankScore(SearchNode node)').replace('private double', 'public double', 1)
+score = block(retention_source, 'private double ComputeBeamRankScore(SearchNode node)')\
+    .replace('private double ComputeBeamRankScore', 'public double BeamRankScore', 1)
 retained = retention_source[retention_source.index('private int RetainedAttackGrowth(SimulationSnapshot snapshot)'):]
 retained = retained[:retained.index(';') + 1]
 compare = block(ranking_source, 'internal static int CompareBeamRankOrder(').replace('internal static', 'public static', 1)

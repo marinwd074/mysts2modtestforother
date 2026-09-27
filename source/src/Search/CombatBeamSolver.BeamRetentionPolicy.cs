@@ -93,6 +93,8 @@ internal sealed partial class CombatBeamSolver
         bool _enforcePotionDirectives,
         bool _renewablePotionShapedRock,
         SearchRunContext _run,
+        R1EvaluationShadowCache? _r1EvaluationShadowCache,
+        bool _continuationSeedProbe,
         Func<SearchNode, StandPatEvaluation> _evaluateStandPat,
         Action<IEnumerable<SearchNode>>? _prepareStandPat = null)
     {
@@ -2482,6 +2484,23 @@ internal sealed partial class CombatBeamSolver
         }
 
         private double BeamRankScore(SearchNode node)
+        {
+            if (!_continuationSeedProbe
+                && _r1EvaluationShadowCache?.TryReuseBeamRank(node, out double cached) == true)
+            {
+                return cached;
+            }
+
+            double actual = ComputeBeamRankScore(node);
+            if (!_continuationSeedProbe)
+                _r1EvaluationShadowCache?.ValidateBeamRank(node, actual);
+            return actual;
+        }
+
+        internal double ComputeBeamRankScoreForR1Shadow(SearchNode node)
+            => ComputeBeamRankScore(node);
+
+        private double ComputeBeamRankScore(SearchNode node)
         {
             // 基础分成员（见 SolverSearchProfile.BaseScoreOnly）：中途排序只用基础分；未置位时下面逐位不变。
             if (_profile.BaseScoreOnly)
