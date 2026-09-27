@@ -19,7 +19,10 @@
 - 跨根恢复已有明确分类：精确 continuation 记录 `resume_kind=exact_continuation`；精确失败后建议重放记录 `resume_kind=seeded_search`；无可复用建议记录 `resume_kind=cold_search`。P2 continuation-seed incumbent 仍从真实新根重放，不能原样部署旧结果。
 - 同回合轻微 drift 已由 bounded refresh 记录 `MP_PLAN_REFRESH`，包含 `full_restart`、`prefix_replay`、`first_action_changed`、bounded work 与 `replay_latency_ms`；真正 fresh search 由 `MP_REACTIVE_FRESH_SEARCH reason=...` 保留触发原因。由此已能区分冷搜、精确续用、建议/前缀重放和完整重启。
 - 对照固定上游 `Torch1230/CombatSolver@d231e9e51a0e58d6bfa1373c6265cce13ffd9a45`：Beam/portfolio、CrossTurn stand-pat/probe 与 value-only `SolvedRouteCache` 属共同或可移植基础；WorldVersion 驱动的多人重规划、bounded multiplayer refresh、continuation-seed 新根重放及 local-core 多人边界属于本 fork 现有扩展。
-- 阶段 A **不修改搜索结果、预算、排序、并发或 Safe Execute 行为**，因此以现有诊断/合同作为基线闭合，不重复实现。下一阶段为 **B：延迟影响合同**；先审计上游 CrossTurnProbe / PowerCommitment 与本 fork 已模拟的下一回合效果，再只补缺失的负债/覆盖元数据。
+- 阶段 A **不修改搜索结果、预算、排序、并发或 Safe Execute 行为**，因此以现有诊断/合同作为基线闭合，不重复实现。
+- 阶段 B“延迟影响合同”已完成：新增 `DeferredImpactCoverage` / `DeferredImpactOutcome` 旁路元数据，并挂到已有 `TurnOutcome` 与 Smart Block Potion 确定性重放路径；覆盖边界明确为 `CurrentTurn`、`NextLocalTurnStart`、`CombatTerminal`、`Incomplete`。该元数据**不进入 Score、Beam retention、FinalOrdering 或执行权限**，真实未来效果仍由模拟器唯一结算，避免重复扣费/重复加收益。
+- 阶段 B pinned 0.107.1 定向验收通过（Actions run `36291423215`）：Release 与 `U0U1PinnedHarness` 均 0 warning / 0 error；Biased Cognition `Focus 4 → 3` 且覆盖从 `CurrentTurn → NextLocalTurnStart`，Outmaneuver 下一回合 Energy `3 → 5` 且覆盖闭合，当前回合 Bash 斩杀为 `CombatTerminal` 且 `ProjectedHp == PlayerHp == 80`。测试中确认 Borrowed Time 在 0.107.1 是**本回合牌费用 +1 的即时负担**，不是下一回合能量债务，因此不再用错误语义作延迟合同样本。
+- 下一阶段为 **C：战斗级 R0 转移缓存**。先审计纯值转移结果的状态所有权、键与失效条件；首版只允许同一战斗内跨请求复用，必须有开/关缓存逐状态一致性对照。
 
 ## 当前多人架构
 
