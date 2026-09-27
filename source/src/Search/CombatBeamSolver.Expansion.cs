@@ -2761,8 +2761,16 @@ internal sealed partial class CombatBeamSolver
             return cachedTerminal;
         }
 
+        bool observeShadowReplay = r0MemoEligible && ShouldObserveR0ShadowReplay();
+        if (r0MemoEligible
+            && !policy.DetailedDiagnostics
+            && root.PlayerCount > 1
+            && !observeShadowReplay)
+        {
+            _run.ShadowReplaySamplingCapped = true;
+        }
         long shadowReplayStartedTicks =
-            r0MemoEligible && policy.DetailedDiagnostics ? Stopwatch.GetTimestamp() : 0;
+            observeShadowReplay ? Stopwatch.GetTimestamp() : 0;
 
         if (replayForkSeed != null && policy.VerifyIncrementalSearch)
             throw new InvalidOperationException("严格增量回放不能消费并行 Fork seed。");
@@ -2886,7 +2894,7 @@ internal sealed partial class CombatBeamSolver
         if (r0MemoEligible)
         {
             StoreR0TerminalTransition(parent, action, result);
-            if (policy.DetailedDiagnostics
+            if (observeShadowReplay
                 && result.HasSimulator
                 && result.BoundaryReason == SearchBoundaryReason.None
                 && !result.PlayerDead

@@ -906,6 +906,7 @@ internal sealed partial class CombatBeamSolver
                 ShadowReplayCollisionRejects = _run.ShadowReplayCollisionRejects,
                 ShadowReplayOutputMismatches = _run.ShadowReplayOutputMismatches,
                 ShadowReplayDroppedStores = _run.ShadowReplayDroppedStores,
+                ShadowReplaySamplingCapped = _run.ShadowReplaySamplingCapped,
                 ShadowReplayValidationDuration = TimeSpan.FromSeconds(
                     _run.ShadowReplayValidationTicks / (double)Stopwatch.Frequency),
                 ShadowReplayPotentialSavedDuration = TimeSpan.FromSeconds(

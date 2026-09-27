@@ -4,6 +4,21 @@ namespace CombatSolver;
 
 internal sealed partial class CombatBeamSolver
 {
+    internal const int ProductionShadowReplayObservationLimit = 64;
+
+    internal static bool ShouldObserveR0ShadowReplayForTesting(
+        bool detailedDiagnostics,
+        int playerCount,
+        int observations)
+        => detailedDiagnostics
+            || playerCount > 1 && observations < ProductionShadowReplayObservationLimit;
+
+    private bool ShouldObserveR0ShadowReplay()
+        => ShouldObserveR0ShadowReplayForTesting(
+            policy.DetailedDiagnostics,
+            root.PlayerCount,
+            _run.ShadowReplayObservations);
+
     private bool CanUseR0TransitionMemoForReplay(
         PlanAction action,
         ReplayForkSeed? replayForkSeed,

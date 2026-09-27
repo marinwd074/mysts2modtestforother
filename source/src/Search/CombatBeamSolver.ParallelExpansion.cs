@@ -1106,6 +1106,7 @@ internal sealed partial class CombatBeamSolver
         _run.ShadowReplayCollisionRejects += source.ShadowReplayCollisionRejects;
         _run.ShadowReplayOutputMismatches += source.ShadowReplayOutputMismatches;
         _run.ShadowReplayDroppedStores += source.ShadowReplayDroppedStores;
+        _run.ShadowReplaySamplingCapped |= source.ShadowReplaySamplingCapped;
         _run.ShadowReplayValidationTicks += source.ShadowReplayValidationTicks;
         _run.ShadowReplayPotentialSavedTicks += source.ShadowReplayPotentialSavedTicks;
         _run.RepeatableNoProgressBranchesPruned +=
@@ -1160,6 +1161,7 @@ internal sealed partial class CombatBeamSolver
         source.ShadowReplayCollisionRejects = 0;
         source.ShadowReplayOutputMismatches = 0;
         source.ShadowReplayDroppedStores = 0;
+        source.ShadowReplaySamplingCapped = false;
         source.ShadowReplayValidationTicks = 0;
         source.ShadowReplayPotentialSavedTicks = 0;
         source.RepeatableNoProgressBranchesPruned = 0;

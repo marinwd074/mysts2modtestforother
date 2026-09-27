@@ -487,6 +487,8 @@ internal static class ModRuntime
             ["shadowReplayCollisionRejects"] = result.ShadowReplayCollisionRejects,
             ["shadowReplayOutputMismatches"] = result.ShadowReplayOutputMismatches,
             ["shadowReplayDroppedStores"] = result.ShadowReplayDroppedStores,
+            ["shadowReplaySampleLimit"] = CombatBeamSolver.ProductionShadowReplayObservationLimit,
+            ["shadowReplaySamplingCapped"] = result.ShadowReplaySamplingCapped,
             ["shadowReplayValidationMs"] = result.ShadowReplayValidationDuration.TotalMilliseconds,
             ["shadowReplayPotentialSavedMs"] = result.ShadowReplayPotentialSavedDuration.TotalMilliseconds,
             ["roundReplayPrefixReuses"] = result.RoundReplayPrefixReuses,

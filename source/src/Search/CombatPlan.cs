@@ -1775,6 +1775,7 @@ internal sealed class SolverResult
     public int ShadowReplayCollisionRejects { get; init; }
     public int ShadowReplayOutputMismatches { get; init; }
     public int ShadowReplayDroppedStores { get; init; }
+    public bool ShadowReplaySamplingCapped { get; init; }
     public TimeSpan ShadowReplayValidationDuration { get; init; }
     public TimeSpan ShadowReplayPotentialSavedDuration { get; init; }
     public required long WorkerAllocatedBytes { get; init; }

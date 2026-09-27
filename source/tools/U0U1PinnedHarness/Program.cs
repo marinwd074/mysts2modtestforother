@@ -1336,6 +1336,21 @@ internal static class Program
                 R0TransitionMemo = null,
                 R0TransitionPolicyIdentity = string.Empty,
             };
+            Require(
+                !CombatBeamSolver.ShouldObserveR0ShadowReplayForTesting(
+                    detailedDiagnostics: false, playerCount: 1, observations: 0)
+                && CombatBeamSolver.ShouldObserveR0ShadowReplayForTesting(
+                    detailedDiagnostics: false, playerCount: 2, observations: 0)
+                && CombatBeamSolver.ShouldObserveR0ShadowReplayForTesting(
+                    detailedDiagnostics: false, playerCount: 2,
+                    observations: CombatBeamSolver.ProductionShadowReplayObservationLimit - 1)
+                && !CombatBeamSolver.ShouldObserveR0ShadowReplayForTesting(
+                    detailedDiagnostics: false, playerCount: 2,
+                    observations: CombatBeamSolver.ProductionShadowReplayObservationLimit)
+                && CombatBeamSolver.ShouldObserveR0ShadowReplayForTesting(
+                    detailedDiagnostics: true, playerCount: 1,
+                    observations: CombatBeamSolver.ProductionShadowReplayObservationLimit),
+                "Phase C production shadow sampling gate drifted.");
             string policyIdentity = CombatTransitionMemo.CapturePolicyIdentity(basePolicy);
             CombatTransitionMemo memo = new();
             memo.BindCombat(root.ContinuationStamp.CombatIdentity);

@@ -41,7 +41,7 @@ try {
     foreach ($file in $files) {
         if ($file.Length -gt 64MB) { continue }
         foreach ($line in [System.IO.File]::ReadLines($file.FullName)) {
-            if ($line -notmatch '\sSEARCH_PHASE\s') { continue }
+            if ($line -notmatch 'shadow_replay_observations=') { continue }
             $observations = Read-Number $line 'shadow_replay_observations'
             $hits = Read-Number $line 'shadow_replay_validated_hits'
             $rows.Add([pscustomobject]@{
@@ -54,6 +54,8 @@ try {
                 collisionRejects = [long](Read-Number $line 'shadow_replay_collision_rejects')
                 outputMismatches = [long](Read-Number $line 'shadow_replay_output_mismatches')
                 droppedStores = [long](Read-Number $line 'shadow_replay_dropped_stores')
+                sampleLimit = [long](Read-Number $line 'shadow_replay_sample_limit')
+                sampleCapped = $line -match 'shadow_replay_sample_capped=true'
                 validationMs = Read-Number $line 'shadow_replay_validation_ms'
                 potentialSavedMs = Read-Number $line 'shadow_replay_potential_saved_ms'
                 hitRatio = if ($observations -gt 0) { $hits / $observations } else { 0.0 }
@@ -62,7 +64,9 @@ try {
     }
 
     $totals = [pscustomobject]@{
-        searchPhaseLines = $rows.Count
+        resultLines = $rows.Count
+        sampledSearches = @($rows | Where-Object observations -gt 0).Count
+        cappedSearches = @($rows | Where-Object sampleCapped).Count
         transitions = [long](($rows | Measure-Object transitions -Sum).Sum)
         terminalCacheHits = [long](($rows | Measure-Object terminalCacheHits -Sum).Sum)
         observations = [long](($rows | Measure-Object observations -Sum).Sum)

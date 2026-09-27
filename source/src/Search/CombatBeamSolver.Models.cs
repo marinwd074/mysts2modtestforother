@@ -201,6 +201,7 @@ internal sealed partial class CombatBeamSolver
         public int ShadowReplayCollisionRejects;
         public int ShadowReplayOutputMismatches;
         public int ShadowReplayDroppedStores;
+        public bool ShadowReplaySamplingCapped;
         public long ShadowReplayValidationTicks;
         public long ShadowReplayPotentialSavedTicks;
         public int ReusedNodeSnapshots;
