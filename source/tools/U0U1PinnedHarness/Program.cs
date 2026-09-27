@@ -60,6 +60,9 @@ internal static class Program
             Require(
                 R1EvaluationShadowCache.VerifyBeamRankReuseGateForTesting(),
                 "R1 Beam-rank reuse requires first exact validation and disables reuse on mismatch.");
+            Require(
+                R1TransitionHydrationCache.VerifyExactReuseGateForTesting(),
+                "R1 transition hydration requires first exact replay validation and disables reuse on mismatch.");
             ValidateRenderedCurrentTurnTakeoverContract();
 
             HarnessScenario scenario = new(

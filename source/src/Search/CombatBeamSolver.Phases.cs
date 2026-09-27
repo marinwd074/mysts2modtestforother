@@ -937,6 +937,7 @@ internal sealed partial class CombatBeamSolver
                     _run.MaxParallelRoundChoiceReplayConcurrency,
                 NodeLimitSnapshotsReleased = _run.NodeLimitSnapshotsReleased,
                 TransitionCacheHits = _run.TransitionCacheHits,
+                R1TransitionHydrationHits = _run.R1TransitionHydrationHits,
                 ShadowReplayObservations =
                     shadowSampling?.Observations ?? _run.ShadowReplayObservations,
                 ShadowReplayStores =
@@ -2784,6 +2785,7 @@ internal sealed partial class CombatBeamSolver
             node.Snapshot,
             node.Turn,
             node.ActionCount);
+        StoreR1TransitionHydration(node, action, snapshot);
         bool terminal = snapshot.PlayerDead
             || snapshot.AllEnemiesDead
             || snapshot.BoundaryReason != SearchBoundaryReason.None;

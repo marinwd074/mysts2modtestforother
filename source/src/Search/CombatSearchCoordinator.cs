@@ -436,6 +436,7 @@ internal static partial class CombatSearchCoordinator
             SolverResult? continuationSeedIncumbent = null;
             PrimarySearchIncumbent? r1RecoveryIncumbent = null;
             R1EvaluationShadowCache? r1EvaluationShadowCache = null;
+            R1TransitionHydrationCache? r1TransitionHydrationCache = null;
             IReadOnlyList<PlanAction> r1ValidatedEnumerationHints = [];
             SolverResult? earlySmartPotionBaseline = null;
             SolverResult? earlySmartPotionScout = null;
@@ -461,11 +462,17 @@ internal static partial class CombatSearchCoordinator
                     && !refinement
                     && HasOptionalSmartPotionCandidate())
                 {
+                    SearchPolicySnapshot p3Policy = beamPolicy with
+                    {
+                        ContinuationEnumerationHintActions = [],
+                        R1EvaluationShadowCache = null,
+                        R1TransitionHydrationCache = null,
+                    };
                     SolverResult potionFree = RunP3CrossFamilyFixedPass(
                         root,
                         displayNames,
                         battleDamage,
-                        beamPolicy,
+                        p3Policy,
                         memberProfile,
                         cancellationToken,
                         memberProgressCallback,
@@ -483,6 +490,7 @@ internal static partial class CombatSearchCoordinator
                     {
                         ContinuationEnumerationHintActions = [],
                         R1EvaluationShadowCache = null,
+                        R1TransitionHydrationCache = null,
                     }
                     : beamPolicy;
                 CombatBeamSolver solver = new(
@@ -558,6 +566,7 @@ internal static partial class CombatSearchCoordinator
                 SearchRequestWorkSnapshot beforeSeed = totals.Snapshot();
                 long seedStartedMs = passClock.ElapsedMilliseconds;
                 r1EvaluationShadowCache = new R1EvaluationShadowCache();
+                r1TransitionHydrationCache = new R1TransitionHydrationCache();
                 SearchPolicySnapshot seedPolicy = beamPolicy with
                 {
                     Interaction = null,
@@ -566,6 +575,7 @@ internal static partial class CombatSearchCoordinator
                     ContinuationSeedActions = continuationSeedActions,
                     ContinuationEnumerationHintActions = [],
                     R1EvaluationShadowCache = r1EvaluationShadowCache,
+                    R1TransitionHydrationCache = r1TransitionHydrationCache,
                 };
                 try
                 {
@@ -646,11 +656,20 @@ internal static partial class CombatSearchCoordinator
                 }
 
                 r1EvaluationShadowCache.Freeze();
-                if (r1EvaluationShadowCache.EntryCount > 0)
+                r1TransitionHydrationCache.FreezeStores();
+                if (r1EvaluationShadowCache.EntryCount > 0
+                    || r1TransitionHydrationCache.EntryCount > 0)
                 {
                     beamPolicy = beamPolicy with
                     {
-                        R1EvaluationShadowCache = r1EvaluationShadowCache,
+                        R1EvaluationShadowCache =
+                            r1EvaluationShadowCache.EntryCount > 0
+                                ? r1EvaluationShadowCache
+                                : null,
+                        R1TransitionHydrationCache =
+                            r1TransitionHydrationCache.EntryCount > 0
+                                ? r1TransitionHydrationCache
+                                : null,
                     };
                 }
 
@@ -728,6 +747,28 @@ internal static partial class CombatSearchCoordinator
                     $"reuse_disabled={r1Shadow.ReuseDisabled.ToString().ToLowerInvariant()} " +
                     $"capped={r1Shadow.Capped.ToString().ToLowerInvariant()} " +
                     $"behavioral_reuse=beam_rank_after_first_validation");
+            }
+            if (r1TransitionHydrationCache != null)
+            {
+                R1TransitionHydrationSnapshot hydration =
+                    r1TransitionHydrationCache.Capture();
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Test] R1_TRANSITION_HYDRATION " +
+                    $"mode=exact_request_local entry_limit={hydration.EntryLimit} " +
+                    $"entries={hydration.Entries} stores={hydration.Stores} " +
+                    $"duplicate_stores={hydration.DuplicateStores} " +
+                    $"dropped_stores={hydration.DroppedStores} " +
+                    $"store_conflicts={hydration.StoreConflicts} " +
+                    $"first_validations={hydration.FirstValidations} " +
+                    $"validated_keys={hydration.ValidatedKeys} " +
+                    $"index_misses={hydration.IndexMisses} " +
+                    $"collision_rejects={hydration.CollisionRejects} " +
+                    $"hydration_hits={hydration.HydrationHits} " +
+                    $"output_mismatches={hydration.OutputMismatches} " +
+                    $"reuse_disabled={hydration.ReuseDisabled.ToString().ToLowerInvariant()} " +
+                    $"behavioral_reuse=exact_nonterminal_transition");
+                r1TransitionHydrationCache.Release();
+                r1TransitionHydrationCache = null;
             }
             NoveltyPortfolioTelemetry? noveltyPass = passResult.NoveltyPortfolio;
             ObserveSmartLayerMemory(

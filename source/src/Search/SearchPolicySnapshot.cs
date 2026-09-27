@@ -140,6 +140,11 @@ internal sealed record SearchPolicySnapshot(
     // state fingerprinting, candidate admission and deployment authorization are never skipped.
     public R1EvaluationShadowCache? R1EvaluationShadowCache { get; init; }
 
+    // Phase D3.3: request-local exact nonterminal transition hydration sourced only from
+    // the validated R1 probe. The baseline may reuse only a forked predicted post-state;
+    // Snapshot/evaluation, transposition, retention and deployment checks still rerun.
+    public R1TransitionHydrationCache? R1TransitionHydrationCache { get; init; }
+
     // Production multiplayer shadow validation shares one atomic request budget across
     // portfolio members and all parallel lanes. Null means no production sampling.
     public ShadowReplaySamplingBudget? ShadowReplaySamplingBudget { get; init; }
