@@ -85,7 +85,7 @@ internal static partial class SolverController
            && (_search is { } search
                && search.Interaction.CurrentTakeoverRequest == null
                && search.Interaction.CanAcceptTakeover
-               && Volatile.Read(ref search.Interaction.Progress)?.CurrentTurnPreview != null
+               && search.Interaction.RenderedCurrentTurnAdoptionSeed != null
            || PlayerTurnSetupCoordinator.CanApplyCurrentTurn);
     public static bool IsApplyingCurrentTurn
         => _search?.Interaction.IsApplyingCurrentTurn == true
@@ -106,7 +106,10 @@ internal static partial class SolverController
     internal static void InvalidateRenderedRouteAdoptionSeed()
     {
         if (_search != null)
+        {
+            _search.Interaction.RenderedCurrentTurnAdoptionSeed = null;
             _search.Interaction.RenderedRouteAdoptionSeed = null;
+        }
         PlayerTurnSetupCoordinator.InvalidateRenderedRouteAdoptionSeed();
     }
 
@@ -1737,6 +1740,9 @@ internal static partial class SolverController
             : progress.CurrentTurnPreview is { } currentTurn
                 ? SolverOverlaySnapshot.CaptureCurrentTurn(currentTurn)
                 : null;
+        search.Interaction.RenderedCurrentTurnAdoptionSeed = preview == null
+            ? null
+            : progress.CurrentTurnAdoptionSeed;
         search.Interaction.RenderedRouteAdoptionSeed = progress.SpeculativeRoutePreview == null
             ? null
             : progress.RouteAdoptionSeed;

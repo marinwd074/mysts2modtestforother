@@ -68,6 +68,7 @@ internal static partial class CombatSearchCoordinator
         int speculativeRouteVersion = 0;
         SolverCurrentTurnPreview? currentTurnPreview = null;
         SolverSpeculativeRoutePreview? speculativeRoutePreview = null;
+        SolverRouteAdoptionSeed? currentTurnAdoptionSeed = null;
         SolverRouteAdoptionSeed? currentRouteAdoptionSeed = null;
 
         bool TryPromoteDisplayedResult(SolverInterimResult candidate)
@@ -111,6 +112,14 @@ internal static partial class CombatSearchCoordinator
             speculativeRoutePreview = SolverSpeculativeRoutePreview.FromResult(
                 result,
                 ++speculativeRouteVersion);
+            currentTurnAdoptionSeed = new SolverRouteAdoptionSeed(
+                currentTurnPreview.CandidateVersion,
+                currentTurnPreview.Actions,
+                () =>
+                {
+                    result.ResultScope = SolverResultScope.CurrentTurnAdoption;
+                    return result;
+                });
             currentRouteAdoptionSeed = new SolverRouteAdoptionSeed(
                 speculativeRoutePreview.CandidateVersion,
                 result.BestNode.Actions,
@@ -126,6 +135,7 @@ internal static partial class CombatSearchCoordinator
                     CurrentTurnPreview = currentTurnPreview,
                     SpeculativeRoutePreview = speculativeRoutePreview,
                     RouteAdoptionSeed = currentRouteAdoptionSeed,
+                    CurrentTurnAdoptionSeed = currentTurnAdoptionSeed,
                 };
                 progressCallback(lastProgress);
             }
@@ -154,6 +164,7 @@ internal static partial class CombatSearchCoordinator
                     if (progress.CurrentTurnPreview is { } current)
                     {
                         currentTurnPreview = current;
+                        currentTurnAdoptionSeed = progress.CurrentTurnAdoptionSeed;
                         currentTurnPreviewVersion = Math.Max(
                             currentTurnPreviewVersion,
                             current.CandidateVersion);
@@ -186,6 +197,7 @@ internal static partial class CombatSearchCoordinator
                     CurrentTurnPreview = currentTurnPreview,
                     SpeculativeRoutePreview = speculativeRoutePreview,
                     RouteAdoptionSeed = currentRouteAdoptionSeed,
+                    CurrentTurnAdoptionSeed = currentTurnAdoptionSeed,
                 });
             };
         try
@@ -215,23 +227,30 @@ internal static partial class CombatSearchCoordinator
         }
         catch (OperationCanceledException)
             when (interaction?.CurrentTakeoverRequest?.Kind == SearchTakeoverKind.ApplyCurrentTurn
-                  && currentCompleteAdoptableResult != null)
+                  && (interaction.CurrentTakeoverRequest.CurrentTurnAdoptionSeed != null
+                      || currentCompleteAdoptableResult != null))
         {
+            SolverResult adopted =
+                interaction.CurrentTakeoverRequest.CurrentTurnAdoptionSeed?.Materialize()
+                ?? currentCompleteAdoptableResult!;
+            adopted.ResultScope = SolverResultScope.CurrentTurnAdoption;
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] SEARCH_INTERIM_ADOPTED " +
-                $"potions={currentCompleteAdoptableResult.ProjectedBattlePotionCount} " +
-                $"projected_battle_hp_lost={currentCompleteAdoptableResult.ProjectedBattleHpLost}");
+                $"candidate_version=" +
+                $"{interaction.CurrentTakeoverRequest.CurrentTurnAdoptionSeed?.CandidateVersion.ToString() ?? "-"} " +
+                $"potions={adopted.ProjectedBattlePotionCount} " +
+                $"projected_battle_hp_lost={adopted.ProjectedBattleHpLost}");
             portfolioTelemetry.RecordCandidatePublished(
-                currentCompleteAdoptableResult.SearchEfficiencyOrigin,
-                currentCompleteAdoptableResult.SearchEfficiencyEvaluationContextId ?? string.Empty);
-            PopulateRequestWorkTotals(currentCompleteAdoptableResult, requestWorkTotals);
-            currentCompleteAdoptableResult.PortfolioTelemetry = portfolioTelemetry;
+                adopted.SearchEfficiencyOrigin,
+                adopted.SearchEfficiencyEvaluationContextId ?? string.Empty);
+            PopulateRequestWorkTotals(adopted, requestWorkTotals);
+            adopted.PortfolioTelemetry = portfolioTelemetry;
             LogSearchEfficiencySummary(
                 root,
                 policy.Diagnostics,
-                currentCompleteAdoptableResult,
+                adopted,
                 portfolioTelemetry);
-            return currentCompleteAdoptableResult;
+            return adopted;
         }
     }
 
@@ -311,6 +330,13 @@ internal static partial class CombatSearchCoordinator
         }
         if (request.Kind == SearchTakeoverKind.AdoptRoute)
             return request.RouteAdoptionSeed?.Materialize();
+        if (request.Kind == SearchTakeoverKind.ApplyCurrentTurn
+            && request.CurrentTurnAdoptionSeed != null)
+        {
+            SolverResult exactDisplayed = request.CurrentTurnAdoptionSeed.Materialize();
+            exactDisplayed.ResultScope = SolverResultScope.CurrentTurnAdoption;
+            return exactDisplayed;
+        }
         return IsAdoptionResult(result) ? result : null;
     }
 

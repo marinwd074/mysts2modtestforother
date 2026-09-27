@@ -480,7 +480,7 @@ internal sealed partial class CombatBeamSolver
             }
 
             member.PublishedCurrentTurnActions = actions;
-            member.CurrentTurnPreview = new SolverCurrentTurnPreview(
+            SolverCurrentTurnPreview preview = new(
                 ++member.CurrentTurnPreviewVersion,
                 _startTurnNumber,
                 actions.Select(WithDisplayNames).ToArray(),
@@ -495,6 +495,38 @@ internal sealed partial class CombatBeamSolver
                     .Select(WithDisplayNames)
                     .ToArray(),
             };
+            member.CurrentTurnPreview = preview;
+
+            SearchNode displayedCandidate = candidate;
+            int displayedSearchedTurnLayers = member.SearchedTurnLayers;
+            string displayedEvaluationContextId = SearchEfficiencyEvaluationContextId(
+                scenarioReevaluation: false,
+                completion: "displayed_current_turn");
+            member.CurrentTurnAdoptionSeed = new SolverRouteAdoptionSeed(
+                preview.CandidateVersion,
+                preview.Actions,
+                () =>
+                {
+                    FinalPlanSelection displayedOrdering = FinalOrdering.Select(
+                        [(displayedCandidate, displayedCandidate.Snapshot)],
+                        root.InitialPlayerHp,
+                        emitDiagnostics: false,
+                        reevaluateScenarios: false,
+                        allowScenarioRerank: false);
+                    bool displayedOnlyDeath =
+                        displayedCandidate.Snapshot.PlayerDead
+                        || displayedCandidate.Snapshot.ProjectedPlayerHp <= 0;
+                    SolverResult exactDisplayed = MaterializeSelectedRoute(
+                        displayedOrdering,
+                        displayedOnlyDeath,
+                        SolverResultScope.CurrentTurnAdoption,
+                        displayedSearchedTurnLayers,
+                        candidateTimeBudgetReached: false,
+                        candidateNodeBudgetReached: false,
+                        displayedEvaluationContextId);
+                    exactDisplayed.ResultScope = SolverResultScope.CurrentTurnAdoption;
+                    return exactDisplayed;
+                });
         }
 
 
@@ -1242,6 +1274,7 @@ internal sealed partial class CombatBeamSolver
                 member.SpeculativeRoutePreview,
                 member.RouteAdoptionSeed)
             {
+                CurrentTurnAdoptionSeed = member.CurrentTurnAdoptionSeed,
                 OfficialPublishedOrigin = officialPublishedOrigin,
                 OfficialPublishedEvaluationContextId =
                     officialPublishedEvaluationContextId,
@@ -1666,6 +1699,13 @@ internal sealed partial class CombatBeamSolver
                     return false;
                 }
                 if (request?.Kind == SearchTakeoverKind.ApplyCurrentTurn
+                    && request.CurrentTurnAdoptionSeed != null)
+                {
+                    member.RequestedCurrentTurnAdoptionSeed =
+                        request.CurrentTurnAdoptionSeed;
+                    return false;
+                }
+                if (request?.Kind == SearchTakeoverKind.ApplyCurrentTurn
                     && (member.CurrentBestNode != null || member.CurrentTurnCandidateNode != null))
                 {
                     member.AdoptionReached = true;
@@ -1773,6 +1813,15 @@ internal sealed partial class CombatBeamSolver
                     break;
                 }
                 SearchNode? adoptableNode = member.CurrentBestNode ?? member.CurrentTurnCandidateNode;
+                if (takeover?.Kind == SearchTakeoverKind.ApplyCurrentTurn
+                    && takeover.CurrentTurnAdoptionSeed != null)
+                {
+                    member.RequestedCurrentTurnAdoptionSeed =
+                        takeover.CurrentTurnAdoptionSeed;
+                    member.InterruptedActive = member.Active;
+                    member.TimeBudgetReached = true;
+                    break;
+                }
                 if (takeover?.Kind == SearchTakeoverKind.ApplyCurrentTurn && adoptableNode != null)
                 {
                     member.AdoptionReached = true;
@@ -2387,6 +2436,14 @@ internal sealed partial class CombatBeamSolver
                 break;
             }
             if (layerTakeover?.Kind == SearchTakeoverKind.ApplyCurrentTurn
+                && layerTakeover.CurrentTurnAdoptionSeed != null)
+            {
+                member.RequestedCurrentTurnAdoptionSeed =
+                    layerTakeover.CurrentTurnAdoptionSeed;
+                member.TimeBudgetReached = true;
+                break;
+            }
+            if (layerTakeover?.Kind == SearchTakeoverKind.ApplyCurrentTurn
                 && (member.CurrentBestNode != null || member.CurrentTurnCandidateNode != null))
             {
                 member.AdoptionReached = true;
@@ -2417,6 +2474,29 @@ internal sealed partial class CombatBeamSolver
                 member.Frontier = [];
                 break;
             }
+        }
+
+        if (member.RequestedCurrentTurnAdoptionSeed != null)
+        {
+            foreach (SearchNode candidate in member.Completed)
+                candidate.Snapshot.ReleaseSimulator();
+            foreach (SearchNode candidate in member.Frontier)
+                candidate.Snapshot.ReleaseSimulator();
+            if (member.InterruptedActive != null)
+            {
+                foreach (SearchNode candidate in member.InterruptedActive)
+                    candidate.Snapshot.ReleaseSimulator();
+            }
+            policy.Diagnostics.Info(
+                $"[CombatSolver/Test] SEARCH_CURRENT_TURN_DISPLAYED_CHECKPOINT " +
+                $"candidate_version={member.RequestedCurrentTurnAdoptionSeed.CandidateVersion} " +
+                $"displayed_actions={member.RequestedCurrentTurnAdoptionSeed.Actions.Count} " +
+                $"expanded={_run.Expanded}");
+            SolverResult exactDisplayed =
+                member.RequestedCurrentTurnAdoptionSeed.Materialize();
+            exactDisplayed.ResultScope = SolverResultScope.CurrentTurnAdoption;
+            execution.Result = exactDisplayed;
+            yield break;
         }
 
         if (member.RequestedRouteAdoptionSeed != null)
@@ -2850,6 +2930,8 @@ internal sealed partial class CombatBeamSolver
         public SolverSpeculativeRoutePreview? SpeculativeRoutePreview { get; set; }
         public CandidateOrigin? SpeculativeRouteOrigin { get; set; }
         public string? SpeculativeRouteEvaluationContextId { get; set; }
+        public SolverRouteAdoptionSeed? CurrentTurnAdoptionSeed { get; set; }
+        public SolverRouteAdoptionSeed? RequestedCurrentTurnAdoptionSeed { get; set; }
         public SolverRouteAdoptionSeed? RouteAdoptionSeed { get; set; }
         public SolverRouteAdoptionSeed? RequestedRouteAdoptionSeed { get; set; }
         public IReadOnlyList<SearchNode>? InterruptedActive { get; set; }

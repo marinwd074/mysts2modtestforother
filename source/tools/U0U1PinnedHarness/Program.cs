@@ -57,6 +57,7 @@ internal static class Program
             ValidateRollingHorizonQualityContract();
             ValidateRouteInvalidationVersionContract();
             ValidateLocalCoreShadowNormalizationContract();
+            ValidateRenderedCurrentTurnTakeoverContract();
 
             HarnessScenario scenario = new(
                 "IRONCLAD",
@@ -191,6 +192,33 @@ internal static class Program
                 && value.ResourcePotential == 0
                 && value.ScalingPotential == 0,
             $"Vicious strategic value drifted: {value}.");
+    }
+
+    private static void ValidateRenderedCurrentTurnTakeoverContract()
+    {
+        SearchInteractionState interaction = new();
+        PlanAction displayedAction = new(PlanActionKind.EndTurn, 1);
+        SolverRouteAdoptionSeed displayedSeed = new(
+            candidateVersion: 17,
+            actions: [displayedAction],
+            materialize: static () => null!);
+
+        interaction.RenderedCurrentTurnAdoptionSeed = displayedSeed;
+        Require(
+            interaction.RequestApplyCurrentTurn(
+                interaction.RenderedCurrentTurnAdoptionSeed),
+            "Rendered current-turn takeover request was rejected.");
+        SearchTakeoverRequest? request = interaction.CurrentTakeoverRequest;
+        Require(
+            request?.Kind == SearchTakeoverKind.ApplyCurrentTurn
+                && ReferenceEquals(request.CurrentTurnAdoptionSeed, displayedSeed)
+                && request.CurrentTurnAdoptionSeed.CandidateVersion == 17
+                && request.CurrentTurnAdoptionSeed.Actions.SequenceEqual([displayedAction]),
+            "Apply-current-turn did not freeze the exact rendered candidate.");
+        _ = interaction.CompleteTakeover();
+        Require(
+            interaction.RenderedCurrentTurnAdoptionSeed == null,
+            "Rendered current-turn seed survived takeover completion.");
     }
 
     private static void ValidateLocalCoreShadowNormalizationContract()
