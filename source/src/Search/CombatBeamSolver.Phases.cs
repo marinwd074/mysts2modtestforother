@@ -1123,11 +1123,12 @@ internal sealed partial class CombatBeamSolver
             }
             RecordCandidateEvaluated(ordering.Candidate.Node, evaluationContextId);
             RecordCandidateSelected(ordering.Candidate.Node, evaluationContextId);
+            CandidateOrigin? releasedPreviewOrigin = EnsureCandidateOrigin(ordering.Candidate.Node);
             if (!ordering.Candidate.Snapshot.HasSimulator)
             {
                 policy.Diagnostics.Info(
                     $"[CombatSolver/Test] SEARCH_ANYTIME_RELEASED_SNAPSHOT_PREVIEW " +
-                    $"candidate_id={EnsureCandidateOrigin(ordering.Candidate.Node).CandidateId} " +
+                    $"candidate_id={releasedPreviewOrigin?.CandidateId.ToString() ?? "-"} " +
                     $"turn={ordering.Candidate.Node.Turn} " +
                     $"projected_hp={ordering.Candidate.Snapshot.ProjectedPlayerHp} " +
                     $"enemy_hp={ordering.Candidate.Snapshot.EnemyHp}");
