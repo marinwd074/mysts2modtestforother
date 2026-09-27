@@ -18,6 +18,23 @@ using CombatSolver.Engine.InCombat.Simulation;
 
 namespace CombatSolver;
 
+internal static class PaleBlueDotHandDrawScope
+{
+    [ThreadStatic] private static int _depth;
+    public static bool Active => _depth > 0;
+
+    public static Scope Enter()
+    {
+        _depth++;
+        return new Scope();
+    }
+
+    internal readonly struct Scope : IDisposable
+    {
+        public void Dispose() => _depth--;
+    }
+}
+
 internal static class PersistentPowerSupport
 {
     public static int ConsumeModifiedHandDraw(
@@ -42,6 +59,8 @@ internal static class PersistentPowerSupport
         Player player,
         int baseDraw)
     {
+        // This native hook reads live combat history; the branch already represents its draw via DrawCardsNextTurnPower.
+        using var paleBlueDotScope = PaleBlueDotHandDrawScope.Enter();
         decimal result = Hook.ModifyHandDraw(combat, player, baseDraw, out _);
         result = AdjustTurnBasedRelicHandDraw(combat, player, result);
         return Math.Max(0, (int)result);

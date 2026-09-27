@@ -39,6 +39,9 @@ internal static class PatchRegistration
         patcher.RegisterPatch<PowerDynamicVarMaterializationGuardPatch>();
         patcher.RegisterPatch<ModelDbGetIdCachePatch>();
         patcher.RegisterPatch<PowerAmountComparisonPatch>();
+#if STS2_01071
+        patcher.RegisterPatch<PaleBlueDotHandDrawPatch>();
+#endif
         patcher.RegisterPatch<RichTextEnvironmentLifetimePatch>();
         patcher.RegisterPatch<NodePoolSignalLifetimePatch>();
         patcher.RegisterPatch<CombatInstantModePatch>();
