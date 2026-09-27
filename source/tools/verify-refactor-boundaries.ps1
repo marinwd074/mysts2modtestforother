@@ -69,8 +69,9 @@ foreach ($routeScopedDeployRule in @(
     'DEPLOY_COMPATIBLE_WORLD_DELTA',
     'deploy_after_local_state_change',
     'IsLatestResultDeploymentCompatible(',
-    '_combat.LatestRouteInvalidationVersion == MultiplayerRouteChangeTracker.InvalidationVersion',
-    'search.RouteInvalidationVersion == MultiplayerRouteChangeTracker.InvalidationVersion')) {
+    '_combat.LatestRouteInvalidationVersion',
+    'search.RouteInvalidationVersion',
+    'MultiplayerRouteChangeTracker.InvalidationVersion')) {
     if (-not $solverControllerText.Contains($routeScopedDeployRule)) {
         $violations.Add("${solverControllerPath}: route-scoped deployment drifted '$routeScopedDeployRule'")
     }
