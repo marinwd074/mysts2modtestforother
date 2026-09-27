@@ -199,7 +199,8 @@ GPU、学习型价值网络和 MCTS 可作为以后独立实验：现有 C# 规�
 
 - **A 已完成**：沿现有发布/continuation/refresh 调用链完成现状测量，没有另造重复计时或复用层。
 - **B 已完成**：`DeferredImpactCoverage` / `DeferredImpactOutcome` 只记录真实模拟已到达的覆盖边界和绝对结果，不参与生产排序。pinned 0.107.1 定向验收覆盖真实延迟负效应（Biased Cognition Focus `4 → 3`）、慢收益（Outmaneuver 下一回合 Energy `3 → 5`）以及当前回合斩杀（`CombatTerminal`，无未来攻击债务）；Release 与 harness 均 0 warning / 0 error。Borrowed Time 经固定上游/0.107.1 语义核对属于本回合费用修正，不作为跨回合负债样本。
-- **下一阶段 C**：战斗级 R0 转移缓存；先做同战斗、纯值、可禁用、严格失效的旁路缓存，再用开/关逐状态一致性决定是否允许采用。
+- **C 已完成**：战斗级 R0 exact/normalized shadow 已通过同战斗跨请求与真实 fresh re-root 证据；非终局真实 hydration 仍保持关闭，避免把 simulator-free value snapshot 误当可展开节点。
+- **D 进行中**：生产启用 R1 新根路线重放。旧候选只作为动作建议，从 live 新根重新模拟；成功的完整合法胜利可建立安全 incumbent bound，失败回到原求解。枚举提示/P3 不随 R1 一起开启，普通 Beam 预算与顺序保持不变。
 
 建议实施顺序 A → B → C → D → E → F → G → H；先收获正确的短期评价和同战斗复用，再投入昂贵持久化。R2 依赖闭包复用是 D 后的可选独立阶段，未证明可靠时不影响主线交付。
 

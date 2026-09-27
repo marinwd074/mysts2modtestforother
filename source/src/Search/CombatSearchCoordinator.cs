@@ -434,6 +434,7 @@ internal static partial class CombatSearchCoordinator
             SolverSearchProfile activeProfile = passProfile;
             Stopwatch activeClock = passClock;
             SolverResult? continuationSeedIncumbent = null;
+            PrimarySearchIncumbent? r1RecoveryIncumbent = null;
             SolverResult? earlySmartPotionBaseline = null;
             SolverResult? earlySmartPotionScout = null;
 
@@ -483,7 +484,8 @@ internal static partial class CombatSearchCoordinator
                     cancellationToken,
                     memberProgressCallback,
                     memberProfile,
-                    potionPolicyOverride: initialPotionPolicyOverride);
+                    potionPolicyOverride: initialPotionPolicyOverride,
+                    primaryIncumbent: refinement ? null : r1RecoveryIncumbent);
                 return RunResumableMemberToCompletion(
                     solver,
                     cancellationToken,
@@ -578,6 +580,7 @@ internal static partial class CombatSearchCoordinator
                     if (admissible)
                     {
                         continuationSeedIncumbent = seedResult;
+                        r1RecoveryIncumbent = BuildPrimarySearchIncumbent(root, beamPolicy, seedResult);
                         interimResultCallback?.Invoke(seedResult);
                     }
                     policy.Diagnostics.Info(
@@ -586,7 +589,14 @@ internal static partial class CombatSearchCoordinator
                         $"actions={continuationSeedActions.Count} " +
                         $"expanded={seedResult.ExpandedNodes} transitions={seedResult.TransitionCount} " +
                         $"elapsed_ms={seedResult.Elapsed.TotalMilliseconds:F1} " +
-                        $"published={admissible.ToString().ToLowerInvariant()}");
+                        $"published={admissible.ToString().ToLowerInvariant()} " +
+                        $"r1_bound={(r1RecoveryIncumbent.HasValue ? "established" : "none")}");
+                    policy.Diagnostics.Info(
+                        $"[CombatSolver/Test] R1_REROOT_RECOVERY " +
+                        $"status={(r1RecoveryIncumbent.HasValue ? "bound_established" : "replayed_only")} " +
+                        $"actions={continuationSeedActions.Count} " +
+                        $"complete_victory={admissible.ToString().ToLowerInvariant()} " +
+                        $"primary_budget_unchanged=true");
                 }
                 catch (ContinuationSeedRejectedException rejected)
                 {
@@ -594,25 +604,25 @@ internal static partial class CombatSearchCoordinator
                         $"[CombatSolver/Test] P2_CONTINUATION_SEED_INCUMBENT " +
                         $"status=rejected reason={rejected.Reason} " +
                         $"actions={continuationSeedActions.Count} published=false");
+                    policy.Diagnostics.Info(
+                        $"[CombatSolver/Test] R1_REROOT_RECOVERY " +
+                        $"status=rejected reason={rejected.Reason} " +
+                        $"actions={continuationSeedActions.Count} primary_budget_unchanged=true");
                 }
 
                 SearchRequestWorkSnapshot afterSeed = totals.Snapshot();
                 long seedElapsedMs = Math.Max(0, passClock.ElapsedMilliseconds - seedStartedMs);
                 long seedExpanded = Math.Max(
                     0, afterSeed.ExpandedNodes - beforeSeed.ExpandedNodes);
-                activeProfile = ContinuationSeedIncumbentBudget.Remaining(
-                        passProfile,
-                        seedElapsedMs,
-                        seedExpanded)
-                    ?? throw new InvalidOperationException(
-                        "P2 continuation-seed incumbent exhausted the primary request budget.");
+                activeProfile = passProfile;
                 activeClock = Stopwatch.StartNew();
                 policy.Diagnostics.Info(
                     $"[CombatSolver/Test] P2_CONTINUATION_SEED_BUDGET " +
                     $"probe_nodes={seedExpanded}/{seedProfile.MaxExpandedNodes} " +
                     $"probe_ms={seedElapsedMs}/{seedProfile.SoftTimeBudgetMilliseconds} " +
-                    $"remaining_nodes={activeProfile.MaxExpandedNodes} " +
-                    $"remaining_ms={activeProfile.SoftTimeBudgetMilliseconds}");
+                    $"primary_nodes_unchanged={activeProfile.MaxExpandedNodes} " +
+                    $"primary_ms_unchanged={activeProfile.SoftTimeBudgetMilliseconds} " +
+                    $"r1_bound={(r1RecoveryIncumbent.HasValue ? "established" : "none")}");
             }
 
             SolverResult SelectContinuationSeedIncumbent(SolverResult ordinary)

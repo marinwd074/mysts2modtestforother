@@ -80,10 +80,13 @@ internal static class MultiplayerLocalCrossTurnContracts
             && searchedTurnLayers >= limit;
 
     /// <summary>
-    /// Quality-first default: local-core multiplayer keeps the exact single-player
-    /// exploration order. P1/P2 continuation seeds and P3 cross-family scheduling stay
-    /// available as offline experiments but do not influence production search.
+    /// Phase D R1 recovery is allowed to replay a previous local route from the new live root.
+    /// The replay is re-simulated and re-evaluated; it never reuses old scores or deployment
+    /// authority. Enumeration hints and P3 scheduling remain disabled so the ordinary
+    /// single-player Beam order stays unchanged.
     /// </summary>
+    internal static bool LocalCoreR1RecoveryEnabled => true;
+
     internal static bool LocalCoreSearchAcceleratorsEnabled => false;
 
     internal static bool ShouldUseP3CrossFamilyScheduling(

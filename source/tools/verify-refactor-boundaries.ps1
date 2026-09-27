@@ -4359,8 +4359,11 @@ $p1ContinuationContractsText = [IO.File]::ReadAllText($p1ContinuationContractsPa
 if (-not $p1ContinuationContractsText.Contains('CanReplayContinuationSeedAction(')) {
     $violations.Add("${p1ContinuationContractsPath}: P1 continuation seed action boundary is missing")
 }
+if (-not $p1ContinuationContractsText.Contains('internal static bool LocalCoreR1RecoveryEnabled => true;')) {
+    $violations.Add("${p1ContinuationContractsPath}: Phase D local-core R1 recovery must stay enabled")
+}
 if (-not $p1ContinuationContractsText.Contains('internal static bool LocalCoreSearchAcceleratorsEnabled => false;')) {
-    $violations.Add("${p1ContinuationContractsPath}: default local-core must keep multiplayer search accelerators disabled")
+    $violations.Add("${p1ContinuationContractsPath}: enumeration/P3 accelerators must stay disabled")
 }
 if (-not $p1ContinuationContractsText.Contains('ShouldRunEarlySmartPotionScout(')) {
     $violations.Add("${p1ContinuationContractsPath}: local-core single Smart-potion-audit gate is missing")
@@ -4405,7 +4408,9 @@ foreach ($p1RuntimeRule in @(
     'CaptureContinuationSeedActions(',
     'MultiplayerLocalCrossTurnContracts.CanReplayContinuationSeedAction(',
     'ContinuationSeedActions = continuationSeedActions',
+    'LocalCoreR1RecoveryEnabled',
     'LocalCoreSearchAcceleratorsEnabled',
+    'MP_LOCAL_XTURN_R1_RECOVERY',
     'MP_LOCAL_XTURN_SEED_SKIPPED',
     'IsLocalCoreContinuationStateCompatible(',
     'exact_except_shared_shuffle_rng',
@@ -4468,6 +4473,9 @@ foreach ($p2CoordinatorRule in @(
     'continuationSeedProbe: true',
     'Interaction = null',
     'interimResultCallback?.Invoke(seedResult);',
+    'r1RecoveryIncumbent = BuildPrimarySearchIncumbent(root, beamPolicy, seedResult);',
+    'primaryIncumbent: refinement ? null : r1RecoveryIncumbent',
+    'primary_nodes_unchanged=',
     'SelectContinuationSeedIncumbent(',
     'P2_CONTINUATION_SEED_BUDGET')) {
     if (-not $p1CoordinatorText.Contains($p2CoordinatorRule)) {

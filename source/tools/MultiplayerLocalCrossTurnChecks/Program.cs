@@ -300,14 +300,15 @@ Check(
     "Local-core continuation may ignore only downward HP drift on a still-living enemy; lethal-window gating, HP increases, death and block changes remain strict.");
 
 Check(
-    !MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled
+    MultiplayerLocalCrossTurnContracts.LocalCoreR1RecoveryEnabled
+    && !MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled
     && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
         SearchRoutePolicy.MultiplayerSinglePlayerCore, false, true, false, false)
     && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
         SearchRoutePolicy.SinglePlayerFullRoute, false, true, false, false)
     && !MultiplayerLocalCrossTurnContracts.ShouldUseP3CrossFamilyScheduling(
         SearchRoutePolicy.MultiplayerLocalCrossTurn, false, true, false, false),
-    "Default multiplayer local-core disables P1/P2/P3 search accelerators so finite-budget exploration keeps single-player ordering.");
+    "Phase D enables validated R1 reroot replay while enumeration hints and P3 remain disabled, preserving ordinary Beam ordering.");
 
 Check(
     !MultiplayerLocalCrossTurnContracts.ShouldRunEarlySmartPotionScout(

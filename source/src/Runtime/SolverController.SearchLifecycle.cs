@@ -495,20 +495,27 @@ internal static partial class SolverController
             if (continuationSeedActions.Count > 0
                 && searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
                 && !searchPolicy.IncludeTurnSetup
-                && MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled)
+                && MultiplayerLocalCrossTurnContracts.LocalCoreR1RecoveryEnabled)
             {
                 searchPolicy = searchPolicy with
                 {
                     ContinuationSeedActions = continuationSeedActions,
-                    ContinuationEnumerationHintActions = continuationSeedActions,
+                    ContinuationEnumerationHintActions =
+                        MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled
+                            ? continuationSeedActions
+                            : [],
                 };
+                Entry.Logger.Info(
+                    $"[CombatSolver/Test] MP_LOCAL_XTURN_R1_RECOVERY " +
+                    $"actions={continuationSeedActions.Count} " +
+                    $"enumeration_hint={MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled.ToString().ToLowerInvariant()}");
             }
             else if (continuationSeedActions.Count > 0
                      && searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore)
             {
                 Entry.Logger.Info(
                     $"[CombatSolver/Test] MP_LOCAL_XTURN_SEED_SKIPPED " +
-                    $"reason=single_player_quality_order actions={continuationSeedActions.Count}");
+                    $"reason=r1_recovery_unavailable actions={continuationSeedActions.Count}");
             }
             if (continuationStamp != null && capabilities.IsMultiplayer)
             {
@@ -517,6 +524,7 @@ internal static partial class SolverController
                     $"resume_kind={(searchPolicy.ContinuationSeedActions.Count > 0 ? "seeded_search" : "cold_search")} " +
                     $"seed_actions={searchPolicy.ContinuationSeedActions.Count} " +
                     $"single_player_quality_order={(!MultiplayerLocalCrossTurnContracts.LocalCoreSearchAcceleratorsEnabled).ToString().ToLowerInvariant()} " +
+                    $"r1_recovery_enabled={MultiplayerLocalCrossTurnContracts.LocalCoreR1RecoveryEnabled.ToString().ToLowerInvariant()} " +
                     $"continuation_reject_reason={continuationRejectReason}");
             }
             search.MaxDegreeOfParallelism = searchPolicy.MaxDegreeOfParallelism;

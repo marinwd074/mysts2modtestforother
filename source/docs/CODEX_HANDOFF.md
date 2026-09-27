@@ -13,6 +13,10 @@
 
 ## 当前主目标：Rolling Horizon Reuse（2026-09-27）
 
+- **阶段 C 已闭合，阶段 D 已进入生产实现。** 最新仪式兽问题包证明 future-turn normalized local-core shadow 在真实 `state_mismatch` fresh re-root 后出现 validated hit，且 output mismatch / collision 继续为 0；因此不再扩展 C 的观测面。
+- D 第一小步复用现有 P1/P2 continuation repair，但拆开旧总开关：`LocalCoreR1RecoveryEnabled=true`，而 enumeration hint / P3 继续关闭。Runtime 只把旧路线中当前真实回合、普通无 Choice、带精确 CardStateKey 的连续 PlayCard 冻结为 R1 seed；从新 live root 重新模拟，失败立即 cold fallback，不继承旧 score、旧 simulator 或部署授权。
+- R1 probe 仍最多使用原 5% 探针上限，但**不再扣减普通 Beam 的 MaxExpandedNodes / SoftTimeBudget**。若新根重放重新得到完整合法胜利，则仅转成现有 `PrimarySearchIncumbent` 的可证明 HP/回合下界，供普通 Beam 剪掉数学上不可能更优的分支；普通 Beam 宽度、枚举顺序、节点/时间上限、并发、Smart Potion 与 FinalOrdering 不变。诊断：`MP_LOCAL_XTURN_R1_RECOVERY`、`R1_REROOT_RECOVERY`、`primary_budget_unchanged=true`。
+
 - 用户已将 `docs/Rolling_Horizon_Reuse_Architecture.md` 设为新的主执行目标；其阶段顺序 A → B → C → D → E → F → G → H 优先于下方历史 Quality-first “下一任务”描述。既有质量与执行保护继续作为约束，不重复施工。
 - 阶段 A“现状与测量”已按 current HEAD `2c0c9274c5d83519e67ed4933ea5f37024e47239` 完成定向核对。设计文档最初基线 `eb70db3` 到 current HEAD 仅前进 2 个提交；其中生产代码变化是默认 multiplayer local-core 的 Smart Potion 调度去掉重复 early scout，不改变阶段 A 的 continuation / refresh / publication 分类合同。
 - 候选发布时间已有 `SEARCH_E0_TIMELINE`，覆盖首次生成、完成评估、最终选中和首次发布；请求成员/阶段另有 `SEARCH_E0_MEMBER` / `SEARCH_E0_PHASE`。因此阶段 A 不新增另一套计时器。
