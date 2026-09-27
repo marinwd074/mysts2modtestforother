@@ -26,7 +26,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: phase-c-validation-${{ github.ref }}
+  group: phase-c-validation-v2-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
