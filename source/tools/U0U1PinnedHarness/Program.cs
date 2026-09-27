@@ -1403,18 +1403,87 @@ internal static class Program
                     && memo.CollisionRejects == 1,
                     "Phase C fingerprint collision verifier did not fail closed.");
 
-                return new PhaseCEvidence(
-                    "PASS",
-                    "pinned_exact_terminal_r0_cross_solver",
-                    memo.EntryCount,
-                    memo.Hits,
-                    memo.CollisionRejects,
-                    cached.HasSimulator,
-                    fresh.StateKey == cached.StateKey,
-                    fresh.StateKey == uncached.StateKey,
-                    !memo.ContainsIndexForTesting(changedDynamicsKey, bash, policyIdentity),
-                    !memo.ContainsIndexForTesting(parentKey, bash, policyIdentity + "-other"),
-                    !CombatTransitionMemo.IsActionEligibleForTesting(choiceAction));
+                enemy.SetCurrentHpInternal(originalEnemyHp);
+                BattleDamageSnapshot nonterminalDamage = BattleDamageTracker.Observe(combat);
+                CombatRootSnapshot nonterminalRoot = CombatRootSnapshot.Capture(combat);
+                SearchPolicySnapshot shadowPolicy = memoPolicy with
+                {
+                    DetailedDiagnostics = true,
+                };
+                PlanAction nonterminalBash = bash with
+                {
+                    Turn = nonterminalRoot.StartTurnNumber,
+                };
+                ActionReplayCache shadowCache = ActionReplayCache.For(memo);
+                SimulationSnapshot shadowFresh = new CombatBeamSolver(
+                    nonterminalRoot,
+                    names,
+                    nonterminalDamage,
+                    shadowPolicy,
+                    searchProfile: profile).ReplayDiagnosticActionWithR0Memo(nonterminalBash);
+                SimulationSnapshot shadowRepeated = new CombatBeamSolver(
+                    nonterminalRoot,
+                    names,
+                    nonterminalDamage,
+                    shadowPolicy,
+                    searchProfile: profile).ReplayDiagnosticActionWithR0Memo(nonterminalBash);
+                SimulationSnapshot shadowCacheOff = new CombatBeamSolver(
+                    nonterminalRoot,
+                    names,
+                    nonterminalDamage,
+                    basePolicy,
+                    searchProfile: profile).ReplayDiagnosticActionWithR0Memo(nonterminalBash);
+                try
+                {
+                    Require(
+                        !shadowFresh.AllEnemiesDead
+                            && !shadowRepeated.AllEnemiesDead
+                            && !shadowCacheOff.AllEnemiesDead,
+                        "Phase C nonterminal shadow fixture unexpectedly became terminal.");
+                    Require(
+                        shadowFresh.HasSimulator
+                            && shadowRepeated.HasSimulator
+                            && shadowCacheOff.HasSimulator,
+                        "Phase C nonterminal shadow validation must keep real replay simulators.");
+                    Require(
+                        shadowFresh.StateKey == shadowRepeated.StateKey
+                            && shadowFresh.StateKey == shadowCacheOff.StateKey
+                            && shadowFresh.Score == shadowRepeated.Score
+                            && shadowFresh.Score == shadowCacheOff.Score,
+                        "Phase C nonterminal shadow cache on/off output differs.");
+                    Require(
+                        shadowCache.Count == 1
+                            && shadowCache.ValidatedHits == 1
+                            && shadowCache.CollisionRejects == 0
+                            && shadowCache.OutputMismatches == 0,
+                        $"Phase C shadow replay validation drifted: entries={shadowCache.Count} " +
+                        $"hits={shadowCache.ValidatedHits} collisions={shadowCache.CollisionRejects} " +
+                        $"mismatches={shadowCache.OutputMismatches}.");
+
+                    return new PhaseCEvidence(
+                        "PASS",
+                        "pinned_terminal_r0_plus_nonterminal_shadow_replay",
+                        memo.EntryCount,
+                        memo.Hits,
+                        memo.CollisionRejects,
+                        cached.HasSimulator,
+                        fresh.StateKey == cached.StateKey,
+                        fresh.StateKey == uncached.StateKey,
+                        !memo.ContainsIndexForTesting(changedDynamicsKey, bash, policyIdentity),
+                        !memo.ContainsIndexForTesting(parentKey, bash, policyIdentity + "-other"),
+                        !CombatTransitionMemo.IsActionEligibleForTesting(choiceAction),
+                        shadowCache.Count,
+                        shadowCache.ValidatedHits,
+                        shadowCache.CollisionRejects,
+                        shadowCache.OutputMismatches,
+                        shadowFresh.StateKey == shadowCacheOff.StateKey);
+                }
+                finally
+                {
+                    shadowFresh.ReleaseSimulator();
+                    shadowRepeated.ReleaseSimulator();
+                    shadowCacheOff.ReleaseSimulator();
+                }
             }
             finally
             {
@@ -1616,7 +1685,12 @@ internal static class Program
         bool CacheOffStateKeyEqual,
         bool DynamicsChangeRejected,
         bool PolicyChangeRejected,
-        bool ChoiceRejected);
+        bool ChoiceRejected,
+        int ShadowEntries,
+        int ShadowValidatedHits,
+        int ShadowCollisionRejects,
+        int ShadowOutputMismatches,
+        bool ShadowCacheOffStateKeyEqual);
 
     internal sealed record PhaseBEvidence(
         string Status,
