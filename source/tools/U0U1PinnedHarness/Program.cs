@@ -95,6 +95,8 @@ internal static class Program
                 combat, names, damage, captured, profile);
             PhaseCEvidence phaseC = RunR0TransitionMemoContract(
                 combat, names, captured, profile);
+            PhaseCFullSearchEvidence phaseCFullSearch = RunPhaseCFullSearchReuseContract(
+                combat, names, captured, profile);
 
             var evidence = new
             {
@@ -118,6 +120,7 @@ internal static class Program
                 u5,
                 phaseB,
                 phaseC,
+                phaseCFullSearch,
                 remainingRuntimeSmoke = new[]
                 {
                     "real multiplayer Heavy Blade + native Choice/Brand + following card",
@@ -1521,6 +1524,144 @@ internal static class Program
         }
     }
 
+    private static PhaseCFullSearchEvidence RunPhaseCFullSearchReuseContract(
+        CombatState combat,
+        SolverDisplayNames names,
+        SearchPolicySnapshot captured,
+        SolverSearchProfile profile)
+    {
+        BattleDamageSnapshot damage = BattleDamageTracker.Observe(combat);
+        SearchPolicySnapshot cacheOffPolicy = captured with
+        {
+            Profile = profile,
+            RoutePolicy = SearchRoutePolicy.SinglePlayerFullRoute,
+            CurrentTurnOnly = false,
+            UseMultiplayerTeamObjective = false,
+            DetailedDiagnostics = true,
+            VerifyIncrementalSearch = false,
+            FixedBudget = true,
+            MaxDegreeOfParallelism = 1,
+            BudgetOverrideMilliseconds = null,
+            UseNoveltyPortfolio = false,
+            NoveltySearch = null,
+            UseBeamWidthPortfolio = false,
+            BeamWidthPortfolioWidths = null,
+            Interaction = null,
+            RequestWorkTotals = new SearchRequestWorkTotals(),
+            R0TransitionMemo = null,
+            R0TransitionPolicyIdentity = string.Empty,
+        };
+        string policyIdentity = CombatTransitionMemo.CapturePolicyIdentity(cacheOffPolicy);
+        CombatTransitionMemo sharedMemo = new();
+        CombatRootSnapshot identityRoot = CombatRootSnapshot.Capture(combat);
+        sharedMemo.BindCombat(identityRoot.ContinuationStamp.CombatIdentity);
+
+        SolverResult Run(SearchPolicySnapshot policy)
+        {
+            CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
+            CombatBeamSolver solver = new(
+                root,
+                names,
+                damage,
+                policy with { RequestWorkTotals = new SearchRequestWorkTotals() },
+                searchProfile: profile);
+            return solver.Solve();
+        }
+
+        string[] Route(SolverResult result)
+            => result.BestNode.Actions.Select(ActionToken).ToArray();
+
+        bool SameQuality(SolverResult left, SolverResult right)
+            => left.ProjectedBattleHpLost == right.ProjectedBattleHpLost
+                && left.ProjectedBattlePotionCount == right.ProjectedBattlePotionCount
+                && left.CombatEndedTurn == right.CombatEndedTurn
+                && left.Snapshot.EnemyHp == right.Snapshot.EnemyHp
+                && left.Snapshot.PlayerHp == right.Snapshot.PlayerHp
+                && left.Snapshot.PlayerDead == right.Snapshot.PlayerDead
+                && left.Snapshot.AllEnemiesDead == right.Snapshot.AllEnemiesDead
+                && left.BoundaryReason == right.BoundaryReason;
+
+        SearchPolicySnapshot sharedPolicy = cacheOffPolicy with
+        {
+            R0TransitionMemo = sharedMemo,
+            R0TransitionPolicyIdentity = policyIdentity,
+        };
+
+        SolverResult cacheOff = Run(cacheOffPolicy);
+        SolverResult warm = Run(sharedPolicy);
+        ActionReplayCache shadowCache = ActionReplayCache.For(sharedMemo);
+        int entriesAfterWarm = shadowCache.Count;
+        SolverResult repeated = Run(sharedPolicy);
+
+        string[] cacheOffRoute = Route(cacheOff);
+        string[] warmRoute = Route(warm);
+        string[] repeatedRoute = Route(repeated);
+        bool sameRoute =
+            cacheOffRoute.SequenceEqual(warmRoute, StringComparer.Ordinal)
+            && cacheOffRoute.SequenceEqual(repeatedRoute, StringComparer.Ordinal);
+        bool sameQuality =
+            SameQuality(cacheOff, warm)
+            && SameQuality(cacheOff, repeated);
+        bool sameFixedWork =
+            cacheOff.ExpandedNodes == warm.ExpandedNodes
+            && cacheOff.ExpandedNodes == repeated.ExpandedNodes
+            && cacheOff.TransitionCount == warm.TransitionCount
+            && cacheOff.TransitionCount == repeated.TransitionCount;
+        double repeatedHitRatio = repeated.ShadowReplayObservations == 0
+            ? 0d
+            : repeated.ShadowReplayValidatedHits / (double)repeated.ShadowReplayObservations;
+
+        Require(sameRoute,
+            "Phase C full-search cross-request reuse changed the selected route.");
+        Require(sameQuality,
+            "Phase C full-search cross-request reuse changed final quality.");
+        Require(sameFixedWork,
+            $"Phase C full-search fixed work drifted: off={cacheOff.ExpandedNodes}/{cacheOff.TransitionCount} " +
+            $"warm={warm.ExpandedNodes}/{warm.TransitionCount} repeated={repeated.ExpandedNodes}/{repeated.TransitionCount}.");
+        Require(entriesAfterWarm > 0,
+            "Phase C full-search warm request stored no nonterminal shadow transitions.");
+        Require(repeated.ShadowReplayObservations > 0
+                && repeated.ShadowReplayValidatedHits > 0,
+            "Phase C full-search repeated request produced no cross-request shadow hits.");
+        Require(repeated.ShadowReplayCollisionRejects == 0
+                && repeated.ShadowReplayOutputMismatches == 0
+                && shadowCache.CollisionRejects == 0
+                && shadowCache.OutputMismatches == 0,
+            $"Phase C full-search shadow reuse failed closed: solver_collision={repeated.ShadowReplayCollisionRejects} " +
+            $"solver_mismatch={repeated.ShadowReplayOutputMismatches} cache_collision={shadowCache.CollisionRejects} " +
+            $"cache_mismatch={shadowCache.OutputMismatches}.");
+        Require(repeated.ShadowReplayPotentialSavedDuration > TimeSpan.Zero,
+            "Phase C full-search repeated request recorded no potential replay savings.");
+
+        return new PhaseCFullSearchEvidence(
+            Status: "PASS",
+            EvidenceLevel: "pinned_full_search_cross_request_fixed_work_ab",
+            SameRoute: sameRoute,
+            SameQuality: sameQuality,
+            SameFixedWork: sameFixedWork,
+            CacheOffExpanded: cacheOff.ExpandedNodes,
+            WarmExpanded: warm.ExpandedNodes,
+            RepeatedExpanded: repeated.ExpandedNodes,
+            CacheOffTransitions: cacheOff.TransitionCount,
+            WarmTransitions: warm.TransitionCount,
+            RepeatedTransitions: repeated.TransitionCount,
+            EntriesAfterWarm: entriesAfterWarm,
+            WarmObservations: warm.ShadowReplayObservations,
+            WarmStores: warm.ShadowReplayStores,
+            WarmValidatedHits: warm.ShadowReplayValidatedHits,
+            RepeatedObservations: repeated.ShadowReplayObservations,
+            RepeatedStores: repeated.ShadowReplayStores,
+            RepeatedValidatedHits: repeated.ShadowReplayValidatedHits,
+            RepeatedHitRatio: repeatedHitRatio,
+            RepeatedCollisionRejects: repeated.ShadowReplayCollisionRejects,
+            RepeatedOutputMismatches: repeated.ShadowReplayOutputMismatches,
+            RepeatedDroppedStores: repeated.ShadowReplayDroppedStores,
+            RepeatedValidationMs: repeated.ShadowReplayValidationDuration.TotalMilliseconds,
+            RepeatedPotentialSavedMs: repeated.ShadowReplayPotentialSavedDuration.TotalMilliseconds,
+            TerminalCacheHits: repeated.TransitionCacheHits,
+            Route: repeatedRoute);
+    }
+
     private static SimulationSnapshot ReplayPhaseB(
         CombatRootSnapshot root,
         SolverDisplayNames names,
@@ -1718,6 +1859,34 @@ internal static class Program
         int ShadowSolverValidatedHits,
         bool ShadowValidationCostRecorded,
         bool ShadowPotentialSavedCostRecorded);
+
+    internal sealed record PhaseCFullSearchEvidence(
+        string Status,
+        string EvidenceLevel,
+        bool SameRoute,
+        bool SameQuality,
+        bool SameFixedWork,
+        int CacheOffExpanded,
+        int WarmExpanded,
+        int RepeatedExpanded,
+        int CacheOffTransitions,
+        int WarmTransitions,
+        int RepeatedTransitions,
+        int EntriesAfterWarm,
+        int WarmObservations,
+        int WarmStores,
+        int WarmValidatedHits,
+        int RepeatedObservations,
+        int RepeatedStores,
+        int RepeatedValidatedHits,
+        double RepeatedHitRatio,
+        int RepeatedCollisionRejects,
+        int RepeatedOutputMismatches,
+        int RepeatedDroppedStores,
+        double RepeatedValidationMs,
+        double RepeatedPotentialSavedMs,
+        int TerminalCacheHits,
+        string[] Route);
 
     internal sealed record PhaseBEvidence(
         string Status,
