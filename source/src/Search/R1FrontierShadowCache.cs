@@ -5,6 +5,10 @@ internal readonly record struct R1FrontierShadowKey(
     int ActionCount,
     int NodeCount);
 
+internal readonly record struct R1FrontierDepthKey(
+    int Turn,
+    int ActionCount);
+
 internal enum R1FrontierMissKind
 {
     Turn,
@@ -16,6 +20,14 @@ internal readonly record struct R1FrontierMissSample(
     R1FrontierMissKind Kind,
     R1FrontierShadowKey Baseline,
     R1FrontierShadowKey NearestProbe);
+
+internal readonly record struct R1FrontierSubsetSample(
+    R1FrontierDepthKey Depth,
+    int ProbeNodes,
+    int BaselineNodes,
+    int IntersectionNodes,
+    bool ProbeSubsetOfBaseline,
+    bool ExactSetMatch);
 
 internal readonly record struct R1FrontierShadowSnapshot(
     int SignatureLimit,
@@ -30,15 +42,23 @@ internal readonly record struct R1FrontierShadowSnapshot(
     int ValidatedHits,
     int SignatureMismatches,
     int SkippedFrontiers,
-    IReadOnlyList<R1FrontierMissSample> MissSamples);
+    int SubsetObservations,
+    int ProbeSubsetHits,
+    int ExactSetHits,
+    int PartialOverlapHits,
+    int ZeroOverlapHits,
+    IReadOnlyList<R1FrontierMissSample> MissSamples,
+    IReadOnlyList<R1FrontierSubsetSample> SubsetSamples);
 
 internal sealed class R1FrontierShadowCache(int signatureLimit = 16)
 {
-    private const int MissSampleLimit = 16;
+    private const int SampleLimit = 16;
 
     private readonly object _gate = new();
     private readonly Dictionary<R1FrontierShadowKey, List<string>> _signatures = [];
+    private readonly Dictionary<R1FrontierDepthKey, List<HashSet<StateFingerprint>>> _nodeSets = [];
     private readonly List<R1FrontierMissSample> _missSamples = [];
+    private readonly List<R1FrontierSubsetSample> _subsetSamples = [];
     private readonly int _signatureLimit = signatureLimit > 0
         ? signatureLimit
         : throw new ArgumentOutOfRangeException(nameof(signatureLimit));
@@ -53,6 +73,11 @@ internal sealed class R1FrontierShadowCache(int signatureLimit = 16)
     private int _validatedHits;
     private int _signatureMismatches;
     private int _skippedFrontiers;
+    private int _subsetObservations;
+    private int _probeSubsetHits;
+    private int _exactSetHits;
+    private int _partialOverlapHits;
+    private int _zeroOverlapHits;
     private int _frozen;
 
     internal void FreezeStores()
@@ -89,12 +114,75 @@ internal sealed class R1FrontierShadowCache(int signatureLimit = 16)
                     throw new ArgumentOutOfRangeException(nameof(kind), kind, null);
             }
 
-            if (_missSamples.Count < MissSampleLimit
+            if (_missSamples.Count < SampleLimit
                 && TryFindNearestProbeKey(key, out R1FrontierShadowKey nearest))
             {
                 _missSamples.Add(new R1FrontierMissSample(kind, key, nearest));
             }
             return false;
+        }
+    }
+
+    internal bool WantsSubsetObservation(R1FrontierDepthKey depth)
+    {
+        if (Volatile.Read(ref _frozen) == 0)
+            return false;
+        lock (_gate)
+            return _nodeSets.ContainsKey(depth);
+    }
+
+    internal void ObserveSubset(
+        R1FrontierDepthKey depth,
+        IReadOnlyList<StateFingerprint> baselineNodeFingerprints)
+    {
+        lock (_gate)
+        {
+            if (!_nodeSets.TryGetValue(depth, out List<HashSet<StateFingerprint>>? probeSets))
+                return;
+
+            _subsetObservations++;
+            HashSet<StateFingerprint> baseline = [.. baselineNodeFingerprints];
+            HashSet<StateFingerprint>? bestProbe = null;
+            int bestIntersection = -1;
+            foreach (HashSet<StateFingerprint> probe in probeSets)
+            {
+                int intersection = 0;
+                foreach (StateFingerprint node in probe)
+                {
+                    if (baseline.Contains(node))
+                        intersection++;
+                }
+                if (intersection > bestIntersection)
+                {
+                    bestIntersection = intersection;
+                    bestProbe = probe;
+                }
+            }
+
+            if (bestProbe == null)
+                return;
+
+            bool probeSubset = bestIntersection == bestProbe.Count;
+            bool exactSet = probeSubset && bestProbe.Count == baseline.Count;
+            if (exactSet)
+                _exactSetHits++;
+            else if (probeSubset)
+                _probeSubsetHits++;
+            else if (bestIntersection > 0)
+                _partialOverlapHits++;
+            else
+                _zeroOverlapHits++;
+
+            if (_subsetSamples.Count < SampleLimit)
+            {
+                _subsetSamples.Add(new R1FrontierSubsetSample(
+                    depth,
+                    bestProbe.Count,
+                    baseline.Count,
+                    Math.Max(0, bestIntersection),
+                    probeSubset,
+                    exactSet));
+            }
         }
     }
 
@@ -106,7 +194,6 @@ internal sealed class R1FrontierShadowCache(int signatureLimit = 16)
         {
             if (probe.Turn != baseline.Turn)
                 continue;
-
             sameTurn = true;
             if (probe.ActionCount == baseline.ActionCount)
             {
@@ -114,7 +201,6 @@ internal sealed class R1FrontierShadowCache(int signatureLimit = 16)
                 break;
             }
         }
-
         if (!sameTurn)
             return R1FrontierMissKind.Turn;
         return sameTurnAndActionCount
@@ -161,20 +247,10 @@ internal sealed class R1FrontierShadowCache(int signatureLimit = 16)
     internal void RecordSkipped()
         => Interlocked.Increment(ref _skippedFrontiers);
 
-    internal void Observe(
+    internal void StoreProbe(
         R1FrontierShadowKey key,
         string signature,
-        bool r1Probe)
-    {
-        if (r1Probe)
-        {
-            Store(key, signature);
-            return;
-        }
-        Validate(key, signature);
-    }
-
-    private void Store(R1FrontierShadowKey key, string signature)
+        IReadOnlyList<StateFingerprint> nodeFingerprints)
     {
         lock (_gate)
         {
@@ -200,12 +276,20 @@ internal sealed class R1FrontierShadowCache(int signatureLimit = 16)
                 _droppedStores++;
                 return;
             }
+
             bucket.Add(signature);
             _storedSignatures++;
+            R1FrontierDepthKey depth = new(key.Turn, key.ActionCount);
+            if (!_nodeSets.TryGetValue(depth, out List<HashSet<StateFingerprint>>? sets))
+            {
+                sets = [];
+                _nodeSets.Add(depth, sets);
+            }
+            sets.Add([.. nodeFingerprints]);
         }
     }
 
-    private void Validate(R1FrontierShadowKey key, string signature)
+    internal void ValidateExact(R1FrontierShadowKey key, string signature)
     {
         lock (_gate)
         {
@@ -235,32 +319,45 @@ internal sealed class R1FrontierShadowCache(int signatureLimit = 16)
                 _validatedHits,
                 _signatureMismatches,
                 Volatile.Read(ref _skippedFrontiers),
-                _missSamples.ToArray());
+                _subsetObservations,
+                _probeSubsetHits,
+                _exactSetHits,
+                _partialOverlapHits,
+                _zeroOverlapHits,
+                _missSamples.ToArray(),
+                _subsetSamples.ToArray());
         }
     }
 
     internal static bool VerifyShadowGateForTesting()
     {
+        StateFingerprint a = new(1, 1);
+        StateFingerprint b = new(2, 2);
+        StateFingerprint c = new(3, 3);
         R1FrontierShadowKey exactKey = new(3, 4, 2);
         R1FrontierShadowCache cache = new(signatureLimit: 4);
-        cache.Observe(exactKey, "frontier-a", r1Probe: true);
-        cache.Observe(new R1FrontierShadowKey(3, 6, 5), "frontier-b", r1Probe: true);
-        cache.Observe(new R1FrontierShadowKey(5, 2, 1), "frontier-c", r1Probe: true);
+        cache.StoreProbe(exactKey, "frontier-a", [a, b]);
+        cache.StoreProbe(new R1FrontierShadowKey(3, 6, 1), "frontier-b", [c]);
+        cache.StoreProbe(new R1FrontierShadowKey(5, 2, 1), "frontier-c", [a]);
         cache.FreezeStores();
 
         if (!cache.TryBeginBaselineObservation(exactKey))
             return false;
-        cache.Observe(exactKey, "frontier-a", r1Probe: false);
+        cache.ValidateExact(exactKey, "frontier-a");
         if (!cache.TryBeginBaselineObservation(exactKey))
             return false;
-        cache.Observe(exactKey, "frontier-mismatch", r1Probe: false);
+        cache.ValidateExact(exactKey, "frontier-mismatch");
 
         if (cache.TryBeginBaselineObservation(new R1FrontierShadowKey(9, 4, 2)))
             return false;
         if (cache.TryBeginBaselineObservation(new R1FrontierShadowKey(3, 5, 2)))
             return false;
-        if (cache.TryBeginBaselineObservation(new R1FrontierShadowKey(3, 4, 9)))
+        R1FrontierShadowKey nodeCountMiss = new(3, 4, 3);
+        if (cache.TryBeginBaselineObservation(nodeCountMiss))
             return false;
+        if (!cache.WantsSubsetObservation(new R1FrontierDepthKey(3, 4)))
+            return false;
+        cache.ObserveSubset(new R1FrontierDepthKey(3, 4), [a, b, c]);
 
         R1FrontierShadowSnapshot snapshot = cache.Capture();
         return snapshot.StoredSignatures == 3
@@ -271,9 +368,16 @@ internal sealed class R1FrontierShadowCache(int signatureLimit = 16)
             && snapshot.NodeCountMisses == 1
             && snapshot.ValidatedHits == 1
             && snapshot.SignatureMismatches == 1
+            && snapshot.SubsetObservations == 1
+            && snapshot.ProbeSubsetHits == 1
+            && snapshot.ExactSetHits == 0
+            && snapshot.PartialOverlapHits == 0
+            && snapshot.ZeroOverlapHits == 0
             && snapshot.MissSamples.Count == 3
-            && snapshot.MissSamples[0].Kind == R1FrontierMissKind.Turn
-            && snapshot.MissSamples[1].Kind == R1FrontierMissKind.ActionCount
-            && snapshot.MissSamples[2].Kind == R1FrontierMissKind.NodeCount;
+            && snapshot.SubsetSamples.Count == 1
+            && snapshot.SubsetSamples[0].ProbeNodes == 2
+            && snapshot.SubsetSamples[0].BaselineNodes == 3
+            && snapshot.SubsetSamples[0].IntersectionNodes == 2
+            && snapshot.SubsetSamples[0].ProbeSubsetOfBaseline;
     }
 }
