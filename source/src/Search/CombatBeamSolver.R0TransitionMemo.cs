@@ -40,7 +40,21 @@ internal sealed partial class CombatBeamSolver
             policy.R0TransitionPolicyIdentity,
             parentStateText,
             out snapshot);
+    
+    private static bool IsPureTransitionForR0Memo(
+        SimulationSnapshot before,
+        SimulationSnapshot after)
+    {
+        CombatPredictionSimulator simulator = (CombatPredictionSimulator)after.Simulator;
+        foreach (CombatPredictionHistoryEntry entry in
+                 simulator.History.EntriesFrom(before.HistoryEntryCount))
+        {
+            if (!IsPureHistoryEntry(entry))
+                return false;
+        }
+        return true;
     }
+}
 
     private void StoreR0TerminalTransition(
         SearchNode parent,
@@ -59,6 +73,7 @@ internal sealed partial class CombatBeamSolver
             action,
             policy.R0TransitionPolicyIdentity,
             parentStateText,
-            output);
+            output,
+            IsPureTransitionForR0Memo(parent.Snapshot, output));
     }
 }
