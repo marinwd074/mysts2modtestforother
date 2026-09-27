@@ -6,13 +6,25 @@ namespace CombatSolver;
 /// </summary>
 internal static class ContinuationLifecycleGuard
 {
+    internal static bool CanReuse(
+        string expectedLifecycle,
+        string actualLifecycle,
+        out string reason)
+    {
+        if (string.Equals(expectedLifecycle, actualLifecycle, StringComparison.Ordinal))
+        {
+            reason = "exact_lifecycle_match";
+            return true;
+        }
+
+        reason = $"lifecycle_changed expected={expectedLifecycle} actual={actualLifecycle}";
+        return false;
+    }
+
     internal static bool ShouldRejectContinuation(
         string expectedLifecycle,
         string actualLifecycle)
     {
-        return !string.Equals(
-            expectedLifecycle,
-            actualLifecycle,
-            StringComparison.Ordinal);
+        return !CanReuse(expectedLifecycle, actualLifecycle, out _);
     }
 }
