@@ -138,18 +138,19 @@ state_mismatch
 
 ## 下一任务
 
-继续 E3，但先收一份带 `SEARCH_E3_FINAL_VS_FOREGROUND` 的实机包，再决定 E4 调度。
+先实机验证 E3 completion foreground guard，再决定 E4 后台调度。
 
-KAISER_CRAB_BOSS `35db6c5d375e4f5d883d122a86acba84` 来自 `0.40.2+5b4c6eb18846ace9918ad936494103f75267c294`，已闭合上一轮低血斩杀修复：第 2 回合真实敌方仅 Crusher 40 + Rocket 31，continuation 明确 `allow_living_enemy_hp_decrease=false` 并以 `state_mismatch` 拒绝旧路线；本场 `reused=0`。第 2 回合 fresh search 击杀 Rocket，第 3 回合从 Crusher 40 HP 真实根 fresh search，仅展开 101 节点 / 40ms 就以 PERFECTED_STRIKE 结束战斗。
+SCROLLS_OF_BITING_WEAK `5d0ac4d9b96b43c9bd4b7ffea8f79ed2` 来自 `0.40.2+df248c23734421a34d43ddcdc4e52a78ac66a88e`，首次验证 `SEARCH_E3_FINAL_VS_FOREGROUND` 并暴露实际质量倒退。generation 1 在 8.947s 已有 foreground：projected HP loss 19、strategic deficit 17、enemy HP 68；请求直到 39.750s 才结束，后台新增 16,437 expanded / 138,385 transitions。最终 SearchCompletion 却是 novelty 的完整胜利：HP loss 39、strategic deficit 23、enemy HP 0。诊断明确 `relation=foreground_better`，随后该 39 战损结果仍被 `SEARCH_RESULT_ROUTE_CAPTURE` 捕获并 `DEPLOY_START`，证明 E2 只保护搜索中前台，没有保护自然完成边界。
 
-同一包同时给出首份 E3 基线：
-- generation 1：首 foreground 5.073s；12.625s 由 potion_disabled 将 projected HP loss 45 → 6；请求到 29.196s 才结束，最后一次 foreground 改善后仍有约 16.571s。
-- generation 2：首 foreground 7.892s，之后约 14.831s 没有 replace；后台新启动成员累计 46,333 transitions。
-- generation 3：首 foreground 后仅约 0.468s 长尾。
+当前修复：
+1. 只在 `MultiplayerSinglePlayerCore` 的自然 SearchCompletion 上启用 completion guard。
+2. 用现有 `CanPromoteDisplayedResult` 判断最后 foreground 是否严格优于 final，不新增评分。
+3. 不直接执行 preview；先调用其 `RouteAdoptionSeed.Materialize()` 从根精确重放。
+4. 对物化结果再次用同一质量排序与 final 比较；只有仍严格更优才返回 RouteAdoption。
+5. 新日志 `SEARCH_E3_COMPLETION_FOREGROUND_GUARD` 记录 candidate version、final/foreground 战损、战略 deficit、敌血和最终 scope。
+6. pinned 合同固定本包关系：19 战损 rolling-horizon foreground 必须阻止 39 战损 terminal final 的自然覆盖。
 
-但 generation 1 的最终返回路线来自后续 potion_required，而 E2 foreground 没有被它 replace；因此“没有 foreground 改善”不能直接等价于“对最终执行无价值”。现在新增 `SEARCH_E3_FINAL_VS_FOREGROUND`：请求结束时把最终 `SolverResult` 转回同一 `SolverInterimResult` 质量空间，用现有 `CanPromoteDisplayedResult` 双向比较，记录 `final_better / foreground_better / equivalent_or_incomparable` 及两边战损、战略 deficit、敌血、药水。只测量，不改变 final selection。
-
-下一包若证明长尾 final 也不优于 foreground，E4 才有证据压缩对应 member_kind；如果 final_better，则不能直接砍该成员。
+下一份实机需要看到该日志，并确认 `SEARCH_RESULT_ROUTE_CAPTURE` / `DEPLOY_START` 捕获的是精确物化后的低战损 foreground，而不是原 39 战损 final。通过后 E3 才可真正收口并进入 E4。
 ## 当前未验证边界
 
 - E1 已通过实机验证。E2 的 keep/replace 诊断与 pinned 合同已加入，仍需一份 current HEAD 实机日志证明真实后台候选按生产质量排序稳定替换/保留。

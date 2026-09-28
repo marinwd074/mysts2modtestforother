@@ -355,6 +355,37 @@ internal static partial class CombatSearchCoordinator
             {
                 selected = currentCompleteAdoptableResult;
             }
+
+            if (policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
+                && selected.ResultScope == SolverResultScope.SearchCompletion
+                && currentDisplayedResult is { } foreground
+                && currentRouteAdoptionSeed is { } foregroundSeed)
+            {
+                SolverInterimResult finalSummary = BuildInterimResult(root, policy, selected);
+                if (ShouldPreferForegroundAtCompletion(finalSummary, foreground))
+                {
+                    SolverResult exactForeground = foregroundSeed.Materialize();
+                    SolverInterimResult exactForegroundSummary =
+                        BuildInterimResult(root, policy, exactForeground);
+                    if (ShouldPreferForegroundAtCompletion(
+                            finalSummary,
+                            exactForegroundSummary))
+                    {
+                        policy.Diagnostics.Info(
+                            $"[CombatSolver/Test] SEARCH_E3_COMPLETION_FOREGROUND_GUARD " +
+                            $"candidate_version={foregroundSeed.CandidateVersion} " +
+                            $"final_hp_loss={finalSummary.ProjectedBattleHpLost} " +
+                            $"foreground_hp_loss={exactForegroundSummary.ProjectedBattleHpLost} " +
+                            $"final_strategic_deficit={finalSummary.StrategicHpDeficit} " +
+                            $"foreground_strategic_deficit={exactForegroundSummary.StrategicHpDeficit} " +
+                            $"final_enemy_hp={finalSummary.EnemyHp} " +
+                            $"foreground_enemy_hp={exactForegroundSummary.EnemyHp} " +
+                            $"scope={exactForeground.ResultScope}");
+                        selected = exactForeground;
+                    }
+                }
+            }
+
             portfolioTelemetry.RecordCandidatePublished(
                 selected.SearchEfficiencyOrigin,
                 selected.SearchEfficiencyEvaluationContextId ?? string.Empty);
@@ -448,6 +479,12 @@ internal static partial class CombatSearchCoordinator
                 $"exclusive_ms={exclusiveMs.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)}");
         }
     }
+
+    internal static bool ShouldPreferForegroundAtCompletion(
+        SolverInterimResult final,
+        SolverInterimResult foreground)
+        => SolverInterimResultOrdering.CanPromoteDisplayedResult(foreground, final)
+            && !SolverInterimResultOrdering.CanPromoteDisplayedResult(final, foreground);
 
     private static bool IsAdoptionResult(SolverResult result)
         => result.ResultScope is SolverResultScope.CurrentTurnAdoption

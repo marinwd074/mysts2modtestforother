@@ -522,6 +522,32 @@ internal static class Program
         Require(
             SolverInterimResultOrdering.CanPromoteDisplayedResult(betterBackground, live),
             "E2 rejected a same-loss background candidate with strictly better enemy HP.");
+
+        SolverInterimResult scrollsForeground = live with
+        {
+            Won = false,
+            ProjectedBattleHpLost = 19,
+            StrategicHpDeficit = 17,
+            EnemyHp = 68,
+        };
+        SolverInterimResult scrollsFinal = live with
+        {
+            Won = true,
+            ProjectedBattleHpLost = 39,
+            StrategicHpDeficit = 23,
+            EnemyHp = 0,
+            CombatEndedTurn = 3,
+        };
+        Require(
+            CombatSearchCoordinator.ShouldPreferForegroundAtCompletion(
+                scrollsFinal,
+                scrollsForeground),
+            "E3 completion guard allowed the 39-loss terminal result to replace the 19-loss rolling-horizon foreground.");
+        Require(
+            !CombatSearchCoordinator.ShouldPreferForegroundAtCompletion(
+                scrollsForeground,
+                scrollsFinal),
+            "E3 completion guard reversed the strict foreground/final quality relation.");
     }
 
     private static void ValidateDarkEmbracePredictionCoverage()
