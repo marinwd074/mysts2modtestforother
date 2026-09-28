@@ -1741,16 +1741,17 @@ internal static partial class SolverController
             return;
 
         SolverProgress? approvedProgress = search.Interaction.ApprovedForegroundProgress;
-        if (approvedProgress is { RouteAdoptionSeed: { } approvedSeed }
-            && approvedSeed.CandidateVersion > search.ForegroundPublishedCandidateVersion)
+        int approvedVersion = approvedProgress?.ApprovedForegroundCandidateVersion ?? -1;
+        if (approvedVersion > search.ForegroundPublishedCandidateVersion)
         {
-            search.ForegroundPublishedCandidateVersion = approvedSeed.CandidateVersion;
+            search.ForegroundPublishedCandidateVersion = approvedVersion;
             bool backgroundContinues = !search.WorkerCompletion.IsCompleted;
             Entry.Logger.Info(
                 $"[CombatSolver/Test] SEARCH_E_FOREGROUND_PUBLISHED " +
-                $"generation={search.Generation} candidate_version={approvedSeed.CandidateVersion} " +
-                $"turn={approvedProgress.StartTurnNumber} " +
+                $"generation={search.Generation} candidate_version={approvedVersion} " +
+                $"turn={approvedProgress!.StartTurnNumber} " +
                 $"approved_elapsed_ms={approvedProgress.ElapsedMilliseconds} " +
+                $"execution_authorized={(approvedProgress.RouteAdoptionSeed != null).ToString().ToLowerInvariant()} " +
                 $"background_continues={backgroundContinues.ToString().ToLowerInvariant()}");
         }
 

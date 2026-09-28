@@ -146,11 +146,11 @@ state_mismatch
 2. 前台发布只使用现有不可变 preview / candidate version，不把后台仍可能继续填充诊断数据的 `SolverResult` 直接共享到主线程。
 3. 发布后后台搜索继续；本轮不提前自动部署、不改变搜索预算、不改变 Beam/Portfolio、也不降低现有手动 takeover 的质量保护。
 4. 旧 search session 继续由实例身份隔离；旧 epoch 的 progress 不得发布成当前建议。
-5. Release 构建、pinned replay harness 与 R0 transition contract 已通过。实机包 `27ac90238bdf4fec9f37517c56cf3064` 重新核对后暴露一次性 progress 丢信号：generation 1 在 `SEARCH_E1_EARLY_PUBLISH` 后仍后台计算约 14.2 秒，却没有前台发布；generation 2/3 的前台发布分别只领先 worker 完成约 9/10ms，不能证明真正前后台分离。当前修正为 session 内单调锁存已批准候选，并让日志读取真实 `WorkerCompletion.IsCompleted`。下一份实机需证明前台发布后后台仍有可观测工作。
+5. Release 构建、pinned replay harness 与 R0 transition contract 已通过。第二份实机包 `c12f6af5d9dc4486a80b7aab1d3b9186` 明确来自 `0.40.2+bb59d3b6480c29fa0140b1e9ecf5f534bd57a507`，因此包含首轮锁存修复；仍出现两次 `SEARCH_E1_EARLY_PUBLISH` 而没有任何 `SEARCH_E_FOREGROUND_PUBLISHED`。源码核对确认正式早期发布阶段故意令 `RouteAdoptionSeed=null`，而旧批准谓词错误要求 seed 非空，使“可显示”被“可执行”门禁阻断。当前第二次修正改为仅凭正式排序通过的 `SpeculativeRoutePreview` 锁存前台；执行 seed 仍必须等待完整结果 materialize 且动作与已批准 preview 一致。
 
 ## 当前未验证边界
 
-- 阶段 E1 的首份实机包不能验收：一次性 approved progress 会被后续普通 progress 覆盖；现已改为 session 锁存，仍需 current HEAD Release/合同回归与一份新的实机日志。UI“已批准”仍不是提前自动部署授权。
+- 阶段 E1 的第二份实机包确认首轮锁存仍被错误的执行 seed 门禁阻断。现已将 display approval 与 execution authorization 分离，并加入 pinned 合同；仍需 current HEAD Release/合同回归与一份新的实机日志。UI“已批准”不是提前自动部署授权。
 - U5/U6 历史 Host/Client observation → fresh replan 的部分真实多人边界仍不是 pinned replay 可替代的证据。
 - GitHub Issue #8：多人 Safe Execute 的 Headbutt / turn-start Choice 仍需 current HEAD Host/Client 复验。
 - GitHub Issue #9：Vicious 战略估值修复仍需 comparable current multiplayer root 复验。

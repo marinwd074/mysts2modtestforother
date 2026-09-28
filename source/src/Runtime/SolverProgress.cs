@@ -59,14 +59,15 @@ internal sealed class SearchInteractionState
     public void PublishProgress(SolverProgress progress)
     {
         Volatile.Write(ref Progress, progress);
-        if (!progress.HasApprovedForegroundRoute || progress.RouteAdoptionSeed is not { } seed)
+        if (!progress.HasApprovedForegroundRoute)
             return;
 
+        int candidateVersion = progress.ApprovedForegroundCandidateVersion;
         while (true)
         {
             SolverProgress? current = Volatile.Read(ref _approvedForegroundProgress);
-            int currentVersion = current?.RouteAdoptionSeed?.CandidateVersion ?? -1;
-            if (currentVersion >= seed.CandidateVersion)
+            int currentVersion = current?.ApprovedForegroundCandidateVersion ?? -1;
+            if (currentVersion >= candidateVersion)
                 return;
             if (ReferenceEquals(
                     Interlocked.CompareExchange(
@@ -97,8 +98,16 @@ internal sealed class SearchInteractionState
                 CurrentBestResult = approved.CurrentBestResult,
                 CurrentTurnPreview = approved.CurrentTurnPreview,
                 SpeculativeRoutePreview = approved.SpeculativeRoutePreview,
-                RouteAdoptionSeed = approved.RouteAdoptionSeed,
-                CurrentTurnAdoptionSeed = approved.CurrentTurnAdoptionSeed,
+                RouteAdoptionSeed = RouteSeedMatchesApprovedPreview(
+                    liveProgress.RouteAdoptionSeed,
+                    approved.SpeculativeRoutePreview)
+                        ? liveProgress.RouteAdoptionSeed
+                        : null,
+                CurrentTurnAdoptionSeed = CurrentTurnSeedMatchesApprovedPreview(
+                    liveProgress.CurrentTurnAdoptionSeed,
+                    approved.CurrentTurnPreview)
+                        ? liveProgress.CurrentTurnAdoptionSeed
+                        : null,
                 OfficialPublishedOrigin = approved.OfficialPublishedOrigin,
                 OfficialPublishedEvaluationContextId =
                     approved.OfficialPublishedEvaluationContextId,
@@ -112,6 +121,20 @@ internal sealed class SearchInteractionState
         RenderedProgress = displayProgress;
         return true;
     }
+
+    private static bool RouteSeedMatchesApprovedPreview(
+        SolverRouteAdoptionSeed? seed,
+        SolverSpeculativeRoutePreview? preview)
+        => seed != null
+            && preview != null
+            && seed.Actions.SequenceEqual(preview.Turns.SelectMany(static turn => turn.Actions));
+
+    private static bool CurrentTurnSeedMatchesApprovedPreview(
+        SolverRouteAdoptionSeed? seed,
+        SolverCurrentTurnPreview? preview)
+        => seed != null
+            && preview != null
+            && seed.Actions.SequenceEqual(preview.Actions);
 
     public void ResetForSearch()
     {
@@ -364,8 +387,8 @@ internal sealed record SolverProgress(
     public bool HasApprovedForegroundRoute
         => OfficialPublishedOrigin != null
             && !string.IsNullOrWhiteSpace(OfficialPublishedEvaluationContextId)
-            && CurrentTurnPreview != null
-            && SpeculativeRoutePreview != null
-            && RouteAdoptionSeed != null
-            && RouteAdoptionSeed.CandidateVersion == SpeculativeRoutePreview.CandidateVersion;
+            && SpeculativeRoutePreview != null;
+
+    public int ApprovedForegroundCandidateVersion
+        => SpeculativeRoutePreview?.CandidateVersion ?? -1;
 }
