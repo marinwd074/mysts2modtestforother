@@ -577,6 +577,32 @@ internal static class Program
                 [new PlanAction(PlanActionKind.EndTurn, 2)],
                 foregroundPreview),
             "E3 completion backing did not require exact displayed route actions.");
+
+        SolverCurrentTurnPreview currentTurnPreview = new(
+            CandidateVersion: 31,
+            StartTurnNumber: 1,
+            Actions: [foregroundAction],
+            HpLost: 0,
+            HpRecovered: 0,
+            EnemyHpLost: 0,
+            EnergyLeft: 0,
+            CombatEnded: false,
+            FrontierTurns: foregroundPreview.Turns);
+        SolverRouteAdoptionSeed currentTurnSeed = new(
+            candidateVersion: 31,
+            actions: [foregroundAction],
+            materialize: static () => null!);
+        Require(
+            CombatSearchCoordinator.CurrentTurnSeedMatchesPreview(
+                currentTurnSeed,
+                currentTurnPreview)
+            && !CombatSearchCoordinator.CurrentTurnSeedMatchesPreview(
+                new SolverRouteAdoptionSeed(
+                    candidateVersion: 32,
+                    actions: [new PlanAction(PlanActionKind.EndTurn, 2)],
+                    materialize: static () => null!),
+                currentTurnPreview),
+            "E3 completion current-turn fallback did not require the exact approved foreground prefix.");
     }
 
     private static void ValidateDarkEmbracePredictionCoverage()

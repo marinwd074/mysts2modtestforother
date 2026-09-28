@@ -392,6 +392,16 @@ internal static partial class CombatSearchCoordinator
                         exactForeground = materializedForeground;
                         materializationSource = "completed_member";
                     }
+                    else if (currentTurnAdoptionSeed is { } turnSeed
+                             && CurrentTurnSeedMatchesPreview(
+                                 turnSeed,
+                                 currentTurnPreview))
+                    {
+                        exactForeground = turnSeed.Materialize();
+                        exactForeground.ResultScope = SolverResultScope.CurrentTurnAdoption;
+                        materializationSource = "current_turn_seed";
+                        candidateVersion = turnSeed.CandidateVersion;
+                    }
 
                     if (exactForeground != null)
                     {
@@ -522,6 +532,12 @@ internal static partial class CombatSearchCoordinator
         SolverSpeculativeRoutePreview? preview)
         => preview != null
             && actions.SequenceEqual(preview.Turns.SelectMany(static turn => turn.Actions));
+
+    internal static bool CurrentTurnSeedMatchesPreview(
+        SolverRouteAdoptionSeed seed,
+        SolverCurrentTurnPreview? preview)
+        => preview != null
+            && seed.Actions.SequenceEqual(preview.Actions);
 
     private static bool IsAdoptionResult(SolverResult result)
         => result.ResultScope is SolverResultScope.CurrentTurnAdoption

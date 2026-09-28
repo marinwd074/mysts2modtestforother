@@ -138,19 +138,20 @@ state_mismatch
 
 ## 下一任务
 
-实机验证 E3 completion backing guard，然后再进入 E4。
+先实机验证 E3 completion 的 current-turn fallback，再进入 E4。
 
-GLOBE_HEAD_NORMAL `a1f9a44b5dab4dc8ad9ac4864529673b` 来自 `0.40.2+071a5218a4d21b050ca1832f901eded971c01736`，证明上一版 completion guard 仍漏一条路径。generation 3 在 9.026s 已有 potion_disabled foreground：12 战损 / strategic deficit 2 / enemy HP 211；30.165s 最终 potion_required 结果为完整胜利，但 25 战损 / deficit 9 / 1 瓶药。日志明确 `SEARCH_E3_FINAL_VS_FOREGROUND relation=foreground_better`，最终 RESULT 却仍为 25 战损，并在 T2 exact continuation 中复用。
+KNIGHTS_ELITE `251346020d114e749c5860c29fd9cc4b` 来自 `0.40.2+52f8a764581e20737199e70d6b7a3abfc1a9c308`，证明第二版 completion backing guard 仍漏非终局 foreground。generation 9 在 25.291s 已由 potion_disabled 把 foreground 从 38 战损降到 5 战损；请求持续到 120.050s。最终 novelty SearchCompletion 却是完整胜利但 41 战损。诊断明确 `SEARCH_E3_FINAL_VS_FOREGROUND relation=foreground_better final_hp_loss=41 foreground_hp_loss=5`，随后 `SEARCH_RESULT_ROUTE_CAPTURE` 仍捕获 41 战损 route `0e6ccb...` 并由 Safe Execute 执行。整包没有 `SEARCH_E3_FOREGROUND_BACKING_CAPTURED` 或 `SEARCH_E3_COMPLETION_FOREGROUND_GUARD`。
 
-根因：071a guard 只在 `currentRouteAdoptionSeed != null` 时接管；该 foreground 正处于 E1 的正式 materialization progress，route seed 按安全设计暂时为 null，因此 guard 没有触发。
+根因：这个 5 战损 foreground 是非终局 Rolling-Horizon 候选，没有完整 route seed，也没有与 speculative preview 完全一致的 completed-member SolverResult，所以 52f8 的 full-route backing 仍为空；但该 foreground 已经拥有与其当前回合 preview 对齐的 `CurrentTurnAdoptionSeed`。
 
-当前修复不放宽 E1 执行授权。成员完成时若精确 `SolverResult` 的动作与当前 speculative foreground 完全一致、且 interim summary 等于当前 displayed result，则仅在协调器内部记录 `currentMaterializedForegroundResult`，不发布为提前可执行 seed。自然 SearchCompletion 时：
-1. 优先使用现有 route seed；
-2. seed 暂空时使用这个已完成成员的精确 materialized result；
-3. 对精确结果再次用 `ShouldPreferForegroundAtCompletion` 比较，仍严格更优才替换 final；
-4. 日志 `SEARCH_E3_COMPLETION_FOREGROUND_GUARD source=completed_member|route_seed` 标明来源。
+当前第三版 guard：
+1. 仍先要求现有 `ShouldPreferForegroundAtCompletion` 证明 foreground 严格优于 final，不新增质量规则。
+2. materialization 优先级保持 `route_seed -> completed_member`；两者都不可用时，若 `CurrentTurnAdoptionSeed.Actions` 与当前 approved `CurrentTurnPreview.Actions` 完全一致，则精确 materialize 该 seed。
+3. fallback 结果强制标记 `CurrentTurnAdoption`：只执行已经批准的当前回合前缀，下一回合从真实根重新搜索；不把 partial preview 伪装成完整路线。
+4. 精确 materialize 后再次与 final 用同一质量排序比较，仍更优才接管。
+5. 诊断应出现 `SEARCH_E3_COMPLETION_FOREGROUND_GUARD source=current_turn_seed`。
 
-下一包要求看到 generation 内 `SEARCH_E3_FOREGROUND_BACKING_CAPTURED`，若 final 更差则必须随后出现 `SEARCH_E3_COMPLETION_FOREGROUND_GUARD source=completed_member`，最终 RESULT 的战损应保持 foreground，而不是再次回退到更差 terminal final。
+本包还确认 continuation state 已包含敌人 next move 和 AI 序列（E0/E1/E2 与 AI0/AI1/AI2），第 2 回合因真实 HP/history 差异正常 `SEARCH_REUSE_MISS state_mismatch`；当前没有证据支持另加一套 AI timeline fingerprint。
 ## 当前未验证边界
 
 - E1 已通过实机验证。E2 的 keep/replace 诊断与 pinned 合同已加入，仍需一份 current HEAD 实机日志证明真实后台候选按生产质量排序稳定替换/保留。
