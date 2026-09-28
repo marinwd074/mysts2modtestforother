@@ -149,14 +149,37 @@ internal static partial class CombatSearchCoordinator
                 // Keep the visible current-turn line and speculative future attached to the
                 // same globally promoted Beam result. A shallow early boundary such as Strike
                 // must not independently lock the preview after a better multi-turn route appears.
+                SolverInterimResult? previousDisplayedResult = currentDisplayedResult;
+                SolverSpeculativeRoutePreview? previousRoutePreview = speculativeRoutePreview;
+                SolverInterimResult? evaluatedCandidate = progress.CurrentBestResult;
                 bool acceptsRouteUpdate = currentDisplayedResult == null;
-                if (progress.CurrentBestResult is { } candidate)
+                if (evaluatedCandidate is { } candidate)
                 {
                     acceptsRouteUpdate = TryPromoteDisplayedResult(candidate);
                 }
                 else if (currentDisplayedResult != null)
                 {
                     acceptsRouteUpdate = false;
+                }
+
+                if (progress.OfficialPublishedOrigin is { } e2Origin
+                    && !string.IsNullOrWhiteSpace(progress.OfficialPublishedEvaluationContextId)
+                    && evaluatedCandidate is { } e2Candidate)
+                {
+                    string decision = previousDisplayedResult == null
+                        ? "initial"
+                        : e2Candidate == previousDisplayedResult
+                            ? "refresh"
+                            : acceptsRouteUpdate ? "replace" : "keep";
+                    policy.Diagnostics.Info(
+                        $"[CombatSolver/Test] SEARCH_E2_FOREGROUND_DECISION " +
+                        $"decision={decision} candidate_id={e2Origin.CandidateId} " +
+                        $"previous_version={previousRoutePreview?.CandidateVersion.ToString() ?? "-"} " +
+                        $"candidate_version={progress.SpeculativeRoutePreview?.CandidateVersion.ToString() ?? "-"} " +
+                        $"previous_hp_loss={previousDisplayedResult?.ProjectedBattleHpLost.ToString() ?? "-"} " +
+                        $"candidate_hp_loss={e2Candidate.ProjectedBattleHpLost} " +
+                        $"previous_enemy_hp={previousDisplayedResult?.EnemyHp.ToString() ?? "-"} " +
+                        $"candidate_enemy_hp={e2Candidate.EnemyHp}");
                 }
 
                 if (acceptsRouteUpdate)

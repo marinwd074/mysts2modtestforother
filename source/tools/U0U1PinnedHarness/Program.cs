@@ -487,6 +487,26 @@ internal static class Program
         Require(
             !SolverInterimResultOrdering.CanPromoteDisplayedResult(costlyVictory, live),
             "Rolling horizon display replaced a 0-HP live route with a 24-HP terminal route.");
+
+        SolverInterimResult worseBackground = live with
+        {
+            ProjectedBattleHpLost = 2,
+            StrategicHpDeficit = 2,
+            EnemyHp = 200,
+            Score = 1000d,
+        };
+        Require(
+            !SolverInterimResultOrdering.CanPromoteDisplayedResult(worseBackground, live),
+            "E2 allowed a higher-loss background candidate to replace the current foreground route.");
+
+        SolverInterimResult betterBackground = live with
+        {
+            EnemyHp = 250,
+            Score = 1d,
+        };
+        Require(
+            SolverInterimResultOrdering.CanPromoteDisplayedResult(betterBackground, live),
+            "E2 rejected a same-loss background candidate with strictly better enemy HP.");
     }
 
     private static void ValidateDarkEmbracePredictionCoverage()

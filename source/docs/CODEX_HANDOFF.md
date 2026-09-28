@@ -26,7 +26,7 @@
 - **B 延迟影响合同：完成。**
 - **C 战斗级 R0 转移缓存：完成。**
 - **D 新根恢复 R1：完成。**
-- **E 前台/后台分离：进行中，进入 E1 可信前台发布。**
+- **E 前台/后台分离：进行中；E1 已完成，进入 E2 前台稳定替换。**
 - **F 情景预热：未开始。**
 - **G SSD 冷存储：未开始。**
 - **H 质量与响应验收：未开始。**
@@ -138,19 +138,23 @@ state_mismatch
 
 ## 下一任务
 
-进入阶段 E，只做 E1：把“前台可用建议”和“后台继续探索”建立成明确边界。
+进入阶段 E2：验证后台探索只能改善或保持当前前台建议，不能把劣化候选抖到前台。
 
-当前实现方向：
+E1 已由 INFESTED_PRISMS ELITE 实机包 `f86f0df9c9ff478ab621f943a97e77bf` 闭合。该包来自 `0.40.2+a2a8cd2645861fab2fae9c79f043261d62d95256`；generation 1 在 `approved_elapsed_ms=5035` 首次发布可信前台路线后，直到约 115 秒后才完成 worker callback，期间持续存在真实 portfolio/search 工作；后续 candidate version 1 → 59 正常升级。generation 2 同时覆盖了 `execution_authorized=false/true` 的分离与恢复，且未发现旧 generation 越界发布。
 
-1. 只把**已经完成生产正式排序且同时赢得全局 displayed-result ordering** 的进度候选标记为前台已批准；普通 interim preview 仍明确标为“尚未验证”。
-2. 前台发布只使用现有不可变 preview / candidate version，不把后台仍可能继续填充诊断数据的 `SolverResult` 直接共享到主线程。
-3. 发布后后台搜索继续；本轮不提前自动部署、不改变搜索预算、不改变 Beam/Portfolio、也不降低现有手动 takeover 的质量保护。
-4. 旧 search session 继续由实例身份隔离；旧 epoch 的 progress 不得发布成当前建议。
-5. Release 构建、pinned replay harness 与 R0 transition contract 已通过。第二份实机包 `c12f6af5d9dc4486a80b7aab1d3b9186` 明确来自 `0.40.2+bb59d3b6480c29fa0140b1e9ecf5f534bd57a507`，因此包含首轮锁存修复；仍出现两次 `SEARCH_E1_EARLY_PUBLISH` 而没有任何 `SEARCH_E_FOREGROUND_PUBLISHED`。源码核对确认正式早期发布阶段故意令 `RouteAdoptionSeed=null`，而旧批准谓词错误要求 seed 非空，使“可显示”被“可执行”门禁阻断。当前第二次修正改为仅凭正式排序通过的 `SpeculativeRoutePreview` 锁存前台；执行 seed 仍必须等待完整结果 materialize 且动作与已批准 preview 一致。
+E2 当前只做稳定替换合同：
+
+1. 不新增质量函数，继续复用生产 `SolverInterimResultOrdering.CanPromoteDisplayedResult`。
+2. 正式后台候选如果严格允许 promotion，记录 `SEARCH_E2_FOREGROUND_DECISION decision=replace` 并允许现有 approved preview 升级。
+3. 劣化候选记录 `decision=keep`，不得获得前台批准标记，也不得覆盖已锁存 preview。
+4. pinned 合同固定两条边界：更高战损即使敌方 HP 更低/分数更高也不能替换；同战损且敌方 HP 严格更低的候选可以替换。
+5. 本轮不改变 Beam/Portfolio、搜索预算、执行授权、自动部署或 E1 epoch 隔离。
+
+下一份实机重点收集同一 generation 内的 `SEARCH_E2_FOREGROUND_DECISION`。需要至少看到一次真实 `replace`；若出现 `keep`，同时确认前台 candidate version 不随被拒候选改变。
 
 ## 当前未验证边界
 
-- 阶段 E1 的第二份实机包确认首轮锁存仍被错误的执行 seed 门禁阻断。display approval 与 execution authorization 已分离；current HEAD 已通过 Release 构建、pinned harness、新增 E1 合同与 R0 transition contract。现在只差一份新的实机日志。UI“已批准”不是提前自动部署授权。
+- E1 已通过实机验证。E2 的 keep/replace 诊断与 pinned 合同已加入，仍需一份 current HEAD 实机日志证明真实后台候选按生产质量排序稳定替换/保留。
 - U5/U6 历史 Host/Client observation → fresh replan 的部分真实多人边界仍不是 pinned replay 可替代的证据。
 - GitHub Issue #8：多人 Safe Execute 的 Headbutt / turn-start Choice 仍需 current HEAD Host/Client 复验。
 - GitHub Issue #9：Vicious 战略估值修复仍需 comparable current multiplayer root 复验。
