@@ -202,7 +202,8 @@ GPU、学习型价值网络和 MCTS 可作为以后独立实验：现有 C# 规�
 - **C 已完成**：战斗级 R0 exact/normalized shadow 已通过同战斗跨请求与真实 fresh re-root 证据；非终局真实 hydration 仍保持关闭，避免把 simulator-free value snapshot 误当可展开节点。
 - **D 已完成**：生产启用 R1 新根路线重放。完整合法胜利可建立安全 incumbent bound；未胜利但仍存活的 probe 结果可抽取新根已验证的当前回合普通牌前缀，仅用于 baseline Beam 枚举顺序提示。THE_OBSCURA NORMAL 实机已证明 request-tail exact hydration 可真实命中，同时坏 key 仍按 D3.3B 独立 fail-closed；原 D3.5 retained frontier/subtree 因 exact subset 无交集保持暂停，作为后续研究项而不阻塞主线。
 - **E1 已完成**：INFESTED_PRISMS ELITE `f86f0df9c9ff478ab621f943a97e77bf` 来自 `0.40.2+a2a8cd26`，实机证明正式排序 preview 可在无执行 seed 时提前前台发布，generation 1 首次发布后后台继续真实工作约 115 秒，并从 candidate version 1 升级到 59；generation 2 覆盖执行授权 false/true 的分离与恢复，未见旧 generation 越界发布。
-- **E2 进行中**：不新增质量函数，直接复用 `SolverInterimResultOrdering.CanPromoteDisplayedResult` 作为前台替换唯一生产门禁。新增 `SEARCH_E2_FOREGROUND_DECISION` 记录正式后台候选的 `initial/refresh/replace/keep`；被拒候选不获得 approved 标记。pinned 合同要求更高战损候选即使敌方 HP 更低/Score 更高仍 keep，同战损且敌方 HP 更低的严格改进允许 replace。
+- **E2 已完成**：INFESTED_PRISMS ELITE `604411ffffe44ca388ece05d9eb8e594` 来自 `0.40.2+ddd43a3c`。实机出现真实 `replace` 后新 foreground version 发布；generation 3 连续两个更高战损候选均 `keep`，第二次仍引用原 `previous_version=5` 且该 generation 无 foreground publish，证明劣化后台候选不会抖掉当前建议。
+- **E3 进行中（后台有效率测量）**：不改变搜索行为。E2 正式决策补充 member identity 与 request-relative 时间；请求结束记录 `SEARCH_E3_BACKGROUND_VALUE`，包含首次 foreground、后台墙钟、最后改善时间、决策计数，以及完全在 foreground 后启动成员的 elapsed/expanded/transitions 保守下界。该证据用于决定后续是否调整时域或 portfolio 优先级，不以猜测直接削减长搜。
 - **D3.1 shadow 已落地**：R1 probe 与 baseline 对 retained-state evaluation 做 request-local exact/path-aware 对照，固定上限 256 entries / 4096 observations；当前 `behavioral_reuse=false`，不跳过任何模拟或评价。D3.2 仅在真实 fresh re-root 证明 hit>0 且 conflict/mismatch 均为 0 后启用。
 
 - **D3.2 已落地**：只对 Beam retention 的纯 `BeamRankScore` 做 request-local 首验后复用。第一次 baseline 命中仍现算并精确比对；同 key 后续调用才复用。任一冲突或 mismatch 立即关闭该请求的复用。真实 replay、state capture/fingerprint、候选集合和搜索预算均保持原路径。

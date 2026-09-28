@@ -138,20 +138,18 @@ state_mismatch
 
 ## 下一任务
 
-进入阶段 E2：验证后台探索只能改善或保持当前前台建议，不能把劣化候选抖到前台。
+进入阶段 E3：先建立后台有效率基线，再决定是否改变时域/成员优先级。
 
-E1 已由 INFESTED_PRISMS ELITE 实机包 `f86f0df9c9ff478ab621f943a97e77bf` 闭合。该包来自 `0.40.2+a2a8cd2645861fab2fae9c79f043261d62d95256`；generation 1 在 `approved_elapsed_ms=5035` 首次发布可信前台路线后，直到约 115 秒后才完成 worker callback，期间持续存在真实 portfolio/search 工作；后续 candidate version 1 → 59 正常升级。generation 2 同时覆盖了 `execution_authorized=false/true` 的分离与恢复，且未发现旧 generation 越界发布。
+E2 已由 INFESTED_PRISMS ELITE `604411ffffe44ca388ece05d9eb8e594` 实机闭合。该包来自 `0.40.2+ddd43a3cf1d69517ebf0ae3065ec9c954cb04d3a`。真实出现两次 `replace` 并随后发布新 foreground version；generation 3 又出现连续 `keep`，第二次仍以 `previous_version=5` 作为基线且该 generation 没有 `SEARCH_E_FOREGROUND_PUBLISHED`，证明被拒候选没有覆盖前台。
 
-E2 当前只做稳定替换合同：
+E3 本轮只测量，不改搜索行为：
 
-1. 不新增质量函数，继续复用生产 `SolverInterimResultOrdering.CanPromoteDisplayedResult`。
-2. 正式后台候选如果严格允许 promotion，记录 `SEARCH_E2_FOREGROUND_DECISION decision=replace` 并允许现有 approved preview 升级。
-3. 劣化候选记录 `decision=keep`，不得获得前台批准标记，也不得覆盖已锁存 preview。
-4. pinned 合同固定两条边界：更高战损即使敌方 HP 更低/分数更高也不能替换；同战损且敌方 HP 严格更低的候选可以替换。
-5. 本轮不改变 Beam/Portfolio、搜索预算、执行授权、自动部署或 E1 epoch 隔离。
+1. 每条正式 E2 决策补充 `member_id/member_kind/decision_elapsed_ms`，定位真正带来改善的 portfolio 成员。
+2. 请求结束输出 `SEARCH_E3_BACKGROUND_VALUE`：首个可信前台时间、请求结束时间、后台墙钟、最后一次改善时间以及 initial/replace/keep/refresh 次数。
+3. 额外统计**完全在首个 foreground 之后启动**的成员数量、elapsed、expanded、transitions；这是后台工作量的保守下界，明确不把首发时已经运行中的成员整段误算成后台成本。
+4. 本轮不调整 Beam/Portfolio、药水成员、预算、并发、时域、自动执行或 E1/E2 门禁。
 
-下一份实机重点收集同一 generation 内的 `SEARCH_E2_FOREGROUND_DECISION`。需要至少看到一次真实 `replace`；若出现 `keep`，同时确认前台 candidate version 不随被拒候选改变。
-
+下一份实机包用这些数据决定 E4 是否值得调整后台优先级：如果大量后台工作发生在最后一次 `replace` 之后且不再改善前台，再针对具体 member_kind 设计调度 A/B；没有证据前不削减生产搜索。
 ## 当前未验证边界
 
 - E1 已通过实机验证。E2 的 keep/replace 诊断与 pinned 合同已加入，仍需一份 current HEAD 实机日志证明真实后台候选按生产质量排序稳定替换/保留。

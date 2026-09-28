@@ -70,6 +70,12 @@ internal static partial class CombatSearchCoordinator
         SolverSpeculativeRoutePreview? speculativeRoutePreview = null;
         SolverRouteAdoptionSeed? currentTurnAdoptionSeed = null;
         SolverRouteAdoptionSeed? currentRouteAdoptionSeed = null;
+        long? firstForegroundPublishedTicks = null;
+        long? lastForegroundImprovementTicks = null;
+        int foregroundInitialCount = 0;
+        int foregroundReplaceCount = 0;
+        int foregroundKeepCount = 0;
+        int foregroundRefreshCount = 0;
 
         bool TryPromoteDisplayedResult(SolverInterimResult candidate)
         {
@@ -166,14 +172,39 @@ internal static partial class CombatSearchCoordinator
                     && !string.IsNullOrWhiteSpace(progress.OfficialPublishedEvaluationContextId)
                     && evaluatedCandidate is { } e2Candidate)
                 {
+                    long decisionTicks = Stopwatch.GetTimestamp();
                     string decision = previousDisplayedResult == null
                         ? "initial"
                         : e2Candidate == previousDisplayedResult
                             ? "refresh"
                             : acceptsRouteUpdate ? "replace" : "keep";
+                    switch (decision)
+                    {
+                        case "initial":
+                            foregroundInitialCount++;
+                            break;
+                        case "replace":
+                            foregroundReplaceCount++;
+                            lastForegroundImprovementTicks = decisionTicks;
+                            break;
+                        case "keep":
+                            foregroundKeepCount++;
+                            break;
+                        case "refresh":
+                            foregroundRefreshCount++;
+                            break;
+                    }
+                    if (acceptsRouteUpdate)
+                        firstForegroundPublishedTicks ??= decisionTicks;
+
+                    SearchEfficiencyMemberReport? e3Member =
+                        portfolioTelemetry.FindSearchMember(e2Origin.SearchMemberId);
                     policy.Diagnostics.Info(
                         $"[CombatSolver/Test] SEARCH_E2_FOREGROUND_DECISION " +
                         $"decision={decision} candidate_id={e2Origin.CandidateId} " +
+                        $"member_id={e2Origin.SearchMemberId} " +
+                        $"member_kind={e3Member?.Kind ?? "unknown"} " +
+                        $"decision_elapsed_ms={portfolioTelemetry.ToRequestMilliseconds(decisionTicks).ToString("F3", System.Globalization.CultureInfo.InvariantCulture)} " +
                         $"previous_version={previousRoutePreview?.CandidateVersion.ToString() ?? "-"} " +
                         $"candidate_version={progress.SpeculativeRoutePreview?.CandidateVersion.ToString() ?? "-"} " +
                         $"previous_hp_loss={previousDisplayedResult?.ProjectedBattleHpLost.ToString() ?? "-"} " +
@@ -232,6 +263,46 @@ internal static partial class CombatSearchCoordinator
                     OfficialPublishedEvaluationContextId = approvedForegroundContextId,
                 });
             };
+
+        void LogBackgroundValueSummary()
+        {
+            if (firstForegroundPublishedTicks is not long firstTicks)
+                return;
+
+            long endTicks = Stopwatch.GetTimestamp();
+            SearchEfficiencyMemberReport[] postForegroundStartedMembers =
+                portfolioTelemetry.SearchMembers
+                    .Where(member => member.StartedTicks >= firstTicks)
+                    .ToArray();
+            long postForegroundExpanded = postForegroundStartedMembers.Sum(member => member.ExpandedNodes);
+            long postForegroundTransitions =
+                postForegroundStartedMembers.Sum(member => member.TransitionCount);
+            double postForegroundMemberElapsedMs = postForegroundStartedMembers.Sum(member =>
+                member.CompletedTicks.HasValue
+                    ? BeamWidthPortfolioTelemetry.DurationMilliseconds(
+                        Math.Max(0, member.CompletedTicks.Value - member.StartedTicks))
+                    : 0d);
+            double firstForegroundMs = portfolioTelemetry.ToRequestMilliseconds(firstTicks);
+            double requestEndMs = portfolioTelemetry.ToRequestMilliseconds(endTicks);
+            double lastImprovementMs = lastForegroundImprovementTicks.HasValue
+                ? portfolioTelemetry.ToRequestMilliseconds(lastForegroundImprovementTicks.Value)
+                : firstForegroundMs;
+
+            policy.Diagnostics.Info(
+                $"[CombatSolver/Test] SEARCH_E3_BACKGROUND_VALUE " +
+                $"first_foreground_ms={firstForegroundMs.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)} " +
+                $"request_end_ms={requestEndMs.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)} " +
+                $"background_wall_ms={Math.Max(0d, requestEndMs - firstForegroundMs).ToString("F3", System.Globalization.CultureInfo.InvariantCulture)} " +
+                $"last_improvement_ms={lastImprovementMs.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)} " +
+                $"initial={foregroundInitialCount} replace={foregroundReplaceCount} " +
+                $"keep={foregroundKeepCount} refresh={foregroundRefreshCount} " +
+                $"post_foreground_started_members={postForegroundStartedMembers.Length} " +
+                $"post_foreground_started_member_ms={postForegroundMemberElapsedMs.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)} " +
+                $"post_foreground_started_expanded={postForegroundExpanded} " +
+                $"post_foreground_started_transitions={postForegroundTransitions} " +
+                $"work_scope=members_started_after_foreground_lower_bound");
+        }
+
         try
         {
             SolverResult result = SolveCore(
@@ -254,6 +325,7 @@ internal static partial class CombatSearchCoordinator
                 selected.SearchEfficiencyEvaluationContextId ?? string.Empty);
             PopulateRequestWorkTotals(selected, requestWorkTotals);
             selected.PortfolioTelemetry = portfolioTelemetry;
+            LogBackgroundValueSummary();
             LogSearchEfficiencySummary(root, policy.Diagnostics, selected, portfolioTelemetry);
             return selected;
         }
@@ -277,6 +349,7 @@ internal static partial class CombatSearchCoordinator
                 adopted.SearchEfficiencyEvaluationContextId ?? string.Empty);
             PopulateRequestWorkTotals(adopted, requestWorkTotals);
             adopted.PortfolioTelemetry = portfolioTelemetry;
+            LogBackgroundValueSummary();
             LogSearchEfficiencySummary(
                 root,
                 policy.Diagnostics,
