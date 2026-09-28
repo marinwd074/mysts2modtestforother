@@ -146,11 +146,11 @@ state_mismatch
 2. 前台发布只使用现有不可变 preview / candidate version，不把后台仍可能继续填充诊断数据的 `SolverResult` 直接共享到主线程。
 3. 发布后后台搜索继续；本轮不提前自动部署、不改变搜索预算、不改变 Beam/Portfolio、也不降低现有手动 takeover 的质量保护。
 4. 旧 search session 继续由实例身份隔离；旧 epoch 的 progress 不得发布成当前建议。
-5. 先用构建/合同确认边界，再收一份真实搜索日志验证出现 `SEARCH_E_FOREGROUND_PUBLISHED ... background_continues=true`，且随后正式完成结果或状态变化能正常覆盖/作废它。
+5. Release 构建、pinned replay harness 与 R0 transition contract 已通过；下一步只需收一份真实搜索日志，验证出现 `SEARCH_E_FOREGROUND_PUBLISHED ... background_continues=true`，且随后正式完成结果或状态变化能正常覆盖/作废它。
 
 ## 当前未验证边界
 
-- 阶段 E1 的可信前台发布仍需 current HEAD 构建/合同与一份真实搜索日志补证；本轮不把 UI “已批准”视为可提前自动部署授权。
+- 阶段 E1 的 current HEAD Release 构建、pinned replay harness 与 R0 transition contract 已通过；仍需一份真实搜索日志补证。UI“已批准”目前不是提前自动部署授权。
 - U5/U6 历史 Host/Client observation → fresh replan 的部分真实多人边界仍不是 pinned replay 可替代的证据。
 - GitHub Issue #8：多人 Safe Execute 的 Headbutt / turn-start Choice 仍需 current HEAD Host/Client 复验。
 - GitHub Issue #9：Vicious 战略估值修复仍需 comparable current multiplayer root 复验。
