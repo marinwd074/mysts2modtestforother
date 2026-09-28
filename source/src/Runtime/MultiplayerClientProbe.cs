@@ -206,17 +206,16 @@ internal static class MultiplayerClientProbe
             return false;
 
         StateFingerprint enemyHpFingerprint = EnemyHpFingerprint(state);
+        bool inLethalRecalculationWindow =
+            MultiplayerCombatObjectivePolicy.IsInLethalRecalculationWindow(state.Enemies);
         bool enemyHpRouteChanged;
         if (returnEnemyHpRouteChange)
         {
-            bool lethalHpRecalculationEnabled =
-                SolverSettings.Current.UseMultiplayerLethalHpRecalculation;
-            bool inLethalRecalculationWindow =
-                MultiplayerCombatObjectivePolicy.IsInLethalRecalculationWindow(
-                    state.Enemies);
+            // Near lethal, a remote HP drop can create an immediate local kill that the
+            // existing route never considered. This quality boundary is not optional.
             enemyHpRouteChanged = MultiplayerRouteChangeTracker.ObserveEnemyHp(
                 enemyHpFingerprint,
-                lethalHpRecalculationEnabled && inLethalRecalculationWindow,
+                inLethalRecalculationWindow,
                 reason);
         }
         else
@@ -264,8 +263,9 @@ internal static class MultiplayerClientProbe
             $"[CombatSolver/MultiplayerProbe] OBSERVED sequence={_observationSequence} " +
             $"world_version={MultiplayerWorldTracker.WorldVersion} " +
             $"route_version={MultiplayerRouteChangeTracker.Version} reason={reason} " +
-            $"lethal_hp_recalculation={SolverSettings.Current.UseMultiplayerLethalHpRecalculation.ToString().ToLowerInvariant()} " +
-            $"in_lethal_window={MultiplayerCombatObjectivePolicy.IsInLethalRecalculationWindow(state.Enemies).ToString().ToLowerInvariant()} " +
+            $"lethal_hp_recalculation={inLethalRecalculationWindow.ToString().ToLowerInvariant()} " +
+            $"lethal_hp_legacy_setting={SolverSettings.Current.UseMultiplayerLethalHpRecalculation.ToString().ToLowerInvariant()} " +
+            $"in_lethal_window={inLethalRecalculationWindow.ToString().ToLowerInvariant()} " +
             $"enemy_hp_route_changed={enemyHpRouteChanged.ToString().ToLowerInvariant()} " +
             "compact_changed=true" +
             (display is null ? string.Empty : $" {display}"));

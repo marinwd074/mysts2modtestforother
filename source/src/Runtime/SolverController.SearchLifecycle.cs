@@ -208,8 +208,8 @@ internal static partial class SolverController
             bool sharedFinishedCardPlayDrift = false;
             bool livingEnemyHpDecreaseDrift = false;
             bool allowLivingEnemyHpDecrease =
-                !SolverSettings.Current.UseMultiplayerLethalHpRecalculation
-                || !MultiplayerCombatObjectivePolicy.IsInLethalRecalculationWindow(state.Enemies);
+                MultiplayerCombatObjectivePolicy.ShouldAllowLivingEnemyHpDecreaseReuse(
+                    state.Enemies);
             ContinuationStamp? continuationValidationStamp = continuationStamp;
             if (continuationStamp != null
                 && expectedContinuation != null
