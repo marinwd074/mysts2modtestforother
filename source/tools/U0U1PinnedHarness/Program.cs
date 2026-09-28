@@ -56,6 +56,7 @@ internal static class Program
             ValidateViciousStrategicValue();
             ValidateRollingHorizonQualityContract();
             ValidateRouteInvalidationVersionContract();
+            ValidateMultiplayerLethalReuseBoundary();
             ValidateLocalCoreShadowNormalizationContract();
             Require(
                 R1EvaluationShadowCache.VerifyBeamRankReuseGateForTesting(),
@@ -386,6 +387,20 @@ internal static class Program
                 && cache.Observe(key, normalizedParentB, secondOutput)
                     == ReplayCacheValidationResult.ValidatedHit,
             "Local-core normalized shadow cache did not validate equivalent remote/shared drift.");
+    }
+
+    private static void ValidateMultiplayerLethalReuseBoundary()
+    {
+        Require(
+            MultiplayerCombatObjectivePolicy.IsInLethalRecalculationWindow(
+                enemyDurability: 13,
+                initialEnemyMaximumHp: 386),
+            "4 HP + 9 block at 386 max HP must invalidate reused routes inside the lethal window.");
+        Require(
+            !MultiplayerCombatObjectivePolicy.IsInLethalRecalculationWindow(
+                enemyDurability: 200,
+                initialEnemyMaximumHp: 386),
+            "200/386 durability must remain outside the lethal recalculation window.");
     }
 
     private static void ValidateRouteInvalidationVersionContract()
