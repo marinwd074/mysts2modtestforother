@@ -138,18 +138,19 @@ state_mismatch
 
 ## 下一任务
 
-进入阶段 E3：先建立后台有效率基线，再决定是否改变时域/成员优先级。
+先验证 INFESTED_PRISMS 的斩杀窗口复用修复，再继续 E3 后台有效率测量。
 
-E2 已由 INFESTED_PRISMS ELITE `604411ffffe44ca388ece05d9eb8e594` 实机闭合。该包来自 `0.40.2+ddd43a3cf1d69517ebf0ae3065ec9c954cb04d3a`。真实出现两次 `replace` 并随后发布新 foreground version；generation 3 又出现连续 `keep`，第二次仍以 `previous_version=5` 作为基线且该 generation 没有 `SEARCH_E_FOREGROUND_PUBLISHED`，证明被拒候选没有覆盖前台。
+问题包 `604411ffffe44ca388ece05d9eb8e594` 暴露高优先级质量漏洞：第 4/5 回合真实敌人已经只有 4 HP；第 5 回合另有 9 Block，总耐久 13/386。日志仍为 `in_lethal_window=true / enemy_hp_route_changed=false`，下一回合结果为 `reused=True / reused_from_turn=4 / expanded=0`，证明旧路线没有从真实低血根重新搜索即时斩杀。
 
-E3 本轮只测量，不改搜索行为：
+当前修复：
+1. 斩杀窗口外仍允许同一存活敌人的纯 HP 下降软复用。
+2. 一旦进入 `IsInLethalRecalculationWindow`，敌人 HP 变化无条件推进 route invalidation，当前旧路线不能继续执行。
+3. 跨回合 continuation 在斩杀窗口内同样禁止 living-enemy HP-decrease 软兼容。
+4. 旧 `UseMultiplayerLethalHpRecalculation` 只保留配置/报告兼容，不再控制生产质量；UI 对应实验开关已移除。
+5. pinned 合同固定本次样本：13/386 必须处于 lethal window，200/386 必须保持窗口外。
 
-1. 每条正式 E2 决策补充 `member_id/member_kind/decision_elapsed_ms`，定位真正带来改善的 portfolio 成员。
-2. 请求结束输出 `SEARCH_E3_BACKGROUND_VALUE`：首个可信前台时间、请求结束时间、后台墙钟、最后一次改善时间以及 initial/replace/keep/refresh 次数。
-3. 额外统计**完全在首个 foreground 之后启动**的成员数量、elapsed、expanded、transitions；这是后台工作量的保守下界，明确不把首发时已经运行中的成员整段误算成后台成本。
-4. 本轮不调整 Beam/Portfolio、药水成员、预算、并发、时域、自动执行或 E1/E2 门禁。
+下一份实机先确认低血变化出现 `in_lethal_window=true enemy_hp_route_changed=true`，随后 fresh search，而不是低血下继续 `SEARCH_REUSED ... remote_enemy_hp_decrease`。通过后再继续使用 `SEARCH_E3_BACKGROUND_VALUE` 分析后台成本。
 
-下一份实机包用这些数据决定 E4 是否值得调整后台优先级：如果大量后台工作发生在最后一次 `replace` 之后且不再改善前台，再针对具体 member_kind 设计调度 A/B；没有证据前不削减生产搜索。
 ## 当前未验证边界
 
 - E1 已通过实机验证。E2 的 keep/replace 诊断与 pinned 合同已加入，仍需一份 current HEAD 实机日志证明真实后台候选按生产质量排序稳定替换/保留。

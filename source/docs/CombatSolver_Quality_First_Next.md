@@ -237,6 +237,12 @@
 - 若设置 `UseMultiplayerLethalHpRecalculation` 开启且实机已进入已有 `IsInLethalRecalculationWindow`，即使只是 HP 向下变化也不放宽，仍按原逻辑重算；因此 continuation 与现有“普通 HP 变化忽略、斩杀窗口重算”的 route-version 策略一致。
 - 成功复用时日志标记 `validation=exact_except_remote_enemy_hp`、`living_enemy_hp_decrease_drift=true`、`reason=remote_enemy_hp_decrease`。
 
+### INFESTED_PRISMS：斩杀窗口禁止复用低血旧路线（2026-09-28）
+
+- 问题包 `604411ffffe44ca388ece05d9eb8e594` 第 4/5 回合真实敌人只剩 4 HP；第 5 回合另有 9 Block，总耐久 13/386。日志仍为 `in_lethal_window=true / lethal_hp_recalculation=false / enemy_hp_route_changed=false`，随后第 5 回合直接 `reused=True / reused_from_turn=4 / expanded=0`，旧路线拖到第 6 回合才击杀。
+- 根因不是 Beam 漏解，而是旧实验设置关闭后同时放宽了同回合 route invalidation 与跨回合 continuation admission。斩杀窗口现升级为生产质量边界：窗口外仍可忽略同一存活敌人的纯 HP 下降；窗口内任何敌人 HP 变化都使当前路线失效，continuation 也不得用 HP-decrease 软兼容。
+- 旧 `UseMultiplayerLethalHpRecalculation` 只保留序列化/报告兼容，UI 实验开关移除。pinned 合同固定 13/386 必须进入 lethal window、200/386 必须保持窗口外。该修复不改变 Beam、FinalOrdering、3 回合预测窗或目标函数。
+
 ### THE_OBSCURA：多人 Smart Potion 去掉重复提前审计（2026-09-27）
 
 - 问题包 `THE_OBSCURA_NORMAL-ecc2f56a93bd4867a5c329299563792e` 一次请求依次运行了：Novelty 无药 5.00s → `E3_CROSS_FAMILY_SCOUT` 有药 5.23s → 正式无药 Beam 8.66s → Smart Potion 有药 10.43s。两个有药成员合计约 15.66s，最终仍选择 0 瓶。
