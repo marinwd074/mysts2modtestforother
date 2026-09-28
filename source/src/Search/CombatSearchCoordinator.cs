@@ -11,6 +11,10 @@ internal static partial class CombatSearchCoordinator
         maxTransitions: 1_024);
     private const int E4SupplementalMinimumGraceMilliseconds = 20_000;
     private const int E4SupplementalFreshImprovementWindowMilliseconds = 30_000;
+    private readonly record struct E4SupplementalBudgetContext(
+        long RequestElapsedMilliseconds,
+        long LastImprovementMilliseconds,
+        bool HasApprovedForeground);
 
     internal static int ComputeE4SupplementalDeadlineMilliseconds(
         SearchRoutePolicy routePolicy,
@@ -393,7 +397,24 @@ internal static partial class CombatSearchCoordinator
                 policy,
                 cancellationToken,
                 enrichedProgressCallback,
-                interaction == null ? null : PublishAdoptableResult);
+                interaction == null ? null : PublishAdoptableResult,
+                () =>
+                {
+                    long nowTicks = Stopwatch.GetTimestamp();
+                    long nowMs = (long)Math.Round(
+                        portfolioTelemetry.ToRequestMilliseconds(nowTicks));
+                    long qualityAnchorTicks =
+                        lastForegroundImprovementTicks
+                        ?? firstForegroundPublishedTicks
+                        ?? nowTicks;
+                    long qualityAnchorMs = (long)Math.Round(
+                        portfolioTelemetry.ToRequestMilliseconds(qualityAnchorTicks));
+                    return new E4SupplementalBudgetContext(
+                        nowMs,
+                        qualityAnchorMs,
+                        firstForegroundPublishedTicks.HasValue
+                            && currentDisplayedResult?.Survives == true);
+                });
             SolverResult selected = ResolveTakeoverResult(result, interaction) ?? result;
             if (interaction?.CurrentTakeoverRequest?.Kind == SearchTakeoverKind.ApplyCurrentTurn
                 && selected.ResultScope == SolverResultScope.SearchCompletion
@@ -613,7 +634,8 @@ internal static partial class CombatSearchCoordinator
         SearchPolicySnapshot policy,
         CancellationToken cancellationToken,
         Action<SolverProgress>? progressCallback,
-        Action<SolverResult>? interimResultCallback)
+        Action<SolverResult>? interimResultCallback,
+        Func<E4SupplementalBudgetContext>? e4BudgetContextProvider)
     {
         if (policy.CurrentTurnOnly)
         {
@@ -1166,15 +1188,15 @@ internal static partial class CombatSearchCoordinator
                 SolverSearchProfile supplementalProfile = activeProfile;
                 if (policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore)
                 {
-                    long supplementalStartMs = (long)Math.Round(
-                        portfolioTelemetry.ToRequestMilliseconds(Stopwatch.GetTimestamp()));
-                    long qualityAnchorMs = firstForegroundPublishedTicks.HasValue
-                        ? (long)Math.Round(portfolioTelemetry.ToRequestMilliseconds(
-                            lastForegroundImprovementTicks ?? firstForegroundPublishedTicks.Value))
-                        : supplementalStartMs;
-                    bool hasApprovedForeground =
-                        firstForegroundPublishedTicks.HasValue
-                        && currentDisplayedResult?.Survives == true;
+                    E4SupplementalBudgetContext e4Context =
+                        e4BudgetContextProvider?.Invoke()
+                        ?? new E4SupplementalBudgetContext(
+                            activeClock.ElapsedMilliseconds,
+                            activeClock.ElapsedMilliseconds,
+                            HasApprovedForeground: false);
+                    long supplementalStartMs = e4Context.RequestElapsedMilliseconds;
+                    long qualityAnchorMs = e4Context.LastImprovementMilliseconds;
+                    bool hasApprovedForeground = e4Context.HasApprovedForeground;
                     bool isPrimaryPass = ReferenceEquals(passClock, requestClock);
                     int e4DeadlineMs = ComputeE4SupplementalDeadlineMilliseconds(
                         policy.RoutePolicy,
