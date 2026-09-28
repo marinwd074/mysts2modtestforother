@@ -14,11 +14,20 @@ internal static class MultiplayerCombatObjectivePolicy
             LegacyLethalDurabilityBoundary);
 
     internal static bool IsInLethalRecalculationWindow(IEnumerable<Creature> enemies)
-    {
-        double durabilityRatio = ComputeEnemyDurabilityRatio(enemies);
-        return MultiplayerCombatObjectiveMath.ComputeLethalUrgency(durabilityRatio)
+        => IsInLethalRecalculationWindow(ComputeEnemyDurabilityRatio(enemies));
+
+    internal static bool IsInLethalRecalculationWindow(
+        int enemyDurability,
+        int initialEnemyMaximumHp)
+        => IsInLethalRecalculationWindow(
+            ComputeEnemyDurabilityRatio(enemyDurability, initialEnemyMaximumHp));
+
+    internal static bool ShouldAllowLivingEnemyHpDecreaseReuse(IEnumerable<Creature> enemies)
+        => !IsInLethalRecalculationWindow(enemies);
+
+    private static bool IsInLethalRecalculationWindow(double durabilityRatio)
+        => MultiplayerCombatObjectiveMath.ComputeLethalUrgency(durabilityRatio)
             >= LegacyLethalUrgencyBoundary;
-    }
 
     internal static double ComputeEnemyDurabilityRatio(IEnumerable<Creature> enemies)
     {

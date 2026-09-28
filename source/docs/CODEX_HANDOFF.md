@@ -26,7 +26,7 @@
 - **B 延迟影响合同：完成。**
 - **C 战斗级 R0 转移缓存：完成。**
 - **D 新根恢复 R1：完成。**
-- **E 前台/后台分离：进行中，进入 E1 可信前台发布。**
+- **E 前台/后台分离：进行中；E1 已完成，进入 E2 前台稳定替换。**
 - **F 情景预热：未开始。**
 - **G SSD 冷存储：未开始。**
 - **H 质量与响应验收：未开始。**
@@ -138,19 +138,23 @@ state_mismatch
 
 ## 下一任务
 
-进入阶段 E，只做 E1：把“前台可用建议”和“后台继续探索”建立成明确边界。
+先实机验证 E3 completion 的 current-turn fallback，再进入 E4。
 
-当前实现方向：
+KNIGHTS_ELITE `251346020d114e749c5860c29fd9cc4b` 来自 `0.40.2+52f8a764581e20737199e70d6b7a3abfc1a9c308`，证明第二版 completion backing guard 仍漏非终局 foreground。generation 9 在 25.291s 已由 potion_disabled 把 foreground 从 38 战损降到 5 战损；请求持续到 120.050s。最终 novelty SearchCompletion 却是完整胜利但 41 战损。诊断明确 `SEARCH_E3_FINAL_VS_FOREGROUND relation=foreground_better final_hp_loss=41 foreground_hp_loss=5`，随后 `SEARCH_RESULT_ROUTE_CAPTURE` 仍捕获 41 战损 route `0e6ccb...` 并由 Safe Execute 执行。整包没有 `SEARCH_E3_FOREGROUND_BACKING_CAPTURED` 或 `SEARCH_E3_COMPLETION_FOREGROUND_GUARD`。
 
-1. 只把**已经完成生产正式排序且同时赢得全局 displayed-result ordering** 的进度候选标记为前台已批准；普通 interim preview 仍明确标为“尚未验证”。
-2. 前台发布只使用现有不可变 preview / candidate version，不把后台仍可能继续填充诊断数据的 `SolverResult` 直接共享到主线程。
-3. 发布后后台搜索继续；本轮不提前自动部署、不改变搜索预算、不改变 Beam/Portfolio、也不降低现有手动 takeover 的质量保护。
-4. 旧 search session 继续由实例身份隔离；旧 epoch 的 progress 不得发布成当前建议。
-5. Release 构建、pinned replay harness 与 R0 transition contract 已通过。第二份实机包 `c12f6af5d9dc4486a80b7aab1d3b9186` 明确来自 `0.40.2+bb59d3b6480c29fa0140b1e9ecf5f534bd57a507`，因此包含首轮锁存修复；仍出现两次 `SEARCH_E1_EARLY_PUBLISH` 而没有任何 `SEARCH_E_FOREGROUND_PUBLISHED`。源码核对确认正式早期发布阶段故意令 `RouteAdoptionSeed=null`，而旧批准谓词错误要求 seed 非空，使“可显示”被“可执行”门禁阻断。当前第二次修正改为仅凭正式排序通过的 `SpeculativeRoutePreview` 锁存前台；执行 seed 仍必须等待完整结果 materialize 且动作与已批准 preview 一致。
+根因：这个 5 战损 foreground 是非终局 Rolling-Horizon 候选，没有完整 route seed，也没有与 speculative preview 完全一致的 completed-member SolverResult，所以 52f8 的 full-route backing 仍为空；但该 foreground 已经拥有与其当前回合 preview 对齐的 `CurrentTurnAdoptionSeed`。
 
+当前第三版 guard：
+1. 仍先要求现有 `ShouldPreferForegroundAtCompletion` 证明 foreground 严格优于 final，不新增质量规则。
+2. materialization 优先级保持 `route_seed -> completed_member`；两者都不可用时，若 `CurrentTurnAdoptionSeed.Actions` 与当前 approved `CurrentTurnPreview.Actions` 完全一致，则精确 materialize 该 seed。
+3. fallback 结果强制标记 `CurrentTurnAdoption`：只执行已经批准的当前回合前缀，下一回合从真实根重新搜索；不把 partial preview 伪装成完整路线。
+4. 精确 materialize 后再次与 final 用同一质量排序比较，仍更优才接管。
+5. 诊断应出现 `SEARCH_E3_COMPLETION_FOREGROUND_GUARD source=current_turn_seed`。
+
+本包还确认 continuation state 已包含敌人 next move 和 AI 序列（E0/E1/E2 与 AI0/AI1/AI2），第 2 回合因真实 HP/history 差异正常 `SEARCH_REUSE_MISS state_mismatch`；当前没有证据支持另加一套 AI timeline fingerprint。
 ## 当前未验证边界
 
-- 阶段 E1 的第二份实机包确认首轮锁存仍被错误的执行 seed 门禁阻断。display approval 与 execution authorization 已分离；current HEAD 已通过 Release 构建、pinned harness、新增 E1 合同与 R0 transition contract。现在只差一份新的实机日志。UI“已批准”不是提前自动部署授权。
+- E1 已通过实机验证。E2 的 keep/replace 诊断与 pinned 合同已加入，仍需一份 current HEAD 实机日志证明真实后台候选按生产质量排序稳定替换/保留。
 - U5/U6 历史 Host/Client observation → fresh replan 的部分真实多人边界仍不是 pinned replay 可替代的证据。
 - GitHub Issue #8：多人 Safe Execute 的 Headbutt / turn-start Choice 仍需 current HEAD Host/Client 复验。
 - GitHub Issue #9：Vicious 战略估值修复仍需 comparable current multiplayer root 复验。

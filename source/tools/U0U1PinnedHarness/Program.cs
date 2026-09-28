@@ -56,6 +56,7 @@ internal static class Program
             ValidateViciousStrategicValue();
             ValidateRollingHorizonQualityContract();
             ValidateRouteInvalidationVersionContract();
+            ValidateMultiplayerLethalReuseBoundary();
             ValidateLocalCoreShadowNormalizationContract();
             Require(
                 R1EvaluationShadowCache.VerifyBeamRankReuseGateForTesting(),
@@ -388,6 +389,20 @@ internal static class Program
             "Local-core normalized shadow cache did not validate equivalent remote/shared drift.");
     }
 
+    private static void ValidateMultiplayerLethalReuseBoundary()
+    {
+        Require(
+            MultiplayerCombatObjectivePolicy.IsInLethalRecalculationWindow(
+                enemyDurability: 13,
+                initialEnemyMaximumHp: 386),
+            "4 HP + 9 block at 386 max HP must invalidate reused routes inside the lethal window.");
+        Require(
+            !MultiplayerCombatObjectivePolicy.IsInLethalRecalculationWindow(
+                enemyDurability: 200,
+                initialEnemyMaximumHp: 386),
+            "200/386 durability must remain outside the lethal recalculation window.");
+    }
+
     private static void ValidateRouteInvalidationVersionContract()
     {
         MultiplayerRouteChangeTracker.Reset();
@@ -487,6 +502,107 @@ internal static class Program
         Require(
             !SolverInterimResultOrdering.CanPromoteDisplayedResult(costlyVictory, live),
             "Rolling horizon display replaced a 0-HP live route with a 24-HP terminal route.");
+
+        SolverInterimResult worseBackground = live with
+        {
+            ProjectedBattleHpLost = 2,
+            StrategicHpDeficit = 2,
+            EnemyHp = 200,
+            Score = 1000d,
+        };
+        Require(
+            !SolverInterimResultOrdering.CanPromoteDisplayedResult(worseBackground, live),
+            "E2 allowed a higher-loss background candidate to replace the current foreground route.");
+
+        SolverInterimResult betterBackground = live with
+        {
+            EnemyHp = 250,
+            Score = 1d,
+        };
+        Require(
+            SolverInterimResultOrdering.CanPromoteDisplayedResult(betterBackground, live),
+            "E2 rejected a same-loss background candidate with strictly better enemy HP.");
+
+        SolverInterimResult scrollsForeground = live with
+        {
+            Won = false,
+            ProjectedBattleHpLost = 19,
+            StrategicHpDeficit = 17,
+            EnemyHp = 68,
+        };
+        SolverInterimResult scrollsFinal = live with
+        {
+            Won = true,
+            ProjectedBattleHpLost = 39,
+            StrategicHpDeficit = 23,
+            EnemyHp = 0,
+            CombatEndedTurn = 3,
+        };
+        Require(
+            CombatSearchCoordinator.ShouldPreferForegroundAtCompletion(
+                scrollsFinal,
+                scrollsForeground),
+            "E3 completion guard allowed the 39-loss terminal result to replace the 19-loss rolling-horizon foreground.");
+        Require(
+            !CombatSearchCoordinator.ShouldPreferForegroundAtCompletion(
+                scrollsForeground,
+                scrollsFinal),
+            "E3 completion guard reversed the strict foreground/final quality relation.");
+
+        PlanAction foregroundAction = new(PlanActionKind.EndTurn, 1);
+        SolverSpeculativeRoutePreview foregroundPreview = new(
+            CandidateVersion: 23,
+            StartTurnNumber: 1,
+            ProjectedBattlePotionCount: 0,
+            ProjectedBattleHpLost: 12,
+            CombatEnded: false,
+            OnlyDeathRoutesFound: false,
+            HasRisk: false,
+            Turns:
+            [
+                new SolverFrontierTurn(
+                    Turn: 1,
+                    Actions: [foregroundAction],
+                    HpLost: 0,
+                    HpRecovered: 0,
+                    EnemyHpLost: 0,
+                    EnergyLeft: 0,
+                    CombatEnded: false),
+            ]);
+        Require(
+            CombatSearchCoordinator.RouteMatchesPreview(
+                [foregroundAction],
+                foregroundPreview)
+            && !CombatSearchCoordinator.RouteMatchesPreview(
+                [new PlanAction(PlanActionKind.EndTurn, 2)],
+                foregroundPreview),
+            "E3 completion backing did not require exact displayed route actions.");
+
+        SolverCurrentTurnPreview currentTurnPreview = new(
+            CandidateVersion: 31,
+            Turn: 1,
+            Actions: [foregroundAction],
+            HpLost: 0,
+            HpRecovered: 0,
+            EnemyHpLost: 0,
+            EnergyLeft: 0,
+            CombatEnded: false,
+            FrontierTurns: foregroundPreview.Turns);
+        SolverRouteAdoptionSeed currentTurnSeed = new(
+            candidateVersion: 31,
+            actions: [foregroundAction],
+            materialize: static () => null!);
+        Require(
+            CombatSearchCoordinator.CurrentTurnSeedMatchesPreview(
+                currentTurnSeed,
+                currentTurnPreview)
+            && !CombatSearchCoordinator.CurrentTurnSeedMatchesPreview(
+                new SolverRouteAdoptionSeed(
+                    candidateVersion: 32,
+                    actions: [new PlanAction(PlanActionKind.EndTurn, 2)],
+                    materialize: static () => null!),
+                currentTurnPreview),
+            "E3 completion current-turn fallback did not require the exact approved foreground prefix.");
     }
 
     private static void ValidateDarkEmbracePredictionCoverage()

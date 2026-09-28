@@ -70,6 +70,13 @@ internal static partial class CombatSearchCoordinator
         SolverSpeculativeRoutePreview? speculativeRoutePreview = null;
         SolverRouteAdoptionSeed? currentTurnAdoptionSeed = null;
         SolverRouteAdoptionSeed? currentRouteAdoptionSeed = null;
+        SolverResult? currentMaterializedForegroundResult = null;
+        long? firstForegroundPublishedTicks = null;
+        long? lastForegroundImprovementTicks = null;
+        int foregroundInitialCount = 0;
+        int foregroundReplaceCount = 0;
+        int foregroundKeepCount = 0;
+        int foregroundRefreshCount = 0;
 
         bool TryPromoteDisplayedResult(SolverInterimResult candidate)
         {
@@ -88,6 +95,17 @@ internal static partial class CombatSearchCoordinator
 
         void PublishAdoptableResult(SolverResult result)
         {
+            SolverInterimResult summary = BuildInterimResult(root, policy, result);
+            if (currentDisplayedResult == summary
+                && RouteMatchesPreview(result.BestNode.Actions, speculativeRoutePreview))
+            {
+                currentMaterializedForegroundResult = result;
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Test] SEARCH_E3_FOREGROUND_BACKING_CAPTURED " +
+                    $"hp_loss={summary.ProjectedBattleHpLost} enemy_hp={summary.EnemyHp} " +
+                    $"won={summary.Won.ToString().ToLowerInvariant()}");
+            }
+
             if (result.OnlyDeathRoutesFound
                 || !SolverInterimResultOrdering.IsCompleteVictory(
                     result.BestNode.ActionCount,
@@ -98,7 +116,6 @@ internal static partial class CombatSearchCoordinator
                 return;
             }
 
-            SolverInterimResult summary = BuildInterimResult(root, policy, result);
             bool promoted = TryPromoteDisplayedResult(summary);
             if (!promoted && summary != currentDisplayedResult)
                 return;
@@ -149,8 +166,11 @@ internal static partial class CombatSearchCoordinator
                 // Keep the visible current-turn line and speculative future attached to the
                 // same globally promoted Beam result. A shallow early boundary such as Strike
                 // must not independently lock the preview after a better multi-turn route appears.
+                SolverInterimResult? previousDisplayedResult = currentDisplayedResult;
+                SolverSpeculativeRoutePreview? previousRoutePreview = speculativeRoutePreview;
+                SolverInterimResult? evaluatedCandidate = progress.CurrentBestResult;
                 bool acceptsRouteUpdate = currentDisplayedResult == null;
-                if (progress.CurrentBestResult is { } candidate)
+                if (evaluatedCandidate is { } candidate)
                 {
                     acceptsRouteUpdate = TryPromoteDisplayedResult(candidate);
                 }
@@ -159,8 +179,54 @@ internal static partial class CombatSearchCoordinator
                     acceptsRouteUpdate = false;
                 }
 
+                if (progress.OfficialPublishedOrigin is { } e2Origin
+                    && !string.IsNullOrWhiteSpace(progress.OfficialPublishedEvaluationContextId)
+                    && evaluatedCandidate is { } e2Candidate)
+                {
+                    long decisionTicks = Stopwatch.GetTimestamp();
+                    string decision = previousDisplayedResult == null
+                        ? "initial"
+                        : e2Candidate == previousDisplayedResult
+                            ? "refresh"
+                            : acceptsRouteUpdate ? "replace" : "keep";
+                    switch (decision)
+                    {
+                        case "initial":
+                            foregroundInitialCount++;
+                            break;
+                        case "replace":
+                            foregroundReplaceCount++;
+                            lastForegroundImprovementTicks = decisionTicks;
+                            break;
+                        case "keep":
+                            foregroundKeepCount++;
+                            break;
+                        case "refresh":
+                            foregroundRefreshCount++;
+                            break;
+                    }
+                    if (acceptsRouteUpdate)
+                        firstForegroundPublishedTicks ??= decisionTicks;
+
+                    SearchEfficiencyMemberReport? e3Member =
+                        portfolioTelemetry.FindSearchMember(e2Origin.SearchMemberId);
+                    policy.Diagnostics.Info(
+                        $"[CombatSolver/Test] SEARCH_E2_FOREGROUND_DECISION " +
+                        $"decision={decision} candidate_id={e2Origin.CandidateId} " +
+                        $"member_id={e2Origin.SearchMemberId} " +
+                        $"member_kind={e3Member?.Kind ?? "unknown"} " +
+                        $"decision_elapsed_ms={portfolioTelemetry.ToRequestMilliseconds(decisionTicks).ToString("F3", System.Globalization.CultureInfo.InvariantCulture)} " +
+                        $"previous_version={previousRoutePreview?.CandidateVersion.ToString() ?? "-"} " +
+                        $"candidate_version={progress.SpeculativeRoutePreview?.CandidateVersion.ToString() ?? "-"} " +
+                        $"previous_hp_loss={previousDisplayedResult?.ProjectedBattleHpLost.ToString() ?? "-"} " +
+                        $"candidate_hp_loss={e2Candidate.ProjectedBattleHpLost} " +
+                        $"previous_enemy_hp={previousDisplayedResult?.EnemyHp.ToString() ?? "-"} " +
+                        $"candidate_enemy_hp={e2Candidate.EnemyHp}");
+                }
+
                 if (acceptsRouteUpdate)
                 {
+                    currentMaterializedForegroundResult = null;
                     // Current-turn and future-route previews are one displayed candidate bundle.
                     // Replace or clear them together so the UI can never combine a newer
                     // current-turn line with an older speculative future.
@@ -209,6 +275,81 @@ internal static partial class CombatSearchCoordinator
                     OfficialPublishedEvaluationContextId = approvedForegroundContextId,
                 });
             };
+
+        void LogFinalVsForeground(SolverResult selected)
+        {
+            if (currentDisplayedResult is not { } foreground)
+                return;
+
+            SolverInterimResult final = BuildInterimResult(root, policy, selected);
+            bool finalWouldReplaceForeground =
+                SolverInterimResultOrdering.CanPromoteDisplayedResult(final, foreground);
+            bool foregroundWouldReplaceFinal =
+                SolverInterimResultOrdering.CanPromoteDisplayedResult(foreground, final);
+            string relation = finalWouldReplaceForeground
+                ? "final_better"
+                : foregroundWouldReplaceFinal
+                    ? "foreground_better"
+                    : "equivalent_or_incomparable";
+            CandidateOrigin? finalOrigin = selected.SearchEfficiencyOrigin;
+            SearchEfficiencyMemberReport? finalMember = finalOrigin == null
+                ? null
+                : portfolioTelemetry.FindSearchMember(finalOrigin.SearchMemberId);
+            policy.Diagnostics.Info(
+                $"[CombatSolver/Test] SEARCH_E3_FINAL_VS_FOREGROUND " +
+                $"relation={relation} " +
+                $"final_member_id={finalOrigin?.SearchMemberId.ToString() ?? "-"} " +
+                $"final_member_kind={finalMember?.Kind ?? "unknown"} " +
+                $"final_won={final.Won.ToString().ToLowerInvariant()} " +
+                $"foreground_won={foreground.Won.ToString().ToLowerInvariant()} " +
+                $"final_hp_loss={final.ProjectedBattleHpLost} " +
+                $"foreground_hp_loss={foreground.ProjectedBattleHpLost} " +
+                $"final_strategic_deficit={final.StrategicHpDeficit} " +
+                $"foreground_strategic_deficit={foreground.StrategicHpDeficit} " +
+                $"final_enemy_hp={final.EnemyHp} foreground_enemy_hp={foreground.EnemyHp} " +
+                $"final_potions={final.ProjectedBattlePotionCount} " +
+                $"foreground_potions={foreground.ProjectedBattlePotionCount}");
+        }
+
+        void LogBackgroundValueSummary()
+        {
+            if (firstForegroundPublishedTicks is not long firstTicks)
+                return;
+
+            long endTicks = Stopwatch.GetTimestamp();
+            SearchEfficiencyMemberReport[] postForegroundStartedMembers =
+                portfolioTelemetry.SearchMembers
+                    .Where(member => member.StartedTicks >= firstTicks)
+                    .ToArray();
+            long postForegroundExpanded = postForegroundStartedMembers.Sum(member => member.ExpandedNodes);
+            long postForegroundTransitions =
+                postForegroundStartedMembers.Sum(member => member.TransitionCount);
+            double postForegroundMemberElapsedMs = postForegroundStartedMembers.Sum(member =>
+                member.CompletedTicks.HasValue
+                    ? BeamWidthPortfolioTelemetry.DurationMilliseconds(
+                        Math.Max(0, member.CompletedTicks.Value - member.StartedTicks))
+                    : 0d);
+            double firstForegroundMs = portfolioTelemetry.ToRequestMilliseconds(firstTicks);
+            double requestEndMs = portfolioTelemetry.ToRequestMilliseconds(endTicks);
+            double lastImprovementMs = lastForegroundImprovementTicks.HasValue
+                ? portfolioTelemetry.ToRequestMilliseconds(lastForegroundImprovementTicks.Value)
+                : firstForegroundMs;
+
+            policy.Diagnostics.Info(
+                $"[CombatSolver/Test] SEARCH_E3_BACKGROUND_VALUE " +
+                $"first_foreground_ms={firstForegroundMs.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)} " +
+                $"request_end_ms={requestEndMs.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)} " +
+                $"background_wall_ms={Math.Max(0d, requestEndMs - firstForegroundMs).ToString("F3", System.Globalization.CultureInfo.InvariantCulture)} " +
+                $"last_improvement_ms={lastImprovementMs.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)} " +
+                $"initial={foregroundInitialCount} replace={foregroundReplaceCount} " +
+                $"keep={foregroundKeepCount} refresh={foregroundRefreshCount} " +
+                $"post_foreground_started_members={postForegroundStartedMembers.Length} " +
+                $"post_foreground_started_member_ms={postForegroundMemberElapsedMs.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)} " +
+                $"post_foreground_started_expanded={postForegroundExpanded} " +
+                $"post_foreground_started_transitions={postForegroundTransitions} " +
+                $"work_scope=members_started_after_foreground_lower_bound");
+        }
+
         try
         {
             SolverResult result = SolveCore(
@@ -226,11 +367,73 @@ internal static partial class CombatSearchCoordinator
             {
                 selected = currentCompleteAdoptableResult;
             }
+
+            if (policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
+                && selected.ResultScope == SolverResultScope.SearchCompletion
+                && currentDisplayedResult is { } foreground)
+            {
+                SolverInterimResult finalSummary = BuildInterimResult(root, policy, selected);
+                if (ShouldPreferForegroundAtCompletion(finalSummary, foreground))
+                {
+                    SolverResult? exactForeground = null;
+                    string materializationSource = "none";
+                    int candidateVersion = -1;
+                    if (currentRouteAdoptionSeed is { } foregroundSeed)
+                    {
+                        exactForeground = foregroundSeed.Materialize();
+                        materializationSource = "route_seed";
+                        candidateVersion = foregroundSeed.CandidateVersion;
+                    }
+                    else if (currentMaterializedForegroundResult is { } materializedForeground
+                             && RouteMatchesPreview(
+                                 materializedForeground.BestNode.Actions,
+                                 speculativeRoutePreview))
+                    {
+                        exactForeground = materializedForeground;
+                        materializationSource = "completed_member";
+                    }
+                    else if (currentTurnAdoptionSeed is { } turnSeed
+                             && CurrentTurnSeedMatchesPreview(
+                                 turnSeed,
+                                 currentTurnPreview))
+                    {
+                        exactForeground = turnSeed.Materialize();
+                        exactForeground.ResultScope = SolverResultScope.CurrentTurnAdoption;
+                        materializationSource = "current_turn_seed";
+                        candidateVersion = turnSeed.CandidateVersion;
+                    }
+
+                    if (exactForeground != null)
+                    {
+                        SolverInterimResult exactForegroundSummary =
+                            BuildInterimResult(root, policy, exactForeground);
+                        if (ShouldPreferForegroundAtCompletion(
+                                finalSummary,
+                                exactForegroundSummary))
+                        {
+                            policy.Diagnostics.Info(
+                                $"[CombatSolver/Test] SEARCH_E3_COMPLETION_FOREGROUND_GUARD " +
+                                $"source={materializationSource} candidate_version={candidateVersion} " +
+                                $"final_hp_loss={finalSummary.ProjectedBattleHpLost} " +
+                                $"foreground_hp_loss={exactForegroundSummary.ProjectedBattleHpLost} " +
+                                $"final_strategic_deficit={finalSummary.StrategicHpDeficit} " +
+                                $"foreground_strategic_deficit={exactForegroundSummary.StrategicHpDeficit} " +
+                                $"final_enemy_hp={finalSummary.EnemyHp} " +
+                                $"foreground_enemy_hp={exactForegroundSummary.EnemyHp} " +
+                                $"scope={exactForeground.ResultScope}");
+                            selected = exactForeground;
+                        }
+                    }
+                }
+            }
+
             portfolioTelemetry.RecordCandidatePublished(
                 selected.SearchEfficiencyOrigin,
                 selected.SearchEfficiencyEvaluationContextId ?? string.Empty);
             PopulateRequestWorkTotals(selected, requestWorkTotals);
             selected.PortfolioTelemetry = portfolioTelemetry;
+            LogFinalVsForeground(selected);
+            LogBackgroundValueSummary();
             LogSearchEfficiencySummary(root, policy.Diagnostics, selected, portfolioTelemetry);
             return selected;
         }
@@ -254,6 +457,8 @@ internal static partial class CombatSearchCoordinator
                 adopted.SearchEfficiencyEvaluationContextId ?? string.Empty);
             PopulateRequestWorkTotals(adopted, requestWorkTotals);
             adopted.PortfolioTelemetry = portfolioTelemetry;
+            LogFinalVsForeground(adopted);
+            LogBackgroundValueSummary();
             LogSearchEfficiencySummary(
                 root,
                 policy.Diagnostics,
@@ -315,6 +520,24 @@ internal static partial class CombatSearchCoordinator
                 $"exclusive_ms={exclusiveMs.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)}");
         }
     }
+
+    internal static bool ShouldPreferForegroundAtCompletion(
+        SolverInterimResult final,
+        SolverInterimResult foreground)
+        => SolverInterimResultOrdering.CanPromoteDisplayedResult(foreground, final)
+            && !SolverInterimResultOrdering.CanPromoteDisplayedResult(final, foreground);
+
+    internal static bool RouteMatchesPreview(
+        IReadOnlyList<PlanAction> actions,
+        SolverSpeculativeRoutePreview? preview)
+        => preview != null
+            && actions.SequenceEqual(preview.Turns.SelectMany(static turn => turn.Actions));
+
+    internal static bool CurrentTurnSeedMatchesPreview(
+        SolverRouteAdoptionSeed seed,
+        SolverCurrentTurnPreview? preview)
+        => preview != null
+            && seed.Actions.SequenceEqual(preview.Actions);
 
     private static bool IsAdoptionResult(SolverResult result)
         => result.ResultScope is SolverResultScope.CurrentTurnAdoption

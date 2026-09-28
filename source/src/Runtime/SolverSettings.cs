@@ -111,8 +111,8 @@ internal sealed record SolverSettingsData
     /// </summary>
     public bool UseMultiplayerPrediction { get; init; }
     /// <summary>
-    /// Optional multiplayer replan trigger. Enemy HP changes are ignored until the existing
-    /// adaptive-lethal model reaches the legacy 35% lethal window.
+    /// Legacy persisted field retained for settings/report compatibility. Enemy HP changes in
+    /// the lethal window now always invalidate the current multiplayer local-core route.
     /// </summary>
     public bool UseMultiplayerLethalHpRecalculation { get; init; }
     public int AcceptableBattleHpLoss { get; init; }
