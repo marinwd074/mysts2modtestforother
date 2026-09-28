@@ -54,3 +54,5 @@
 - 新文档必须有长期用途，或被本索引/稳定专题索引引用。
 - 可重跑事实优先固化为测试/fixture，不用日志证明长期正确性。
 - 清理规则见 [REPOSITORY_MAINTENANCE.md](REPOSITORY_MAINTENANCE.md)。
+
+<!-- repository-maintenance-marker: 2026-09-28 -->
