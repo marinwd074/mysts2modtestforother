@@ -194,6 +194,10 @@ internal static partial class CombatSearchCoordinator
                     }
                 }
 
+                CandidateOrigin? approvedForegroundOrigin =
+                    acceptsRouteUpdate ? progress.OfficialPublishedOrigin : null;
+                string? approvedForegroundContextId =
+                    acceptsRouteUpdate ? progress.OfficialPublishedEvaluationContextId : null;
                 progressCallback(progress with
                 {
                     CurrentBestResult = currentDisplayedResult,
@@ -201,6 +205,8 @@ internal static partial class CombatSearchCoordinator
                     SpeculativeRoutePreview = speculativeRoutePreview,
                     RouteAdoptionSeed = currentRouteAdoptionSeed,
                     CurrentTurnAdoptionSeed = currentTurnAdoptionSeed,
+                    OfficialPublishedOrigin = approvedForegroundOrigin,
+                    OfficialPublishedEvaluationContextId = approvedForegroundContextId,
                 });
             };
         try

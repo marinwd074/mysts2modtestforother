@@ -22,7 +22,7 @@ internal static class MultiplayerPlanRefreshContracts
         string[] currentFields = currentStateText.Split(';');
         if (previousFields.Length != currentFields.Length)
         {
-            reason = "field_count_changed";
+            reason = $"field_count_changed:{previousFields.Length}->{currentFields.Length}";
             return false;
         }
 
@@ -43,7 +43,7 @@ internal static class MultiplayerPlanRefreshContracts
                     actualField[..actualSeparator],
                     StringComparison.Ordinal))
             {
-                reason = "field_identity_changed";
+                reason = $"field_identity_changed:{expectedField}->{actualField}";
                 return false;
             }
 
@@ -53,7 +53,7 @@ internal static class MultiplayerPlanRefreshContracts
                     expectedField[(expectedSeparator + 1)..],
                     actualField[(actualSeparator + 1)..]))
             {
-                reason = $"strong_field_change:{fieldName}";
+                reason = $"strong_field_change:{fieldName}:{expectedField}->{actualField}";
                 return false;
             }
             sawSoftEnemyDelta = true;
@@ -74,7 +74,6 @@ internal static class MultiplayerPlanRefreshContracts
         if (previousParts.Length != 7 || currentParts.Length != 7)
             return false;
 
-        // combat-id, monster id, slot, max HP and move must stay identical.
         foreach (int fixedIndex in new[] { 0, 1, 2, 4, 6 })
         {
             if (!string.Equals(
@@ -94,7 +93,6 @@ internal static class MultiplayerPlanRefreshContracts
             return false;
         }
 
-        // Crossing the alive/dead boundary can invalidate targets and lethal ordering.
         return previousHp > 0 && currentHp > 0;
     }
 }

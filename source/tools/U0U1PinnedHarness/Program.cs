@@ -78,6 +78,7 @@ internal static class Program
                     hasSimulator: true),
                 "Novelty skips fact capture only for simulator-free terminal memo snapshots.");
             ValidateRenderedCurrentTurnTakeoverContract();
+            ValidateApprovedForegroundPreviewContract();
 
             HarnessScenario scenario = new(
                 "IRONCLAD",
@@ -212,6 +213,97 @@ internal static class Program
                 && value.ResourcePotential == 0
                 && value.ScalingPotential == 0,
             $"Vicious strategic value drifted: {value}.");
+    }
+
+    private static void ValidateApprovedForegroundPreviewContract()
+    {
+        SearchInteractionState interaction = new();
+        PlanAction approvedAction = new(PlanActionKind.EndTurn, 1);
+        SolverFrontierTurn approvedTurn = new(
+            Turn: 1,
+            Actions: [approvedAction],
+            HpLost: 0,
+            HpRecovered: 0,
+            EnemyHpLost: 0,
+            EnergyLeft: 0,
+            CombatEnded: false);
+        SolverSpeculativeRoutePreview approvedPreview = new(
+            CandidateVersion: 7,
+            StartTurnNumber: 1,
+            ProjectedBattlePotionCount: 0,
+            ProjectedBattleHpLost: 0,
+            CombatEnded: false,
+            OnlyDeathRoutesFound: false,
+            HasRisk: false,
+            Turns: [approvedTurn]);
+        SolverProgress approved = new(
+            StartTurnNumber: 1,
+            CurrentTurnNumber: 1,
+            CompletedTurnLayers: 1,
+            PlayDepth: 1,
+            ExpandedNodes: 10,
+            ReviewedWorldlines: 10,
+            MaxNodes: 100,
+            FrontierNodes: 1,
+            EndedNodes: 0,
+            ElapsedMilliseconds: 100,
+            Phase: "approved",
+            SpeculativeRoutePreview: approvedPreview)
+        {
+            OfficialPublishedOrigin = new CandidateOrigin(1, 1, 1, 10, 1),
+            OfficialPublishedEvaluationContextId = "pinned-e1",
+        };
+        Require(
+            approved.RouteAdoptionSeed == null && approved.HasApprovedForegroundRoute,
+            "E1 approved display preview incorrectly requires an executable route seed.");
+
+        interaction.PublishProgress(approved);
+        Require(
+            ReferenceEquals(interaction.ApprovedForegroundProgress, approved)
+                && interaction.ApprovedForegroundProgress!.ApprovedForegroundCandidateVersion == 7,
+            "E1 approved display preview was not latched.");
+
+        SolverSpeculativeRoutePreview unapprovedPreview = approvedPreview with
+        {
+            CandidateVersion = 8,
+            ProjectedBattleHpLost = 99,
+        };
+        interaction.PublishProgress(approved with
+        {
+            ElapsedMilliseconds = 200,
+            SpeculativeRoutePreview = unapprovedPreview,
+            OfficialPublishedOrigin = null,
+            OfficialPublishedEvaluationContextId = null,
+        });
+        Require(
+            ReferenceEquals(interaction.ApprovedForegroundProgress, approved),
+            "Ordinary background progress replaced the approved foreground preview.");
+
+        long now = Environment.TickCount64 + SolverWeights.ProgressUiIntervalMilliseconds + 10;
+        Require(
+            interaction.TryCreateDisplayProgress(now, out SolverProgress displayed)
+                && displayed.SpeculativeRoutePreview?.CandidateVersion == 7
+                && displayed.RouteAdoptionSeed == null,
+            "E1 display did not preserve the approved preview without granting execution.");
+
+        SolverRouteAdoptionSeed matchingSeed = new(
+            candidateVersion: 99,
+            actions: [approvedAction],
+            materialize: static () => null!);
+        interaction.PublishProgress(approved with
+        {
+            ElapsedMilliseconds = 300,
+            RouteAdoptionSeed = matchingSeed,
+            OfficialPublishedOrigin = null,
+            OfficialPublishedEvaluationContextId = null,
+        });
+        Require(
+            interaction.TryCreateDisplayProgress(
+                now + SolverWeights.ProgressUiIntervalMilliseconds + 10,
+                out SolverProgress executableDisplay)
+                && executableDisplay.SpeculativeRoutePreview?.CandidateVersion == 7
+                && ReferenceEquals(executableDisplay.RouteAdoptionSeed, matchingSeed),
+            "E1 did not expose execution only after a matching materialized route became available.");
     }
 
     private static void ValidateRenderedCurrentTurnTakeoverContract()

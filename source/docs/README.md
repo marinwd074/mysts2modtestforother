@@ -7,9 +7,9 @@
 | 目的 | 文件 |
 |---|---|
 | 当前状态 / 下一任务 | [CODEX_HANDOFF.md](CODEX_HANDOFF.md) |
-| 当前质量优先计划 | [CombatSolver_Quality_First_Next.md](CombatSolver_Quality_First_Next.md) |
-| 多人本地核心搜索效率任务书 | [Multiplayer_LocalCore_Search_Optimization.md](Multiplayer_LocalCore_Search_Optimization.md) |
-| 当前回合决策、滚动时域与持续复用设计 | [Rolling_Horizon_Reuse_Architecture.md](Rolling_Horizon_Reuse_Architecture.md) |
+| 当前主执行计划（A → H） | [Rolling_Horizon_Reuse_Architecture.md](Rolling_Horizon_Reuse_Architecture.md) |
+| 坏路线 / 质量专项参考 | [CombatSolver_Quality_First_Next.md](CombatSolver_Quality_First_Next.md) |
+| 多人本地核心搜索效率任务书（P0–P4 已关闭） | [Multiplayer_LocalCore_Search_Optimization.md](Multiplayer_LocalCore_Search_Optimization.md) |
 | 多人总体架构计划 | [CombatSolver_GPT_Architecture_Plan.md](CombatSolver_GPT_Architecture_Plan.md) |
 | 架构、职责、状态所有权 | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | 当前验证入口 | [TEST_MATRIX.md](TEST_MATRIX.md) |
@@ -54,3 +54,5 @@
 - 新文档必须有长期用途，或被本索引/稳定专题索引引用。
 - 可重跑事实优先固化为测试/fixture，不用日志证明长期正确性。
 - 清理规则见 [REPOSITORY_MAINTENANCE.md](REPOSITORY_MAINTENANCE.md)。
+
+<!-- repository-maintenance-marker: 2026-09-28 -->

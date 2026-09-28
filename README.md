@@ -17,7 +17,7 @@ The fork keeps the upstream solver/simulation foundation while adding substantia
 - Current project state: [`source/docs/CODEX_HANDOFF.md`](source/docs/CODEX_HANDOFF.md)
 - Documentation index: [`source/docs/README.md`](source/docs/README.md)
 
-Single-player and multiplayer share the same main search/simulation core. Multiplayer adds teammate forecasting, team objectives, world-version tracking, and local-player-only execution boundaries.
+Single-player and multiplayer share the same main search/simulation core. Production multiplayer defaults to the local single-player quality core with world-version tracking and local-player-only execution boundaries; teammate forecasting, team objectives, and scenario reevaluation remain behind the experimental multiplayer prediction switch.
 
 Background presence telemetry, automatic run-statistics upload, server update checks, and automatic private Showcase upload were intentionally removed. User-triggered problem-report upload remains separate.
 
