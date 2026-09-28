@@ -150,7 +150,7 @@ state_mismatch
 
 ## 当前未验证边界
 
-- 阶段 E1 的第二份实机包确认首轮锁存仍被错误的执行 seed 门禁阻断。现已将 display approval 与 execution authorization 分离，并加入 pinned 合同；仍需 current HEAD Release/合同回归与一份新的实机日志。UI“已批准”不是提前自动部署授权。
+- 阶段 E1 的第二份实机包确认首轮锁存仍被错误的执行 seed 门禁阻断。display approval 与 execution authorization 已分离；current HEAD 已通过 Release 构建、pinned harness、新增 E1 合同与 R0 transition contract。现在只差一份新的实机日志。UI“已批准”不是提前自动部署授权。
 - U5/U6 历史 Host/Client observation → fresh replan 的部分真实多人边界仍不是 pinned replay 可替代的证据。
 - GitHub Issue #8：多人 Safe Execute 的 Headbutt / turn-start Choice 仍需 current HEAD Host/Client 复验。
 - GitHub Issue #9：Vicious 战略估值修复仍需 comparable current multiplayer root 复验。
