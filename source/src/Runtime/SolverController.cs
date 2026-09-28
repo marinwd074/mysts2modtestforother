@@ -1740,15 +1740,18 @@ internal static partial class SolverController
         if (_search is not { } search)
             return;
 
-        SolverProgress? latestProgress = Volatile.Read(ref search.Interaction.Progress);
-        if (latestProgress is { HasApprovedForegroundRoute: true, RouteAdoptionSeed: { } approvedSeed }
+        SolverProgress? approvedProgress = search.Interaction.ApprovedForegroundProgress;
+        if (approvedProgress is { RouteAdoptionSeed: { } approvedSeed }
             && approvedSeed.CandidateVersion > search.ForegroundPublishedCandidateVersion)
         {
             search.ForegroundPublishedCandidateVersion = approvedSeed.CandidateVersion;
+            bool backgroundContinues = !search.WorkerCompletion.IsCompleted;
             Entry.Logger.Info(
                 $"[CombatSolver/Test] SEARCH_E_FOREGROUND_PUBLISHED " +
                 $"generation={search.Generation} candidate_version={approvedSeed.CandidateVersion} " +
-                $"turn={latestProgress.StartTurnNumber} background_continues=true");
+                $"turn={approvedProgress.StartTurnNumber} " +
+                $"approved_elapsed_ms={approvedProgress.ElapsedMilliseconds} " +
+                $"background_continues={backgroundContinues.ToString().ToLowerInvariant()}");
         }
 
         if (!SolverOverlay.IsVisible
