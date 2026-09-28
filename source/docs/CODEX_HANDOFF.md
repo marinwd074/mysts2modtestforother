@@ -138,19 +138,19 @@ state_mismatch
 
 ## 下一任务
 
-先实机验证 E3 completion foreground guard，再决定 E4 后台调度。
+实机验证 E3 completion backing guard，然后再进入 E4。
 
-SCROLLS_OF_BITING_WEAK `5d0ac4d9b96b43c9bd4b7ffea8f79ed2` 来自 `0.40.2+df248c23734421a34d43ddcdc4e52a78ac66a88e`，首次验证 `SEARCH_E3_FINAL_VS_FOREGROUND` 并暴露实际质量倒退。generation 1 在 8.947s 已有 foreground：projected HP loss 19、strategic deficit 17、enemy HP 68；请求直到 39.750s 才结束，后台新增 16,437 expanded / 138,385 transitions。最终 SearchCompletion 却是 novelty 的完整胜利：HP loss 39、strategic deficit 23、enemy HP 0。诊断明确 `relation=foreground_better`，随后该 39 战损结果仍被 `SEARCH_RESULT_ROUTE_CAPTURE` 捕获并 `DEPLOY_START`，证明 E2 只保护搜索中前台，没有保护自然完成边界。
+GLOBE_HEAD_NORMAL `a1f9a44b5dab4dc8ad9ac4864529673b` 来自 `0.40.2+071a5218a4d21b050ca1832f901eded971c01736`，证明上一版 completion guard 仍漏一条路径。generation 3 在 9.026s 已有 potion_disabled foreground：12 战损 / strategic deficit 2 / enemy HP 211；30.165s 最终 potion_required 结果为完整胜利，但 25 战损 / deficit 9 / 1 瓶药。日志明确 `SEARCH_E3_FINAL_VS_FOREGROUND relation=foreground_better`，最终 RESULT 却仍为 25 战损，并在 T2 exact continuation 中复用。
 
-当前修复：
-1. 只在 `MultiplayerSinglePlayerCore` 的自然 SearchCompletion 上启用 completion guard。
-2. 用现有 `CanPromoteDisplayedResult` 判断最后 foreground 是否严格优于 final，不新增评分。
-3. 不直接执行 preview；先调用其 `RouteAdoptionSeed.Materialize()` 从根精确重放。
-4. 对物化结果再次用同一质量排序与 final 比较；只有仍严格更优才返回 RouteAdoption。
-5. 新日志 `SEARCH_E3_COMPLETION_FOREGROUND_GUARD` 记录 candidate version、final/foreground 战损、战略 deficit、敌血和最终 scope。
-6. pinned 合同固定本包关系：19 战损 rolling-horizon foreground 必须阻止 39 战损 terminal final 的自然覆盖。
+根因：071a guard 只在 `currentRouteAdoptionSeed != null` 时接管；该 foreground 正处于 E1 的正式 materialization progress，route seed 按安全设计暂时为 null，因此 guard 没有触发。
 
-下一份实机需要看到该日志，并确认 `SEARCH_RESULT_ROUTE_CAPTURE` / `DEPLOY_START` 捕获的是精确物化后的低战损 foreground，而不是原 39 战损 final。通过后 E3 才可真正收口并进入 E4。
+当前修复不放宽 E1 执行授权。成员完成时若精确 `SolverResult` 的动作与当前 speculative foreground 完全一致、且 interim summary 等于当前 displayed result，则仅在协调器内部记录 `currentMaterializedForegroundResult`，不发布为提前可执行 seed。自然 SearchCompletion 时：
+1. 优先使用现有 route seed；
+2. seed 暂空时使用这个已完成成员的精确 materialized result；
+3. 对精确结果再次用 `ShouldPreferForegroundAtCompletion` 比较，仍严格更优才替换 final；
+4. 日志 `SEARCH_E3_COMPLETION_FOREGROUND_GUARD source=completed_member|route_seed` 标明来源。
+
+下一包要求看到 generation 内 `SEARCH_E3_FOREGROUND_BACKING_CAPTURED`，若 final 更差则必须随后出现 `SEARCH_E3_COMPLETION_FOREGROUND_GUARD source=completed_member`，最终 RESULT 的战损应保持 foreground，而不是再次回退到更差 terminal final。
 ## 当前未验证边界
 
 - E1 已通过实机验证。E2 的 keep/replace 诊断与 pinned 合同已加入，仍需一份 current HEAD 实机日志证明真实后台候选按生产质量排序稳定替换/保留。

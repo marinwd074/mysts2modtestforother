@@ -548,6 +548,35 @@ internal static class Program
                 scrollsForeground,
                 scrollsFinal),
             "E3 completion guard reversed the strict foreground/final quality relation.");
+
+        PlanAction foregroundAction = new(PlanActionKind.EndTurn, 1);
+        SolverSpeculativeRoutePreview foregroundPreview = new(
+            CandidateVersion: 23,
+            StartTurnNumber: 1,
+            ProjectedBattlePotionCount: 0,
+            ProjectedBattleHpLost: 12,
+            CombatEnded: false,
+            OnlyDeathRoutesFound: false,
+            HasRisk: false,
+            Turns:
+            [
+                new SolverFrontierTurn(
+                    Turn: 1,
+                    Actions: [foregroundAction],
+                    HpLost: 0,
+                    HpRecovered: 0,
+                    EnemyHpLost: 0,
+                    EnergyLeft: 0,
+                    CombatEnded: false),
+            ]);
+        Require(
+            CombatSearchCoordinator.RouteMatchesPreview(
+                [foregroundAction],
+                foregroundPreview)
+            && !CombatSearchCoordinator.RouteMatchesPreview(
+                [new PlanAction(PlanActionKind.EndTurn, 2)],
+                foregroundPreview),
+            "E3 completion backing did not require exact displayed route actions.");
     }
 
     private static void ValidateDarkEmbracePredictionCoverage()
