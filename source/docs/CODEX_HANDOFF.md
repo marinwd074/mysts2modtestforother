@@ -138,20 +138,22 @@ state_mismatch
 
 ## 下一任务
 
-先实机验证 E3 completion 的 current-turn fallback，再进入 E4。
+实机验证 E4-A：高质量前台形成后限制 supplemental/potion 长尾，但不缩主 Beam。
 
-KNIGHTS_ELITE `251346020d114e749c5860c29fd9cc4b` 来自 `0.40.2+52f8a764581e20737199e70d6b7a3abfc1a9c308`，证明第二版 completion backing guard 仍漏非终局 foreground。generation 9 在 25.291s 已由 potion_disabled 把 foreground 从 38 战损降到 5 战损；请求持续到 120.050s。最终 novelty SearchCompletion 却是完整胜利但 41 战损。诊断明确 `SEARCH_E3_FINAL_VS_FOREGROUND relation=foreground_better final_hp_loss=41 foreground_hp_loss=5`，随后 `SEARCH_RESULT_ROUTE_CAPTURE` 仍捕获 41 战损 route `0e6ccb...` 并由 Safe Execute 执行。整包没有 `SEARCH_E3_FOREGROUND_BACKING_CAPTURED` 或 `SEARCH_E3_COMPLETION_FOREGROUND_GUARD`。
+TEST_SUBJECT_BOSS `19137cca8baa4f26bece04828153965e` 来自 `0.40.2+e4aef0e07d82a39a8c404f30e21dd66d8a1cba60`，已闭合 E3 completion guard 第三版：真实出现 `SEARCH_E3_COMPLETION_FOREGROUND_GUARD source=current_turn_seed scope=CurrentTurnAdoption`，更差自然 final 不再覆盖已批准当前回合前台。实验体 260→520→780 HP 阶段转换也未复现旧卡死/跨阶段硬复用。
 
-根因：这个 5 战损 foreground 是非终局 Rolling-Horizon 候选，没有完整 route seed，也没有与 speculative preview 完全一致的 completed-member SolverResult，所以 52f8 的 full-route backing 仍为空；但该 foreground 已经拥有与其当前回合 preview 对齐的 `CurrentTurnAdoptionSeed`。
+E3 多包证据同时表明：主 potion_disabled 的有效改善常在 25–40 秒才出现，不能砍主搜索；但最后一次 foreground 改善后 supplemental potion 长尾可继续 30–80+ 秒而不改善最终质量。E4-A 因而只收紧第一轮 MultiplayerSinglePlayerCore 的 supplemental 总墙钟：
 
-当前第三版 guard：
-1. 仍先要求现有 `ShouldPreferForegroundAtCompletion` 证明 foreground 严格优于 final，不新增质量规则。
-2. materialization 优先级保持 `route_seed -> completed_member`；两者都不可用时，若 `CurrentTurnAdoptionSeed.Actions` 与当前 approved `CurrentTurnPreview.Actions` 完全一致，则精确 materialize 该 seed。
-3. fallback 结果强制标记 `CurrentTurnAdoption`：只执行已经批准的当前回合前缀，下一回合从真实根重新搜索；不把 partial preview 伪装成完整路线。
-4. 精确 materialize 后再次与 final 用同一质量排序比较，仍更优才接管。
-5. 诊断应出现 `SEARCH_E3_COMPLETION_FOREGROUND_GUARD source=current_turn_seed`。
+1. 主 Beam / Novelty / potion_disabled、BeamWidth、节点、并发与质量排序完全不变。
+2. 只有已经存在正式批准且存活的 foreground 时才启用。
+3. supplemental 至少获得 20 秒；若 foreground 刚改善，则至少保留到“最后一次改善后 30 秒”。
+4. deadline 仍受原请求总预算上限约束；不会延长原预算。
+5. 单人模式、没有批准前台、用户显式 Force potion、以及 NO_VICTORY_ESCALATION 全部保持原预算。
+6. completion guard 继续兜底；E4 不引入新的路线质量比较。
+7. 新日志 `SEARCH_E4_SUPPLEMENTAL_BUDGET` 记录 start/last improvement/original deadline/E4 deadline。
 
-本包还确认 continuation state 已包含敌人 next move 和 AI 序列（E0/E1/E2 与 AI0/AI1/AI2），第 2 回合因真实 HP/history 差异正常 `SEARCH_REUSE_MISS state_mismatch`；当前没有证据支持另加一套 AI timeline fingerprint。
+下一份长 Elite/Boss 包重点验证：主 potion_disabled 的最后有效 replace 时间是否不变；supplemental 是否在 E4 deadline 附近结束；最终/foreground 质量不得比 E3 基线回退。若出现被截断后明显更差的合法 potion 路线，撤回/放宽 E4 deadline，不调整质量排序。
+
 ## 当前未验证边界
 
 - E1 已通过实机验证。E2 的 keep/replace 诊断与 pinned 合同已加入，仍需一份 current HEAD 实机日志证明真实后台候选按生产质量排序稳定替换/保留。

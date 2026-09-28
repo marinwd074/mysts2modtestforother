@@ -9,6 +9,40 @@ internal static partial class CombatSearchCoordinator
     private static readonly SearchWorkAllowance E3FixedMemberAllowance = new(
         maxParentCommits: 256,
         maxTransitions: 1_024);
+    private const int E4SupplementalMinimumGraceMilliseconds = 20_000;
+    private const int E4SupplementalFreshImprovementWindowMilliseconds = 30_000;
+
+    internal static int ComputeE4SupplementalDeadlineMilliseconds(
+        SearchRoutePolicy routePolicy,
+        int configuredBudgetMilliseconds,
+        long supplementalStartMilliseconds,
+        long lastImprovementMilliseconds,
+        bool hasApprovedForeground,
+        bool hasForcedPotionDirectives,
+        bool isPrimaryPass)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(configuredBudgetMilliseconds, 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(supplementalStartMilliseconds);
+        ArgumentOutOfRangeException.ThrowIfNegative(lastImprovementMilliseconds);
+        if (routePolicy != SearchRoutePolicy.MultiplayerSinglePlayerCore
+            || !hasApprovedForeground
+            || hasForcedPotionDirectives
+            || !isPrimaryPass
+            || supplementalStartMilliseconds >= configuredBudgetMilliseconds)
+        {
+            return configuredBudgetMilliseconds;
+        }
+
+        long boundedImprovement = Math.Min(
+            lastImprovementMilliseconds,
+            supplementalStartMilliseconds);
+        long minimumDeadline = supplementalStartMilliseconds
+            + E4SupplementalMinimumGraceMilliseconds;
+        long freshnessDeadline = boundedImprovement
+            + E4SupplementalFreshImprovementWindowMilliseconds;
+        long deadline = Math.Max(minimumDeadline, freshnessDeadline);
+        return (int)Math.Min(configuredBudgetMilliseconds, deadline);
+    }
 
     private static SolverResult RunResumableMemberToCompletion(
         CombatBeamSolver solver,
@@ -1129,6 +1163,45 @@ internal static partial class CombatSearchCoordinator
                     ReleaseR1TransitionHydration("acceptable_loss", emitTelemetry: false);
                     return SelectContinuationSeedIncumbent(passResult);
                 }
+                SolverSearchProfile supplementalProfile = activeProfile;
+                if (policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore)
+                {
+                    long supplementalStartMs = (long)Math.Round(
+                        portfolioTelemetry.ToRequestMilliseconds(Stopwatch.GetTimestamp()));
+                    long qualityAnchorMs = firstForegroundPublishedTicks.HasValue
+                        ? (long)Math.Round(portfolioTelemetry.ToRequestMilliseconds(
+                            lastForegroundImprovementTicks ?? firstForegroundPublishedTicks.Value))
+                        : supplementalStartMs;
+                    bool hasApprovedForeground =
+                        firstForegroundPublishedTicks.HasValue
+                        && currentDisplayedResult?.Survives == true;
+                    bool isPrimaryPass = ReferenceEquals(passClock, requestClock);
+                    int e4DeadlineMs = ComputeE4SupplementalDeadlineMilliseconds(
+                        policy.RoutePolicy,
+                        activeProfile.SoftTimeBudgetMilliseconds,
+                        supplementalStartMs,
+                        qualityAnchorMs,
+                        hasApprovedForeground,
+                        policy.PotionStrategy.HasForcedDirectives,
+                        isPrimaryPass);
+                    if (e4DeadlineMs < activeProfile.SoftTimeBudgetMilliseconds)
+                    {
+                        supplementalProfile = activeProfile with
+                        {
+                            SoftTimeBudgetMilliseconds = e4DeadlineMs,
+                        };
+                    }
+                    policy.Diagnostics.Info(
+                        $"[CombatSolver/Test] SEARCH_E4_SUPPLEMENTAL_BUDGET " +
+                        $"active={(e4DeadlineMs < activeProfile.SoftTimeBudgetMilliseconds).ToString().ToLowerInvariant()} " +
+                        $"primary_pass={isPrimaryPass.ToString().ToLowerInvariant()} " +
+                        $"approved_foreground={hasApprovedForeground.ToString().ToLowerInvariant()} " +
+                        $"forced_potions={policy.PotionStrategy.HasForcedDirectives.ToString().ToLowerInvariant()} " +
+                        $"start_ms={supplementalStartMs} last_improvement_ms={qualityAnchorMs} " +
+                        $"original_deadline_ms={activeProfile.SoftTimeBudgetMilliseconds} " +
+                        $"e4_deadline_ms={e4DeadlineMs}");
+                }
+
                 passResult = RunSupplementalAudits(
                     root,
                     displayNames,
@@ -1141,7 +1214,7 @@ internal static partial class CombatSearchCoordinator
                     },
                     cancellationToken,
                     progressCallback,
-                    activeProfile,
+                    supplementalProfile,
                     activeClock,
                     passResult,
                     memoryForecast,

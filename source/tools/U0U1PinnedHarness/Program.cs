@@ -54,6 +54,7 @@ internal static class Program
             Console.WriteLine($"search_patches={patchCount}");
             ValidateDarkEmbracePredictionCoverage();
             ValidateViciousStrategicValue();
+            ValidateE4SupplementalBudgetContract();
             ValidateRollingHorizonQualityContract();
             ValidateRouteInvalidationVersionContract();
             ValidateMultiplayerLethalReuseBoundary();
@@ -453,6 +454,66 @@ internal static class Program
         {
             MultiplayerRouteChangeTracker.Reset();
         }
+    }
+
+    private static void ValidateE4SupplementalBudgetContract()
+    {
+        Require(
+            CombatSearchCoordinator.ComputeE4SupplementalDeadlineMilliseconds(
+                SearchRoutePolicy.MultiplayerSinglePlayerCore,
+                120_000,
+                40_000,
+                38_000,
+                hasApprovedForeground: true,
+                hasForcedPotionDirectives: false,
+                isPrimaryPass: true) == 68_000,
+            "E4 must preserve 30 seconds after a fresh foreground improvement.");
+
+        Require(
+            CombatSearchCoordinator.ComputeE4SupplementalDeadlineMilliseconds(
+                SearchRoutePolicy.MultiplayerSinglePlayerCore,
+                120_000,
+                40_000,
+                5_000,
+                hasApprovedForeground: true,
+                hasForcedPotionDirectives: false,
+                isPrimaryPass: true) == 60_000,
+            "E4 must still grant at least 20 seconds of supplemental grace after a stale foreground.");
+
+        Require(
+            CombatSearchCoordinator.ComputeE4SupplementalDeadlineMilliseconds(
+                SearchRoutePolicy.MultiplayerSinglePlayerCore,
+                120_000,
+                40_000,
+                38_000,
+                hasApprovedForeground: false,
+                hasForcedPotionDirectives: false,
+                isPrimaryPass: true) == 120_000
+            && CombatSearchCoordinator.ComputeE4SupplementalDeadlineMilliseconds(
+                SearchRoutePolicy.SinglePlayerFullRoute,
+                120_000,
+                40_000,
+                38_000,
+                hasApprovedForeground: true,
+                hasForcedPotionDirectives: false,
+                isPrimaryPass: true) == 120_000
+            && CombatSearchCoordinator.ComputeE4SupplementalDeadlineMilliseconds(
+                SearchRoutePolicy.MultiplayerSinglePlayerCore,
+                120_000,
+                40_000,
+                38_000,
+                hasApprovedForeground: true,
+                hasForcedPotionDirectives: true,
+                isPrimaryPass: true) == 120_000
+            && CombatSearchCoordinator.ComputeE4SupplementalDeadlineMilliseconds(
+                SearchRoutePolicy.MultiplayerSinglePlayerCore,
+                120_000,
+                40_000,
+                38_000,
+                hasApprovedForeground: true,
+                hasForcedPotionDirectives: false,
+                isPrimaryPass: false) == 120_000,
+            "E4 must not cap searches without an approved foreground, single-player, forced-potion directives, or no-victory escalation passes.");
     }
 
     private static void ValidateRollingHorizonQualityContract()
