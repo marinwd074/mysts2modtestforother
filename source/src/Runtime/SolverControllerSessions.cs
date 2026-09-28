@@ -189,6 +189,7 @@ internal sealed class SolverSearchSession(
     public int ReferenceReleaseState;
     public int CancellationDisposeState;
     public bool DeployWhenReady { get; set; } = deployWhenReady;
+    public int ForegroundPublishedCandidateVersion { get; set; } = -1;
     public int MaxDegreeOfParallelism { get; set; } = 1;
     public SearchMemoryPressureSignal? MemoryPressureSignal { get; set; }
     public SearchInteractionState Interaction { get; } = new();

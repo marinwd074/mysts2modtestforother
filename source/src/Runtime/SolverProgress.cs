@@ -315,4 +315,12 @@ internal sealed record SolverProgress(
     // wins the global displayed-result ordering.
     public CandidateOrigin? OfficialPublishedOrigin { get; init; }
     public string? OfficialPublishedEvaluationContextId { get; init; }
+
+    public bool HasApprovedForegroundRoute
+        => OfficialPublishedOrigin != null
+            && !string.IsNullOrWhiteSpace(OfficialPublishedEvaluationContextId)
+            && CurrentTurnPreview != null
+            && SpeculativeRoutePreview != null
+            && RouteAdoptionSeed != null
+            && RouteAdoptionSeed.CandidateVersion == SpeculativeRoutePreview.CandidateVersion;
 }

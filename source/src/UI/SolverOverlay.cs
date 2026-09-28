@@ -706,14 +706,20 @@ internal static partial class SolverOverlay
             "切换用药路线",
             StringComparison.Ordinal);
         bool refiningRoute = string.Equals(progress.Phase, "正在精炼路线", StringComparison.Ordinal);
+        bool foregroundApproved = progress.HasApprovedForegroundRoute;
         SetStatus(
-            reclaimingMemory
-                ? changingPotionGradient ? SolverText.Get("切换用药路线") : SolverText.Get("正在整理内存")
-                : refiningRoute ? SolverText.Get("正在精炼路线") : SolverText.Get("后台计算中"),
-            reclaimingMemory ? Warning : Accent,
+            foregroundApproved
+                ? SolverText.Get("方案可用 · 后台继续优化")
+                : reclaimingMemory
+                    ? changingPotionGradient ? SolverText.Get("切换用药路线") : SolverText.Get("正在整理内存")
+                    : refiningRoute ? SolverText.Get("正在精炼路线") : SolverText.Get("后台计算中"),
+            foregroundApproved ? Success : reclaimingMemory ? Warning : Accent,
             deployWhenReady ? SolverText.Format($"{routeContext}    已排队执行") : routeContext);
         if (_routeHeadingLabel != null)
-            _routeHeadingLabel.Text = SolverText.Get("求解器当前考虑（尚未验证）");
+            _routeHeadingLabel.Text = SolverText.Get(
+                foregroundApproved
+                    ? "求解器当前建议（已通过正式排序）"
+                    : "求解器当前考虑（尚未验证）");
         if (_progressText != null)
         {
             _progressText.Visible = true;

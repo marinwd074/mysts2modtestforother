@@ -1737,7 +1737,21 @@ internal static partial class SolverController
     public static void RefreshSearchProgress()
     {
         AssertMainThread();
-        if (_search is not { } search || !SolverOverlay.IsVisible
+        if (_search is not { } search)
+            return;
+
+        SolverProgress? latestProgress = Volatile.Read(ref search.Interaction.Progress);
+        if (latestProgress is { HasApprovedForegroundRoute: true, RouteAdoptionSeed: { } approvedSeed }
+            && approvedSeed.CandidateVersion > search.ForegroundPublishedCandidateVersion)
+        {
+            search.ForegroundPublishedCandidateVersion = approvedSeed.CandidateVersion;
+            Entry.Logger.Info(
+                $"[CombatSolver/Test] SEARCH_E_FOREGROUND_PUBLISHED " +
+                $"generation={search.Generation} candidate_version={approvedSeed.CandidateVersion} " +
+                $"turn={latestProgress.StartTurnNumber} background_continues=true");
+        }
+
+        if (!SolverOverlay.IsVisible
             || !search.Interaction.TryCreateDisplayProgress(
                 System.Environment.TickCount64,
                 out SolverProgress progress))

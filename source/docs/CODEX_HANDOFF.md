@@ -25,8 +25,8 @@
 - **A 现状与测量：完成。**
 - **B 延迟影响合同：完成。**
 - **C 战斗级 R0 转移缓存：完成。**
-- **D 新根恢复 R1：进行中，已进入后半段。**
-- **E 前台/后台分离：未开始。**
+- **D 新根恢复 R1：完成。**
+- **E 前台/后台分离：进行中，进入 E1 可信前台发布。**
 - **F 情景预热：未开始。**
 - **G SSD 冷存储：未开始。**
 - **H 质量与响应验收：未开始。**
@@ -57,14 +57,17 @@ BeamRankScore 首验后复用已落地。第一次 exact key 命中仍现算并�
 - D3.3B：改为 **per-key fail-closed**。坏 key 只拒绝自身，不再关闭整次请求。
 - D3.3C：通过首验的 transition hydration cache 生命周期已延长到同一 request 的 supplemental audits 结束；baseline 和 request-tail 分别输出 telemetry，最终再释放原型 simulator。
 
-当前 D3.3C 需要的实机闭合证据：
+D3.3C 已由 THE_OBSCURA NORMAL 实机包 `c20503100021438b8502afb9582cd611` 闭合。第一次 fresh re-root 的 request-tail 为：
 
 ```text
-validated_keys > 0
-hydration_hits > 0
-output_mismatches = 0
-rejected_keys = 0
+validated_keys=1
+hydration_hits=1
+output_mismatches=0
+rejected_keys=0
+reuse_disabled=false
 ```
+
+同包第二次 fresh re-root 出现单 key `output_state_key` mismatch，并由 D3.3B 正确独立拒绝（`hydration_hits=0 / output_mismatches=1 / rejected_keys=1 / reuse_disabled=false`）。因此 exact hydration 已证明既能真实命中，也能在坏 key 上 fail-closed；原 D3.5 retained frontier/subtree 方案保持暂停，不再阻塞阶段 D 收尾。
 
 ### D3.4 / D3.4B / D3.4C
 
@@ -135,36 +138,19 @@ state_mismatch
 
 ## 下一任务
 
-只做一件事：取得一份真正覆盖 D3.3C 的 fresh re-root 实机包。
+进入阶段 E，只做 E1：把“前台可用建议”和“后台继续探索”建立成明确边界。
 
-推荐场景：
+当前实现方向：
 
-1. 多人、至少 2 个敌人、战斗可持续 3 回合以上。
-2. Solver 先形成跨回合路线。
-3. 队友提前击杀原路线中预计仍存活的一个敌人，使 exact continuation 失效。
-4. 不额外改变本地手牌/能量/玩家身份，保留 R1 seed 合法性。
-5. 下一本地回合等待完整 request 结束，再导出问题包。
-
-目标链：
-
-```text
-SEARCH_REUSE_MISS reason=state_mismatch
-MP_LOCAL_XTURN_SEED_CAPTURE captured_actions>0
-resume_kind=seeded_search
-R1_REROOT_RECOVERY
-R1_TRANSITION_HYDRATION stage=baseline
-R1_TRANSITION_HYDRATION_TAIL stage=request_tail
-```
-
-判断：
-
-- 若 `hydration_hits > 0` 且 mismatch/reject 为 0：闭合 D3.3C，评估阶段 D 是否可以收尾并进入 E。
-- 若连续真实 seeded-search 都是 `validated_keys > 0 / hydration_hits = 0`：停止继续扩宽复用，先定位 supplemental 为什么没有再次访问已验证 exact key。
-- 若出现 output mismatch：先修对应 transition，一律不扩大 hydration。
+1. 只把**已经完成生产正式排序且同时赢得全局 displayed-result ordering** 的进度候选标记为前台已批准；普通 interim preview 仍明确标为“尚未验证”。
+2. 前台发布只使用现有不可变 preview / candidate version，不把后台仍可能继续填充诊断数据的 `SolverResult` 直接共享到主线程。
+3. 发布后后台搜索继续；本轮不提前自动部署、不改变搜索预算、不改变 Beam/Portfolio、也不降低现有手动 takeover 的质量保护。
+4. 旧 search session 继续由实例身份隔离；旧 epoch 的 progress 不得发布成当前建议。
+5. 先用构建/合同确认边界，再收一份真实搜索日志验证出现 `SEARCH_E_FOREGROUND_PUBLISHED ... background_continues=true`，且随后正式完成结果或状态变化能正常覆盖/作废它。
 
 ## 当前未验证边界
 
-- D3.3C request-tail 是否产生真实 hydration hit 和可测 replay 节省。
+- 阶段 E1 的可信前台发布仍需 current HEAD 构建/合同与一份真实搜索日志补证；本轮不把 UI “已批准”视为可提前自动部署授权。
 - U5/U6 历史 Host/Client observation → fresh replan 的部分真实多人边界仍不是 pinned replay 可替代的证据。
 - GitHub Issue #8：多人 Safe Execute 的 Headbutt / turn-start Choice 仍需 current HEAD Host/Client 复验。
 - GitHub Issue #9：Vicious 战略估值修复仍需 comparable current multiplayer root 复验。
