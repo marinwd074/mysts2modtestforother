@@ -138,19 +138,18 @@ state_mismatch
 
 ## 下一任务
 
-先验证 INFESTED_PRISMS 的斩杀窗口复用修复，再继续 E3 后台有效率测量。
+继续 E3，但先收一份带 `SEARCH_E3_FINAL_VS_FOREGROUND` 的实机包，再决定 E4 调度。
 
-问题包 `604411ffffe44ca388ece05d9eb8e594` 暴露高优先级质量漏洞：第 4/5 回合真实敌人已经只有 4 HP；第 5 回合另有 9 Block，总耐久 13/386。日志仍为 `in_lethal_window=true / enemy_hp_route_changed=false`，下一回合结果为 `reused=True / reused_from_turn=4 / expanded=0`，证明旧路线没有从真实低血根重新搜索即时斩杀。
+KAISER_CRAB_BOSS `35db6c5d375e4f5d883d122a86acba84` 来自 `0.40.2+5b4c6eb18846ace9918ad936494103f75267c294`，已闭合上一轮低血斩杀修复：第 2 回合真实敌方仅 Crusher 40 + Rocket 31，continuation 明确 `allow_living_enemy_hp_decrease=false` 并以 `state_mismatch` 拒绝旧路线；本场 `reused=0`。第 2 回合 fresh search 击杀 Rocket，第 3 回合从 Crusher 40 HP 真实根 fresh search，仅展开 101 节点 / 40ms 就以 PERFECTED_STRIKE 结束战斗。
 
-当前修复：
-1. 斩杀窗口外仍允许同一存活敌人的纯 HP 下降软复用。
-2. 一旦进入 `IsInLethalRecalculationWindow`，敌人 HP 变化无条件推进 route invalidation，当前旧路线不能继续执行。
-3. 跨回合 continuation 在斩杀窗口内同样禁止 living-enemy HP-decrease 软兼容。
-4. 旧 `UseMultiplayerLethalHpRecalculation` 只保留配置/报告兼容，不再控制生产质量；UI 对应实验开关已移除。
-5. pinned 合同固定本次样本：13/386 必须处于 lethal window，200/386 必须保持窗口外。
+同一包同时给出首份 E3 基线：
+- generation 1：首 foreground 5.073s；12.625s 由 potion_disabled 将 projected HP loss 45 → 6；请求到 29.196s 才结束，最后一次 foreground 改善后仍有约 16.571s。
+- generation 2：首 foreground 7.892s，之后约 14.831s 没有 replace；后台新启动成员累计 46,333 transitions。
+- generation 3：首 foreground 后仅约 0.468s 长尾。
 
-下一份实机先确认低血变化出现 `in_lethal_window=true enemy_hp_route_changed=true`，随后 fresh search，而不是低血下继续 `SEARCH_REUSED ... remote_enemy_hp_decrease`。通过后再继续使用 `SEARCH_E3_BACKGROUND_VALUE` 分析后台成本。
+但 generation 1 的最终返回路线来自后续 potion_required，而 E2 foreground 没有被它 replace；因此“没有 foreground 改善”不能直接等价于“对最终执行无价值”。现在新增 `SEARCH_E3_FINAL_VS_FOREGROUND`：请求结束时把最终 `SolverResult` 转回同一 `SolverInterimResult` 质量空间，用现有 `CanPromoteDisplayedResult` 双向比较，记录 `final_better / foreground_better / equivalent_or_incomparable` 及两边战损、战略 deficit、敌血、药水。只测量，不改变 final selection。
 
+下一包若证明长尾 final 也不优于 foreground，E4 才有证据压缩对应 member_kind；如果 final_better，则不能直接砍该成员。
 ## 当前未验证边界
 
 - E1 已通过实机验证。E2 的 keep/replace 诊断与 pinned 合同已加入，仍需一份 current HEAD 实机日志证明真实后台候选按生产质量排序稳定替换/保留。

@@ -264,6 +264,41 @@ internal static partial class CombatSearchCoordinator
                 });
             };
 
+        void LogFinalVsForeground(SolverResult selected)
+        {
+            if (currentDisplayedResult is not { } foreground)
+                return;
+
+            SolverInterimResult final = BuildInterimResult(root, policy, selected);
+            bool finalWouldReplaceForeground =
+                SolverInterimResultOrdering.CanPromoteDisplayedResult(final, foreground);
+            bool foregroundWouldReplaceFinal =
+                SolverInterimResultOrdering.CanPromoteDisplayedResult(foreground, final);
+            string relation = finalWouldReplaceForeground
+                ? "final_better"
+                : foregroundWouldReplaceFinal
+                    ? "foreground_better"
+                    : "equivalent_or_incomparable";
+            CandidateOrigin? finalOrigin = selected.SearchEfficiencyOrigin;
+            SearchEfficiencyMemberReport? finalMember = finalOrigin == null
+                ? null
+                : portfolioTelemetry.FindSearchMember(finalOrigin.SearchMemberId);
+            policy.Diagnostics.Info(
+                $"[CombatSolver/Test] SEARCH_E3_FINAL_VS_FOREGROUND " +
+                $"relation={relation} " +
+                $"final_member_id={finalOrigin?.SearchMemberId.ToString() ?? "-"} " +
+                $"final_member_kind={finalMember?.Kind ?? "unknown"} " +
+                $"final_won={final.Won.ToString().ToLowerInvariant()} " +
+                $"foreground_won={foreground.Won.ToString().ToLowerInvariant()} " +
+                $"final_hp_loss={final.ProjectedBattleHpLost} " +
+                $"foreground_hp_loss={foreground.ProjectedBattleHpLost} " +
+                $"final_strategic_deficit={final.StrategicHpDeficit} " +
+                $"foreground_strategic_deficit={foreground.StrategicHpDeficit} " +
+                $"final_enemy_hp={final.EnemyHp} foreground_enemy_hp={foreground.EnemyHp} " +
+                $"final_potions={final.ProjectedBattlePotionCount} " +
+                $"foreground_potions={foreground.ProjectedBattlePotionCount}");
+        }
+
         void LogBackgroundValueSummary()
         {
             if (firstForegroundPublishedTicks is not long firstTicks)
@@ -325,6 +360,7 @@ internal static partial class CombatSearchCoordinator
                 selected.SearchEfficiencyEvaluationContextId ?? string.Empty);
             PopulateRequestWorkTotals(selected, requestWorkTotals);
             selected.PortfolioTelemetry = portfolioTelemetry;
+            LogFinalVsForeground(selected);
             LogBackgroundValueSummary();
             LogSearchEfficiencySummary(root, policy.Diagnostics, selected, portfolioTelemetry);
             return selected;
@@ -349,6 +385,7 @@ internal static partial class CombatSearchCoordinator
                 adopted.SearchEfficiencyEvaluationContextId ?? string.Empty);
             PopulateRequestWorkTotals(adopted, requestWorkTotals);
             adopted.PortfolioTelemetry = portfolioTelemetry;
+            LogFinalVsForeground(adopted);
             LogBackgroundValueSummary();
             LogSearchEfficiencySummary(
                 root,
