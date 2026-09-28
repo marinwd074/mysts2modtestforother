@@ -14,6 +14,8 @@ on:
       - 'source/src/Search/SearchPolicySnapshot.cs'
       - 'source/src/Runtime/SolverControllerSessions.cs'
       - 'source/src/Runtime/SolverController.SearchLifecycle.cs'
+      - 'source/src/Runtime/SolverController.cs'
+      - 'source/src/Runtime/SolverProgress.cs'
       - 'source/src/Runtime/SolverDiagnostics.cs'
       - 'source/src/Search/CombatBeamSolver.Models.cs'
       - 'source/src/Search/CombatBeamSolver.Phases.cs'
