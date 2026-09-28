@@ -580,7 +580,7 @@ internal static class Program
 
         SolverCurrentTurnPreview currentTurnPreview = new(
             CandidateVersion: 31,
-            StartTurnNumber: 1,
+            Turn: 1,
             Actions: [foregroundAction],
             HpLost: 0,
             HpRecovered: 0,
