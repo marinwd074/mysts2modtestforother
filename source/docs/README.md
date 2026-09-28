@@ -7,9 +7,9 @@
 | 目的 | 文件 |
 |---|---|
 | 当前状态 / 下一任务 | [CODEX_HANDOFF.md](CODEX_HANDOFF.md) |
-| 当前质量优先计划 | [CombatSolver_Quality_First_Next.md](CombatSolver_Quality_First_Next.md) |
-| 多人本地核心搜索效率任务书 | [Multiplayer_LocalCore_Search_Optimization.md](Multiplayer_LocalCore_Search_Optimization.md) |
-| 当前回合决策、滚动时域与持续复用设计 | [Rolling_Horizon_Reuse_Architecture.md](Rolling_Horizon_Reuse_Architecture.md) |
+| 当前主执行计划（A → H） | [Rolling_Horizon_Reuse_Architecture.md](Rolling_Horizon_Reuse_Architecture.md) |
+| 坏路线 / 质量专项参考 | [CombatSolver_Quality_First_Next.md](CombatSolver_Quality_First_Next.md) |
+| 多人本地核心搜索效率任务书（P0–P4 已关闭） | [Multiplayer_LocalCore_Search_Optimization.md](Multiplayer_LocalCore_Search_Optimization.md) |
 | 多人总体架构计划 | [CombatSolver_GPT_Architecture_Plan.md](CombatSolver_GPT_Architecture_Plan.md) |
 | 架构、职责、状态所有权 | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | 当前验证入口 | [TEST_MATRIX.md](TEST_MATRIX.md) |
