@@ -11,6 +11,7 @@ internal static partial class CombatSearchCoordinator
         maxTransitions: 1_024);
     private const int E4SupplementalMinimumGraceMilliseconds = 20_000;
     private const int E4SupplementalFreshImprovementWindowMilliseconds = 30_000;
+    private const int E4SmartPotionDegradedBudgetMilliseconds = 10_000;
     private readonly record struct E4SupplementalBudgetContext(
         long RequestElapsedMilliseconds,
         long LastImprovementMilliseconds,
@@ -65,6 +66,21 @@ internal static partial class CombatSearchCoordinator
             + E4SupplementalFreshImprovementWindowMilliseconds;
         long deadline = Math.Max(minimumDeadline, freshnessDeadline);
         return (int)Math.Min(configuredBudgetMilliseconds, deadline);
+    }
+
+    internal static int ComputeE4SmartPotionStageDeadlineMilliseconds(
+        int supplementalBudgetMilliseconds,
+        long stageStartMilliseconds,
+        bool e4Active)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(supplementalBudgetMilliseconds, 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(stageStartMilliseconds);
+        if (!e4Active || stageStartMilliseconds >= supplementalBudgetMilliseconds)
+            return supplementalBudgetMilliseconds;
+
+        return (int)Math.Min(
+            supplementalBudgetMilliseconds,
+            stageStartMilliseconds + E4SmartPotionDegradedBudgetMilliseconds);
     }
 
     private static SolverResult RunResumableMemberToCompletion(
@@ -1220,6 +1236,7 @@ internal static partial class CombatSearchCoordinator
                     return SelectContinuationSeedIncumbent(passResult);
                 }
                 SolverSearchProfile supplementalProfile = activeProfile;
+                bool e4SmartPotionBudgetActive = false;
                 if (policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore)
                 {
                     E4SupplementalBudgetContext e4Context =
@@ -1242,6 +1259,7 @@ internal static partial class CombatSearchCoordinator
                         isPrimaryPass);
                     bool e4Active =
                         e4DeadlineMs < activeProfile.SoftTimeBudgetMilliseconds;
+                    e4SmartPotionBudgetActive = e4Active;
                     int e4ActiveDeadlineMs = e4Active
                         ? ComputeE4ActiveClockDeadlineMilliseconds(
                             activeProfile.SoftTimeBudgetMilliseconds,
@@ -1287,7 +1305,8 @@ internal static partial class CombatSearchCoordinator
                     memoryForecast,
                     interimResultCallback,
                     earlySmartPotionBaseline,
-                    earlySmartPotionScout);
+                    earlySmartPotionScout,
+                    e4SmartPotionBudgetActive);
                 // The final potion audit may return another result object. Keep the
                 // primary-pass observations alongside the request's final outcome.
                 passResult.NoveltyPortfolio = noveltyPass;
@@ -1590,7 +1609,8 @@ internal static partial class CombatSearchCoordinator
         SmartLayerMemoryForecast memoryForecast,
         Action<SolverResult>? interimResultCallback,
         SolverResult? earlySmartPotionBaseline,
-        SolverResult? earlySmartPotionScout)
+        SolverResult? earlySmartPotionScout,
+        bool e4SmartPotionBudgetActive)
     {
         long remainingMilliseconds = profile.SoftTimeBudgetMilliseconds - requestClock.ElapsedMilliseconds;
         if (remainingMilliseconds <= 0)
@@ -1673,7 +1693,11 @@ internal static partial class CombatSearchCoordinator
                 $"after_potions={afterPotions} after_member_kind={afterMemberKind}");
         }
 
-        SolverResult MeasureE4Stage(string stage, SolverResult before, Func<SolverResult> run)
+        SolverResult MeasureE4Stage(
+            string stage,
+            SolverResult before,
+            Func<SolverResult> run,
+            Func<string>? completedStatus = null)
         {
             activeE4Stage = stage;
             activeE4Before = before;
@@ -1686,7 +1710,7 @@ internal static partial class CombatSearchCoordinator
                 after,
                 activeE4WorkBefore,
                 activeE4StartedMs,
-                status: "completed");
+                status: completedStatus?.Invoke() ?? "completed");
             activeE4Stage = null;
             activeE4Before = null;
             return after;
@@ -1732,6 +1756,26 @@ internal static partial class CombatSearchCoordinator
             else
             {
                 SolverResult beforeSmart = selected;
+                using CancellationTokenSource smartDeadline =
+                    CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
+                long smartStageStartMs = requestClock.ElapsedMilliseconds;
+                int smartStageDeadlineMs = ComputeE4SmartPotionStageDeadlineMilliseconds(
+                    profile.SoftTimeBudgetMilliseconds,
+                    smartStageStartMs,
+                    e4SmartPotionBudgetActive);
+                bool smartBudgetActive =
+                    smartStageDeadlineMs < profile.SoftTimeBudgetMilliseconds;
+                if (smartBudgetActive)
+                {
+                    smartDeadline.CancelAfter(TimeSpan.FromMilliseconds(
+                        Math.Max(1L, smartStageDeadlineMs - smartStageStartMs)));
+                }
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Test] SEARCH_E4_SMART_POTION_BUDGET " +
+                    $"active={smartBudgetActive.ToString().ToLowerInvariant()} " +
+                    $"stage_start_ms={smartStageStartMs} " +
+                    $"stage_deadline_ms={smartStageDeadlineMs} " +
+                    $"supplemental_deadline_ms={profile.SoftTimeBudgetMilliseconds}");
                 selected = MeasureE4Stage(
                     "smart_potion",
                     beforeSmart,
@@ -1740,13 +1784,19 @@ internal static partial class CombatSearchCoordinator
                         displayNames,
                         battleDamage,
                         policy,
-                        deadline.Token,
+                        smartDeadline.Token,
                         cancellationToken,
                         progressCallback,
                         profile,
                         beforeSmart,
                         memoryForecast,
-                        interimResultCallback));
+                        interimResultCallback),
+                    completedStatus: () =>
+                        smartDeadline.IsCancellationRequested
+                            ? deadline.IsCancellationRequested
+                                ? "deadline"
+                                : "degraded_deadline"
+                            : "completed");
             }
             if (HasReachedAcceptableBattleHpLoss(policy, selected))
                 return selected;
