@@ -577,6 +577,22 @@ internal static partial class SolverController
                 $"combat_mod_subscribers={rootSnapshot.CapturedCombatModSubscriberCount} " +
                 $"base_lib_card_modifiers={rootSnapshot.CapturedBaseLibCardModifiers}");
             _combat.TransitionMemo.BindCombat(rootSnapshot.ContinuationStamp.CombatIdentity);
+            ScenarioPrewarmRootObservation f0Prewarm =
+                ScenarioPrewarmShadowTracker.For(_combat.TransitionMemo)
+                    .ObserveRoot(rootSnapshot.ContinuationStamp);
+            if (searchPolicy.UseMultiplayerTeamObjective
+                && searchPolicy.UseMultiplayerTeammateForecast
+                && searchPolicy.UseMultiplayerScenarioReevaluation)
+            {
+                Entry.Logger.Info(
+                    $"[CombatSolver/Test] SEARCH_F0_SCENARIO_PREWARM " +
+                    $"status={f0Prewarm.Status} behavioral_reuse=false " +
+                    $"root_epoch={f0Prewarm.RootEpoch} predictions={f0Prewarm.PredictionCount} " +
+                    $"matched_scenario={f0Prewarm.MatchedScenarioKind?.ToString() ?? "-"} " +
+                    $"exact_matches={f0Prewarm.ExactMatches} misses={f0Prewarm.Misses} " +
+                    $"duplicate_stores={f0Prewarm.DuplicateStores} " +
+                    $"stale_stores={f0Prewarm.StaleStores} dropped_stores={f0Prewarm.DroppedStores}");
+            }
             searchPolicy = searchPolicy with
             {
                 R0TransitionMemo = _combat.TransitionMemo,

@@ -74,6 +74,9 @@ internal static class Program
                 R1FrontierShadowCache.VerifyShadowGateForTesting(),
                 "R1 frontier shadow distinguishes exact retained-frontier matches, mismatches and missing depth keys.");
             Require(
+                ScenarioPrewarmShadowTracker.VerifyShadowGateForTesting(),
+                "F0 scenario prewarm shadow must match only the next distinct exact live root and reject stale stores.");
+            Require(
                 CombatBeamSolver.CanSkipNoveltyFactsForValueOnlyTerminalForTesting(
                     isTerminal: true,
                     hasSimulator: false)

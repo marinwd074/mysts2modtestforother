@@ -324,6 +324,22 @@ internal sealed partial class CombatBeamSolver
                         continue;
                     }
 
+                    if (!terminal && policy.R0TransitionMemo is { } f0Owner)
+                    {
+                        ContinuationStamp predictedObservation =
+                            ContinuationStamp.CapturePredicted(
+                                _player,
+                                outcomeSnapshot.Simulator,
+                                outcomeSnapshot.Turn,
+                                _forecast,
+                                _startTurnNumber);
+                        ScenarioPrewarmShadowTracker.For(f0Owner).RecordPrediction(
+                            root.ContinuationStamp,
+                            predictedObservation,
+                            decisionKey,
+                            spec.Kind);
+                    }
+
                     MultiplayerScenarioOutcome outcome = BuildScenarioOutcome(
                         outcomeSnapshot,
                         prefix.Count + 1,
