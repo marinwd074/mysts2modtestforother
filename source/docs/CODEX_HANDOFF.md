@@ -26,8 +26,8 @@
 - **B 延迟影响合同：完成。**
 - **C 战斗级 R0 转移缓存：完成。**
 - **D 新根恢复 R1：完成。**
-- **E 前台/后台分离：进行中；E1/E2/E3、E4-A 已实机通过，E4-B 质量准入仍待触发样本。**
-- **F 情景预热：未开始。**
+- **E 前台/后台分离：完成。** E1–E4-A 已闭合；E4-B 在最新 INFESTED_PRISMS / MYTES 实机包中同时覆盖 regression 拒绝、improved 接纳与 Smart Potion 约 10s 降级上限。
+- **F 情景预热：F0 影子测量已落地，待实验多人预测模式实机命中证据。**
 - **G SSD 冷存储：未开始。**
 - **H 质量与响应验收：未开始。**
 
@@ -138,26 +138,29 @@ state_mismatch
 
 ## 下一任务
 
-### 最新测试包结论（2026-09-29）
+### E 阶段已闭合（2026-09-29）
 
-- EXOSKELETONS_WEAK `98211ee985ee4607b22ae7311d43618f`：Smart Potion 在 10003ms 降级结束；第 5 回合 R1 完整胜利与最终结果均为累计 21 战损、当回合结束。
-- BOWLBUGS_WEAK `40f79fca33f5441fbfe6537103909895`：Smart Potion 在 10005ms 降级结束；第 2 回合 completion guard 实际保留 12 战损前台，拒绝 15 战损终局，部署范围为 `CurrentTurnAdoption`。该包结果含 `modeled_damage_exact=False`，不能作精确战斗模拟验收。
-- 两包均未出现 `relation=regressed / admission=rejected_regression`，也没有等战损早胜与延迟成长的实际对照。因此不关闭下面两个实机边界，不提前进入 F。
-- [代码审查四项修复](Rolling_Horizon_Reuse_Code_Review.md) 已落地并通过 pinned 0.107.1 的 9 个定向场景；原生跨回合 R0 重新建根与当前构建 Host/Client 仍需实机验证。
+最新 INFESTED_PRISMS_ELITE `164e79ed1a85499592363e80497d26b1` 与 MYTES_NORMAL `aa290e44d353496fa7d33b0f0eae84e8` 已覆盖 E4-B 的三个关键合同：
 
-实机验证两个 current HEAD 边界：
+- Smart Potion 真实出现 `relation=regressed admission=rejected_regression`：9 战损 / 0 药 / 敌 301 HP 的 incumbent 没有被 29 战损 / 1 药 / 胜利覆盖。
+- 真实出现 `relation=improved admission=accepted`：9 战损 / 敌 94 HP 被同 9 战损 / 2 药 / 胜利正确接纳。
+- Smart Potion 长尾再次真实触发 `degraded_deadline`，约 10007–10067ms；两包当前战斗均无 `SEARCH_FAILURE`。
 
-1. **E4-B 第二阶段质量准入**：PHROG_PARASITE_ELITE `6c34eee729b94f4584f7c3ad29f9c019` 已实机证明 Smart Potion 10s 降级预算生效（约 10006 / 10009ms）。同包另一次 Smart Potion 4.566s 返回 `relation=regressed`：8 战损 / 0 药 / 敌 1 HP 被 9 战损 / 1 药 / 胜利覆盖。现在 E4 活跃窗口继续执行并记录 supplemental 搜索，但 `regressed` 结果只记账，`admission=rejected_regression`，不得接管 incumbent；非 E4 窗口保持旧行为。
-2. **当前回合斩杀优先**：CEREMONIAL_BEAST_BOSS `c2271afb91434692a2a64a2abb85c9d1` 在第 9 回合 28 HP 时，R1 仅用 `TEAR_ASUNDER` 已验证当回合完整胜利，但主搜索被“先回血、11 回合再杀”的同战损路线覆盖。rolling-horizon 完整胜利现按真实累计战损 → 是否胜利 → 更早结束排序，回血/成长只在这些硬键相同时继续 tie-break。
+因此 E4-B 与阶段 E 正式闭合。
 
-下一份 Boss/Elite 包重点确认：
-- E4 出现 `relation=regressed` 时同时出现 `admission=rejected_regression`，最终 RESULT 不再来自该更差 supplemental member。
-- 存在当回合等战损斩杀时不再拖回合；更早斩杀若增加真实累计战损，仍保持 loss-first。
+### 当前任务：F0 情景预热影子测量
 
+只在已显式开启的实验多人预测栈（Team Objective + teammate forecast + scenario reevaluation）记录情景预热，不改变默认 local-single-core。
+
+- scenario matrix 的非终局 replay 后态保存精确 `ContinuationStamp`，每个真实根最多 64 个唯一预测。
+- 下一次**不同** live root 只做完整状态文本 exact-match；记录 `initial / same_root / exact_match / miss / no_predictions`。
+- 新根到来后上一根预测立即清空；旧 worker 向新根写入记为 `stale_stores` 并拒绝。
+- `behavioral_reuse=false`：F0 不复用 SearchNode、分数、动作、候选或部署权限，也不减少 Beam、情景或预算。
+- 只有真实 Host/Client / 问题包证明存在稳定 exact hit 且没有 stale/collision 语义问题后，才设计 F1 的实际预热采用。
 
 ## 当前未验证边界
 
-- E2 已由 INFESTED_PRISMS `604411ffffe44ca388ece05d9eb8e594` 实机闭合；本轮比较规则修复后仍需当前构建复验 E4 准入与等战损早胜。
+- E2/E4-B 已由 current build 实机闭合。滚动比较规则的“等战损更早胜利”已有 pinned 合同，但仍缺一份明确跨回合（如 T9 对 T11）current build 实机对照；该项继续作为质量 smoke，不作为 F0 影子测量的行为依赖。
 - U5/U6 历史 Host/Client observation → fresh replan 的部分真实多人边界仍不是 pinned replay 可替代的证据。
 - GitHub Issue #8：多人 Safe Execute 的 Headbutt / turn-start Choice 仍需 current HEAD Host/Client 复验。
 - GitHub Issue #9：Vicious 战略估值修复仍需 comparable current multiplayer root 复验。
