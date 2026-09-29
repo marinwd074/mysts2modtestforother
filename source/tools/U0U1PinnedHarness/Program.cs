@@ -645,6 +645,24 @@ internal static class Program
             && CombatSearchCoordinator.ClassifyE4SupplementalRelation(live, live)
                 == "equivalent_or_incomparable",
             "E4 supplemental value classification must reuse the existing foreground quality ordering.");
+        Require(
+            CombatSearchCoordinator.ShouldAdmitE4SupplementalResult(
+                e4Active: true,
+                live,
+                betterBackground)
+            && !CombatSearchCoordinator.ShouldAdmitE4SupplementalResult(
+                e4Active: true,
+                live,
+                worseBackground)
+            && CombatSearchCoordinator.ShouldAdmitE4SupplementalResult(
+                e4Active: true,
+                live,
+                live)
+            && CombatSearchCoordinator.ShouldAdmitE4SupplementalResult(
+                e4Active: false,
+                live,
+                worseBackground),
+            "E4 active supplemental members must not replace their incumbent with a classified regression.");
 
         SolverInterimResult scrollsForeground = live with
         {

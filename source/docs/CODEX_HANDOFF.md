@@ -140,10 +140,13 @@ state_mismatch
 
 实机验证两个 current HEAD 边界：
 
-1. **E4-B 第二阶段**：已批准 foreground 后，Smart Potion 仍保留审计但单阶段最多 10s；看 `SEARCH_E4_SMART_POTION_BUDGET` 与 `SEARCH_E4_SUPPLEMENTAL_VALUE`，确认长尾下降且没有丢失真实 improved。
-2. **当前回合斩杀优先**：CEREMONIAL_BEAST_BOSS `c2271afb91434692a2a64a2abb85c9d1` 在第 9 回合 28 HP 时，R1 仅用 `TEAR_ASUNDER` 2.3ms 已验证当回合完整胜利，但主搜索被“先回血、11 回合再杀”的同战损路线覆盖。现在 rolling-horizon 完整胜利按真实累计战损 → 是否胜利 → 更早结束排序，回血/成长只在这些硬键相同时继续 tie-break。
+1. **E4-B 第二阶段质量准入**：PHROG_PARASITE_ELITE `6c34eee729b94f4584f7c3ad29f9c019` 已实机证明 Smart Potion 10s 降级预算生效（约 10006 / 10009ms）。同包另一次 Smart Potion 4.566s 返回 `relation=regressed`：8 战损 / 0 药 / 敌 1 HP 被 9 战损 / 1 药 / 胜利覆盖。现在 E4 活跃窗口继续执行并记录 supplemental 搜索，但 `regressed` 结果只记账，`admission=rejected_regression`，不得接管 incumbent；非 E4 窗口保持旧行为。
+2. **当前回合斩杀优先**：CEREMONIAL_BEAST_BOSS `c2271afb91434692a2a64a2abb85c9d1` 在第 9 回合 28 HP 时，R1 仅用 `TEAR_ASUNDER` 已验证当回合完整胜利，但主搜索被“先回血、11 回合再杀”的同战损路线覆盖。rolling-horizon 完整胜利现按真实累计战损 → 是否胜利 → 更早结束排序，回血/成长只在这些硬键相同时继续 tie-break。
 
-下一份 Boss/Elite 包应确认：存在当回合等战损斩杀时不再拖回合；若更早斩杀会增加真实累计战损，仍保持 loss-first，不把速度无条件置于战损之上。
+下一份 Boss/Elite 包重点确认：
+- E4 出现 `relation=regressed` 时同时出现 `admission=rejected_regression`，最终 RESULT 不再来自该更差 supplemental member。
+- 存在当回合等战损斩杀时不再拖回合；更早斩杀若增加真实累计战损，仍保持 loss-first。
+
 
 ## 当前未验证边界
 

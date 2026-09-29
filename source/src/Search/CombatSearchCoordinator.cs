@@ -632,6 +632,13 @@ internal static partial class CombatSearchCoordinator
         return "equivalent_or_incomparable";
     }
 
+    internal static bool ShouldAdmitE4SupplementalResult(
+        bool e4Active,
+        SolverInterimResult before,
+        SolverInterimResult after)
+        => !e4Active
+            || ClassifyE4SupplementalRelation(before, after) != "regressed";
+
     internal static bool RouteMatchesPreview(
         IReadOnlyList<PlanAction> actions,
         SolverSpeculativeRoutePreview? preview)
@@ -1655,7 +1662,8 @@ internal static partial class CombatSearchCoordinator
             SolverResult? after,
             SearchRequestWorkSnapshot workBefore,
             long startedMs,
-            string status)
+            string status,
+            string admission)
         {
             SearchRequestWorkSnapshot workAfter = E4WorkSnapshot();
             long elapsedMs = Math.Max(0, requestClock.ElapsedMilliseconds - startedMs);
@@ -1683,7 +1691,7 @@ internal static partial class CombatSearchCoordinator
 
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] SEARCH_E4_SUPPLEMENTAL_VALUE " +
-                $"stage={stage} status={status} relation={relation} " +
+                $"stage={stage} status={status} relation={relation} admission={admission} " +
                 $"elapsed_ms={elapsedMs} expanded={expanded} transitions={transitions} " +
                 $"selected_changed={(after != null && !ReferenceEquals(before, after)).ToString().ToLowerInvariant()} " +
                 $"before_hp_loss={beforeSummary.ProjectedBattleHpLost} " +
@@ -1704,16 +1712,23 @@ internal static partial class CombatSearchCoordinator
             activeE4WorkBefore = E4WorkSnapshot();
             activeE4StartedMs = requestClock.ElapsedMilliseconds;
             SolverResult after = run();
+            SolverInterimResult beforeSummary = BuildInterimResult(root, policy, before);
+            SolverInterimResult afterSummary = BuildInterimResult(root, policy, after);
+            bool admitted = ShouldAdmitE4SupplementalResult(
+                e4SmartPotionBudgetActive,
+                beforeSummary,
+                afterSummary);
             LogE4SupplementalValue(
                 stage,
                 before,
                 after,
                 activeE4WorkBefore,
                 activeE4StartedMs,
-                status: completedStatus?.Invoke() ?? "completed");
+                status: completedStatus?.Invoke() ?? "completed",
+                admission: admitted ? "accepted" : "rejected_regression");
             activeE4Stage = null;
             activeE4Before = null;
-            return after;
+            return admitted ? after : before;
         }
 
         try
@@ -1830,7 +1845,8 @@ internal static partial class CombatSearchCoordinator
                     after: null,
                     activeE4WorkBefore,
                     activeE4StartedMs,
-                    status: "deadline");
+                    status: "deadline",
+                    admission: "no_result");
                 activeE4Stage = null;
                 activeE4Before = null;
             }
