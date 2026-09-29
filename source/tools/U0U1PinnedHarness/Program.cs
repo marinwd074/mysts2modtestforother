@@ -593,6 +593,31 @@ internal static class Program
             !SolverInterimResultOrdering.CanPromoteDisplayedResult(costlyVictory, live),
             "Rolling horizon display replaced a 0-HP live route with a 24-HP terminal route.");
 
+        SolverInterimResult immediateVictory = live with
+        {
+            Won = true,
+            ProjectedBattleHpLost = 29,
+            StrategicHpDeficit = 7,
+            EnemyHp = 0,
+            CombatEndedTurn = 9,
+        };
+        SolverInterimResult delayedHealVictory = immediateVictory with
+        {
+            StrategicHpDeficit = -3,
+            CombatEndedTurn = 11,
+            Score = immediateVictory.Score + 10_000d,
+        };
+        Require(
+            SolverInterimResultOrdering.IsBetter(immediateVictory, delayedHealVictory)
+            && !SolverInterimResultOrdering.IsBetter(delayedHealVictory, immediateVictory)
+            && SolverInterimResultOrdering.CanPromoteDisplayedResult(
+                immediateVictory,
+                delayedHealVictory)
+            && !SolverInterimResultOrdering.CanPromoteDisplayedResult(
+                delayedHealVictory,
+                immediateVictory),
+            "Rolling horizon allowed delayed healing to displace an equal-loss earlier victory.");
+
         SolverInterimResult worseBackground = live with
         {
             ProjectedBattleHpLost = 2,

@@ -138,21 +138,12 @@ state_mismatch
 
 ## 下一任务
 
-实机验证 E4-B 第一阶段：supplemental 成员价值账本。当前只测量，不跳过任何成员。
+实机验证两个 current HEAD 边界：
 
-E4-A 已闭合，当前生产窗口继续保持：主 Beam/Novelty/potion_disabled 不缩；已批准 foreground 后 supplemental 受 20s grace / 最后改善后 30s freshness 上限控制。
+1. **E4-B 第二阶段**：已批准 foreground 后，Smart Potion 仍保留审计但单阶段最多 10s；看 `SEARCH_E4_SMART_POTION_BUDGET` 与 `SEARCH_E4_SUPPLEMENTAL_VALUE`，确认长尾下降且没有丢失真实 improved。
+2. **当前回合斩杀优先**：CEREMONIAL_BEAST_BOSS `c2271afb91434692a2a64a2abb85c9d1` 在第 9 回合 28 HP 时，R1 仅用 `TEAR_ASUNDER` 2.3ms 已验证当回合完整胜利，但主搜索被“先回血、11 回合再杀”的同战损路线覆盖。现在 rolling-horizon 完整胜利按真实累计战损 → 是否胜利 → 更早结束排序，回血/成长只在这些硬键相同时继续 tie-break。
 
-E4-B 新增 `SEARCH_E4_SUPPLEMENTAL_VALUE`，对 supplemental 阶段逐项记录：
-- `stage=required_potion / smart_potion / early_smart_scout_reuse / opening_power`
-- `status=completed / deadline`
-- 该阶段独占墙钟、expanded、transitions
-- 进入阶段前 incumbent 与阶段输出的 HP loss / enemy HP / potion count
-- 用现有 `CanPromoteDisplayedResult` 得出的 `relation=improved / regressed / equivalent_or_incomparable / no_result`
-- 最终输出实际来自哪个 `member_kind`
-
-deadline 截断中的成员也会记录已消耗工作量，但不伪造候选质量。该阶段不改变 Beam、药水准入、quality ordering、E4-A deadline 或 completion guard。
-
-下一份长 Elite/Boss 包重点看：`smart_potion` 在 E4-A 的 20–30s 窗口内，有多少次 relation=improved；若长期只有 deadline/equivalent/regressed，再设计 E4-B 第二阶段准入。单个样本不足以直接删除药水搜索。
+下一份 Boss/Elite 包应确认：存在当回合等战损斩杀时不再拖回合；若更早斩杀会增加真实累计战损，仍保持 loss-first，不把速度无条件置于战损之上。
 
 ## 当前未验证边界
 

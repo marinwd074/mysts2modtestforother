@@ -97,6 +97,22 @@ internal static class SolverInterimResultOrdering
         if (candidate.TheftPolicy == SolverTheftPolicy.PreserveResources
             && candidate.OutstandingStolenResource != current.OutstandingStolenResource)
             return candidate.OutstandingStolenResource < current.OutstandingStolenResource;
+        if (rollingHorizonLossFirst)
+        {
+            comparison = candidate.ProjectedBattleHpLost.CompareTo(current.ProjectedBattleHpLost);
+            if (comparison != 0)
+                return comparison < 0;
+            comparison = current.Won.CompareTo(candidate.Won);
+            if (comparison != 0)
+                return comparison < 0;
+            if (candidate.Won && current.Won)
+            {
+                comparison = (candidate.CombatEndedTurn ?? int.MaxValue)
+                    .CompareTo(current.CombatEndedTurn ?? int.MaxValue);
+                if (comparison != 0)
+                    return comparison < 0;
+            }
+        }
         if (IsResourceTradeImprovement(candidate, current))
             return true;
         if (IsResourceTradeImprovement(current, candidate))
@@ -105,12 +121,6 @@ internal static class SolverInterimResultOrdering
             return candidate.GrowthHpCredit > current.GrowthHpCredit;
         if (candidate.GrowthRewardCount != current.GrowthRewardCount)
             return candidate.GrowthRewardCount > current.GrowthRewardCount;
-        if (rollingHorizonLossFirst)
-        {
-            comparison = current.Won.CompareTo(candidate.Won);
-            if (comparison != 0)
-                return comparison < 0;
-        }
         comparison = (candidate.CombatEndedTurn ?? int.MaxValue)
             .CompareTo(current.CombatEndedTurn ?? int.MaxValue);
         if (comparison != 0)

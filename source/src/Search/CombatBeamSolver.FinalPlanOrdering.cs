@@ -367,7 +367,8 @@ internal sealed partial class CombatBeamSolver
                             bossHpRelief,
                             postCombatRelicHeal,
                             theftPolicy,
-                            useMultiplayerRouteSemantics) >= 0)
+                            useMultiplayerRouteSemantics,
+                            useRollingHorizonLossFirst) >= 0)
                 {
                     continue;
                 }
@@ -490,6 +491,15 @@ internal sealed partial class CombatBeamSolver
                 .ThenBy(candidate => useRollingHorizonLossFirst
                     ? candidate.Snapshot.ProjectedDeathSaveUseCount
                     : 0)
+                .ThenBy(candidate => useRollingHorizonLossFirst
+                    ? candidate.HpDeficit
+                    : 0)
+                .ThenByDescending(candidate => useRollingHorizonLossFirst
+                    && candidate.CompleteVictory)
+                .ThenBy(candidate => useRollingHorizonLossFirst
+                    && candidate.CompleteVictory
+                        ? candidate.CombatEndedTurn ?? int.MaxValue
+                        : 0)
                 .ThenBy(candidate => useRollingHorizonLossFirst
                     ? candidate.StrategicHpDeficit
                     : 0)
@@ -1319,7 +1329,8 @@ internal sealed partial class CombatBeamSolver
         BossHpRelief bossHpRelief,
         PostCombatRelicHealProfile postCombatRelicHeal,
         SolverTheftPolicy? theftPolicy,
-        bool useMultiplayerRouteSemantics)
+        bool useMultiplayerRouteSemantics,
+        bool useRollingHorizonLossFirst)
     {
         SimulationSnapshot leftSnapshot = left.Snapshot;
         SimulationSnapshot rightSnapshot = right.Snapshot;
@@ -1336,10 +1347,14 @@ internal sealed partial class CombatBeamSolver
         // Potion spending is always a local-player resource decision. Multiplayer team
         // objectives may rank routes only after the single-player potion policy admits them;
         // teammate HP/loss never redefines the potion-free baseline.
-        int comparison = rightWon.CompareTo(leftWon);
-        if (comparison != 0)
-            return comparison;
-        if (!leftWon && !rightWon)
+        int comparison = 0;
+        if (!useRollingHorizonLossFirst)
+        {
+            comparison = rightWon.CompareTo(leftWon);
+            if (comparison != 0)
+                return comparison;
+        }
+        if (useRollingHorizonLossFirst || !leftWon && !rightWon)
         {
             bool leftSurvives = !leftSnapshot.PlayerDead && leftSnapshot.ProjectedPlayerHp > 0;
             bool rightSurvives = !rightSnapshot.PlayerDead && rightSnapshot.ProjectedPlayerHp > 0;
@@ -1355,6 +1370,23 @@ internal sealed partial class CombatBeamSolver
             leftWon, leftSnapshot.OutstandingStolenResource, rightWon, rightSnapshot.OutstandingStolenResource);
         if (comparison != 0)
             return comparison;
+        if (useRollingHorizonLossFirst)
+        {
+            comparison = leftSnapshot.CumulativePlayerHpLost.CompareTo(
+                rightSnapshot.CumulativePlayerHpLost);
+            if (comparison != 0)
+                return comparison;
+            comparison = rightWon.CompareTo(leftWon);
+            if (comparison != 0)
+                return comparison;
+            if (leftWon && rightWon)
+            {
+                comparison = (leftSnapshot.CombatEndedTurn ?? int.MaxValue)
+                    .CompareTo(rightSnapshot.CombatEndedTurn ?? int.MaxValue);
+                if (comparison != 0)
+                    return comparison;
+            }
+        }
         comparison = (ActEndingBossPolicy.StrategicHpDeficit(
                 leftSnapshot.CumulativePlayerHpLost,
                 Math.Max(0, initialPlayerMaxHp - leftSnapshot.PlayerMaxHp),

@@ -159,7 +159,8 @@ internal sealed partial class CombatBeamSolver
                             _bossHpRelief,
                             _postCombatRelicHeal,
                             _theftPolicy,
-                            _useMultiplayerRouteSemantics) < 0))
+                            _useMultiplayerRouteSemantics,
+                            _useRollingHorizonLossFirst) < 0))
                 {
                     potionFreeBaseline = candidate;
                 }
@@ -1712,6 +1713,22 @@ internal sealed partial class CombatBeamSolver
                 leftWon, leftSnapshot.OutstandingStolenResource, rightWon, rightSnapshot.OutstandingStolenResource);
             if (recoveryComparison != 0)
                 return recoveryComparison;
+            if (_useRollingHorizonLossFirst)
+            {
+                comparison = leftSnapshot.CumulativePlayerHpLost.CompareTo(
+                    rightSnapshot.CumulativePlayerHpLost);
+                if (comparison != 0)
+                    return comparison;
+                comparison = rightWon.CompareTo(leftWon);
+                if (comparison != 0)
+                    return comparison;
+                if (leftWon && rightWon)
+                {
+                    comparison = CompletedCombatTurn(left).CompareTo(CompletedCombatTurn(right));
+                    if (comparison != 0)
+                        return comparison;
+                }
+            }
             comparison = SolverInterimResultOrdering.ComparePrimaryQuality(
                 leftWon,
                 StrategicHpDeficit(leftSnapshot, leftWon),
