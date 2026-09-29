@@ -478,6 +478,27 @@ internal static class Program
             "E4 must translate a request-relative deadline into the active pass clock without re-adding continuation-seed time.");
 
         Require(
+            CombatSearchCoordinator.ComputeE4SmartPotionStageDeadlineMilliseconds(
+                supplementalBudgetMilliseconds: 34_500,
+                stageStartMilliseconds: 4_500,
+                e4Active: true) == 14_500,
+            "E4-B must bound Smart Potion to a 10-second degraded audit after an approved foreground.");
+
+        Require(
+            CombatSearchCoordinator.ComputeE4SmartPotionStageDeadlineMilliseconds(
+                supplementalBudgetMilliseconds: 12_000,
+                stageStartMilliseconds: 5_000,
+                e4Active: true) == 12_000,
+            "E4-B must not shorten an already smaller remaining supplemental window.");
+
+        Require(
+            CombatSearchCoordinator.ComputeE4SmartPotionStageDeadlineMilliseconds(
+                supplementalBudgetMilliseconds: 120_000,
+                stageStartMilliseconds: 5_000,
+                e4Active: false) == 120_000,
+            "E4-B must preserve the full Smart Potion budget outside the approved-foreground E4 window.");
+
+        Require(
             CombatSearchCoordinator.ComputeE4SupplementalDeadlineMilliseconds(
                 SearchRoutePolicy.MultiplayerSinglePlayerCore,
                 120_000,
