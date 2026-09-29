@@ -470,6 +470,14 @@ internal static class Program
             "E4 must preserve 30 seconds after a fresh foreground improvement.");
 
         Require(
+            CombatSearchCoordinator.ComputeE4ActiveClockDeadlineMilliseconds(
+                configuredActiveBudgetMilliseconds: 120_000,
+                activeClockElapsedMilliseconds: 31_000,
+                requestStartMilliseconds: 37_500,
+                requestDeadlineMilliseconds: 67_500) == 61_000,
+            "E4 must translate a request-relative deadline into the active pass clock without re-adding continuation-seed time.");
+
+        Require(
             CombatSearchCoordinator.ComputeE4SupplementalDeadlineMilliseconds(
                 SearchRoutePolicy.MultiplayerSinglePlayerCore,
                 120_000,
