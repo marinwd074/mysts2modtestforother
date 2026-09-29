@@ -1179,7 +1179,8 @@ internal sealed partial class UnattendedTestRunner
                 currentCompleteVictory: false,
                 currentStrategicHpDeficit: 0,
                 currentCombatEndedTurn: null,
-                rollingHorizonLossFirst: true) <= 0
+                rollingHorizonLossFirst: true,
+                candidateBattleHpLost: 24, currentBattleHpLost: 0) <= 0
             || SolverInterimResultOrdering.ComparePrimaryQuality(
                 candidateCompleteVictory: true,
                 candidateStrategicHpDeficit: 0,
@@ -1187,7 +1188,8 @@ internal sealed partial class UnattendedTestRunner
                 currentCompleteVictory: false,
                 currentStrategicHpDeficit: 0,
                 currentCombatEndedTurn: null,
-                rollingHorizonLossFirst: true) >= 0)
+                rollingHorizonLossFirst: true,
+                candidateBattleHpLost: 0, currentBattleHpLost: 0) >= 0)
         {
             throw new InvalidOperationException(
                 "多人滚动时域仍让窗口内高战损斩杀压过低战损存活路线，或同战损时没有优先胜利。");

@@ -1,8 +1,12 @@
 # 滚动搜索复用：代码审查与修复清单
 
-审查基线：`b91a47e`。本文与 [滚动搜索复用架构计划](Rolling_Horizon_Reuse_Architecture.md) 并列，记录该基线的缺陷、优化点及验收条件，不替代主计划。以下项目均待修复；后续执行前须核对当前源码，避免重复施工。
+审查基线：`b91a47e`。本文与 [滚动搜索复用架构计划](Rolling_Horizon_Reuse_Architecture.md) 并列，保留问题边界及可重跑验收入口，不替代主计划。四项源码修复已落地；实机待验收项以 [当前交接](CODEX_HANDOFF.md) 为准。
+
+定向入口：`dotnet tools/U0U1PinnedHarness/bin/Release/net9.0/U0U1PinnedHarness.dll rolling-review --out <项目忽略目录>`。2026-09-29 pinned `0.107.1` 的 9 个场景通过，Release / harness 均 0 warning / 0 error；没有运行完整矩阵或游戏 GUI。
 
 ## 1. P1：R0 终局缓存携带旧路径评分
+
+**已修复。** 状态基础评分与动作惩罚分开；缓存保存输入评价上下文及转移增量，命中后按当前动作数、累计战损、回血、历史计数及各玩家根最大 HP 重建评价。Boss/战后回血配置或玩家集合不兼容时拒绝复用。新根定向对照已证明真实命中且评分/质量字段与关闭缓存一致；夹具覆盖新根与不同路径计数，尚不是原生 T1→T2 实机推进证据。
 
 **位置：** [CombatTransitionMemo.cs](../src/Search/CombatTransitionMemo.cs) 的 `TryReadTerminal`；[CombatBeamSolver.StateEvaluation.cs](../src/Search/CombatBeamSolver.StateEvaluation.cs) 的 `Snapshot`；[CombatPlan.cs](../src/Search/CombatPlan.cs) 的 `CloneValueOnlyForTransitionMemo`。
 
@@ -20,6 +24,8 @@
 **验收：** 固定同一父战斗状态、动作和策略，分别使用不同累计动作数；缓存命中结果与各自新鲜回放的评分、质量字段一致。至少覆盖跨回合重新建根场景。
 
 ## 2. P2：更早斩杀的比较规则没有贯穿所有入口
+
+**已修复。** rolling-horizon 各入口共享原始战损 → 胜利 → 更早胜利的比较前缀，跨成员及药水 baseline 显式携带原始战损，前台提升移除成长折算战损的额外拦截。定向覆盖早胜、较高战损拒绝、同回合成长与单人旧顺序；真实等战损早斩杀仍待新包。
 
 **位置：** [SolverInterimResultOrdering.cs](../src/Search/SolverInterimResultOrdering.cs) 的 `IsBetter`、`CanPromoteDisplayedResult`、`ComparePrimaryQuality`；[CombatSearchCoordinator.cs](../src/Search/CombatSearchCoordinator.cs) 的药水成员比较及 E4 补充结果准入。
 
@@ -44,6 +50,8 @@
 
 ## 3. P2：Smart 药水搜索超时丢失已完成结果
 
+**已修复。** 停止推进及释放活跃成员后，先核对用户取消，再沿原有 `CommitCompletedInOrder` 提交已完成的连续层。真实 scheduled 搜索夹具覆盖合格一药结果保留、不合格结果拒绝、用户取消不提交；没有绕过顺序缺口或重启成员。
+
 **位置：** [CombatSearchCoordinator.cs](../src/Search/CombatSearchCoordinator.cs) 的 `SearchSmartPotionGradientScheduled`，尤其是 `StepLayer`、`CommitCompletedInOrder` 和 `deadlineExpired` 退出分支。
 
 成员完成后先进入 `completed`，只有 `CommitCompletedInOrder` 才会发布并参与选择。主循环发现超时会在提交之前退出，最终返回旧 `selected`。
@@ -55,6 +63,8 @@
 **验收：** 用可控调度夹具令一药成员先完成、二药成员随后超时，最终选择包含符合资格的一药结果；不合格结果仍被拒绝；用户主动取消仍符合原取消契约。
 
 ## 4. 性能：R0 应先判断终局准入，再生成状态文本
+
+**已修复。** 存储入口先复用 `IsSafeTerminalOutput`，非终局不生成存储文本、不捕获评价上下文、不扫描历史。固定 Bash 非终局输入的存储文本捕获次数为 0；终局缓存仍真实命中。不宣称整体加速百分比。
 
 **位置：** [CombatBeamSolver.R0TransitionMemo.cs](../src/Search/CombatBeamSolver.R0TransitionMemo.cs) 的 `StoreR0TerminalTransition`；[CombatTransitionMemo.cs](../src/Search/CombatTransitionMemo.cs) 的 `StoreTerminal`、`IsSafeTerminalOutput`。
 
@@ -68,6 +78,4 @@
 
 建议顺序：R0 评分正确性 → 比较规则统一 → 超时结果回收 → R0 前置筛选。正确性修复与性能调整尽量分开，优先扩展现有测试入口，每次默认不超过 10 项；不得削减搜索质量、预算、并发或正确性保障来简化实现。
 
-本轮审查未修改生产代码、未构建、未启动游戏。第 2 项已有纯函数复现；第 1、3、4 项依据调用链静态审查，尚未完成运行回归或性能测量。纯函数探针首次因测试夹具缺少导入而编译失败，补齐后成功，不属于项目构建失败。
-
-本文落库仅需定向链接检查及 `git diff --check`，不触发上述修复验收。修复完成后直接更新对应项目状态和证据摘要，不另建重复报告。
+以上问题描述保留修复前触发条件；当前实现与验收状态以各项“已修复”段落为准。实机验证不得用 pinned 合同替代。

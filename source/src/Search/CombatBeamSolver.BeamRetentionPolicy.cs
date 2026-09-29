@@ -1742,7 +1742,9 @@ internal sealed partial class CombatBeamSolver
                 rightSnapshot.StrategyGoalCount,
                 leftSnapshot.ProjectedDeathSaveUseCount,
                 rightSnapshot.ProjectedDeathSaveUseCount,
-                _useRollingHorizonLossFirst);
+                _useRollingHorizonLossFirst,
+                leftSnapshot.CumulativePlayerHpLost,
+                rightSnapshot.CumulativePlayerHpLost);
             if (comparison != 0)
                 return comparison;
 

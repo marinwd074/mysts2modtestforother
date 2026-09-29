@@ -14,6 +14,8 @@ using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.Models.Powers;
+using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.ValueProps;
 using OfflineSearchHarness;
 using U2DegenerateHarness;
 
@@ -34,7 +36,8 @@ internal static class Program
     private static int Main(string[] args)
     {
         bool darkEmbracePactOnly = args.Length > 0 && args[0] == "dark-embrace-pact";
-        string outputDirectory = ParseOutput(darkEmbracePactOnly ? args[1..] : args);
+        bool rollingReviewOnly = args.Length > 0 && args[0] == "rolling-review";
+        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly ? args[1..] : args);
         Directory.CreateDirectory(outputDirectory);
 
         try
@@ -52,6 +55,8 @@ internal static class Program
                 MaxExpandedNodes,
                 BudgetMilliseconds);
             Console.WriteLine($"search_patches={patchCount}");
+            if (!rollingReviewOnly)
+            {
             ValidateDarkEmbracePredictionCoverage();
             ValidateViciousStrategicValue();
             ValidateE4SupplementalBudgetContract();
@@ -81,6 +86,11 @@ internal static class Program
                 "Novelty skips fact capture only for simulator-free terminal memo snapshots.");
             ValidateRenderedCurrentTurnTakeoverContract();
             ValidateApprovedForegroundPreviewContract();
+            }
+            else
+            {
+                ValidateReviewOrdering();
+            }
 
             HarnessScenario scenario = new(
                 "IRONCLAD",
@@ -107,6 +117,16 @@ internal static class Program
                 combat,
                 includeTurnSetup: false,
                 theftPolicy: null);
+
+            if (rollingReviewOnly)
+            {
+                ValidateReviewR0(combat, names, captured, profile);
+                ValidateReviewSmartDeadline(combat, names, captured, profile, acceptable: true, cancelCaller: false);
+                ValidateReviewSmartDeadline(combat, names, captured, profile, acceptable: false, cancelCaller: false);
+                ValidateReviewSmartDeadline(combat, names, captured, profile, acceptable: true, cancelCaller: true);
+                Console.WriteLine("RollingReview PASS (9 targeted scenarios)");
+                return 0;
+            }
 
             if (darkEmbracePactOnly)
             {
@@ -555,7 +575,8 @@ internal static class Program
                 currentCompleteVictory: false,
                 currentStrategicHpDeficit: 0,
                 currentCombatEndedTurn: null,
-                rollingHorizonLossFirst: true) > 0,
+                rollingHorizonLossFirst: true,
+                candidateBattleHpLost: 24, currentBattleHpLost: 0) > 0,
             "Rolling horizon allowed a 24-HP terminal route to outrank a 0-HP live horizon route.");
         Require(
             SolverInterimResultOrdering.ComparePrimaryQuality(
@@ -565,7 +586,8 @@ internal static class Program
                 currentCompleteVictory: false,
                 currentStrategicHpDeficit: 0,
                 currentCombatEndedTurn: null,
-                rollingHorizonLossFirst: true) < 0,
+                rollingHorizonLossFirst: true,
+                candidateBattleHpLost: 0, currentBattleHpLost: 0) < 0,
             "Rolling horizon did not prefer victory when strategic HP loss tied.");
 
         SolverInterimResult live = new(
@@ -2008,7 +2030,8 @@ internal static class Program
                     "Phase C choice-bearing action entered the exact terminal memo.");
                 Require(
                     !memo.TryReadTerminal(
-                        parentKey, bash, policyIdentity, "semantic-collision-fixture", out _)
+                        parentKey, bash, policyIdentity, "semantic-collision-fixture",
+                        null!, 1, 0, out _)
                     && memo.CollisionRejects == 1,
                     "Phase C fingerprint collision verifier did not fail closed.");
 
@@ -2413,6 +2436,177 @@ internal static class Program
     {
         if (!condition)
             throw new InvalidOperationException(message);
+    }
+
+    private static void ValidateReviewOrdering()
+    {
+        SolverInterimResult early = new(true, 0, 0, 0, 0, 0, 0, 0)
+        { Survives = true, RollingHorizonLossFirst = true, CombatEndedTurn = 2 };
+        SolverInterimResult late = early with
+        { CombatEndedTurn = 3, GrowthHpCredit = 5, StrategicHpDeficit = -5 };
+        void Consistent(SolverInterimResult better, SolverInterimResult worse, string label)
+        {
+            Require(SolverInterimResultOrdering.IsBetter(better, worse)
+                && SolverInterimResultOrdering.CanPromoteDisplayedResult(better, worse)
+                && CombatSearchCoordinator.IsBetterPotionPolicyResult(null, better, worse)
+                && !SolverInterimResultOrdering.IsBetter(worse, better)
+                && !SolverInterimResultOrdering.CanPromoteDisplayedResult(worse, better)
+                && !CombatSearchCoordinator.IsBetterPotionPolicyResult(null, worse, better), label);
+            Console.WriteLine($"PASS ordering: {label}");
+        }
+        Consistent(early, late, "equal-loss earlier victory precedes growth");
+        Consistent(late, early with { ProjectedBattleHpLost = 1 }, "earlier victory cannot increase loss");
+        Consistent(late with { CombatEndedTurn = 2 }, early, "same-turn growth tie-break remains");
+        Consistent(late with { RollingHorizonLossFirst = false },
+            early with { RollingHorizonLossFirst = false }, "single-player growth ordering remains");
+    }
+
+    private static void ValidateReviewR0(
+        CombatState combat, SolverDisplayNames names, SearchPolicySnapshot captured,
+        SolverSearchProfile profile)
+    {
+        Player player = LocalContext.GetMe(combat)!;
+        var enemy = combat.Enemies.Single();
+        int originalHp = enemy.CurrentHp;
+        try
+        {
+            enemy.SetCurrentHpInternal(7);
+            SetLiveEnergyForU5(player, 3);
+            CombatRootSnapshot oldRoot = CombatRootSnapshot.Capture(combat);
+            SearchPolicySnapshot plain = captured with
+            {
+                Profile = profile, RoutePolicy = SearchRoutePolicy.SinglePlayerFullRoute,
+                CurrentTurnOnly = false, UseMultiplayerTeamObjective = false,
+                FixedBudget = true, MaxDegreeOfParallelism = 1,
+                R0TransitionMemo = null, R0TransitionPolicyIdentity = string.Empty,
+                VerifyIncrementalSearch = false,
+            };
+            CombatTransitionMemo memo = new();
+            memo.BindCombat(oldRoot.ContinuationStamp.CombatIdentity);
+            SearchPolicySnapshot cachedPolicy = plain with
+            { R0TransitionMemo = memo, R0TransitionPolicyIdentity = CombatTransitionMemo.CapturePolicyIdentity(plain) };
+            PlanAction bash = new(PlanActionKind.PlayCard, oldRoot.StartTurnNumber,
+                CardId: "BASH", TargetIndex: 0, TargetCombatId: enemy.CombatId);
+            void LossCounters(CombatPredictionSimulator simulator, int lost, int recovered)
+            {
+                SimulatedCombatState state = (SimulatedCombatState)simulator.State.CombatState;
+                state.RecordDamageReceived(player.Creature, null,
+                    new DamageResult(player.Creature, ValueProp.Unpowered) { UnblockedDamage = lost });
+                state.RecordHpRecovered(player.Creature, recovered);
+            }
+            SimulationSnapshot seeded = new CombatBeamSolver(oldRoot, names,
+                BattleDamageTracker.Observe(combat), cachedPolicy, searchProfile: profile)
+                .ReplayDiagnosticActionWithR0Memo(bash, priorActionCount: 7,
+                    prepareParent: simulator => LossCounters(simulator, 3, 2));
+            // Capture a fresh root after the simulated prior-turn path; keep the combat memo.
+            CombatRootSnapshot newRoot = CombatRootSnapshot.Capture(combat);
+            CombatBeamSolver reusedSolver = new(newRoot, names, BattleDamageTracker.Observe(combat),
+                cachedPolicy, searchProfile: profile);
+            SimulationSnapshot reused = reusedSolver.ReplayDiagnosticActionWithR0Memo(bash, priorActionCount: 2,
+                prepareParent: simulator => LossCounters(simulator, 1, 1));
+            SimulationSnapshot fresh = new CombatBeamSolver(newRoot, names,
+                BattleDamageTracker.Observe(combat), plain, searchProfile: profile)
+                .ReplayDiagnosticActionWithR0Memo(bash, priorActionCount: 2,
+                    prepareParent: simulator => LossCounters(simulator, 1, 1));
+            try
+            {
+                Require(reusedSolver.R0TransitionCacheHitsForTesting == 1 && !reused.HasSimulator
+                    && reused.Score == fresh.Score && reused.StateKey == fresh.StateKey
+                    && reused.CumulativePlayerHpLost == fresh.CumulativePlayerHpLost
+                    && reused.RecoveredPlayerHp == fresh.RecoveredPlayerHp
+                    && reused.HistoryEntryCount == fresh.HistoryEntryCount
+                    && reused.TeamCumulativeHpLost == fresh.TeamCumulativeHpLost
+                    && reused.TeamLossRatio == fresh.TeamLossRatio
+                    && reused.WorstPlayerLossRatio == fresh.WorstPlayerLossRatio
+                    && DeferredImpactOutcome.Capture(reused) == DeferredImpactOutcome.Capture(fresh),
+                    $"R0 fresh-root path differs: hits={reusedSolver.R0TransitionCacheHitsForTesting} "
+                    + $"score={reused.Score}/{fresh.Score} state={reused.StateKey == fresh.StateKey} "
+                    + $"loss={reused.CumulativePlayerHpLost}/{fresh.CumulativePlayerHpLost} "
+                    + $"recovered={reused.RecoveredPlayerHp}/{fresh.RecoveredPlayerHp} "
+                    + $"history={reused.HistoryEntryCount}/{fresh.HistoryEntryCount}.");
+                Console.WriteLine("PASS R0: fresh root rebinds action count, loss, recovery, history and team quality");
+            }
+            finally { seeded.ReleaseSimulator(); reused.ReleaseSimulator(); fresh.ReleaseSimulator(); }
+            enemy.SetCurrentHpInternal(originalHp);
+            CombatRootSnapshot nonterminalRoot = CombatRootSnapshot.Capture(combat);
+            CombatBeamSolver nonterminal = new(nonterminalRoot, names, BattleDamageTracker.Observe(combat),
+                cachedPolicy, searchProfile: profile);
+            SimulationSnapshot output = nonterminal.ReplayDiagnosticActionWithR0Memo(bash);
+            try
+            {
+                Require(!output.AllEnemiesDead && nonterminal.R0TerminalStoreTextCapturesForTesting == 0,
+                    "Nonterminal R0 store generated full state text.");
+                Console.WriteLine("PASS R0: nonterminal storage text captures=0");
+            }
+            finally { output.ReleaseSimulator(); }
+        }
+        finally { enemy.SetCurrentHpInternal(originalHp); }
+    }
+
+    private static void ValidateReviewSmartDeadline(
+        CombatState combat, SolverDisplayNames names, SearchPolicySnapshot captured,
+        SolverSearchProfile originalProfile, bool acceptable, bool cancelCaller)
+    {
+        Player player = LocalContext.GetMe(combat)!;
+        var enemy = combat.Enemies.Single();
+        enemy.SetCurrentHpInternal(acceptable ? 20 : 21);
+        SetLiveEnergyForU5(player, 0);
+        var state = player.PlayerCombatState!;
+        foreach (var pile in new[] { state.Hand, state.DrawPile, state.DiscardPile })
+            foreach (CardModel card in pile.Cards.ToArray())
+                pile.RemoveInternal(card, silent: true);
+        foreach (PotionModel potion in player.PotionSlots.OfType<PotionModel>().ToArray())
+            potion.Discard();
+        for (int slot = 0; slot < 2; slot++)
+            Require(player.AddPotionInternal(ModelDb.AllPotions.Single(p => p.Id.Entry == "FIRE_POTION")
+                .ToMutable(), slot, silent: false).success, "Could not add deadline fixture potion.");
+        SolverSearchProfile profile = originalProfile with { MaxExpandedNodes = 40, BeamWidth = 8 };
+        CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
+        BattleDamageSnapshot damage = BattleDamageTracker.Observe(combat);
+        SearchPolicySnapshot policy = captured with
+        {
+            Profile = profile, CurrentTurnOnly = false, RoutePolicy = SearchRoutePolicy.SinglePlayerFullRoute,
+            PotionPolicy = SolverPotionPolicy.Smart, PotionStrategy = new(SolverPotionPolicy.Smart, []),
+            UseNoveltyPortfolio = false, UseBeamWidthPortfolio = false,
+            FixedBudget = true, MaxDegreeOfParallelism = 1, R0TransitionMemo = null,
+            UseE3FixedPortfolioScheduling = true, UseE3AdaptivePortfolioScheduling = false,
+            Interaction = null, RequestWorkTotals = new SearchRequestWorkTotals(),
+        };
+        SolverResult primary = new CombatBeamSolver(root, names, damage,
+            policy with { PotionPolicy = SolverPotionPolicy.Disabled }, searchProfile: profile).Solve();
+        using CancellationTokenSource deadline = new();
+        using CancellationTokenSource caller = new();
+        bool completedOne = false;
+        bool committedOne = false;
+        policy = policy with { Diagnostics = new SearchDiagnosticsSink(message =>
+        {
+            if (message.Contains("SMART_POTION_GRADIENT")) Console.WriteLine(message);
+            if (message.Contains("E3_PORTFOLIO_SLICE kind=smart_potion potion_count=1 status=Completed"))
+            {
+                completedOne = true;
+                deadline.Cancel();
+                if (cancelCaller) caller.Cancel();
+            }
+            if (message.Contains("SMART_POTION_GRADIENT layer=1 won="))
+                committedOne = true;
+        }, _ => { }) };
+        MethodInfo scheduled = typeof(CombatSearchCoordinator).GetMethod("SearchSmartPotionGradientScheduled",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+        try
+        {
+            SolverResult result = (SolverResult)scheduled.Invoke(null,
+                [root, names, damage, policy, deadline.Token, caller.Token, profile,
+                    primary, new SmartLayerMemoryForecast(), null, false])!;
+            Require(!cancelCaller && completedOne && committedOne
+                && (acceptable ? result.ExplicitPotionCount == 1 && result.Snapshot.AllEnemiesDead
+                    : ReferenceEquals(result, primary)),
+                $"Deadline drain failed: acceptable={acceptable} completed={completedOne} committed={committedOne} potions={result.ExplicitPotionCount}.");
+        }
+        catch (TargetInvocationException error) when (cancelCaller && error.InnerException is OperationCanceledException)
+        {
+            Require(completedOne && !committedOne, "Caller cancellation published completed layers.");
+        }
+        Console.WriteLine($"PASS Smart deadline: acceptable={acceptable} caller_cancel={cancelCaller}");
     }
 
     private static string ParseOutput(string[] args)

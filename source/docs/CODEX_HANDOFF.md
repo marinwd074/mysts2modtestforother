@@ -26,7 +26,7 @@
 - **B 延迟影响合同：完成。**
 - **C 战斗级 R0 转移缓存：完成。**
 - **D 新根恢复 R1：完成。**
-- **E 前台/后台分离：进行中；E1 已完成，进入 E2 前台稳定替换。**
+- **E 前台/后台分离：进行中；E1/E2/E3、E4-A 已实机通过，E4-B 质量准入仍待触发样本。**
 - **F 情景预热：未开始。**
 - **G SSD 冷存储：未开始。**
 - **H 质量与响应验收：未开始。**
@@ -138,6 +138,13 @@ state_mismatch
 
 ## 下一任务
 
+### 最新测试包结论（2026-09-29）
+
+- EXOSKELETONS_WEAK `98211ee985ee4607b22ae7311d43618f`：Smart Potion 在 10003ms 降级结束；第 5 回合 R1 完整胜利与最终结果均为累计 21 战损、当回合结束。
+- BOWLBUGS_WEAK `40f79fca33f5441fbfe6537103909895`：Smart Potion 在 10005ms 降级结束；第 2 回合 completion guard 实际保留 12 战损前台，拒绝 15 战损终局，部署范围为 `CurrentTurnAdoption`。该包结果含 `modeled_damage_exact=False`，不能作精确战斗模拟验收。
+- 两包均未出现 `relation=regressed / admission=rejected_regression`，也没有等战损早胜与延迟成长的实际对照。因此不关闭下面两个实机边界，不提前进入 F。
+- [代码审查四项修复](Rolling_Horizon_Reuse_Code_Review.md) 已落地并通过 pinned 0.107.1 的 9 个定向场景；原生跨回合 R0 重新建根与当前构建 Host/Client 仍需实机验证。
+
 实机验证两个 current HEAD 边界：
 
 1. **E4-B 第二阶段质量准入**：PHROG_PARASITE_ELITE `6c34eee729b94f4584f7c3ad29f9c019` 已实机证明 Smart Potion 10s 降级预算生效（约 10006 / 10009ms）。同包另一次 Smart Potion 4.566s 返回 `relation=regressed`：8 战损 / 0 药 / 敌 1 HP 被 9 战损 / 1 药 / 胜利覆盖。现在 E4 活跃窗口继续执行并记录 supplemental 搜索，但 `regressed` 结果只记账，`admission=rejected_regression`，不得接管 incumbent；非 E4 窗口保持旧行为。
@@ -150,7 +157,7 @@ state_mismatch
 
 ## 当前未验证边界
 
-- E1 已通过实机验证。E2 的 keep/replace 诊断与 pinned 合同已加入，仍需一份 current HEAD 实机日志证明真实后台候选按生产质量排序稳定替换/保留。
+- E2 已由 INFESTED_PRISMS `604411ffffe44ca388ece05d9eb8e594` 实机闭合；本轮比较规则修复后仍需当前构建复验 E4 准入与等战损早胜。
 - U5/U6 历史 Host/Client observation → fresh replan 的部分真实多人边界仍不是 pinned replay 可替代的证据。
 - GitHub Issue #8：多人 Safe Execute 的 Headbutt / turn-start Choice 仍需 current HEAD Host/Client 复验。
 - GitHub Issue #9：Vicious 战略估值修复仍需 comparable current multiplayer root 复验。

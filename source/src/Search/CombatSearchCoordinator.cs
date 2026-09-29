@@ -2474,6 +2474,7 @@ internal static partial class CombatSearchCoordinator
             CombatEndedTurn: potionFree.CombatEndedTurn)
         {
             DeathSaveUseCount = potionFree.Snapshot.ProjectedDeathSaveUseCount,
+            BattleHpLost = potionFree.ProjectedBattleHpLost,
         };
         SolverResult audited = new CombatBeamSolver(
             root,
@@ -2540,6 +2541,7 @@ internal static partial class CombatSearchCoordinator
             provisionalPotionFree.CombatEndedTurn)
         {
             DeathSaveUseCount = provisionalPotionFree.Snapshot.ProjectedDeathSaveUseCount,
+            BattleHpLost = provisionalPotionFree.ProjectedBattleHpLost,
         };
         SolverResult? scout = SolveOptionalPotionPosterior(
             new CombatBeamSolver(
@@ -2755,6 +2757,7 @@ internal static partial class CombatSearchCoordinator
             potionFree.CombatEndedTurn)
         {
             DeathSaveUseCount = potionFree.Snapshot.ProjectedDeathSaveUseCount,
+            BattleHpLost = potionFree.ProjectedBattleHpLost,
         };
         List<SolverResult> searches = [potionFree];
         SolverResult selected = potionFree;
@@ -3082,6 +3085,9 @@ internal static partial class CombatSearchCoordinator
         }
 
         callerCancellationToken.ThrowIfCancellationRequested();
+        // Deadline stops new work; completed layers still pass the original ordered admission.
+        if (CommitCompletedInOrder() is { } settledAtDeadline)
+            return settledAtDeadline;
         MergeAuditTotals(selected, [.. searches]);
         policy.Diagnostics.Info(
             $"[CombatSolver/Test] SMART_POTION_GRADIENT result " +
@@ -3131,6 +3137,7 @@ internal static partial class CombatSearchCoordinator
             potionFree.CombatEndedTurn)
         {
             DeathSaveUseCount = potionFree.Snapshot.ProjectedDeathSaveUseCount,
+            BattleHpLost = potionFree.ProjectedBattleHpLost,
         };
         List<SolverResult> searches = [potionFree];
         SolverResult selected = potionFree;
@@ -3548,7 +3555,9 @@ internal static partial class CombatSearchCoordinator
             current.GrowthRewardCount,
             candidate.DeathSaveUseCount,
             current.DeathSaveUseCount,
-            rollingHorizonLossFirst);
+            rollingHorizonLossFirst,
+            candidate.ProjectedBattleHpLost,
+            current.ProjectedBattleHpLost);
         if (primaryQuality != 0)
             return primaryQuality;
         if (theftPolicy == SolverTheftPolicy.PreserveResources
@@ -3626,7 +3635,9 @@ internal static partial class CombatSearchCoordinator
             current.Snapshot.StrategyGoalCount,
             candidate.Snapshot.ProjectedDeathSaveUseCount,
             current.Snapshot.ProjectedDeathSaveUseCount,
-            rollingHorizonLossFirst);
+            rollingHorizonLossFirst,
+            candidate.ProjectedBattleHpLost,
+            current.ProjectedBattleHpLost);
     }
 
     private static bool IsCompleteVictory(SolverResult result)

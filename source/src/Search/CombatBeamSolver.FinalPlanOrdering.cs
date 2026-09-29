@@ -381,6 +381,9 @@ internal sealed partial class CombatBeamSolver
             int potionFreeStrategicHpDeficit = hasPotionFreeBaseline
                 ? policyCandidates[potionFreeBaselineIndex].StrategicHpDeficit
                 : initialHp;
+            int potionFreeBattleHpLost = hasPotionFreeBaseline
+                ? policyCandidates[potionFreeBaselineIndex].Snapshot.CumulativePlayerHpLost
+                : initialHp;
             int potionFreePlayerHp = hasPotionFreeBaseline
                 ? policyCandidates[potionFreeBaselineIndex].Snapshot.PlayerHp
                 : 0;
@@ -398,6 +401,10 @@ internal sealed partial class CombatBeamSolver
                 hasPotionFreeBaseline = true;
                 potionFreeWon = auditedBaseline.Won;
                 potionFreeStrategicHpDeficit = auditedBaseline.HpDeficit;
+                potionFreeBattleHpLost = auditedBaseline.BattleHpLost
+                    ?? (MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(routePolicy)
+                        ? throw new InvalidOperationException("Rolling-horizon potion baseline requires raw battle HP loss.")
+                        : auditedBaseline.HpDeficit);
                 potionFreePlayerHp = auditedBaseline.PlayerHp;
                 potionFreeCombatEndedTurn = auditedBaseline.CombatEndedTurn;
                 potionFreeDeathSaveUseCount = auditedBaseline.DeathSaveUseCount;
@@ -447,7 +454,9 @@ internal sealed partial class CombatBeamSolver
                             potionFreeCombatEndedTurn,
                             candidateDeathSaveUseCount: candidate.Snapshot.ProjectedDeathSaveUseCount,
                             currentDeathSaveUseCount: potionFreeDeathSaveUseCount,
-                            rollingHorizonLossFirst: useRollingHorizonLossFirst) < 0;
+                            rollingHorizonLossFirst: useRollingHorizonLossFirst,
+                            candidateBattleHpLost: candidate.Snapshot.CumulativePlayerHpLost,
+                            currentBattleHpLost: potionFreeBattleHpLost) < 0;
                     bool passesSoftPotionPolicy = PotionUsePolicy.IsEligible(
                             candidate.EffectivePotionPolicy,
                             candidate.OptionalPotionCount,

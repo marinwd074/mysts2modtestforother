@@ -18,7 +18,23 @@ internal sealed class CombatTransitionMemo
     private int _collisionRejects;
     private int _droppedStores;
 
-    private sealed record Entry(string ParentStateText, SimulationSnapshot Output);
+    private sealed record Entry(
+        string ParentStateText,
+        TerminalEvaluationContext EvaluationContext,
+        int HistoryEntryDelta,
+        IReadOnlyList<TerminalPlayerLoss> OutputPlayerLosses,
+        SimulationSnapshot Output);
+
+    // State keys omit evaluation-only loss counters and root-relative HP denominators.
+    // Keep transition deltas so a new root can evaluate the same outcome on its own path.
+    internal readonly record struct TerminalPlayerLoss(string NetId, int MaxHp, int HpLost);
+    internal sealed record TerminalEvaluationContext(
+        int InitialPlayerMaxHp,
+        BossHpRelief BossHpRelief,
+        PostCombatRelicHealProfile PostCombatRelicHeal,
+        int CumulativePlayerHpLost,
+        int RecoveredPlayerHp,
+        IReadOnlyList<TerminalPlayerLoss> PlayerLosses);
 
     internal int EntryCount { get { lock (_gate) return _entryCount; } }
     internal int Hits { get { lock (_gate) return _hits; } }
@@ -87,6 +103,9 @@ internal sealed class CombatTransitionMemo
         PlanAction action,
         string policyIdentity,
         string parentStateText,
+        TerminalEvaluationContext evaluationContext,
+        int actionCount,
+        int parentHistoryEntryCount,
         out SimulationSnapshot snapshot)
     {
         snapshot = null!;
@@ -97,15 +116,33 @@ internal sealed class CombatTransitionMemo
         {
             if (!_entries.TryGetValue(key, out List<Entry>? bucket))
                 return false;
+            bool matchedStateText = false;
             foreach (Entry entry in bucket)
             {
                 if (!string.Equals(entry.ParentStateText, parentStateText, StringComparison.Ordinal))
                     continue;
+                matchedStateText = true;
+                if (entry.EvaluationContext.BossHpRelief != evaluationContext.BossHpRelief
+                    || entry.EvaluationContext.PostCombatRelicHeal != evaluationContext.PostCombatRelicHeal
+                    || !TryEvaluateTeamLosses(entry, evaluationContext,
+                        out int teamLoss, out double teamRatio, out double worstRatio))
+                    continue;
                 _hits++;
-                snapshot = entry.Output.CloneValueOnlyForTransitionMemo();
+                snapshot = entry.Output.EvaluateTerminalMemo(
+                    actionCount, checked(parentHistoryEntryCount + entry.HistoryEntryDelta),
+                    checked(evaluationContext.CumulativePlayerHpLost
+                        + entry.Output.CumulativePlayerHpLost - entry.EvaluationContext.CumulativePlayerHpLost),
+                    checked(evaluationContext.RecoveredPlayerHp
+                        + entry.Output.RecoveredPlayerHp - entry.EvaluationContext.RecoveredPlayerHp),
+                    (entry.EvaluationContext.InitialPlayerMaxHp - evaluationContext.InitialPlayerMaxHp)
+                        * SolverWeights.Hp
+                        - (evaluationContext.CumulativePlayerHpLost - entry.EvaluationContext.CumulativePlayerHpLost)
+                            * SolverWeights.Hp,
+                    teamLoss, teamRatio, worstRatio);
                 return true;
             }
-            _collisionRejects++;
+            if (!matchedStateText)
+                _collisionRejects++;
             return false;
         }
     }
@@ -115,6 +152,9 @@ internal sealed class CombatTransitionMemo
         PlanAction action,
         string policyIdentity,
         string parentStateText,
+        TerminalEvaluationContext evaluationContext,
+        int parentHistoryEntryCount,
+        IReadOnlyList<TerminalPlayerLoss> outputPlayerLosses,
         SimulationSnapshot output,
         bool transitionIsPure)
     {
@@ -128,7 +168,9 @@ internal sealed class CombatTransitionMemo
             if (_entries.TryGetValue(key, out List<Entry>? bucket))
             {
                 if (bucket.Any(entry =>
-                        string.Equals(entry.ParentStateText, parentStateText, StringComparison.Ordinal)))
+                        string.Equals(entry.ParentStateText, parentStateText, StringComparison.Ordinal)
+                        && entry.EvaluationContext.BossHpRelief == evaluationContext.BossHpRelief
+                        && entry.EvaluationContext.PostCombatRelicHeal == evaluationContext.PostCombatRelicHeal))
                     return;
             }
             else
@@ -145,9 +187,40 @@ internal sealed class CombatTransitionMemo
                 _entries.Add(key, bucket);
             bucket.Add(new Entry(
                 parentStateText,
+                evaluationContext,
+                checked(output.HistoryEntryCount - parentHistoryEntryCount),
+                outputPlayerLosses,
                 output.CloneValueOnlyForTransitionMemo(transitionIsPure)));
             _entryCount++;
         }
+    }
+
+    private static bool TryEvaluateTeamLosses(
+        Entry entry, TerminalEvaluationContext current,
+        out int total, out double teamRatio, out double worstRatio)
+    {
+        total = 0;
+        teamRatio = 0;
+        worstRatio = 0;
+        if (current.PlayerLosses.Count != entry.EvaluationContext.PlayerLosses.Count
+            || current.PlayerLosses.Count != entry.OutputPlayerLosses.Count)
+            return false;
+        for (int index = 0; index < current.PlayerLosses.Count; index++)
+        {
+            TerminalPlayerLoss before = entry.EvaluationContext.PlayerLosses[index];
+            TerminalPlayerLoss after = entry.OutputPlayerLosses[index];
+            TerminalPlayerLoss actual = current.PlayerLosses[index];
+            if (before.NetId != actual.NetId || after.NetId != actual.NetId)
+                return false;
+            int lost = checked(actual.HpLost + after.HpLost - before.HpLost);
+            if (lost < 0)
+                return false;
+            total = checked(total + lost);
+            double ratio = lost / (double)Math.Max(1, actual.MaxHp);
+            teamRatio += ratio;
+            worstRatio = Math.Max(worstRatio, ratio);
+        }
+        return true;
     }
 
     internal bool ContainsIndexForTesting(
@@ -159,7 +232,7 @@ internal sealed class CombatTransitionMemo
     internal static bool IsActionEligibleForTesting(PlanAction action)
         => R0TransitionActionKey.TryCreate(action, out _);
 
-    private static bool IsSafeTerminalOutput(SimulationSnapshot output)
+    internal static bool IsSafeTerminalOutput(SimulationSnapshot output)
         => output.BoundaryReason == SearchBoundaryReason.None
             && (output.PlayerDead || output.AllEnemiesDead)
             && !output.HasRisk
