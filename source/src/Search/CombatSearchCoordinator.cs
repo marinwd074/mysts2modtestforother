@@ -1225,12 +1225,15 @@ internal static partial class CombatSearchCoordinator
                         hasApprovedForeground,
                         policy.PotionStrategy.HasForcedDirectives,
                         isPrimaryPass);
-                    int e4ActiveDeadlineMs =
-                        ComputeE4ActiveClockDeadlineMilliseconds(
+                    bool e4Active =
+                        e4DeadlineMs < activeProfile.SoftTimeBudgetMilliseconds;
+                    int e4ActiveDeadlineMs = e4Active
+                        ? ComputeE4ActiveClockDeadlineMilliseconds(
                             activeProfile.SoftTimeBudgetMilliseconds,
                             activeClock.ElapsedMilliseconds,
                             supplementalStartMs,
-                            e4DeadlineMs);
+                            e4DeadlineMs)
+                        : activeProfile.SoftTimeBudgetMilliseconds;
                     if (e4ActiveDeadlineMs < activeProfile.SoftTimeBudgetMilliseconds)
                     {
                         supplementalProfile = activeProfile with
@@ -1240,7 +1243,7 @@ internal static partial class CombatSearchCoordinator
                     }
                     policy.Diagnostics.Info(
                         $"[CombatSolver/Test] SEARCH_E4_SUPPLEMENTAL_BUDGET " +
-                        $"active={(e4ActiveDeadlineMs < activeProfile.SoftTimeBudgetMilliseconds).ToString().ToLowerInvariant()} " +
+                        $"active={e4Active.ToString().ToLowerInvariant()} " +
                         $"primary_pass={isPrimaryPass.ToString().ToLowerInvariant()} " +
                         $"approved_foreground={hasApprovedForeground.ToString().ToLowerInvariant()} " +
                         $"forced_potions={policy.PotionStrategy.HasForcedDirectives.ToString().ToLowerInvariant()} " +
