@@ -16,6 +16,25 @@ internal static partial class CombatSearchCoordinator
         long LastImprovementMilliseconds,
         bool HasApprovedForeground);
 
+    internal static int ComputeE4ActiveClockDeadlineMilliseconds(
+        int configuredActiveBudgetMilliseconds,
+        long activeClockElapsedMilliseconds,
+        long requestStartMilliseconds,
+        int requestDeadlineMilliseconds)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(configuredActiveBudgetMilliseconds, 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(activeClockElapsedMilliseconds);
+        ArgumentOutOfRangeException.ThrowIfNegative(requestStartMilliseconds);
+        long remainingRequestWindow = Math.Max(
+            1L,
+            requestDeadlineMilliseconds - requestStartMilliseconds);
+        long activeDeadline = activeClockElapsedMilliseconds + remainingRequestWindow;
+        return (int)Math.Clamp(
+            activeDeadline,
+            1L,
+            configuredActiveBudgetMilliseconds);
+    }
+
     internal static int ComputeE4SupplementalDeadlineMilliseconds(
         SearchRoutePolicy routePolicy,
         int configuredBudgetMilliseconds,
@@ -1206,22 +1225,30 @@ internal static partial class CombatSearchCoordinator
                         hasApprovedForeground,
                         policy.PotionStrategy.HasForcedDirectives,
                         isPrimaryPass);
-                    if (e4DeadlineMs < activeProfile.SoftTimeBudgetMilliseconds)
+                    int e4ActiveDeadlineMs =
+                        ComputeE4ActiveClockDeadlineMilliseconds(
+                            activeProfile.SoftTimeBudgetMilliseconds,
+                            activeClock.ElapsedMilliseconds,
+                            supplementalStartMs,
+                            e4DeadlineMs);
+                    if (e4ActiveDeadlineMs < activeProfile.SoftTimeBudgetMilliseconds)
                     {
                         supplementalProfile = activeProfile with
                         {
-                            SoftTimeBudgetMilliseconds = e4DeadlineMs,
+                            SoftTimeBudgetMilliseconds = e4ActiveDeadlineMs,
                         };
                     }
                     policy.Diagnostics.Info(
                         $"[CombatSolver/Test] SEARCH_E4_SUPPLEMENTAL_BUDGET " +
-                        $"active={(e4DeadlineMs < activeProfile.SoftTimeBudgetMilliseconds).ToString().ToLowerInvariant()} " +
+                        $"active={(e4ActiveDeadlineMs < activeProfile.SoftTimeBudgetMilliseconds).ToString().ToLowerInvariant()} " +
                         $"primary_pass={isPrimaryPass.ToString().ToLowerInvariant()} " +
                         $"approved_foreground={hasApprovedForeground.ToString().ToLowerInvariant()} " +
                         $"forced_potions={policy.PotionStrategy.HasForcedDirectives.ToString().ToLowerInvariant()} " +
                         $"start_ms={supplementalStartMs} last_improvement_ms={qualityAnchorMs} " +
+                        $"active_clock_ms={activeClock.ElapsedMilliseconds} " +
                         $"original_deadline_ms={activeProfile.SoftTimeBudgetMilliseconds} " +
-                        $"e4_deadline_ms={e4DeadlineMs}");
+                        $"e4_request_deadline_ms={e4DeadlineMs} " +
+                        $"e4_active_deadline_ms={e4ActiveDeadlineMs}");
                 }
 
                 passResult = RunSupplementalAudits(
