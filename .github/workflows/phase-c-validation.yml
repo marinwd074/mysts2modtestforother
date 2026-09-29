@@ -9,6 +9,7 @@ on:
       - 'source/src/Search/CombatTransitionMemo.cs'
       - 'source/src/Search/ActionReplayCache.cs'
       - 'source/src/Search/CombatSearchCoordinator.cs'
+      - 'source/src/Search/ScenarioPrewarmShadowTracker.cs'
       - 'source/src/Search/CombatBeamSolver.R0TransitionMemo.cs'
       - 'source/src/Search/CombatBeamSolver.Expansion.cs'
       - 'source/src/Search/CombatPlan.cs'
