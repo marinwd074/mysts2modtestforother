@@ -601,6 +601,21 @@ internal static partial class CombatSearchCoordinator
         => SolverInterimResultOrdering.CanPromoteDisplayedResult(foreground, final)
             && !SolverInterimResultOrdering.CanPromoteDisplayedResult(final, foreground);
 
+    internal static string ClassifyE4SupplementalRelation(
+        SolverInterimResult before,
+        SolverInterimResult after)
+    {
+        bool afterPromotesBefore =
+            SolverInterimResultOrdering.CanPromoteDisplayedResult(after, before);
+        bool beforePromotesAfter =
+            SolverInterimResultOrdering.CanPromoteDisplayedResult(before, after);
+        if (afterPromotesBefore && !beforePromotesAfter)
+            return "improved";
+        if (beforePromotesAfter && !afterPromotesBefore)
+            return "regressed";
+        return "equivalent_or_incomparable";
+    }
+
     internal static bool RouteMatchesPreview(
         IReadOnlyList<PlanAction> actions,
         SolverSpeculativeRoutePreview? preview)
@@ -1606,19 +1621,94 @@ internal static partial class CombatSearchCoordinator
         using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(TimeSpan.FromMilliseconds(remainingMilliseconds));
         SolverResult selected = primary;
+        string? activeE4Stage = null;
+        SolverResult? activeE4Before = null;
+        SearchRequestWorkSnapshot activeE4WorkBefore = default;
+        long activeE4StartedMs = 0;
+
+        SearchRequestWorkSnapshot E4WorkSnapshot()
+            => policy.RequestWorkTotals?.Snapshot() ?? default;
+
+        void LogE4SupplementalValue(
+            string stage,
+            SolverResult before,
+            SolverResult? after,
+            SearchRequestWorkSnapshot workBefore,
+            long startedMs,
+            string status)
+        {
+            SearchRequestWorkSnapshot workAfter = E4WorkSnapshot();
+            long elapsedMs = Math.Max(0, requestClock.ElapsedMilliseconds - startedMs);
+            long expanded = Math.Max(0, workAfter.ExpandedNodes - workBefore.ExpandedNodes);
+            long transitions = Math.Max(0, workAfter.TransitionCount - workBefore.TransitionCount);
+            SolverInterimResult beforeSummary = BuildInterimResult(root, policy, before);
+            string relation = "no_result";
+            string afterHpLoss = "-";
+            string afterEnemyHp = "-";
+            string afterPotions = "-";
+            string afterMemberKind = "none";
+            if (after != null)
+            {
+                SolverInterimResult afterSummary = BuildInterimResult(root, policy, after);
+                relation = ClassifyE4SupplementalRelation(beforeSummary, afterSummary);
+                afterHpLoss = afterSummary.ProjectedBattleHpLost.ToString();
+                afterEnemyHp = afterSummary.EnemyHp.ToString();
+                afterPotions = afterSummary.ProjectedBattlePotionCount.ToString();
+                CandidateOrigin? afterOrigin = after.SearchEfficiencyOrigin;
+                afterMemberKind = afterOrigin == null
+                    ? "unknown"
+                    : policy.PortfolioTelemetry?.FindSearchMember(afterOrigin.SearchMemberId)?.Kind
+                        ?? "unknown";
+            }
+
+            policy.Diagnostics.Info(
+                $"[CombatSolver/Test] SEARCH_E4_SUPPLEMENTAL_VALUE " +
+                $"stage={stage} status={status} relation={relation} " +
+                $"elapsed_ms={elapsedMs} expanded={expanded} transitions={transitions} " +
+                $"selected_changed={(after != null && !ReferenceEquals(before, after)).ToString().ToLowerInvariant()} " +
+                $"before_hp_loss={beforeSummary.ProjectedBattleHpLost} " +
+                $"before_enemy_hp={beforeSummary.EnemyHp} " +
+                $"before_potions={beforeSummary.ProjectedBattlePotionCount} " +
+                $"after_hp_loss={afterHpLoss} after_enemy_hp={afterEnemyHp} " +
+                $"after_potions={afterPotions} after_member_kind={afterMemberKind}");
+        }
+
+        SolverResult MeasureE4Stage(string stage, SolverResult before, Func<SolverResult> run)
+        {
+            activeE4Stage = stage;
+            activeE4Before = before;
+            activeE4WorkBefore = E4WorkSnapshot();
+            activeE4StartedMs = requestClock.ElapsedMilliseconds;
+            SolverResult after = run();
+            LogE4SupplementalValue(
+                stage,
+                before,
+                after,
+                activeE4WorkBefore,
+                activeE4StartedMs,
+                status: "completed");
+            activeE4Stage = null;
+            activeE4Before = null;
+            return after;
+        }
+
         try
         {
             if (!policy.PotionStrategy.HasForcedDirectives)
             {
-                selected = AuditRequiredPotionUse(
-                    root,
-                    displayNames,
-                    battleDamage,
-                    policy,
-                    deadline.Token,
-                    progressCallback,
-                    profile,
-                    selected);
+                SolverResult beforeRequired = selected;
+                selected = MeasureE4Stage(
+                    "required_potion",
+                    beforeRequired,
+                    () => AuditRequiredPotionUse(
+                        root,
+                        displayNames,
+                        battleDamage,
+                        policy,
+                        deadline.Token,
+                        progressCallback,
+                        profile,
+                        beforeRequired));
             }
             if (ResolveTakeoverResult(selected, policy.Interaction) is { } requiredTakeoverResult)
                 return requiredTakeoverResult;
@@ -1633,36 +1723,48 @@ internal static partial class CombatSearchCoordinator
                     earlySmartPotionScout,
                     out SolverResult? reusedScout))
             {
-                selected = reusedScout!;
+                SolverResult beforeReuse = selected;
+                selected = MeasureE4Stage(
+                    "early_smart_scout_reuse",
+                    beforeReuse,
+                    () => reusedScout!);
             }
             else
             {
-                selected = AuditSmartPotionUse(
-                    root,
-                    displayNames,
-                    battleDamage,
-                    policy,
-                    deadline.Token,
-                    cancellationToken,
-                    progressCallback,
-                    profile,
-                    selected,
-                    memoryForecast,
-                    interimResultCallback);
+                SolverResult beforeSmart = selected;
+                selected = MeasureE4Stage(
+                    "smart_potion",
+                    beforeSmart,
+                    () => AuditSmartPotionUse(
+                        root,
+                        displayNames,
+                        battleDamage,
+                        policy,
+                        deadline.Token,
+                        cancellationToken,
+                        progressCallback,
+                        profile,
+                        beforeSmart,
+                        memoryForecast,
+                        interimResultCallback));
             }
             if (HasReachedAcceptableBattleHpLoss(policy, selected))
                 return selected;
             if (policy.PotionPolicy != SolverPotionPolicy.Smart)
             {
-                selected = AuditOpeningPowerUse(
-                    root,
-                    displayNames,
-                    battleDamage,
-                    policy,
-                    deadline.Token,
-                    progressCallback,
-                    profile,
-                    selected);
+                SolverResult beforeOpening = selected;
+                selected = MeasureE4Stage(
+                    "opening_power",
+                    beforeOpening,
+                    () => AuditOpeningPowerUse(
+                        root,
+                        displayNames,
+                        battleDamage,
+                        policy,
+                        deadline.Token,
+                        progressCallback,
+                        profile,
+                        beforeOpening));
                 if (HasReachedAcceptableBattleHpLoss(policy, selected))
                     return selected;
             }
@@ -1670,6 +1772,18 @@ internal static partial class CombatSearchCoordinator
         catch (OperationCanceledException)
             when (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
+            if (activeE4Stage != null && activeE4Before != null)
+            {
+                LogE4SupplementalValue(
+                    activeE4Stage,
+                    activeE4Before,
+                    after: null,
+                    activeE4WorkBefore,
+                    activeE4StartedMs,
+                    status: "deadline");
+                activeE4Stage = null;
+                activeE4Before = null;
+            }
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] SUPPLEMENTAL_AUDIT_BUDGET exhausted=true " +
                 $"elapsed_ms={requestClock.ElapsedMilliseconds} " +

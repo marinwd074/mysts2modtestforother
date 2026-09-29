@@ -138,19 +138,21 @@ state_mismatch
 
 ## 下一任务
 
-进入 E4-B：基于已验证的 E4-A 边界，测量并按价值调度 supplemental 成员，不再缩主 Beam。
+实机验证 E4-B 第一阶段：supplemental 成员价值账本。当前只测量，不跳过任何成员。
 
-E4-A 已由 TEST_SUBJECT_BOSS `602c55e77ca447b1bd7abcb4b75111d1` 实机闭合，构建为 `0.40.2+43e58cc99221a569706f1081d186af12285b3c89`。
+E4-A 已闭合，当前生产窗口继续保持：主 Beam/Novelty/potion_disabled 不缩；已批准 foreground 后 supplemental 受 20s grace / 最后改善后 30s freshness 上限控制。
 
-关键实机证据：
-- generation 1：主 potion_disabled 在 29.739s 最后改善到 13 战损；E4 supplemental 从 29.758s 启动，deadline 59.739s，实际 request 59.761s 结束。potion_required 约 29.993s，最终仍与 foreground 等价。
-- generation 2：最后改善 43.016s；E4 request deadline 73.016s，实际 73.018s 结束。两个 potion_required 合计约 29.99s，最终仍与 foreground 等价。
-- generation 3：最后改善 22.977s；E4 request deadline 52.977s，实际 52.978s 结束。两个 potion_required 合计约 30.00s，最终仍与 foreground 等价。
-- 三次 `SEARCH_E3_FINAL_VS_FOREGROUND` 均为 `equivalent_or_incomparable`，最终成员均仍是 `potion_disabled`，没有观察到 E4 截断造成质量回退。
-- generation 4 已自然形成完整胜利，request 13.743s 结束，未被 E4 强行延长到 deadline，说明 E4 是上限而不是最低等待时间。
-- continuation / 实验体阶段切换本包未出现新回归。
+E4-B 新增 `SEARCH_E4_SUPPLEMENTAL_VALUE`，对 supplemental 阶段逐项记录：
+- `stage=required_potion / smart_potion / early_smart_scout_reuse / opening_power`
+- `status=completed / deadline`
+- 该阶段独占墙钟、expanded、transitions
+- 进入阶段前 incumbent 与阶段输出的 HP loss / enemy HP / potion count
+- 用现有 `CanPromoteDisplayedResult` 得出的 `relation=improved / regressed / equivalent_or_incomparable / no_result`
+- 最终输出实际来自哪个 `member_kind`
 
-E4-B 建议只做价值调度测量/准入，不改主 Beam、quality ordering 或 completion guard。重点回答：哪些 supplemental member 在 E4-A 给出的 20–30s 窗口内真正产生最终质量改善；没有证据前不继续压缩窗口。
+deadline 截断中的成员也会记录已消耗工作量，但不伪造候选质量。该阶段不改变 Beam、药水准入、quality ordering、E4-A deadline 或 completion guard。
+
+下一份长 Elite/Boss 包重点看：`smart_potion` 在 E4-A 的 20–30s 窗口内，有多少次 relation=improved；若长期只有 deadline/equivalent/regressed，再设计 E4-B 第二阶段准入。单个样本不足以直接删除药水搜索。
 
 ## 当前未验证边界
 

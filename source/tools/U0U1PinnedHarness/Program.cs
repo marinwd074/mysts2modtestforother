@@ -591,6 +591,14 @@ internal static class Program
         Require(
             SolverInterimResultOrdering.CanPromoteDisplayedResult(betterBackground, live),
             "E2 rejected a same-loss background candidate with strictly better enemy HP.");
+        Require(
+            CombatSearchCoordinator.ClassifyE4SupplementalRelation(live, betterBackground)
+                == "improved"
+            && CombatSearchCoordinator.ClassifyE4SupplementalRelation(live, worseBackground)
+                == "regressed"
+            && CombatSearchCoordinator.ClassifyE4SupplementalRelation(live, live)
+                == "equivalent_or_incomparable",
+            "E4 supplemental value classification must reuse the existing foreground quality ordering.");
 
         SolverInterimResult scrollsForeground = live with
         {
