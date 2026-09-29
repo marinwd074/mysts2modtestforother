@@ -177,8 +177,8 @@ internal sealed class ScenarioPrewarmShadowTracker
         ScenarioPrewarmRootObservation same = tracker.ObserveRoot(rootA);
         ScenarioPrewarmRootObservation hit = tracker.ObserveRoot(rootB);
 
-        tracker.RecordPrediction(rootA, rootC, "stale", ShadowTeammateScenarioKind.Balanced);
-        tracker.RecordPrediction(rootB, rootC, "decision-b", ShadowTeammateScenarioKind.Balanced);
+        tracker.RecordPrediction(rootA, rootC, "stale", ShadowTeammateScenarioKind.Conserve);
+        tracker.RecordPrediction(rootB, rootC, "decision-b", ShadowTeammateScenarioKind.Conserve);
         ScenarioPrewarmRootObservation miss = tracker.ObserveRoot(rootD);
 
         return initial.Status == "initial"
