@@ -138,21 +138,19 @@ state_mismatch
 
 ## 下一任务
 
-实机验证 E4-A：高质量前台形成后限制 supplemental/potion 长尾，但不缩主 Beam。
+进入 E4-B：基于已验证的 E4-A 边界，测量并按价值调度 supplemental 成员，不再缩主 Beam。
 
-TEST_SUBJECT_BOSS `19137cca8baa4f26bece04828153965e` 来自 `0.40.2+e4aef0e07d82a39a8c404f30e21dd66d8a1cba60`，已闭合 E3 completion guard 第三版：真实出现 `SEARCH_E3_COMPLETION_FOREGROUND_GUARD source=current_turn_seed scope=CurrentTurnAdoption`，更差自然 final 不再覆盖已批准当前回合前台。实验体 260→520→780 HP 阶段转换也未复现旧卡死/跨阶段硬复用。
+E4-A 已由 TEST_SUBJECT_BOSS `602c55e77ca447b1bd7abcb4b75111d1` 实机闭合，构建为 `0.40.2+43e58cc99221a569706f1081d186af12285b3c89`。
 
-E3 多包证据同时表明：主 potion_disabled 的有效改善常在 25–40 秒才出现，不能砍主搜索；但最后一次 foreground 改善后 supplemental potion 长尾可继续 30–80+ 秒而不改善最终质量。E4-A 因而只收紧第一轮 MultiplayerSinglePlayerCore 的 supplemental 总墙钟：
+关键实机证据：
+- generation 1：主 potion_disabled 在 29.739s 最后改善到 13 战损；E4 supplemental 从 29.758s 启动，deadline 59.739s，实际 request 59.761s 结束。potion_required 约 29.993s，最终仍与 foreground 等价。
+- generation 2：最后改善 43.016s；E4 request deadline 73.016s，实际 73.018s 结束。两个 potion_required 合计约 29.99s，最终仍与 foreground 等价。
+- generation 3：最后改善 22.977s；E4 request deadline 52.977s，实际 52.978s 结束。两个 potion_required 合计约 30.00s，最终仍与 foreground 等价。
+- 三次 `SEARCH_E3_FINAL_VS_FOREGROUND` 均为 `equivalent_or_incomparable`，最终成员均仍是 `potion_disabled`，没有观察到 E4 截断造成质量回退。
+- generation 4 已自然形成完整胜利，request 13.743s 结束，未被 E4 强行延长到 deadline，说明 E4 是上限而不是最低等待时间。
+- continuation / 实验体阶段切换本包未出现新回归。
 
-1. 主 Beam / Novelty / potion_disabled、BeamWidth、节点、并发与质量排序完全不变。
-2. 只有已经存在正式批准且存活的 foreground 时才启用。
-3. supplemental 至少获得 20 秒；若 foreground 刚改善，则至少保留到“最后一次改善后 30 秒”。
-4. deadline 仍受原请求总预算上限约束；不会延长原预算。
-5. 单人模式、没有批准前台、用户显式 Force potion、以及 NO_VICTORY_ESCALATION 全部保持原预算。
-6. completion guard 继续兜底；E4 不引入新的路线质量比较。
-7. 新日志 `SEARCH_E4_SUPPLEMENTAL_BUDGET` 记录 start/last improvement/original deadline/E4 deadline。
-
-下一份长 Elite/Boss 包重点验证：主 potion_disabled 的最后有效 replace 时间是否不变；supplemental 是否在 E4 deadline 附近结束；最终/foreground 质量不得比 E3 基线回退。若出现被截断后明显更差的合法 potion 路线，撤回/放宽 E4 deadline，不调整质量排序。
+E4-B 建议只做价值调度测量/准入，不改主 Beam、quality ordering 或 completion guard。重点回答：哪些 supplemental member 在 E4-A 给出的 20–30s 窗口内真正产生最终质量改善；没有证据前不继续压缩窗口。
 
 ## 当前未验证边界
 
