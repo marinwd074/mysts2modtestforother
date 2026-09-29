@@ -96,8 +96,12 @@ internal sealed class ScenarioPrewarmShadowTracker
         ArgumentException.ThrowIfNullOrWhiteSpace(decisionKey);
         lock (_gate)
         {
-            BindCombat(sourceRoot.CombatIdentity);
-            if (_currentRootStateText == null
+            if (_combatIdentity == null
+                || !string.Equals(
+                    _combatIdentity,
+                    sourceRoot.CombatIdentity,
+                    StringComparison.Ordinal)
+                || _currentRootStateText == null
                 || !string.Equals(
                     _currentRootStateText,
                     sourceRoot.StateText,
