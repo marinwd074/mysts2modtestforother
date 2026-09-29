@@ -6,6 +6,7 @@ internal sealed partial class CombatBeamSolver
 {
     internal const int ProductionShadowReplayObservationLimit = 64;
     internal const int ProductionShadowReplayFutureTurnReserve = 16;
+    internal int R0TerminalStoreTextCapturesForTesting { get; private set; }
 
     private bool WantsR0ShadowReplayTiming()
         => policy.DetailedDiagnostics || policy.ShadowReplaySamplingBudget != null;
@@ -47,6 +48,9 @@ internal sealed partial class CombatBeamSolver
             action,
             policy.R0TransitionPolicyIdentity,
             parentStateText,
+            CaptureR0TerminalEvaluationContext(parent.Snapshot),
+            parent.ActionCount + 1,
+            parent.Snapshot.HistoryEntryCount,
             out snapshot);
     }
 
@@ -55,7 +59,10 @@ internal sealed partial class CombatBeamSolver
         PlanAction action,
         SimulationSnapshot output)
     {
+        if (!CombatTransitionMemo.IsSafeTerminalOutput(output))
+            return;
         CombatTransitionMemo memo = policy.R0TransitionMemo!;
+        R0TerminalStoreTextCapturesForTesting++;
         string parentStateText = ContinuationStamp.CapturePredicted(
             _player,
             parent.Snapshot.Simulator,
@@ -67,8 +74,33 @@ internal sealed partial class CombatBeamSolver
             action,
             policy.R0TransitionPolicyIdentity,
             parentStateText,
+            CaptureR0TerminalEvaluationContext(parent.Snapshot),
+            parent.Snapshot.HistoryEntryCount,
+            CaptureR0PlayerLosses(output),
             output,
             IsPureTransitionForR0Memo(parent.Snapshot, output));
+    }
+
+    private CombatTransitionMemo.TerminalEvaluationContext CaptureR0TerminalEvaluationContext(
+        SimulationSnapshot parent)
+        => new(
+            root.InitialPlayerMaxHp,
+            _strategicBossHpRelief,
+            root.PostCombatRelicHeal,
+            parent.CumulativePlayerHpLost,
+            parent.RecoveredPlayerHp,
+            CaptureR0PlayerLosses(parent));
+
+    private IReadOnlyList<CombatTransitionMemo.TerminalPlayerLoss> CaptureR0PlayerLosses(
+        SimulationSnapshot snapshot)
+    {
+        CombatPredictionSimulator simulator = snapshot.Simulator;
+        SimulatedCombatState combat = (SimulatedCombatState)simulator.State.CombatState;
+        return simulator.State.RootCapturedPlayers
+            .Select(player => new CombatTransitionMemo.TerminalPlayerLoss(
+                player.NetId.ToString(), root.CapturedPlayerMaxHp(player),
+                Math.Max(0, combat.GetCumulativeHpLost(player.Creature))))
+            .ToArray();
     }
 
     private static bool IsPureTransitionForR0Memo(

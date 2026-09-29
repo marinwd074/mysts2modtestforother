@@ -545,6 +545,7 @@ internal sealed partial class CombatBeamSolver
         score += (long)Math.Max(0, vulnerable - focusTargetVulnerableTurns)
             * vulnerableAttackWindow
             * SolverWeights.OffTargetVulnerableAttackMultiplierBeamValue;
+        double stateEvaluationScore = score;
         score += actionCount * SolverWeights.ActionPenalty;
         if (risk)
             score += SolverWeights.RiskPenalty;
@@ -649,6 +650,7 @@ internal sealed partial class CombatBeamSolver
             simulator,
             simulator.TerminalStamp)
         {
+            StateEvaluationScore = stateEvaluationScore,
             GrowthHpCredit = growthHpCredit,
             RelicCounters = relicCounters,
             GrowthRewards = growthRewards,

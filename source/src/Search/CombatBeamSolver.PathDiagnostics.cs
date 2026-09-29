@@ -55,11 +55,20 @@ internal sealed partial class CombatBeamSolver
     // The diagnostic caller owns the returned snapshot and releases it after freezing evidence.
     internal SimulationSnapshot ReplayDiagnosticPrefix(IReadOnlyList<PlanAction> actions) => Replay(actions);
 
-    internal SimulationSnapshot ReplayDiagnosticActionWithR0Memo(PlanAction action)
+    internal SimulationSnapshot ReplayDiagnosticActionWithR0Memo(
+        PlanAction action, int priorActionCount = 0,
+        Action<CombatPredictionSimulator>? prepareParent = null)
     {
-        SimulationSnapshot rootSnapshot = Replay([]);
+        SimulationSnapshot rootSnapshot = Replay([], priorActionCount: priorActionCount);
+        if (prepareParent != null)
+        {
+            prepareParent(rootSnapshot.Simulator);
+            rootSnapshot = Snapshot(rootSnapshot.Simulator, rootSnapshot.Turn,
+                priorActionCount, rootSnapshot.ShufflesCrossed,
+                rootSnapshot.BoundaryReason, rootSnapshot.ProcessedEnemyDeaths);
+        }
         SearchNode parent = new(
-            null, 0, rootSnapshot.PotionUseCount, rootSnapshot.PotionStrategicCost,
+            null, priorActionCount, rootSnapshot.PotionUseCount, rootSnapshot.PotionStrategicCost,
             rootSnapshot.Turn, SearchRouteTraits.None, 0, rootSnapshot.Score,
             rootSnapshot.StateKey, rootSnapshot.HasRisk, rootSnapshot.BoundaryReason,
             rootSnapshot.PlayerDead || rootSnapshot.AllEnemiesDead, null, rootSnapshot,

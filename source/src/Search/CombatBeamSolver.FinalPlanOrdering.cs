@@ -367,7 +367,9 @@ internal sealed partial class CombatBeamSolver
                             bossHpRelief,
                             postCombatRelicHeal,
                             theftPolicy,
-                            useMultiplayerRouteSemantics) >= 0)
+                            useMultiplayerRouteSemantics,
+                            MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(
+                                routePolicy)) >= 0)
                 {
                     continue;
                 }
@@ -378,6 +380,9 @@ internal sealed partial class CombatBeamSolver
                 && policyCandidates[potionFreeBaselineIndex].CompleteVictory;
             int potionFreeStrategicHpDeficit = hasPotionFreeBaseline
                 ? policyCandidates[potionFreeBaselineIndex].StrategicHpDeficit
+                : initialHp;
+            int potionFreeBattleHpLost = hasPotionFreeBaseline
+                ? policyCandidates[potionFreeBaselineIndex].Snapshot.CumulativePlayerHpLost
                 : initialHp;
             int potionFreePlayerHp = hasPotionFreeBaseline
                 ? policyCandidates[potionFreeBaselineIndex].Snapshot.PlayerHp
@@ -396,6 +401,10 @@ internal sealed partial class CombatBeamSolver
                 hasPotionFreeBaseline = true;
                 potionFreeWon = auditedBaseline.Won;
                 potionFreeStrategicHpDeficit = auditedBaseline.HpDeficit;
+                potionFreeBattleHpLost = auditedBaseline.BattleHpLost
+                    ?? (MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(routePolicy)
+                        ? throw new InvalidOperationException("Rolling-horizon potion baseline requires raw battle HP loss.")
+                        : auditedBaseline.HpDeficit);
                 potionFreePlayerHp = auditedBaseline.PlayerHp;
                 potionFreeCombatEndedTurn = auditedBaseline.CombatEndedTurn;
                 potionFreeDeathSaveUseCount = auditedBaseline.DeathSaveUseCount;
@@ -445,7 +454,9 @@ internal sealed partial class CombatBeamSolver
                             potionFreeCombatEndedTurn,
                             candidateDeathSaveUseCount: candidate.Snapshot.ProjectedDeathSaveUseCount,
                             currentDeathSaveUseCount: potionFreeDeathSaveUseCount,
-                            rollingHorizonLossFirst: useRollingHorizonLossFirst) < 0;
+                            rollingHorizonLossFirst: useRollingHorizonLossFirst,
+                            candidateBattleHpLost: candidate.Snapshot.CumulativePlayerHpLost,
+                            currentBattleHpLost: potionFreeBattleHpLost) < 0;
                     bool passesSoftPotionPolicy = PotionUsePolicy.IsEligible(
                             candidate.EffectivePotionPolicy,
                             candidate.OptionalPotionCount,
@@ -490,6 +501,15 @@ internal sealed partial class CombatBeamSolver
                 .ThenBy(candidate => useRollingHorizonLossFirst
                     ? candidate.Snapshot.ProjectedDeathSaveUseCount
                     : 0)
+                .ThenBy(candidate => useRollingHorizonLossFirst
+                    ? candidate.HpDeficit
+                    : 0)
+                .ThenByDescending(candidate => useRollingHorizonLossFirst
+                    && candidate.CompleteVictory)
+                .ThenBy(candidate => useRollingHorizonLossFirst
+                    && candidate.CompleteVictory
+                        ? candidate.CombatEndedTurn ?? int.MaxValue
+                        : 0)
                 .ThenBy(candidate => useRollingHorizonLossFirst
                     ? candidate.StrategicHpDeficit
                     : 0)
@@ -1319,7 +1339,8 @@ internal sealed partial class CombatBeamSolver
         BossHpRelief bossHpRelief,
         PostCombatRelicHealProfile postCombatRelicHeal,
         SolverTheftPolicy? theftPolicy,
-        bool useMultiplayerRouteSemantics)
+        bool useMultiplayerRouteSemantics,
+        bool useRollingHorizonLossFirst)
     {
         SimulationSnapshot leftSnapshot = left.Snapshot;
         SimulationSnapshot rightSnapshot = right.Snapshot;
@@ -1336,10 +1357,14 @@ internal sealed partial class CombatBeamSolver
         // Potion spending is always a local-player resource decision. Multiplayer team
         // objectives may rank routes only after the single-player potion policy admits them;
         // teammate HP/loss never redefines the potion-free baseline.
-        int comparison = rightWon.CompareTo(leftWon);
-        if (comparison != 0)
-            return comparison;
-        if (!leftWon && !rightWon)
+        int comparison = 0;
+        if (!useRollingHorizonLossFirst)
+        {
+            comparison = rightWon.CompareTo(leftWon);
+            if (comparison != 0)
+                return comparison;
+        }
+        if (useRollingHorizonLossFirst || !leftWon && !rightWon)
         {
             bool leftSurvives = !leftSnapshot.PlayerDead && leftSnapshot.ProjectedPlayerHp > 0;
             bool rightSurvives = !rightSnapshot.PlayerDead && rightSnapshot.ProjectedPlayerHp > 0;
@@ -1355,6 +1380,23 @@ internal sealed partial class CombatBeamSolver
             leftWon, leftSnapshot.OutstandingStolenResource, rightWon, rightSnapshot.OutstandingStolenResource);
         if (comparison != 0)
             return comparison;
+        if (useRollingHorizonLossFirst)
+        {
+            comparison = leftSnapshot.CumulativePlayerHpLost.CompareTo(
+                rightSnapshot.CumulativePlayerHpLost);
+            if (comparison != 0)
+                return comparison;
+            comparison = rightWon.CompareTo(leftWon);
+            if (comparison != 0)
+                return comparison;
+            if (leftWon && rightWon)
+            {
+                comparison = (leftSnapshot.CombatEndedTurn ?? int.MaxValue)
+                    .CompareTo(rightSnapshot.CombatEndedTurn ?? int.MaxValue);
+                if (comparison != 0)
+                    return comparison;
+            }
+        }
         comparison = (ActEndingBossPolicy.StrategicHpDeficit(
                 leftSnapshot.CumulativePlayerHpLost,
                 Math.Max(0, initialPlayerMaxHp - leftSnapshot.PlayerMaxHp),

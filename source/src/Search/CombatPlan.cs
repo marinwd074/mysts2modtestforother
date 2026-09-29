@@ -1403,7 +1403,8 @@ internal sealed class SimulationSnapshot(
     private string? _releasedBy;
     private int _releasedAtLine;
 
-    public double Score { get; } = score;
+    public double Score { get; private set; } = score;
+    internal double StateEvaluationScore { get; init; } = score;
     public StateFingerprint StateKey { get; } = stateKey;
     public StateFingerprint UnorderedPileKey { get; } = unorderedPileKey;
     public StateFingerprint CycleShapeKey { get; } = cycleShapeKey;
@@ -1419,8 +1420,8 @@ internal sealed class SimulationSnapshot(
         ? terminal.PlayerTurn : null;
     public int PlayerHp { get; } = playerHp;
     public int PlayerMaxHp { get; } = playerMaxHp;
-    public int CumulativePlayerHpLost { get; } = cumulativePlayerHpLost;
-    public int RecoveredPlayerHp { get; } = recoveredPlayerHp;
+    public int CumulativePlayerHpLost { get; private set; } = cumulativePlayerHpLost;
+    public int RecoveredPlayerHp { get; private set; } = recoveredPlayerHp;
 
     /// <summary>HP a one-shot death-save relic put back on this route.</summary>
     /// <seealso cref="ActEndingBossPolicy.DeathSavePremium"/>
@@ -1430,9 +1431,12 @@ internal sealed class SimulationSnapshot(
     public int DeathSaveUseCount { get; init; }
     public int ProjectedDeathSaveUseCount { get; init; }
     public bool AllPlayersAlive { get; init; } = true;
-    public int TeamCumulativeHpLost { get; init; }
-    public double TeamLossRatio { get; init; }
-    public double WorstPlayerLossRatio { get; init; }
+    private int _teamCumulativeHpLost;
+    private double _teamLossRatio;
+    private double _worstPlayerLossRatio;
+    public int TeamCumulativeHpLost { get => _teamCumulativeHpLost; init => _teamCumulativeHpLost = value; }
+    public double TeamLossRatio { get => _teamLossRatio; init => _teamLossRatio = value; }
+    public double WorstPlayerLossRatio { get => _worstPlayerLossRatio; init => _worstPlayerLossRatio = value; }
 
     public int LongTermResourceValue { get; } = longTermResourceValue;
     public RelicCounterEvaluation RelicCounters { get; init; }
@@ -1488,7 +1492,7 @@ internal sealed class SimulationSnapshot(
     public int OffensiveProgressValue { get; } = offensiveProgressValue;
     public int Energy { get; } = energy;
     public int Stars { get; } = stars;
-    public int HistoryEntryCount { get; } = historyEntryCount;
+    public int HistoryEntryCount { get; private set; } = historyEntryCount;
     public int HandCount { get; } = handCount;
     public int ReachableHandValue { get; } = reachableHandValue;
     public int ZeroCostPlayableCount { get; } = zeroCostPlayableCount;
@@ -1530,6 +1534,21 @@ internal sealed class SimulationSnapshot(
             clone.CachedTransitionIsPure = transitionIsPure.Value;
         clone._releasedBy = nameof(CloneValueOnlyForTransitionMemo);
         clone._releasedAtLine = 0;
+        return clone;
+    }
+
+    internal SimulationSnapshot EvaluateTerminalMemo(
+        int actionCount, int historyEntryCount, int cumulativeHpLost, int recoveredHp,
+        double stateScoreAdjustment, int teamLoss, double teamRatio, double worstRatio)
+    {
+        SimulationSnapshot clone = CloneValueOnlyForTransitionMemo();
+        clone.Score = StateEvaluationScore + stateScoreAdjustment + actionCount * SolverWeights.ActionPenalty;
+        clone.HistoryEntryCount = historyEntryCount;
+        clone.CumulativePlayerHpLost = cumulativeHpLost;
+        clone.RecoveredPlayerHp = recoveredHp;
+        clone._teamCumulativeHpLost = teamLoss;
+        clone._teamLossRatio = teamRatio;
+        clone._worstPlayerLossRatio = worstRatio;
         return clone;
     }
 

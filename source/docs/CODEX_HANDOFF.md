@@ -26,7 +26,7 @@
 - **B 延迟影响合同：完成。**
 - **C 战斗级 R0 转移缓存：完成。**
 - **D 新根恢复 R1：完成。**
-- **E 前台/后台分离：进行中；E1 已完成，进入 E2 前台稳定替换。**
+- **E 前台/后台分离：进行中；E1/E2/E3、E4-A 已实机通过，E4-B 质量准入仍待触发样本。**
 - **F 情景预热：未开始。**
 - **G SSD 冷存储：未开始。**
 - **H 质量与响应验收：未开始。**
@@ -138,23 +138,26 @@ state_mismatch
 
 ## 下一任务
 
-先实机验证 E3 completion 的 current-turn fallback，再进入 E4。
+### 最新测试包结论（2026-09-29）
 
-KNIGHTS_ELITE `251346020d114e749c5860c29fd9cc4b` 来自 `0.40.2+52f8a764581e20737199e70d6b7a3abfc1a9c308`，证明第二版 completion backing guard 仍漏非终局 foreground。generation 9 在 25.291s 已由 potion_disabled 把 foreground 从 38 战损降到 5 战损；请求持续到 120.050s。最终 novelty SearchCompletion 却是完整胜利但 41 战损。诊断明确 `SEARCH_E3_FINAL_VS_FOREGROUND relation=foreground_better final_hp_loss=41 foreground_hp_loss=5`，随后 `SEARCH_RESULT_ROUTE_CAPTURE` 仍捕获 41 战损 route `0e6ccb...` 并由 Safe Execute 执行。整包没有 `SEARCH_E3_FOREGROUND_BACKING_CAPTURED` 或 `SEARCH_E3_COMPLETION_FOREGROUND_GUARD`。
+- EXOSKELETONS_WEAK `98211ee985ee4607b22ae7311d43618f`：Smart Potion 在 10003ms 降级结束；第 5 回合 R1 完整胜利与最终结果均为累计 21 战损、当回合结束。
+- BOWLBUGS_WEAK `40f79fca33f5441fbfe6537103909895`：Smart Potion 在 10005ms 降级结束；第 2 回合 completion guard 实际保留 12 战损前台，拒绝 15 战损终局，部署范围为 `CurrentTurnAdoption`。该包结果含 `modeled_damage_exact=False`，不能作精确战斗模拟验收。
+- 两包均未出现 `relation=regressed / admission=rejected_regression`，也没有等战损早胜与延迟成长的实际对照。因此不关闭下面两个实机边界，不提前进入 F。
+- [代码审查四项修复](Rolling_Horizon_Reuse_Code_Review.md) 已落地并通过 pinned 0.107.1 的 9 个定向场景；原生跨回合 R0 重新建根与当前构建 Host/Client 仍需实机验证。
 
-根因：这个 5 战损 foreground 是非终局 Rolling-Horizon 候选，没有完整 route seed，也没有与 speculative preview 完全一致的 completed-member SolverResult，所以 52f8 的 full-route backing 仍为空；但该 foreground 已经拥有与其当前回合 preview 对齐的 `CurrentTurnAdoptionSeed`。
+实机验证两个 current HEAD 边界：
 
-当前第三版 guard：
-1. 仍先要求现有 `ShouldPreferForegroundAtCompletion` 证明 foreground 严格优于 final，不新增质量规则。
-2. materialization 优先级保持 `route_seed -> completed_member`；两者都不可用时，若 `CurrentTurnAdoptionSeed.Actions` 与当前 approved `CurrentTurnPreview.Actions` 完全一致，则精确 materialize 该 seed。
-3. fallback 结果强制标记 `CurrentTurnAdoption`：只执行已经批准的当前回合前缀，下一回合从真实根重新搜索；不把 partial preview 伪装成完整路线。
-4. 精确 materialize 后再次与 final 用同一质量排序比较，仍更优才接管。
-5. 诊断应出现 `SEARCH_E3_COMPLETION_FOREGROUND_GUARD source=current_turn_seed`。
+1. **E4-B 第二阶段质量准入**：PHROG_PARASITE_ELITE `6c34eee729b94f4584f7c3ad29f9c019` 已实机证明 Smart Potion 10s 降级预算生效（约 10006 / 10009ms）。同包另一次 Smart Potion 4.566s 返回 `relation=regressed`：8 战损 / 0 药 / 敌 1 HP 被 9 战损 / 1 药 / 胜利覆盖。现在 E4 活跃窗口继续执行并记录 supplemental 搜索，但 `regressed` 结果只记账，`admission=rejected_regression`，不得接管 incumbent；非 E4 窗口保持旧行为。
+2. **当前回合斩杀优先**：CEREMONIAL_BEAST_BOSS `c2271afb91434692a2a64a2abb85c9d1` 在第 9 回合 28 HP 时，R1 仅用 `TEAR_ASUNDER` 已验证当回合完整胜利，但主搜索被“先回血、11 回合再杀”的同战损路线覆盖。rolling-horizon 完整胜利现按真实累计战损 → 是否胜利 → 更早结束排序，回血/成长只在这些硬键相同时继续 tie-break。
 
-本包还确认 continuation state 已包含敌人 next move 和 AI 序列（E0/E1/E2 与 AI0/AI1/AI2），第 2 回合因真实 HP/history 差异正常 `SEARCH_REUSE_MISS state_mismatch`；当前没有证据支持另加一套 AI timeline fingerprint。
+下一份 Boss/Elite 包重点确认：
+- E4 出现 `relation=regressed` 时同时出现 `admission=rejected_regression`，最终 RESULT 不再来自该更差 supplemental member。
+- 存在当回合等战损斩杀时不再拖回合；更早斩杀若增加真实累计战损，仍保持 loss-first。
+
+
 ## 当前未验证边界
 
-- E1 已通过实机验证。E2 的 keep/replace 诊断与 pinned 合同已加入，仍需一份 current HEAD 实机日志证明真实后台候选按生产质量排序稳定替换/保留。
+- E2 已由 INFESTED_PRISMS `604411ffffe44ca388ece05d9eb8e594` 实机闭合；本轮比较规则修复后仍需当前构建复验 E4 准入与等战损早胜。
 - U5/U6 历史 Host/Client observation → fresh replan 的部分真实多人边界仍不是 pinned replay 可替代的证据。
 - GitHub Issue #8：多人 Safe Execute 的 Headbutt / turn-start Choice 仍需 current HEAD Host/Client 复验。
 - GitHub Issue #9：Vicious 战略估值修复仍需 comparable current multiplayer root 复验。

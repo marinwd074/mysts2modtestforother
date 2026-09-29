@@ -134,7 +134,9 @@ internal sealed class CombatDiagnosticJournal : IDisposable
             || message.StartsWith("[CombatSolver/Test] SEARCH_E0_MEMBER ", StringComparison.Ordinal)
             || message.StartsWith("[CombatSolver/Test] SEARCH_E0_PHASE ", StringComparison.Ordinal)
             || message.StartsWith("[CombatSolver/Test] SEARCH_E3_BACKGROUND_VALUE ", StringComparison.Ordinal)
-            || message.StartsWith("[CombatSolver/Test] SEARCH_E3_FINAL_VS_FOREGROUND ", StringComparison.Ordinal);
+            || message.StartsWith("[CombatSolver/Test] SEARCH_E3_FINAL_VS_FOREGROUND ", StringComparison.Ordinal)
+            || message.StartsWith("[CombatSolver/Test] SEARCH_E4_SUPPLEMENTAL_BUDGET ", StringComparison.Ordinal)
+            || message.StartsWith("[CombatSolver/Test] SEARCH_E4_SUPPLEMENTAL_VALUE ", StringComparison.Ordinal);
     public Task<CombatLogArchive> CaptureAsync()
     {
         lock (_gate)

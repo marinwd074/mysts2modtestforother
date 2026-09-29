@@ -9,6 +9,79 @@ internal static partial class CombatSearchCoordinator
     private static readonly SearchWorkAllowance E3FixedMemberAllowance = new(
         maxParentCommits: 256,
         maxTransitions: 1_024);
+    private const int E4SupplementalMinimumGraceMilliseconds = 20_000;
+    private const int E4SupplementalFreshImprovementWindowMilliseconds = 30_000;
+    private const int E4SmartPotionDegradedBudgetMilliseconds = 10_000;
+    private readonly record struct E4SupplementalBudgetContext(
+        long RequestElapsedMilliseconds,
+        long LastImprovementMilliseconds,
+        bool HasApprovedForeground);
+
+    internal static int ComputeE4ActiveClockDeadlineMilliseconds(
+        int configuredActiveBudgetMilliseconds,
+        long activeClockElapsedMilliseconds,
+        long requestStartMilliseconds,
+        int requestDeadlineMilliseconds)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(configuredActiveBudgetMilliseconds, 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(activeClockElapsedMilliseconds);
+        ArgumentOutOfRangeException.ThrowIfNegative(requestStartMilliseconds);
+        long remainingRequestWindow = Math.Max(
+            1L,
+            requestDeadlineMilliseconds - requestStartMilliseconds);
+        long activeDeadline = activeClockElapsedMilliseconds + remainingRequestWindow;
+        return (int)Math.Clamp(
+            activeDeadline,
+            1L,
+            configuredActiveBudgetMilliseconds);
+    }
+
+    internal static int ComputeE4SupplementalDeadlineMilliseconds(
+        SearchRoutePolicy routePolicy,
+        int configuredBudgetMilliseconds,
+        long supplementalStartMilliseconds,
+        long lastImprovementMilliseconds,
+        bool hasApprovedForeground,
+        bool hasForcedPotionDirectives,
+        bool isPrimaryPass)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(configuredBudgetMilliseconds, 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(supplementalStartMilliseconds);
+        ArgumentOutOfRangeException.ThrowIfNegative(lastImprovementMilliseconds);
+        if (routePolicy != SearchRoutePolicy.MultiplayerSinglePlayerCore
+            || !hasApprovedForeground
+            || hasForcedPotionDirectives
+            || !isPrimaryPass
+            || supplementalStartMilliseconds >= configuredBudgetMilliseconds)
+        {
+            return configuredBudgetMilliseconds;
+        }
+
+        long boundedImprovement = Math.Min(
+            lastImprovementMilliseconds,
+            supplementalStartMilliseconds);
+        long minimumDeadline = supplementalStartMilliseconds
+            + E4SupplementalMinimumGraceMilliseconds;
+        long freshnessDeadline = boundedImprovement
+            + E4SupplementalFreshImprovementWindowMilliseconds;
+        long deadline = Math.Max(minimumDeadline, freshnessDeadline);
+        return (int)Math.Min(configuredBudgetMilliseconds, deadline);
+    }
+
+    internal static int ComputeE4SmartPotionStageDeadlineMilliseconds(
+        int supplementalBudgetMilliseconds,
+        long stageStartMilliseconds,
+        bool e4Active)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(supplementalBudgetMilliseconds, 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(stageStartMilliseconds);
+        if (!e4Active || stageStartMilliseconds >= supplementalBudgetMilliseconds)
+            return supplementalBudgetMilliseconds;
+
+        return (int)Math.Min(
+            supplementalBudgetMilliseconds,
+            stageStartMilliseconds + E4SmartPotionDegradedBudgetMilliseconds);
+    }
 
     private static SolverResult RunResumableMemberToCompletion(
         CombatBeamSolver solver,
@@ -359,7 +432,24 @@ internal static partial class CombatSearchCoordinator
                 policy,
                 cancellationToken,
                 enrichedProgressCallback,
-                interaction == null ? null : PublishAdoptableResult);
+                interaction == null ? null : PublishAdoptableResult,
+                () =>
+                {
+                    long nowTicks = Stopwatch.GetTimestamp();
+                    long nowMs = (long)Math.Round(
+                        portfolioTelemetry.ToRequestMilliseconds(nowTicks));
+                    long qualityAnchorTicks =
+                        lastForegroundImprovementTicks
+                        ?? firstForegroundPublishedTicks
+                        ?? nowTicks;
+                    long qualityAnchorMs = (long)Math.Round(
+                        portfolioTelemetry.ToRequestMilliseconds(qualityAnchorTicks));
+                    return new E4SupplementalBudgetContext(
+                        nowMs,
+                        qualityAnchorMs,
+                        firstForegroundPublishedTicks.HasValue
+                            && currentDisplayedResult?.Survives == true);
+                });
             SolverResult selected = ResolveTakeoverResult(result, interaction) ?? result;
             if (interaction?.CurrentTakeoverRequest?.Kind == SearchTakeoverKind.ApplyCurrentTurn
                 && selected.ResultScope == SolverResultScope.SearchCompletion
@@ -527,6 +617,28 @@ internal static partial class CombatSearchCoordinator
         => SolverInterimResultOrdering.CanPromoteDisplayedResult(foreground, final)
             && !SolverInterimResultOrdering.CanPromoteDisplayedResult(final, foreground);
 
+    internal static string ClassifyE4SupplementalRelation(
+        SolverInterimResult before,
+        SolverInterimResult after)
+    {
+        bool afterPromotesBefore =
+            SolverInterimResultOrdering.CanPromoteDisplayedResult(after, before);
+        bool beforePromotesAfter =
+            SolverInterimResultOrdering.CanPromoteDisplayedResult(before, after);
+        if (afterPromotesBefore && !beforePromotesAfter)
+            return "improved";
+        if (beforePromotesAfter && !afterPromotesBefore)
+            return "regressed";
+        return "equivalent_or_incomparable";
+    }
+
+    internal static bool ShouldAdmitE4SupplementalResult(
+        bool e4Active,
+        SolverInterimResult before,
+        SolverInterimResult after)
+        => !e4Active
+            || ClassifyE4SupplementalRelation(before, after) != "regressed";
+
     internal static bool RouteMatchesPreview(
         IReadOnlyList<PlanAction> actions,
         SolverSpeculativeRoutePreview? preview)
@@ -579,7 +691,8 @@ internal static partial class CombatSearchCoordinator
         SearchPolicySnapshot policy,
         CancellationToken cancellationToken,
         Action<SolverProgress>? progressCallback,
-        Action<SolverResult>? interimResultCallback)
+        Action<SolverResult>? interimResultCallback,
+        Func<E4SupplementalBudgetContext>? e4BudgetContextProvider)
     {
         if (policy.CurrentTurnOnly)
         {
@@ -1129,6 +1242,58 @@ internal static partial class CombatSearchCoordinator
                     ReleaseR1TransitionHydration("acceptable_loss", emitTelemetry: false);
                     return SelectContinuationSeedIncumbent(passResult);
                 }
+                SolverSearchProfile supplementalProfile = activeProfile;
+                bool e4SmartPotionBudgetActive = false;
+                if (policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore)
+                {
+                    E4SupplementalBudgetContext e4Context =
+                        e4BudgetContextProvider?.Invoke()
+                        ?? new E4SupplementalBudgetContext(
+                            activeClock.ElapsedMilliseconds,
+                            activeClock.ElapsedMilliseconds,
+                            HasApprovedForeground: false);
+                    long supplementalStartMs = e4Context.RequestElapsedMilliseconds;
+                    long qualityAnchorMs = e4Context.LastImprovementMilliseconds;
+                    bool hasApprovedForeground = e4Context.HasApprovedForeground;
+                    bool isPrimaryPass = ReferenceEquals(passClock, requestClock);
+                    int e4DeadlineMs = ComputeE4SupplementalDeadlineMilliseconds(
+                        policy.RoutePolicy,
+                        activeProfile.SoftTimeBudgetMilliseconds,
+                        supplementalStartMs,
+                        qualityAnchorMs,
+                        hasApprovedForeground,
+                        policy.PotionStrategy.HasForcedDirectives,
+                        isPrimaryPass);
+                    bool e4Active =
+                        e4DeadlineMs < activeProfile.SoftTimeBudgetMilliseconds;
+                    e4SmartPotionBudgetActive = e4Active;
+                    int e4ActiveDeadlineMs = e4Active
+                        ? ComputeE4ActiveClockDeadlineMilliseconds(
+                            activeProfile.SoftTimeBudgetMilliseconds,
+                            activeClock.ElapsedMilliseconds,
+                            supplementalStartMs,
+                            e4DeadlineMs)
+                        : activeProfile.SoftTimeBudgetMilliseconds;
+                    if (e4ActiveDeadlineMs < activeProfile.SoftTimeBudgetMilliseconds)
+                    {
+                        supplementalProfile = activeProfile with
+                        {
+                            SoftTimeBudgetMilliseconds = e4ActiveDeadlineMs,
+                        };
+                    }
+                    policy.Diagnostics.Info(
+                        $"[CombatSolver/Test] SEARCH_E4_SUPPLEMENTAL_BUDGET " +
+                        $"active={e4Active.ToString().ToLowerInvariant()} " +
+                        $"primary_pass={isPrimaryPass.ToString().ToLowerInvariant()} " +
+                        $"approved_foreground={hasApprovedForeground.ToString().ToLowerInvariant()} " +
+                        $"forced_potions={policy.PotionStrategy.HasForcedDirectives.ToString().ToLowerInvariant()} " +
+                        $"start_ms={supplementalStartMs} last_improvement_ms={qualityAnchorMs} " +
+                        $"active_clock_ms={activeClock.ElapsedMilliseconds} " +
+                        $"original_deadline_ms={activeProfile.SoftTimeBudgetMilliseconds} " +
+                        $"e4_request_deadline_ms={e4DeadlineMs} " +
+                        $"e4_active_deadline_ms={e4ActiveDeadlineMs}");
+                }
+
                 passResult = RunSupplementalAudits(
                     root,
                     displayNames,
@@ -1141,13 +1306,14 @@ internal static partial class CombatSearchCoordinator
                     },
                     cancellationToken,
                     progressCallback,
-                    activeProfile,
+                    supplementalProfile,
                     activeClock,
                     passResult,
                     memoryForecast,
                     interimResultCallback,
                     earlySmartPotionBaseline,
-                    earlySmartPotionScout);
+                    earlySmartPotionScout,
+                    e4SmartPotionBudgetActive);
                 // The final potion audit may return another result object. Keep the
                 // primary-pass observations alongside the request's final outcome.
                 passResult.NoveltyPortfolio = noveltyPass;
@@ -1450,7 +1616,8 @@ internal static partial class CombatSearchCoordinator
         SmartLayerMemoryForecast memoryForecast,
         Action<SolverResult>? interimResultCallback,
         SolverResult? earlySmartPotionBaseline,
-        SolverResult? earlySmartPotionScout)
+        SolverResult? earlySmartPotionScout,
+        bool e4SmartPotionBudgetActive)
     {
         long remainingMilliseconds = profile.SoftTimeBudgetMilliseconds - requestClock.ElapsedMilliseconds;
         if (remainingMilliseconds <= 0)
@@ -1481,19 +1648,106 @@ internal static partial class CombatSearchCoordinator
         using CancellationTokenSource deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(TimeSpan.FromMilliseconds(remainingMilliseconds));
         SolverResult selected = primary;
+        string? activeE4Stage = null;
+        SolverResult? activeE4Before = null;
+        SearchRequestWorkSnapshot activeE4WorkBefore = default;
+        long activeE4StartedMs = 0;
+
+        SearchRequestWorkSnapshot E4WorkSnapshot()
+            => policy.RequestWorkTotals?.Snapshot() ?? default;
+
+        void LogE4SupplementalValue(
+            string stage,
+            SolverResult before,
+            SolverResult? after,
+            SearchRequestWorkSnapshot workBefore,
+            long startedMs,
+            string status,
+            string admission)
+        {
+            SearchRequestWorkSnapshot workAfter = E4WorkSnapshot();
+            long elapsedMs = Math.Max(0, requestClock.ElapsedMilliseconds - startedMs);
+            long expanded = Math.Max(0, workAfter.ExpandedNodes - workBefore.ExpandedNodes);
+            long transitions = Math.Max(0, workAfter.TransitionCount - workBefore.TransitionCount);
+            SolverInterimResult beforeSummary = BuildInterimResult(root, policy, before);
+            string relation = "no_result";
+            string afterHpLoss = "-";
+            string afterEnemyHp = "-";
+            string afterPotions = "-";
+            string afterMemberKind = "none";
+            if (after != null)
+            {
+                SolverInterimResult afterSummary = BuildInterimResult(root, policy, after);
+                relation = ClassifyE4SupplementalRelation(beforeSummary, afterSummary);
+                afterHpLoss = afterSummary.ProjectedBattleHpLost.ToString();
+                afterEnemyHp = afterSummary.EnemyHp.ToString();
+                afterPotions = afterSummary.ProjectedBattlePotionCount.ToString();
+                CandidateOrigin? afterOrigin = after.SearchEfficiencyOrigin;
+                afterMemberKind = afterOrigin == null
+                    ? "unknown"
+                    : policy.PortfolioTelemetry?.FindSearchMember(afterOrigin.SearchMemberId)?.Kind
+                        ?? "unknown";
+            }
+
+            policy.Diagnostics.Info(
+                $"[CombatSolver/Test] SEARCH_E4_SUPPLEMENTAL_VALUE " +
+                $"stage={stage} status={status} relation={relation} admission={admission} " +
+                $"elapsed_ms={elapsedMs} expanded={expanded} transitions={transitions} " +
+                $"selected_changed={(after != null && !ReferenceEquals(before, after)).ToString().ToLowerInvariant()} " +
+                $"before_hp_loss={beforeSummary.ProjectedBattleHpLost} " +
+                $"before_enemy_hp={beforeSummary.EnemyHp} " +
+                $"before_potions={beforeSummary.ProjectedBattlePotionCount} " +
+                $"after_hp_loss={afterHpLoss} after_enemy_hp={afterEnemyHp} " +
+                $"after_potions={afterPotions} after_member_kind={afterMemberKind}");
+        }
+
+        SolverResult MeasureE4Stage(
+            string stage,
+            SolverResult before,
+            Func<SolverResult> run,
+            Func<string>? completedStatus = null)
+        {
+            activeE4Stage = stage;
+            activeE4Before = before;
+            activeE4WorkBefore = E4WorkSnapshot();
+            activeE4StartedMs = requestClock.ElapsedMilliseconds;
+            SolverResult after = run();
+            SolverInterimResult beforeSummary = BuildInterimResult(root, policy, before);
+            SolverInterimResult afterSummary = BuildInterimResult(root, policy, after);
+            bool admitted = ShouldAdmitE4SupplementalResult(
+                e4SmartPotionBudgetActive,
+                beforeSummary,
+                afterSummary);
+            LogE4SupplementalValue(
+                stage,
+                before,
+                after,
+                activeE4WorkBefore,
+                activeE4StartedMs,
+                status: completedStatus?.Invoke() ?? "completed",
+                admission: admitted ? "accepted" : "rejected_regression");
+            activeE4Stage = null;
+            activeE4Before = null;
+            return admitted ? after : before;
+        }
+
         try
         {
             if (!policy.PotionStrategy.HasForcedDirectives)
             {
-                selected = AuditRequiredPotionUse(
-                    root,
-                    displayNames,
-                    battleDamage,
-                    policy,
-                    deadline.Token,
-                    progressCallback,
-                    profile,
-                    selected);
+                SolverResult beforeRequired = selected;
+                selected = MeasureE4Stage(
+                    "required_potion",
+                    beforeRequired,
+                    () => AuditRequiredPotionUse(
+                        root,
+                        displayNames,
+                        battleDamage,
+                        policy,
+                        deadline.Token,
+                        progressCallback,
+                        profile,
+                        beforeRequired));
             }
             if (ResolveTakeoverResult(selected, policy.Interaction) is { } requiredTakeoverResult)
                 return requiredTakeoverResult;
@@ -1508,36 +1762,74 @@ internal static partial class CombatSearchCoordinator
                     earlySmartPotionScout,
                     out SolverResult? reusedScout))
             {
-                selected = reusedScout!;
+                SolverResult beforeReuse = selected;
+                selected = MeasureE4Stage(
+                    "early_smart_scout_reuse",
+                    beforeReuse,
+                    () => reusedScout!);
             }
             else
             {
-                selected = AuditSmartPotionUse(
-                    root,
-                    displayNames,
-                    battleDamage,
-                    policy,
-                    deadline.Token,
-                    cancellationToken,
-                    progressCallback,
-                    profile,
-                    selected,
-                    memoryForecast,
-                    interimResultCallback);
+                SolverResult beforeSmart = selected;
+                using CancellationTokenSource smartDeadline =
+                    CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
+                long smartStageStartMs = requestClock.ElapsedMilliseconds;
+                int smartStageDeadlineMs = ComputeE4SmartPotionStageDeadlineMilliseconds(
+                    profile.SoftTimeBudgetMilliseconds,
+                    smartStageStartMs,
+                    e4SmartPotionBudgetActive);
+                bool smartBudgetActive =
+                    smartStageDeadlineMs < profile.SoftTimeBudgetMilliseconds;
+                if (smartBudgetActive)
+                {
+                    smartDeadline.CancelAfter(TimeSpan.FromMilliseconds(
+                        Math.Max(1L, smartStageDeadlineMs - smartStageStartMs)));
+                }
+                policy.Diagnostics.Info(
+                    $"[CombatSolver/Test] SEARCH_E4_SMART_POTION_BUDGET " +
+                    $"active={smartBudgetActive.ToString().ToLowerInvariant()} " +
+                    $"stage_start_ms={smartStageStartMs} " +
+                    $"stage_deadline_ms={smartStageDeadlineMs} " +
+                    $"supplemental_deadline_ms={profile.SoftTimeBudgetMilliseconds}");
+                selected = MeasureE4Stage(
+                    "smart_potion",
+                    beforeSmart,
+                    () => AuditSmartPotionUse(
+                        root,
+                        displayNames,
+                        battleDamage,
+                        policy,
+                        smartDeadline.Token,
+                        cancellationToken,
+                        progressCallback,
+                        profile,
+                        beforeSmart,
+                        memoryForecast,
+                        interimResultCallback),
+                    completedStatus: () =>
+                        smartDeadline.IsCancellationRequested
+                            ? deadline.IsCancellationRequested
+                                ? "deadline"
+                                : "degraded_deadline"
+                            : "completed");
             }
             if (HasReachedAcceptableBattleHpLoss(policy, selected))
                 return selected;
             if (policy.PotionPolicy != SolverPotionPolicy.Smart)
             {
-                selected = AuditOpeningPowerUse(
-                    root,
-                    displayNames,
-                    battleDamage,
-                    policy,
-                    deadline.Token,
-                    progressCallback,
-                    profile,
-                    selected);
+                SolverResult beforeOpening = selected;
+                selected = MeasureE4Stage(
+                    "opening_power",
+                    beforeOpening,
+                    () => AuditOpeningPowerUse(
+                        root,
+                        displayNames,
+                        battleDamage,
+                        policy,
+                        deadline.Token,
+                        progressCallback,
+                        profile,
+                        beforeOpening));
                 if (HasReachedAcceptableBattleHpLoss(policy, selected))
                     return selected;
             }
@@ -1545,6 +1837,19 @@ internal static partial class CombatSearchCoordinator
         catch (OperationCanceledException)
             when (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
+            if (activeE4Stage != null && activeE4Before != null)
+            {
+                LogE4SupplementalValue(
+                    activeE4Stage,
+                    activeE4Before,
+                    after: null,
+                    activeE4WorkBefore,
+                    activeE4StartedMs,
+                    status: "deadline",
+                    admission: "no_result");
+                activeE4Stage = null;
+                activeE4Before = null;
+            }
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] SUPPLEMENTAL_AUDIT_BUDGET exhausted=true " +
                 $"elapsed_ms={requestClock.ElapsedMilliseconds} " +
@@ -2169,6 +2474,7 @@ internal static partial class CombatSearchCoordinator
             CombatEndedTurn: potionFree.CombatEndedTurn)
         {
             DeathSaveUseCount = potionFree.Snapshot.ProjectedDeathSaveUseCount,
+            BattleHpLost = potionFree.ProjectedBattleHpLost,
         };
         SolverResult audited = new CombatBeamSolver(
             root,
@@ -2235,6 +2541,7 @@ internal static partial class CombatSearchCoordinator
             provisionalPotionFree.CombatEndedTurn)
         {
             DeathSaveUseCount = provisionalPotionFree.Snapshot.ProjectedDeathSaveUseCount,
+            BattleHpLost = provisionalPotionFree.ProjectedBattleHpLost,
         };
         SolverResult? scout = SolveOptionalPotionPosterior(
             new CombatBeamSolver(
@@ -2450,6 +2757,7 @@ internal static partial class CombatSearchCoordinator
             potionFree.CombatEndedTurn)
         {
             DeathSaveUseCount = potionFree.Snapshot.ProjectedDeathSaveUseCount,
+            BattleHpLost = potionFree.ProjectedBattleHpLost,
         };
         List<SolverResult> searches = [potionFree];
         SolverResult selected = potionFree;
@@ -2777,6 +3085,9 @@ internal static partial class CombatSearchCoordinator
         }
 
         callerCancellationToken.ThrowIfCancellationRequested();
+        // Deadline stops new work; completed layers still pass the original ordered admission.
+        if (CommitCompletedInOrder() is { } settledAtDeadline)
+            return settledAtDeadline;
         MergeAuditTotals(selected, [.. searches]);
         policy.Diagnostics.Info(
             $"[CombatSolver/Test] SMART_POTION_GRADIENT result " +
@@ -2826,6 +3137,7 @@ internal static partial class CombatSearchCoordinator
             potionFree.CombatEndedTurn)
         {
             DeathSaveUseCount = potionFree.Snapshot.ProjectedDeathSaveUseCount,
+            BattleHpLost = potionFree.ProjectedBattleHpLost,
         };
         List<SolverResult> searches = [potionFree];
         SolverResult selected = potionFree;
@@ -3243,7 +3555,9 @@ internal static partial class CombatSearchCoordinator
             current.GrowthRewardCount,
             candidate.DeathSaveUseCount,
             current.DeathSaveUseCount,
-            rollingHorizonLossFirst);
+            rollingHorizonLossFirst,
+            candidate.ProjectedBattleHpLost,
+            current.ProjectedBattleHpLost);
         if (primaryQuality != 0)
             return primaryQuality;
         if (theftPolicy == SolverTheftPolicy.PreserveResources
@@ -3321,7 +3635,9 @@ internal static partial class CombatSearchCoordinator
             current.Snapshot.StrategyGoalCount,
             candidate.Snapshot.ProjectedDeathSaveUseCount,
             current.Snapshot.ProjectedDeathSaveUseCount,
-            rollingHorizonLossFirst);
+            rollingHorizonLossFirst,
+            candidate.ProjectedBattleHpLost,
+            current.ProjectedBattleHpLost);
     }
 
     private static bool IsCompleteVictory(SolverResult result)

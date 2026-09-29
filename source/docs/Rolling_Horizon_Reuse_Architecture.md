@@ -2,7 +2,7 @@
 
 日期：2026-09-27。初次核对基线：`7dd49ba6a26d7f5bfbf4b286f853c1580677f023`；提交前已接入并定向核对远端新增的 `d745b0018e27f2013f7df580bde99523f1ec12ed`。仓库：[CombatSolver](https://github.com/xwr20070408-cloud/CombatSolver)。
 
-性质：面向 GPT 的设计与实施任务书，**尚未实现，也没有性能实测结论**。本次只修改文档。本文负责滚动时域与跨请求复用设计；当前生产事实仍以源码为准，既有质量问题继续由 [质量优先计划](CombatSolver_Quality_First_Next.md) 管理，不复制历史阶段状态。
+性质：滚动时域与跨请求复用的设计及阶段验收任务书；当前实施状态见第 7 节，生产事实以源码为准。既有质量问题继续由 [质量优先计划](CombatSolver_Quality_First_Next.md) 管理。
 
 ## 1. 推荐方案
 
@@ -182,7 +182,7 @@ GPU、学习型价值网络和 MCTS 可作为以后独立实验：现有 C# 规�
 
 ## 7. GPT 分阶段执行卡
 
-每次一个阶段、一个主要语义边界。阶段名不是必须创建的类。实施前核对当前源码与已有结果，禁止重复施工。当前任务只批准生成此文档；下列代码变更按后续明确任务推进，用户可见行为单独确认。
+每次一个阶段、一个主要语义边界。阶段名不是必须创建的类。实施前核对当前源码与已有结果，禁止重复施工。用户可见的新能力单独确认。
 
 | 阶段 | GPT 要完成的修改 | 最小验收 | 依赖/回滚 |
 |---|---|---|---|
@@ -195,7 +195,7 @@ GPU、学习型价值网络和 MCTS 可作为以后独立实验：现有 C# 规�
 | G SSD 冷存储 | 纯值编码、版本命名空间、异步写入/预取、校验与恢复 | 往返语义一致、损坏/旧版本不误命中、热路径无同步 I/O | C/D 成熟后；不让磁盘成为必要依赖 |
 | H 质量与响应验收 | 固定输入 A/B，再真实 Host/Client 验证；记录收益及未达项 | 质量不被已知对照支配，响应/复用改善可重现 | 前面各阶段；不以合同替代实机 |
 
-执行状态（2026-09-27）：
+执行状态（最新证据与待验收边界见 [当前交接](CODEX_HANDOFF.md)；四项局部修复见 [代码审查清单](Rolling_Horizon_Reuse_Code_Review.md)）：
 
 - **A 已完成**：沿现有发布/continuation/refresh 调用链完成现状测量，没有另造重复计时或复用层。
 - **B 已完成**：`DeferredImpactCoverage` / `DeferredImpactOutcome` 只记录真实模拟已到达的覆盖边界和绝对结果，不参与生产排序。pinned 0.107.1 定向验收覆盖真实延迟负效应（Biased Cognition Focus `4 → 3`）、慢收益（Outmaneuver 下一回合 Energy `3 → 5`）以及当前回合斩杀（`CombatTerminal`，无未来攻击债务）；Release 与 harness 均 0 warning / 0 error。Borrowed Time 经固定上游/0.107.1 语义核对属于本回合费用修正，不作为跨回合负债样本。
@@ -203,7 +203,9 @@ GPU、学习型价值网络和 MCTS 可作为以后独立实验：现有 C# 规�
 - **D 已完成**：生产启用 R1 新根路线重放。完整合法胜利可建立安全 incumbent bound；未胜利但仍存活的 probe 结果可抽取新根已验证的当前回合普通牌前缀，仅用于 baseline Beam 枚举顺序提示。THE_OBSCURA NORMAL 实机已证明 request-tail exact hydration 可真实命中，同时坏 key 仍按 D3.3B 独立 fail-closed；原 D3.5 retained frontier/subtree 因 exact subset 无交集保持暂停，作为后续研究项而不阻塞主线。
 - **E1 已完成**：INFESTED_PRISMS ELITE `f86f0df9c9ff478ab621f943a97e77bf` 来自 `0.40.2+a2a8cd26`，实机证明正式排序 preview 可在无执行 seed 时提前前台发布，generation 1 首次发布后后台继续真实工作约 115 秒，并从 candidate version 1 升级到 59；generation 2 覆盖执行授权 false/true 的分离与恢复，未见旧 generation 越界发布。
 - **E2 已完成**：INFESTED_PRISMS ELITE `604411ffffe44ca388ece05d9eb8e594` 来自 `0.40.2+ddd43a3c`。实机出现真实 `replace` 后新 foreground version 发布；generation 3 连续两个更高战损候选均 `keep`，第二次仍引用原 `previous_version=5` 且该 generation 无 foreground publish，证明劣化后台候选不会抖掉当前建议。
-- **E3 进行中（后台有效率测量）**：不改变搜索行为。E2 正式决策补充 member identity 与 request-relative 时间；请求结束记录 `SEARCH_E3_BACKGROUND_VALUE`，包含首次 foreground、后台墙钟、最后改善时间、决策计数，以及完全在 foreground 后启动成员的 elapsed/expanded/transitions 保守下界。该证据用于决定后续是否调整时域或 portfolio 优先级，不以猜测直接削减长搜。
+- **E3 已完成**：多份实机包已覆盖 foreground 改善、final-vs-foreground、completion quality guard 与后台工作量。TEST_SUBJECT_BOSS `19137cca8baa4f26bece04828153965e` 在 `0.40.2+e4aef0e0` 上真实触发 `SEARCH_E3_COMPLETION_FOREGROUND_GUARD source=current_turn_seed`，证明更差自然 final 不再覆盖严格更优的已批准当前回合前台。
+- **E4-A 已完成并实机通过（supplemental 长尾预算）**：TEST_SUBJECT_BOSS `602c55e77ca447b1bd7abcb4b75111d1` 来自 `0.40.2+43e58cc9`。三次长 fresh search 均在 E4 request deadline 附近结束（约 59.76s / 73.02s / 52.98s），而最终成员仍为 potion_disabled，`FINAL_VS_FOREGROUND` 均未出现更优 final 被截断。主 Beam/Novelty/potion_disabled 不缩；第一轮 local-core supplemental 保留 20s 最低 grace / 最后改善后 30s freshness，上限仍是原请求预算。单人、无批准前台、Force potion、no-victory escalation 保持原预算。
+- **E4-B 第二阶段已进入实机收口**：PHROG_PARASITE_ELITE `6c34eee729b94f4584f7c3ad29f9c019` 已证明已批准 foreground 后 Smart Potion 单阶段约 10s 降级上限真实生效（10006 / 10009ms）。同包同时暴露质量准入漏洞：一次 Smart audit 4.566s 从 8 战损 / 0 药 / 敌 1 HP 变为 9 战损 / 1 药 / 胜利，telemetry 已分类 `relation=regressed`，但旧代码仍让该结果接管 selected。现在 E4 活跃窗口对 supplemental 增加 fail-closed admission：搜索与价值账本照常执行，`regressed` 只记录 `admission=rejected_regression` 并保留进入阶段前 incumbent；improved / equivalent_or_incomparable 保持现有准入，非 E4 窗口行为不变。待 current HEAD 实机复验后闭合 E4-B。
 - **E3 前置质量修复已实机通过**：KAISER_CRAB_BOSS `35db6c5d375e4f5d883d122a86acba84` 来自 `0.40.2+5b4c6eb1`。低血窗口 continuation 已 `allow_living_enemy_hp_decrease=false`，本场 `reused=0`；第 3 回合 Crusher 40 HP 时 fresh search 101 节点 / 40ms 直接选择 PERFECTED_STRIKE 斩杀。
 - **E3 测量补全已发现 completion 质量倒退**：SCROLLS_OF_BITING_WEAK `5d0ac4d9b96b43c9bd4b7ffea8f79ed2` 来自 `0.40.2+df248c23`。generation 1 的最后 foreground 为 19 战损 / strategic deficit 17 / enemy HP 68，但 39.75s 后自然 final 为 39 战损 / deficit 23 / victory，并被实际捕获执行；`SEARCH_E3_FINAL_VS_FOREGROUND relation=foreground_better` 已直接证明自然完成边界绕过 E2 质量保护。
 - **E3 completion guard 第三版待实机确认**：KNIGHTS_ELITE `251346020d114e749c5860c29fd9cc4b` 在 `0.40.2+52f8a764` 上再次证明 full-route backing 不足：foreground 5 战损严格优于 final 41 战损，但没有 route seed / completed-member backing，最终仍捕获并执行 41 战损 route。现在 completion guard 在原有 route_seed / completed_member 后增加 exact current-turn seed fallback；只有 seed 动作与 approved current-turn preview 完全一致，且 materialize 后仍严格优于 final，才返回 `CurrentTurnAdoption`，下一回合重新建根。

@@ -151,6 +151,7 @@ internal readonly record struct PotionFreePolicyBaseline(
     int? CombatEndedTurn)
 {
     public int DeathSaveUseCount { get; init; }
+    public int? BattleHpLost { get; init; }
 }
 
 internal sealed class PotionPolicyUnsatisfiedException(string message) : InvalidOperationException(message);
