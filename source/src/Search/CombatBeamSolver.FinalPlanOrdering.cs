@@ -368,7 +368,8 @@ internal sealed partial class CombatBeamSolver
                             postCombatRelicHeal,
                             theftPolicy,
                             useMultiplayerRouteSemantics,
-                            useRollingHorizonLossFirst) >= 0)
+                            MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(
+                                routePolicy)) >= 0)
                 {
                     continue;
                 }
