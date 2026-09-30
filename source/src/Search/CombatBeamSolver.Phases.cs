@@ -2846,11 +2846,19 @@ internal sealed partial class CombatBeamSolver
         if (!CanApplyFixedPrefixAction(node, action))
             return null;
 
-        SimulationSnapshot snapshot = Replay(
-            [action],
-            node.Snapshot,
-            node.Turn,
-            node.ActionCount);
+        SimulationSnapshot snapshot;
+        if (TryRequestHydrationKey(node, action, out ReplayCacheKey requestKey))
+        {
+            if (!TryReadRequestTransitionHydration(node, requestKey, out snapshot))
+            {
+                snapshot = Replay([action], node.Snapshot, node.Turn, node.ActionCount);
+                ObserveRequestTransitionHydration(node, requestKey, snapshot);
+            }
+        }
+        else
+        {
+            snapshot = Replay([action], node.Snapshot, node.Turn, node.ActionCount);
+        }
         StoreR1TransitionHydration(node, action, snapshot);
         bool terminal = snapshot.PlayerDead
             || snapshot.AllEnemiesDead

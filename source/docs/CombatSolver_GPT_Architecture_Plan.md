@@ -5,7 +5,7 @@
 
 新增任务见 [§11 多人战前预计算与 Boss 通关优先](#11-多人战前预计算与-boss-通关优先2026-09-30)，按其独立阶段推进，不重开已完成的 U0–U6。
 
-后续性能方案见 [§12 多人搜索加速](#12-多人搜索加速2026-10-01)；本节只做设计，不改源码、不调整生产设置。
+后续性能方案见 [§12 多人搜索加速](#12-多人搜索加速2026-10-01)；S2 首版实验已实现且默认关闭，其余保持计划。
 
 本文件是设计与执行任务书，不代表修改已经实现。核对了交接、Shadow planner、多人目标数学、最终排序、情景复评、Safe Execute policy/classifier 与 Deployment 的相关实现；没有做全仓审计、构建或实机性能测试。执行时必须先核对新 HEAD，以当前代码为准，禁止重复实现已完成阶段。
 
@@ -331,7 +331,7 @@ U6 实现与清理收口后即可独立评估本地精确斩杀、缓存、增�
 
 ## 12. 多人搜索加速（2026-10-01）
 
-**状态：只读源码审计后的架构建议，未实施、未做性能实测。** 本节基线 `93dd5f9`，以当前 [交接](CODEX_HANDOFF.md) 和直接调用链为准；§1–10 的历史实现描述不作为本轮性能事实。收益、热点占比和缓存命中率均待测，不承诺固定倍数。
+**状态：架构建议；S2 首版实验实现和 pinned 对照已完成，默认关闭，其余阶段未实施。** 设计基线 `93dd5f9`，当前实施以 [交接](CODEX_HANDOFF.md) 和源码为准；§1–10 的历史实现描述不作为当前性能事实，不承诺固定倍数。
 
 ### 12.1 当前已经有什么，以及还缺什么
 
@@ -342,6 +342,7 @@ U6 实现与清理收口后即可独立评估本地精确斩杀、缓存、增�
 | Exact continuation、R1 新根重放、E 前台/后台及 Smart Potion 降级已落地 | 优先补最新 RNG/采用恢复的实机边界，不重复建设 Rolling Horizon |
 | [R0 memo](../src/Search/CombatTransitionMemo.cs) 是最多 4096 项的战斗级终局值缓存；[ActionReplayCache](../src/Search/ActionReplayCache.cs) 的普通转移仍是 shadow | 普通非终局转移尚不能凭 shadow 命中直接跨请求复用 |
 | [R1 hydration](../src/Search/CombatBeamSolver.R1TransitionHydration.cs) 从 seed probe 保存最多 32 项后态，首验后复用到 request tail；无 seed 的冷搜索不会因此获得通用后态缓存 | 可研究同一新根下 baseline/portfolio/药水审计共享普通动作后态，不能只增大 32 项容量 |
+| [请求后态缓存](../src/Search/CombatBeamSolver.RequestTransitionHydration.cs) 已作为默认关闭的 S2 实验接入；复用 R1 存储的独立 learning 实例 | 冷根最多 32 项，同一请求/完整普通动作路径首验后复用；首次单独元数据不保留 simulator，生命周期由 Coordinator finally 收口 |
 | `CombatTransitionMemo.CapturePolicyIdentity` 包含整个 `Profile`、策略及版本 | 不同 Beam 配置会分键；纯转移身份与保留/评分身份可否分离，必须审计，不能直接删 `Profile` |
 | [StateEvaluation](../src/Search/CombatBeamSolver.StateEvaluation.cs) 已缓存卡牌、牌堆指纹；[ForkableCollections](../src/Search/ForkableCollections.cs) 已使用 COW；[Transpositions](../src/Search/CombatBeamSolver.Transpositions.cs) 已保留非支配路径标签 | 新工作应针对剩余全状态扫描、路径物化、重复纯评价及 COW detach，不重新实现相同机制 |
 
@@ -390,6 +391,8 @@ flowchart TD
 
 S2 中，只有审计证明不影响单步输出的 Beam 宽度、节点额度或时间上限，才可移入独立 retention 身份；`CurrentTurnOnly`、边界/Choice 模式、模型选项、评分目标和资源政策不能随意删键。首版允许同配置共享，跨配置共享单独首验。把完整 Profile 从键移走不是独立安全优化。
 
+**S2 首版结论**：`UseRequestTransitionHydration` 默认 false；仅适用捕获回合内、完整普通 PlayCard 前缀不超过 8 张的无 Choice/checkpoint 转移，不缓存终局/EndTurn/药水动作或跨根图。保留原始完整 policy 身份和成员实际分支上限；单步模拟/StateEvaluation 不读取成员 Beam 宽度、rank band、节点/时间额度，兼容成员仍须先真实重复验证。`request-hydration` 覆盖冷根、首验、逐状态/路径目标差分、并发 Fork、容量/失效及两层 Smart Potion 审计，得到 14 次实际复用且结果/逻辑工作一致；`rolling-review` 和 Release 通过。四个 clean-process 预热后 ABBA 小样本未证明提速，分配约 +9.6%；因此未开放生产默认，真实 Host/Client 及净收益继续 UNVERIFIED。复跑性能用同一 harness 的 `request-hydration-benchmark-off/on`，结果仅写 `.local/`，不是新增门禁。
+
 S4 的根变化优化只做“当前根立即取代旧根、同根合并重复请求、取消后不再准入新作业”，保留必要稳定捕获和取消屏障。先检查现有去重是否已覆盖，再补真实缺口；不额外添加固定 debounce，不放宽斩杀/RNG 敏感性。旧请求已完成且独立验证的纯值可以保留在合适缓存，但旧 worker 不得发布路线。
 
 ### 12.4 暂不优先的方案
@@ -419,4 +422,4 @@ S0 先选少量有明确边界的样本：冷根、RNG-only 新根、长药水�
 
 ### 12.6 后续可复制的第一项任务
 
-> 按 §12 只执行 S0：核对当前 HEAD、交接和生产配置，先从既有可复现输入及性能入口分解冷根、RNG-only 新根和长 supplemental 的完整请求耗时。使用现有工具，不改求解语义、预算、部署或生产默认。区分逻辑转移与实际模拟，量测各成员重复 parent/action 及构键/校验/Fork/Snapshot 开销；没有证据就标未知。输出一份最小热点表，并只选择一个有净收益证据的 S1/S2/S3/S4 后续边界。临时数据放项目 .local；不使用子智能体，不代用户操作游戏 GUI。此任务卡供以后授权，本轮仅提交计划，没有运行采集、构建或游戏。
+> 按 §12 只执行 S0：核对当前 HEAD、交接和生产配置，先从既有可复现输入及性能入口分解冷根、RNG-only 新根和长 supplemental 的完整请求耗时。使用现有工具，不改求解语义、预算、部署或生产默认。区分逻辑转移与实际模拟，量测各成员重复 parent/action 及构键/校验/Fork/Snapshot 开销；没有证据就标未知。输出一份最小热点表，并只选择一个有净收益证据的 S1/S2/S3/S4 后续边界。临时数据放项目 .local；不使用子智能体，不代用户操作游戏 GUI。此任务卡供后续热点测量，不重复实现已完成的 S2 首版实验。

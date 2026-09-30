@@ -31,6 +31,7 @@ internal enum SearchMetricPhase
     CombatFingerprint,
     Prune,
     FinalSelection,
+    TransitionHydration,
 }
 
 internal readonly record struct SearchMeasurement(long Timestamp, long AllocatedBytes)

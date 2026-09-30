@@ -127,6 +127,43 @@ internal static partial class CombatSearchCoordinator
         CancellationToken cancellationToken,
         Action<SolverProgress>? progressCallback)
     {
+        R1TransitionHydrationCache? cache = policy.UseRequestTransitionHydration
+            && policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
+            && !policy.VerifyIncrementalSearch && !policy.IncludeTurnSetup && !policy.CurrentTurnOnly
+            && !policy.UseMultiplayerTeamObjective && !policy.UseMultiplayerTeammateForecast
+            && !policy.UseMultiplayerScenarioReevaluation
+                ? new(learnFromSearch: true) : null;
+        try
+        {
+            SolverResult result = SolveRequest(root, displayNames, battleDamage,
+                policy with { RequestTransitionHydrationCache = cache }, cancellationToken, progressCallback);
+            if (cache != null)
+                result.RequestTransitionHydration = cache.Capture();
+            return result;
+        }
+        finally
+        {
+            if (cache != null)
+            {
+                try
+                {
+                    R1TransitionHydrationSnapshot stats = cache.Capture();
+                    policy.Diagnostics.Info(
+                        $"[CombatSolver/Test] REQUEST_TRANSITION_HYDRATION entries={stats.Entries}/{stats.EntryLimit} " +
+                        $"stores={stats.Stores} first_validations={stats.FirstValidations} " +
+                        $"validated_keys={stats.ValidatedKeys} hydration_hits={stats.HydrationHits} " +
+                        $"output_mismatches={stats.OutputMismatches} rejected_keys={stats.RejectedKeys}");
+                }
+                finally { cache.Release(); }
+            }
+        }
+    }
+
+    private static SolverResult SolveRequest(
+        CombatRootSnapshot root, SolverDisplayNames displayNames, BattleDamageSnapshot battleDamage,
+        SearchPolicySnapshot policy, CancellationToken cancellationToken,
+        Action<SolverProgress>? progressCallback)
+    {
         SearchRequestWorkTotals requestWorkTotals = new();
         BeamWidthPortfolioTelemetry portfolioTelemetry = new();
         policy = policy with

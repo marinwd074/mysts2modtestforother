@@ -35,6 +35,14 @@
 
 新增待实施任务：[多人战前预计算与 Boss 通关优先计划](CombatSolver_GPT_Architecture_Plan.md#11-多人战前预计算与-boss-通关优先2026-09-30)。仅完成静态可行性审计；先统一 Boss 质量排序，再验证多人离线恢复，未开放能力或修改相关源码。Showcase 已取消。
 
+### 通用非终局后态缓存：首版实验实现，默认关闭
+
+`SearchPolicySnapshot.UseRequestTransitionHydration=true` 时，Coordinator 为同一 local-core 请求创建最多 32 项的普通 PlayCard 后态缓存，冷搜索/兼容成员/药水审计可共享；不依赖 R1。首版仅捕获回合内、完整普通动作前缀不超过 8 张、无 Choice/checkpoint 的非终局转移。首次只留值元数据，第一次重复仍真实模拟并验证，之后才从封存原型 Fork、重新 Snapshot/评分；完整路径、目标、策略、状态/RNG/损失上下文不一致则拒绝，结束/异常/取消后释放。R1 和生产预算/授权保持原合同。
+
+Release、`U0U1PinnedHarness request-hydration` 与 `rolling-review` 通过。Pinned 单人夹具使用 local-core policy 的冷请求 + 两层 Smart Potion 审计得到 17 entries / 14 validated keys / 14 hydration hits / 0 mismatch；完整路线、最终状态、质量、260 expanded / 904 logical transitions 与 cache-off 一致，另覆盖并发 Fork、隔离、容量、严格验证、目标/策略身份及取消释放。不是真实 Host/Client PASS。
+
+四个 clean-process、关闭 tiered JIT、预热后 ABBA 样本中，cache-off 为 66.410/67.549ms，on 为 66.970/72.306ms；on 分配约 +9.6%，未证明净收益。因此开关默认 false，尚不作为玩家加速能力启用。后续只在更有重复/更昂贵动作的固定输入证明净节省并获得真实多人证据后再决定推广；见 [加速计划 §12](CombatSolver_GPT_Architecture_Plan.md#12-多人搜索加速2026-10-01)。
+
 ## 阶段 D 当前实现
 
 ### R1 新根恢复
