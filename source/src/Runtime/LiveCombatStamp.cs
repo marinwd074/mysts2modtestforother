@@ -37,6 +37,8 @@ internal sealed record LiveCombatStamp(string StateText)
             string name = separator < 0 ? field : field[..separator];
             if (IsSharedMutableSearchField(name))
                 continue;
+            if (string.Equals(name, "R", StringComparison.Ordinal))
+                field = NormalizeSharedShuffleRng(field);
             if (string.Equals(name, "HC", StringComparison.Ordinal)
                 && !requiresGlobalFinishedCardPlays)
             {
@@ -80,10 +82,27 @@ internal sealed record LiveCombatStamp(string StateText)
     }
 
     private static bool IsSharedMutableSearchField(string name)
-        => name is "P" or "R"
+        => name is "P"
             || IsIndexedField(name, "E")
             || IsIndexedField(name, "AI")
             || IsIndexedField(name, "MS");
+
+    private static string NormalizeSharedShuffleRng(string field)
+    {
+        // Only shuffle drift has an existing compatibility contract. Generation,
+        // selection and the other streams can change planned local choices/actions.
+        int slash = field.IndexOf('/');
+        return slash < 0 ? field : "R=*" + field[slash..];
+    }
+
+    internal static bool IsLocalCoreRngOnlyChange(LiveCombatStamp expected, LiveCombatStamp actual)
+    {
+        string[] before = NormalizeLocalCoreSearchValidityText(expected.StateText).Split(';');
+        string[] after = NormalizeLocalCoreSearchValidityText(actual.StateText).Split(';');
+        return !before.SequenceEqual(after)
+            && before.Where(field => !field.StartsWith("R=", StringComparison.Ordinal))
+                .SequenceEqual(after.Where(field => !field.StartsWith("R=", StringComparison.Ordinal)));
+    }
 
     private static bool IsIndexedField(string name, string prefix)
     {

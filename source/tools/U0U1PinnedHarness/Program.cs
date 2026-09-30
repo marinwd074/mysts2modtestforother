@@ -37,11 +37,18 @@ internal static class Program
     {
         bool darkEmbracePactOnly = args.Length > 0 && args[0] == "dark-embrace-pact";
         bool rollingReviewOnly = args.Length > 0 && args[0] == "rolling-review";
-        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly ? args[1..] : args);
+        bool choiceRngOnly = args.Length > 0 && args[0] == "choice-rng";
+        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly ? args[1..] : args);
         Directory.CreateDirectory(outputDirectory);
 
         try
         {
+            if (choiceRngOnly)
+            {
+                ValidateLocalCoreChoiceRngContract();
+                Console.WriteLine("ChoiceRng PASS (10 targeted scenarios)");
+                return 0;
+            }
             HarnessLog.Language = "eng";
             MainLoopContext loop = new();
             SynchronizationContext.SetSynchronizationContext(loop);
@@ -358,16 +365,50 @@ internal static class Program
             "Rendered current-turn seed survived takeover completion.");
     }
 
+    private static void ValidateLocalCoreChoiceRngContract()
+    {
+        const string baseline = "L=local;HC=4/0/0/1/0/11;P=remote;E0=enemy;" +
+            "R=2222:1:2:3:4/244:5:6:7:8/0:9:10:11:12/31:13:14:15:16/" +
+            "0:17:18:19:20/49:21:22:23:24/0:25:26:27:28/17:29:30:31:32/46:33:34:35:36";
+        LiveCombatStamp expected = new(baseline);
+        string expectedLocal = LiveCombatStamp.NormalizeLocalCoreSearchValidityText(baseline);
+        string[] streams = baseline[(baseline.IndexOf("R=", StringComparison.Ordinal) + 2)..].Split('/');
+        string prefix = baseline[..baseline.IndexOf("R=", StringComparison.Ordinal)];
+        for (int index = 1; index < streams.Length; index++)
+        {
+            string[] changed = (string[])streams.Clone();
+            // The reported Colorless Potion failure advanced generation 244 -> 249.
+            string[] state = changed[index].Split(':');
+            state[0] = (int.Parse(state[0]) + 1).ToString();
+            changed[index] = index == 1 ? "249:37:38:39:40" : string.Join(':', state);
+            LiveCombatStamp actual = new(prefix + "R=" + string.Join('/', changed));
+            bool localMatches = expectedLocal == LiveCombatStamp.NormalizeLocalCoreSearchValidityText(actual.StateText);
+            Require(!localMatches && LiveCombatStamp.IsLocalCoreRngOnlyChange(expected, actual)
+                && MultiplayerSearchCompletionContracts.IsStale(true, 16, 32, 2, 2, false, localMatches),
+                $"Shared RNG stream {index} drift must reject the old route and admit a fresh-root replan.");
+        }
+        LiveCombatStamp shuffleAndRemote = new(baseline.Replace("2222:1:2:3:4", "2227:41:42:43:44")
+            .Replace("P=remote", "P=remote-after").Replace("E0=enemy", "E0=enemy-after")
+            .Replace("HC=4/", "HC=7/"));
+        Require(expectedLocal == LiveCombatStamp.NormalizeLocalCoreSearchValidityText(shuffleAndRemote.StateText)
+            && !LiveCombatStamp.IsLocalCoreRngOnlyChange(expected, shuffleAndRemote),
+            "Previously allowed shuffle/remote drift must retain route compatibility.");
+        LiveCombatStamp localAndRng = new(baseline.Replace("244:5:6:7:8", "249:37:38:39:40")
+            .Replace("L=local", "L=player-changed"));
+        Require(!LiveCombatStamp.IsLocalCoreRngOnlyChange(expected, localAndRng),
+            "A local state change must not inherit an RNG-only deployment replan.");
+    }
+
     private static void ValidateLocalCoreShadowNormalizationContract()
     {
         const string parentA =
-            "L=local;HC=4/0/0/1/0/11;P=remote-a;R=shared-a;E0=enemy-a;AI0=ai-a;MS0=multi-a";
+            "L=local;HC=4/0/0/1/0/11;P=remote-a;R=shared-a/local-rng;E0=enemy-a;AI0=ai-a;MS0=multi-a";
         const string parentB =
-            "L=local;HC=6/0/0/1/0/11;P=remote-b;R=shared-b;E0=enemy-b;AI0=ai-b;MS0=multi-b";
+            "L=local;HC=6/0/0/1/0/11;P=remote-b;R=shared-b/local-rng;E0=enemy-b;AI0=ai-b;MS0=multi-b";
         const string outputA =
-            "L=local-after;HC=5/0/0/1/0/11;P=remote-c;R=shared-c;E0=enemy-c;AI0=ai-c;MS0=multi-c";
+            "L=local-after;HC=5/0/0/1/0/11;P=remote-c;R=shared-c/local-rng-after;E0=enemy-c;AI0=ai-c;MS0=multi-c";
         const string outputB =
-            "L=local-after;HC=7/0/0/1/0/11;P=remote-d;R=shared-d;E0=enemy-d;AI0=ai-d;MS0=multi-d";
+            "L=local-after;HC=7/0/0/1/0/11;P=remote-d;R=shared-d/local-rng-after;E0=enemy-d;AI0=ai-d;MS0=multi-d";
 
         string normalizedParentA =
             LiveCombatStamp.NormalizeLocalCoreSearchValidityText(parentA);

@@ -941,6 +941,19 @@ internal static partial class SolverController
                 $"full_stamp_match={fullStampMatches.ToString().ToLowerInvariant()} " +
                 $"local_stamp_match={localCoreStampMatches.ToString().ToLowerInvariant()}");
             Entry.Logger.Info($"[CombatSolver/Test] SEARCH_STALE generation={generation}");
+            if (stillSearchable && search.UseRouteScopedCompletion && currentStamp != null
+                && LiveCombatStamp.IsLocalCoreRngOnlyChange(searchedStamp, currentStamp)
+                && !_combat.AutomaticSearchPaused
+                && !search.Interaction.StopRequested
+                && (search.DeployWhenReady || AutomaticCalculationEnabled))
+            {
+                _combat.ContinuationSource = null;
+                Entry.Logger.Info(
+                    $"[CombatSolver/Test] SEARCH_RNG_REPLAN generation={generation} " +
+                    $"deploy_when_ready={search.DeployWhenReady.ToString().ToLowerInvariant()}");
+                RequestSearch(host, searchedState, SearchReason.DeploymentDrift,
+                    deployWhenReady: search.DeployWhenReady);
+            }
             return;
         }
 
