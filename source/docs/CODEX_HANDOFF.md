@@ -33,6 +33,8 @@
 
 `CombatSolver_Quality_First_Next.md` 继续用于坏路线、执行质量和回归定位，但不覆盖 Rolling Horizon 的主阶段顺序。
 
+新增待实施任务：[多人战前预计算与 Boss 通关优先计划](CombatSolver_GPT_Architecture_Plan.md#11-多人战前预计算与-boss-通关优先2026-09-30)。仅完成静态可行性审计；先统一 Boss 质量排序，再验证多人离线恢复，未开放能力或修改相关源码。Showcase 已取消。
+
 ## 阶段 D 当前实现
 
 ### R1 新根恢复
@@ -189,6 +191,12 @@ G SSD 冷存储按当前产品目标延期。F1/G 作为可选研究项，不再
 
 ## 当前未验证边界
 
+- CONSTRUCT_MENAGERIE_NORMAL `52af3616…`：T2 点击采用 candidate 88（27 动作、0 药水、预计战损 19）后，生成 RNG 328→333 使旧根失效，原代码丢弃采用意图再搜约 48s。现保留显式采用动作/质量基线，从新根做既有 128 动作 / 600ms 重放；完整胜利且战损不增、奖励/遗物/保命资源及药水合同通过才保留 RouteAdoption，部分路线仍须原终态证明，失败回退搜索。普通自动零战损门槛不改；重复 RNG 失效继续保留采用意图，不追加执行授权。Release 与 `continuation-replay` 新增采用/质量拒绝/live 隔离检查通过；原包同场 Host/Client 采用恢复待验证。
+- SCROLLS_OF_BITING_WEAK `2d81b689…`：T1 收尾修复已在实机包生效（3 回合 / 2 continuation）。T1→T2 队友回合结束后敌人 HP -6 / Targets +1（符合招架盾效果），旧路线新根重放遇 route_boundary 后回退；旧日志缺具体边界，现补充边界与相邻动作诊断。T2→T3 另有钟摆抽牌预测错误：其原生 AfterPlayerTurnStart 抽牌不属于 ModifyHandDraw，却被当作根贡献扣除，计数 0 的根使后续少抽 1 张（烙印）。已去除错误抵扣；`pendulum-draw` 覆盖 3 个根计数 × 3 个未来回合、原生 hook 与 live 隔离。T3 搜索期间队友 CardGeneration 324→328 / CardSelection 37→38 的 fresh replan 仍必要。Release / 定向回归通过；原场当前构建 Host/Client 续用仍待验证。
+- SCROLLS_OF_BITING_WEAK `03fa54df…`：T1 队友换牌使共享 CardGeneration `313→319`，敌人与本地手牌不变，触发 RNG-only fresh replan。另有收尾范围混淆：`current_turn_seed` 的 1 回合 / 0 战损 / 敌人 243 HP 挤掉跨回合结果，并误标自动 `CurrentTurnAdoption`。现要求前台后备覆盖完整展示动作及适用评估回合，避免短前缀以眼前战损覆盖长路线；自动收尾保留 SearchCompletion，显式当前回合接管照旧。Release、`completion-scope` 合同通过；原场质量与多人部署仍待 current build 实机验证。
+- DEVOTED_SCULPTOR_WEAK `49947939…` / `40e88d94…`：队友招架盾在 T2 结束时格挡 14，额外伤害 6 / Targets RNG +1；不能据 T3 差额认定本地红披风漏算。新增高血 Targets 偏差的新根路线重放（128 动作、600ms 软预算、无 Beam 展开）：完整胜利满足既有采用门槛，或部分路线终点本地完整状态相同、战损不增且敌人仅存活血量下降，才跳过完整搜索。未通过则保留 R1 / 普通搜索；严格续用和部署 RNG 校验未改。队友未来格挡未知，不默认预测招架盾。Release 与 `U0U1PinnedHarness continuation-replay` 通过；仍需当前构建 Host/Client 验证 `MP_LOCAL_XTURN_ROUTE_REPLAY status=accepted` 及部署。
+- ENTOMANCER_ELITE `e3fd63e…` 高血重算：T2/T3 仅记录敌人 HP、HC 和 RNG 差异，`allow_living_enemy_hp_decrease=true`；HP/HC 已被兼容判断接受，随后在 RNG 字段拒绝，说明还有非 Shuffle RNG 差异。旧诊断只输出该字段第一个变化的流，不能确定具体流或归因队友/模拟。T4/T5 另有真实手牌/牌堆差异。现增加 `local_core_reject_reason` 并输出全部 RNG 差异，不放宽复用规则；Release、`continuation-audit` 和原 `choice-rng` 通过。下一步用新构建问题包定位具体随机流，再做同根同动作的预测/实机对照；可修模拟误差才修改预测，队友变化继续从新根复演已有 R1 候选，不跳过校验。
+- BOWLBUGS_NORMAL `69faf6312f3f49f9b428a0b264a0c9e3`：搜索期间共享生成 RNG `244→249`，旧路线仍预测无色药水选“秘密技法”，实机候选却含“金斧头”。local-core 有效性现保留非 Shuffle RNG；仅 RNG 失效时从新根重算，并保留已请求的执行意图。`U0U1PinnedHarness choice-rng --out <ignored-path>` 的 10 个定向合同及 Release 编译通过；自动选牌恢复仍需当前构建 Host/Client 实机复验。开局遗物选择流程未改。
 - E2/E4-B 已由 current build 实机闭合。滚动比较规则的“等战损更早胜利”已有 pinned 合同，但仍缺一份明确跨回合（如 T9 对 T11）current build 实机对照；该项继续作为质量 smoke，不作为 F0 影子测量的行为依赖。
 - U5/U6 历史 Host/Client observation → fresh replan 的部分真实多人边界仍不是 pinned replay 可替代的证据。
 - GitHub Issue #8：多人 Safe Execute 的 Headbutt / turn-start Choice 仍需 current HEAD Host/Client 复验。

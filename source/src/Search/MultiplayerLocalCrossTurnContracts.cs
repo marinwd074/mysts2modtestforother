@@ -199,6 +199,31 @@ internal static class MultiplayerLocalCrossTurnContracts
     internal static bool IsCurrentTurnAction(int actionTurn, int currentTurn)
         => actionTurn == currentTurn;
 
+    internal static bool ShouldReplayContinuationRoute(
+        bool followedBySolver, bool allowLivingEnemyHpDecrease, string rejectionReason)
+        => followedBySolver && allowLivingEnemyHpDecrease
+            && rejectionReason == "non_shuffle_rng_changed:targets";
+
+    // Quality evidence after fresh-root replay, never permission to reuse an old branch.
+    // Target RNG stays strict in IsLocalCoreContinuationStateCompatible and Safe Execute.
+    internal static bool IsReplayedRouteFinalStateCompatible(string expected, string actual)
+    {
+        string[] expectedFields = expected.Split(';');
+        string[] actualFields = actual.Split(';');
+        int rngIndex = Array.FindIndex(expectedFields, field => field.StartsWith("R=", StringComparison.Ordinal));
+        if (expectedFields.Length != actualFields.Length || rngIndex < 0
+            || !actualFields[rngIndex].StartsWith("R=", StringComparison.Ordinal))
+            return false;
+        string[] expectedRng = expectedFields[rngIndex][2..].Split('/');
+        string[] actualRng = actualFields[rngIndex][2..].Split('/');
+        if (expectedRng.Length != 9 || actualRng.Length != 9)
+            return false;
+        actualRng[5] = expectedRng[5];
+        actualFields[rngIndex] = "R=" + string.Join('/', actualRng);
+        return IsLocalCoreContinuationStateCompatible(expected, string.Join(';', actualFields),
+            allowLivingEnemyHpDecrease: true, out _, out _, out _);
+    }
+
     internal static bool HasCurrentTurnPlayableAction(
         IReadOnlyList<MultiplayerProjectedAction> actions,
         int currentTurn)
@@ -293,17 +318,38 @@ internal static class MultiplayerLocalCrossTurnContracts
         out bool sharedShuffleRngDrift,
         out bool sharedFinishedCardPlayDrift,
         out bool livingEnemyHpDecreaseDrift)
+        => IsLocalCoreContinuationStateCompatible(
+            expectedStateText,
+            actualStateText,
+            allowLivingEnemyHpDecrease,
+            out sharedShuffleRngDrift,
+            out sharedFinishedCardPlayDrift,
+            out livingEnemyHpDecreaseDrift,
+            out _);
+
+    internal static bool IsLocalCoreContinuationStateCompatible(
+        string expectedStateText,
+        string actualStateText,
+        bool allowLivingEnemyHpDecrease,
+        out bool sharedShuffleRngDrift,
+        out bool sharedFinishedCardPlayDrift,
+        out bool livingEnemyHpDecreaseDrift,
+        out string rejectionReason)
     {
         sharedShuffleRngDrift = false;
         sharedFinishedCardPlayDrift = false;
         livingEnemyHpDecreaseDrift = false;
+        rejectionReason = "none";
         if (string.Equals(expectedStateText, actualStateText, StringComparison.Ordinal))
             return true;
 
         string[] expectedFields = expectedStateText.Split(';');
         string[] actualFields = actualStateText.Split(';');
         if (expectedFields.Length != actualFields.Length)
+        {
+            rejectionReason = "field_count_changed";
             return false;
+        }
 
         bool requiresGlobalFinishedCardPlays =
             StateContainsGlobalFinishedCardPlayDependentLocalCard(expectedFields)
@@ -325,6 +371,7 @@ internal static class MultiplayerLocalCrossTurnContracts
                     actualField[..actualSeparator],
                     StringComparison.Ordinal))
             {
+                rejectionReason = $"field_layout_changed:{index}";
                 return false;
             }
 
@@ -334,14 +381,35 @@ internal static class MultiplayerLocalCrossTurnContracts
                 string[] expectedRng = expectedField[(expectedSeparator + 1)..].Split('/');
                 string[] actualRng = actualField[(actualSeparator + 1)..].Split('/');
                 if (expectedRng.Length != actualRng.Length || expectedRng.Length == 0)
+                {
+                    rejectionReason = "rng_layout_changed";
                     return false;
+                }
                 for (int rngIndex = 1; rngIndex < expectedRng.Length; rngIndex++)
                 {
                     if (!string.Equals(expectedRng[rngIndex], actualRng[rngIndex], StringComparison.Ordinal))
+                    {
+                        string stream = rngIndex switch
+                        {
+                            1 => "card_generation",
+                            2 => "potion_generation",
+                            3 => "card_selection",
+                            4 => "energy_costs",
+                            5 => "targets",
+                            6 => "orbs",
+                            7 => "monster_ai",
+                            8 => "niche",
+                            _ => $"part_{rngIndex}",
+                        };
+                        rejectionReason = $"non_shuffle_rng_changed:{stream}";
                         return false;
+                    }
                 }
                 if (string.Equals(expectedRng[0], actualRng[0], StringComparison.Ordinal))
+                {
+                    rejectionReason = "rng_value_format_changed";
                     return false;
+                }
                 sharedShuffleRngDrift = true;
                 continue;
             }
@@ -366,6 +434,7 @@ internal static class MultiplayerLocalCrossTurnContracts
                 continue;
             }
 
+            rejectionReason = $"field_changed:{name}";
             return false;
         }
 

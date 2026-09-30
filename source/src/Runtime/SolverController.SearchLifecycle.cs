@@ -21,7 +21,8 @@ namespace CombatSolver;
 internal static partial class SolverController
 {
 
-    public static void RequestSearch(NGame host, CombatState state, SearchReason reason, bool deployWhenReady = false)
+    public static void RequestSearch(NGame host, CombatState state, SearchReason reason, bool deployWhenReady = false,
+        SolverResult? adoptedRouteReplay = null)
     {
         AssertMainThread();
         SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
@@ -207,6 +208,8 @@ internal static partial class SolverController
             bool sharedShuffleRngDrift = false;
             bool sharedFinishedCardPlayDrift = false;
             bool livingEnemyHpDecreaseDrift = false;
+            bool localCoreStateCompatible = false;
+            string localCoreRejectionReason = "not_checked";
             bool allowLivingEnemyHpDecrease =
                 MultiplayerCombatObjectivePolicy.ShouldAllowLivingEnemyHpDecreaseReuse(
                     state.Enemies);
@@ -215,13 +218,14 @@ internal static partial class SolverController
                 && expectedContinuation != null
                 && capabilities.IsMultiplayer
                 && !SolverSettings.Current.UseMultiplayerPrediction
-                && MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+                && (localCoreStateCompatible = MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
                     expectedContinuation.ExpectedState.StateText,
                     continuationStamp.StateText,
                     allowLivingEnemyHpDecrease,
                     out sharedShuffleRngDrift,
                     out sharedFinishedCardPlayDrift,
-                    out livingEnemyHpDecreaseDrift)
+                    out livingEnemyHpDecreaseDrift,
+                    out localCoreRejectionReason))
                 && (sharedShuffleRngDrift
                     || sharedFinishedCardPlayDrift
                     || livingEnemyHpDecreaseDrift))
@@ -232,6 +236,20 @@ internal static partial class SolverController
             }
             string continuationRejectReason = "none";
             IReadOnlyList<PlanAction> continuationSeedActions = Array.Empty<PlanAction>();
+            IReadOnlyList<PlanAction> continuationReplayActions = Array.Empty<PlanAction>();
+            ContinuationRouteReplayBaseline? continuationReplayBaseline = null;
+            if (reason == SearchReason.DeploymentDrift
+                && adoptedRouteReplay?.PredictedFinalState is { } adoptedFinalState
+                && adoptedRouteReplay.StartTurnNumber == searchTurn)
+            {
+                // Retain values only; this request captures and replays a fresh live root below.
+                continuationReplayActions = adoptedRouteReplay.BestNode.Actions.ToArray();
+                continuationReplayBaseline = new(adoptedFinalState,
+                    adoptedRouteReplay.ProjectedBattleHpLost,
+                    adoptedRouteReplay.Snapshot.ProjectedDeathSaveUseCount,
+                    adoptedRouteReplay.Snapshot.GrowthRewards,
+                    adoptedRouteReplay.Snapshot.RelicCounters, ExplicitRouteAdoption: true);
+            }
             if (continuationStamp != null && capabilities.IsMultiplayer)
             {
                 Entry.Logger.Info(
@@ -244,6 +262,8 @@ internal static partial class SolverController
                     $"shared_finished_card_play_drift={sharedFinishedCardPlayDrift.ToString().ToLowerInvariant()} " +
                     $"living_enemy_hp_decrease_drift={livingEnemyHpDecreaseDrift.ToString().ToLowerInvariant()} " +
                     $"allow_living_enemy_hp_decrease={allowLivingEnemyHpDecrease.ToString().ToLowerInvariant()} " +
+                    $"local_core_state_compatible={localCoreStateCompatible.ToString().ToLowerInvariant()} " +
+                    $"local_core_reject_reason={localCoreRejectionReason} " +
                     $"fresh_probe_changed={freshProbeChanged.ToString().ToLowerInvariant()}");
             }
             if (continuationValidationStamp != null
@@ -374,6 +394,7 @@ internal static partial class SolverController
                     $"reason={CauseToken(replanCause)} cached_turns={source.Continuations.Count} " +
                     $"previous_boundary={source.BoundaryReason} " +
                     $"continuation_reject_reason={continuationRejectReason} " +
+                    $"local_core_reject_reason={localCoreRejectionReason} " +
                     $"local_state_exact={localStateExact.ToString().ToLowerInvariant()} " +
                     $"diff_count={_combat.LastContinuationDifferences.Count} {difference}");
                 if (_combat.LastContinuationDifferences.Count > 0)
@@ -420,6 +441,18 @@ internal static partial class SolverController
                         continuationSeedActions = CaptureContinuationSeedActions(
                             source.BestNode.Actions,
                             currentTurn);
+                        if (MultiplayerLocalCrossTurnContracts.ShouldReplayContinuationRoute(
+                                followedBySolver, allowLivingEnemyHpDecrease, localCoreRejectionReason))
+                        {
+                            continuationReplayActions = source.BestNode.Actions
+                                .Where(action => action.Turn >= currentTurn)
+                                .Select(action => action with { RelicEffects = null, AutoPlayedCards = null })
+                                .ToArray();
+                            if (source.PredictedFinalState is { } finalState)
+                                continuationReplayBaseline = new(finalState, source.ProjectedBattleHpLost,
+                                    source.Snapshot.ProjectedDeathSaveUseCount,
+                                    source.Snapshot.GrowthRewards, source.Snapshot.RelicCounters);
+                        }
                     }
                     Entry.Logger.Info(
                         $"[CombatSolver/Test] MP_LOCAL_XTURN_SEED_CAPTURE " +
@@ -501,6 +534,12 @@ internal static partial class SolverController
                 interaction: search.Interaction);
             search.UseRouteScopedCompletion =
                 searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore;
+            if (search.UseRouteScopedCompletion && !searchPolicy.IncludeTurnSetup)
+                searchPolicy = searchPolicy with
+                {
+                    ContinuationRouteReplayActions = continuationReplayActions,
+                    ContinuationRouteReplayBaseline = continuationReplayBaseline,
+                };
             if (continuationSeedActions.Count > 0
                 && searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
                 && !searchPolicy.IncludeTurnSetup
@@ -941,6 +980,26 @@ internal static partial class SolverController
                 $"full_stamp_match={fullStampMatches.ToString().ToLowerInvariant()} " +
                 $"local_stamp_match={localCoreStampMatches.ToString().ToLowerInvariant()}");
             Entry.Logger.Info($"[CombatSolver/Test] SEARCH_STALE generation={generation}");
+            bool routeAdoptionRequested = search.Interaction.CurrentTakeoverRequest?.Kind
+                == SearchTakeoverKind.AdoptRoute || task.Result.ResultScope == SolverResultScope.RouteAdoption;
+            if (stillSearchable && search.UseRouteScopedCompletion && currentStamp != null
+                && LiveCombatStamp.IsLocalCoreRngOnlyChange(searchedStamp, currentStamp)
+                && !_combat.AutomaticSearchPaused
+                && !search.Interaction.StopRequested
+                && (search.DeployWhenReady || AutomaticCalculationEnabled || routeAdoptionRequested))
+            {
+                _combat.ContinuationSource = null;
+                Entry.Logger.Info(
+                    $"[CombatSolver/Test] SEARCH_RNG_REPLAN generation={generation} " +
+                    $"deploy_when_ready={search.DeployWhenReady.ToString().ToLowerInvariant()}");
+                SolverResult? adoptedRoute = routeAdoptionRequested ? task.Result : null;
+                if (adoptedRoute != null)
+                    Entry.Logger.Info(
+                        $"[CombatSolver/Test] SEARCH_RNG_ADOPTION_RECOVERY " +
+                        $"actions={adoptedRoute.BestNode.ActionCount}");
+                RequestSearch(host, searchedState, SearchReason.DeploymentDrift,
+                    deployWhenReady: search.DeployWhenReady, adoptedRouteReplay: adoptedRoute);
+            }
             return;
         }
 

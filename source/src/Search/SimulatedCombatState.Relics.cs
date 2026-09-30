@@ -210,7 +210,9 @@ internal sealed partial class SimulatedCombatState
         RelicModel relic,
         Player player,
         int turn)
-        => GetStatefulRelicHandDrawContribution(relic, player, turn, CaptureLiveState(relic));
+        // Pendulum draws in AfterPlayerTurnStart; ModifyHandDraw never included it.
+        => relic is Pendulum ? 0m
+            : GetStatefulRelicHandDrawContribution(relic, player, turn, CaptureLiveState(relic));
 
     private static decimal GetStatefulRelicHandDrawContribution(
         RelicModel relic,

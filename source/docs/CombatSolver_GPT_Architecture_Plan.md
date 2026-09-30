@@ -3,6 +3,8 @@
 评估日期：2026-09-23。代码基线：`afc4fda136a190668fc6eefd33c061d8c2242c88`。
 仓库：https://github.com/marinwd074/mysts2modtestforother
 
+新增任务见 [§11 多人战前预计算与 Boss 通关优先](#11-多人战前预计算与-boss-通关优先2026-09-30)，按其独立阶段推进，不重开已完成的 U0–U6。
+
 本文件是设计与执行任务书，不代表修改已经实现。核对了交接、Shadow planner、多人目标数学、最终排序、情景复评、Safe Execute policy/classifier 与 Deployment 的相关实现；没有做全仓审计、构建或实机性能测试。执行时必须先核对新 HEAD，以当前代码为准，禁止重复实现已完成阶段。
 
 ## 1. 决策结论
@@ -252,3 +254,75 @@ U6 实现与清理收口后即可独立评估本地精确斩杀、缓存、增�
 - [P3设计](https://github.com/marinwd074/mysts2modtestforother/blob/afc4fda136a190668fc6eefd33c061d8c2242c88/source/docs/P3_MULTIPLAYER_JOINT_DECISION.md)
 - [情景排序](https://github.com/marinwd074/mysts2modtestforother/blob/afc4fda136a190668fc6eefd33c061d8c2242c88/source/src/Search/MultiplayerScenarioReevaluationPolicy.cs)
 - [ISMCTS论文原文](https://eprints.whiterose.ac.uk/id/eprint/75048/1/CowlingPowleyWhitehouse2012.pdf)：信息集与策略融合是本方案非预知约束的理论参考，不代表建议把Beam整体换成ISMCTS。
+
+## 11. 多人战前预计算与 Boss 通关优先（2026-09-30）
+
+**状态：可行性审计与架构计划；未实施。** 审计基线 `a102abf`，已 fetch 确认与 `origin/main` 一致；本轮未修改源码、构建或启动游戏。用户已取消 Showcase，不纳入实施范围。本节针对默认 `MultiplayerSinglePlayerCore`，不要求开启队友预测，不改开局赌博筹码、Full Auto、快速部署或多人专属牌权限。
+
+### 11.1 可行性与已核对证据
+
+| 能力 | 静态结论 | 已有基础与实际缺口 |
+|---|---|---|
+| Boss 通关优先 | 可直接推进排序统一 | 设置已传入共享核心，但多人 loss-first 分支在胜利之前比较原始战损；不是未接设置，也不是只改一个最终排序即可 |
+| 战前预计算 | 有条件可行；先证明离线恢复 | 已有独立 worker、序列化快照与前台过期校验；入口要求单人，恢复调用单人 setup，并以 `Players.Single()` / `[0]` 确认视角 |
+
+核对入口（均为当前源码，实施时重读受影响部分）：
+
+- [能力开关](../src/Runtime/SolverSessionCapabilities.cs)、[策略捕获](../src/Runtime/SolverController.cs)。当前多人战前 capability 关闭；不能以放开开关代替恢复验证。
+- [中间结果排序](../src/Search/SolverInterimResultOrdering.cs)、[最终与无药基线排序](../src/Search/CombatBeamSolver.FinalPlanOrdering.cs)、[协调器](../src/Search/CombatSearchCoordinator.cs)、[保留/剪枝](../src/Search/CombatBeamSolver.Retention.cs)。原始战损优先存在多处，须逐项核对。
+- [Boss 场景与回血价值](../src/Search/ActEndingBossPolicy.cs)。换幕回血、部分回血、最终通关不同；双 Boss 的第一场不会自动取得最终通关价值。
+- [战前快照](../src/Api/PreCombatLiveStateSnapshot.cs)、[worker](../src/Api/PreCombatForecastWorker.cs)、[API 与前台有效性](../src/Api/PreCombatForecastApi.cs)、[结果合同](../src/Api/PreCombatForecastContracts.cs)、[恢复入口](../src/Testing/UnattendedTestRunner.ScenarioBuilder.cs)。当前结果是标量推荐，没有可执行路线合同。
+
+两份用户包仅在 ZIP 内只读检查，未解压：ENTOMANCER_ELITE `e3fd63e…`、BOWLBUGS_NORMAL `69faf631…`。各自 combat_start 的 run-state 与 replay-state 都有两名玩家，NetId 为 `1,1000`；另有 pre-combat 存档材料。**这些材料证明有多人恢复输入，不证明已能恢复。** 本轮没有验证目标游戏的单人 setup 能否保留多人人数缩放、身份和回合语义；战斗检查点也不能替代真正战前快照的开战流程验收。
+
+排序反例用于定义验收：同样合法、存活及资源约束下，A 为战损 0 的未胜利有界路线，B 为战损 5 的已证明胜利路线。当前多人 raw-loss 分支先选 A；有效 Boss `ProgressionFirst` 应选 B。此为源码比较顺序推导，尚非运行测试。
+
+### 11.2 共同架构与权限
+
+复用当前模拟、搜索、worker 与存档恢复；新增类型名只表达职责，不要求再建搜索器或独立项目。
+
+1. **不可变快照身份。** 主线程捕获完整 roster、明确 `LocalPlayerNetId`、完整 run/player RNG、真实房间/encounter/地图位置、回合阶段和可恢复状态。身份包含 live session/epoch、内容摘要、游戏/mod 版本及搜索设置/策略版本。禁止以角色、数组首位或网络角色推断本地玩家；平台字段归一化不能抹掉视角映射。
+2. **离线恢复所有者。** 无界面 worker 保留所有玩家的牌堆、遗物、药水、状态及多人缩放，视角由 NetId 指定。不得加入真实网络房间或复用真实会话的执行授权。必须先证明现有 setup 可用；若不行，研究游戏允许的离线多人/fake multiplayer 初始化路径，缺合法路径即返回 Unsupported。
+3. **推荐与执行分离。** 战前预计算返回带身份、队友假设和 Complete/Bounded 标记的推荐；真实 Safe Execute 仍只执行本地玩家动作。首版战前结果不直接获得部署权，不开放多人持久整场路线缓存。
+4. **有效质量合同。** 从真实 Boss 场景、两个 Boss 设置及 route policy 生成不可变质量上下文，贯穿搜索、协调、显示与复用。保留当前死亡/救命、资源及执行限制；不把队友预测胜利或“有望斩杀”标成真实 `Won`。
+
+战前返回时除原有 active run / token / combat-active 检查，还须匹配视角及会话 epoch。队友准备期间的牌组、遗物、HP、药水或 RNG 变化使推荐过期；并发请求与 worker 重用键不能跨玩家视角。隔离进程中的开局选牌需显式记录模拟假设，不因此改变真实开局 Choice 或 mod 加载时机。
+
+### 11.3 Boss 质量规则
+
+- 仅当 `ResolveHpRelief` 对当前场景有换幕/最终通关意义，且对应设置为 `ProgressionFirst`，启用 Boss 通关质量模式。普通战、双 Boss 第一场以及 `MinimizeHpLoss` 保留既有行为。
+- 在现有生存与资源约束下，已模拟证明的完整胜利优先于尚未胜利的有界结果；胜利之间按 Boss 调整后的持久 HP/资源价值和既有结束回合等规则排序。部分回血仍有持久 HP 代价，不能全部归零。不得扩大药水权限或搜索预算。
+- 对最终选择、中间结果、显示晋升、Smart Potion 无药基线、协调器、R1 incumbent、E4 候选接纳及相关剪枝逐项列出同一质量合同的消费者。剪枝不能用旧 raw-loss 上界提前删除新模式下更优的胜利路线；R0 仍仅缓存转移，不继承旧排序值。
+- 核对 memo/cache 的现有设置、场景和版本身份是否已充分区分有效模式；不足再补字段，不无条件重做缓存。单人排序保持，实验队友预测栈不自动扩大本轮范围。
+
+### 11.4 战前预计算首版边界
+
+从真实战前状态捕获完整队伍，在隔离 worker 进入指定 Monster/Elite/Boss 场景，以指定本地玩家运行默认共享核心，返回预测战损、药水、结束回合和搜索边界。真实房间类型和多人人数缩放必须保持，不能减少玩家数后声称多人预计算通过。
+
+首版采用明确的“队友不主动出牌”假设；本地动作影响队友、队友被动触发仍按实际多人状态模拟。跨回合屏障需要 worker 内显式的模拟结束回合策略，并计入结果假设；不能等待不存在的网络队友，也不能增加真实远端执行权限。若当前恢复环境无法推进该屏障，只返回已搜索范围的 Bounded 结果，不宣称整场预测完成。
+
+`Complete` 仅表示该假设下模拟到真实终局，不能表示真实队友一定这样行动。队友预测、多情景估计、路线预热部署和整场录像均不进入首版。Hypothetical / Planning API 先保持既有单人范围；若多人只支持 Forecast，分别返回准确能力与 Unsupported 原因，不能误报所有 API 都支持多人。
+
+### 11.5 分阶段执行清单
+
+顺序：**B → R → F**。Boss 不等待离线恢复研究；F 必须通过 R 的准入。每阶段只运行覆盖变化边界的检查，通过即停止扩大。
+
+- [ ] B：统一 Boss 质量合同并验证排序反例。
+- [ ] R：证明完整队伍、两种本地玩家位置及开战语义可离线恢复。
+- [ ] F：接入多人战前标量推荐，完成失效校验与 Host/Client 对照。
+
+| 阶段 | 工作 | 准入 / 验收 |
+|---|---|---|
+| B1 | 列齐质量消费者，统一有效 Boss 模式、比较器及必要剪枝 | 相同候选在最终/中间/显示/药水基线/R1/E4 上一致；不改普通战与 MinimizeHpLoss |
+| B2 | 固定预算回归与真实多人 Boss 样例 | 覆盖低损未胜 vs 高损胜利、部分回血、双 Boss 第一/第二场、最终 Boss、死亡/救命和资源限制；真实 Host/Client 证据独立报告 |
+| R0 | 用现有恢复入口做最小离线恢复实验，临时产物放 `.local/` | 2 人存档能否保留 roster、指定 NetId、缩放、RNG、开战 Choice 和回合屏障；本地身份分别位于第 0/1 项，不以进程启动作为通过 |
+| R1 | 将通过的恢复边界收敛为快照/身份合同 | 运行存档归一化回存一致，固定输入开战状态一致；不能恢复的内部状态明确拒绝；失败则停止 F 实装 |
+| F1 | worker 请求携带 roster、视角、场景和模式；隔离初始化 | 不联机、不写真实存档、不继承 live 执行权；能力只对被明确识别的离线 worker 开放 |
+| F2 | 扩展标量结果与 stale/cache 合同，再开放多人战前入口 | 相同快照/身份固定预算可复现；队友变化、开战、取消、迟到返回均拒绝过期结果；Complete/Bounded 与假设可见 |
+| F3 | Host/Client 战前采样与真实开战对照 | 真实双方各能取得本地视角推荐；记录预测偏差与假设，不把无队友行为模型的结果称为整队保证 |
+
+复用验证入口：[`U0U1PinnedHarness`](../tools/U0U1PinnedHarness/Program.cs) 扩展质量反例；[`PreCombatRequestChecks`](../tools/PreCombatRequestChecks/Program.cs) 扩展请求/身份/过期合同；现有 Unattended 场景入口验证多人恢复与开战。合同测试、游戏离线恢复、真实 Host/Client 分别记证据；本轮只完成上面的静态核对，后三类尚未运行。
+
+### 11.6 可复制的第一步
+
+> 先核对当前 HEAD、AGENTS 与 CODEX_HANDOFF，按本文件 §11 只实施 B1/B2 的最小 Boss 排序修复。先列出最终、中间、显示晋升、Smart Potion 基线、协调器、R1/E4 与剪枝的质量消费者，再从实际 BossHpRelief 和对应设置派生统一质量上下文。保持单人、普通多人战、MinimizeHpLoss、双 Boss 第一场、药水/死亡/救命约束及搜索预算；未证明胜利不得标 Won。扩展既有 harness 覆盖相互矛盾的候选排序，只做受影响验证，明确未运行的实机项。不要同时开放战前预计算，不做 Showcase，不修改开局赌博筹码。此提示词供后续授权实施，本轮仅完成可行性与计划。

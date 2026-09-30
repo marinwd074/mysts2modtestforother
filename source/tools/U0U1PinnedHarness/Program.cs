@@ -37,11 +37,36 @@ internal static class Program
     {
         bool darkEmbracePactOnly = args.Length > 0 && args[0] == "dark-embrace-pact";
         bool rollingReviewOnly = args.Length > 0 && args[0] == "rolling-review";
-        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly ? args[1..] : args);
+        bool choiceRngOnly = args.Length > 0 && args[0] == "choice-rng";
+        bool continuationAuditOnly = args.Length > 0 && args[0] == "continuation-audit";
+        bool continuationReplayOnly = args.Length > 0 && args[0] == "continuation-replay";
+        bool pendulumDrawOnly = args.Length > 0 && args[0] == "pendulum-draw";
+        bool completionScopeOnly = args.Length > 0 && args[0] == "completion-scope";
+        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly ? args[1..] : args);
         Directory.CreateDirectory(outputDirectory);
 
         try
         {
+            if (completionScopeOnly)
+            {
+                ValidateCompletionForegroundScope();
+                ValidateApprovedForegroundPreviewContract();
+                ValidateRenderedCurrentTurnTakeoverContract();
+                Console.WriteLine("CompletionScope PASS (forecast scope and existing foreground ordering)");
+                return 0;
+            }
+            if (continuationAuditOnly)
+            {
+                ValidateContinuationRejectionDiagnostics();
+                Console.WriteLine("ContinuationAudit PASS (all RNG streams and high-HP reuse boundaries)");
+                return 0;
+            }
+            if (choiceRngOnly)
+            {
+                ValidateLocalCoreChoiceRngContract();
+                Console.WriteLine("ChoiceRng PASS (10 targeted scenarios)");
+                return 0;
+            }
             HarnessLog.Language = "eng";
             MainLoopContext loop = new();
             SynchronizationContext.SetSynchronizationContext(loop);
@@ -55,7 +80,7 @@ internal static class Program
                 MaxExpandedNodes,
                 BudgetMilliseconds);
             Console.WriteLine($"search_patches={patchCount}");
-            if (!rollingReviewOnly)
+            if (!rollingReviewOnly && !continuationReplayOnly)
             {
             ValidateDarkEmbracePredictionCoverage();
             ValidateViciousStrategicValue();
@@ -90,7 +115,7 @@ internal static class Program
             ValidateRenderedCurrentTurnTakeoverContract();
             ValidateApprovedForegroundPreviewContract();
             }
-            else
+            else if (rollingReviewOnly)
             {
                 ValidateReviewOrdering();
             }
@@ -135,6 +160,18 @@ internal static class Program
             {
                 ValidateDarkEmbraceBurningPactDraw(combat, names, damage, captured, profile);
                 Console.WriteLine("DarkEmbraceBurningPact PASS");
+                return 0;
+            }
+            if (pendulumDrawOnly)
+            {
+                ValidatePendulumDraw(combat, names, damage, captured, profile);
+                Console.WriteLine("PendulumDraw PASS (three counters, three future turns, live isolation)");
+                return 0;
+            }
+            if (continuationReplayOnly)
+            {
+                ValidateContinuationRouteReplay(combat, names, damage, captured, profile);
+                Console.WriteLine("ContinuationReplay PASS");
                 return 0;
             }
 
@@ -358,16 +395,101 @@ internal static class Program
             "Rendered current-turn seed survived takeover completion.");
     }
 
+    private static void ValidateContinuationRejectionDiagnostics()
+    {
+        const string fields = "L=local;E0=2/ENTOMANCER/0/348/348/0/ATTACK;H=STRIKE;D=DEFEND;HC=2/0/0/1/0/11;";
+        string[] streams = Enumerable.Range(0, 9).Select(index => $"{index}:1:2:3:4").ToArray();
+        string baseline = fields + "R=" + string.Join('/', streams);
+        string remoteFields = fields.Replace("/348/348/", "/280/348/").Replace("HC=2/", "HC=9/");
+        string[] shuffled = (string[])streams.Clone();
+        shuffled[0] = "20:5:6:7:8";
+        string shuffleOnly = remoteFields + "R=" + string.Join('/', shuffled);
+        Require(MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+            baseline, shuffleOnly, true, out bool shuffleDrift, out bool historyDrift,
+            out bool hpDrift, out string acceptedReason)
+            && shuffleDrift && historyDrift && hpDrift && acceptedReason == "none",
+            "High-HP remote damage/history/shuffle drift must still admit continuation reuse.");
+
+        string[] streamNames = ["shuffle", "card_generation", "potion_generation", "card_selection",
+            "energy_costs", "targets", "orbs", "monster_ai", "niche"];
+        for (int stream = 1; stream < streams.Length; stream++)
+        {
+            string[] changed = (string[])shuffled.Clone();
+            changed[stream] = "30:9:10:11:12";
+            string actual = remoteFields + "R=" + string.Join('/', changed);
+            Require(!MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+                baseline, actual, true, out _, out _, out _, out string reason)
+                && reason == $"non_shuffle_rng_changed:{streamNames[stream]}",
+                $"Allowed HP/history/shuffle drift must not hide strict RNG rejection for {streamNames[stream]}.");
+            IReadOnlyList<string> differences = new ContinuationStamp(baseline)
+                .DescribeDifferences(new ContinuationStamp(actual));
+            Require(differences.Count == 4
+                && differences[2].StartsWith("field=R.shuffle ", StringComparison.Ordinal)
+                && differences[3].StartsWith($"field=R.{streamNames[stream]} ", StringComparison.Ordinal),
+                $"Diagnostics must expose {streamNames[stream]} after the first shuffle difference.");
+        }
+
+        string[] allChanged = streams.Select(_ => "50:13:14:15:16").ToArray();
+        ContinuationStamp expectedRng = new("R=" + string.Join('/', streams));
+        ContinuationStamp actualRng = new("R=" + string.Join('/', allChanged));
+        Require(expectedRng.DescribeDifferences(actualRng).Count == 9
+            && expectedRng.DescribeDifferences(actualRng, maximumDifferences: 2).Count == 2
+            && expectedRng.DescribeFirstDifference(actualRng).StartsWith("field=R.shuffle ", StringComparison.Ordinal),
+            "Full RNG diagnostics must preserve the caller's difference limit and first-difference behavior.");
+        Require(!MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+            baseline, shuffleOnly, false, out _, out _, out _, out string lethalReason)
+            && lethalReason == "field_changed:E0",
+            "Lethal-window enemy damage must remain a replan boundary.");
+        Require(!MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+            baseline, shuffleOnly.Replace("H=STRIKE", "H=OFFERING"), true,
+            out _, out _, out _, out string handReason) && handReason == "field_changed:H",
+            "Changed local cards must remain a strict continuation rejection.");
+    }
+
+    private static void ValidateLocalCoreChoiceRngContract()
+    {
+        const string baseline = "L=local;HC=4/0/0/1/0/11;P=remote;E0=enemy;" +
+            "R=2222:1:2:3:4/244:5:6:7:8/0:9:10:11:12/31:13:14:15:16/" +
+            "0:17:18:19:20/49:21:22:23:24/0:25:26:27:28/17:29:30:31:32/46:33:34:35:36";
+        LiveCombatStamp expected = new(baseline);
+        string expectedLocal = LiveCombatStamp.NormalizeLocalCoreSearchValidityText(baseline);
+        string[] streams = baseline[(baseline.IndexOf("R=", StringComparison.Ordinal) + 2)..].Split('/');
+        string prefix = baseline[..baseline.IndexOf("R=", StringComparison.Ordinal)];
+        for (int index = 1; index < streams.Length; index++)
+        {
+            string[] changed = (string[])streams.Clone();
+            // The reported Colorless Potion failure advanced generation 244 -> 249.
+            string[] state = changed[index].Split(':');
+            state[0] = (int.Parse(state[0]) + 1).ToString();
+            changed[index] = index == 1 ? "249:37:38:39:40" : string.Join(':', state);
+            LiveCombatStamp actual = new(prefix + "R=" + string.Join('/', changed));
+            bool localMatches = expectedLocal == LiveCombatStamp.NormalizeLocalCoreSearchValidityText(actual.StateText);
+            Require(!localMatches && LiveCombatStamp.IsLocalCoreRngOnlyChange(expected, actual)
+                && MultiplayerSearchCompletionContracts.IsStale(true, 16, 32, 2, 2, false, localMatches),
+                $"Shared RNG stream {index} drift must reject the old route and admit a fresh-root replan.");
+        }
+        LiveCombatStamp shuffleAndRemote = new(baseline.Replace("2222:1:2:3:4", "2227:41:42:43:44")
+            .Replace("P=remote", "P=remote-after").Replace("E0=enemy", "E0=enemy-after")
+            .Replace("HC=4/", "HC=7/"));
+        Require(expectedLocal == LiveCombatStamp.NormalizeLocalCoreSearchValidityText(shuffleAndRemote.StateText)
+            && !LiveCombatStamp.IsLocalCoreRngOnlyChange(expected, shuffleAndRemote),
+            "Previously allowed shuffle/remote drift must retain route compatibility.");
+        LiveCombatStamp localAndRng = new(baseline.Replace("244:5:6:7:8", "249:37:38:39:40")
+            .Replace("L=local", "L=player-changed"));
+        Require(!LiveCombatStamp.IsLocalCoreRngOnlyChange(expected, localAndRng),
+            "A local state change must not inherit an RNG-only deployment replan.");
+    }
+
     private static void ValidateLocalCoreShadowNormalizationContract()
     {
         const string parentA =
-            "L=local;HC=4/0/0/1/0/11;P=remote-a;R=shared-a;E0=enemy-a;AI0=ai-a;MS0=multi-a";
+            "L=local;HC=4/0/0/1/0/11;P=remote-a;R=shared-a/local-rng;E0=enemy-a;AI0=ai-a;MS0=multi-a";
         const string parentB =
-            "L=local;HC=6/0/0/1/0/11;P=remote-b;R=shared-b;E0=enemy-b;AI0=ai-b;MS0=multi-b";
+            "L=local;HC=6/0/0/1/0/11;P=remote-b;R=shared-b/local-rng;E0=enemy-b;AI0=ai-b;MS0=multi-b";
         const string outputA =
-            "L=local-after;HC=5/0/0/1/0/11;P=remote-c;R=shared-c;E0=enemy-c;AI0=ai-c;MS0=multi-c";
+            "L=local-after;HC=5/0/0/1/0/11;P=remote-c;R=shared-c/local-rng-after;E0=enemy-c;AI0=ai-c;MS0=multi-c";
         const string outputB =
-            "L=local-after;HC=7/0/0/1/0/11;P=remote-d;R=shared-d;E0=enemy-d;AI0=ai-d;MS0=multi-d";
+            "L=local-after;HC=7/0/0/1/0/11;P=remote-d;R=shared-d/local-rng-after;E0=enemy-d;AI0=ai-d;MS0=multi-d";
 
         string normalizedParentA =
             LiveCombatStamp.NormalizeLocalCoreSearchValidityText(parentA);
@@ -2439,6 +2561,270 @@ internal static class Program
     {
         if (!condition)
             throw new InvalidOperationException(message);
+    }
+
+    private static void ValidatePendulumDraw(CombatState combat,
+        SolverDisplayNames names, BattleDamageSnapshot damage, SearchPolicySnapshot policy,
+        SolverSearchProfile profile)
+    {
+        Player player = LocalContext.GetMe(combat)!;
+        var relic = ModelDb.Relic<MegaCrit.Sts2.Core.Models.Relics.Pendulum>().ToMutable();
+        player.AddRelicInternal(relic);
+        var pendulum = (MegaCrit.Sts2.Core.Models.Relics.Pendulum)relic;
+        for (int i = 0; i < 25; i++)
+            player.PlayerCombatState!.DrawPile.AddInternal(
+                combat.CreateCard(ResolveCard("DEFEND_IRONCLAD"), player), -1);
+        int turn = player.PlayerCombatState!.TurnNumber;
+        foreach (int counter in new[] { 0, 1, 2 })
+        {
+            pendulum.TurnsSeen = counter;
+            Require(MegaCrit.Sts2.Core.Hooks.Hook.ModifyHandDraw(combat, player,
+                    CombatManager.baseHandDrawCount, out _) == CombatManager.baseHandDrawCount,
+                "Pinned native Pendulum unexpectedly modifies the hand-draw hook.");
+            Require(SimulatedCombatState.GetLiveStatefulRelicHandDrawContribution(
+                    pendulum, player, turn) == 0,
+                "Pendulum was subtracted from a native hand-draw hook that does not include it.");
+            CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
+            var solver = new CombatBeamSolver(root, names, damage,
+                policy with { RoutePolicy = SearchRoutePolicy.MultiplayerSinglePlayerCore,
+                    CurrentTurnOnly = false, IncludeTurnSetup = false }, searchProfile: profile);
+            PlanAction[] actions = [];
+            for (int step = 1; step <= 3; step++)
+            {
+                actions = [.. actions, new(PlanActionKind.EndTurn, turn + step - 1)];
+                SimulationSnapshot snapshot = solver.ReplayDiagnosticPrefix(actions);
+                try
+                {
+                    int expected = CombatManager.baseHandDrawCount
+                        + ((counter + step) % 3 == 0 ? pendulum.DynamicVars.Cards.IntValue : 0);
+                    var predicted = snapshot.Simulator.State.GetPlayerCombatState(player);
+                    Require(snapshot.BoundaryReason == SearchBoundaryReason.None
+                            && predicted.Hand.Cards.Count == expected,
+                        $"Pendulum root={counter} step={step}: expected {expected} cards, "
+                        + $"got {predicted.Hand.Cards.Count}, boundary={snapshot.BoundaryReason}.");
+                    Require(pendulum.TurnsSeen == counter
+                            && player.PlayerCombatState.TurnNumber == turn,
+                        "Future Pendulum replay mutated live relic or turn state.");
+                }
+                finally { snapshot.ReleaseSimulator(); }
+            }
+        }
+    }
+
+    private static void ValidateContinuationRouteReplay(CombatState combat,
+        SolverDisplayNames names, BattleDamageSnapshot damage, SearchPolicySnapshot captured,
+        SolverSearchProfile profile)
+    {
+        Player player = LocalContext.GetMe(combat)!;
+        var enemy = combat.Enemies.Single();
+        int originalHp = enemy.CurrentHp;
+        try
+        {
+            SetLiveEnergyForU5(player, 3);
+            player.PlayerCombatState!.DrawPile.AddInternal(
+                combat.CreateCard(ResolveCard("STRIKE_IRONCLAD"), player), 0);
+            int turn = player.PlayerCombatState.TurnNumber;
+            PlanAction[] actions =
+            [
+                new(PlanActionKind.PlayCard, turn, CardId: "BASH", TargetIndex: 0, TargetCombatId: enemy.CombatId),
+                new(PlanActionKind.EndTurn, turn),
+                new(PlanActionKind.PlayCard, turn + 1, CardId: "STRIKE_IRONCLAD", TargetIndex: 0, TargetCombatId: enemy.CombatId),
+            ];
+            SearchPolicySnapshot policy = captured with
+            {
+                Profile = profile, RoutePolicy = SearchRoutePolicy.MultiplayerSinglePlayerCore,
+                CurrentTurnOnly = false, IncludeTurnSetup = false, UseMultiplayerTeamObjective = false,
+                UseMultiplayerScenarioReevaluation = false, FixedBudget = true,
+                VerifyIncrementalSearch = false, MaxDegreeOfParallelism = 1,
+                Interaction = null, R0TransitionMemo = null,
+                ContinuationRouteReplayActions = actions, AcceptableBattleHpLoss = 100,
+                IgnoreLongTermRewards = true,
+                StopAtAcceptableBattleHpLoss = true, RelicTargets = [],
+                PotionPolicy = SolverPotionPolicy.Disabled,
+                Diagnostics = new SearchDiagnosticsSink(message =>
+                {
+                    if (message.Contains("MP_LOCAL_XTURN_ROUTE_REPLAY")) Console.WriteLine(message);
+                }, _ => { }),
+            };
+            enemy.SetCurrentHpInternal(21);
+            CombatRootSnapshot oldRoot = CombatRootSnapshot.Capture(combat);
+            SolverResult old = new CombatBeamSolver(oldRoot, names, damage, policy,
+                searchProfile: profile, continuationRouteReplayActions: actions).Solve();
+            Require(!old.Snapshot.AllEnemiesDead && old.ExpandedNodes == 0,
+                "Old route must be incomplete and replay must not expand Beam nodes.");
+
+            enemy.SetCurrentHpInternal(15);
+            combat.RunState.Rng.CombatTargets.NextItem(combat.Enemies);
+            CombatRootSnapshot freshRoot = CombatRootSnapshot.Capture(combat);
+            SolverResult? replayed = CombatSearchCoordinator.TryReplayContinuationRoute(
+                freshRoot, names, damage, policy, CancellationToken.None);
+            Require(replayed != null && replayed.Snapshot.AllEnemiesDead && replayed.ExpandedNodes == 0
+                && replayed.StartTurnNumber == freshRoot.StartTurnNumber
+                && replayed.RouteIdentity != old.RouteIdentity && replayed.BestNode.Actions.Count == 3,
+                "Fresh HP/RNG root must repair the cross-turn route without stale identity or Beam expansion.");
+            Require(enemy.CurrentHp == 15 && player.PlayerCombatState.Energy == 3,
+                "Route replay mutated live combat.");
+            string Targets(ContinuationStamp stamp) => stamp.StateText.Split(';')
+                .Single(field => field.StartsWith("R=")).Substring(2).Split('/')[5];
+            Require(Targets(replayed!.Continuations.Single().ExpectedState)
+                    == Targets(freshRoot.ContinuationStamp)
+                && Targets(oldRoot.ContinuationStamp) != Targets(freshRoot.ContinuationStamp)
+                && Targets(ContinuationStamp.CaptureLive(combat)) == Targets(freshRoot.ContinuationStamp),
+                "Replayed continuation must use fresh target RNG and leave live RNG unchanged.");
+            ContinuationRouteReplayBaseline adoptedBaseline = new(old.PredictedFinalState!,
+                old.ProjectedBattleHpLost, old.Snapshot.ProjectedDeathSaveUseCount,
+                old.Snapshot.GrowthRewards, old.Snapshot.RelicCounters, ExplicitRouteAdoption: true);
+            // Match the report: a teammate changes generation RNG while adoption is pending.
+            combat.RunState.Rng.CombatCardGeneration.NextInt(100);
+            CombatRootSnapshot adoptedFreshRoot = CombatRootSnapshot.Capture(combat);
+            SearchPolicySnapshot adoptionPolicy = policy with
+            {
+                ContinuationRouteReplayBaseline = adoptedBaseline,
+                AcceptableBattleHpLoss = 0, StopAtAcceptableBattleHpLoss = false,
+            };
+            SolverResult adoptedReplay = CombatSearchCoordinator.Solve(adoptedFreshRoot,
+                names, damage, adoptionPolicy, CancellationToken.None, progressCallback: null);
+            Require(adoptedReplay.ResultScope == SolverResultScope.RouteAdoption
+                    && adoptedReplay.Snapshot.AllEnemiesDead && adoptedReplay.ExpandedNodes == 0
+                    && adoptedReplay.ProjectedBattleHpLost > adoptionPolicy.AcceptableBattleHpLoss
+                    && adoptedReplay.ProjectedBattleHpLost <= adoptedBaseline.ProjectedBattleHpLost
+                    && adoptedReplay.BestNode.Actions.Select(a => (a.Kind, a.Turn, a.CardId, a.TargetCombatId))
+                        .SequenceEqual(actions.Select(a => (a.Kind, a.Turn, a.CardId, a.TargetCombatId)))
+                    && adoptedReplay.RouteIdentity != old.RouteIdentity,
+                "Explicit adopted route was lost or subjected to the automatic zero-loss gate after RNG drift.");
+            Require(CombatSearchCoordinator.TryReplayContinuationRoute(adoptedFreshRoot, names, damage,
+                    adoptionPolicy with { AcceptableBattleHpLoss = 100,
+                        ContinuationRouteReplayBaseline = adoptedBaseline with { ProjectedBattleHpLost = 0 } },
+                    CancellationToken.None) == null,
+                "Explicit adoption accepted more loss than the chosen route via the automatic threshold.");
+            Require(CombatSearchCoordinator.TryReplayContinuationRoute(adoptedFreshRoot, names, damage,
+                    adoptionPolicy with { ContinuationRouteReplayBaseline = adoptedBaseline with { DeathSaveUses = 1 } },
+                    CancellationToken.None) == null,
+                "Explicit adoption ignored a changed death-save resource outcome.");
+            Require(enemy.CurrentHp == 15 && player.PlayerCombatState.Energy == 3
+                    && ContinuationStamp.CaptureLive(combat) == adoptedFreshRoot.ContinuationStamp,
+                "Explicit adoption replay mutated live state or RNG.");
+            Require(CombatSearchCoordinator.TryReplayContinuationRoute(oldRoot, names, damage,
+                    policy, CancellationToken.None) == null,
+                "Incomplete replay bypassed the quality gate.");
+            Require(CombatSearchCoordinator.TryReplayContinuationRoute(freshRoot, names, damage,
+                    policy with { AcceptableBattleHpLoss = -1 }, CancellationToken.None) == null,
+                "Replay bypassed the acceptable-loss gate.");
+            Require(CombatSearchCoordinator.TryReplayContinuationRoute(freshRoot, names, damage,
+                    policy with { ContinuationRouteReplayActions = [actions[0] with { CardId = "MISSING_CARD" }] },
+                    CancellationToken.None) == null,
+                "Unavailable card did not fail closed.");
+            Require(CombatSearchCoordinator.TryReplayContinuationRoute(freshRoot, names, damage,
+                    policy with { ContinuationRouteReplayActions = [actions[0] with { Turn = turn + 1 }] },
+                    CancellationToken.None) == null,
+                "Wrong-turn route did not fail closed.");
+            Require(CombatSearchCoordinator.TryReplayContinuationRoute(freshRoot, names, damage,
+                    policy with { StopAtAcceptableBattleHpLoss = false }, CancellationToken.None) == null,
+                "Fast replay ignored the user's request to continue searching for quality.");
+            Require(CombatSearchCoordinator.TryReplayContinuationRoute(freshRoot, names, damage,
+                    policy with { Profile = profile with { SoftTimeBudgetMilliseconds = 0 } },
+                    CancellationToken.None) == null,
+                "Replay time budget did not fail closed.");
+            Require(MultiplayerLocalCrossTurnContracts.ShouldReplayContinuationRoute(true, true,
+                    "non_shuffle_rng_changed:targets")
+                && !MultiplayerLocalCrossTurnContracts.ShouldReplayContinuationRoute(true, false,
+                    "non_shuffle_rng_changed:targets")
+                && !MultiplayerLocalCrossTurnContracts.ShouldReplayContinuationRoute(false, true,
+                    "non_shuffle_rng_changed:targets")
+                && !MultiplayerLocalCrossTurnContracts.ShouldReplayContinuationRoute(true, true, "field_changed:E0")
+                && !MultiplayerLocalCrossTurnContracts.ShouldReplayContinuationRoute(true, true, "field_changed:H"),
+                "Route replay admission widened to lethal, manual, intent or hand changes.");
+
+            enemy.SetCurrentHpInternal(27);
+            CombatRootSnapshot partialOldRoot = CombatRootSnapshot.Capture(combat);
+            SolverResult partialOld = new CombatBeamSolver(partialOldRoot, names, damage, policy,
+                searchProfile: profile, continuationRouteReplayActions: actions).Solve();
+            ContinuationRouteReplayBaseline baseline = new(partialOld.PredictedFinalState!,
+                partialOld.ProjectedBattleHpLost, partialOld.Snapshot.ProjectedDeathSaveUseCount,
+                partialOld.Snapshot.GrowthRewards, partialOld.Snapshot.RelicCounters);
+            enemy.SetCurrentHpInternal(21);
+            combat.RunState.Rng.CombatTargets.NextItem(combat.Enemies);
+            CombatRootSnapshot partialFreshRoot = CombatRootSnapshot.Capture(combat);
+            SearchPolicySnapshot partialPolicy = policy with
+            {
+                ContinuationRouteReplayBaseline = baseline, StopAtAcceptableBattleHpLoss = false,
+                AcceptableBattleHpLoss = -1,
+            };
+            SolverResult? partial = CombatSearchCoordinator.TryReplayContinuationRoute(partialFreshRoot,
+                names, damage, partialPolicy, CancellationToken.None);
+            Require(partial != null && !partial.Snapshot.AllEnemiesDead && partial.ExpandedNodes == 0
+                && partial.ProjectedBattleHpLost == partialOld.ProjectedBattleHpLost
+                && partial.Snapshot.EnemyHp == partialOld.Snapshot.EnemyHp - 6,
+                "Equivalent partial route was not repaired under the prior adopted quality.");
+            Require(CombatSearchCoordinator.TryReplayContinuationRoute(partialFreshRoot, names, damage,
+                    partialPolicy with { ContinuationRouteReplayBaseline = baseline with { ProjectedBattleHpLost = 0 } },
+                    CancellationToken.None) == null,
+                "Partial replay increased loss relative to the prior adopted route.");
+            Require(CombatSearchCoordinator.TryReplayContinuationRoute(partialFreshRoot, names, damage,
+                    partialPolicy with { ContinuationRouteReplayBaseline = null }, CancellationToken.None) == null,
+                "Partial route was adopted without end-state quality evidence.");
+            string finalText = partial!.PredictedFinalState!.StateText;
+            string MutateField(string name) => string.Join(';', finalText.Split(';')
+                .Select(field => field.StartsWith(name + "=", StringComparison.Ordinal) ? name + "=changed" : field));
+            foreach (string field in new[] { "H", "D", "P", "AI0" })
+                Require(!MultiplayerLocalCrossTurnContracts.IsReplayedRouteFinalStateCompatible(
+                    baseline.FinalState.StateText, MutateField(field)),
+                    $"Partial route ignored a changed {field} endpoint.");
+            string enemyField = baseline.FinalState.StateText.Split(';').Single(field => field.StartsWith("E0="));
+            string[] enemyParts = enemyField.Split('/');
+            enemyParts[3] = (int.Parse(enemyParts[3]) + 1).ToString();
+            string enemyHpIncrease = string.Join(';', finalText.Split(';')
+                .Select(field => field.StartsWith("E0=") ? string.Join('/', enemyParts) : field));
+            Require(!MultiplayerLocalCrossTurnContracts.IsReplayedRouteFinalStateCompatible(
+                    baseline.FinalState.StateText, enemyHpIncrease),
+                "Partial replay accepted an enemy taking less damage than the prior route.");
+            string[] finalFields = finalText.Split(';');
+            int rngIndex = Array.FindIndex(finalFields, field => field.StartsWith("R="));
+            string[] rngStreams = finalFields[rngIndex][2..].Split('/');
+            rngStreams[1] = "changed";
+            finalFields[rngIndex] = "R=" + string.Join('/', rngStreams);
+            Require(!MultiplayerLocalCrossTurnContracts.IsReplayedRouteFinalStateCompatible(
+                    baseline.FinalState.StateText, string.Join(';', finalFields)),
+                "Partial replay ignored card-generation RNG drift.");
+            using CancellationTokenSource canceled = new();
+            canceled.Cancel();
+            try
+            {
+                CombatSearchCoordinator.TryReplayContinuationRoute(freshRoot, names, damage, policy, canceled.Token);
+                throw new InvalidOperationException("Canceled route replay returned a result.");
+            }
+            catch (OperationCanceledException) { }
+            Console.WriteLine("PASS fresh-root route repair: HP -6 / target RNG +1, complete and equivalent partial routes, no Beam expansion, endpoint rejection and cancellation");
+        }
+        finally { enemy.SetCurrentHpInternal(originalHp); }
+    }
+
+    private static void ValidateCompletionForegroundScope()
+    {
+        PlanAction[] current =
+        [new(PlanActionKind.PlayCard, 1, CardId: "COLOSSUS"),
+         new(PlanActionKind.PlayCard, 1, CardId: "DEFEND_IRONCLAD"),
+         new(PlanActionKind.EndTurn, 1)];
+        PlanAction[] full = [.. current, new(PlanActionKind.PlayCard, 2, CardId: "BASH")];
+        SolverSpeculativeRoutePreview Preview(bool future) => new(1, 1, 0, future ? 22 : 0,
+            false, false, false,
+            [new SolverFrontierTurn(1, current, 0, 0, 0, 1, false),
+             .. future ? new[] { new SolverFrontierTurn(2, [full[^1]], 22, 0, 208, 0, false) } : []]);
+        Require(!CombatSearchCoordinator.CompletionForegroundCoversRoute(current, Preview(true), 1, 2,
+                completeVictory: false, currentTurnAdoption: true),
+            "Zero-loss current-turn prefix replaced a full route with 22 projected loss.");
+        Require(!CombatSearchCoordinator.CompletionForegroundCoversRoute(current, Preview(false), 1, 2,
+                completeVictory: false, currentTurnAdoption: false),
+            "Shorter non-winning horizon replaced a longer route.");
+        Require(!CombatSearchCoordinator.CompletionForegroundCoversRoute(current, Preview(false), 1, 1,
+                completeVictory: false, currentTurnAdoption: true),
+            "Current-turn adoption became automatic completion without a future evaluation.");
+        Require(CombatSearchCoordinator.CompletionForegroundCoversRoute(full, Preview(true), 2, 2,
+                completeVictory: false, currentTurnAdoption: true),
+            "Fully evaluated foreground route was rejected due to its adoption label.");
+        Require(CombatSearchCoordinator.CompletionForegroundCoversRoute(current, Preview(false), 1, 3,
+                completeVictory: true, currentTurnAdoption: true),
+            "Earlier complete victory was rejected due to its shorter horizon.");
     }
 
     private static void ValidateReviewOrdering()

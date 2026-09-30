@@ -1650,6 +1650,7 @@ internal sealed record CachedContinuation(
 
 internal sealed class SolverResult
 {
+    public ContinuationStamp? PredictedFinalState { get; internal set; }
     public bool WasRestoredFromCache { get; internal set; }
     public SolverResultScope ResultScope { get; internal set; } = SolverResultScope.SearchCompletion;
     public MultiplayerSearchResultScope MultiplayerScope { get; internal set; }
@@ -2051,6 +2052,7 @@ internal sealed class SolverResult
             Continuations = Continuations.Where(item => item.StartTurnNumber > cached.StartTurnNumber).ToList(),
             WasReused = true,
             ReusedFromTurn = StartTurnNumber,
+            PredictedFinalState = PredictedFinalState,
             MultiplayerScope = MultiplayerScope,
             RouteIdentity = RouteIdentity,
             RecalculatedAfterCompleteProjection = RecalculatedAfterCompleteProjection,

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using CombatSolver.Engine.Common;
 using MegaCrit.Sts2.Core.Combat;
 
 namespace CombatSolver;
@@ -132,6 +133,17 @@ internal static partial class CombatSearchCoordinator
         {
             RequestWorkTotals = requestWorkTotals,
             PortfolioTelemetry = portfolioTelemetry,
+        };
+        if (TryReplayContinuationRoute(root, displayNames, battleDamage, policy,
+                cancellationToken) is { } replayedContinuation)
+        {
+            PopulateRequestWorkTotals(replayedContinuation, requestWorkTotals);
+            return replayedContinuation;
+        }
+        policy = policy with
+        {
+            ContinuationRouteReplayActions = [],
+            ContinuationRouteReplayBaseline = null,
         };
         SearchInteractionState? interaction = policy.Interaction;
         SolverResult? currentCompleteAdoptableResult = null;
@@ -488,11 +500,26 @@ internal static partial class CombatSearchCoordinator
                                  currentTurnPreview))
                     {
                         exactForeground = turnSeed.Materialize();
-                        exactForeground.ResultScope = SolverResultScope.CurrentTurnAdoption;
                         materializationSource = "current_turn_seed";
                         candidateVersion = turnSeed.CandidateVersion;
                     }
 
+                    if (exactForeground != null)
+                    {
+                        bool completeVictory = IsCompleteVictory(exactForeground);
+                        if (!CompletionForegroundCoversRoute(
+                                exactForeground.BestNode.Actions, speculativeRoutePreview,
+                                exactForeground.SearchedTurns, selected.SearchedTurns,
+                                completeVictory,
+                                exactForeground.ResultScope == SolverResultScope.CurrentTurnAdoption))
+                        {
+                            policy.Diagnostics.Info(
+                                $"[CombatSolver/Test] SEARCH_E3_COMPLETION_FOREGROUND_REJECTED " +
+                                $"source={materializationSource} reason=evaluation_scope_mismatch " +
+                                $"foreground_turns={exactForeground.SearchedTurns} final_turns={selected.SearchedTurns}");
+                            exactForeground = null;
+                        }
+                    }
                     if (exactForeground != null)
                     {
                         SolverInterimResult exactForegroundSummary =
@@ -512,6 +539,9 @@ internal static partial class CombatSearchCoordinator
                                 $"foreground_enemy_hp={exactForegroundSummary.EnemyHp} " +
                                 $"scope={exactForeground.ResultScope}");
                             selected = exactForeground;
+                            // Automatic completion retains the evaluated route. Current-turn
+                            // adoption is reserved for the explicit takeover branch above.
+                            selected.ResultScope = SolverResultScope.SearchCompletion;
                         }
                     }
                 }
@@ -650,6 +680,14 @@ internal static partial class CombatSearchCoordinator
         SolverCurrentTurnPreview? preview)
         => preview != null
             && seed.Actions.SequenceEqual(preview.Actions);
+
+    internal static bool CompletionForegroundCoversRoute(
+        IReadOnlyList<PlanAction> actions, SolverSpeculativeRoutePreview? preview,
+        int foregroundTurns, int finalTurns, bool completeVictory, bool currentTurnAdoption)
+        => actions.Count > 0 && RouteMatchesPreview(actions, preview)
+            && (completeVictory || foregroundTurns >= finalTurns)
+            && (!currentTurnAdoption || completeVictory
+                || actions.Any(action => action.Turn > actions[0].Turn));
 
     private static bool IsAdoptionResult(SolverResult result)
         => result.ResultScope is SolverResultScope.CurrentTurnAdoption
@@ -3646,6 +3684,85 @@ internal static partial class CombatSearchCoordinator
             result.Snapshot.AllEnemiesDead,
             result.Snapshot.PlayerDead,
             result.Snapshot.ProjectedPlayerHp);
+
+    internal static SolverResult? TryReplayContinuationRoute(
+        CombatRootSnapshot root, SolverDisplayNames displayNames, BattleDamageSnapshot battleDamage,
+        SearchPolicySnapshot policy, CancellationToken cancellationToken)
+    {
+        if (policy.ContinuationRouteReplayActions.Count == 0
+            || policy.RoutePolicy != SearchRoutePolicy.MultiplayerSinglePlayerCore
+            || policy.IncludeTurnSetup || policy.CurrentTurnOnly || policy.VerifyIncrementalSearch)
+            return null;
+        try
+        {
+            SolverSearchProfile replayProfile = policy.Profile with
+            {
+                SoftTimeBudgetMilliseconds = Math.Min(policy.Profile.SoftTimeBudgetMilliseconds, 600),
+            };
+            SolverResult result = new CombatBeamSolver(root, displayNames, battleDamage,
+                policy with { VerifyIncrementalSearch = false }, cancellationToken,
+                searchProfile: replayProfile,
+                continuationRouteReplayActions: policy.ContinuationRouteReplayActions).Solve();
+            bool equivalentPartial = !result.Snapshot.AllEnemiesDead && !result.Snapshot.PlayerDead
+                && result.Snapshot.ProjectedPlayerHp > 0
+                && result.PotionCount == 0
+                && policy.MinimumRequiredPotionUses(result.BattlePotionsUsedSoFar) == 0
+                && policy.PotionStrategy.EvaluateForcedUses(result.BestNode.Actions,
+                    renewablePotionShapedRock: false).AllForcedUsesSatisfied
+                && result.BoundaryReason is SearchBoundaryReason.None or SearchBoundaryReason.TurnLimit
+                && policy.ContinuationRouteReplayBaseline is { } baseline
+                && result.PredictedFinalState is { } finalState
+                && result.ProjectedBattleHpLost <= baseline.ProjectedBattleHpLost
+                && result.Snapshot.ProjectedDeathSaveUseCount == baseline.DeathSaveUses
+                && result.Snapshot.GrowthRewards == baseline.GrowthRewards
+                && result.Snapshot.RelicCounters == baseline.RelicCounters
+                && MultiplayerLocalCrossTurnContracts.IsReplayedRouteFinalStateCompatible(
+                    baseline.FinalState.StateText, finalState.StateText);
+            bool explicitVictory = policy.ContinuationRouteReplayBaseline is { ExplicitRouteAdoption: true } adopted
+                && IsCompleteVictory(result)
+                && result.ProjectedBattleHpLost <= adopted.ProjectedBattleHpLost
+                && result.Snapshot.ProjectedDeathSaveUseCount == adopted.DeathSaveUses
+                && result.Snapshot.GrowthRewards == adopted.GrowthRewards
+                && result.Snapshot.RelicCounters == adopted.RelicCounters
+                && result.PotionCount == 0
+                && policy.MinimumRequiredPotionUses(result.BattlePotionsUsedSoFar) == 0
+                && policy.PotionStrategy.EvaluateForcedUses(result.BestNode.Actions,
+                    renewablePotionShapedRock: false).AllForcedUsesSatisfied
+                && TheftEncounterStrategy.RecoverySatisfied(policy.TheftPolicy, result.OutstandingStolenResource);
+            bool accepted = policy.ContinuationRouteReplayBaseline?.ExplicitRouteAdoption == true
+                ? equivalentPartial || explicitVictory
+                : equivalentPartial || HasReachedAcceptableBattleHpLoss(policy, result);
+            if (accepted && policy.ContinuationRouteReplayBaseline?.ExplicitRouteAdoption == true)
+                result.ResultScope = SolverResultScope.RouteAdoption;
+            policy.Diagnostics.Info(
+                $"[CombatSolver/Test] MP_LOCAL_XTURN_ROUTE_REPLAY status={(accepted ? "accepted" : "quality_rejected")} " +
+                $"fresh_root=true expanded={result.ExpandedNodes} actions={result.BestNode.ActionCount} " +
+                $"hp_loss={result.ProjectedBattleHpLost} elapsed_ms={result.Elapsed.TotalMilliseconds:F1} " +
+                $"quality={(equivalentPartial ? "equivalent_partial" : explicitVictory ? "explicit_adoption_victory" : accepted ? "acceptable_victory" : "not_proven")} " +
+                $"full_search_skipped={accepted.ToString().ToLowerInvariant()}");
+            return accepted ? result : null;
+        }
+        catch (ContinuationSeedRejectedException ex)
+        {
+            policy.Diagnostics.Info($"[CombatSolver/Test] MP_LOCAL_XTURN_ROUTE_REPLAY status=rejected reason={ex.Reason}");
+            return null;
+        }
+        catch (PredictionUnsupportedException ex)
+        {
+            policy.Diagnostics.Info($"[CombatSolver/Test] MP_LOCAL_XTURN_ROUTE_REPLAY status=rejected reason={ex.GetType().Name}");
+            return null;
+        }
+        catch (NativeChoicePlanMismatchException ex)
+        {
+            policy.Diagnostics.Info($"[CombatSolver/Test] MP_LOCAL_XTURN_ROUTE_REPLAY status=rejected reason={ex.GetType().Name}");
+            return null;
+        }
+        catch (InvalidPlannedChoiceBranchException ex)
+        {
+            policy.Diagnostics.Info($"[CombatSolver/Test] MP_LOCAL_XTURN_ROUTE_REPLAY status=rejected reason={ex.GetType().Name}");
+            return null;
+        }
+    }
 
     internal static bool HasReachedAcceptableBattleHpLoss(
         SearchPolicySnapshot policy,
