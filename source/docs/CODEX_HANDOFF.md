@@ -191,6 +191,7 @@ G SSD 冷存储按当前产品目标延期。F1/G 作为可选研究项，不再
 
 ## 当前未验证边界
 
+- SCROLLS_OF_BITING_WEAK `03fa54df…`：T1 队友换牌使共享 CardGeneration `313→319`，敌人与本地手牌不变，触发 RNG-only fresh replan。另有收尾范围混淆：`current_turn_seed` 的 1 回合 / 0 战损 / 敌人 243 HP 挤掉跨回合结果，并误标自动 `CurrentTurnAdoption`。现要求前台后备覆盖完整展示动作及适用评估回合，避免短前缀以眼前战损覆盖长路线；自动收尾保留 SearchCompletion，显式当前回合接管照旧。Release、`completion-scope` 合同通过；原场质量与多人部署仍待 current build 实机验证。
 - DEVOTED_SCULPTOR_WEAK `49947939…` / `40e88d94…`：队友招架盾在 T2 结束时格挡 14，额外伤害 6 / Targets RNG +1；不能据 T3 差额认定本地红披风漏算。新增高血 Targets 偏差的新根路线重放（128 动作、600ms 软预算、无 Beam 展开）：完整胜利满足既有采用门槛，或部分路线终点本地完整状态相同、战损不增且敌人仅存活血量下降，才跳过完整搜索。未通过则保留 R1 / 普通搜索；严格续用和部署 RNG 校验未改。队友未来格挡未知，不默认预测招架盾。Release 与 `U0U1PinnedHarness continuation-replay` 通过；仍需当前构建 Host/Client 验证 `MP_LOCAL_XTURN_ROUTE_REPLAY status=accepted` 及部署。
 - ENTOMANCER_ELITE `e3fd63e…` 高血重算：T2/T3 仅记录敌人 HP、HC 和 RNG 差异，`allow_living_enemy_hp_decrease=true`；HP/HC 已被兼容判断接受，随后在 RNG 字段拒绝，说明还有非 Shuffle RNG 差异。旧诊断只输出该字段第一个变化的流，不能确定具体流或归因队友/模拟。T4/T5 另有真实手牌/牌堆差异。现增加 `local_core_reject_reason` 并输出全部 RNG 差异，不放宽复用规则；Release、`continuation-audit` 和原 `choice-rng` 通过。下一步用新构建问题包定位具体随机流，再做同根同动作的预测/实机对照；可修模拟误差才修改预测，队友变化继续从新根复演已有 R1 候选，不跳过校验。
 - BOWLBUGS_NORMAL `69faf6312f3f49f9b428a0b264a0c9e3`：搜索期间共享生成 RNG `244→249`，旧路线仍预测无色药水选“秘密技法”，实机候选却含“金斧头”。local-core 有效性现保留非 Shuffle RNG；仅 RNG 失效时从新根重算，并保留已请求的执行意图。`U0U1PinnedHarness choice-rng --out <ignored-path>` 的 10 个定向合同及 Release 编译通过；自动选牌恢复仍需当前构建 Host/Client 实机复验。开局遗物选择流程未改。

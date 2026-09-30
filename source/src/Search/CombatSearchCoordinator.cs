@@ -500,11 +500,26 @@ internal static partial class CombatSearchCoordinator
                                  currentTurnPreview))
                     {
                         exactForeground = turnSeed.Materialize();
-                        exactForeground.ResultScope = SolverResultScope.CurrentTurnAdoption;
                         materializationSource = "current_turn_seed";
                         candidateVersion = turnSeed.CandidateVersion;
                     }
 
+                    if (exactForeground != null)
+                    {
+                        bool completeVictory = IsCompleteVictory(exactForeground);
+                        if (!CompletionForegroundCoversRoute(
+                                exactForeground.BestNode.Actions, speculativeRoutePreview,
+                                exactForeground.SearchedTurns, selected.SearchedTurns,
+                                completeVictory,
+                                exactForeground.ResultScope == SolverResultScope.CurrentTurnAdoption))
+                        {
+                            policy.Diagnostics.Info(
+                                $"[CombatSolver/Test] SEARCH_E3_COMPLETION_FOREGROUND_REJECTED " +
+                                $"source={materializationSource} reason=evaluation_scope_mismatch " +
+                                $"foreground_turns={exactForeground.SearchedTurns} final_turns={selected.SearchedTurns}");
+                            exactForeground = null;
+                        }
+                    }
                     if (exactForeground != null)
                     {
                         SolverInterimResult exactForegroundSummary =
@@ -524,6 +539,9 @@ internal static partial class CombatSearchCoordinator
                                 $"foreground_enemy_hp={exactForegroundSummary.EnemyHp} " +
                                 $"scope={exactForeground.ResultScope}");
                             selected = exactForeground;
+                            // Automatic completion retains the evaluated route. Current-turn
+                            // adoption is reserved for the explicit takeover branch above.
+                            selected.ResultScope = SolverResultScope.SearchCompletion;
                         }
                     }
                 }
@@ -662,6 +680,14 @@ internal static partial class CombatSearchCoordinator
         SolverCurrentTurnPreview? preview)
         => preview != null
             && seed.Actions.SequenceEqual(preview.Actions);
+
+    internal static bool CompletionForegroundCoversRoute(
+        IReadOnlyList<PlanAction> actions, SolverSpeculativeRoutePreview? preview,
+        int foregroundTurns, int finalTurns, bool completeVictory, bool currentTurnAdoption)
+        => actions.Count > 0 && RouteMatchesPreview(actions, preview)
+            && (completeVictory || foregroundTurns >= finalTurns)
+            && (!currentTurnAdoption || completeVictory
+                || actions.Any(action => action.Turn > actions[0].Turn));
 
     private static bool IsAdoptionResult(SolverResult result)
         => result.ResultScope is SolverResultScope.CurrentTurnAdoption

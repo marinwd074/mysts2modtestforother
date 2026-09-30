@@ -40,11 +40,20 @@ internal static class Program
         bool choiceRngOnly = args.Length > 0 && args[0] == "choice-rng";
         bool continuationAuditOnly = args.Length > 0 && args[0] == "continuation-audit";
         bool continuationReplayOnly = args.Length > 0 && args[0] == "continuation-replay";
-        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly ? args[1..] : args);
+        bool completionScopeOnly = args.Length > 0 && args[0] == "completion-scope";
+        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly ? args[1..] : args);
         Directory.CreateDirectory(outputDirectory);
 
         try
         {
+            if (completionScopeOnly)
+            {
+                ValidateCompletionForegroundScope();
+                ValidateApprovedForegroundPreviewContract();
+                ValidateRenderedCurrentTurnTakeoverContract();
+                Console.WriteLine("CompletionScope PASS (forecast scope and existing foreground ordering)");
+                return 0;
+            }
             if (continuationAuditOnly)
             {
                 ValidateContinuationRejectionDiagnostics();
@@ -2700,6 +2709,34 @@ internal static class Program
             Console.WriteLine("PASS fresh-root route repair: HP -6 / target RNG +1, complete and equivalent partial routes, no Beam expansion, endpoint rejection and cancellation");
         }
         finally { enemy.SetCurrentHpInternal(originalHp); }
+    }
+
+    private static void ValidateCompletionForegroundScope()
+    {
+        PlanAction[] current =
+        [new(PlanActionKind.PlayCard, 1, CardId: "COLOSSUS"),
+         new(PlanActionKind.PlayCard, 1, CardId: "DEFEND_IRONCLAD"),
+         new(PlanActionKind.EndTurn, 1)];
+        PlanAction[] full = [.. current, new(PlanActionKind.PlayCard, 2, CardId: "BASH")];
+        SolverSpeculativeRoutePreview Preview(bool future) => new(1, 1, 0, future ? 22 : 0,
+            false, false, false,
+            [new SolverFrontierTurn(1, current, 0, 0, 0, 1, false),
+             .. future ? new[] { new SolverFrontierTurn(2, [full[^1]], 22, 0, 208, 0, false) } : []]);
+        Require(!CombatSearchCoordinator.CompletionForegroundCoversRoute(current, Preview(true), 1, 2,
+                completeVictory: false, currentTurnAdoption: true),
+            "Zero-loss current-turn prefix replaced a full route with 22 projected loss.");
+        Require(!CombatSearchCoordinator.CompletionForegroundCoversRoute(current, Preview(false), 1, 2,
+                completeVictory: false, currentTurnAdoption: false),
+            "Shorter non-winning horizon replaced a longer route.");
+        Require(!CombatSearchCoordinator.CompletionForegroundCoversRoute(current, Preview(false), 1, 1,
+                completeVictory: false, currentTurnAdoption: true),
+            "Current-turn adoption became automatic completion without a future evaluation.");
+        Require(CombatSearchCoordinator.CompletionForegroundCoversRoute(full, Preview(true), 2, 2,
+                completeVictory: false, currentTurnAdoption: true),
+            "Fully evaluated foreground route was rejected due to its adoption label.");
+        Require(CombatSearchCoordinator.CompletionForegroundCoversRoute(current, Preview(false), 1, 3,
+                completeVictory: true, currentTurnAdoption: true),
+            "Earlier complete victory was rejected due to its shorter horizon.");
     }
 
     private static void ValidateReviewOrdering()
