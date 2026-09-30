@@ -2671,6 +2671,39 @@ internal static class Program
                 && Targets(oldRoot.ContinuationStamp) != Targets(freshRoot.ContinuationStamp)
                 && Targets(ContinuationStamp.CaptureLive(combat)) == Targets(freshRoot.ContinuationStamp),
                 "Replayed continuation must use fresh target RNG and leave live RNG unchanged.");
+            ContinuationRouteReplayBaseline adoptedBaseline = new(old.PredictedFinalState!,
+                old.ProjectedBattleHpLost, old.Snapshot.ProjectedDeathSaveUseCount,
+                old.Snapshot.GrowthRewards, old.Snapshot.RelicCounters, ExplicitRouteAdoption: true);
+            // Match the report: a teammate changes generation RNG while adoption is pending.
+            combat.RunState.Rng.CombatCardGeneration.NextInt(100);
+            CombatRootSnapshot adoptedFreshRoot = CombatRootSnapshot.Capture(combat);
+            SearchPolicySnapshot adoptionPolicy = policy with
+            {
+                ContinuationRouteReplayBaseline = adoptedBaseline,
+                AcceptableBattleHpLoss = 0, StopAtAcceptableBattleHpLoss = false,
+            };
+            SolverResult adoptedReplay = CombatSearchCoordinator.Solve(adoptedFreshRoot,
+                names, damage, adoptionPolicy, CancellationToken.None, progressCallback: null);
+            Require(adoptedReplay.ResultScope == SolverResultScope.RouteAdoption
+                    && adoptedReplay.Snapshot.AllEnemiesDead && adoptedReplay.ExpandedNodes == 0
+                    && adoptedReplay.ProjectedBattleHpLost > adoptionPolicy.AcceptableBattleHpLoss
+                    && adoptedReplay.ProjectedBattleHpLost <= adoptedBaseline.ProjectedBattleHpLost
+                    && adoptedReplay.BestNode.Actions.Select(a => (a.Kind, a.Turn, a.CardId, a.TargetCombatId))
+                        .SequenceEqual(actions.Select(a => (a.Kind, a.Turn, a.CardId, a.TargetCombatId)))
+                    && adoptedReplay.RouteIdentity != old.RouteIdentity,
+                "Explicit adopted route was lost or subjected to the automatic zero-loss gate after RNG drift.");
+            Require(CombatSearchCoordinator.TryReplayContinuationRoute(adoptedFreshRoot, names, damage,
+                    adoptionPolicy with { AcceptableBattleHpLoss = 100,
+                        ContinuationRouteReplayBaseline = adoptedBaseline with { ProjectedBattleHpLost = 0 } },
+                    CancellationToken.None) == null,
+                "Explicit adoption accepted more loss than the chosen route via the automatic threshold.");
+            Require(CombatSearchCoordinator.TryReplayContinuationRoute(adoptedFreshRoot, names, damage,
+                    adoptionPolicy with { ContinuationRouteReplayBaseline = adoptedBaseline with { DeathSaveUses = 1 } },
+                    CancellationToken.None) == null,
+                "Explicit adoption ignored a changed death-save resource outcome.");
+            Require(enemy.CurrentHp == 15 && player.PlayerCombatState.Energy == 3
+                    && ContinuationStamp.CaptureLive(combat) == adoptedFreshRoot.ContinuationStamp,
+                "Explicit adoption replay mutated live state or RNG.");
             Require(CombatSearchCoordinator.TryReplayContinuationRoute(oldRoot, names, damage,
                     policy, CancellationToken.None) == null,
                 "Incomplete replay bypassed the quality gate.");

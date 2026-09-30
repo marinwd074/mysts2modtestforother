@@ -3718,12 +3718,27 @@ internal static partial class CombatSearchCoordinator
                 && result.Snapshot.RelicCounters == baseline.RelicCounters
                 && MultiplayerLocalCrossTurnContracts.IsReplayedRouteFinalStateCompatible(
                     baseline.FinalState.StateText, finalState.StateText);
-            bool accepted = equivalentPartial || HasReachedAcceptableBattleHpLoss(policy, result);
+            bool explicitVictory = policy.ContinuationRouteReplayBaseline is { ExplicitRouteAdoption: true } adopted
+                && IsCompleteVictory(result)
+                && result.ProjectedBattleHpLost <= adopted.ProjectedBattleHpLost
+                && result.Snapshot.ProjectedDeathSaveUseCount == adopted.DeathSaveUses
+                && result.Snapshot.GrowthRewards == adopted.GrowthRewards
+                && result.Snapshot.RelicCounters == adopted.RelicCounters
+                && result.PotionCount == 0
+                && policy.MinimumRequiredPotionUses(result.BattlePotionsUsedSoFar) == 0
+                && policy.PotionStrategy.EvaluateForcedUses(result.BestNode.Actions,
+                    renewablePotionShapedRock: false).AllForcedUsesSatisfied
+                && TheftEncounterStrategy.RecoverySatisfied(policy.TheftPolicy, result.OutstandingStolenResource);
+            bool accepted = policy.ContinuationRouteReplayBaseline?.ExplicitRouteAdoption == true
+                ? equivalentPartial || explicitVictory
+                : equivalentPartial || HasReachedAcceptableBattleHpLoss(policy, result);
+            if (accepted && policy.ContinuationRouteReplayBaseline?.ExplicitRouteAdoption == true)
+                result.ResultScope = SolverResultScope.RouteAdoption;
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] MP_LOCAL_XTURN_ROUTE_REPLAY status={(accepted ? "accepted" : "quality_rejected")} " +
                 $"fresh_root=true expanded={result.ExpandedNodes} actions={result.BestNode.ActionCount} " +
                 $"hp_loss={result.ProjectedBattleHpLost} elapsed_ms={result.Elapsed.TotalMilliseconds:F1} " +
-                $"quality={(equivalentPartial ? "equivalent_partial" : accepted ? "acceptable_victory" : "not_proven")} " +
+                $"quality={(equivalentPartial ? "equivalent_partial" : explicitVictory ? "explicit_adoption_victory" : accepted ? "acceptable_victory" : "not_proven")} " +
                 $"full_search_skipped={accepted.ToString().ToLowerInvariant()}");
             return accepted ? result : null;
         }

@@ -21,7 +21,8 @@ namespace CombatSolver;
 internal static partial class SolverController
 {
 
-    public static void RequestSearch(NGame host, CombatState state, SearchReason reason, bool deployWhenReady = false)
+    public static void RequestSearch(NGame host, CombatState state, SearchReason reason, bool deployWhenReady = false,
+        SolverResult? adoptedRouteReplay = null)
     {
         AssertMainThread();
         SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
@@ -237,6 +238,18 @@ internal static partial class SolverController
             IReadOnlyList<PlanAction> continuationSeedActions = Array.Empty<PlanAction>();
             IReadOnlyList<PlanAction> continuationReplayActions = Array.Empty<PlanAction>();
             ContinuationRouteReplayBaseline? continuationReplayBaseline = null;
+            if (reason == SearchReason.DeploymentDrift
+                && adoptedRouteReplay?.PredictedFinalState is { } adoptedFinalState
+                && adoptedRouteReplay.StartTurnNumber == searchTurn)
+            {
+                // Retain values only; this request captures and replays a fresh live root below.
+                continuationReplayActions = adoptedRouteReplay.BestNode.Actions.ToArray();
+                continuationReplayBaseline = new(adoptedFinalState,
+                    adoptedRouteReplay.ProjectedBattleHpLost,
+                    adoptedRouteReplay.Snapshot.ProjectedDeathSaveUseCount,
+                    adoptedRouteReplay.Snapshot.GrowthRewards,
+                    adoptedRouteReplay.Snapshot.RelicCounters, ExplicitRouteAdoption: true);
+            }
             if (continuationStamp != null && capabilities.IsMultiplayer)
             {
                 Entry.Logger.Info(
@@ -967,18 +980,25 @@ internal static partial class SolverController
                 $"full_stamp_match={fullStampMatches.ToString().ToLowerInvariant()} " +
                 $"local_stamp_match={localCoreStampMatches.ToString().ToLowerInvariant()}");
             Entry.Logger.Info($"[CombatSolver/Test] SEARCH_STALE generation={generation}");
+            bool routeAdoptionRequested = search.Interaction.CurrentTakeoverRequest?.Kind
+                == SearchTakeoverKind.AdoptRoute || task.Result.ResultScope == SolverResultScope.RouteAdoption;
             if (stillSearchable && search.UseRouteScopedCompletion && currentStamp != null
                 && LiveCombatStamp.IsLocalCoreRngOnlyChange(searchedStamp, currentStamp)
                 && !_combat.AutomaticSearchPaused
                 && !search.Interaction.StopRequested
-                && (search.DeployWhenReady || AutomaticCalculationEnabled))
+                && (search.DeployWhenReady || AutomaticCalculationEnabled || routeAdoptionRequested))
             {
                 _combat.ContinuationSource = null;
                 Entry.Logger.Info(
                     $"[CombatSolver/Test] SEARCH_RNG_REPLAN generation={generation} " +
                     $"deploy_when_ready={search.DeployWhenReady.ToString().ToLowerInvariant()}");
+                SolverResult? adoptedRoute = routeAdoptionRequested ? task.Result : null;
+                if (adoptedRoute != null)
+                    Entry.Logger.Info(
+                        $"[CombatSolver/Test] SEARCH_RNG_ADOPTION_RECOVERY " +
+                        $"actions={adoptedRoute.BestNode.ActionCount}");
                 RequestSearch(host, searchedState, SearchReason.DeploymentDrift,
-                    deployWhenReady: search.DeployWhenReady);
+                    deployWhenReady: search.DeployWhenReady, adoptedRouteReplay: adoptedRoute);
             }
             return;
         }

@@ -191,6 +191,7 @@ G SSD 冷存储按当前产品目标延期。F1/G 作为可选研究项，不再
 
 ## 当前未验证边界
 
+- CONSTRUCT_MENAGERIE_NORMAL `52af3616…`：T2 点击采用 candidate 88（27 动作、0 药水、预计战损 19）后，生成 RNG 328→333 使旧根失效，原代码丢弃采用意图再搜约 48s。现保留显式采用动作/质量基线，从新根做既有 128 动作 / 600ms 重放；完整胜利且战损不增、奖励/遗物/保命资源及药水合同通过才保留 RouteAdoption，部分路线仍须原终态证明，失败回退搜索。普通自动零战损门槛不改；重复 RNG 失效继续保留采用意图，不追加执行授权。Release 与 `continuation-replay` 新增采用/质量拒绝/live 隔离检查通过；原包同场 Host/Client 采用恢复待验证。
 - SCROLLS_OF_BITING_WEAK `2d81b689…`：T1 收尾修复已在实机包生效（3 回合 / 2 continuation）。T1→T2 队友回合结束后敌人 HP -6 / Targets +1（符合招架盾效果），旧路线新根重放遇 route_boundary 后回退；旧日志缺具体边界，现补充边界与相邻动作诊断。T2→T3 另有钟摆抽牌预测错误：其原生 AfterPlayerTurnStart 抽牌不属于 ModifyHandDraw，却被当作根贡献扣除，计数 0 的根使后续少抽 1 张（烙印）。已去除错误抵扣；`pendulum-draw` 覆盖 3 个根计数 × 3 个未来回合、原生 hook 与 live 隔离。T3 搜索期间队友 CardGeneration 324→328 / CardSelection 37→38 的 fresh replan 仍必要。Release / 定向回归通过；原场当前构建 Host/Client 续用仍待验证。
 - SCROLLS_OF_BITING_WEAK `03fa54df…`：T1 队友换牌使共享 CardGeneration `313→319`，敌人与本地手牌不变，触发 RNG-only fresh replan。另有收尾范围混淆：`current_turn_seed` 的 1 回合 / 0 战损 / 敌人 243 HP 挤掉跨回合结果，并误标自动 `CurrentTurnAdoption`。现要求前台后备覆盖完整展示动作及适用评估回合，避免短前缀以眼前战损覆盖长路线；自动收尾保留 SearchCompletion，显式当前回合接管照旧。Release、`completion-scope` 合同通过；原场质量与多人部署仍待 current build 实机验证。
 - DEVOTED_SCULPTOR_WEAK `49947939…` / `40e88d94…`：队友招架盾在 T2 结束时格挡 14，额外伤害 6 / Targets RNG +1；不能据 T3 差额认定本地红披风漏算。新增高血 Targets 偏差的新根路线重放（128 动作、600ms 软预算、无 Beam 展开）：完整胜利满足既有采用门槛，或部分路线终点本地完整状态相同、战损不增且敌人仅存活血量下降，才跳过完整搜索。未通过则保留 R1 / 普通搜索；严格续用和部署 RNG 校验未改。队友未来格挡未知，不默认预测招架盾。Release 与 `U0U1PinnedHarness continuation-replay` 通过；仍需当前构建 Host/Client 验证 `MP_LOCAL_XTURN_ROUTE_REPLAY status=accepted` 及部署。

@@ -2,7 +2,8 @@ namespace CombatSolver;
 
 internal sealed record ContinuationRouteReplayBaseline(
     ContinuationStamp FinalState, int ProjectedBattleHpLost,
-    int DeathSaveUses, GrowthValues GrowthRewards, RelicCounterEvaluation RelicCounters);
+    int DeathSaveUses, GrowthValues GrowthRewards, RelicCounterEvaluation RelicCounters,
+    bool ExplicitRouteAdoption = false);
 
 internal sealed record SearchPolicySnapshot(
     SolverSearchProfile Profile,
