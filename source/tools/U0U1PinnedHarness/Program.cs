@@ -40,8 +40,9 @@ internal static class Program
         bool choiceRngOnly = args.Length > 0 && args[0] == "choice-rng";
         bool continuationAuditOnly = args.Length > 0 && args[0] == "continuation-audit";
         bool continuationReplayOnly = args.Length > 0 && args[0] == "continuation-replay";
+        bool pendulumDrawOnly = args.Length > 0 && args[0] == "pendulum-draw";
         bool completionScopeOnly = args.Length > 0 && args[0] == "completion-scope";
-        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly ? args[1..] : args);
+        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly ? args[1..] : args);
         Directory.CreateDirectory(outputDirectory);
 
         try
@@ -159,6 +160,12 @@ internal static class Program
             {
                 ValidateDarkEmbraceBurningPactDraw(combat, names, damage, captured, profile);
                 Console.WriteLine("DarkEmbraceBurningPact PASS");
+                return 0;
+            }
+            if (pendulumDrawOnly)
+            {
+                ValidatePendulumDraw(combat, names, damage, captured, profile);
+                Console.WriteLine("PendulumDraw PASS (three counters, three future turns, live isolation)");
                 return 0;
             }
             if (continuationReplayOnly)
@@ -2554,6 +2561,54 @@ internal static class Program
     {
         if (!condition)
             throw new InvalidOperationException(message);
+    }
+
+    private static void ValidatePendulumDraw(CombatState combat,
+        SolverDisplayNames names, BattleDamageSnapshot damage, SearchPolicySnapshot policy,
+        SolverSearchProfile profile)
+    {
+        Player player = LocalContext.GetMe(combat)!;
+        var relic = ModelDb.Relic<MegaCrit.Sts2.Core.Models.Relics.Pendulum>().ToMutable();
+        player.AddRelicInternal(relic);
+        var pendulum = (MegaCrit.Sts2.Core.Models.Relics.Pendulum)relic;
+        for (int i = 0; i < 25; i++)
+            player.PlayerCombatState!.DrawPile.AddInternal(
+                combat.CreateCard(ResolveCard("DEFEND_IRONCLAD"), player), -1);
+        int turn = player.PlayerCombatState!.TurnNumber;
+        foreach (int counter in new[] { 0, 1, 2 })
+        {
+            pendulum.TurnsSeen = counter;
+            Require(MegaCrit.Sts2.Core.Hooks.Hook.ModifyHandDraw(combat, player,
+                    CombatManager.baseHandDrawCount, out _) == CombatManager.baseHandDrawCount,
+                "Pinned native Pendulum unexpectedly modifies the hand-draw hook.");
+            Require(SimulatedCombatState.GetLiveStatefulRelicHandDrawContribution(
+                    pendulum, player, turn) == 0,
+                "Pendulum was subtracted from a native hand-draw hook that does not include it.");
+            CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
+            var solver = new CombatBeamSolver(root, names, damage,
+                policy with { RoutePolicy = SearchRoutePolicy.MultiplayerSinglePlayerCore,
+                    CurrentTurnOnly = false, IncludeTurnSetup = false }, searchProfile: profile);
+            PlanAction[] actions = [];
+            for (int step = 1; step <= 3; step++)
+            {
+                actions = [.. actions, new(PlanActionKind.EndTurn, turn + step - 1)];
+                SimulationSnapshot snapshot = solver.ReplayDiagnosticPrefix(actions);
+                try
+                {
+                    int expected = CombatManager.baseHandDrawCount
+                        + ((counter + step) % 3 == 0 ? pendulum.DynamicVars.Cards.IntValue : 0);
+                    var predicted = snapshot.Simulator.State.GetPlayerCombatState(player);
+                    Require(snapshot.BoundaryReason == SearchBoundaryReason.None
+                            && predicted.Hand.Cards.Count == expected,
+                        $"Pendulum root={counter} step={step}: expected {expected} cards, "
+                        + $"got {predicted.Hand.Cards.Count}, boundary={snapshot.BoundaryReason}.");
+                    Require(pendulum.TurnsSeen == counter
+                            && player.PlayerCombatState.TurnNumber == turn,
+                        "Future Pendulum replay mutated live relic or turn state.");
+                }
+                finally { snapshot.ReleaseSimulator(); }
+            }
+        }
     }
 
     private static void ValidateContinuationRouteReplay(CombatState combat,

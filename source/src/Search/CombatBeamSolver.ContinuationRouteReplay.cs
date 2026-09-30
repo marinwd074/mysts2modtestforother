@@ -19,7 +19,14 @@ internal sealed partial class CombatBeamSolver
                 if (node.Snapshot.AllEnemiesDead && !node.Snapshot.PlayerDead)
                     break;
                 if (node.IsTerminal)
+                {
+                    policy.Diagnostics.Info(
+                        $"[CombatSolver/Test] MP_LOCAL_XTURN_ROUTE_REPLAY_BOUNDARY " +
+                        $"turn={node.Turn} boundary={node.Snapshot.BoundaryReason} " +
+                        $"previous_action={node.Action?.CardId ?? node.Action?.Kind.ToString()} " +
+                        $"next_action={action.CardId ?? action.Kind.ToString()}");
                     throw new ContinuationSeedRejectedException("route_boundary");
+                }
                 if (EffectiveSearchElapsedMilliseconds(stopwatch) >= _profile.SoftTimeBudgetMilliseconds)
                     throw new ContinuationSeedRejectedException("route_time_budget");
                 if (action.Turn != node.Turn || action.ShadowForecast != null
