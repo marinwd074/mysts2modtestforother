@@ -29,7 +29,7 @@
 - **E 前台/后台分离：完成。** E1–E4-A 已闭合；E4-B 在最新 INFESTED_PRISMS / MYTES 实机包中同时覆盖 regression 拒绝、improved 接纳与 Smart Potion 约 10s 降级上限。
 - **F 情景预热：F0 影子测量已落地；默认 local-single-core 不依赖它，F1 暂停，保留为显式实验多人预测栈的后续选项。**
 - **G SSD 冷存储：延期。** 当前优先验证同场战斗质量/响应，暂不把 SSD 持久化加入默认热路径。
-- **H 质量与响应验收：已进入 H0。** 先冻结基线与验收口径，再做固定输入 A/B，最后做真实 Host/Client 连续回合验收。
+- **H 质量与响应验收：H0/H1 已完成，当前进入 H2。** 固定输入历史 A/B 已证明质量/路线/固定工作不回归；剩余门槛是真实 Host/Client 连续回合的高血复用 → 斩杀窗口重算。
 
 `CombatSolver_Quality_First_Next.md` 继续用于坏路线、执行质量和回归定位，但不覆盖 Rolling Horizon 的主阶段顺序。
 
@@ -138,41 +138,44 @@ state_mismatch
 
 ## 下一任务
 
-### 当前任务：H0 质量与响应验收基线
+### H1 已完成：固定输入质量 / 固定工作 A/B
 
-H 的历史对照固定为 `d745b0018e27f2013f7df580bde99523f1ec12ed`：这是
-`Rolling_Horizon_Reuse_Architecture.md` 进入仓库前最后一个生产提交，并且已经包含
-“非斩杀敌人掉血不触发跨回合重算”。因此 H 不会通过回退这条 local-core 策略制造虚假的复用收益。
+历史基线固定为 `d745b0018e27f2013f7df580bde99523f1ec12ed`，current 为
+`1d0860ff3161172da006567c689b002deb368270`。GitHub Actions H1 run
+`36685079529` 在同一 pinned STS2 / RitsuLib 0.107.1、DOP=1、相同 Beam/节点/时间预算下，
+对 simple / draw_energy / teammate 各取得 4 个 clean-process 样本并按 ABBA 交错。
 
-H0 只冻结验收合同，不改变搜索、预算、排序、部署或默认设置：
+三组均为：
 
-- **固定输入 A/B**：同游戏/RitsuLib 0.107.1、同 encounter/seed/loadout、同搜索预算、Beam、DOP、
-  NoGC 与药水策略；历史基线与 current HEAD 分别使用干净进程。性能对照沿用
-  `PERFORMANCE_GUARDRAILS.md`，至少三份独立样本并以 ABBA 顺序消除热身偏差。
-- **质量优先于速度**：记录 `projected_battle_hp_lost`、是否胜利、`combat_ended_turn`、
-  药水/长期资源与完整动作路线。候选不能被历史基线在已知质量轴上支配；若战损相同，
-  baseline 的胜利不能退化为未胜利，双方都胜利时不能无理由拖后斩杀回合。
-- **固定工作量再谈性能**：同时记录 expanded nodes、transitions、总耗时、分配/GC 与主线程 gap。
-  质量保持时，固定工作主指标超过现行 2% 回归线要记为回归或测量不确定，不能靠缩 Beam、
-  节点、时间或 DOP 伪装提速。
-- **local-core 必验语义**：高血量/非斩杀窗口的队友普通敌人 HP 下降不得制造无意义 cold search；
-  进入 `IsInLethalRecalculationWindow`、目标死亡、阶段转换或其他真实语义变化时必须重新定根/
-  重算，不能为了提高复用率继续旧路线。
-- **响应指标**：首个可采用当前回合结果、最终结果、exact continuation/R1/cold-search 数量、
-  同回合重复重算次数，以及连续本地回合的累计等待。最终报告 p50/p95 时必须注明样本数和硬件，
-  小样本只报告原始值/中位数，不声称统计显著。
-- **实机门槛**：固定输入只能完成 H1；H2 必须由真实 Host/Client journal/问题包验证连续回合。
-  合同、headless 和 pinned fixture 不能替代该证据。
+- 质量完全相同，完整动作路线相同。
+- expanded nodes / transitions 完全相同。
+- 无 TimeLimit 样本。
+- final publication 中位数变化分别为 simple `+0.368%`、draw_energy `+0.559%`、
+  teammate `+1.736%`，均低于现行固定工作 `2%` 回归线。
+- simple：4 战损、0 药、T3 胜利，1963 nodes / 5165 transitions。
+- draw_energy：6 战损、0 药、T2 胜利，823 / 2642。
+- teammate：4 战损、0 药、TurnLimit，391 / 1026；这是 detached 双玩家固定根，不替代网络实机。
 
-H 分三步收尾：
+因此 H1 结论为 **PASS**：当前 Rolling Horizon 主线没有在这三个固定输入上降低路线质量或增加搜索工作，
+也没有超过固定工作性能回归门槛。它**不证明**真实多人跨回合响应已经改善。
 
-1. **H0（当前）**：冻结上面基线、质量向量、响应指标与 local-core 斩杀窗口合同。
-2. **H1**：对 `d745b001` 与 current HEAD 跑固定输入质量/固定工作 A/B；路线不同允许，但必须解释
-   质量差异，不能只比较 elapsed。
-3. **H2**：真实多人连续回合验证“高血稳定复用 → 斩杀窗口重算”，并汇总首结果等待、重算/复用和
-   最终战损/斩杀回合；完成后才关闭 Rolling Horizon 主计划。
+### 当前任务：H2 真实多人连续回合验收
 
-F0 保留 `behavioral_reuse=false`；没有实验多人预测 exact-hit 证据前不进入 F1。G 不作为 H 的前置条件。
+H2 只验证默认 `MultiplayerSinglePlayerCore`，不要求开启 `UseMultiplayerPrediction`，也不依赖 F1/G。
+
+需要由 current build 的真实 Host/Client journal / 问题包覆盖同一场或可比场景中的两个边界：
+
+1. **高血 / 非斩杀窗口**：队友只降低仍存活敌人的 HP 时，
+   `in_lethal_window=false`、`enemy_hp_route_changed=false`；旧 continuation/路线应继续成立或走轻量恢复，
+   不应仅因为这次普通伤害产生 cold full search。
+2. **进入斩杀窗口或真实语义变化**：`in_lethal_window=true`、目标死亡、阶段转换、Block/意图等关键字段变化时，
+   必须停止宽松 HP 复用，从最新 live root 重新定根/搜索；旧目标和旧部署授权不能继续使用。
+
+同包同时统计：首个可采用当前回合结果、最终结果时间，exact continuation / R1 / cold-search 次数，
+同回合重复重算次数，最终战损与 `combat_ended_turn`。小样本只报告原始值与中位数，不声称可靠 p95。
+
+H2 通过后即可关闭 Rolling Horizon A→H 主计划；F0 继续保持 `behavioral_reuse=false`，
+F1 与 G 作为可选研究项，不阻塞默认 local-core 收尾。
 
 ## 当前未验证边界
 
