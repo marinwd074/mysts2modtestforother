@@ -520,7 +520,11 @@ internal static partial class SolverController
             new SearchMemoryPressureSignal())
         {
             Interaction = interaction,
+            // Phase-C shadow sampling is diagnostic-only. H1 fixed-work showed measurable
+            // default local-core overhead, so keep bounded production sampling on the explicit
+            // multiplayer prediction stack; detailed diagnostics still observes directly.
             ShadowReplaySamplingBudget = capabilities.IsMultiplayer
+                && useMultiplayerPrediction
                 && !settings.EnableDetailedDiagnosticLogs
                     ? new ShadowReplaySamplingBudget(
                         CombatBeamSolver.ProductionShadowReplayObservationLimit,

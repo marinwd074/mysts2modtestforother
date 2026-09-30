@@ -1,0 +1,157 @@
+name: H1 fixed-input quality response A-B
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/h1-fixed-input-ab.yml'
+      - 'source/tools/compare-h1-fixed-input.ps1'
+      - 'source/src/Runtime/SolverController.cs'
+      - 'source/tools/E0PinnedHarness/Program.cs'
+      - 'source/src/Search/SolverInterimResultOrdering.cs'
+      - 'source/src/Search/CombatBeamSolver.BeamRetentionPolicy.cs'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: h1-fixed-input-ab
+  cancel-in-progress: true
+
+jobs:
+  h1:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      BASELINE_REF: d745b0018e27f2013f7df580bde99523f1ec12ed
+    steps:
+      - name: Check out current HEAD
+        uses: actions/checkout@v6.0.2
+        with:
+          path: current
+          persist-credentials: false
+          lfs: false
+
+      - name: Check out H baseline
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ env.BASELINE_REF }}
+          path: baseline
+          persist-credentials: false
+          lfs: false
+
+      - name: Fetch pinned 0.107.1 game references
+        shell: pwsh
+        run: |
+          Push-Location '.\current'
+          try {
+            git lfs pull --include="game-body/data_sts2_windows_x86_64/sts2.dll,game-body/data_sts2_windows_x86_64/0Harmony.dll,game-body/data_sts2_windows_x86_64/GodotSharp.dll,game-body/data_sts2_windows_x86_64/Steamworks.NET.dll,game-body/data_sts2_windows_x86_64/System.IO.Hashing.dll,game-body/data_sts2_windows_x86_64/SmartFormat.dll,game-body/data_sts2_windows_x86_64/SmartFormat.ZString.dll,game-body/data_sts2_windows_x86_64/JetBrains.Annotations.dll,game-body/data_sts2_windows_x86_64/Sentry.dll" --exclude=""
+          } finally {
+            Pop-Location
+          }
+          $dll = '.\current\game-body\data_sts2_windows_x86_64\sts2.dll'
+          $actual = (Get-FileHash -LiteralPath $dll -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expected = 'a1f9e653f1e28e4076558fee1e60d218619cb7e057b887c6417f62c62c6d7a52'
+          if ($actual -ne $expected) {
+            throw "Pinned sts2.dll hash mismatch. expected=$expected actual=$actual"
+          }
+
+      - name: Fetch pinned RitsuLib 0.107.1
+        shell: pwsh
+        run: |
+          $uri = 'https://github.com/BAKAOLC/STS2-RitsuLib/releases/download/v0.6.2/STS2.RitsuLib.Compat.0.107.1.0.6.2.github.zip'
+          $zip = Join-Path $env:RUNNER_TEMP 'ritsulib-0.107.1-0.6.2.zip'
+          Invoke-WebRequest -Uri $uri -OutFile $zip
+          $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expected = '8cb0bc276d3c64dde5ea5415e1738808dcbe71f0a0baf3ef51008ae6dde13517'
+          if ($actual -ne $expected) {
+            throw "RitsuLib package hash mismatch. expected=$expected actual=$actual"
+          }
+          $out = Join-Path $env:RUNNER_TEMP 'ritsulib'
+          Expand-Archive -LiteralPath $zip -DestinationPath $out -Force
+          $props = Get-ChildItem -LiteralPath $out -Recurse -Filter 'RitsuLib.References.props' | Select-Object -First 1
+          if ($null -eq $props) { throw 'RitsuLib.References.props not found.' }
+          "RITSU_PROPS=$($props.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RITSU_ROOT=$out" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build baseline and current pinned harnesses
+        shell: pwsh
+        run: |
+          $gameData = (Resolve-Path '.\current\game-body\data_sts2_windows_x86_64').Path
+          foreach ($side in @('baseline', 'current')) {
+            $warningPolicy = if ($side -eq 'baseline') {
+              '-p:TreatWarningsAsErrors=false'
+            } else {
+              '-p:TreatWarningsAsErrors=true'
+            }
+            $common = @(
+              '-c', 'Release',
+              "-p:Sts2DataDir=$gameData",
+              "-p:RitsuLibReferencesProps=$env:RITSU_PROPS",
+              "-p:RitsuWorkshopRoot=$env:RITSU_ROOT",
+              '-p:RitsuLibReferenceTarget=0.107.1',
+              $warningPolicy,
+              '--nologo'
+            )
+            & dotnet build ".\$side\source\CombatSolver.csproj" @common "-p:CopyModOnBuild=false"
+            if ($LASTEXITCODE -ne 0) { throw "$side CombatSolver Release build failed." }
+            & dotnet build ".\$side\source\tools\E0PinnedHarness\E0PinnedHarness.csproj" @common
+            if ($LASTEXITCODE -ne 0) { throw "$side E0PinnedHarness build failed." }
+          }
+
+      - name: Run clean-process ABBA samples
+        shell: pwsh
+        run: |
+          $evidenceRoot = Join-Path $env:RUNNER_TEMP 'h1-fixed-input'
+          New-Item -ItemType Directory -Force -Path $evidenceRoot | Out-Null
+          $sequence = @('baseline', 'current', 'current', 'baseline', 'baseline', 'current', 'current', 'baseline')
+          foreach ($scenario in @('simple', 'draw_energy', 'teammate')) {
+            for ($i = 0; $i -lt $sequence.Count; $i++) {
+              $side = $sequence[$i]
+              $slot = '{0:D2}' -f ($i + 1)
+              $out = Join-Path $evidenceRoot "$side\$scenario\$slot"
+              New-Item -ItemType Directory -Force -Path $out | Out-Null
+              $harness = ".\$side\source\tools\E0PinnedHarness\bin\Release\net9.0\E0PinnedHarness.dll"
+              & dotnet $harness --scenario $scenario --out $out
+              if ($LASTEXITCODE -ne 0) {
+                throw "H1 $side $scenario sample $slot failed with exit $LASTEXITCODE."
+              }
+              $sample = Get-Content -LiteralPath (Join-Path $out "e0-$scenario.json") -Raw | ConvertFrom-Json
+              Write-Host ("H1_SAMPLE side={0} scenario={1} sample={2} hp={3} potion={4} ended={5} nodes={6} transitions={7} generated_ms={8:F3} published_ms={9:F3}" -f
+                $side, $scenario, $slot, $sample.ProjectedBattleHpLost, $sample.ProjectedBattlePotionCount,
+                $sample.CombatEndedTurn, $sample.TotalExpandedNodes, $sample.TotalTransitionCount,
+                $sample.GeneratedMs, $sample.PublishedMs)
+            }
+          }
+          "H1_EVIDENCE_ROOT=$evidenceRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Compare H1 quality and fixed-work response
+        shell: pwsh
+        run: |
+          $summary = Join-Path $env:H1_EVIDENCE_ROOT 'h1-summary.json'
+          & pwsh -NoLogo -NoProfile -File '.\current\source\tools\compare-h1-fixed-input.ps1' -BaselineRoot (Join-Path $env:H1_EVIDENCE_ROOT 'baseline') -CurrentRoot (Join-Path $env:H1_EVIDENCE_ROOT 'current') -OutputPath $summary
+          $exitCode = $LASTEXITCODE
+          if (Test-Path -LiteralPath $summary) {
+            Get-Content -LiteralPath $summary
+            $result = Get-Content -LiteralPath $summary -Raw | ConvertFrom-Json
+            "## H1 fixed-input A/B" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            "Overall: **$($result.overall)**" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            "| Scenario | Quality | Same route | Same work | Performance | A published ms | B published ms | Change |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            "|---|---|---|---|---|---:|---:|---:|" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            foreach ($row in $result.rows) {
+              "| $($row.scenario) | $($row.qualityStatus) | $($row.sameRoute) | $($row.sameWork) | $($row.performanceStatus) | $($row.baseline.publishedMedianMs) | $($row.current.publishedMedianMs) | $($row.publishedChangePercent)% |" |
+                Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            }
+          }
+          if ($exitCode -ne 0) { throw "H1 comparison failed with exit $exitCode." }
+
+      - name: Upload H1 evidence
+        if: always()
+        uses: actions/upload-artifact@v6.0.0
+        with:
+          name: h1-fixed-input-ab
+          path: ${{ runner.temp }}\h1-fixed-input
+          if-no-files-found: warn
+          retention-days: 14

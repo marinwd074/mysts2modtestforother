@@ -35,28 +35,71 @@ internal static class SolverInterimResultOrdering
         int? candidateBattleHpLost = null,
         int? currentBattleHpLost = null)
     {
-        int comparison = 0;
-        if (rollingHorizonLossFirst)
-        {
-            if (candidateBattleHpLost == null || currentBattleHpLost == null)
-                throw new ArgumentException("Rolling-horizon quality requires raw battle HP loss.");
-            comparison = candidateDeathSaveUseCount.CompareTo(currentDeathSaveUseCount);
-            if (comparison != 0)
-                return comparison;
-            comparison = CompareRollingHorizonQuality(
-                candidateCompleteVictory, candidateBattleHpLost.Value,
-                candidateCombatEndedTurn,
-                currentCompleteVictory, currentBattleHpLost.Value,
-                currentCombatEndedTurn);
-            if (comparison != 0)
-                return comparison;
-        }
         if (!rollingHorizonLossFirst)
         {
-            comparison = currentCompleteVictory.CompareTo(candidateCompleteVictory);
-            if (comparison != 0)
-                return comparison;
+            return CompareStrategicPrimaryQuality(
+                candidateCompleteVictory,
+                candidateStrategicHpDeficit,
+                candidateCombatEndedTurn,
+                currentCompleteVictory,
+                currentStrategicHpDeficit,
+                currentCombatEndedTurn,
+                candidateGrowthHpCredit,
+                currentGrowthHpCredit,
+                candidateGrowthRewardCount,
+                currentGrowthRewardCount,
+                candidateDeathSaveUseCount,
+                currentDeathSaveUseCount);
         }
+
+        if (candidateBattleHpLost == null || currentBattleHpLost == null)
+            throw new ArgumentException("Rolling-horizon quality requires raw battle HP loss.");
+
+        int comparison = candidateDeathSaveUseCount.CompareTo(currentDeathSaveUseCount);
+        if (comparison != 0)
+            return comparison;
+        comparison = CompareRollingHorizonQuality(
+            candidateCompleteVictory,
+            candidateBattleHpLost.Value,
+            candidateCombatEndedTurn,
+            currentCompleteVictory,
+            currentBattleHpLost.Value,
+            currentCombatEndedTurn);
+        if (comparison != 0)
+            return comparison;
+        comparison = candidateStrategicHpDeficit.CompareTo(currentStrategicHpDeficit);
+        if (comparison != 0)
+            return comparison;
+        comparison = currentGrowthHpCredit.CompareTo(candidateGrowthHpCredit);
+        if (comparison != 0)
+            return comparison;
+        comparison = currentGrowthRewardCount.CompareTo(candidateGrowthRewardCount);
+        if (comparison != 0)
+            return comparison;
+        comparison = currentCompleteVictory.CompareTo(candidateCompleteVictory);
+        if (comparison != 0)
+            return comparison;
+        return (candidateCombatEndedTurn ?? int.MaxValue)
+            .CompareTo(currentCombatEndedTurn ?? int.MaxValue);
+    }
+
+    private static int CompareStrategicPrimaryQuality(
+        bool candidateCompleteVictory,
+        int candidateStrategicHpDeficit,
+        int? candidateCombatEndedTurn,
+        bool currentCompleteVictory,
+        int currentStrategicHpDeficit,
+        int? currentCombatEndedTurn,
+        int candidateGrowthHpCredit,
+        int currentGrowthHpCredit,
+        int candidateGrowthRewardCount,
+        int currentGrowthRewardCount,
+        int candidateDeathSaveUseCount,
+        int currentDeathSaveUseCount)
+    {
+        int comparison = currentCompleteVictory.CompareTo(candidateCompleteVictory);
+        if (comparison != 0)
+            return comparison;
         comparison = candidateDeathSaveUseCount.CompareTo(currentDeathSaveUseCount);
         if (comparison != 0)
             return comparison;
@@ -69,12 +112,6 @@ internal static class SolverInterimResultOrdering
         comparison = currentGrowthRewardCount.CompareTo(candidateGrowthRewardCount);
         if (comparison != 0)
             return comparison;
-        if (rollingHorizonLossFirst)
-        {
-            comparison = currentCompleteVictory.CompareTo(candidateCompleteVictory);
-            if (comparison != 0)
-                return comparison;
-        }
         return (candidateCombatEndedTurn ?? int.MaxValue)
             .CompareTo(currentCombatEndedTurn ?? int.MaxValue);
     }
@@ -112,13 +149,52 @@ internal static class SolverInterimResultOrdering
     {
         bool rollingHorizonLossFirst =
             candidate.RollingHorizonLossFirst && current.RollingHorizonLossFirst;
-        int comparison = 0;
         if (!rollingHorizonLossFirst)
-        {
-            comparison = current.Won.CompareTo(candidate.Won);
-            if (comparison != 0)
-                return comparison < 0;
-        }
+            return IsBetterStrategic(candidate, current);
+
+        int comparison = current.Survives.CompareTo(candidate.Survives);
+        if (comparison != 0)
+            return comparison < 0;
+        if (candidate.DeathSaveUseCount != current.DeathSaveUseCount)
+            return candidate.DeathSaveUseCount < current.DeathSaveUseCount;
+        if (candidate.TheftPolicy == SolverTheftPolicy.PreserveResources
+            && candidate.OutstandingStolenResource != current.OutstandingStolenResource)
+            return candidate.OutstandingStolenResource < current.OutstandingStolenResource;
+        comparison = CompareRollingHorizonQuality(
+            candidate.Won,
+            candidate.ProjectedBattleHpLost,
+            candidate.CombatEndedTurn,
+            current.Won,
+            current.ProjectedBattleHpLost,
+            current.CombatEndedTurn);
+        if (comparison != 0)
+            return comparison < 0;
+        if (IsResourceTradeImprovement(candidate, current))
+            return true;
+        if (IsResourceTradeImprovement(current, candidate))
+            return false;
+        if (candidate.GrowthHpCredit != current.GrowthHpCredit)
+            return candidate.GrowthHpCredit > current.GrowthHpCredit;
+        if (candidate.GrowthRewardCount != current.GrowthRewardCount)
+            return candidate.GrowthRewardCount > current.GrowthRewardCount;
+        comparison = (candidate.CombatEndedTurn ?? int.MaxValue)
+            .CompareTo(current.CombatEndedTurn ?? int.MaxValue);
+        if (comparison != 0)
+            return comparison < 0;
+        if (candidate.ProjectedBattlePotionCount != current.ProjectedBattlePotionCount)
+            return candidate.ProjectedBattlePotionCount < current.ProjectedBattlePotionCount;
+        if (candidate.EnemyHp != current.EnemyHp)
+            return candidate.EnemyHp < current.EnemyHp;
+        return candidate.Score > current.Score;
+    }
+
+    private static bool IsBetterStrategic(
+        SolverInterimResult candidate,
+        SolverInterimResult current)
+    {
+        int comparison = current.Won.CompareTo(candidate.Won);
+        if (comparison != 0)
+            return comparison < 0;
         comparison = current.Survives.CompareTo(candidate.Survives);
         if (comparison != 0)
             return comparison < 0;
@@ -127,14 +203,6 @@ internal static class SolverInterimResultOrdering
         if (candidate.TheftPolicy == SolverTheftPolicy.PreserveResources
             && candidate.OutstandingStolenResource != current.OutstandingStolenResource)
             return candidate.OutstandingStolenResource < current.OutstandingStolenResource;
-        if (rollingHorizonLossFirst)
-        {
-            comparison = CompareRollingHorizonQuality(
-                candidate.Won, candidate.ProjectedBattleHpLost, candidate.CombatEndedTurn,
-                current.Won, current.ProjectedBattleHpLost, current.CombatEndedTurn);
-            if (comparison != 0)
-                return comparison < 0;
-        }
         if (IsResourceTradeImprovement(candidate, current))
             return true;
         if (IsResourceTradeImprovement(current, candidate))
