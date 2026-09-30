@@ -191,6 +191,7 @@ G SSD 冷存储按当前产品目标延期。F1/G 作为可选研究项，不再
 
 ## 当前未验证边界
 
+- ENTOMANCER_ELITE `e3fd63e…` 高血重算：T2/T3 仅记录敌人 HP、HC 和 RNG 差异，`allow_living_enemy_hp_decrease=true`；HP/HC 已被兼容判断接受，随后在 RNG 字段拒绝，说明还有非 Shuffle RNG 差异。旧诊断只输出该字段第一个变化的流，不能确定具体流或归因队友/模拟。T4/T5 另有真实手牌/牌堆差异。现增加 `local_core_reject_reason` 并输出全部 RNG 差异，不放宽复用规则；Release、`continuation-audit` 和原 `choice-rng` 通过。下一步用新构建问题包定位具体随机流，再做同根同动作的预测/实机对照；可修模拟误差才修改预测，队友变化继续从新根复演已有 R1 候选，不跳过校验。
 - BOWLBUGS_NORMAL `69faf6312f3f49f9b428a0b264a0c9e3`：搜索期间共享生成 RNG `244→249`，旧路线仍预测无色药水选“秘密技法”，实机候选却含“金斧头”。local-core 有效性现保留非 Shuffle RNG；仅 RNG 失效时从新根重算，并保留已请求的执行意图。`U0U1PinnedHarness choice-rng --out <ignored-path>` 的 10 个定向合同及 Release 编译通过；自动选牌恢复仍需当前构建 Host/Client 实机复验。开局遗物选择流程未改。
 - E2/E4-B 已由 current build 实机闭合。滚动比较规则的“等战损更早胜利”已有 pinned 合同，但仍缺一份明确跨回合（如 T9 对 T11）current build 实机对照；该项继续作为质量 smoke，不作为 F0 影子测量的行为依赖。
 - U5/U6 历史 Host/Client observation → fresh replan 的部分真实多人边界仍不是 pinned replay 可替代的证据。

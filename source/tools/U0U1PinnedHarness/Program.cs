@@ -38,11 +38,18 @@ internal static class Program
         bool darkEmbracePactOnly = args.Length > 0 && args[0] == "dark-embrace-pact";
         bool rollingReviewOnly = args.Length > 0 && args[0] == "rolling-review";
         bool choiceRngOnly = args.Length > 0 && args[0] == "choice-rng";
-        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly ? args[1..] : args);
+        bool continuationAuditOnly = args.Length > 0 && args[0] == "continuation-audit";
+        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly ? args[1..] : args);
         Directory.CreateDirectory(outputDirectory);
 
         try
         {
+            if (continuationAuditOnly)
+            {
+                ValidateContinuationRejectionDiagnostics();
+                Console.WriteLine("ContinuationAudit PASS (all RNG streams and high-HP reuse boundaries)");
+                return 0;
+            }
             if (choiceRngOnly)
             {
                 ValidateLocalCoreChoiceRngContract();
@@ -363,6 +370,57 @@ internal static class Program
         Require(
             interaction.RenderedCurrentTurnAdoptionSeed == null,
             "Rendered current-turn seed survived takeover completion.");
+    }
+
+    private static void ValidateContinuationRejectionDiagnostics()
+    {
+        const string fields = "L=local;E0=2/ENTOMANCER/0/348/348/0/ATTACK;H=STRIKE;D=DEFEND;HC=2/0/0/1/0/11;";
+        string[] streams = Enumerable.Range(0, 9).Select(index => $"{index}:1:2:3:4").ToArray();
+        string baseline = fields + "R=" + string.Join('/', streams);
+        string remoteFields = fields.Replace("/348/348/", "/280/348/").Replace("HC=2/", "HC=9/");
+        string[] shuffled = (string[])streams.Clone();
+        shuffled[0] = "20:5:6:7:8";
+        string shuffleOnly = remoteFields + "R=" + string.Join('/', shuffled);
+        Require(MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+            baseline, shuffleOnly, true, out bool shuffleDrift, out bool historyDrift,
+            out bool hpDrift, out string acceptedReason)
+            && shuffleDrift && historyDrift && hpDrift && acceptedReason == "none",
+            "High-HP remote damage/history/shuffle drift must still admit continuation reuse.");
+
+        string[] streamNames = ["shuffle", "card_generation", "potion_generation", "card_selection",
+            "energy_costs", "targets", "orbs", "monster_ai", "niche"];
+        for (int stream = 1; stream < streams.Length; stream++)
+        {
+            string[] changed = (string[])shuffled.Clone();
+            changed[stream] = "30:9:10:11:12";
+            string actual = remoteFields + "R=" + string.Join('/', changed);
+            Require(!MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+                baseline, actual, true, out _, out _, out _, out string reason)
+                && reason == $"non_shuffle_rng_changed:{streamNames[stream]}",
+                $"Allowed HP/history/shuffle drift must not hide strict RNG rejection for {streamNames[stream]}.");
+            IReadOnlyList<string> differences = new ContinuationStamp(baseline)
+                .DescribeDifferences(new ContinuationStamp(actual));
+            Require(differences.Count == 4
+                && differences[2].StartsWith("field=R.shuffle ", StringComparison.Ordinal)
+                && differences[3].StartsWith($"field=R.{streamNames[stream]} ", StringComparison.Ordinal),
+                $"Diagnostics must expose {streamNames[stream]} after the first shuffle difference.");
+        }
+
+        string[] allChanged = streams.Select(_ => "50:13:14:15:16").ToArray();
+        ContinuationStamp expectedRng = new("R=" + string.Join('/', streams));
+        ContinuationStamp actualRng = new("R=" + string.Join('/', allChanged));
+        Require(expectedRng.DescribeDifferences(actualRng).Count == 9
+            && expectedRng.DescribeDifferences(actualRng, maximumDifferences: 2).Count == 2
+            && expectedRng.DescribeFirstDifference(actualRng).StartsWith("field=R.shuffle ", StringComparison.Ordinal),
+            "Full RNG diagnostics must preserve the caller's difference limit and first-difference behavior.");
+        Require(!MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+            baseline, shuffleOnly, false, out _, out _, out _, out string lethalReason)
+            && lethalReason == "field_changed:E0",
+            "Lethal-window enemy damage must remain a replan boundary.");
+        Require(!MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+            baseline, shuffleOnly.Replace("H=STRIKE", "H=OFFERING"), true,
+            out _, out _, out _, out string handReason) && handReason == "field_changed:H",
+            "Changed local cards must remain a strict continuation rejection.");
     }
 
     private static void ValidateLocalCoreChoiceRngContract()

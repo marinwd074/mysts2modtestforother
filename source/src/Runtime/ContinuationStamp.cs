@@ -74,7 +74,28 @@ internal sealed record ContinuationStamp(string StateText)
             }
             else
             {
-                differences.Add(DescribeValueDifference(expectedName, expectedValue, actualValue));
+                if (expectedName == "R")
+                {
+                    string[] expectedRng = expectedValue.Split('/');
+                    string[] actualRng = actualValue.Split('/');
+                    string[] streamNames = ["shuffle", "card_generation", "potion_generation",
+                        "card_selection", "energy_costs", "targets", "orbs", "monster_ai", "niche"];
+                    for (int stream = 0; stream < Math.Max(expectedRng.Length, actualRng.Length); stream++)
+                    {
+                        string expectedPart = stream < expectedRng.Length ? expectedRng[stream] : "<missing>";
+                        string actualPart = stream < actualRng.Length ? actualRng[stream] : "<missing>";
+                        if (string.Equals(expectedPart, actualPart, StringComparison.Ordinal))
+                            continue;
+                        string streamName = stream < streamNames.Length ? streamNames[stream] : $"part_{stream}";
+                        differences.Add($"field=R.{streamName} expected={LogValue(expectedPart)} actual={LogValue(actualPart)}");
+                        if (differences.Count >= maximumDifferences)
+                            break;
+                    }
+                }
+                else
+                {
+                    differences.Add(DescribeValueDifference(expectedName, expectedValue, actualValue));
+                }
             }
             if (differences.Count >= maximumDifferences)
                 return differences;
@@ -294,7 +315,6 @@ internal sealed record ContinuationStamp(string StateText)
         {
             "osty" => ["combat_id", "hp", "max_hp"],
             "O" => ["capacity", "orbs"],
-            "R" => ["shuffle", "card_generation", "potion_generation", "card_selection", "energy_costs", "targets", "orbs", "monster_ai", "niche"],
             _ when name.StartsWith('E') => ["combat_id", "monster", "slot", "hp", "max_hp", "block", "move"],
             _ => null,
         };

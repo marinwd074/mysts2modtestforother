@@ -207,6 +207,8 @@ internal static partial class SolverController
             bool sharedShuffleRngDrift = false;
             bool sharedFinishedCardPlayDrift = false;
             bool livingEnemyHpDecreaseDrift = false;
+            bool localCoreStateCompatible = false;
+            string localCoreRejectionReason = "not_checked";
             bool allowLivingEnemyHpDecrease =
                 MultiplayerCombatObjectivePolicy.ShouldAllowLivingEnemyHpDecreaseReuse(
                     state.Enemies);
@@ -215,13 +217,14 @@ internal static partial class SolverController
                 && expectedContinuation != null
                 && capabilities.IsMultiplayer
                 && !SolverSettings.Current.UseMultiplayerPrediction
-                && MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
+                && (localCoreStateCompatible = MultiplayerLocalCrossTurnContracts.IsLocalCoreContinuationStateCompatible(
                     expectedContinuation.ExpectedState.StateText,
                     continuationStamp.StateText,
                     allowLivingEnemyHpDecrease,
                     out sharedShuffleRngDrift,
                     out sharedFinishedCardPlayDrift,
-                    out livingEnemyHpDecreaseDrift)
+                    out livingEnemyHpDecreaseDrift,
+                    out localCoreRejectionReason))
                 && (sharedShuffleRngDrift
                     || sharedFinishedCardPlayDrift
                     || livingEnemyHpDecreaseDrift))
@@ -244,6 +247,8 @@ internal static partial class SolverController
                     $"shared_finished_card_play_drift={sharedFinishedCardPlayDrift.ToString().ToLowerInvariant()} " +
                     $"living_enemy_hp_decrease_drift={livingEnemyHpDecreaseDrift.ToString().ToLowerInvariant()} " +
                     $"allow_living_enemy_hp_decrease={allowLivingEnemyHpDecrease.ToString().ToLowerInvariant()} " +
+                    $"local_core_state_compatible={localCoreStateCompatible.ToString().ToLowerInvariant()} " +
+                    $"local_core_reject_reason={localCoreRejectionReason} " +
                     $"fresh_probe_changed={freshProbeChanged.ToString().ToLowerInvariant()}");
             }
             if (continuationValidationStamp != null
@@ -374,6 +379,7 @@ internal static partial class SolverController
                     $"reason={CauseToken(replanCause)} cached_turns={source.Continuations.Count} " +
                     $"previous_boundary={source.BoundaryReason} " +
                     $"continuation_reject_reason={continuationRejectReason} " +
+                    $"local_core_reject_reason={localCoreRejectionReason} " +
                     $"local_state_exact={localStateExact.ToString().ToLowerInvariant()} " +
                     $"diff_count={_combat.LastContinuationDifferences.Count} {difference}");
                 if (_combat.LastContinuationDifferences.Count > 0)
