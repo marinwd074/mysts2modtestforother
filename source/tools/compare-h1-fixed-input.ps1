@@ -99,6 +99,14 @@ foreach ($scenario in $Scenarios) {
         $hardFailures.Add("$scenario fixture identity drifted between A/B.")
     }
 
+    $timeLimited = @($all | Where-Object {
+        [string]::Equals($_.boundary, 'TimeLimit', [StringComparison]::OrdinalIgnoreCase)
+    })
+    if ($timeLimited.Count -gt 0) {
+        $paths = @($timeLimited | ForEach-Object path) -join ', '
+        $hardFailures.Add("$scenario contains TimeLimit samples and cannot establish fixed-work H1 evidence: $paths")
+    }
+
     $baselineQuality = @($baseline | ForEach-Object { Quality-Signature $_ } | Sort-Object -Unique)
     $currentQuality = @($current | ForEach-Object { Quality-Signature $_ } | Sort-Object -Unique)
     if ($baselineQuality.Count -ne 1) {
