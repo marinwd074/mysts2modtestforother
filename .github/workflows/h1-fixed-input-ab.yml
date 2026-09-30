@@ -9,6 +9,7 @@ on:
       - 'source/tools/compare-h1-fixed-input.ps1'
       - 'source/src/Runtime/SolverController.cs'
       - 'source/tools/E0PinnedHarness/Program.cs'
+      - 'source/src/Search/SolverInterimResultOrdering.cs'
 
 permissions:
   contents: read
