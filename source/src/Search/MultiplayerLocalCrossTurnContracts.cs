@@ -199,6 +199,31 @@ internal static class MultiplayerLocalCrossTurnContracts
     internal static bool IsCurrentTurnAction(int actionTurn, int currentTurn)
         => actionTurn == currentTurn;
 
+    internal static bool ShouldReplayContinuationRoute(
+        bool followedBySolver, bool allowLivingEnemyHpDecrease, string rejectionReason)
+        => followedBySolver && allowLivingEnemyHpDecrease
+            && rejectionReason == "non_shuffle_rng_changed:targets";
+
+    // Quality evidence after fresh-root replay, never permission to reuse an old branch.
+    // Target RNG stays strict in IsLocalCoreContinuationStateCompatible and Safe Execute.
+    internal static bool IsReplayedRouteFinalStateCompatible(string expected, string actual)
+    {
+        string[] expectedFields = expected.Split(';');
+        string[] actualFields = actual.Split(';');
+        int rngIndex = Array.FindIndex(expectedFields, field => field.StartsWith("R=", StringComparison.Ordinal));
+        if (expectedFields.Length != actualFields.Length || rngIndex < 0
+            || !actualFields[rngIndex].StartsWith("R=", StringComparison.Ordinal))
+            return false;
+        string[] expectedRng = expectedFields[rngIndex][2..].Split('/');
+        string[] actualRng = actualFields[rngIndex][2..].Split('/');
+        if (expectedRng.Length != 9 || actualRng.Length != 9)
+            return false;
+        actualRng[5] = expectedRng[5];
+        actualFields[rngIndex] = "R=" + string.Join('/', actualRng);
+        return IsLocalCoreContinuationStateCompatible(expected, string.Join(';', actualFields),
+            allowLivingEnemyHpDecrease: true, out _, out _, out _);
+    }
+
     internal static bool HasCurrentTurnPlayableAction(
         IReadOnlyList<MultiplayerProjectedAction> actions,
         int currentTurn)

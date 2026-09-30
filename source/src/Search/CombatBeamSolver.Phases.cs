@@ -801,6 +801,10 @@ internal sealed partial class CombatBeamSolver
                 policy.ShadowReplaySamplingBudget?.Capture();
             SolverResult result = new()
             {
+                PredictedFinalState = policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
+                    ? ContinuationStamp.CapturePredicted(_player, finalSnapshot.Simulator,
+                        finalSnapshot.Turn, _forecast, _startTurnNumber)
+                    : null,
                 ResultScope = resultScope,
                 SearchEfficiencyOrigin = TryGetCandidateOrigin(best),
                 SearchEfficiencyEvaluationContextId = evaluationContextId,
@@ -1449,7 +1453,9 @@ internal sealed partial class CombatBeamSolver
                 continue;
             }
 
-            SearchNode? compatibleRoot = ApplyFixedPrefix(root);
+            SearchNode? compatibleRoot = _continuationRouteReplayActions is { } replayActions
+                ? ReplayContinuationRoute(root, replayActions, stopwatch)
+                : ApplyFixedPrefix(root);
             if (compatibleRoot == null)
                 continue;
             RegisterInitialFrontierNode(compatibleRoot);
@@ -1468,6 +1474,24 @@ internal sealed partial class CombatBeamSolver
         member.PotionFreeBoundaryFallbackScore = double.NegativeInfinity;
         member.PotionBoundaryFallback = null;
         member.PotionBoundaryFallbackScore = double.NegativeInfinity;
+        if (_continuationRouteReplayActions != null)
+        {
+            SearchNode replayed = member.Fallback;
+            FinalPlanSelection replayOrdering = FinalOrdering.Select(
+                [(replayed, replayed.Snapshot)], initialHp,
+                emitDiagnostics: true, reevaluateScenarios: false, allowScenarioRerank: false);
+            try
+            {
+                execution.Result = MaterializeSelectedRoute(replayOrdering,
+                    replayed.Snapshot.PlayerDead || replayed.Snapshot.ProjectedPlayerHp <= 0,
+                    SolverResultScope.SearchCompletion,
+                    Math.Max(0, replayed.Turn - _startTurnNumber),
+                    candidateTimeBudgetReached: false, candidateNodeBudgetReached: false,
+                    evaluationContextId: "fresh_root_route_replay");
+            }
+            finally { replayed.Snapshot.ReleaseSimulator(); }
+            yield break;
+        }
         // A cheap first parent is not a safe predictor for the rest of a later play depth.
         // Retain the largest observed parent for the whole search so a new depth cannot
         // immediately rematerialize a wide wave that exceeds the No-GC allocation budget.

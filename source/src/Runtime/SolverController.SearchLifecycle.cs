@@ -235,6 +235,8 @@ internal static partial class SolverController
             }
             string continuationRejectReason = "none";
             IReadOnlyList<PlanAction> continuationSeedActions = Array.Empty<PlanAction>();
+            IReadOnlyList<PlanAction> continuationReplayActions = Array.Empty<PlanAction>();
+            ContinuationRouteReplayBaseline? continuationReplayBaseline = null;
             if (continuationStamp != null && capabilities.IsMultiplayer)
             {
                 Entry.Logger.Info(
@@ -426,6 +428,18 @@ internal static partial class SolverController
                         continuationSeedActions = CaptureContinuationSeedActions(
                             source.BestNode.Actions,
                             currentTurn);
+                        if (MultiplayerLocalCrossTurnContracts.ShouldReplayContinuationRoute(
+                                followedBySolver, allowLivingEnemyHpDecrease, localCoreRejectionReason))
+                        {
+                            continuationReplayActions = source.BestNode.Actions
+                                .Where(action => action.Turn >= currentTurn)
+                                .Select(action => action with { RelicEffects = null, AutoPlayedCards = null })
+                                .ToArray();
+                            if (source.PredictedFinalState is { } finalState)
+                                continuationReplayBaseline = new(finalState, source.ProjectedBattleHpLost,
+                                    source.Snapshot.ProjectedDeathSaveUseCount,
+                                    source.Snapshot.GrowthRewards, source.Snapshot.RelicCounters);
+                        }
                     }
                     Entry.Logger.Info(
                         $"[CombatSolver/Test] MP_LOCAL_XTURN_SEED_CAPTURE " +
@@ -507,6 +521,12 @@ internal static partial class SolverController
                 interaction: search.Interaction);
             search.UseRouteScopedCompletion =
                 searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore;
+            if (search.UseRouteScopedCompletion && !searchPolicy.IncludeTurnSetup)
+                searchPolicy = searchPolicy with
+                {
+                    ContinuationRouteReplayActions = continuationReplayActions,
+                    ContinuationRouteReplayBaseline = continuationReplayBaseline,
+                };
             if (continuationSeedActions.Count > 0
                 && searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
                 && !searchPolicy.IncludeTurnSetup

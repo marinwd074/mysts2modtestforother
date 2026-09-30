@@ -1,5 +1,9 @@
 namespace CombatSolver;
 
+internal sealed record ContinuationRouteReplayBaseline(
+    ContinuationStamp FinalState, int ProjectedBattleHpLost,
+    int DeathSaveUses, GrowthValues GrowthRewards, RelicCounterEvaluation RelicCounters);
+
 internal sealed record SearchPolicySnapshot(
     SolverSearchProfile Profile,
     SolverPotionPolicy PotionPolicy,
@@ -127,6 +131,9 @@ internal sealed record SearchPolicySnapshot(
     public SearchRequestWorkTotals? RequestWorkTotals { get; init; }
     // Suggestions from the prior turn; replay must evaluate them from the current root.
     public IReadOnlyList<PlanAction> ContinuationSeedActions { get; init; } = [];
+    // Value-only route suggestions; never carry old simulator state or deployment authority.
+    public IReadOnlyList<PlanAction> ContinuationRouteReplayActions { get; init; } = [];
+    public ContinuationRouteReplayBaseline? ContinuationRouteReplayBaseline { get; init; }
 
     // Ordering-only suggestions for the ordinary Beam baseline. Phase D may populate this only
     // after the R1 probe has re-simulated the prefix from the new live root. It never authorizes
