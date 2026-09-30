@@ -1729,6 +1729,9 @@ internal sealed partial class CombatBeamSolver
                         return comparison;
                 }
             }
+            // Rolling-horizon primary dimensions were already resolved above. Re-running
+            // the rolling comparator here only repeats loss/victory/lethal-turn work before
+            // reaching the same strategic tie-break. Use the strategic tail for both modes.
             comparison = SolverInterimResultOrdering.ComparePrimaryQuality(
                 leftWon,
                 StrategicHpDeficit(leftSnapshot, leftWon),
@@ -1741,10 +1744,7 @@ internal sealed partial class CombatBeamSolver
                 leftSnapshot.StrategyGoalCount,
                 rightSnapshot.StrategyGoalCount,
                 leftSnapshot.ProjectedDeathSaveUseCount,
-                rightSnapshot.ProjectedDeathSaveUseCount,
-                _useRollingHorizonLossFirst,
-                leftSnapshot.CumulativePlayerHpLost,
-                rightSnapshot.CumulativePlayerHpLost);
+                rightSnapshot.ProjectedDeathSaveUseCount);
             if (comparison != 0)
                 return comparison;
 

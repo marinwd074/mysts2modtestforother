@@ -10,6 +10,7 @@ on:
       - 'source/src/Runtime/SolverController.cs'
       - 'source/tools/E0PinnedHarness/Program.cs'
       - 'source/src/Search/SolverInterimResultOrdering.cs'
+      - 'source/src/Search/CombatBeamSolver.BeamRetentionPolicy.cs'
 
 permissions:
   contents: read
