@@ -217,6 +217,16 @@ internal static class Program
                     $"forecast={captured.UseMultiplayerTeammateForecast} " +
                     $"scenario={captured.UseMultiplayerScenarioReevaluation}.");
             }
+            if (teammate)
+            {
+                bool hasShadowSampling = captured.ShadowReplaySamplingBudget != null;
+                if (hasShadowSampling != multiplayerPrediction)
+                {
+                    throw new InvalidOperationException(
+                        $"Production shadow replay sampling boundary mismatch: " +
+                        $"prediction={multiplayerPrediction} sampling={hasShadowSampling}.");
+                }
+            }
             SearchPolicySnapshot policy = captured with
             {
                 Profile = profile,

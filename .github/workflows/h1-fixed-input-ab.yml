@@ -7,6 +7,8 @@ on:
     paths:
       - '.github/workflows/h1-fixed-input-ab.yml'
       - 'source/tools/compare-h1-fixed-input.ps1'
+      - 'source/src/Runtime/SolverController.cs'
+      - 'source/tools/E0PinnedHarness/Program.cs'
 
 permissions:
   contents: read
