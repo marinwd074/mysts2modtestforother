@@ -76,13 +76,18 @@ jobs:
         run: |
           $gameData = (Resolve-Path '.\current\game-body\data_sts2_windows_x86_64').Path
           foreach ($side in @('baseline', 'current')) {
+            $warningPolicy = if ($side -eq 'baseline') {
+              '-p:TreatWarningsAsErrors=false'
+            } else {
+              '-p:TreatWarningsAsErrors=true'
+            }
             $common = @(
               '-c', 'Release',
               "-p:Sts2DataDir=$gameData",
               "-p:RitsuLibReferencesProps=$env:RITSU_PROPS",
               "-p:RitsuWorkshopRoot=$env:RITSU_ROOT",
               '-p:RitsuLibReferenceTarget=0.107.1',
-              '-p:TreatWarningsAsErrors=true',
+              $warningPolicy,
               '--nologo'
             )
             & dotnet build ".\$side\source\CombatSolver.csproj" @common "-p:CopyModOnBuild=false"
