@@ -27,9 +27,9 @@
 - **C 战斗级 R0 转移缓存：完成。**
 - **D 新根恢复 R1：完成。**
 - **E 前台/后台分离：完成。** E1–E4-A 已闭合；E4-B 在最新 INFESTED_PRISMS / MYTES 实机包中同时覆盖 regression 拒绝、improved 接纳与 Smart Potion 约 10s 降级上限。
-- **F 情景预热：F0 影子测量已落地，待实验多人预测模式实机命中证据。**
-- **G SSD 冷存储：未开始。**
-- **H 质量与响应验收：未开始。**
+- **F 情景预热：F0 影子测量已落地；默认 local-single-core 不依赖它，F1 暂停，保留为显式实验多人预测栈的后续选项。**
+- **G SSD 冷存储：延期。** 当前优先验证同场战斗质量/响应，暂不把 SSD 持久化加入默认热路径。
+- **H 质量与响应验收：已进入 H0。** 先冻结基线与验收口径，再做固定输入 A/B，最后做真实 Host/Client 连续回合验收。
 
 `CombatSolver_Quality_First_Next.md` 继续用于坏路线、执行质量和回归定位，但不覆盖 Rolling Horizon 的主阶段顺序。
 
@@ -138,25 +138,41 @@ state_mismatch
 
 ## 下一任务
 
-### E 阶段已闭合（2026-09-29）
+### 当前任务：H0 质量与响应验收基线
 
-最新 INFESTED_PRISMS_ELITE `164e79ed1a85499592363e80497d26b1` 与 MYTES_NORMAL `aa290e44d353496fa7d33b0f0eae84e8` 已覆盖 E4-B 的三个关键合同：
+H 的历史对照固定为 `d745b0018e27f2013f7df580bde99523f1ec12ed`：这是
+`Rolling_Horizon_Reuse_Architecture.md` 进入仓库前最后一个生产提交，并且已经包含
+“非斩杀敌人掉血不触发跨回合重算”。因此 H 不会通过回退这条 local-core 策略制造虚假的复用收益。
 
-- Smart Potion 真实出现 `relation=regressed admission=rejected_regression`：9 战损 / 0 药 / 敌 301 HP 的 incumbent 没有被 29 战损 / 1 药 / 胜利覆盖。
-- 真实出现 `relation=improved admission=accepted`：9 战损 / 敌 94 HP 被同 9 战损 / 2 药 / 胜利正确接纳。
-- Smart Potion 长尾再次真实触发 `degraded_deadline`，约 10007–10067ms；两包当前战斗均无 `SEARCH_FAILURE`。
+H0 只冻结验收合同，不改变搜索、预算、排序、部署或默认设置：
 
-因此 E4-B 与阶段 E 正式闭合。
+- **固定输入 A/B**：同游戏/RitsuLib 0.107.1、同 encounter/seed/loadout、同搜索预算、Beam、DOP、
+  NoGC 与药水策略；历史基线与 current HEAD 分别使用干净进程。性能对照沿用
+  `PERFORMANCE_GUARDRAILS.md`，至少三份独立样本并以 ABBA 顺序消除热身偏差。
+- **质量优先于速度**：记录 `projected_battle_hp_lost`、是否胜利、`combat_ended_turn`、
+  药水/长期资源与完整动作路线。候选不能被历史基线在已知质量轴上支配；若战损相同，
+  baseline 的胜利不能退化为未胜利，双方都胜利时不能无理由拖后斩杀回合。
+- **固定工作量再谈性能**：同时记录 expanded nodes、transitions、总耗时、分配/GC 与主线程 gap。
+  质量保持时，固定工作主指标超过现行 2% 回归线要记为回归或测量不确定，不能靠缩 Beam、
+  节点、时间或 DOP 伪装提速。
+- **local-core 必验语义**：高血量/非斩杀窗口的队友普通敌人 HP 下降不得制造无意义 cold search；
+  进入 `IsInLethalRecalculationWindow`、目标死亡、阶段转换或其他真实语义变化时必须重新定根/
+  重算，不能为了提高复用率继续旧路线。
+- **响应指标**：首个可采用当前回合结果、最终结果、exact continuation/R1/cold-search 数量、
+  同回合重复重算次数，以及连续本地回合的累计等待。最终报告 p50/p95 时必须注明样本数和硬件，
+  小样本只报告原始值/中位数，不声称统计显著。
+- **实机门槛**：固定输入只能完成 H1；H2 必须由真实 Host/Client journal/问题包验证连续回合。
+  合同、headless 和 pinned fixture 不能替代该证据。
 
-### 当前任务：F0 情景预热影子测量
+H 分三步收尾：
 
-只在已显式开启的实验多人预测栈（Team Objective + teammate forecast + scenario reevaluation）记录情景预热，不改变默认 local-single-core。
+1. **H0（当前）**：冻结上面基线、质量向量、响应指标与 local-core 斩杀窗口合同。
+2. **H1**：对 `d745b001` 与 current HEAD 跑固定输入质量/固定工作 A/B；路线不同允许，但必须解释
+   质量差异，不能只比较 elapsed。
+3. **H2**：真实多人连续回合验证“高血稳定复用 → 斩杀窗口重算”，并汇总首结果等待、重算/复用和
+   最终战损/斩杀回合；完成后才关闭 Rolling Horizon 主计划。
 
-- scenario matrix 的非终局 replay 后态保存精确 `ContinuationStamp`，每个真实根最多 64 个唯一预测。
-- 下一次**不同** live root 只做完整状态文本 exact-match；记录 `initial / same_root / exact_match / miss / no_predictions`。
-- 新根到来后上一根预测立即清空；旧 worker 向新根写入记为 `stale_stores` 并拒绝。
-- `behavioral_reuse=false`：F0 不复用 SearchNode、分数、动作、候选或部署权限，也不减少 Beam、情景或预算。
-- 只有真实 Host/Client / 问题包证明存在稳定 exact hit 且没有 stale/collision 语义问题后，才设计 F1 的实际预热采用。
+F0 保留 `behavioral_reuse=false`；没有实验多人预测 exact-hit 证据前不进入 F1。G 不作为 H 的前置条件。
 
 ## 当前未验证边界
 
