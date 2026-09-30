@@ -76,9 +76,8 @@ jobs:
         run: |
           $gameData = (Resolve-Path '.\current\game-body\data_sts2_windows_x86_64').Path
           foreach ($side in @('baseline', 'current')) {
-            $project = ".\$side\source\tools\E0PinnedHarness\E0PinnedHarness.csproj"
-            $arguments = @(
-              'build', $project, '-c', 'Release',
+            $common = @(
+              '-c', 'Release',
               "-p:Sts2DataDir=$gameData",
               "-p:RitsuLibReferencesProps=$env:RITSU_PROPS",
               "-p:RitsuWorkshopRoot=$env:RITSU_ROOT",
@@ -86,7 +85,9 @@ jobs:
               '-p:TreatWarningsAsErrors=true',
               '--nologo'
             )
-            & dotnet @arguments
+            & dotnet build ".\$side\source\CombatSolver.csproj" @common "-p:CopyModOnBuild=false"
+            if ($LASTEXITCODE -ne 0) { throw "$side CombatSolver Release build failed." }
+            & dotnet build ".\$side\source\tools\E0PinnedHarness\E0PinnedHarness.csproj" @common
             if ($LASTEXITCODE -ne 0) { throw "$side E0PinnedHarness build failed." }
           }
 
@@ -142,6 +143,6 @@ jobs:
         uses: actions/upload-artifact@v6.0.0
         with:
           name: h1-fixed-input-ab
-          path: ${{ env.H1_EVIDENCE_ROOT }}
+          path: ${{ runner.temp }}\h1-fixed-input
           if-no-files-found: warn
           retention-days: 14
