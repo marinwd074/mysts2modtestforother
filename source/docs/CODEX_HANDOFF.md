@@ -29,7 +29,7 @@
 - **E 前台/后台分离：完成。** E1–E4-A 已闭合；E4-B 在最新 INFESTED_PRISMS / MYTES 实机包中同时覆盖 regression 拒绝、improved 接纳与 Smart Potion 约 10s 降级上限。
 - **F 情景预热：F0 影子测量已落地；默认 local-single-core 不依赖它，F1 暂停，保留为显式实验多人预测栈的后续选项。**
 - **G SSD 冷存储：延期。** 当前优先验证同场战斗质量/响应，暂不把 SSD 持久化加入默认热路径。
-- **H 质量与响应验收：H0/H1 已完成，当前进入 H2。** 固定输入历史 A/B 已证明质量/路线/固定工作不回归；剩余门槛是真实 Host/Client 连续回合的高血复用 → 斩杀窗口重算。
+- **H 质量与响应验收：完成。** H1 固定输入 A/B 无质量/固定工作回归；H2 已由真实多人 INFESTED_PRISMS / BYRDONIS 日志闭合高血复用 → 斩杀窗口重算。Rolling Horizon A→H 主计划完成。
 
 `CombatSolver_Quality_First_Next.md` 继续用于坏路线、执行质量和回归定位，但不覆盖 Rolling Horizon 的主阶段顺序。
 
@@ -136,46 +136,56 @@ state_mismatch
 
 因此仍不能验收 D3.3C request-tail hydration。
 
-## 下一任务
+## 当前结论：Rolling Horizon A→H 已完成
 
-### H1 已完成：固定输入质量 / 固定工作 A/B
+### H1：固定输入质量 / 固定工作 A/B — PASS
 
-历史基线固定为 `d745b0018e27f2013f7df580bde99523f1ec12ed`，current 为
-`1d0860ff3161172da006567c689b002deb368270`。GitHub Actions H1 run
-`36685079529` 在同一 pinned STS2 / RitsuLib 0.107.1、DOP=1、相同 Beam/节点/时间预算下，
-对 simple / draw_energy / teammate 各取得 4 个 clean-process 样本并按 ABBA 交错。
+历史基线 `d745b0018e27f2013f7df580bde99523f1ec12ed` 与 current H1 build
+`1d0860ff3161172da006567c689b002deb368270` 在 GitHub Actions run
+`36685079529` 上使用同一 pinned STS2 / RitsuLib 0.107.1、DOP=1、相同 Beam/节点/时间预算。
+simple / draw_energy / teammate 各 4 个 clean-process ABBA 样本均满足：
 
-三组均为：
-
-- 质量完全相同，完整动作路线相同。
-- expanded nodes / transitions 完全相同。
+- 质量、完整动作路线、expanded nodes、transitions 完全一致。
 - 无 TimeLimit 样本。
-- final publication 中位数变化分别为 simple `+0.368%`、draw_energy `+0.559%`、
-  teammate `+1.736%`，均低于现行固定工作 `2%` 回归线。
-- simple：4 战损、0 药、T3 胜利，1963 nodes / 5165 transitions。
-- draw_energy：6 战损、0 药、T2 胜利，823 / 2642。
-- teammate：4 战损、0 药、TurnLimit，391 / 1026；这是 detached 双玩家固定根，不替代网络实机。
+- final publication 中位数变化：`+0.368% / +0.559% / +1.736%`，均低于 2% 固定工作回归线。
 
-因此 H1 结论为 **PASS**：当前 Rolling Horizon 主线没有在这三个固定输入上降低路线质量或增加搜索工作，
-也没有超过固定工作性能回归门槛。它**不证明**真实多人跨回合响应已经改善。
+### H2：真实多人连续回合 — PASS
 
-### 当前任务：H2 真实多人连续回合验收
+INFESTED_PRISMS_ELITE `164e79ed1a85499592363e80497d26b1` 在同一真实 Host/Client 战斗内覆盖两个必验边界：
 
-H2 只验证默认 `MultiplayerSinglePlayerCore`，不要求开启 `UseMultiplayerPrediction`，也不依赖 F1/G。
+- **高血稳定复用**：T4 continuation 验证记录
+  `living_enemy_hp_decrease_drift=true allow_living_enemy_hp_decrease=true`；14ms 后
+  `SEARCH_REUSED validation=compatible_remote_enemy_hp_and_shared_state`，
+  `reason=remote_enemy_hp_decrease resume_kind=exact_continuation`。对应 RESULT 为
+  `expanded=0 / total_transitions=0`，没有为普通队友伤害支付一次完整搜索。
+  BYRDONIS_ELITE `c4a2e1a74385400caadc99262d4d63f2` 又在 T2/T4 独立出现同类
+  `remote_enemy_hp_decrease` continuation reuse，作为交叉证据。
+- **斩杀窗口立即敏感**：INFESTED_PRISM 在 T4 从 144→125 HP 时，本地手牌/能量保持不变，
+  `in_lethal_window false→true`、`enemy_hp_route_changed=true`、route version `14→15`；
+  347ms 后启动 fresh search。随后 125→116 HP 又使 route `15→16`，851ms 后启动第二次 fresh search。
+  这两次是斩杀窗口内有意的同回合重算，而不是高血阶段的无意义重算。
+- **低血 continuation 不放宽**：T5 continuation 见
+  `allow_living_enemy_hp_decrease=false`；预测 17 HP、实机 11 HP 被
+  `SEARCH_REUSE_MISS / MP_LOCAL_XTURN_CONTINUATION_REJECTED reason=local_state_mismatch`
+  拒绝，随后从新 live root 启动 fresh search，并由 R1 仅建立安全 incumbent/hint。
+- T5 新搜索约 345.6ms 出现可刷新候选，约 564.7ms 发布 final；最终仍为 22 战损、
+  `combat_ended_turn=6`。当前战斗无 `SEARCH_FAILURE` / `FAIL_CLOSED`。
+- 当前战斗总计：1 次 exact continuation reuse、3 次 continuation miss、3 次 R1 recovery、
+  显式 `resume_kind=cold_search=0`；共有 6 个 reactive fresh-search 事件，其中包含初始根和
+  斩杀窗口内两次同回合重算。该数字保留为后续响应优化基线，不解释成“零重算”。
 
-需要由 current build 的真实 Host/Client journal / 问题包覆盖同一场或可比场景中的两个边界：
+该实机包产生于 `7f7cc95d` 后、F0 前。到当前 H 收尾 HEAD，负责该行为的
+`MultiplayerCombatObjectivePolicy`、`MultiplayerClientProbe` 与 local-core continuation 合同未修改；
+`SolverController.SearchLifecycle.cs` 的后续差异只加入 F0 shadow 观察，默认 local-core 的影子采样随后还被关闭。
+因此 H2 使用的是与当前生产 gate 等价的真实 Host/Client 证据；H1 另行覆盖 current HEAD 固定输入质量/工作量。
 
-1. **高血 / 非斩杀窗口**：队友只降低仍存活敌人的 HP 时，
-   `in_lethal_window=false`、`enemy_hp_route_changed=false`；旧 continuation/路线应继续成立或走轻量恢复，
-   不应仅因为这次普通伤害产生 cold full search。
-2. **进入斩杀窗口或真实语义变化**：`in_lethal_window=true`、目标死亡、阶段转换、Block/意图等关键字段变化时，
-   必须停止宽松 HP 复用，从最新 live root 重新定根/搜索；旧目标和旧部署授权不能继续使用。
+### 主线状态
 
-同包同时统计：首个可采用当前回合结果、最终结果时间，exact continuation / R1 / cold-search 次数，
-同回合重复重算次数，最终战损与 `combat_ended_turn`。小样本只报告原始值与中位数，不声称可靠 p95。
+Rolling Horizon **A、B、C、D、E、H 均完成**。F0 已完成影子测量但 F1 不进入默认 local-core；
+G SSD 冷存储按当前产品目标延期。F1/G 作为可选研究项，不再阻塞 A→H 主线关闭。
 
-H2 通过后即可关闭 Rolling Horizon A→H 主计划；F0 继续保持 `behavioral_reuse=false`，
-F1 与 G 作为可选研究项，不阻塞默认 local-core 收尾。
+下一步不再按阶段机械增加算法。后续只根据真实问题包处理可复现的质量/响应问题；目前已知可继续观察的是
+斩杀窗口内连续队友伤害可能触发多次同回合 fresh search，但不能通过重新忽略斩杀线来消除。
 
 ## 当前未验证边界
 

@@ -19,7 +19,7 @@ The fork keeps the upstream solver/simulation foundation while adding substantia
 
 Single-player and multiplayer share the same main search/simulation core. Production multiplayer defaults to the local single-player quality core with world-version tracking and local-player-only execution boundaries; teammate forecasting, team objectives, and scenario reevaluation remain behind the experimental multiplayer prediction switch.
 
-Rolling-horizon reuse phases A–E are complete. Phase F has started with shadow-only scenario-prewarm hit measurement inside that experimental prediction mode; prewarmed states are **not** reused for search or execution yet.
+Rolling-horizon reuse product work is complete through final quality/response acceptance. F0 scenario prewarming remains shadow-only inside the experimental multiplayer prediction mode, and SSD cold storage is deferred; neither is required by the default local-single-core path.
 
 Background presence telemetry, automatic run-statistics upload, server update checks, and automatic private Showcase upload were intentionally removed. User-triggered problem-report upload remains separate.
 
