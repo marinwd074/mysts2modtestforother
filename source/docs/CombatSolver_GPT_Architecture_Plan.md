@@ -5,6 +5,8 @@
 
 新增任务见 [§11 多人战前预计算与 Boss 通关优先](#11-多人战前预计算与-boss-通关优先2026-09-30)，按其独立阶段推进，不重开已完成的 U0–U6。
 
+后续性能方案见 [§12 多人搜索加速](#12-多人搜索加速2026-10-01)；本节只做设计，不改源码、不调整生产设置。
+
 本文件是设计与执行任务书，不代表修改已经实现。核对了交接、Shadow planner、多人目标数学、最终排序、情景复评、Safe Execute policy/classifier 与 Deployment 的相关实现；没有做全仓审计、构建或实机性能测试。执行时必须先核对新 HEAD，以当前代码为准，禁止重复实现已完成阶段。
 
 ## 1. 决策结论
@@ -326,3 +328,95 @@ U6 实现与清理收口后即可独立评估本地精确斩杀、缓存、增�
 ### 11.6 可复制的第一步
 
 > 先核对当前 HEAD、AGENTS 与 CODEX_HANDOFF，按本文件 §11 只实施 B1/B2 的最小 Boss 排序修复。先列出最终、中间、显示晋升、Smart Potion 基线、协调器、R1/E4 与剪枝的质量消费者，再从实际 BossHpRelief 和对应设置派生统一质量上下文。保持单人、普通多人战、MinimizeHpLoss、双 Boss 第一场、药水/死亡/救命约束及搜索预算；未证明胜利不得标 Won。扩展既有 harness 覆盖相互矛盾的候选排序，只做受影响验证，明确未运行的实机项。不要同时开放战前预计算，不做 Showcase，不修改开局赌博筹码。此提示词供后续授权实施，本轮仅完成可行性与计划。
+
+## 12. 多人搜索加速（2026-10-01）
+
+**状态：只读源码审计后的架构建议，未实施、未做性能实测。** 本节基线 `93dd5f9`，以当前 [交接](CODEX_HANDOFF.md) 和直接调用链为准；§1–10 的历史实现描述不作为本轮性能事实。收益、热点占比和缓存命中率均待测，不承诺固定倍数。
+
+### 12.1 当前已经有什么，以及还缺什么
+
+| 当前事实与源码 | 后续空间 |
+|---|---|
+| 默认多人 `local-single-core` 是本地单人搜索语义；[SolverWeights](../src/Search/SolverWeights.cs) 的默认 DOP 按逻辑处理器数为 1/2/4/8，设置最大 16 | 已有多核，不把“改成多线程”当新增方案；实际会话 DOP、帧压力和内存退让须从运行数据确认 |
+| [ParallelExpansion](../src/Search/CombatBeamSolver.ParallelExpansion.cs) 已有持久 lane、动作/Choice 作业、父节点顺序提交和 Fork gate | 可以优化作业负载与串行准备/提交，不能取消所有权锁或改变提交顺序求快 |
+| Exact continuation、R1 新根重放、E 前台/后台及 Smart Potion 降级已落地 | 优先补最新 RNG/采用恢复的实机边界，不重复建设 Rolling Horizon |
+| [R0 memo](../src/Search/CombatTransitionMemo.cs) 是最多 4096 项的战斗级终局值缓存；[ActionReplayCache](../src/Search/ActionReplayCache.cs) 的普通转移仍是 shadow | 普通非终局转移尚不能凭 shadow 命中直接跨请求复用 |
+| [R1 hydration](../src/Search/CombatBeamSolver.R1TransitionHydration.cs) 从 seed probe 保存最多 32 项后态，首验后复用到 request tail；无 seed 的冷搜索不会因此获得通用后态缓存 | 可研究同一新根下 baseline/portfolio/药水审计共享普通动作后态，不能只增大 32 项容量 |
+| `CombatTransitionMemo.CapturePolicyIdentity` 包含整个 `Profile`、策略及版本 | 不同 Beam 配置会分键；纯转移身份与保留/评分身份可否分离，必须审计，不能直接删 `Profile` |
+| [StateEvaluation](../src/Search/CombatBeamSolver.StateEvaluation.cs) 已缓存卡牌、牌堆指纹；[ForkableCollections](../src/Search/ForkableCollections.cs) 已使用 COW；[Transpositions](../src/Search/CombatBeamSolver.Transpositions.cs) 已保留非支配路径标签 | 新工作应针对剩余全状态扫描、路径物化、重复纯评价及 COW detach，不重新实现相同机制 |
+
+交接中的高血 continuation 已出现 0 节点复用，代表这条路径已经很快；另一采用路线样本曾在共享 RNG 变化后重搜约 48s，相关新根重放修复仍待当前构建 Host/Client 验证。这些是交接记录，不是本轮重跑结果，也不能据此认定 CPU 热点。D3.4C 曾得到 retained-node intersection=0，整 frontier 恢复继续暂停。
+
+### 12.2 推荐架构
+
+保留现有 Controller → Coordinator → Beam/Novelty → Simulator；下图的 Router、Memo 表示职责，可以扩展现有类型，不要求建立新搜索器或独立项目。
+
+```mermaid
+flowchart TD
+    A[主线程捕获稳定根和会话身份] --> B[Runtime 请求路由]
+    B --> C[严格续用或新根路线重放]
+    B --> D[当前根搜索请求]
+    C --> E[现有质量和评估范围准入]
+    C -->|拒绝| D
+    D --> F[现有 Beam / Novelty / 药水审计]
+    F --> G[请求内精确转移和纯评价复用]
+    G --> H[独占分支模拟与有序提交]
+    H --> E
+    E --> I[当前 epoch 前台发布和后台改善]
+    I --> J[新根授权及逐动作执行校验]
+```
+
+状态与缓存分三层：
+
+1. **Runtime 会话层**：拥有 live 根捕获、WorldVersion、epoch、取消和执行意图；同一时刻只允许当前请求发布。队友改变 RNG/斩杀线立即撤销旧授权，不能靠延迟观察掩盖失效。
+2. **Request 计算层**：同一捕获根的成员共享经过证明的普通转移；缓存条目不含旧 SearchNode、旧分数或部署权。原型后态封存，Fork 经条目 gate 串行创建，worker 只改自己的副本；取消/结束时越过 worker barrier 后释放。首版限 request，跨新根非终局缓存后置。
+3. **Battle 成果层**：继续保留现有终局值缓存、路线建议及 R1 提示。跨根仅精确键可复用计算；RNG 或语义变化后的旧路线必须在新根 replay，重新评分与授权。无法证明等价就走正常搜索。
+
+请求内缓存键至少区分版本/合同、战斗与本地视角、完整父态、动作/目标/Choice、转移语义及适用历史/RNG；哈希只做索引，完整语义校验负责碰撞拒绝。转移输出保留 RNG、历史增量、死亡处理和边界；接入时用当前路径重建 actionCount、累计损失、资源、父链与 Snapshot。纯评价另带策略/目标/路径上下文；不能共用旧 Score 或把状态去重简化为单标签。
+
+### 12.3 路线与优先级
+
+| 阶段 | 方案与直接落点 | 准入及验收 |
+|---|---|---|
+| S0，先做 | 用现有 [SearchPerformanceMetrics](../src/Search/SearchPerformanceMetrics.cs)、[ParallelExpansionWorkProfile](../src/Search/ParallelExpansionWorkProfile.cs)、[SearchRequestWorkTotals](../src/Search/SearchRequestWorkTotals.cs) 和 [性能采集工具](../tools/watch-performance.ps1) 分类等待 | 区分根捕获等待、续用/重放、R1、baseline、portfolio、药水、取消后的浪费与发布；没有分解不选微优化 |
+| S1，优先 | 闭合现有新根路线重放与显式采用恢复；落点 [SearchLifecycle](../src/Runtime/SolverController.SearchLifecycle.cs) 和 `CombatSearchCoordinator.TryReplayContinuationRoute` | 当前构建验证 RNG-only、Targets 改变、目标死亡、斩杀窗口和重复失效；成功 replay 是否实际省去 fresh search，失败是否及时回退，质量与评估范围是否保留 |
+| S2，优先候选 | 将 R1 首验模式扩展为普通冷搜索也可使用的 request 内后态复用；复用 hydration、Expansion 与 Coordinator | 先 shadow 统计各成员重复 parent/action；有净节省才启用。首次真实模拟对照、单 key 拒绝、串行 Fork、当前路径重建全部通过；从无 Choice/无 checkpoint 的普通 PlayCard 开始 |
+| S3，由热点决定 | 降低 Snapshot/Fingerprint/Fork/纯评价成本；落点 StateEvaluation、SimulatedCombatState、现有 COW 集合 | 优先缓存未变的 Power/计数/history 子摘要、复用节点内纯事实、减少临时数组和重复路径展开；全量指纹 oracle、变更失效及 sibling Fork 隔离逐项通过 |
+| S4，由调度数据决定 | 改善既有 lane 作业平衡与跨成员计算复用；落点 ParallelExpansion、Coordinator 与 [SearchWorkPacer](../src/Search/SearchWorkPacer.cs) | 原始父/动作顺序和预算准入保持；可提前准备封存 Fork seed、拆分昂贵 Choice 作业，但不得让后续便宜父节点抢先改变候选准入。比较串行准备、lane 等待、提交及主线程帧尾延迟 |
+| S5，研究后置 | 在现有 transposition 前减少已证明等价的动作排列 | 仅对白名单证明 A→B 与 B→A 完整后态、RNG、历史、触发器、路径目标和 retention 行为等价；否则不裁剪。伤害相加或看起来独立不构成证明 |
+| S6，可选 | §11 战前预计算，在玩家准备期间先算 | 先通过多人离线恢复；它主要降低开战后等待，可能增加总计算量。真实根匹配/重放后才采用，不承诺整队行为或直接执行 |
+
+执行顺序是 **S0 → S1 → 按热点选择 S2/S3/S4**。不要求为了完成表格逐项施工。S2 首版不缓存 EndTurn、原生 Choice continuation、未知 Hook 或终局可变图；更广语义以后逐项证明。每项若成本高于省掉的模拟，就保持关闭并停止扩容。
+
+S2 中，只有审计证明不影响单步输出的 Beam 宽度、节点额度或时间上限，才可移入独立 retention 身份；`CurrentTurnOnly`、边界/Choice 模式、模型选项、评分目标和资源政策不能随意删键。首版允许同配置共享，跨配置共享单独首验。把完整 Profile 从键移走不是独立安全优化。
+
+S4 的根变化优化只做“当前根立即取代旧根、同根合并重复请求、取消后不再准入新作业”，保留必要稳定捕获和取消屏障。先检查现有去重是否已覆盖，再补真实缺口；不额外添加固定 debounce，不放宽斩杀/RNG 敏感性。旧请求已完成且独立验证的纯值可以保留在合适缓存，但旧 worker 不得发布路线。
+
+### 12.4 暂不优先的方案
+
+- **GPU、换 MCTS/A\* 主引擎**：当前是带 Hook/Choice/COW/路径目标的对象模拟，尚无批量纯计算热点或替代算法质量证据；迁移成本不能当收益。
+- **SSD 全搜索图、恢复旧 frontier**：前者未证明热缓存受容量限制，后者已有低 overlap 证据；现有磁盘路线缓存不等于可恢复模拟图。
+- **增加队友情景预热**：默认 local-core 不依赖实验预测，F0 exact hit 尚不足以开放 F1；可能增加无用工作。
+- **提高 DOP、换更快 CPU**：DOP 已存在，应以真实墙钟/GC/帧时间选择，Host 与 Client 同机尤其要计入竞争；本轮不改设置，不给硬件购买建议。
+- **缩 Beam、少算药水/下一回合、放松 RNG 校验**：改变搜索覆盖或正确性，不能作为同质量提速验收。局部 lethal 搜索也要先证明现有候选确实漏解，不能固定追加开销。
+
+### 12.5 测量、验收与退出条件
+
+把三个目标分开：**首次合格推荐更早、最终结果更早、每次队友变化浪费更少**。已有前台发布改善不等于整场搜索吞吐提升。
+
+| 对照 | 记录与通过条件 |
+|---|---|
+| 固定工作、缓存/热点改动 | 同输入、语义、成员、DOP 和充足不截断时间；比较完整路线、质量、边界及逻辑展开工作。允许真实 replay 数降低，另计逻辑请求/实际模拟/命中，避免把缓存计数冒充工作消失 |
+| 固定墙钟 | 同预算比较完整胜利、死亡/救命、适用累计战损、奖励/遗物/药水及结束回合；不能以 CurrentTurn 结果较低的短期损失取代长路线比较 |
+| 多人响应 | 从稳定新根到当前 epoch 首次合格发布/最终发布的 p50/p95；按 RNG、目标死亡、斩杀、普通伤害分类并报告样本数；记录取消次数、取消后耗时和未采用工作 |
+| 缓存净收益 | 实际省掉的动作模拟成本减去构键、完整校验、保存、首验、Fork 和重新 Snapshot 成本；记录容量、拒绝、峰值保留内存及 GC，不只报 hit rate |
+| 游戏体验 | 主线程帧 p95/p99、卡顿与 GC，Host/Client 同机资源竞争；worker elapsed_sum 与嵌套 phase 不可相加当总墙钟 |
+| 正确性 | 新旧逐状态/RNG/history 差分、Fork 隔离、过期发布/部署为 0；有冲突拒绝对应 key，未知语义走正常模拟，保留诊断 |
+
+S0 先选少量有明确边界的样本：冷根、RNG-only 新根、长药水尾部、抽牌/Choice 密集和斩杀线连续变化。扩展现有 [U0U1PinnedHarness](../tools/U0U1PinnedHarness/Program.cs)、[固定输入对照](../tools/compare-h1-fixed-input.ps1) 与 [PerformanceCandidateProbes](../tools/PerformanceCandidateProbes/Program.cs)，不新建 benchmark 项目。微测只用于定位，生产收益以完整请求为准；ABBA clean-process 对照记录运行环境、JIT/热缓存状态和分原因样本数。量测会改变 DOP 或详细诊断路径时，使用等价配置对照，并单独报告常规模式。
+
+缓存开关且提交调度相同时应有相同结果；调度/等价排列裁剪须另验合法性、质量、retention 和覆盖，不能仅看分数相同。Pinned/headless 与真实 Host/Client 分别报告；最新恢复项没有实机证据前继续 UNVERIFIED。净收益不正、质量倒退、内存/帧时间恶化或命中不足时停止该方向，不靠放宽键、增加预算补成绩。
+
+### 12.6 后续可复制的第一项任务
+
+> 按 §12 只执行 S0：核对当前 HEAD、交接和生产配置，先从既有可复现输入及性能入口分解冷根、RNG-only 新根和长 supplemental 的完整请求耗时。使用现有工具，不改求解语义、预算、部署或生产默认。区分逻辑转移与实际模拟，量测各成员重复 parent/action 及构键/校验/Fork/Snapshot 开销；没有证据就标未知。输出一份最小热点表，并只选择一个有净收益证据的 S1/S2/S3/S4 后续边界。临时数据放项目 .local；不使用子智能体，不代用户操作游戏 GUI。此任务卡供以后授权，本轮仅提交计划，没有运行采集、构建或游戏。
