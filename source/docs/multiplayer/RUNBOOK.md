@@ -369,6 +369,11 @@ continuation 实机验证覆盖严格续用、失效回退及新根路线重放�
 - **RouteReplay**：高血战斗中 Client 正常执行，Host 只打纯格挡牌并结束，以观察招架盾等产生的 Targets-only 偏差。要求实际出现新根 replay accepted、完整请求只有一个零展开 RouteReplay 成员、保留评估范围，以及新路线重新授权后的逐动作原生部署和 Safe EndTurn。未触发或未部署保留 UNVERIFIED；不放宽严格状态/RNG gate。此入口验证新根搜索恢复，执行仍为本地 Safe Execute。
 - **TargetDeath**：Client 执行 T1 后，Host 击杀一个敌人并保留其他敌人，再结束回合；Client 等 T2 新根搜索后执行。验证 strict roster subset、旧 seed 因失效动作安全截断、独立恢复及存活目标的原生部署。Client T2 Safe EndTurn 与授权清除完成后即可收集，不要求 Host 再结束 T2。仅覆盖实际观察的 partial seed 恢复，不代表省去主搜索或已实战胜利。
 
+S1 同回合专项另按实际 journal/native 事件审计，不套用要求下一回合的 Reactive Carry B 或禁止自动 EndTurn 的旧 MP2B normal smoke：
+
+- **斩杀窗口**：单敌 HP+格挡 ≤35% 最大 HP、仍存活且 Client 已有路线时，Host 非致命伤害后保持回合；核对前后窗口、本地状态、伤害归属、旧路线失效、新根/新授权、原生部署与 Safe EndTurn。当前 FABRICATOR 会话已核对，详情见 [当前交接](../CODEX_HANDOFF.md#s1-斩杀窗口公开伤害失效新根搜索与部署已核对)。
+- **显式采用重复失效**：Client 搜索中点击“采用当前路线”，Host 在采用/恢复期间连续两次推进共享 RNG 并保持回合。要求同一采用意图的两次独立失效、各次新根恢复、最终新授权部署；只点击采用、只触发一次或仅普通重算均不计完成。当前 UNVERIFIED。
+
 验证命令：
 
 ~~~powershell

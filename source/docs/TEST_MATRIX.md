@@ -49,6 +49,8 @@ CI 只能证明其实际执行的层级；没有日志/steps 的 runner 失败�
 | Safe Auto 连续 3 本地回合 | PASS |
 | Carry Ranking R1 | PASS |
 | Carry Ranking R2 decisive | UNVERIFIED |
+| S1 斩杀窗口公开伤害 → 新根重算 → 新授权部署 | 定向实机审计通过，见当前交接；不等同于 MP2B normal / Reactive Carry B |
+| S1 显式采用后的重复 RNG 失效恢复 | UNVERIFIED |
 | MultiplayerOnly runtime boundary | UNVERIFIED |
 | Tag Team 原生双 Client 语义 | UNVERIFIED |
 | TAG_TEAM Safe Execute whitelist | NOT ENABLED |

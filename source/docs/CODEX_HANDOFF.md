@@ -239,7 +239,13 @@ T1/T2/T3 分别部署 8/2/2 张本地牌，各有新 request/route 授权、逐�
 
 `TargetDeath`、`Reactive Carry B -RequestId 13`、`Joint Mismatch` 均 PASS；新 validator 从 fresh marker 分别读取搜索代次与路线代次，避免跨战斗后 29/2 被误认为同一计数器。合成 plain/JSON、独立代次、替换敌人、死亡目标、未截断 seed、旧授权及错误账本反例通过，上一 Targets-only 实机日志回归仍 PASS。两个请求为 11256/110414、19256/159254 expanded/transitions；前者 2 Completed / 1 Canceled，后者 4 Completed，独立 E0、全部阶段与 Snapshot 分区守恒。两端 Graceful 后 12660 行 JSON 完整、error=0，6 次所选路线的 97 步已记录标量一致；归档 CRC 与 6 组四类状态产物通过，恢复仍 UNVERIFIED。证据在 `.local/s1-target-death-live/`；本轮仍运行主搜索，不是零展开 replay 或提速证明。
 
-下一步只验证斩杀窗口的公开伤害重算：选单敌战斗，把敌人 HP+格挡降到最大 HP 的约 1/3 并保持存活；Client 方案出现后，Host 再造成一次非致命伤害并保持回合，Client 等自动重算后执行。Agent 核对 in_lethal_window、route invalidation、新根/授权及部署；未进入窗口不计 PASS。显式采用重复失效仍待后续专项；预算、DOP、GC、缓存与能力默认不变。
+### S1 斩杀窗口：公开伤害失效、新根搜索与部署已核对
+
+同一 DLL 会话 `028f45b262b04d2bb4666f42ba70275c`（FABRICATOR_NORMAL）中，Host 的 MIND_BLAST 使存活敌人 ID 2 从 126/360 降到 113/360，格挡为 0，前后均 `in_lethal_window=true`。Client 本地状态与已记录 RNG 不变；公开打牌同时改变 HC 历史，因此不宣称纯 HP-only stamp 等价。旧路线失效，搜索 generation 11 / route generation 4 从新根产出不同路线；新 request 4 授权部署 6 张牌，逐动作原生校验、Safe EndTurn 和授权清除完整。
+
+定向 journal/native 断言审计通过，两端 Graceful 后 5939 行 JSON 完整、error=0；4 请求全部成员、阶段及 Snapshot 分区守恒，保留实际 Canceled/Disposed。新根请求首前台 5.007s、墙钟 6.741s，不能与不同输入比较为提速。7 次所选路线共 72 步已记录标量一致，归档 CRC 与 6 组四类状态产物通过，恢复仍 UNVERIFIED。证据与审计在 `.local/s1-lethal-window-live/`，journal SHA256 `72448b568e6ec81131b93746bdbc9632b844ea6ad7a6273fe81309b9dce62fdc`。旧 MP2B normal smoke 禁止自动 EndTurn，Reactive Carry B 要求下一回合 fresh search；本样本不满足这两种入口范围，保留其输出，不把它们报为 PASS。
+
+下一步仅做显式采用后的重复 RNG 失效专项：Client 搜索出现可采用路线时点击“采用当前路线”，Host 在采用/恢复期间连续做两次推进共享 RNG 的动作并保持回合；Client 等恢复后执行。验收要求同一采用意图经历两次独立失效，从各自新根重放/合法回退，旧授权不执行，最终新授权部署。未触发重复失效保留 UNVERIFIED；预算、DOP、GC、缓存与能力默认不变。
 
 ## 阶段 D 当前实现
 
