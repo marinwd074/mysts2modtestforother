@@ -233,7 +233,13 @@ T1/T2/T3 分别部署 8/2/2 张本地牌，各有新 request/route 授权、逐�
 
 此轮证明两次实际跳过完整搜索并正确部署，不是通用后态缓存或固定输入速度 A/B，不代表 S1 全项完成。既有 Joint validator 新增 RouteReplay 模式，按同一日志的请求窗口核对 Targets-only 新根、唯一零展开 replay ledger、评估范围、新路线授权及原生动作/结束回合；合成正例和旧授权、错请求/回合、混合账本、非法质量及缺失证据反例通过。
 
-下一步验证目标死亡后的新根恢复：进入至少两个敌人的自然战斗，Client 执行 T1 后，Host 击杀其中一个并留另一个存活，再结束回合；Client 等待 T2 搜索后执行本回合。Agent 检查 roster subset 准入、失效目标截断/回退及新授权，不要求强行触发 Targets-only。斩杀窗口及显式采用重复失效仍待后续专项；预算、DOP、GC、缓存与能力默认不变。
+### S1 目标死亡：截断旧 seed、新根恢复与部署 PASS
+
+同一 DLL 会话 `3217e9e264b54bc5b27e9392354570df`（SCROLLS_OF_BITING_NORMAL）中，T2 敌人集合从 combat ID 2/3/4/5 减为 2/3/4。严格续用拒绝后，R1 同战斗/玩家与 roster subset 准入为 none；10 个旧动作仅重放前 5 个，第 6 个 TAUNT 指向已死亡 ID 5，以 action_unavailable 截断。新根生成独立候选，最终选择 seed 派生的预计完整胜利、12 战损路线；新路线 TAUNT 指向存活 ID 3。T2 实际部署 12 张牌，全部目标属于新集合，Safe EndTurn 与清除新授权完整。Host 未结束 T2 已足够验收此边界，不代表后续胜利。
+
+`TargetDeath`、`Reactive Carry B -RequestId 13`、`Joint Mismatch` 均 PASS；新 validator 从 fresh marker 分别读取搜索代次与路线代次，避免跨战斗后 29/2 被误认为同一计数器。合成 plain/JSON、独立代次、替换敌人、死亡目标、未截断 seed、旧授权及错误账本反例通过，上一 Targets-only 实机日志回归仍 PASS。两个请求为 11256/110414、19256/159254 expanded/transitions；前者 2 Completed / 1 Canceled，后者 4 Completed，独立 E0、全部阶段与 Snapshot 分区守恒。两端 Graceful 后 12660 行 JSON 完整、error=0，6 次所选路线的 97 步已记录标量一致；归档 CRC 与 6 组四类状态产物通过，恢复仍 UNVERIFIED。证据在 `.local/s1-target-death-live/`；本轮仍运行主搜索，不是零展开 replay 或提速证明。
+
+下一步只验证斩杀窗口的公开伤害重算：选单敌战斗，把敌人 HP+格挡降到最大 HP 的约 1/3 并保持存活；Client 方案出现后，Host 再造成一次非致命伤害并保持回合，Client 等自动重算后执行。Agent 核对 in_lethal_window、route invalidation、新根/授权及部署；未进入窗口不计 PASS。显式采用重复失效仍待后续专项；预算、DOP、GC、缓存与能力默认不变。
 
 ## 阶段 D 当前实现
 
