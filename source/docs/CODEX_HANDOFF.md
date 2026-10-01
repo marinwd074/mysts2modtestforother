@@ -215,7 +215,7 @@ Release 0 warning / 0 error；134932 个标量案例、462 个原生关键词上
 
 手动重算 SnapshotEvaluation 累计 6.578s，其中 Fingerprint 2.202s（嵌套 ProjectedShuffle 1.132s）、SnapshotStrategicEffects 1.467s。两请求 no_gc_starts 为 0/3，工作和退出范围也不同，不能作为固定工作 A/B。退出检查点 queued=True、提前采集标记及 FIFO checkpoints=6 收尾无失败，full=False 的归档/恢复仍 UNVERIFIED。实机净收益、自然输入质量及部署正确性仍 UNVERIFIED，通用后态缓存继续默认 false。
 
-### S1 实机：跨回合能量隔离通过，新根完整重放仍待验收
+### S1 实机：跨回合能量隔离通过
 
 `cc9bdc0` owned Lab 会话 `118e77086e894e23b13c3ba07a6ebdd8` 已完成 Client 预热重启及双端 Graceful 收尾。实战进入 T3 后 2.122s，旧 T2 搜索成功回放 48 步；T2 EndTurn 后 expected/actual energy 均为 4，3 次 Burning Pact 选牌成功。15 次所选路线回放、283 步已记录 HP/block/energy/stars/hand-count 全部一致，5460 行 JSON 完整、error=0。覆盖上轮 live 回合推进导致能量 4→5 的边界，但不代表完整后态等价或旧 47 步动作逐项复现。
 
@@ -225,7 +225,15 @@ T1 实际部署 8 张牌、原生 Safe EndTurn 并清除旧授权；T2 因本地
 
 生产能量查询用两处原生 ModifyMaxEnergy Prefix，只在线程内预测作用域读取分支回合，保留原 Hook 顺序；真实调用不变、无新增 AbstractModel。144 次原生对照、1280 次 DOP=4 查询及 4 次完整 EndTurn、相关回归/Release/结构门禁通过；启动 64 applied / 0 ignored / 0 failed。异常成员记 Faulted、重复 Dispose 只贡献一次。旧实机失败与原生反例保留在 `.local/reroot-runtime-acceptance/`，本轮核对及完整归档在 `.local/turn-energy-runtime-verify/`；归档 CRC、6 组 checkpoint/replay-state/native-state/run-state 完整性通过，恢复仍 UNVERIFIED。
 
-下一步只验证 S1 新根路线重放及后续本地部署：自然高血战斗中 Client 按建议执行回合，Host 每回合仅打纯格挡牌并结束，连续观察 3 个回合；Agent 核对实际 reject 流、replay 准入/质量/回退及新授权。若未自然触发 Targets-only，则保留 UNVERIFIED，不放宽 gate 或把 R1 seed 当完整重放。目标死亡、斩杀窗口、显式采用重复失效专项随后逐项处理；预算、DOP、GC、缓存与能力默认不变。
+### S1 Targets-only：新根重放及后续部署 PASS
+
+同一生产 DLL 的会话 `d21bb8ccc2c54f9bae6fd186918093cf` 中，T2/T3 敌人 HP 比预测各低 6，local-core 仅以 `non_shuffle_rng_changed:targets` 拒绝严格续用。新根重放分别接受 6/3 动作、5.1/1.7ms、`quality=equivalent_partial`，预计战损均 16；完整请求各只有 1 个 Completed RouteReplay 成员、0 expanded / 6或3 transitions。fresh-search marker 到结果路线 capture 为 371/57ms，包含恢复编排但不包含 GUI 展示；纯 replay 耗时不能当完整响应时间。
+
+T1/T2/T3 分别部署 8/2/2 张本地牌，各有新 request/route 授权、逐动作原生校验、Safe EndTurn 与清除授权。`RouteReplay -MinReplays 2`、`Reactive Carry B -RequestId 1`、`Reactive Carry C` 和 `Joint Mismatch` 均 PASS。T4 旧路线已耗尽，正常重新搜索；保留 2 Completed / 1 Canceled / 2 Disposed，未把提前退出记为完成。4 请求全部成员、阶段及 Snapshot 分区守恒；两端 Graceful 后 6698 行 JSON 完整、error=0，10 次所选路线回放无已记录标量差异。完整归档 CRC 和 6 组四类状态产物通过，恢复仍 UNVERIFIED；证据在 `.local/s1-route-replay-live/`。
+
+此轮证明两次实际跳过完整搜索并正确部署，不是通用后态缓存或固定输入速度 A/B，不代表 S1 全项完成。既有 Joint validator 新增 RouteReplay 模式，按同一日志的请求窗口核对 Targets-only 新根、唯一零展开 replay ledger、评估范围、新路线授权及原生动作/结束回合；合成正例和旧授权、错请求/回合、混合账本、非法质量及缺失证据反例通过。
+
+下一步验证目标死亡后的新根恢复：进入至少两个敌人的自然战斗，Client 执行 T1 后，Host 击杀其中一个并留另一个存活，再结束回合；Client 等待 T2 搜索后执行本回合。Agent 检查 roster subset 准入、失效目标截断/回退及新授权，不要求强行触发 Targets-only。斩杀窗口及显式采用重复失效仍待后续专项；预算、DOP、GC、缓存与能力默认不变。
 
 ## 阶段 D 当前实现
 

@@ -7,10 +7,13 @@ param(
     [string[]]$LogPath,
 
     [Parameter(Mandatory = $true)]
-    [ValidateSet('Reuse', 'Mismatch')]
+    [ValidateSet('Reuse', 'Mismatch', 'RouteReplay')]
     [string]$Mode,
 
     [string]$ExpectedRejectReason = 'remote_public_mismatch',
+
+    [ValidateRange(1, 20)]
+    [int]$MinReplays = 1,
 
     [string]$OutputPath = '',
 
@@ -99,7 +102,140 @@ $validations = @($records | Where-Object {
         $_.Text -match '\[CombatSolver/Test\] MP_LOCAL_XTURN_CONTINUATION_VALIDATE\b'
     })
 
-if ($validations.Count -eq 0) {
+if ($Mode -eq 'RouteReplay') {
+    $replays = @($records | Where-Object {
+        $_.Text -match '\[CombatSolver/Test\] MP_LOCAL_XTURN_ROUTE_REPLAY\b' -and
+        (Get-Token $_.Text 'status') -eq 'accepted'
+    })
+    Add-Check 'acceptedReplayCount' $(if ($replays.Count -ge $MinReplays) {'PASS'} else {'UNVERIFIED'}) '' "Observed $($replays.Count); required $MinReplays. Rejected or absent replays do not prove acceptance."
+    foreach ($replay in $replays) {
+        $localRecords = @($records | Where-Object Path -eq $replay.Path)
+        $request = @($localRecords | Where-Object {
+            $_.Index -lt $replay.Index -and $_.Text -match '\] SEARCH_REQUEST generation='
+        } | Select-Object -Last 1)
+        if ($request.Count -ne 1) {
+            Add-Check 'replayRequestIdentity' FAIL (Format-Evidence $replay) 'Accepted replay has no preceding request in the same log.'
+            continue
+        }
+        $generation = Get-Token $request[0].Text 'generation'
+        $turn = Get-Token $request[0].Text 'turn'
+        $next = @($localRecords | Where-Object {
+            $_.Index -gt $request[0].Index -and $_.Text -match '\] SEARCH_REQUEST generation='
+        } | Select-Object -First 1)
+        $endIndex = if ($next.Count) { $next[0].Index } else { [int]::MaxValue }
+        $window = @($localRecords | Where-Object { $_.Index -gt $request[0].Index -and $_.Index -lt $endIndex })
+        $validation = @($validations | Where-Object {
+            $_.Path -eq $replay.Path -and $_.Index -lt $request[0].Index -and
+            (Get-Token $_.Text 'turn') -eq $turn
+        } | Select-Object -Last 1)
+        $fresh = @($localRecords | Where-Object {
+            $_.Index -lt $request[0].Index -and $_.Text -match '\] MP_REACTIVE_FRESH_SEARCH\b' -and
+            (Get-Token $_.Text 'generation') -eq $generation -and (Get-Token $_.Text 'turn') -eq $turn
+        } | Select-Object -Last 1)
+        $rootValid = $validation.Count -eq 1 -and $fresh.Count -eq 1
+        if ($rootValid) {
+            $oldRoute = Get-Token $validation[0].Text 'route_identity'
+            $rejected = @($localRecords | Where-Object {
+                $_.Index -gt $validation[0].Index -and $_.Index -lt $request[0].Index -and
+                $_.Text -match '\] MP_LOCAL_XTURN_CONTINUATION_REJECTED\b' -and
+                (Get-Token $_.Text 'turn') -eq $turn -and (Get-Token $_.Text 'route_identity') -eq $oldRoute -and
+                (Get-Token $_.Text 'reason') -eq 'local_state_mismatch'
+            })
+            $actualWorld = Get-LongToken $validation[0].Text 'actual_world_version'
+            $sourceWorld = Get-LongToken $validation[0].Text 'source_world_version'
+            $minimumWorld = Get-LongToken $validation[0].Text 'minimum_world_version'
+            $rootValid = $rejected.Count -eq 1 -and -not [string]::IsNullOrWhiteSpace($oldRoute) -and
+                (Get-Token $validation[0].Text 'local_core_reject_reason') -eq 'non_shuffle_rng_changed:targets' -and
+                (Get-Token $validation[0].Text 'allow_living_enemy_hp_decrease') -eq 'true' -and
+                $null -ne $actualWorld -and $null -ne $sourceWorld -and $null -ne $minimumWorld -and
+                $actualWorld -gt [Math]::Max($sourceWorld, $minimumWorld) -and
+                (Get-LongToken $fresh[0].Text 'world_version') -eq $actualWorld -and
+                (Get-Token $fresh[0].Text 'fresh_probe') -eq 'true' -and
+                (Get-Token $fresh[0].Text 'fresh_capture') -eq 'true' -and
+                (Get-Token $fresh[0].Text 'after_safe_end_turn') -eq 'true' -and
+                $null -ne (Get-LongToken $fresh[0].Text 'previous_end_turn_request_id') -and
+                (Get-Token $fresh[0].Text 'cross_turn_reuse') -eq 'false'
+        }
+        Add-Check "targetsFreshRoot:$generation" $(if ($rootValid) {'PASS'} else {'FAIL'}) (Join-Evidence @($validation + $fresh)) 'Requires Targets-only admission and a newer captured root; strict continuation remains rejected.'
+
+        $ledger = @($window | Where-Object { $_.Index -ge $replay.Index -and $_.Text -match '\] SEARCH_REQUEST_PHASE ' })
+        $workValid = $ledger.Count -eq 1 -and (Get-Token $replay.Text 'fresh_root') -eq 'true' -and
+            (Get-LongToken $replay.Text 'expanded') -eq 0 -and
+            (Get-Token $replay.Text 'full_search_skipped') -eq 'true' -and
+            (Get-Token $replay.Text 'quality') -in @('equivalent_partial','acceptable_victory','explicit_adoption_victory')
+        if ($workValid) {
+            $metrics = $ledger[0].Text.Substring($ledger[0].Text.IndexOf('{')) | ConvertFrom-Json -ErrorAction Stop
+            $workValid = $metrics.RecordedSolverCount -eq 1 -and $metrics.Members.Count -eq 1 -and
+                $metrics.Members[0].Kind -eq 'RouteReplay' -and $metrics.Members[0].Outcome -eq 'Completed' -and
+                $metrics.ExpandedNodes -eq 0 -and $metrics.Members[0].Work.ExpandedNodes -eq 0 -and
+                $metrics.LogicalTransitions -eq (Get-LongToken $replay.Text 'actions') -and
+                $metrics.Members[0].Work.TransitionCount -eq $metrics.LogicalTransitions -and $metrics.LogicalTransitions -gt 0
+        }
+        Add-Check "fullSearchSkipped:$generation" $(if ($workValid) {'PASS'} else {'FAIL'}) (Join-Evidence @(@($replay) + $ledger)) 'The completed request ledger must contain only the zero-expansion RouteReplay member.'
+        $forbidden = @($window | Where-Object {
+            $_.Text -match '\b(SEARCH_FAILURE|MP2B_DEPLOY_ABORTED|FAIL_CLOSED)\b|custom_network_api_used=true\b' -or
+            ($_.Text -match 'MP_LOCAL_XTURN_CONTINUATION_REUSED\b' -and (Get-Token $_.Text 'turn') -eq $turn)
+        })
+        Add-Check "noStaleDeployment:$generation" $(if ($forbidden.Count -eq 0) {'PASS'} else {'FAIL'}) (Join-Evidence $forbidden)
+
+        $capture = @($window | Where-Object {
+            $_.Index -gt $replay.Index -and $_.Text -match '\] SEARCH_RESULT_ROUTE_CAPTURE\b' -and
+            (Get-Token $_.Text 'generation') -eq $generation
+        } | Select-Object -First 1)
+        $deploy = @($window | Where-Object {
+            $_.Index -gt $replay.Index -and $_.Text -match '\] MP2B_DEPLOY_START\b' -and
+            (Get-Token $_.Text 'turn') -eq $turn -and (Get-Token $_.Text 'route_generation') -eq $generation
+        } | Select-Object -First 1)
+        if ($capture.Count -ne 1 -or $deploy.Count -ne 1) {
+            Add-Check "replayDeployment:$generation" UNVERIFIED (Join-Evidence @($capture + $deploy)) 'Accepted replay still needs its captured result and actual deployment.'
+            continue
+        }
+        $requestId = Get-LongToken $deploy[0].Text 'request_id'
+        $route = Get-Token $capture[0].Text 'route_identity'
+        $authorized = $rootValid -and $capture[0].Index -lt $deploy[0].Index -and
+            (Get-Token $deploy[0].Text 'new_authorization') -eq 'true' -and $null -ne $requestId -and
+            -not [string]::IsNullOrWhiteSpace($route) -and
+            $requestId -gt (Get-LongToken $fresh[0].Text 'previous_end_turn_request_id') -and
+            (Get-Token $deploy[0].Text 'route_identity') -eq $route -and
+            $route -ne (Get-Token $validation[0].Text 'route_identity') -and
+            (Get-LongToken $deploy[0].Text 'search_world_version') -ge $actualWorld
+        if ((Get-Token $replay.Text 'quality') -eq 'equivalent_partial') {
+            $authorized = $authorized -and (Get-Token $capture[0].Text 'deployment_scope') -eq 'SearchCompletion' -and
+                (Get-Token $capture[0].Text 'route_scope') -eq 'PartialLocalCrossTurnProjection'
+        }
+        Add-Check "renewedAuthorization:$generation" $(if ($authorized) {'PASS'} else {'FAIL'}) (Join-Evidence @($capture + $deploy)) 'Deployment must use the new route identity and preserve the partial evaluation scope.'
+        $deployment = @($window | Where-Object {
+            $_.Index -gt $deploy[0].Index -and (Get-LongToken $_.Text 'request_id') -eq $requestId
+        })
+        $reconciled = @($deployment | Where-Object { $_.Text -match '\] MP2B_ACTION_RECONCILED\b' })
+        $end = @($deployment | Where-Object { $_.Text -match '\] MP2B_SAFE_END_TURN_ACCEPTED\b' })
+        $nativeEnd = @($deployment | Where-Object { $_.Text -match 'NATIVE_ACTION_CAPTURED\b.*type=EndPlayerTurnAction\b' })
+        $safe = @($deployment | Where-Object {
+            $_.Text -match '\] MP2B_END_TURN_REVALIDATED\b' -and (Get-Token $_.Text 'decision') -eq 'Safe'
+        })
+        $actionCount = Get-LongToken $deploy[0].Text 'action_count'
+        $complete = $null -ne $actionCount -and $actionCount -gt 0 -and $reconciled.Count -eq $actionCount -and
+            $end.Count -eq 1 -and $nativeEnd.Count -eq 1 -and $safe.Count -eq 1
+        if ($complete) {
+            for ($i = 0; $i -lt $reconciled.Count; $i++) {
+                $complete = $complete -and (Get-LongToken $reconciled[$i].Text 'action_index') -eq $i -and
+                    (Get-Token $reconciled[$i].Text 'native_action_captured') -eq 'true' -and
+                    (Get-Token $reconciled[$i].Text 'action_queue_idle') -eq 'true' -and
+                    (Get-Token $reconciled[$i].Text 'decision') -in @('SafeToContinue','ExpectedLocalChange') -and
+                    $reconciled[$i].Index -lt $safe[0].Index
+            }
+            $complete = $complete -and $safe[0].Index -lt $nativeEnd[0].Index -and $nativeEnd[0].Index -lt $end[0].Index -and
+                (Get-Token $end[0].Text 'session_cleared') -eq 'true' -and
+                (Get-Token $end[0].Text 'authorization_cleared') -eq 'true' -and
+                (Get-Token $end[0].Text 'automatic_end_turn') -eq 'true' -and
+                (Get-Token $end[0].Text 'custom_network_api_used') -eq 'false' -and
+                (Get-LongToken $end[0].Text 'action_count') -eq $actionCount -and
+                (Get-Token $end[0].Text 'turn') -eq $turn -and
+                (Get-Token $end[0].Text 'route_identity') -eq $route
+        }
+        Add-Check "nativeDeploymentCompleted:$generation" $(if ($complete) {'PASS'} else {'FAIL'}) (Join-Evidence @($reconciled + $safe + $nativeEnd + $end)) 'Requires each native local action, Safe EndTurn, and cleared authorization for this request.'
+    }
+} elseif ($validations.Count -eq 0) {
     Add-Check 'validationObserved' UNVERIFIED '' 'No Joint continuation validation marker was observed.'
 } else {
     $validation = $validations[0]
@@ -227,12 +363,14 @@ $result = [ordered]@{
     mode = $Mode
     status = $status
     expectedRejectReason = if ($Mode -eq 'Mismatch') { $ExpectedRejectReason } else { $null }
+    minimumReplays = if ($Mode -eq 'RouteReplay') { $MinReplays } else { $null }
     validatedUtc = [DateTimeOffset]::UtcNow.ToString('O')
     logFiles = @($resolvedLogs)
     checks = @($checks)
     limitations = @(
         'This validator proves CombatSolver journal ordering and continuation identity; it does not replace visual Host/Client confirmation.',
-        'Exact continuation correctness also depends on the runtime live/predicted stamp implementation, which includes local combat state and combat RNG streams.'
+        'Exact continuation correctness also depends on the runtime live/predicted stamp implementation, which includes local combat state and combat RNG streams.',
+        'RouteReplay checks Targets-only acceptance, request work, evaluation scope and deployment; logged quality labels do not independently prove quality formulas or general speedup.'
     )
 }
 

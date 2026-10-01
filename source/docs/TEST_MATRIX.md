@@ -15,7 +15,9 @@ CI 只能证明其实际执行的层级；没有日志/steps 的 runner 失败�
 
 `U0U1PinnedHarness rng-restore` 对照旧 RNG 还原的计数器、状态、后续随机值及父状态隔离；完整请求对照复用 `request-hydration-benchmark-off`，高计数器压力夹具为 `multi-hit-high-counter`。不替代实机搜索或退出取证验证。
 
-`U0U1PinnedHarness turn-based-energy` 对照 PaelsFlesh / Bread 原生最大能量：144 次根/未来/live 回合及熔化查询、1280 次 DOP=4 查询、4 次完整 EndTurn 重放，核对全分支状态/RNG及真实回合隔离。`request-hydration` 另覆盖异常成员 Faulted、释放与重复 Dispose 的单次贡献。`tools/multiplayer-lab/test-joint-continuation-validator.ps1` 覆盖 plain/JSON journal 与末尾 reason 的正确解析及错误原因拒绝；这些合同不替代修复构建的自然多人重放验收。
+`U0U1PinnedHarness turn-based-energy` 对照 PaelsFlesh / Bread 原生最大能量：144 次根/未来/live 回合及熔化查询、1280 次 DOP=4 查询、4 次完整 EndTurn 重放，核对全分支状态/RNG及真实回合隔离。`request-hydration` 另覆盖异常成员 Faulted、释放与重复 Dispose 的单次贡献。
+
+`tools/multiplayer-lab/test-joint-continuation-validator.ps1` 覆盖 plain/JSON、reason 解析及错误原因拒绝；RouteReplay 模式另检查同日志/请求的新根与完整账本、评估范围、新授权及原生部署。反例包含错请求/回合、旧授权/路线、混合成员、无质量证明、动作顺序、未清授权及缺失证据；只有真实 Host/Client journal 的对应模式通过才构成实机证据。入口见 [多人 RUNBOOK](multiplayer/RUNBOOK.md#joint-forecast-continuation-smoke)。
 
 `request-hydration-benchmark-off --measure` 另核对 Snapshot 全调用与子阶段调用数、不重叠阶段上界、结果内部子阶段和 worker 汇总；固定输入包含 shared-audit / draw-repeat / multi-hit，三敌覆盖 DOP=1/4。诊断开关对照验证完整根/路线/最终状态/质量/工作一致，不作为新增默认门禁或提速证明。
 
