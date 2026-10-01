@@ -215,7 +215,17 @@ Release 0 warning / 0 error；134932 个标量案例、462 个原生关键词上
 
 手动重算 SnapshotEvaluation 累计 6.578s，其中 Fingerprint 2.202s（嵌套 ProjectedShuffle 1.132s）、SnapshotStrategicEffects 1.467s。两请求 no_gc_starts 为 0/3，工作和退出范围也不同，不能作为固定工作 A/B。退出检查点 queued=True、提前采集标记及 FIFO checkpoints=6 收尾无失败，full=False 的归档/恢复仍 UNVERIFIED。实机净收益、自然输入质量及部署正确性仍 UNVERIFIED，通用后态缓存继续默认 false。
 
-下一步回到加速计划 S1：先采一轮当前构建的跨回合队友公开行动样本。用户在 Client 点击“执行本回合”，Host 正常打牌并结束回合，等待 Client 下一回合计划；若执行停在不支持边界，先记录原因。核对 fresh Probe/Capture、全部 RNG 差异、新根 route replay 的 accepted/rejected 与回退、旧授权失效及真实部署记录。一次普通跨回合不自动闭合 RNG-only、Targets、目标死亡、斩杀窗口或显式采用重复失效的全部验收。沿用现有 Lab/验证器，临时记录放 `.local/reroot-runtime-acceptance/`；不改预算、DOP、GC、调度或能力默认。
+### S1 实机：跨回合能量隔离通过，新根完整重放仍待验收
+
+`cc9bdc0` owned Lab 会话 `118e77086e894e23b13c3ba07a6ebdd8` 已完成 Client 预热重启及双端 Graceful 收尾。实战进入 T3 后 2.122s，旧 T2 搜索成功回放 48 步；T2 EndTurn 后 expected/actual energy 均为 4，3 次 Burning Pact 选牌成功。15 次所选路线回放、283 步已记录 HP/block/energy/stars/hand-count 全部一致，5460 行 JSON 完整、error=0。覆盖上轮 live 回合推进导致能量 4→5 的边界，但不代表完整后态等价或旧 47 步动作逐项复现。
+
+三个请求分别为 13363/61561、8785/39115、10105/49062 expanded/transitions；5/3/5 个成员均 Completed，独立 E0 工作、全部阶段及 Snapshot 分区守恒，全部 footer 早于 Graceful stop。首前台 5.073/5.123/4.340s、墙钟 9.618/7.248/8.842s；输入与工作量不同，不构成提速 A/B。
+
+T1 实际部署 8 张牌、原生 Safe EndTurn 并清除旧授权；T2 因本地 HP 预测 68 / 实际 81，以 `field_changed:hp` 拒绝严格续用，从新根做 2 动作 R1 seed 后搜索。`Reactive Carry B` 与 `Joint Mismatch`（local_state_mismatch）均 PASS。未触发 `MP_LOCAL_XTURN_ROUTE_REPLAY status=accepted`，因此 Targets-only 跳过完整搜索、后续部署及 S1 全项仍 UNVERIFIED。
+
+生产能量查询用两处原生 ModifyMaxEnergy Prefix，只在线程内预测作用域读取分支回合，保留原 Hook 顺序；真实调用不变、无新增 AbstractModel。144 次原生对照、1280 次 DOP=4 查询及 4 次完整 EndTurn、相关回归/Release/结构门禁通过；启动 64 applied / 0 ignored / 0 failed。异常成员记 Faulted、重复 Dispose 只贡献一次。旧实机失败与原生反例保留在 `.local/reroot-runtime-acceptance/`，本轮核对及完整归档在 `.local/turn-energy-runtime-verify/`；归档 CRC、6 组 checkpoint/replay-state/native-state/run-state 完整性通过，恢复仍 UNVERIFIED。
+
+下一步只验证 S1 新根路线重放及后续本地部署：自然高血战斗中 Client 按建议执行回合，Host 每回合仅打纯格挡牌并结束，连续观察 3 个回合；Agent 核对实际 reject 流、replay 准入/质量/回退及新授权。若未自然触发 Targets-only，则保留 UNVERIFIED，不放宽 gate 或把 R1 seed 当完整重放。目标死亡、斩杀窗口、显式采用重复失效专项随后逐项处理；预算、DOP、GC、缓存与能力默认不变。
 
 ## 阶段 D 当前实现
 

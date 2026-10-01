@@ -16,6 +16,7 @@ internal static class U2Runtime
         "CombatSolver.BaseLibDynamicVarCloneMetadataPatch",
         "CombatSolver.RitsuDynamicVarCloneMetadataPatch",
         "CombatSolver.SimulationCardPileLookupPatch",
+        "CombatSolver.TurnBasedMaxEnergyPredictionPatch",
         "CombatSolver.RitsuFreePlayVoidIsolationPatch",
         "CombatSolver.RitsuFreePlayBoolIsolationPatch",
         "CombatSolver.RitsuFreePlayResolveIsolationPatch",

@@ -44,6 +44,7 @@ internal static class Program
         bool continuationAuditOnly = args.Length > 0 && args[0] == "continuation-audit";
         bool continuationReplayOnly = args.Length > 0 && args[0] == "continuation-replay";
         bool pendulumDrawOnly = args.Length > 0 && args[0] == "pendulum-draw";
+        bool turnEnergyOnly = args.Length > 0 && args[0] == "turn-based-energy";
         bool completionScopeOnly = args.Length > 0 && args[0] == "completion-scope";
         bool rngRestoreOnly = args.Length > 0 && args[0] == "rng-restore";
         bool strategicEnergyOnly = args.Length > 0 && args[0] == "strategic-energy";
@@ -53,7 +54,7 @@ internal static class Program
         bool requestHydrationOnly = args.Length > 0 && args[0] is "request-hydration"
             or "request-hydration-benchmark-on" or "request-hydration-benchmark-off";
         bool requestHydrationBenchmark = requestHydrationOnly && args[0] != "request-hydration";
-        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
+        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
             allowHydrationOptions: requestHydrationBenchmark);
         Directory.CreateDirectory(outputDirectory);
 
@@ -97,7 +98,7 @@ internal static class Program
                 ValidateRngRestore(outputDirectory);
                 return 0;
             }
-            if (!rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly && !rootHistoryOnly && !strategicContextOnly && !strategicEnergyOnly && !projectedShuffleOnly)
+            if (!turnEnergyOnly && !rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly && !rootHistoryOnly && !strategicContextOnly && !strategicEnergyOnly && !projectedShuffleOnly)
             {
             ValidateDarkEmbracePredictionCoverage();
             ValidateViciousStrategicValue();
@@ -221,6 +222,11 @@ internal static class Program
             {
                 ValidatePendulumDraw(combat, names, damage, captured, profile);
                 Console.WriteLine("PendulumDraw PASS (three counters, three future turns, live isolation)");
+                return 0;
+            }
+            if (turnEnergyOnly)
+            {
+                ValidateTurnBasedEnergy(combat, names, damage, captured, profile);
                 return 0;
             }
             if (continuationReplayOnly)
@@ -2618,6 +2624,119 @@ internal static class Program
             throw new InvalidOperationException(message);
     }
 
+    private static void ValidateTurnBasedEnergy(CombatState combat,
+        SolverDisplayNames names, BattleDamageSnapshot damage, SearchPolicySnapshot policy,
+        SolverSearchProfile profile)
+    {
+        Player player = LocalContext.GetMe(combat)!;
+        var live = player.PlayerCombatState!;
+        var turnProperty = live.GetType().GetProperty("TurnNumber")!;
+        int originalTurn = live.TurnNumber;
+        RelicModel flesh = ModelDb.Relic<MegaCrit.Sts2.Core.Models.Relics.PaelsFlesh>().ToMutable();
+        RelicModel bread = ModelDb.Relic<MegaCrit.Sts2.Core.Models.Relics.Bread>().ToMutable();
+        player.AddRelicInternal(flesh);
+        player.AddRelicInternal(bread);
+        int checks = 0;
+        int parallelQueries = 0;
+        try
+        {
+            foreach (var melted in new[] { (false, true), (false, false), (true, false), (true, true) })
+            {
+                flesh._isMelted = melted.Item1;
+                bread._isMelted = melted.Item2;
+                foreach (int rootTurn in new[] { 1, 2, 3 })
+                {
+                    turnProperty.SetValue(live, rootTurn);
+                    CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
+                    foreach (int advance in new[] { 0, 1, 2 })
+                    {
+                        CombatPredictionSimulator branch = root.ForkSimulator();
+                        SimulatedCombatState predicted = (SimulatedCombatState)branch.State.CombatState;
+                        for (int step = 0; step < advance; step++)
+                            predicted.AdvancePlayerTurn(player);
+                        int branchTurn = rootTurn + advance;
+                        turnProperty.SetValue(live, branchTurn);
+                        int expected = (int)MegaCrit.Sts2.Core.Hooks.Hook.ModifyMaxEnergy(combat, player, player.MaxEnergy);
+                        foreach (int liveTurn in new[] { 1, 2, 3, 5 })
+                        {
+                            turnProperty.SetValue(live, liveTurn);
+                            int actual = PersistentPowerSupport.GetModifiedMaxEnergy(predicted, player);
+                            Require(actual == expected,
+                                $"Turn energy melted={melted} root={rootTurn} branch={branchTurn} live={liveTurn}: expected {expected}, got {actual}.");
+                            Require(live.TurnNumber == liveTurn && predicted.GetPlayerTurnNumber(player) == branchTurn
+                                    && !PersistentPowerSupport.UsesPredictedMaxEnergyTurn,
+                                "Max-energy evaluation mutated live/branch turn or leaked its query scope.");
+                            checks++;
+                        }
+                    }
+                }
+                int[] expectedTurns = new int[3];
+                for (int i = 0; i < expectedTurns.Length; i++)
+                {
+                    turnProperty.SetValue(live, 2 + i);
+                    expectedTurns[i] = (int)MegaCrit.Sts2.Core.Hooks.Hook.ModifyMaxEnergy(combat, player, player.MaxEnergy);
+                }
+                turnProperty.SetValue(live, 2);
+                CombatRootSnapshot parallelRoot = CombatRootSnapshot.Capture(combat);
+                CombatPredictionSimulator[] branches = Enumerable.Range(0, 32).Select(_ => parallelRoot.ForkSimulator()).ToArray();
+                turnProperty.SetValue(live, 5);
+                Parallel.For(0, branches.Length, new ParallelOptions { MaxDegreeOfParallelism = 4 }, i =>
+                {
+                    var predicted = (SimulatedCombatState)branches[i].State.CombatState;
+                    for (int step = 0; step < i % 3; step++)
+                        predicted.AdvancePlayerTurn(player);
+                    int branchTurn = 2 + i % 3;
+                    string before = ContinuationStamp.CapturePredicted(player, branches[i], branchTurn,
+                        parallelRoot.Forecast, parallelRoot.StartTurnNumber).StateText;
+                    for (int repeat = 0; repeat < 10; repeat++)
+                    {
+                        Require(PersistentPowerSupport.GetModifiedMaxEnergy(predicted, player) == expectedTurns[i % 3]
+                                && !PersistentPowerSupport.UsesPredictedMaxEnergyTurn,
+                            "Parallel max-energy query leaked a live turn or another branch's scope.");
+                        Interlocked.Increment(ref parallelQueries);
+                    }
+                    Require(before == ContinuationStamp.CapturePredicted(player, branches[i], branchTurn,
+                            parallelRoot.Forecast, parallelRoot.StartTurnNumber).StateText,
+                        "Max-energy query changed complete branch state, including history or RNG.");
+                });
+                Require(live.TurnNumber == 5, "Parallel energy query mutated the live turn.");
+            }
+            flesh._isMelted = false;
+            bread._isMelted = false;
+            turnProperty.SetValue(live, 2);
+            CombatRootSnapshot replayRoot = CombatRootSnapshot.Capture(combat);
+            string? replayStamp = null;
+            foreach (int liveTurn in new[] { 1, 2, 3, 5 })
+            {
+                turnProperty.SetValue(live, liveTurn);
+                var solver = new CombatBeamSolver(replayRoot, names, damage,
+                    policy with { RoutePolicy = SearchRoutePolicy.MultiplayerSinglePlayerCore,
+                        CurrentTurnOnly = false, IncludeTurnSetup = false, VerifyIncrementalSearch = false },
+                    searchProfile: profile);
+                SimulationSnapshot snapshot = solver.ReplayDiagnosticPrefix([new(PlanActionKind.EndTurn, 2)]);
+                try
+                {
+                    string actual = ContinuationStamp.CapturePredicted(player, snapshot.Simulator, 3,
+                        replayRoot.Forecast, replayRoot.StartTurnNumber).StateText;
+                    Require(snapshot.BoundaryReason == SearchBoundaryReason.None
+                            && (replayStamp == null || actual == replayStamp),
+                        "Full EndTurn replay changed when only the live turn advanced.");
+                    replayStamp = actual;
+                    Require(live.TurnNumber == liveTurn && !PersistentPowerSupport.UsesPredictedMaxEnergyTurn,
+                        "EndTurn replay mutated the live turn or leaked its resource query scope.");
+                }
+                finally { snapshot.ReleaseSimulator(); }
+            }
+        }
+        finally
+        {
+            turnProperty.SetValue(live, originalTurn);
+            flesh._isMelted = false;
+            bread._isMelted = false;
+        }
+        Console.WriteLine($"TurnBasedEnergy PASS ({checks} native comparisons, {parallelQueries} DOP=4 queries, four full EndTurn replays, full branch/live isolation)");
+    }
+
     private static void ValidatePendulumDraw(CombatState combat,
         SolverDisplayNames names, BattleDamageSnapshot damage, SearchPolicySnapshot policy,
         SolverSearchProfile profile)
@@ -3314,6 +3433,27 @@ internal static class Program
             && partialPhases.ExpandedNodes > 0 && partialPhases.LogicalTransitions > 0
             && partialPhases.Phases[nameof(SearchMetricPhase.Fork)].Samples > 0,
             "Canceled parallel member lost its drained work or phase samples.");
+        SearchRequestWorkTotals faultTotals = new(measurePhases: true);
+        CombatBeamSolver faultSolver = new(root, names, damage,
+            plain with { RequestWorkTotals = faultTotals, MeasurePhasePerformance = true },
+            minimumPotionUses: -1, searchProfile: profile);
+        using (CombatBeamSolver.SearchMemberExecutionSession session = faultSolver.CreateExecutionSession())
+        {
+            try
+            {
+                session.Step(new SearchWorkAllowance(1), default);
+                throw new InvalidOperationException("Invalid member configuration did not throw.");
+            }
+            catch (ArgumentOutOfRangeException) { }
+            Require(!session.HasLiveSimulatorsForTesting, "Faulted member retained live simulators.");
+            session.Dispose();
+            session.Dispose();
+        }
+        SearchRequestPhaseSnapshot faultPhases = faultTotals.CapturePhases()!;
+        Require(faultPhases.RecordedSolverCount == 1 && faultPhases.Members.Count == 1
+                && faultPhases.Members[0].Outcome == "Faulted"
+                && faultPhases.ExpandedNodes == 0 && faultPhases.LogicalTransitions == 0,
+            "Faulted member was reported Running/completed, lost, or recorded twice.");
         Require(ContinuationStamp.CaptureLive(combat) == root.ContinuationStamp, "Portfolio changed live combat.");
         File.WriteAllText(Path.Combine(outputDirectory, "request-hydration.json"), JsonSerializer.Serialize(new
         {

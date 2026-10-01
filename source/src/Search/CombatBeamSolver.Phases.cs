@@ -3002,6 +3002,7 @@ internal sealed partial class CombatBeamSolver
         Yielded,
         Completed,
         Canceled,
+        Faulted,
         Disposed,
     }
 
@@ -3247,6 +3248,7 @@ internal sealed partial class CombatBeamSolver
             }
             catch
             {
+                _state.Phase = SearchMemberExecutionPhase.Faulted;
                 DisposeCore(releaseLiveSimulators: true);
                 throw;
             }
@@ -3318,7 +3320,8 @@ internal sealed partial class CombatBeamSolver
         public void Dispose()
         {
             if (_state.Phase is not SearchMemberExecutionPhase.Completed
-                and not SearchMemberExecutionPhase.Canceled)
+                and not SearchMemberExecutionPhase.Canceled
+                and not SearchMemberExecutionPhase.Faulted)
             {
                 _state.Phase = SearchMemberExecutionPhase.Disposed;
             }
