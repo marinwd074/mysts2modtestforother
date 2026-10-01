@@ -64,7 +64,11 @@ Release、结构门禁、`request-hydration`（含并发统计、未首验惰性
 
 S0 已补齐全请求成员阶段统计：既有 ledger 收尾点在 worker drain 后提交一次阶段贡献，结果与日志均含 `RequestPhaseMetrics` / `SEARCH_REQUEST_PHASE`。成员标注 baseline / beam refinement / Smart Potion / continuation seed / route replay / novelty；未覆盖的分类保留 `Unclassified`。三敌 DOP=1 捕获 baseline 120/568、两层药水 141/873 与 144/1025，合计 405/2466；DOP=4 为 411/2472。缓存 off/on、计时 off/on 的完整结果和逻辑工作一致，阶段汇总守恒；取消前无工作、DOP=4 yield 后取消均只贡献一次。`Disposed` 是真实提前退出状态，不能记为完成。
 
-下一节点为自然 Host/Client 成本采集：Agent 用现有隔离实例、Release payload、Mod warm-up/restart 和 `start-client.ps1 -MultiplayerMode safe-execute-lab -MeasureSearchPhases` 准备窗口，用户仅执行当前 GUI 步骤。缓存继续关闭；预算、DOP、排序不变。阶段耗时有嵌套及并行累计，辅助枚举/根捕获不在成员统计内，协调开销仅含原有回收统计。离线汇总不是实机 PASS；新的实机数据待采集，后续按测量选择热点。
+2026-10-01 已完成单场真实 Host/Client 成本采集：`daeb135` Release、owned Lab、Client warm-up 后重启、两玩家 local-core、缓存关闭、正常并行配置。初次与用户点击重新计算分别记录 5 个已完成成员（Novelty / baseline / 三层 Smart Potion）、13988/66094 与 15074/70505 expanded/transitions；首次前台 5.073/4.873s，请求墙钟 16.049/15.160s。Graceful 停止两端后，全部 JSON 完整，成员工作与独立 E0 member telemetry 一致，全部阶段耗时/分配/次数逐项守恒。两请求 Novelty 工作不同，不是固定工作 A/B，也不是缓存实机收益或部署正确性 PASS。
+
+第二次请求的线程累计热点：Snapshot 10.620s、Action 9.484s、RoundAdvance 5.173s、Fork 4.842s、Fingerprint 3.950s、Prune 1.795s；阶段有嵌套，不能相加作墙钟。Fork/Action 累计分配约 1.067/1.389GiB，不是峰值内存。辅助枚举/根捕获不在成员统计内，协调开销仅含原有回收统计。原始日志留在该实例，定向核对与汇总在 `.local/request-hydration-cost/live-phase-summary.json`，不新增默认门禁。
+
+退出时另有 `BUG_REPORT_CHECKPOINT_FAILURE label=combat_end`：原生跑局已释放，无法导出内存保存快照；发生在两次阶段记录完成后，不是搜索失败，但完整退出快照仍未验证。后续先处理该时序，再按实测优先检查 Snapshot 重复计算/指纹及 Fork 分配；保持当前预算、并行度、排序与模拟语义，用同根固定工作验证后再实机对照。通用后态缓存继续默认关闭，停止扩容和推广。
 
 ## 阶段 D 当前实现
 
