@@ -89,7 +89,22 @@ Snapshot/Fork 首项优化移除了 `PredictionExtensions.Clone/ToRng` 构造器
 
 旧 DLL / 新 DLL 计时关闭 / 新 DLL 计时开启的 DOP=1 三输入，加 DOP=4 三敌的开关对照，合计 33 个请求的完整根、路线、最终状态、质量、边界和逻辑工作逐项一致；不比较跨 DOP 工作量。Harness 检查每成员全部 Snapshot 子阶段调用数、非重叠量上界及 worker 汇总守恒；Release、request-hydration、结构门禁通过。复跑用原 `request-hydration-benchmark-off --fixture shared-audit|draw-repeat|multi-hit --iterations 3 --dop 1|4 --measure`，证据在 `.local/snapshot-cost/`。这是成本诊断，少量顺序样本和详细计时开销不能证明净提速或实机收益。
 
-下一测量候选限定为 `SimulatedCombatState.AppendFingerprint`：三敌每请求约 3.05MB 累计分配，占 Snapshot 19.3%/22.2%；先定位内部枚举/物化来源，再做保持全部字段与次序的固定输入对照。有净收益才落地优化；暂不做快照对象池、放宽指纹或扩大后态缓存。
+### 根历史计数预聚合：已实现，待新构建实机采集
+
+`AppendFingerprint` 定位到 calculated history 的重复扫描及捕获 lambda。现在根捕获时按原谓词预聚合生成牌、闪电球、未格挡受击、虚无出牌和抽牌数；Fork 共享只读根计数，本地主行动玩家用值快路径，预测事件仍由各分支累加。未知玩家及非玩家伤害保留原扫描；没有删指纹字段或改变次序。定位用的额外细分计时已移除。
+
+对照基线 `d3109b8`，每输入四个独立进程 before/after/after/before，每进程 off/on 预热后测 10 个 cache-off 请求；详细计时关闭、`DOTNET_TieredCompilation=0`，逐进程校验实际 DLL hash。160 个请求的完整根、路线、最终状态、质量、边界及逻辑工作一致；不比较跨 DOP 工作量。下表为进程中位数的中位数。
+
+| Pinned 输入 | 旧 / 新墙钟 | 耗时变化 | 分配变化 | expanded / transitions |
+|---|---:|---:|---:|---:|
+| 三敌多段攻击，DOP=1 | 178.76 / 169.69ms | -5.1% | -1.2% | 405 / 2466 |
+| 抽牌审计，DOP=1 | 92.66 / 89.86ms | -3.0% | -1.3% | 334 / 1515 |
+| 长历史压力，DOP=1 | 59.73 / 52.88ms | -11.5% | -1.3% | 261 / 905 |
+| 三敌多段攻击，DOP=4 | 112.44 / 111.71ms | -0.6% | -1.2% | 411 / 2472 |
+
+`history-repeat` 仅在不变棋盘记录 2000 次原生抽牌，是人工压力输入。Benchmark 从已捕获根计时，不包含新增根预聚合成本；普通样本波动与收益不能外推为实时多人净提速。Release、`root-history`（混合原生/预测事件、未知玩家/非玩家回退、Fork 隔离、新根更新）、`request-hydration`、9 项 `rolling-review`、DOP=4 Snapshot 阶段守恒及结构门禁通过。临时对照在 `.local/combat-fingerprint-cost/`，JSON 记录实际 DLL SHA256，不新增默认门禁。
+
+下一步：沿用 owned Host/Client Lab，刷新新 DLL、Client warm-up 后重启，再由用户进入两玩家战斗并点击搜索。采集 cache-off 请求及 Graceful 收尾，保留成员真实退出状态；新构建的实机收益与部署正确性仍 UNVERIFIED。预算、并行度、排序、缓存默认不变；暂不做快照对象池、放宽指纹或扩大后态缓存。
 
 ## 阶段 D 当前实现
 
