@@ -8,22 +8,27 @@ repo=Path(__file__).resolve().parents[2]
 out=repo/'.local/strategic-keyword-checks';out.mkdir(parents=True,exist_ok=True)
 source=(repo/'src/Search/StrategicEffectModel.cs').read_text(encoding='utf-8')
 parser=argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--native', action='store_true', help='run native keyword/context and branch isolation contracts')
+parser.add_argument('--native', action='store_true', help='run native keyword/energy context and branch isolation contracts')
 parser.add_argument('--out', type=Path)
 parser.add_argument('--steam-root', type=Path)
 args=parser.parse_args()
 if args.native:
  native=source[source.index('internal readonly record struct StrategicEffectContext('):source.index('internal static class StrategicEffectModel')]
  native=native.replace('StrategicEffectContext','MaterializedKeywordContext')
- native=native.replace('card.HasKeyword(predictionState, keyword)', 'card.GetKeywords(predictionState).Contains(keyword)')
+ for original,replacement in [
+  ('card.HasKeyword(predictionState, keyword)', 'card.GetKeywords(predictionState).Contains(keyword)'),
+  ('card.GetEnergyCostValueWithModifiers(simulator)', 'U0U1PinnedHarness.Program.NativeEnergyCost(card, simulator)')]:
+  if native.count(original)!=1:raise RuntimeError(f'Update native oracle transformation: {original}')
+  native=native.replace(original,replacement)
  oracle=out/'MaterializedKeywordContext.cs'
  oracle.write_text(source[:source.index('[Flags]')]+native, encoding='utf-8')
  harness=repo/'tools/U0U1PinnedHarness/U0U1PinnedHarness.csproj'
  build=['dotnet','build',str(harness),'-c','Release',f'-p:StrategicContextOracle={oracle}']
  if args.steam_root:build.append(f'-p:SteamRoot={args.steam_root.as_posix()}')
  subprocess.run(build,cwd=repo,check=True)
- subprocess.run(['dotnet',str(harness.parent/'bin/Release/net9.0/U0U1PinnedHarness.dll'),
-  'strategic-context','--out',str(args.out or out/'native')],cwd=repo,check=True)
+ for mode in ['strategic-context','strategic-energy']:
+  subprocess.run(['dotnet',str(harness.parent/'bin/Release/net9.0/U0U1PinnedHarness.dll'),
+   mode,'--out',str(args.out or out/'native')],cwd=repo,check=True)
  sys.exit(0)
 start=source.index('[Flags]');end=source.index('internal static class StrategicEffectModel')
 using=source[:source.index('[Flags]')]

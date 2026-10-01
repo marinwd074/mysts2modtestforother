@@ -136,8 +136,9 @@ internal readonly record struct StrategicEffectContext(
         int incomingDamage,
         int incomingHitCount,
         StrategicEffectRequirements requirements, bool skillsExhaust = false,
-        CombatPredictionState? predictionState = null)
+        CombatPredictionSimulator? simulator = null)
     {
+        CombatPredictionState? predictionState = simulator?.State;
         if (requirements == StrategicEffectRequirements.None)
         {
             return new StrategicEffectContext(
@@ -269,7 +270,7 @@ internal readonly record struct StrategicEffectContext(
                     if (needsSkillCount)
                         skillCount++;
                     if (needsSkillEnergy)
-                        skillEnergy += EnergyCost(card);
+                        skillEnergy += EnergyCost(predicted, simulator);
                     if (needsBlockSkillCount && hasBlockDynamicVar)
                         blockSkillCount++;
                     break;
@@ -277,7 +278,7 @@ internal readonly record struct StrategicEffectContext(
                     if (needsPowerCount)
                         powerCount++;
                     if (needsPowerEnergy)
-                        powerEnergy += EnergyCost(card);
+                        powerEnergy += EnergyCost(predicted, simulator);
                     break;
                 case CardType.Status:
                     if (needsStatusCount)
@@ -406,10 +407,12 @@ internal readonly record struct StrategicEffectContext(
             ? card.Preview.Keywords.Contains(keyword)
             : card.HasKeyword(predictionState, keyword);
 
-    private static int EnergyCost(CardModel card)
-        => card.EnergyCost.CostsX
+    private static int EnergyCost(PredictedCard card, CombatPredictionSimulator? simulator)
+        => card.Preview.EnergyCost.CostsX
             ? 0
-            : Math.Max(0, card.EnergyCost.GetWithModifiers(CostModifiers.All));
+            : simulator == null
+                ? Math.Max(0, card.Preview.EnergyCost.GetWithModifiers(CostModifiers.All))
+                : Math.Max(0, card.GetEnergyCostValueWithModifiers(simulator));
 
     private static int ReachablePlays(int matchingCards, int deckSize, int reachableCards)
         => matchingCards == 0

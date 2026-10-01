@@ -148,7 +148,26 @@ Snapshot/Fork 首项优化移除了 `PredictionExtensions.Clone/ToRng` 构造器
 
 `f47c169` owned Lab、Client warm-up 后重启（PID 8908）、Host PID 8712，已完成两玩家 local-core/cache-off 会话 `7cb3743a52c34105ba550b1ec1c51ec0` 的初次搜索和 `generation=2 reason=Manual` 重算。首次前台 5.303 / 5.004s，墙钟 16.510 / 11.903s，expanded/transitions 为 12510/60868、15040/70621。每请求 5 成员；首次为 3 Completed、1 Canceled、1 Disposed，重算全部 Completed。两端 Graceful 退出后，9606 行 JSON 完整、journal error=0；成员工作与独立 E0 ledger、全部阶段累计量及 Snapshot 分区/内部子阶段守恒通过。退出前捕获 queued=True、FIFO checkpoints=6，无捕获/序列化失败；`full=False`，未验证检查点字节归档/恢复。临时汇总在 `.local/strategic-context-cost/live-phase-summary.json`。
 
-两请求均触发系统内存压力 GC 回退，工作量不同；本轮只验搜索和日志收尾，实机净收益与部署正确性仍 UNVERIFIED。手动重算 SnapshotEvaluation 累计 10.347s，其中 SnapshotStrategicEffects 2.593s、Fingerprint 3.626s（CombatFingerprint 0.679s），嵌套阶段不能相加作墙钟。下一项核对 `StrategicEffectContext.Build` 能耗查询是否也读取真实 Owner：先用原生对照证明分支语义，再决定是否复用模拟器查询并测完整请求。预算、并行度、排序和缓存默认保持不变。
+两请求均触发系统内存压力 GC 回退，工作量不同；本轮只验搜索和日志收尾，实机净收益与部署正确性仍 UNVERIFIED。手动重算 SnapshotEvaluation 累计 10.347s，其中 SnapshotStrategicEffects 2.593s、Fingerprint 3.626s（CombatFingerprint 0.679s），嵌套阶段不能相加作墙钟。费用查询的后续修正与当前下一步见下节。
+
+### 上下文能耗：绑定预测分支，待新版实机采集
+
+`StrategicEffectContext.Build` 现在接收当前 simulator，技能/Power 费用复用既有 `GetEnergyCostValueWithModifiers`，关键词继续使用其 State。旧 `GetWithModifiers(All)` 会通过真实 Owner / 牌堆读取费用修改；原生对照复现了 26 次差异。保留 X 的零估值、负值截零和所有标量公式；此项修正评分输入的状态来源，可能改变路线，不是纯等价优化。未扩大缓存或调整预算、并行度、排序规则和部署授权，通用后态缓存仍默认 false。
+
+Release 0 warning / 0 error；134932 个标量案例、462 个原生关键词上下文、840 次关键词查询 / 32 个并行分支通过。费用合同通过 180 次原生费用查询、792 个完整上下文 / 48 个 DOP=4 分支，覆盖免费技能/Power/攻击、Corruption、Veilpiercer、VoidForm、局部费用、X/负费用、牌堆移动、Power 移除/消耗及真实 Owner 漂移；Power/history 指纹、父分支与真实夹具隔离通过。原生 oracle 仅在无头夹具中串行临时挂载克隆牌，结束恢复夹具，不是生产依赖。request-hydration、9 项 rolling-review 与结构门禁通过。
+
+对照 `ab4014e`（源码 DLL 为 `f47c169`），五输入各四个独立进程 ABBA，预热后每进程 10 个 cache-off 请求；关闭详细计时、`DOTNET_TieredCompilation=0`，实际 DLL hash 与根/DOP 均核对。原有全夹具严格比较在持续效果工作量变化处失败，保留失败，另行分类核对：普通三敌 DOP=1/4 和抽牌共 120 请求的完整动作值、最终状态、质量、边界与工作一致；持续效果 DOP=1/4 共 80 请求各自版本内完整结果/工作稳定，但新旧路线不同。
+
+| Pinned 输入 | 旧 / 新 expanded / transitions | 结果与验收 |
+|---|---|---|
+| 三敌，DOP=1 | 405 / 2466 → 同值 | 墙钟 274.99→260.16ms（-5.4%），分配约不变 |
+| 抽牌，DOP=1 | 334 / 1515 → 同值 | 墙钟 144.67→150.48ms（+4.0%），分配约不变 |
+| 三敌，DOP=4 | 411 / 2472 → 同值 | 墙钟 217.44→208.14ms（-4.3%），分配约不变 |
+| 持续效果，DOP=1/4 | 419 / 2515 → 178 / 1082 | 两版均预测战损 0 的胜利；结束回合 3→2、边界 TurnLimit→None；工作不同，不报告提速百分比 |
+
+计时采用进程中位数的中位数，不证明稳定或实时多人收益。另跑新版持续效果 DOP=4 的 3 个详细请求，成员/阶段和 Snapshot 分区守恒通过；完整所选路线（含 Choice/目标）从原根独立 replay，最终 ContinuationStamp、零战损与第 2 回合胜利一致，真实夹具未改变。临时结果为 `.local/strategic-energy-cost/`，`correctness-summary.json` 保留不同工作范围；不新增默认门禁。
+
+下一步：刷新 owned Lab，Client warm-up 后重启，由用户完成 Host/Join/进入自然战斗并点击重算，再采集阶段成本和 Graceful 收尾；新版实机净收益、自然输入质量及部署正确性继续 UNVERIFIED。完成采集后按实测热点选下一项 S3/S4，不重复开启已停止的 S2 扩容。
 
 ## 阶段 D 当前实现
 

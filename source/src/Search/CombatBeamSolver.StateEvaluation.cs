@@ -324,7 +324,7 @@ internal sealed partial class CombatBeamSolver
             {
                 StrategicEffectContext context = StrategicEffectContext.Build(
                     liveCards, enemyHp, focus.TotalThreat, focus.IncomingHitCount, strategicRequirements, skillsExhaust,
-                    simulator.State) with
+                    simulator) with
                 {
                     Act3BossInteractions = policy.Act3BossStrategy,
                     FirstAttackDamage = policy.Act3BossStrategy && needsFirstAttackDamage

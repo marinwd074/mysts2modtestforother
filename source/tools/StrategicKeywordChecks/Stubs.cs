@@ -51,7 +51,13 @@ namespace CombatSolver {
 // Scalar contracts exercise the native fallback only; simulation is verified in the native harness.
 namespace CombatSolver.Engine.InCombat.Simulation {
  internal sealed class CombatPredictionState {}
+ internal sealed class CombatPredictionSimulator {
+  public CombatPredictionState State => throw new NotSupportedException("Use the native harness for simulation");
+ }
  internal static class CombatPredictedCardExtensions {
+  public static int GetEnergyCostValueWithModifiers(this CombatSolver.Engine.Common.PredictedCard card,
+   CombatPredictionSimulator simulator)
+   => throw new NotSupportedException("Use the native strategic-energy harness for energy queries");
   public static bool HasKeyword(this CombatSolver.Engine.Common.PredictedCard card,
    CombatPredictionState state, MegaCrit.Sts2.Core.Entities.Cards.CardKeyword keyword)
    => throw new NotSupportedException("Use the native strategic-context harness for prediction queries");
