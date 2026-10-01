@@ -193,7 +193,7 @@ Release 0 warning / 0 error；134932 个标量案例、462 个原生关键词上
 
 手动重算 SnapshotEvaluation 累计 6.372s，其中 Fingerprint 2.094s、ProjectedShuffle 1.076s、SnapshotStrategicEffects 1.545s，阶段有嵌套。两请求各记录 `no_gc_starts=3`，上一构建对应采集为 0，工作及成员退出范围也不同；不能把墙钟下降归因于此项优化或当作固定工作 A/B。未执行路线，实机净收益、自然输入质量及部署正确性仍 UNVERIFIED。后续持续效果上下文的同一纯值复用见下节，不扩大后态缓存或修改预算/DOP/GC 配置。
 
-### 持续效果卡牌价值：复用既有纯值，待新版实机采集
+### 持续效果卡牌价值：复用既有纯值，实机成本采集完成
 
 `StrategicEffectContext.Build` 在 simulator 非空时复用前面 ProjectedShuffle 已得到的 `CardValue(PredictedCard)`，只减少 Damage / Block / Cards / 类型的重复读取；无 simulator 的标量/旧原生对照保留未缓存 getter。Ceil、最低值 1、全部聚合字段、关键词和能耗公式不变；沿用已有 Preview/COW 失效及第三方/外部模型回退，不新增缓存或调整预算/DOP/GC/排序/部署授权。
 
@@ -209,7 +209,13 @@ Release 0 warning / 0 error；134932 个标量案例、462 个原生关键词上
 | 持续效果，DOP=4 | 64.90 / 61.96ms | -4.5% | 178 / 1082 |
 | 三敌，DOP=4 | 121.53 / 123.98ms | +2.0% | 411 / 2472 |
 
-分配约不变，不能把所有墙钟变化归因于此项复用或外推为稳定/实时收益。临时证据在 `.local/strategic-card-value-cost/`，不新增默认门禁。下一步刷新 owned Lab、Client warm-up 后重启，由用户进入自然战斗并点击重算后采集成本与 Graceful 收尾；实机净收益、自然输入质量及部署正确性仍 UNVERIFIED，通用后态缓存继续默认 false。
+分配约不变，不能把所有墙钟变化归因于此项复用或外推为稳定/实时收益。临时证据在 `.local/strategic-card-value-cost/`，不新增默认门禁。
+
+`65c57be` owned Lab、Client 预热后重启，两玩家 local-core 的初次/手动重算为 10479/49782、14438/66867 expanded/transitions，首个前台 5.137/5.002s、请求墙钟 18.918/8.503s。初次为 4 Completed / 1 Canceled、药水 stop=deadline；手动为 5 Completed、stop=complete。全部成员工作、阶段累计量和 Snapshot 分区守恒；两端 Graceful 后 6627 行 JSON 完整、journal error=0，手动请求完成早于停止。11 次所选路线模拟回放的逐步标量对照无差异，不代表实际执行或完整后态等价。
+
+手动重算 SnapshotEvaluation 累计 6.578s，其中 Fingerprint 2.202s（嵌套 ProjectedShuffle 1.132s）、SnapshotStrategicEffects 1.467s。两请求 no_gc_starts 为 0/3，工作和退出范围也不同，不能作为固定工作 A/B。退出检查点 queued=True、提前采集标记及 FIFO checkpoints=6 收尾无失败，full=False 的归档/恢复仍 UNVERIFIED。实机净收益、自然输入质量及部署正确性仍 UNVERIFIED，通用后态缓存继续默认 false。
+
+下一步回到加速计划 S1：先采一轮当前构建的跨回合队友公开行动样本。用户在 Client 点击“执行本回合”，Host 正常打牌并结束回合，等待 Client 下一回合计划；若执行停在不支持边界，先记录原因。核对 fresh Probe/Capture、全部 RNG 差异、新根 route replay 的 accepted/rejected 与回退、旧授权失效及真实部署记录。一次普通跨回合不自动闭合 RNG-only、Targets、目标死亡、斩杀窗口或显式采用重复失效的全部验收。沿用现有 Lab/验证器，临时记录放 `.local/reroot-runtime-acceptance/`；不改预算、DOP、GC、调度或能力默认。
 
 ## 阶段 D 当前实现
 
