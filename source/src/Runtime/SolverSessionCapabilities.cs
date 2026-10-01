@@ -54,6 +54,7 @@ internal static class SolverSessionCapabilities
     internal const string MultiplayerModeEnvironmentVariable = "COMBATSOLVER_MULTIPLAYER_MODE";
     internal const string ProbeEvidenceEnvironmentVariable = "COMBATSOLVER_MULTIPLAYER_PROBE_EVIDENCE";
     internal const string MultiplayerInstanceEnvironmentVariable = "COMBATSOLVER_MULTIPLAYER_INSTANCE";
+    internal const string RequestPhaseMetricsEnvironmentVariable = "COMBATSOLVER_REQUEST_PHASE_METRICS";
     private static readonly Lazy<bool> SafeExecuteFormalOptedIn = new(EvaluateSafeExecuteFormalOptIn);
     private static readonly Lazy<bool> SafeExecuteLabAuthorized = new(EvaluateSafeExecuteLabAuthorization);
 
@@ -69,6 +70,9 @@ internal static class SolverSessionCapabilities
 
     internal static bool IsMultiplayerSafeExecuteLabOptedIn
         => SafeExecuteLabAuthorized.Value;
+
+    internal static bool ShouldMeasureLabSearchPhases(bool isMultiplayer, bool labAuthorized, string? optIn)
+        => isMultiplayer && labAuthorized && IsTruthy(optIn);
 
     internal static bool IsMultiplayerSafeExecuteFormalOptedIn
         => SafeExecuteFormalOptedIn.Value;

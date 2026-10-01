@@ -12,14 +12,31 @@ internal readonly record struct SearchSolverWorkContribution(
     int Gen0Collections, int Gen1Collections, int Gen2Collections,
     TimeSpan GcPauseDuration, TimeSpan MaxObservedGcPause);
 
+internal enum SearchRequestMemberKind
+{
+    Unclassified, Baseline, BeamRefinement, SmartPotion, ContinuationSeed, RouteReplay, Novelty,
+}
+
+internal sealed record SearchSolverPhaseContribution(
+    string Kind, int BeamWidth, int MinimumPotionUses, int? MaximumPotionUses,
+    string Outcome, SearchSolverWorkContribution Work, IReadOnlyDictionary<string, SearchPhaseMetric> Phases);
+
+internal sealed record SearchRequestPhaseSnapshot(
+    int RecordedSolverCount, long ExpandedNodes, long LogicalTransitions,
+    TimeSpan CoordinatorOverhead, IReadOnlyList<SearchSolverPhaseContribution> Members,
+    IReadOnlyDictionary<string, SearchPhaseMetric> Phases);
+
 /// <summary>Each solver contributes once, including cancellation and failed policy searches.</summary>
-internal sealed class SearchRequestWorkTotals
+internal sealed class SearchRequestWorkTotals(bool measurePhases = false)
 {
     private readonly Lock _gate = new();
     private SearchRequestWorkSnapshot _totals;
+    private readonly List<SearchSolverPhaseContribution>? _phases = measurePhases ? [] : null;
+    private TimeSpan _coordinatorOverhead;
+    internal bool MeasuresPhases => measurePhases;
     internal int RecordedSolverCountForTesting { get { lock (_gate) return _totals.RecordedSolverCount; } }
 
-    public void Record(SearchSolverWorkContribution work)
+    public void Record(SearchSolverWorkContribution work, SearchSolverPhaseContribution? phases = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(work.ExpandedNodes);
         ArgumentOutOfRangeException.ThrowIfNegative(work.TransitionCount);
@@ -28,6 +45,8 @@ internal sealed class SearchRequestWorkTotals
             work.Gen2Collections, work.GcPauseDuration, work.MaxObservedGcPause);
         lock (_gate)
         {
+            if (_phases != null && phases != null)
+                _phases.Add(phases);
             Accumulate(work.Elapsed, work.WorkerAllocatedBytes, work.Gen0Collections, work.Gen1Collections,
                 work.Gen2Collections, work.GcPauseDuration, work.MaxObservedGcPause);
             _totals = _totals with
@@ -46,7 +65,10 @@ internal sealed class SearchRequestWorkTotals
     {
         ValidateWork(elapsed, allocatedBytes, gen0Collections, gen1Collections, gen2Collections, gcPauseDuration, maxObservedGcPause);
         lock (_gate)
+        {
+            _coordinatorOverhead += elapsed;
             Accumulate(elapsed, allocatedBytes, gen0Collections, gen1Collections, gen2Collections, gcPauseDuration, maxObservedGcPause);
+        }
     }
 
     private static void ValidateWork(TimeSpan elapsed, long allocatedBytes, int gen0Collections,
@@ -76,4 +98,29 @@ internal sealed class SearchRequestWorkTotals
     }
 
     public SearchRequestWorkSnapshot Snapshot() { lock (_gate) return _totals; }
+
+    internal SearchRequestPhaseSnapshot? CapturePhases()
+    {
+        if (_phases == null)
+            return null;
+        lock (_gate)
+        {
+            Dictionary<string, SearchPhaseMetric> totals = [];
+            foreach (SearchMetricPhase phase in Enum.GetValues<SearchMetricPhase>())
+            {
+                TimeSpan elapsed = TimeSpan.Zero;
+                long allocated = 0, samples = 0;
+                foreach (SearchSolverPhaseContribution member in _phases)
+                {
+                    SearchPhaseMetric metric = member.Phases[phase.ToString()];
+                    elapsed += metric.Elapsed;
+                    allocated += metric.AllocatedBytes;
+                    samples += metric.Samples;
+                }
+                totals.Add(phase.ToString(), new(elapsed, allocated, samples));
+            }
+            return new(_totals.RecordedSolverCount, _totals.ExpandedNodes, _totals.TransitionCount,
+                _coordinatorOverhead, _phases.ToArray(), totals);
+        }
+    }
 }

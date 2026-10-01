@@ -133,19 +133,24 @@ internal static partial class CombatSearchCoordinator
             && !policy.UseMultiplayerTeamObjective && !policy.UseMultiplayerTeammateForecast
             && !policy.UseMultiplayerScenarioReevaluation
                 ? new(learnFromSearch: true, measurePerformance: policy.MeasurePhasePerformance) : null;
+        SearchRequestWorkTotals totals = new(measurePhases: policy.MeasurePhasePerformance);
         try
         {
             SolverResult result = SolveRequest(root, displayNames, battleDamage,
-                policy with { RequestTransitionHydrationCache = cache }, cancellationToken, progressCallback);
+                policy with { RequestTransitionHydrationCache = cache, RequestWorkTotals = totals }, cancellationToken, progressCallback);
+            result.RequestPhaseMetrics = totals.CapturePhases();
             if (cache != null)
                 result.RequestTransitionHydration = cache.Capture();
             return result;
         }
         finally
         {
-            if (cache != null)
+            try
             {
-                try
+                if (totals.CapturePhases() is { } phases)
+                    policy.Diagnostics.Info("[CombatSolver/Test] SEARCH_REQUEST_PHASE "
+                        + System.Text.Json.JsonSerializer.Serialize(phases));
+                if (cache != null)
                 {
                     R1TransitionHydrationSnapshot stats = cache.Capture();
                     policy.Diagnostics.Info(
@@ -154,8 +159,8 @@ internal static partial class CombatSearchCoordinator
                         $"validated_keys={stats.ValidatedKeys} hydration_hits={stats.HydrationHits} " +
                         $"output_mismatches={stats.OutputMismatches} rejected_keys={stats.RejectedKeys}");
                 }
-                finally { cache.Release(); }
             }
+            finally { cache?.Release(); }
         }
     }
 
@@ -164,7 +169,8 @@ internal static partial class CombatSearchCoordinator
         SearchPolicySnapshot policy, CancellationToken cancellationToken,
         Action<SolverProgress>? progressCallback)
     {
-        SearchRequestWorkTotals requestWorkTotals = new();
+        SearchRequestWorkTotals requestWorkTotals = policy.RequestWorkTotals
+            ?? new(measurePhases: policy.MeasurePhasePerformance);
         BeamWidthPortfolioTelemetry portfolioTelemetry = new();
         policy = policy with
         {
@@ -916,6 +922,14 @@ internal static partial class CombatSearchCoordinator
                         R1FrontierShadowCache = null,
                     }
                     : beamPolicy;
+                if (policy.MeasurePhasePerformance)
+                {
+                    memberPolicy = memberPolicy with
+                    {
+                        RequestMemberKind = refinement ? SearchRequestMemberKind.BeamRefinement
+                            : SearchRequestMemberKind.Baseline,
+                    };
+                }
                 CombatBeamSolver solver = new(
                     root,
                     displayNames,
@@ -2623,7 +2637,7 @@ internal static partial class CombatSearchCoordinator
                 root,
                 displayNames,
                 battleDamage,
-                policy,
+                policy.MeasurePhasePerformance ? policy with { RequestMemberKind = SearchRequestMemberKind.SmartPotion } : policy,
                 cancellationToken,
                 progressCallback,
                 profile,
@@ -2866,7 +2880,7 @@ internal static partial class CombatSearchCoordinator
                 root,
                 displayNames,
                 battleDamage,
-                policy,
+                policy.MeasurePhasePerformance ? policy with { RequestMemberKind = SearchRequestMemberKind.SmartPotion } : policy,
                 searchCancellationToken,
                 progressCallback: null,
                 profile,
@@ -3262,7 +3276,7 @@ internal static partial class CombatSearchCoordinator
                     root,
                     displayNames,
                     battleDamage,
-                    policy,
+                    policy.MeasurePhasePerformance ? policy with { RequestMemberKind = SearchRequestMemberKind.SmartPotion } : policy,
                     searchCancellationToken,
                     progressCallback,
                     profile,
@@ -3737,7 +3751,7 @@ internal static partial class CombatSearchCoordinator
                 SoftTimeBudgetMilliseconds = Math.Min(policy.Profile.SoftTimeBudgetMilliseconds, 600),
             };
             SolverResult result = new CombatBeamSolver(root, displayNames, battleDamage,
-                policy with { VerifyIncrementalSearch = false }, cancellationToken,
+                policy with { VerifyIncrementalSearch = false, RequestMemberKind = SearchRequestMemberKind.RouteReplay }, cancellationToken,
                 searchProfile: replayProfile,
                 continuationRouteReplayActions: policy.ContinuationRouteReplayActions).Solve();
             bool equivalentPartial = !result.Snapshot.AllEnemiesDead && !result.Snapshot.PlayerDead

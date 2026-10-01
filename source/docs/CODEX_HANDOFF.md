@@ -62,7 +62,9 @@ Release、结构门禁、`request-hydration`（含并发统计、未首验惰性
 
 复跑：同一 `U0U1PinnedHarness` 的 `request-hydration-benchmark-off/on --fixture low-repeat|shared-audit|draw-repeat|multi-hit --iterations 10 --dop 1 --out .local/...`，成本诊断另加 `--measure`。逐进程按 off/on/on/off 顺序运行，不并发 benchmark。Benchmark 与缓存合同入口分开，仍共用固定策略；JSON 含环境/JIT/预热、GC、根与逐请求状态、结果和分配，并在详细模式保留该请求的现有 `SEARCH_PHASE` 日志。临时证据位于 `.local/request-hydration-cost/`，不作为新增默认门禁。
 
-下一任务：转到剩余 S0 的全请求成员阶段汇总，先补齐 baseline / portfolio / Smart Potion 的计算归属。现有 `SEARCH_PHASE` 只覆盖日志实际输出的成员，三敌 DOP=1 cache-off 诊断仅有 baseline 120 expanded / 568 transitions，而请求共 405 / 2466；不可把该 baseline 的 round / Snapshot / prune 比例当成全请求热点，也不凭此改预算或优化 EndTurn 语义。
+S0 已补齐全请求成员阶段统计：既有 ledger 收尾点在 worker drain 后提交一次阶段贡献，结果与日志均含 `RequestPhaseMetrics` / `SEARCH_REQUEST_PHASE`。成员标注 baseline / beam refinement / Smart Potion / continuation seed / route replay / novelty；未覆盖的分类保留 `Unclassified`。三敌 DOP=1 捕获 baseline 120/568、两层药水 141/873 与 144/1025，合计 405/2466；DOP=4 为 411/2472。缓存 off/on、计时 off/on 的完整结果和逻辑工作一致，阶段汇总守恒；取消前无工作、DOP=4 yield 后取消均只贡献一次。`Disposed` 是真实提前退出状态，不能记为完成。
+
+下一节点为自然 Host/Client 成本采集：Agent 用现有隔离实例、Release payload、Mod warm-up/restart 和 `start-client.ps1 -MultiplayerMode safe-execute-lab -MeasureSearchPhases` 准备窗口，用户仅执行当前 GUI 步骤。缓存继续关闭；预算、DOP、排序不变。阶段耗时有嵌套及并行累计，辅助枚举/根捕获不在成员统计内，协调开销仅含原有回收统计。离线汇总不是实机 PASS；新的实机数据待采集，后续按测量选择热点。
 
 ## 阶段 D 当前实现
 

@@ -505,7 +505,11 @@ internal static partial class SolverController
             settings.EnableDetailedDiagnosticLogs,
             UnattendedTestRunner.VerifyIncrementalSearch,
             UnattendedTestRunner.FixedSearchBudget,
-            UnattendedTestRunner.MeasureSearchPhases,
+            UnattendedTestRunner.MeasureSearchPhases
+                || SolverSessionCapabilities.ShouldMeasureLabSearchPhases(
+                    capabilities.IsMultiplayer,
+                    capabilities.IsMultiplayer && SolverSessionCapabilities.IsMultiplayerSafeExecuteLabOptedIn,
+                    System.Environment.GetEnvironmentVariable(SolverSessionCapabilities.RequestPhaseMetricsEnvironmentVariable)),
             maxDegreeOfParallelism,
             UnattendedTestRunner.SearchBudgetOverrideMilliseconds,
             includeTurnSetup && capabilities.CanInterceptTurnSetup,

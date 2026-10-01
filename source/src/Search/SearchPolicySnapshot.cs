@@ -130,6 +130,7 @@ internal sealed record SearchPolicySnapshot(
     /// </summary>
     public BeamWidthPortfolioTelemetry? PortfolioTelemetry { get; init; }
     public SearchRequestWorkTotals? RequestWorkTotals { get; init; }
+    public SearchRequestMemberKind RequestMemberKind { get; init; }
     // Suggestions from the prior turn; replay must evaluate them from the current root.
     public IReadOnlyList<PlanAction> ContinuationSeedActions { get; init; } = [];
     // Value-only route suggestions; never carry old simulator state or deployment authority.

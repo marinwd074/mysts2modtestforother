@@ -109,6 +109,9 @@ internal sealed class SearchPerformanceMetrics(bool enabled, bool threadSafe = f
             Stopwatch.GetElapsedTime(0, _ticks[index]),
             _allocatedBytes[index], _samples[index]);
     }
+
+    internal IReadOnlyDictionary<string, SearchPhaseMetric> CapturePhases()
+        => Enum.GetValues<SearchMetricPhase>().ToDictionary(phase => phase.ToString(), Snapshot);
 }
 
 internal readonly struct SearchMeasurementScope(

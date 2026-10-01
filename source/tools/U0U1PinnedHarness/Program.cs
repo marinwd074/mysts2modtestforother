@@ -3020,6 +3020,11 @@ internal static class Program
         SearchPolicySnapshot captured, SolverSearchProfile originalProfile, string outputDirectory,
         bool? benchmarkCacheEnabled = null, string[]? benchmarkArgs = null)
     {
+        Require(SolverSessionCapabilities.ShouldMeasureLabSearchPhases(true, true, "1")
+            && !SolverSessionCapabilities.ShouldMeasureLabSearchPhases(false, true, "1")
+            && !SolverSessionCapabilities.ShouldMeasureLabSearchPhases(true, false, "1")
+            && !SolverSessionCapabilities.ShouldMeasureLabSearchPhases(true, true, null),
+            "Lab phase measurement escaped its session, ownership or opt-in gate.");
         if (benchmarkCacheEnabled is { } enabledFlag)
         {
             BenchmarkRequestTransitionHydration(combat, names, damage, captured, originalProfile,
@@ -3175,6 +3180,8 @@ internal static class Program
         Require(baseline.RequestTransitionHydration == null, "Cache-off allocated request hydration.");
         Require(enabled.RequestTransitionHydration?.Performance == null,
             "Phase measurements were allocated without opting into diagnostics.");
+        ValidateRequestPhaseMetrics(baseline, measured: false);
+        ValidateRequestPhaseMetrics(enabled, measured: false);
         using CancellationTokenSource canceled = new();
         canceled.Cancel();
         try
@@ -3185,6 +3192,40 @@ internal static class Program
         catch (OperationCanceledException) { }
         Require(diagnostics.Count(line => line.Contains("REQUEST_TRANSITION_HYDRATION")) == 3,
             "Completed and canceled requests did not all close their cache lifecycle.");
+        SearchRequestWorkTotals canceledTotals = new(measurePhases: true);
+        CombatBeamSolver canceledSolver = new(root, names, damage,
+            plain with { RequestWorkTotals = canceledTotals, MeasurePhasePerformance = true },
+            searchProfile: profile);
+        using (CombatBeamSolver.SearchMemberExecutionSession session = canceledSolver.CreateExecutionSession())
+        {
+            Require(session.Step(new SearchWorkAllowance(1), canceled.Token).Status == SearchStepStatus.Canceled,
+                "Canceled member did not stop.");
+            session.Dispose();
+        }
+        SearchRequestPhaseSnapshot canceledPhases = canceledTotals.CapturePhases()!;
+        Require(canceledPhases.RecordedSolverCount == 1 && canceledPhases.Members.Count == 1
+            && canceledPhases.Members[0].Outcome == "Canceled"
+            && canceledPhases.ExpandedNodes == 0 && canceledPhases.LogicalTransitions == 0,
+            "Canceled member phases were duplicated, lost or did work.");
+        SearchRequestWorkTotals partialTotals = new(measurePhases: true);
+        CombatBeamSolver partialSolver = new(root, names, damage,
+            plain with { RequestWorkTotals = partialTotals, MeasurePhasePerformance = true, MaxDegreeOfParallelism = 4 },
+            searchProfile: profile);
+        using (CancellationTokenSource partialCancel = new())
+        using (CombatBeamSolver.SearchMemberExecutionSession session = partialSolver.CreateExecutionSession())
+        {
+            Require(session.Step(new SearchWorkAllowance(1), default).Status == SearchStepStatus.Yielded,
+                "Parallel cancellation fixture did not yield after work.");
+            partialCancel.Cancel();
+            Require(session.Step(new SearchWorkAllowance(1), partialCancel.Token).Status == SearchStepStatus.Canceled,
+                "Parallel member did not cancel after yielding.");
+        }
+        SearchRequestPhaseSnapshot partialPhases = partialTotals.CapturePhases()!;
+        Require(partialPhases.RecordedSolverCount == 1 && partialPhases.Members.Count == 1
+            && partialPhases.Members[0].Outcome == "Canceled"
+            && partialPhases.ExpandedNodes > 0 && partialPhases.LogicalTransitions > 0
+            && partialPhases.Phases[nameof(SearchMetricPhase.Fork)].Samples > 0,
+            "Canceled parallel member lost its drained work or phase samples.");
         Require(ContinuationStamp.CaptureLive(combat) == root.ContinuationStamp, "Portfolio changed live combat.");
         File.WriteAllText(Path.Combine(outputDirectory, "request-hydration.json"), JsonSerializer.Serialize(new
         {
@@ -3248,7 +3289,7 @@ internal static class Program
         // Warm both paths; detailed phase measurements are a separate diagnostic run.
         coordinated = coordinated with { MaxDegreeOfParallelism = dop, MeasurePhasePerformance = measure };
         SolverResult reference = CombatSearchCoordinator.Solve(root, names, damage,
-            coordinated with { UseRequestTransitionHydration = false }, default, null);
+            coordinated with { UseRequestTransitionHydration = false, MeasurePhasePerformance = false }, default, null);
         CombatSearchCoordinator.Solve(root, names, damage,
             coordinated with { UseRequestTransitionHydration = true }, default, null);
         List<object> samples = [];
@@ -3273,6 +3314,7 @@ internal static class Program
                 "Benchmark cache changed route, state, quality, boundary or logical work.");
             Require(ContinuationStamp.CaptureLive(combat) == root.ContinuationStamp,
                 "Benchmark changed live combat.");
+            ValidateRequestPhaseMetrics(measured, measure);
             samples.Add(new
             {
                 iteration, elapsedMs = wall.Elapsed.TotalMilliseconds, allocatedBytes, gcCollections,
@@ -3280,6 +3322,7 @@ internal static class Program
                 measured.BoundaryReason, measured.CombatEndedTurn,
                 route = measured.BestNode.Actions.Select(ActionToken).ToArray(),
                 finalState = measured.PredictedFinalState?.StateText, measured.RequestTransitionHydration,
+                measured.RequestPhaseMetrics,
                 skippedPlayCardSimulations = measured.RequestTransitionHydration?.HydrationHits ?? 0,
                 phaseDiagnostics = measure ? diagnostics.Skip(diagnosticsStart)
                     .Where(static line => line.Contains(" SEARCH_PHASE ")).ToArray() : null,
@@ -3294,6 +3337,34 @@ internal static class Program
                 warmup = "one off and one on request", rootState = root.ContinuationStamp.StateText,
                 root = OfflineCombat.DescribeRoot(combat), samples,
             }, Json));
+    }
+
+    private static void ValidateRequestPhaseMetrics(SolverResult result, bool measured)
+    {
+        if (!measured)
+        {
+            Require(result.RequestPhaseMetrics == null, "Default search collected request phase metrics.");
+            return;
+        }
+        SearchRequestPhaseSnapshot phases = result.RequestPhaseMetrics
+            ?? throw new InvalidOperationException("Measured request did not collect member phases.");
+        Require(phases.RecordedSolverCount == phases.Members.Count
+            && phases.ExpandedNodes == result.TotalExpandedNodes
+            && phases.LogicalTransitions == result.TotalTransitionCount
+            && phases.Members.Sum(m => (long)m.Work.ExpandedNodes) == phases.ExpandedNodes
+            && phases.Members.Sum(m => (long)m.Work.TransitionCount) == phases.LogicalTransitions,
+            "Request phases missed or duplicated member work.");
+        Require(phases.Members.All(m => m.Kind != "Unclassified" && m.Outcome is "Completed" or "Disposed"),
+            "Benchmark member phases were not classified or finalized: "
+            + string.Join(", ", phases.Members.Select(m => $"{m.Kind}/{m.Outcome}/{m.Work.ExpandedNodes}")));
+        foreach (SearchMetricPhase phase in Enum.GetValues<SearchMetricPhase>())
+        {
+            SearchPhaseMetric aggregate = phases.Phases[phase.ToString()];
+            Require(aggregate.Elapsed.Ticks == phases.Members.Sum(m => m.Phases[phase.ToString()].Elapsed.Ticks)
+                && aggregate.AllocatedBytes == phases.Members.Sum(m => m.Phases[phase.ToString()].AllocatedBytes)
+                && aggregate.Samples == phases.Members.Sum(m => m.Phases[phase.ToString()].Samples),
+                $"Request phase {phase} missed worker contributions.");
+        }
     }
 
     private static SearchPolicySnapshot RequestHydrationPolicy(

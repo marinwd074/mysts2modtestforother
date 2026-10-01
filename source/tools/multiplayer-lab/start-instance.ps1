@@ -17,6 +17,8 @@ param(
 
     [UInt64]$ClientId = 0,
 
+    [switch]$MeasureSearchPhases,
+
     [switch]$ForceSteamOff,
 
     [switch]$AllowSteam
@@ -51,10 +53,19 @@ if ($Role -eq 'Client' -and [string]::IsNullOrWhiteSpace($MultiplayerMode)) {
 if ($Role -eq 'Host' -and $ClientId -ne 0) {
     throw 'ClientId is only valid for a Client launcher.'
 }
+if ($MeasureSearchPhases.IsPresent -and
+    ($Role -ne 'Client' -or $profileName -ne 'ClientCombatSolver' -or $MultiplayerMode -ne 'safe-execute-lab')) {
+    throw 'Search phase measurement is restricted to an owned ClientCombatSolver safe-execute-lab instance.'
+}
 
 $existingState = Get-MultiplayerOwnedProcessState $instance
 if ($existingState.state -eq 'Owned') {
     if ($Role -eq 'Client') {
+        $existingMeasurePhases = $existingState.marker.ContainsKey('measureSearchPhases') -and
+            [bool]$existingState.marker.measureSearchPhases
+        if ($existingMeasurePhases -ne $MeasureSearchPhases.IsPresent) {
+            throw 'Client is already running with different search phase measurement settings; stop it before restarting.'
+        }
         $existingMultiplayerMode = if ($existingState.marker.ContainsKey('multiplayerMode')) {
             [string]$existingState.marker.multiplayerMode
         } else {
@@ -77,6 +88,7 @@ if ($existingState.state -eq 'Owned') {
         forceSteamOff = if ($existingState.marker.ContainsKey('forceSteamOff')) { [bool]$existingState.marker.forceSteamOff } else { $null }
         modRestartPolicy = if ($existingState.marker.ContainsKey('modRestartPolicy')) { [string]$existingState.marker.modRestartPolicy } else { $null }
         runtimeEvidenceEligible = $false
+        measureSearchPhases = $MeasureSearchPhases.IsPresent
     } | ConvertTo-Json -Depth 8
     exit 0
 }
@@ -114,6 +126,7 @@ $startInfo.WindowStyle = [Diagnostics.ProcessWindowStyle]::Normal
 $startInfo.Environment['APPDATA'] = $instance.RoamingRoot
 $startInfo.Environment['LOCALAPPDATA'] = $instance.LocalRoot
 $startInfo.Environment['COMBATSOLVER_MULTIPLAYER_INSTANCE'] = $instance.Root
+$startInfo.Environment['COMBATSOLVER_REQUEST_PHASE_METRICS'] = if ($MeasureSearchPhases.IsPresent) { '1' } else { '0' }
 if ($Role -eq 'Client') {
     # Probe evidence is deliberately Lab-only; ordinary desktop launches stay quiet.
     $startInfo.Environment['COMBATSOLVER_MULTIPLAYER_PROBE_EVIDENCE'] = '1'
@@ -152,6 +165,7 @@ try {
         fastMpMode = if ([string]::IsNullOrWhiteSpace($FastMpMode)) { $null } else { $FastMpMode }
         multiplayerMode = if ([string]::IsNullOrWhiteSpace($MultiplayerMode)) { $null } else { $MultiplayerMode }
         clientId = if ($ClientId -eq 0) { $null } else { $ClientId }
+        measureSearchPhases = $MeasureSearchPhases.IsPresent
         forceSteamOff = $forceSteamOffEffective
         modRestartPolicy = $modRestartPolicy
         runtimeEvidenceEligible = $false
@@ -167,6 +181,7 @@ try {
         processMarkerPath = $instance.ProcessMarkerPath
         multiplayerMode = if ([string]::IsNullOrWhiteSpace($MultiplayerMode)) { $null } else { $MultiplayerMode }
         clientId = if ($ClientId -eq 0) { $null } else { $ClientId }
+        measureSearchPhases = $MeasureSearchPhases.IsPresent
         forceSteamOff = $forceSteamOffEffective
         modRestartPolicy = $modRestartPolicy
         runtimeEvidenceEligible = $false
