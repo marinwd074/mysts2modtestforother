@@ -1648,9 +1648,13 @@ internal sealed partial class SimulatedCombatState
     private IReadOnlyList<AbstractModel> GetHandDrawHookListeners()
     {
         IReadOnlyList<AbstractModel> listeners = GetActiveHookListeners();
-        if (!PaleBlueDotHandDrawScope.Active)
+        if (!PaleBlueDotHandDrawScope.Active && !PersistentPowerSupport.UsesPredictedMaxEnergyTurn)
             return listeners;
-        return listeners.Where(static listener => listener is not PaleBlueDotPower).ToArray();
+        return listeners
+            .Where(static listener => !PaleBlueDotHandDrawScope.Active || listener is not PaleBlueDotPower)
+            .Select(listener => PersistentPowerSupport.UsesPredictedMaxEnergyTurn
+                ? PersistentPowerSupport.BindMaxEnergyRelic(listener, this) : listener)
+            .ToArray();
     }
 
     IReadOnlyList<AbstractModel> ICombatPredictionHookListenerSource.RunHookListeners

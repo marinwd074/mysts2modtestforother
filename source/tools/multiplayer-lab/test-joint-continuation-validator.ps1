@@ -12,9 +12,10 @@ $validator = Join-Path $scriptRoot 'validate-joint-continuation-results.ps1'
 function Invoke-Validator {
     param(
         [Parameter(Mandatory)][ValidateSet('Reuse', 'Mismatch')][string]$Mode,
-        [Parameter(Mandatory)][int]$ExpectedExit
+        [Parameter(Mandatory)][int]$ExpectedExit,
+        [string]$ExpectedRejectReason = 'remote_public_mismatch'
     )
-    & pwsh -NoLogo -NoProfile -File $validator -LogPath $fixture -Mode $Mode
+    & pwsh -NoLogo -NoProfile -File $validator -LogPath $fixture -Mode $Mode -ExpectedRejectReason $ExpectedRejectReason
     if ($LASTEXITCODE -ne $ExpectedExit) {
         throw "Joint continuation validator returned $LASTEXITCODE for $Mode, expected $ExpectedExit."
     }
@@ -29,6 +30,12 @@ try {
     ))
     Invoke-Validator -Mode Reuse -ExpectedExit 0
 
+    $messages = @(Get-Content -LiteralPath $fixture)
+    [IO.File]::WriteAllLines($fixture, @($messages | ForEach-Object {
+        @{ Time = 1; Level = 'info'; Message = $_ } | ConvertTo-Json -Compress
+    }))
+    Invoke-Validator -Mode Reuse -ExpectedExit 0
+
     [IO.File]::WriteAllLines($fixture, @(
         '[CombatSolver/MultiplayerProbe] MP_LOCAL_CROSS_TURN_FRESH_PROBE reason=continuation_validation changed=true world_version=12 fresh_probe=true',
         '[CombatSolver/Test] MP_LOCAL_XTURN_CONTINUATION_VALIDATE turn=2 route_identity=route-b source_world_version=10 minimum_world_version=11 actual_world_version=12 fresh_probe_changed=true',
@@ -37,6 +44,13 @@ try {
         '[CombatSolver/MultiplayerAdvisor] MP_ADVISOR_SEARCH_START generation=9 world_version=12 turn=2 reason=AutoTurnStart'
     ))
     Invoke-Validator -Mode Mismatch -ExpectedExit 0
+
+    $messages = @(Get-Content -LiteralPath $fixture)
+    [IO.File]::WriteAllLines($fixture, @($messages | ForEach-Object {
+        @{ Time = 1; Level = 'info'; Message = $_.Replace('remote_public_mismatch', 'local_state_mismatch') } | ConvertTo-Json -Compress
+    }))
+    Invoke-Validator -Mode Mismatch -ExpectedExit 0 -ExpectedRejectReason local_state_mismatch
+    Invoke-Validator -Mode Mismatch -ExpectedExit 1
 
     [IO.File]::WriteAllLines($fixture, @(
         '[CombatSolver/Test] MP_LOCAL_XTURN_CONTINUATION_VALIDATE turn=2 route_identity=route-c source_world_version=10 minimum_world_version=11 actual_world_version=12 fresh_probe_changed=true',

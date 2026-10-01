@@ -215,7 +215,15 @@ Release 0 warning / 0 error；134932 个标量案例、462 个原生关键词上
 
 手动重算 SnapshotEvaluation 累计 6.578s，其中 Fingerprint 2.202s（嵌套 ProjectedShuffle 1.132s）、SnapshotStrategicEffects 1.467s。两请求 no_gc_starts 为 0/3，工作和退出范围也不同，不能作为固定工作 A/B。退出检查点 queued=True、提前采集标记及 FIFO checkpoints=6 收尾无失败，full=False 的归档/恢复仍 UNVERIFIED。实机净收益、自然输入质量及部署正确性仍 UNVERIFIED，通用后态缓存继续默认 false。
 
-下一步回到加速计划 S1：先采一轮当前构建的跨回合队友公开行动样本。用户在 Client 点击“执行本回合”，Host 正常打牌并结束回合，等待 Client 下一回合计划；若执行停在不支持边界，先记录原因。核对 fresh Probe/Capture、全部 RNG 差异、新根 route replay 的 accepted/rejected 与回退、旧授权失效及真实部署记录。一次普通跨回合不自动闭合 RNG-only、Targets、目标死亡、斩杀窗口或显式采用重复失效的全部验收。沿用现有 Lab/验证器，临时记录放 `.local/reroot-runtime-acceptance/`；不改预算、DOP、GC、调度或能力默认。
+### S1 首轮实机：公开变化回退通过，能量漂移已修复、待复验
+
+同一 DLL 的 owned Lab 会话 `c606b88cb4ef4365bc2c6228b14b0be8` 实际部署 8 张牌、原生 Safe EndTurn，并清除旧授权；T2 敌人 HP 665→625、HC 8→17、CardGeneration 397→402、Targets 115→116，严格续用以 `non_shuffle_rng_changed:card_generation` 拒绝，fresh Probe/Capture 后 cold search。`Reactive Carry B` 与 `Joint Mismatch`（local_state_mismatch）验证通过；后者原解析器把 JSON 末尾引号并入 reason，现先解码 Message，保留 plain log 支持及错误原因拒绝合同。seed=0、未触发 route replay，不构成 Targets-only 重放或 S1 全项 PASS。
+
+T2 最终 47 动作重放在 EndTurn 首次出现能量 4→5，随后 Burning Pact 找不到 CONFLAGRATION，保留 SEARCH_FAILURE；此轮不是无错误运行。T1/T3 正常收尾为 9636/45367、9026/44819 expanded/transitions，各 4 Completed / 1 Canceled；失败 T2 为 5344/23297，原账本保留 Completed / Running。全部阶段数量守恒，失败请求没有独立 E0 member telemetry，不伪装为完整收尾 PASS。两端 Graceful 后 11555 行 JSON 完整、error=1；完整问题包 CRC 与 6 组 checkpoint/native/run-save 存在性通过，恢复仍 UNVERIFIED。
+
+旧 DLL 已复现 PaelsFlesh 最大能量随 live 回合推进变化。现在在派生资源查询内，按原 Hook 位置为 PaelsFlesh / Bread 绑定预测回合，保留其他修饰器顺序；不再用根回合扣除真实 getter 的贡献。144 次原生对照覆盖根/未来/live 回合及熔化，1280 次 DOP=4 查询和 4 次完整 EndTurn 重放保持分支全态/RNG及真实状态隔离；pendulum-draw、continuation-replay、9 项 rolling-review、Release/结构门禁通过。异常成员现在记 Faulted，重复 Dispose 仍只贡献一次，request-hydration 合同通过。原始失败、修复对照和解析器合同在 `.local/reroot-runtime-acceptance/`。
+
+下一步刷新同一 owned Lab，用修复构建复验 T2 搜索期间推进到 T3 的同场边界，等待最终搜索完成；自然输入后续选牌重放正确性仍待确认。之后才继续 Targets-only、目标死亡、斩杀窗口及显式采用重复失效专项；不修改预算、DOP、GC、缓存或能力默认。
 
 ## 阶段 D 当前实现
 

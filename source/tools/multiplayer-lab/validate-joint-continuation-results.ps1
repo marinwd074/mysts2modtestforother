@@ -32,11 +32,18 @@ foreach ($pathValue in $LogPath) {
     $lineNumber = 0
     foreach ($line in Get-Content -LiteralPath $path) {
         $lineNumber++
+        $text = [string]$line
+        if ($text.TrimStart().StartsWith('{')) {
+            $entry = $text | ConvertFrom-Json -ErrorAction Stop
+            if ($entry.PSObject.Properties['Message'] -and $entry.Message -is [string]) {
+                $text = $entry.Message
+            }
+        }
         $records.Add([pscustomobject]@{
                 Index = $globalIndex++
                 Path = $path
                 LineNumber = $lineNumber
-                Text = [string]$line
+                Text = $text
             })
     }
 }
