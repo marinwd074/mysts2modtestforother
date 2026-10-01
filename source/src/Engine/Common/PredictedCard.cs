@@ -15,6 +15,8 @@ internal sealed class PredictedCard : IComparable<PredictedCard>
         private ulong _cachedFingerprintFirst;
         private ulong _cachedFingerprintSecond;
         private string? _cachedChoiceKey;
+        private bool _hasCachedIntrinsicValue;
+        private double _cachedIntrinsicValue;
 
         public bool TryGetCachedFingerprint(out ulong first, out ulong second)
         {
@@ -46,10 +48,24 @@ internal sealed class PredictedCard : IComparable<PredictedCard>
         public void SetCachedChoiceKey(string key)
             => Volatile.Write(ref _cachedChoiceKey, key);
 
+        public bool TryGetCachedIntrinsicValue(out double value)
+        {
+            bool found = Volatile.Read(ref _hasCachedIntrinsicValue);
+            value = found ? _cachedIntrinsicValue : 0;
+            return found;
+        }
+
+        public void SetCachedIntrinsicValue(double value)
+        {
+            _cachedIntrinsicValue = value;
+            Volatile.Write(ref _hasCachedIntrinsicValue, true);
+        }
+
         public void InvalidateCaches()
         {
             Volatile.Write(ref _hasCachedFingerprint, false);
             Volatile.Write(ref _cachedChoiceKey, null);
+            Volatile.Write(ref _hasCachedIntrinsicValue, false);
         }
     }
 
@@ -216,6 +232,22 @@ internal sealed class PredictedCard : IComparable<PredictedCard>
     {
         if (!_isolateAttachedModelsOnFork)
             _previewStorage.SetCachedChoiceKey(key);
+    }
+
+    internal bool TryGetCachedIntrinsicValue(out double value)
+    {
+        if (_isolateAttachedModelsOnFork)
+        {
+            value = 0;
+            return false;
+        }
+        return _previewStorage.TryGetCachedIntrinsicValue(out value);
+    }
+
+    internal void SetCachedIntrinsicValue(double value)
+    {
+        if (!_isolateAttachedModelsOnFork)
+            _previewStorage.SetCachedIntrinsicValue(value);
     }
 
     internal void InvalidateCaches()

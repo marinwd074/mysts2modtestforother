@@ -40,6 +40,8 @@ namespace CombatSolver {
  using MegaCrit.Sts2.Core.Entities.Cards;
  using MegaCrit.Sts2.Core.Models;
  internal static class CardChoiceSupport {
+  internal static double CardValue(CombatSolver.Engine.Common.PredictedCard card)
+   => throw new NotSupportedException("Use the native harness for cached intrinsic card values");
   internal static double CardValue(CardModel card) {
    double Value(string key)=>card.DynamicVars.TryGetValue(key,out var v)?(double)v.BaseValue:0d;
    double damage=Value("Damage"), block=Value("Block"), draw=Value("Cards"), power=card.Type==CardType.Power?8d:0d;
@@ -51,7 +53,13 @@ namespace CombatSolver {
 // Scalar contracts exercise the native fallback only; simulation is verified in the native harness.
 namespace CombatSolver.Engine.InCombat.Simulation {
  internal sealed class CombatPredictionState {}
+ internal sealed class CombatPredictionSimulator {
+  public CombatPredictionState State => throw new NotSupportedException("Use the native harness for simulation");
+ }
  internal static class CombatPredictedCardExtensions {
+  public static int GetEnergyCostValueWithModifiers(this CombatSolver.Engine.Common.PredictedCard card,
+   CombatPredictionSimulator simulator)
+   => throw new NotSupportedException("Use the native strategic-energy harness for energy queries");
   public static bool HasKeyword(this CombatSolver.Engine.Common.PredictedCard card,
    CombatPredictionState state, MegaCrit.Sts2.Core.Entities.Cards.CardKeyword keyword)
    => throw new NotSupportedException("Use the native strategic-context harness for prediction queries");

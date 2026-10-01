@@ -1098,6 +1098,20 @@ internal static partial class CardChoiceSupport
             && spec.SourcePile == PileType.Hand;
     }
 
+    // Only immutable native preview facts are shared across Forks. The wrapper's existing
+    // mutation/COW boundary invalidates this value; externally mutable models bypass it.
+    internal static double CardValue(PredictedCard card)
+    {
+        CardModel preview = card.Preview;
+        if (preview.GetType().Assembly != typeof(CardModel).Assembly)
+            return CardValue(preview);
+        if (card.TryGetCachedIntrinsicValue(out double value))
+            return value;
+        value = CardValue(preview);
+        card.SetCachedIntrinsicValue(value);
+        return value;
+    }
+
     internal static double CardValue(CardModel card)
     {
         double damage = DynamicVarBaseValue(card.DynamicVars, "Damage");

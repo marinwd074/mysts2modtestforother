@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using CombatSolver;
 using CombatSolver.Engine.Common;
 using CombatSolver.Engine.InCombat.Simulation;
+using CombatSolver.Engine.InCombat.Mirrors.Hooks;
 using CombatSolver.Engine.InCombat.Mirrors.Cards.OnPlay;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
@@ -16,6 +17,7 @@ using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.Models.Orbs;
 using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.Extensions;
 using MegaCrit.Sts2.Core.ValueProps;
 using OfflineSearchHarness;
 using U2DegenerateHarness;
@@ -44,12 +46,14 @@ internal static class Program
         bool pendulumDrawOnly = args.Length > 0 && args[0] == "pendulum-draw";
         bool completionScopeOnly = args.Length > 0 && args[0] == "completion-scope";
         bool rngRestoreOnly = args.Length > 0 && args[0] == "rng-restore";
+        bool strategicEnergyOnly = args.Length > 0 && args[0] == "strategic-energy";
+        bool projectedShuffleOnly = args.Length > 0 && args[0] == "projected-shuffle";
         bool strategicContextOnly = args.Length > 0 && args[0] == "strategic-context";
         bool rootHistoryOnly = args.Length > 0 && args[0] == "root-history";
         bool requestHydrationOnly = args.Length > 0 && args[0] is "request-hydration"
             or "request-hydration-benchmark-on" or "request-hydration-benchmark-off";
         bool requestHydrationBenchmark = requestHydrationOnly && args[0] != "request-hydration";
-        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly ? args[1..] : args,
+        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
             allowHydrationOptions: requestHydrationBenchmark);
         Directory.CreateDirectory(outputDirectory);
 
@@ -93,7 +97,7 @@ internal static class Program
                 ValidateRngRestore(outputDirectory);
                 return 0;
             }
-            if (!rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly && !rootHistoryOnly && !strategicContextOnly)
+            if (!rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly && !rootHistoryOnly && !strategicContextOnly && !strategicEnergyOnly && !projectedShuffleOnly)
             {
             ValidateDarkEmbracePredictionCoverage();
             ValidateViciousStrategicValue();
@@ -147,6 +151,12 @@ internal static class Program
             CombatState combat = OfflineCombat.WaitForPlayableCombat(loop);
             Console.WriteLine(OfflineCombat.DescribeRoot(combat));
 
+            if (strategicEnergyOnly)
+            {
+                ValidateStrategicEnergy(combat, outputDirectory);
+                return 0;
+            }
+
             if (strategicContextOnly)
             {
                 ValidateStrategicContext(combat, outputDirectory);
@@ -181,6 +191,12 @@ internal static class Program
                 ValidateReviewSmartDeadline(combat, names, captured, profile, acceptable: false, cancelCaller: false);
                 ValidateReviewSmartDeadline(combat, names, captured, profile, acceptable: true, cancelCaller: true);
                 Console.WriteLine("RollingReview PASS (9 targeted scenarios)");
+                return 0;
+            }
+
+            if (projectedShuffleOnly)
+            {
+                ValidateProjectedShuffle(combat, names, damage, captured, profile, outputDirectory);
                 return 0;
             }
 
@@ -3386,6 +3402,23 @@ internal static class Program
         SolverResult reference = CombatSearchCoordinator.Solve(root, names, damage,
             coordinated with { UseRequestTransitionHydration = false, MeasurePhasePerformance = false }, default, null);
         string referenceRoute = JsonSerializer.Serialize(reference.BestNode.Actions, Json);
+        if (measure && fixture == "strategic-repeat")
+        {
+            CombatBeamSolver replay = new(root, names, damage, coordinated, searchProfile: profile);
+            SimulationSnapshot snapshot = replay.ReplayDiagnosticPrefix(reference.BestNode.Actions);
+            try
+            {
+                Require(replay.CaptureDiagnosticContinuation(snapshot) == reference.PredictedFinalState
+                    && snapshot.CombatEndedTurn == reference.CombatEndedTurn
+                    && snapshot.CumulativePlayerHpLost == reference.ProjectedBattleHpLost
+                    && snapshot.TerminalStamp is { Outcome: CombatTerminalOutcome.Victory },
+                    "Strategic selected route did not replay to its predicted victory/state/loss.");
+                Require(ContinuationStamp.CaptureLive(combat) == root.ContinuationStamp,
+                    "Strategic selected route replay changed live combat.");
+                Console.WriteLine($"StrategicRouteReplay PASS (victoryTurn={snapshot.CombatEndedTurn}, hpLoss={snapshot.CumulativePlayerHpLost})");
+            }
+            finally { snapshot.ReleaseSimulator(); }
+        }
         CombatSearchCoordinator.Solve(root, names, damage,
             coordinated with { UseRequestTransitionHydration = true }, default, null);
         List<object> samples = [];
@@ -3445,6 +3478,311 @@ internal static class Program
             }, Json));
     }
 
+    private static void ValidateProjectedShuffle(CombatState combat, SolverDisplayNames names,
+        BattleDamageSnapshot damage, SearchPolicySnapshot policy, SolverSearchProfile profile, string outputDirectory)
+    {
+        Player player = LocalContext.GetMe(combat)!;
+        foreach (string id in new[] { "DARK_EMBRACE", "BURNING_PACT", "WHIRLWIND", "DAZED", "SHIV" })
+            player.PlayerCombatState!.DrawPile.AddInternal(combat.CreateCard(ResolveCard(id), player), -1);
+        CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
+        CombatPredictionSimulator parent = root.ForkSimulator();
+        var parentPiles = parent.State.GetPlayerCombatState(player);
+        PredictedCard[] parentCards = parentPiles.DiscardPile.Cards.Concat(parentPiles.DrawPile.Cards)
+            .Concat(parentPiles.Hand.Cards).ToArray();
+        double[] parentValues = parentCards.Select(c => CardChoiceSupport.CardValue(c)).ToArray();
+        int queries = 0, projections = 0;
+        MethodInfo project = typeof(CombatBeamSolver).GetMethod("BuildProjectedShuffleOrder",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var seeds = new List<CombatPredictionSimulator>();
+        for (int mutation = 0; mutation < 6; mutation++)
+        {
+            CombatPredictionSimulator child = parent.Fork();
+            var piles = child.State.GetPlayerCombatState(player);
+            PredictedCard[] cards = piles.DiscardPile.Cards.Concat(piles.DrawPile.Cards)
+                .Concat(piles.Hand.Cards).ToArray();
+            foreach (PredictedCard sourceCard in cards)
+            {
+                PredictedCard card = sourceCard;
+                Require(CardChoiceSupport.CardValue(card) == CardChoiceSupport.CardValue(card.Preview), "Fork value differs.");
+                CardModel preview = card.MutablePreview;
+                foreach (string field in new[] { "Damage", "Block", "Cards" })
+                    if (preview.DynamicVars.TryGetValue(field, out var variable))
+                        variable.BaseValue += mutation == 1 ? 0.125m : mutation;
+                if (mutation == 2) card.Upgrade();
+                if (mutation == 3) card.InvalidateCaches();
+                if (mutation == 4) card.EnableAttachedModelForkIsolation();
+                if (mutation == 5) card = card.Clone();
+                for (int repeat = 0; repeat < 3; repeat++)
+                {
+                    Require(CardChoiceSupport.CardValue(card) == CardChoiceSupport.CardValue(card.Preview),
+                        "Cached intrinsic value differs after mutation/upgrade/clone.");
+                    queries++;
+                }
+                Require(card.TryGetCachedIntrinsicValue(out _) == (mutation != 4), "Opaque model cache gate differs.");
+                for (int edit = 0; edit < 2; edit++)
+                {
+                    CardModel writable = card.MutablePreview;
+                    if (writable.DynamicVars.TryGetValue("Damage", out var changed)) changed.BaseValue += 0.375m;
+                    Require(!card.TryGetCachedIntrinsicValue(out _), "Mutable access left intrinsic cache valid.");
+                    Require(CardChoiceSupport.CardValue(card) == CardChoiceSupport.CardValue(writable),
+                        "Repeated in-place mutation reused a stale value.");
+                    queries++;
+                }
+                if (mutation == 4)
+                {
+                    if (preview.DynamicVars.TryGetValue("Damage", out var damageVar)) damageVar.BaseValue += 3;
+                    Require(CardChoiceSupport.CardValue(card) == CardChoiceSupport.CardValue(card.Preview),
+                        "Externally mutable card reused a stale value.");
+                }
+            }
+            seeds.Add(child);
+            foreach (uint seed in new uint[] { 0, 17, 7123, uint.MaxValue })
+            foreach (int counter in new[] { 0, 7, 10000 })
+            foreach (int shape in new[] { 0, 1, 2, 3 })
+            {
+                List<PredictedCard> source = shape switch
+                {
+                    0 => [], 1 => [.. cards], 2 => [.. cards.Reverse()],
+                    _ => [.. cards, .. cards.Reverse(), cards[0]],
+                };
+                var rng = new MegaCrit.Sts2.Core.Random.Rng(seed, counter);
+                var rngState = rng.CaptureState();
+                var branchRng = child.Rng.Shuffle;
+                branchRng.Counter = rngState.Counter;
+                branchRng._random._s0 = rngState.State0;
+                branchRng._random._s1 = rngState.State1;
+                branchRng._random._s2 = rngState.State2;
+                branchRng._random._s3 = rngState.State3;
+                List<PredictedCard> expected = [.. source];
+                expected.StableShuffle(rng);
+                List<PredictedCard> ordered = [.. source];
+                var projectionRng = rngState.ToRng();
+                CombatBeamSolver.StableShuffleProjection(ordered, projectionRng);
+                Require(ordered.SequenceEqual(expected) && projectionRng.CaptureState() == rng.CaptureState(),
+                    "Native shuffle ordering or full RNG consumption differs.");
+                StateFingerprintBuilder key = new();
+                key.Add(counter); key.Add(expected.Count);
+                int value = 0;
+                for (int index = 0; index < expected.Count; index++)
+                {
+                    StateFingerprint cardKey = CombatBeamSolver.CaptureCardStateFingerprintForTesting(expected[index]);
+                    key.Add(cardKey.First); key.Add(cardKey.Second);
+                    value += (int)Math.Round(CardChoiceSupport.CardValue(expected[index].Preview) * (expected.Count - index));
+                }
+                CombatBeamSolver solver = new(root, names, damage, policy, searchProfile: profile);
+                var actual = ((StateFingerprint Key, int Value))project.Invoke(solver, [child, source])!;
+                Require(source.SequenceEqual(expected) && actual.Key == key.Finish() && actual.Value == value,
+                    "Projected shuffle order/full key/weighted rounding differs from native uncached oracle.");
+                Require(child.Rng.ShuffleState == rngState, "Projection changed branch RNG.");
+                projections++;
+            }
+        }
+        foreach (CombatPredictionSimulator seed in seeds)
+        {
+            var piles = seed.State.GetPlayerCombatState(player);
+            foreach (PredictedCard card in piles.Hand.Cards.Concat(piles.DrawPile.Cards)) card.InvalidateCaches();
+        }
+        Parallel.For(0, 32, new ParallelOptions { MaxDegreeOfParallelism = 4 }, index =>
+        {
+            CombatPredictionSimulator child = seeds[index % seeds.Count].Fork();
+            var piles = child.State.GetPlayerCombatState(player);
+            foreach (PredictedCard card in piles.Hand.Cards.Concat(piles.DrawPile.Cards))
+            {
+                for (int repeat = 0; repeat < 4; repeat++)
+                    Require(CardChoiceSupport.CardValue(card) == CardChoiceSupport.CardValue(card.Preview),
+                        "Parallel fork reused a stale intrinsic value.");
+                CardModel preview = card.MutablePreview;
+                if (preview.DynamicVars.TryGetValue("Block", out var block)) block.BaseValue += index;
+                Require(CardChoiceSupport.CardValue(card) == CardChoiceSupport.CardValue(preview),
+                    "Parallel mutable fork did not invalidate its value.");
+            }
+        });
+        Require(parentCards.Select(c => CardChoiceSupport.CardValue(c)).SequenceEqual(parentValues)
+            && parentCards.Select(c => CardChoiceSupport.CardValue(c.Preview)).SequenceEqual(parentValues),
+            "Mutable fork changed parent values.");
+        Require(ContinuationStamp.CaptureLive(combat) == root.ContinuationStamp, "Projection changed live fixture.");
+        File.WriteAllText(Path.Combine(outputDirectory, "projected-shuffle.json"), JsonSerializer.Serialize(new
+        { evidence = "pinned-headless; no multiplayer performance or deployment claim", queries, projections,
+            parallelBranches = 32, orderKeyValueRng = "identical", parentAndLive = "isolated" }, Json));
+        Console.WriteLine($"ProjectedShuffle PASS (queries={queries}, projections={projections}, parallelBranches=32)");
+    }
+
+    // Native headless oracle: temporarily attach a cloned preview to the corresponding native pile,
+    // so native late hooks see the same pile as the branch; dispatch the captured branch listeners.
+    internal static int NativeEnergyCost(PredictedCard card, CombatPredictionSimulator simulator)
+    {
+        CardModel native = PredictionUtils.CloneCardStateForSimulation(card.Preview);
+        Player owner = native.Owner;
+        PileType? type = card.GetPile(simulator.State)?.Type;
+        CardPile? pile = type is null ? null : owner.PlayerCombatState!.AllPiles.Single(p => p.Type == type);
+        try
+        {
+            pile?.AddInternal(native, -1);
+            int local = native.EnergyCost.GetWithModifiers(CostModifiers.Local);
+            return local < 0 || native.EnergyCost.CostsX ? local
+                : Math.Max(0, (int)MegaCrit.Sts2.Core.Hooks.Hook.ModifyEnergyCostInCombat(
+                    simulator.State.CombatState, native, local));
+        }
+        finally { pile?.RemoveInternal(native, silent: true); }
+    }
+
+    private static void ValidateStrategicEnergy(CombatState combat, string outputDirectory)
+    {
+#if STRATEGIC_CONTEXT_ORACLE
+        Player player = LocalContext.GetMe(combat)!;
+        foreach (string id in new[] { "DARK_EMBRACE", "BURNING_PACT", "WHIRLWIND", "DAZED" })
+            player.PlayerCombatState!.Hand.AddInternal(combat.CreateCard(ResolveCard(id), player), -1);
+        player.PlayerCombatState!.DrawPile.AddInternal(combat.CreateCard(ResolveCard("DARK_EMBRACE"), player), -1);
+        CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
+        CombatPredictionSimulator parent = root.ForkSimulator();
+        int queries = 0, contexts = 0, oldCostDifferences = 0;
+        List<(CombatPredictionSimulator Simulator, int[] Costs)> parallelSeeds = [];
+        StateFingerprint Fingerprint(CombatPredictionSimulator simulator)
+        {
+            StateFingerprintBuilder builder = new();
+            ((SimulatedCombatState)simulator.State.CombatState).AppendFingerprint(ref builder, simulator);
+            return builder.Finish();
+        }
+        List<object> cases = [];
+        for (int scenario = 0; scenario < 12; scenario++)
+        {
+            CombatPredictionSimulator child = parent.Fork();
+            var state = (SimulatedCombatState)child.State.CombatState;
+            var piles = child.State.GetPlayerCombatState(player);
+            switch (scenario)
+            {
+                case 1: state.SetAmount<CorruptionPower>(player.Creature, 1); break;
+                case 2: state.SetAmount<FreeSkillPower>(player.Creature, 1); break;
+                case 3: state.SetAmount<FreePowerPower>(player.Creature, 1); break;
+                case 4: state.SetAmount<FreeAttackPower>(player.Creature, 1); break;
+                case 5:
+                    state.SetAmount<VeilpiercerPower>(player.Creature, 1);
+                    piles.Hand.Cards[0].MutablePreview.AddKeyword(CardKeyword.Ethereal);
+                    break;
+                case 6: state.SetAmount<VoidFormPower>(player.Creature, 1); break;
+                case 7:
+                    piles.Hand.Cards[0].MutablePreview.EnergyCost.SetThisTurn(0);
+                    piles.Hand.Cards.Single(c => c.Preview is DarkEmbrace).MutablePreview.EnergyCost.SetThisTurn(0);
+                    piles.DrawPile.Cards.Single(c => c.Preview is DarkEmbrace).MutablePreview.EnergyCost.SetThisCombat(3);
+                    break;
+                case 8:
+                    state.SetAmount<FreePowerPower>(player.Creature, 1);
+                    PredictedCard moved = piles.DrawPile.Cards.Single(c => c.Preview is DarkEmbrace);
+                    Require(piles.DrawPile.Remove(moved), "Could not move branch power card.");
+                    piles.Hand.Add(moved);
+                    break;
+                case 9:
+                    state.SetAmount<CorruptionPower>(player.Creature, 1);
+                    piles.Hand.Cards[0].MutablePreview.EnergyCost._base = -2;
+                    break;
+                case 10:
+                    state.SetAmount<FreeSkillPower>(player.Creature, 1);
+                    _ = piles.Hand.Cards[0].GetEnergyCostValueWithModifiers(child);
+                    state.SetAmount<FreeSkillPower>(player.Creature, 0);
+                    break;
+                case 11:
+                    state.SetAmount<FreeSkillPower>(player.Creature, 1);
+                    _ = piles.Hand.Cards[0].GetEnergyCostValueWithModifiers(child);
+                    child.StateStore.GetPowerAmount(state.GetPower<FreeSkillPower>(player.Creature)!).Consume();
+                    child.SynchronizePowerAmountPredictionStates();
+                    break;
+            }
+            int expectedSkills = 0, expectedPowers = 0;
+            PredictedCard[] cards = piles.DiscardPile.Cards.Concat(piles.DrawPile.Cards).Concat(piles.Hand.Cards).ToArray();
+            if (scenario == 7)
+            {
+                // Warm the shared pure-value path, then invalidate it with fractional base edits.
+                // The generated context oracle reads uncached native values and applies Ceil itself.
+                foreach (PredictedCard card in cards)
+                {
+                    _ = CardChoiceSupport.CardValue(card);
+                    CardModel preview = card.MutablePreview;
+                    foreach (string field in new[] { "Damage", "Block", "Cards" })
+                        if (preview.DynamicVars.TryGetValue(field, out var variable)) variable.BaseValue += 0.125m;
+                }
+            }
+            StateFingerprint beforeQueries = Fingerprint(child);
+            List<int> expectedCosts = [];
+            foreach (PredictedCard card in cards)
+            {
+                int expected = NativeEnergyCost(card, child);
+                expectedCosts.Add(expected);
+                int predicted = card.GetEnergyCostValueWithModifiers(child);
+                Require(expected == predicted,
+                    $"Native captured energy differs: {scenario}/{card.Preview.Id}: {expected}/{predicted}.");
+                queries++;
+                int estimated = card.Preview.EnergyCost.CostsX ? 0 : Math.Max(0, expected);
+                if (card.Preview.Type == CardType.Skill) expectedSkills += estimated;
+                if (card.Preview.Type == CardType.Power) expectedPowers += estimated;
+                int old = card.Preview.EnergyCost.CostsX ? 0
+                    : Math.Max(0, card.Preview.EnergyCost.GetWithModifiers(CostModifiers.All));
+                if (old != estimated) oldCostDifferences++;
+            }
+            StrategicEffectContext oldContext = StrategicEffectContext.Build(cards, 90, 23, 4,
+                StrategicEffectRequirements.SkillEnergySpend | StrategicEffectRequirements.PowerEnergySpend,
+                false);
+            StrategicEffectRequirements[] masks = new[] { 0, 65535, 192, 32896, 576, 3264 }
+                .Concat(Enumerable.Range(0, 16).Select(bit => 1 << bit))
+                .Select(value => (StrategicEffectRequirements)value).ToArray();
+            foreach (StrategicEffectRequirements mask in masks)
+            foreach (int hp in new[] { -1, 0, 90 })
+            {
+                bool skillsExhaust = state.GetAmount<CorruptionPower>(player.Creature) > 0;
+                StrategicEffectContext optimized = StrategicEffectContext.Build(cards, hp, 23, 4, mask, skillsExhaust, child);
+                MaterializedKeywordContext oracle = MaterializedKeywordContext.Build(cards, hp, 23, 4, mask, skillsExhaust, child);
+                Require(JsonSerializer.Serialize(optimized, Json) == JsonSerializer.Serialize(oracle, Json),
+                    $"Native full energy context differs: {scenario}/{mask}.");
+                if (mask.HasFlag(StrategicEffectRequirements.SkillEnergySpend))
+                    Require(optimized.SkillEnergySpend == expectedSkills, "Skill energy total differs from native oracle.");
+                if (mask.HasFlag(StrategicEffectRequirements.PowerEnergySpend))
+                    Require(optimized.PowerEnergySpend == expectedPowers, "Power energy total differs from native oracle.");
+                contexts++;
+            }
+            Require(Fingerprint(child) == beforeQueries, "Read-only energy context changed power/history fingerprint.");
+            parallelSeeds.Add((child, expectedCosts.ToArray()));
+            cases.Add(new { scenario, expectedSkills, expectedPowers,
+                oldSkills = oldContext.SkillEnergySpend, oldPowers = oldContext.PowerEnergySpend });
+            Require(ContinuationStamp.CaptureLive(combat) == root.ContinuationStamp,
+                "Native oracle attachment or energy query changed live combat.");
+            Require(((SimulatedCombatState)parent.State.CombatState).GetAmount<CorruptionPower>(player.Creature) == 0
+                && parent.State.GetPlayerCombatState(player).DrawPile.Cards.Any(c => c.Preview is DarkEmbrace),
+                "Energy or pile mutation leaked into the parent.");
+        }
+        Require(oldCostDifferences > 0, "Energy fixture did not expose a live-owner or pile difference.");
+        // The native oracle mutates only this headless fixture and is used serially. Parallel
+        // queries fork prepared seeds and compare against their already computed native values.
+        Parallel.For(0, parallelSeeds.Count * 4, new ParallelOptions { MaxDegreeOfParallelism = 4 }, index =>
+        {
+            var seed = parallelSeeds[index % parallelSeeds.Count];
+            CombatPredictionSimulator child = seed.Simulator.Fork();
+            var piles = child.State.GetPlayerCombatState(player);
+            PredictedCard[] cards = piles.DiscardPile.Cards.Concat(piles.DrawPile.Cards).Concat(piles.Hand.Cards).ToArray();
+            StateFingerprint before = Fingerprint(child);
+            for (int repeat = 0; repeat < 2; repeat++)
+            for (int cardIndex = 0; cardIndex < cards.Length; cardIndex++)
+                Require(cards[cardIndex].GetEnergyCostValueWithModifiers(child) == seed.Costs[cardIndex],
+                    "Concurrent branch energy differs from native seed.");
+            Require(Fingerprint(child) == before, "Concurrent query changed power/history fingerprint.");
+        });
+        // Live owner drift after capture must not change the parent's estimate.
+        ModelDb.Power<CorruptionPower>().ToMutable(0).ApplyInternal(player.Creature, 1, false);
+        var parentPiles = parent.State.GetPlayerCombatState(player);
+        PredictedCard[] parentCards = parentPiles.DiscardPile.Cards.Concat(parentPiles.DrawPile.Cards)
+            .Concat(parentPiles.Hand.Cards).ToArray();
+        StrategicEffectContext frozen = StrategicEffectContext.Build(parentCards, 90, 23, 4,
+            StrategicEffectRequirements.SkillEnergySpend | StrategicEffectRequirements.PowerEnergySpend, false, parent);
+        Require(frozen.SkillEnergySpend == 5 && frozen.PowerEnergySpend == 4 && ((SimulatedCombatState)parent.State.CombatState)
+            .GetAmount<CorruptionPower>(player.Creature) == 0, "Live owner drift changed captured energy.");
+        File.WriteAllText(Path.Combine(outputDirectory, "strategic-energy.json"), JsonSerializer.Serialize(new
+        { evidence = "pinned-headless native; no multiplayer performance claim", queries, contexts,
+            oldCostDifferences, parallelBranches = parallelSeeds.Count * 4,
+            readOnlyPowerHistoryFingerprint = "unchanged", liveOwnerDrift = "isolated", cases }, Json));
+        Console.WriteLine($"StrategicEnergy PASS (queries={queries}, contexts={contexts}, oldCostDifferences={oldCostDifferences}, parallelBranches=48, liveOwnerDrift=isolated)");
+#else
+        throw new InvalidOperationException("Run tools/StrategicKeywordChecks/run.py --native to build the native energy oracle.");
+#endif
+    }
+
     private static void ValidateStrategicContext(CombatState combat, string outputDirectory)
     {
 #if STRATEGIC_CONTEXT_ORACLE
@@ -3502,9 +3840,9 @@ internal static class Program
             {
                 StrategicEffectContext native = StrategicEffectContext.Build(cards, enemyHp, 23, 4, mask, skillsExhaust);
                 StrategicEffectContext optimized = StrategicEffectContext.Build(cards, enemyHp, 23, 4, mask,
-                    skillsExhaust, child.State);
+                    skillsExhaust, child);
                 MaterializedKeywordContext oracle = MaterializedKeywordContext.Build(cards, enemyHp, 23, 4, mask,
-                    skillsExhaust, child.State);
+                    skillsExhaust, child);
                 Require(JsonSerializer.Serialize(oracle, Json) == JsonSerializer.Serialize(optimized, Json),
                     $"Materialized native Hook context differs: {scenario}/{mask}.");
                 IReadOnlyList<PowerModel> powers = state.EffectivePowers();
@@ -3513,10 +3851,12 @@ internal static class Program
                 Require(JsonSerializer.Serialize(oracle.WithExhaustDrawTiming(powers, piles.Hand.Cards,
                     player.Creature, child.State), Json) == JsonSerializer.Serialize(timed, Json),
                     $"Materialized native Hook exhaust timing differs: {scenario}/{mask}.");
-                // The old getter consults the live owner. Equality is required when its keywords agree;
-                // positive Hex branches deliberately expose that prior state-binding defect.
-                bool sameKeywords = cards.All(card => card.Preview.Keywords.SetEquals(card.GetKeywords(child.State)));
-                if (sameKeywords)
+                // The old getters consult the live owner. Equality is required when branch queries agree;
+                // Hex and energy-changing branches deliberately expose prior state-binding defects.
+                bool sameQueries = cards.All(card => card.Preview.Keywords.SetEquals(card.GetKeywords(child.State)))
+                    && native.SkillEnergySpend == optimized.SkillEnergySpend
+                    && native.PowerEnergySpend == optimized.PowerEnergySpend;
+                if (sameQueries)
                 {
                     Require(native == optimized && native.WithExhaustDrawTiming(powers, piles.Hand.Cards,
                         player.Creature) == timed, $"Native getter context differs: {scenario}/{mask}.");

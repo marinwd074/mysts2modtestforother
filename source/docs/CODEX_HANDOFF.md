@@ -148,7 +148,74 @@ Snapshot/Fork 首项优化移除了 `PredictionExtensions.Clone/ToRng` 构造器
 
 `f47c169` owned Lab、Client warm-up 后重启（PID 8908）、Host PID 8712，已完成两玩家 local-core/cache-off 会话 `7cb3743a52c34105ba550b1ec1c51ec0` 的初次搜索和 `generation=2 reason=Manual` 重算。首次前台 5.303 / 5.004s，墙钟 16.510 / 11.903s，expanded/transitions 为 12510/60868、15040/70621。每请求 5 成员；首次为 3 Completed、1 Canceled、1 Disposed，重算全部 Completed。两端 Graceful 退出后，9606 行 JSON 完整、journal error=0；成员工作与独立 E0 ledger、全部阶段累计量及 Snapshot 分区/内部子阶段守恒通过。退出前捕获 queued=True、FIFO checkpoints=6，无捕获/序列化失败；`full=False`，未验证检查点字节归档/恢复。临时汇总在 `.local/strategic-context-cost/live-phase-summary.json`。
 
-两请求均触发系统内存压力 GC 回退，工作量不同；本轮只验搜索和日志收尾，实机净收益与部署正确性仍 UNVERIFIED。手动重算 SnapshotEvaluation 累计 10.347s，其中 SnapshotStrategicEffects 2.593s、Fingerprint 3.626s（CombatFingerprint 0.679s），嵌套阶段不能相加作墙钟。下一项核对 `StrategicEffectContext.Build` 能耗查询是否也读取真实 Owner：先用原生对照证明分支语义，再决定是否复用模拟器查询并测完整请求。预算、并行度、排序和缓存默认保持不变。
+两请求均触发系统内存压力 GC 回退，工作量不同；本轮只验搜索和日志收尾，实机净收益与部署正确性仍 UNVERIFIED。手动重算 SnapshotEvaluation 累计 10.347s，其中 SnapshotStrategicEffects 2.593s、Fingerprint 3.626s（CombatFingerprint 0.679s），嵌套阶段不能相加作墙钟。费用查询的后续修正与当前下一步见下节。
+
+### 上下文能耗：绑定预测分支，新版实机成本采集完成
+
+`StrategicEffectContext.Build` 现在接收当前 simulator，技能/Power 费用复用既有 `GetEnergyCostValueWithModifiers`，关键词继续使用其 State。旧 `GetWithModifiers(All)` 会通过真实 Owner / 牌堆读取费用修改；原生对照复现了 26 次差异。保留 X 的零估值、负值截零和所有标量公式；此项修正评分输入的状态来源，可能改变路线，不是纯等价优化。未扩大缓存或调整预算、并行度、排序规则和部署授权，通用后态缓存仍默认 false。
+
+Release 0 warning / 0 error；134932 个标量案例、462 个原生关键词上下文、840 次关键词查询 / 32 个并行分支通过。费用合同通过 180 次原生费用查询、792 个完整上下文 / 48 个 DOP=4 分支，覆盖免费技能/Power/攻击、Corruption、Veilpiercer、VoidForm、局部费用、X/负费用、牌堆移动、Power 移除/消耗及真实 Owner 漂移；Power/history 指纹、父分支与真实夹具隔离通过。原生 oracle 仅在无头夹具中串行临时挂载克隆牌，结束恢复夹具，不是生产依赖。request-hydration、9 项 rolling-review 与结构门禁通过。
+
+对照 `ab4014e`（源码 DLL 为 `f47c169`），五输入各四个独立进程 ABBA，预热后每进程 10 个 cache-off 请求；关闭详细计时、`DOTNET_TieredCompilation=0`，实际 DLL hash 与根/DOP 均核对。原有全夹具严格比较在持续效果工作量变化处失败，保留失败，另行分类核对：普通三敌 DOP=1/4 和抽牌共 120 请求的完整动作值、最终状态、质量、边界与工作一致；持续效果 DOP=1/4 共 80 请求各自版本内完整结果/工作稳定，但新旧路线不同。
+
+| Pinned 输入 | 旧 / 新 expanded / transitions | 结果与验收 |
+|---|---|---|
+| 三敌，DOP=1 | 405 / 2466 → 同值 | 墙钟 274.99→260.16ms（-5.4%），分配约不变 |
+| 抽牌，DOP=1 | 334 / 1515 → 同值 | 墙钟 144.67→150.48ms（+4.0%），分配约不变 |
+| 三敌，DOP=4 | 411 / 2472 → 同值 | 墙钟 217.44→208.14ms（-4.3%），分配约不变 |
+| 持续效果，DOP=1/4 | 419 / 2515 → 178 / 1082 | 两版均预测战损 0 的胜利；结束回合 3→2、边界 TurnLimit→None；工作不同，不报告提速百分比 |
+
+计时采用进程中位数的中位数，不证明稳定或实时多人收益。另跑新版持续效果 DOP=4 的 3 个详细请求，成员/阶段和 Snapshot 分区守恒通过；完整所选路线（含 Choice/目标）从原根独立 replay，最终 ContinuationStamp、零战损与第 2 回合胜利一致，真实夹具未改变。临时结果为 `.local/strategic-energy-cost/`，`correctness-summary.json` 保留不同工作范围；不新增默认门禁。
+
+`9579c83` owned Lab、Client warm-up 后重启（PID 30672）、Host PID 3996，已完成两玩家 local-core/cache-off 会话 `8044d9d1835041ceae241df4ece2760a` 的初次搜索及 `generation=2 reason=Manual` 重算。首次前台 5.142 / 5.003s，墙钟 18.511 / 17.363s，expanded/transitions 为 11330/53596、13099/61671。每请求 5 成员，均为 4 Completed / 1 Canceled，Smart Potion `stop=deadline`；手动请求在 Graceful 停止前已完成。两端已正常退出且 owned 进程均 Absent；11899 行 JSON 完整、journal error=0，独立 E0 成员工作、全部阶段及 Snapshot 分区/内部子阶段守恒通过。所选路线的模拟重放无差异；不是实际执行验证。退出前 queued=True、FIFO checkpoints=6，无捕获/序列化失败；`full=False`，检查点字节归档/恢复仍 UNVERIFIED。定向核对与状态在 `.local/strategic-energy-cost/live-phase-summary.json` 和 `live-capture-state.json`。
+
+请求工作及退出范围不同，不能作为新旧固定工作 A/B；未执行路线，新版实机净收益、自然输入质量及部署正确性仍 UNVERIFIED。手动重算 SnapshotEvaluation 累计 7.407s，其中 Fingerprint 3.108s、ProjectedShuffle 1.612s、SnapshotStrategicEffects 1.324s；ProjectedShuffle 包含在 Fingerprint 内，不能相加当墙钟。投影成本拆分及后续实现见下节；S1 专项实机验收与 S4 调度仍待完成。
+
+### ProjectedShuffle：复用卡牌纯值，新版实机成本采集完成
+
+三输入（普通三敌 DOP=1、持续效果 DOP=1/4）各 3 个详细请求定位 CardValue 约占 ProjectedShuffle 累计时间三成。现在仅在投影路径使用 `CardChoiceSupport.CardValue(PredictedCard)`，在既有 PreviewStorage 中复用原生牌自身 Damage / Block / Cards / 类型派生的 double 值。MutablePreview、显式失效、升级及 COW 继续沿用现有缓存失效边界；Fork 只共享不可变 Preview 的元数据，Clone 保持新存储，第三方牌及可外部修改附加模型实时计算。没有修改排序/洗牌、卡牌指纹、位置权重、Math.Round、RNG 消耗或评分公式；不增加独立跨节点表、缓存范围、预算、DOP 或部署授权，通用后态缓存仍 false。临时细分计时已移除。
+
+`projected-shuffle` 合同通过 450 次纯值查询、288 个原生 StableShuffle / 完整指纹 / 加权值 / 全 RNG 对照、32 个冷查询 DOP=4 分支，覆盖重复/空列表、分数值、修改/升级/Clone/COW、可外部修改模型禁用以及父/真实夹具隔离。Release 0 warning / 0 error，CardHookReceiverChecks 78 项、request-hydration、9 项 rolling-review、结构门禁通过；新版持续效果 DOP=4 的 3 个详细请求成员/阶段及 Snapshot 分区守恒、所选路线独立 replay 通过。
+
+对照 `48cf087`（源码 DLL 为 `9579c83`），五输入各四个独立进程 ABBA，每进程 off/on 预热后测 10 个 cache-off 请求；关闭详细计时、`DOTNET_TieredCompilation=0`，实际 DLL hash 已核对。200 个请求完整根、动作值（含 Choice/目标）、最终状态、质量、边界和工作全部一致。下表为进程中位数的中位数。
+
+| Pinned 输入 | 旧 / 新墙钟 | 耗时变化 | expanded / transitions |
+|---|---:|---:|---:|
+| 三敌，DOP=1 | 187.85 / 182.00ms | -3.1% | 405 / 2466 |
+| 抽牌，DOP=1 | 108.67 / 98.72ms | -9.2% | 334 / 1515 |
+| 持续效果，DOP=1 | 112.60 / 110.57ms | -1.8% | 178 / 1082 |
+| 持续效果，DOP=4 | 83.11 / 83.81ms | +0.8% | 178 / 1082 |
+| 三敌，DOP=4 | 159.85 / 155.72ms | -2.6% | 411 / 2472 |
+
+分配增加约 0.003%～0.015%，来自 Preview 元数据；不能把本轮墙钟变化全部归因于 CardValue 或宣称普遍/稳定提速。详细模式下值查询累计时间下降约三至四成，仅支持定位。临时对照在 `.local/projected-shuffle-cost/`；不新增默认门禁。
+
+`3f83a34` owned Lab、Client warm-up 后重启（PID 38128）、Host PID 38188，已完成两玩家 local-core/cache-off 会话 `bd790a7149b846eda3762d10c386779a` 的初次及 `generation=2 reason=Manual` 重算。首次前台 5.065 / 4.486s，墙钟 9.243 / 7.558s，expanded/transitions 为 13380/63029、14395/67309；每请求 5 成员均 Completed，Smart Potion `stop=complete`。两端 Graceful 退出后 2291 行 JSON 完整、journal error=0；独立 E0 工作、全部阶段及 Snapshot 分区/内部子阶段守恒通过，所选路线模拟重放无差异。退出前 queued=True、FIFO checkpoints=6，无捕获/序列化失败；`full=False`，检查点字节归档/恢复仍 UNVERIFIED。临时汇总与状态在 `.local/projected-shuffle-cost/live-phase-summary.json` 和 `live-capture-state.json`。
+
+手动重算 SnapshotEvaluation 累计 6.372s，其中 Fingerprint 2.094s、ProjectedShuffle 1.076s、SnapshotStrategicEffects 1.545s，阶段有嵌套。两请求各记录 `no_gc_starts=3`，上一构建对应采集为 0，工作及成员退出范围也不同；不能把墙钟下降归因于此项优化或当作固定工作 A/B。未执行路线，实机净收益、自然输入质量及部署正确性仍 UNVERIFIED。后续持续效果上下文的同一纯值复用见下节，不扩大后态缓存或修改预算/DOP/GC 配置。
+
+### 持续效果卡牌价值：复用既有纯值，实机成本采集完成
+
+`StrategicEffectContext.Build` 在 simulator 非空时复用前面 ProjectedShuffle 已得到的 `CardValue(PredictedCard)`，只减少 Damage / Block / Cards / 类型的重复读取；无 simulator 的标量/旧原生对照保留未缓存 getter。Ceil、最低值 1、全部聚合字段、关键词和能耗公式不变；沿用已有 Preview/COW 失效及第三方/外部模型回退，不新增缓存或调整预算/DOP/GC/排序/部署授权。
+
+原生上下文 oracle 现将纯值查询替换为未缓存 CardModel 计算，并覆盖预热后分数 BaseValue 修改：134932 个标量案例、462 个完整关键词上下文、180 次费用 / 792 个完整上下文及并行隔离通过。Release 0 warning / 0 error，request-hydration、9 项 rolling-review、结构门禁通过；3 个持续效果 DOP=4 详细请求的阶段/Snapshot 分区守恒及所选路线独立 replay 通过。
+
+对照 `3f83a34`，五输入各四个独立进程 ABBA，off/on 预热后每进程测 10 个 cache-off 请求；详细计时关闭、`DOTNET_TieredCompilation=0`，实际 DLL hash 已核对。200 请求完整根、路线（含 Choice/目标）、最终状态、质量、边界和工作一致；下表为进程中位数的中位数。
+
+| Pinned 输入 | 旧 / 新墙钟 | 耗时变化 | expanded / transitions |
+|---|---:|---:|---:|
+| 三敌，DOP=1 | 177.31 / 178.61ms | +0.7% | 405 / 2466 |
+| 抽牌，DOP=1 | 97.42 / 95.59ms | -1.9% | 334 / 1515 |
+| 持续效果，DOP=1 | 98.59 / 96.74ms | -1.9% | 178 / 1082 |
+| 持续效果，DOP=4 | 64.90 / 61.96ms | -4.5% | 178 / 1082 |
+| 三敌，DOP=4 | 121.53 / 123.98ms | +2.0% | 411 / 2472 |
+
+分配约不变，不能把所有墙钟变化归因于此项复用或外推为稳定/实时收益。临时证据在 `.local/strategic-card-value-cost/`，不新增默认门禁。
+
+`65c57be` owned Lab、Client 预热后重启，两玩家 local-core 的初次/手动重算为 10479/49782、14438/66867 expanded/transitions，首个前台 5.137/5.002s、请求墙钟 18.918/8.503s。初次为 4 Completed / 1 Canceled、药水 stop=deadline；手动为 5 Completed、stop=complete。全部成员工作、阶段累计量和 Snapshot 分区守恒；两端 Graceful 后 6627 行 JSON 完整、journal error=0，手动请求完成早于停止。11 次所选路线模拟回放的逐步标量对照无差异，不代表实际执行或完整后态等价。
+
+手动重算 SnapshotEvaluation 累计 6.578s，其中 Fingerprint 2.202s（嵌套 ProjectedShuffle 1.132s）、SnapshotStrategicEffects 1.467s。两请求 no_gc_starts 为 0/3，工作和退出范围也不同，不能作为固定工作 A/B。退出检查点 queued=True、提前采集标记及 FIFO checkpoints=6 收尾无失败，full=False 的归档/恢复仍 UNVERIFIED。实机净收益、自然输入质量及部署正确性仍 UNVERIFIED，通用后态缓存继续默认 false。
+
+下一步回到加速计划 S1：先采一轮当前构建的跨回合队友公开行动样本。用户在 Client 点击“执行本回合”，Host 正常打牌并结束回合，等待 Client 下一回合计划；若执行停在不支持边界，先记录原因。核对 fresh Probe/Capture、全部 RNG 差异、新根 route replay 的 accepted/rejected 与回退、旧授权失效及真实部署记录。一次普通跨回合不自动闭合 RNG-only、Targets、目标死亡、斩杀窗口或显式采用重复失效的全部验收。沿用现有 Lab/验证器，临时记录放 `.local/reroot-runtime-acceptance/`；不改预算、DOP、GC、调度或能力默认。
 
 ## 阶段 D 当前实现
 

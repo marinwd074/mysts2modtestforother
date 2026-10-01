@@ -324,7 +324,7 @@ internal sealed partial class CombatBeamSolver
             {
                 StrategicEffectContext context = StrategicEffectContext.Build(
                     liveCards, enemyHp, focus.TotalThreat, focus.IncomingHitCount, strategicRequirements, skillsExhaust,
-                    simulator.State) with
+                    simulator) with
                 {
                     Act3BossInteractions = policy.Act3BossStrategy,
                     FirstAttackDamage = policy.Act3BossStrategy && needsFirstAttackDamage
@@ -994,7 +994,7 @@ internal sealed partial class CombatBeamSolver
             key.Add(cardKey.First);
             key.Add(cardKey.Second);
             value += (int)Math.Round(
-                CardChoiceSupport.CardValue(cards[index].Preview) * (cards.Count - index));
+                CardChoiceSupport.CardValue(cards[index]) * (cards.Count - index));
         }
         return (key.Finish(), value);
     }
