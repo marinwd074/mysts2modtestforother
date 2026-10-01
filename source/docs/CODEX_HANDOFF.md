@@ -128,7 +128,7 @@ Snapshot/Fork 首项优化移除了 `PredictionExtensions.Clone/ToRng` 构造器
 
 三请求均有系统内存压力 GC 回退，工作量不同，不能与上一构建作为净收益 A/B；没有执行路线，实机净收益/部署正确性仍 UNVERIFIED。手动重算 SnapshotEvaluation 累计 9.298s，其中持续效果 3.172s、Fingerprint 2.958s（CombatFingerprint 0.509s）。关键词查询的后续实现与当前下一步见下节；预算、排序和缓存默认保持不变。
 
-### 上下文关键词：复用分支查询，等待新构建实机采集
+### 上下文关键词：复用分支查询，新构建实机成本采集完成
 
 `StrategicEffectContext.Build` 与 `WithExhaustDrawTiming` 现在传入当前 `CombatPredictionState`，复用既有 `PredictedCard.HasKeyword`：无全局修改者时读本地关键词，有修改者时保留原生 Hook 和递归隔离。没有新增跨节点缓存或改动能耗公式。原生 Hex 分支还复现了旧 getter 通过真实 Owner 查询关键词导致的抽牌时机偏差，现改为捕获分支的 Hook；因此此项同时修正状态来源，不能宣称所有场景语义完全未变。临时细分计时已移除。
 
@@ -146,7 +146,9 @@ Snapshot/Fork 首项优化移除了 `PredictionExtensions.Clone/ToRng` 构造器
 
 持续效果人工输入本轮耗时降 6.7%～7.8%、分配降 5.3%～5.4%，不能推广为自然多人收益。Release、request-hydration、9 项 rolling-review、DOP=4 Snapshot 阶段守恒及结构门禁通过。临时对照在 `.local/strategic-context-cost/`；生成 oracle 仅在显式原生合同构建中编译，不成为生产依赖或默认门禁。
 
-当前下一步：在相同 owned Host/Client 复用实例、Client warm-up 后重启，采集 cache-off 初次搜索及手动重算，再 Graceful 收尾核对成员工作和全部阶段守恒。用户只做当前 GUI 步骤。新版实机净收益与部署正确性仍 UNVERIFIED；预算、并行度、排序和缓存默认保持不变。
+`f47c169` owned Lab、Client warm-up 后重启（PID 8908）、Host PID 8712，已完成两玩家 local-core/cache-off 会话 `7cb3743a52c34105ba550b1ec1c51ec0` 的初次搜索和 `generation=2 reason=Manual` 重算。首次前台 5.303 / 5.004s，墙钟 16.510 / 11.903s，expanded/transitions 为 12510/60868、15040/70621。每请求 5 成员；首次为 3 Completed、1 Canceled、1 Disposed，重算全部 Completed。两端 Graceful 退出后，9606 行 JSON 完整、journal error=0；成员工作与独立 E0 ledger、全部阶段累计量及 Snapshot 分区/内部子阶段守恒通过。退出前捕获 queued=True、FIFO checkpoints=6，无捕获/序列化失败；`full=False`，未验证检查点字节归档/恢复。临时汇总在 `.local/strategic-context-cost/live-phase-summary.json`。
+
+两请求均触发系统内存压力 GC 回退，工作量不同；本轮只验搜索和日志收尾，实机净收益与部署正确性仍 UNVERIFIED。手动重算 SnapshotEvaluation 累计 10.347s，其中 SnapshotStrategicEffects 2.593s、Fingerprint 3.626s（CombatFingerprint 0.679s），嵌套阶段不能相加作墙钟。下一项核对 `StrategicEffectContext.Build` 能耗查询是否也读取真实 Owner：先用原生对照证明分支语义，再决定是否复用模拟器查询并测完整请求。预算、并行度、排序和缓存默认保持不变。
 
 ## 阶段 D 当前实现
 
