@@ -2824,6 +2824,32 @@ internal static class Program
             CombatRootSnapshot oldRoot = CombatRootSnapshot.Capture(combat);
             SolverResult old = new CombatBeamSolver(oldRoot, names, damage, policy,
                 searchProfile: profile, continuationRouteReplayActions: actions).Solve();
+            SearchInteractionState routeInteraction = new();
+            SolverRouteAdoptionSeed materializedSeed = new(17, old.BestNode.Actions, () => old);
+            Require(old.ResultScope == SolverResultScope.SearchCompletion
+                    && routeInteraction.RequestAdoptRoute(materializedSeed),
+                "Materialized incumbent adoption fixture was not admitted.");
+            SolverResult finalizedAdoption = routeInteraction.FinalizeWorkerResult(old);
+            Require(ReferenceEquals(finalizedAdoption, old)
+                    && finalizedAdoption.ResultScope == SolverResultScope.RouteAdoption,
+                "Adopting a materialized incumbent lost its explicit scope at worker completion.");
+            _ = routeInteraction.CompleteTakeover();
+            old.ResultScope = SolverResultScope.SearchCompletion;
+            SearchInteractionState coordinatorInteraction = new();
+            Require(coordinatorInteraction.RequestAdoptRoute(materializedSeed),
+                "Coordinator adoption fixture was not admitted.");
+            MethodInfo resolveTakeover = typeof(CombatSearchCoordinator).GetMethod(
+                "ResolveTakeoverResult", BindingFlags.Static | BindingFlags.NonPublic)!;
+            SolverResult selectedAdoption = (SolverResult)resolveTakeover.Invoke(
+                null, [old, coordinatorInteraction])!;
+            Require(ReferenceEquals(selectedAdoption, old)
+                    && selectedAdoption.ResultScope == SolverResultScope.RouteAdoption,
+                "Coordinator treated explicit incumbent adoption as automatic completion.");
+            _ = coordinatorInteraction.CompleteTakeover();
+            old.ResultScope = SolverResultScope.SearchCompletion;
+            Require(new SearchInteractionState().FinalizeWorkerResult(old).ResultScope
+                    == SolverResultScope.SearchCompletion,
+                "Ordinary completion gained explicit adoption without a takeover request.");
             Require(!old.Snapshot.AllEnemiesDead && old.ExpandedNodes == 0,
                 "Old route must be incomplete and replay must not expand Beam nodes.");
 
@@ -2878,6 +2904,31 @@ internal static class Program
             Require(enemy.CurrentHp == 15 && player.PlayerCombatState.Energy == 3
                     && ContinuationStamp.CaptureLive(combat) == adoptedFreshRoot.ContinuationStamp,
                 "Explicit adoption replay mutated live state or RNG.");
+            SolverResult priorAdoption = adoptedReplay;
+            for (int invalidation = 0; invalidation < 2; invalidation++)
+            {
+                combat.RunState.Rng.CombatCardGeneration.NextInt(100);
+                CombatRootSnapshot repeatedRoot = CombatRootSnapshot.Capture(combat);
+                ContinuationRouteReplayBaseline repeatedBaseline = new(
+                    priorAdoption.PredictedFinalState!, priorAdoption.ProjectedBattleHpLost,
+                    priorAdoption.Snapshot.ProjectedDeathSaveUseCount,
+                    priorAdoption.Snapshot.GrowthRewards, priorAdoption.Snapshot.RelicCounters,
+                    ExplicitRouteAdoption: true);
+                SolverResult repeatedAdoption = CombatSearchCoordinator.Solve(repeatedRoot,
+                    names, damage, adoptionPolicy with
+                    {
+                        ContinuationRouteReplayActions = priorAdoption.BestNode.Actions,
+                        ContinuationRouteReplayBaseline = repeatedBaseline,
+                    }, CancellationToken.None, progressCallback: null);
+                Require(repeatedAdoption.ResultScope == SolverResultScope.RouteAdoption
+                        && repeatedAdoption.ExpandedNodes == 0
+                        && repeatedAdoption.RouteIdentity != priorAdoption.RouteIdentity
+                        && repeatedAdoption.ProjectedBattleHpLost <= repeatedBaseline.ProjectedBattleHpLost
+                        && repeatedAdoption.BestNode.Actions.SequenceEqual(priorAdoption.BestNode.Actions)
+                        && ContinuationStamp.CaptureLive(combat) == repeatedRoot.ContinuationStamp,
+                    "Repeated RNG drift lost adoption scope, quality, fresh identity or live isolation.");
+                priorAdoption = repeatedAdoption;
+            }
             Require(CombatSearchCoordinator.TryReplayContinuationRoute(oldRoot, names, damage,
                     policy, CancellationToken.None) == null,
                 "Incomplete replay bypassed the quality gate.");

@@ -185,7 +185,9 @@ internal sealed class SearchInteractionState
                 && request.RouteAdoptionSeed != null
                 && result.ResultScope != SolverResultScope.RouteAdoption)
             {
-                return request.RouteAdoptionSeed.Materialize();
+                SolverResult exactDisplayed = request.RouteAdoptionSeed.Materialize();
+                exactDisplayed.ResultScope = SolverResultScope.RouteAdoption;
+                return exactDisplayed;
             }
             if (request?.Kind == SearchTakeoverKind.ApplyCurrentTurn
                 && request.CurrentTurnAdoptionSeed != null

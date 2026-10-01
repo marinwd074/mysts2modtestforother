@@ -245,7 +245,13 @@ T1/T2/T3 分别部署 8/2/2 张本地牌，各有新 request/route 授权、逐�
 
 定向 journal/native 断言审计通过，两端 Graceful 后 5939 行 JSON 完整、error=0；4 请求全部成员、阶段及 Snapshot 分区守恒，保留实际 Canceled/Disposed。新根请求首前台 5.007s、墙钟 6.741s，不能与不同输入比较为提速。7 次所选路线共 72 步已记录标量一致，归档 CRC 与 6 组四类状态产物通过，恢复仍 UNVERIFIED。证据与审计在 `.local/s1-lethal-window-live/`，journal SHA256 `72448b568e6ec81131b93746bdbc9632b844ea6ad7a6273fe81309b9dce62fdc`。旧 MP2B normal smoke 禁止自动 EndTurn，Reactive Carry B 要求下一回合 fresh search；本样本不满足这两种入口范围，保留其输出，不把它们报为 PASS。
 
-下一步仅做显式采用后的重复 RNG 失效专项：Client 搜索出现可采用路线时点击“采用当前路线”，Host 在采用/恢复期间连续做两次推进共享 RNG 的动作并保持回合；Client 等恢复后执行。验收要求同一采用意图经历两次独立失效，从各自新根重放/合法回退，旧授权不执行，最终新授权部署。未触发重复失效保留 UNVERIFIED；预算、DOP、GC、缓存与能力默认不变。
+### S1 显式采用：物化候选标记已修复，重复失效实机仍 UNVERIFIED
+
+旧 DLL 会话 `077e0ab339f6473ea08f49ea78a40133`（AEONGLASS）中，T6 点击采用 candidate 1，54ms 后 capture 仍为 SearchCompletion；首次后续 CardGeneration 529→535 在 capture 后 1012ms 才发生。唯一 SEARCH_RNG_REPLAN 在 T5、采用前，没有 SEARCH_RNG_ADOPTION_RECOVERY，因此不验收连续采用失效。T1–T6 共 26 张本地牌、6 次 Safe EndTurn 及授权清除完整，Reactive Carry B（request 3）PASS。两端 Graceful 后 22083 行 JSON 完整、journal error=0，10 请求成员/阶段/Snapshot 分区守恒，48 次路线回放共 767 步已记录标量一致；native 退出有 Godot 资源泄漏提示，本轮无 BUG_REPORT_EXPORTED 标记，归档 CRC/恢复仍 UNVERIFIED。证据在 `.local/s1-explicit-adoption-live/`，journal SHA256 `cdfa22e4ca4f6b62193ed016c3d9fee55bf49c0c40ab7fc26281d9dfdbfb74a7`。
+
+根因是已物化 incumbent 的采用 seed 返回普通完成结果；Coordinator 选择和 Runtime 最终收口现只在显式 AdoptRoute 请求下设置 RouteAdoption，保留屏幕所选身份，不增加部署授权。新增回归在旧 DLL 明确失败，新 DLL 的 continuation-replay、completion-scope、lifecycle/结构检查与 Release（0 warning/error）通过；两次额外 RNG 新根重放保持采用范围、质量、不同路线身份和 live 隔离。DLL SHA256 `6B679A6E3EBE9D9527212ED4543F5946C019517518828F93B09D4FF565B1036E`，当前修复仍须实机复测。
+
+下一步重测显式采用：Host 先开始连续推进共享 RNG，Client 搜索未结束且按钮可用时点击“采用当前路线”，Host 在采用/恢复期间继续生成牌并保持回合；Client 等恢复后执行。要求同一采用意图两次独立失效、各次新根恢复和最终新授权部署；仅采用完成后发生变化不计此专项。预算、DOP、GC、缓存与能力默认不变。
 
 ## 阶段 D 当前实现
 
