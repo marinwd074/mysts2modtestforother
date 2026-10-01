@@ -74,7 +74,22 @@ S0 已补齐全请求成员阶段统计：既有 ledger 收尾点在 worker drai
 
 Snapshot/Fork 首项优化移除了 `PredictionExtensions.Clone/ToRng` 构造器按旧 Counter 的无效推进，随后仍逐字段恢复 Counter 与四个生成器状态字。`U0U1PinnedHarness rng-restore` 覆盖 4 seeds × 5 counters、3840 次后续随机值/状态比较及父 RNG 隔离，另通过 request-hydration 与 rolling-review。Cache-off 固定输入 before/after：普通三敌 DOP=1/4 各四进程 ABBA、每进程预热后 10 请求，176.95→177.57ms / 114.10→112.68ms，尚无稳定明显收益；抽牌 DOP=1 单进程对为 95.23→94.27ms，只作质量检查。
 
-新增 `multi-hit-high-counter` 压力夹具沿用三敌输入、先将真实 Shuffle RNG 推进至 Counter=10000；DOP=1 四进程 ABBA、每进程 10 请求，214.37→176.92ms（-17.5%），404 expanded / 2465 transitions、战损 11。所有旧/新请求的完整根、路线、最终状态、质量、边界及逻辑工作一致，JIT/预热设置同原基准；压力夹具不是自然实机样本，收益不外推到普通计数器。临时对照在 `.local/rng-restore-cost/`。预算、并行度、排序、模拟语义与缓存默认不变；新 Release 实机搜索及退出日志采集已完成，尚无普遍提速证据。下一候选先用固定输入分解 Snapshot 的剩余成本，不直接启用缓存或追加算法；退出检查点字节归档/恢复作为独立未验证边界。
+新增 `multi-hit-high-counter` 压力夹具沿用三敌输入、先将真实 Shuffle RNG 推进至 Counter=10000；DOP=1 四进程 ABBA、每进程 10 请求，214.37→176.92ms（-17.5%），404 expanded / 2465 transitions、战损 11。所有旧/新请求的完整根、路线、最终状态、质量、边界及逻辑工作一致，JIT/预热设置同原基准；压力夹具不是自然实机样本，收益不外推到普通计数器。临时对照在 `.local/rng-restore-cost/`。预算、并行度、排序、模拟语义与缓存默认不变；新 Release 实机搜索及退出日志采集已完成，尚无普遍提速证据。Snapshot 剩余成本拆分见下节；退出检查点字节归档/恢复作为独立未验证边界。
+
+### Snapshot 剩余成本拆分：完成，仅增加可选诊断
+
+沿用 `MeasurePhasePerformance` / `SEARCH_REQUEST_PHASE`，新增 `SnapshotEvaluation` 覆盖所有 Snapshot 调用；原 `Snapshot` 只覆盖现有展开计时点，不能混用调用数。内部八个不重叠部分为敌人/覆盖、Fingerprint、ThreatProjection、牌与收益估值、持续效果、未来资源、敌人控制、结果；结果内另测 `SnapshotReachableHand` / `SnapshotConstruction`。未改变评分、键字段、预算、排序、部署及缓存默认。详细计时仍默认关闭；表中为每模式预热后 3 请求的平均线程累计时间，占比以 `SnapshotEvaluation` 为分母，括号中的子阶段不得再与父阶段相加。
+
+| Pinned 输入 | SnapshotEvaluation | Fingerprint（其中 CombatFingerprint） | 手牌可达价值 | 未来资源 | 对象构建 |
+|---|---:|---:|---:|---:|---:|
+| 两层药水审计，DOP=1 | 13.84ms | 42.8%（16.7%） | 13.2% | 17.1% | 2.1% |
+| 抽牌审计，DOP=1 | 24.67ms | 45.0%（16.8%） | 14.7% | 14.2% | 1.9% |
+| 三敌多段攻击，DOP=1 | 48.80ms | 42.7%（19.3%） | 12.5% | 11.3% | 1.7% |
+| 三敌多段攻击，DOP=4 | 84.40ms | 47.2%（22.2%） | 9.1% | 9.2% | 1.8% |
+
+旧 DLL / 新 DLL 计时关闭 / 新 DLL 计时开启的 DOP=1 三输入，加 DOP=4 三敌的开关对照，合计 33 个请求的完整根、路线、最终状态、质量、边界和逻辑工作逐项一致；不比较跨 DOP 工作量。Harness 检查每成员全部 Snapshot 子阶段调用数、非重叠量上界及 worker 汇总守恒；Release、request-hydration、结构门禁通过。复跑用原 `request-hydration-benchmark-off --fixture shared-audit|draw-repeat|multi-hit --iterations 3 --dop 1|4 --measure`，证据在 `.local/snapshot-cost/`。这是成本诊断，少量顺序样本和详细计时开销不能证明净提速或实机收益。
+
+下一测量候选限定为 `SimulatedCombatState.AppendFingerprint`：三敌每请求约 3.05MB 累计分配，占 Snapshot 19.3%/22.2%；先定位内部枚举/物化来源，再做保持全部字段与次序的固定输入对照。有净收益才落地优化；暂不做快照对象池、放宽指纹或扩大后态缓存。
 
 ## 阶段 D 当前实现
 

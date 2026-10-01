@@ -41,6 +41,15 @@ internal enum SearchMetricPhase
     HydrationFork,
     HydrationSnapshot,
     HydrationRealReplay,
+    SnapshotEvaluation,
+    SnapshotEnemyState,
+    SnapshotCardValues,
+    SnapshotStrategicEffects,
+    SnapshotFutureResources,
+    SnapshotEnemyControl,
+    SnapshotResult,
+    SnapshotReachableHand,
+    SnapshotConstruction,
 }
 
 internal readonly record struct SearchMeasurement(long Timestamp, long AllocatedBytes)

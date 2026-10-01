@@ -3424,6 +3424,28 @@ internal static class Program
                 && aggregate.Samples == phases.Members.Sum(m => m.Phases[phase.ToString()].Samples),
                 $"Request phase {phase} missed worker contributions.");
         }
+        string[] snapshotParts =
+        [
+            "SnapshotEnemyState", "Fingerprint", "ThreatProjection", "SnapshotCardValues",
+            "SnapshotStrategicEffects", "SnapshotFutureResources", "SnapshotEnemyControl", "SnapshotResult",
+        ];
+        foreach (SearchSolverPhaseContribution member in phases.Members)
+        {
+            SearchPhaseMetric evaluation = member.Phases["SnapshotEvaluation"];
+            Require(evaluation.Samples > 0
+                && snapshotParts.All(part => member.Phases[part].Samples == evaluation.Samples),
+                "Snapshot decomposition missed a caller or worker contribution.");
+            Require(snapshotParts.Sum(part => member.Phases[part].Elapsed.Ticks) <= evaluation.Elapsed.Ticks
+                && snapshotParts.Sum(part => member.Phases[part].AllocatedBytes) <= evaluation.AllocatedBytes,
+                "Snapshot decomposition double-counted its non-overlapping parts.");
+            SearchPhaseMetric hand = member.Phases["SnapshotReachableHand"];
+            SearchPhaseMetric construction = member.Phases["SnapshotConstruction"];
+            SearchPhaseMetric resultPhase = member.Phases["SnapshotResult"];
+            Require(hand.Samples == evaluation.Samples && construction.Samples == evaluation.Samples
+                && hand.Elapsed.Ticks + construction.Elapsed.Ticks <= resultPhase.Elapsed.Ticks
+                && hand.AllocatedBytes + construction.AllocatedBytes <= resultPhase.AllocatedBytes,
+                "Snapshot result children escaped their parent scope.");
+        }
     }
 
     private static SearchPolicySnapshot RequestHydrationPolicy(

@@ -52,6 +52,10 @@ internal sealed partial class CombatBeamSolver
         SearchBoundaryReason boundary,
         IReadOnlySet<uint> processedEnemyDeaths)
     {
+        // This scope covers every caller; the outer Snapshot metric covers expansion sites only.
+        using SearchMeasurementScope evaluationMeasurement =
+            _run.Performance.Measure(SearchMetricPhase.SnapshotEvaluation);
+        SearchMeasurement enemyStateMeasurement = _run.Performance.Begin();
         SimCreatureState player = simulator.State.GetCreature(_player.Creature);
         SimulatedCombatState combat = (SimulatedCombatState)simulator.State.CombatState;
         int enemyHp = 0;
@@ -109,6 +113,7 @@ internal sealed partial class CombatBeamSolver
             boundary = SearchBoundaryReason.UnsupportedEffect;
 
         SimPlayerCombatState playerState = simulator.State.GetPlayerCombatState(_player);
+        _run.Performance.End(SearchMetricPhase.SnapshotEnemyState, enemyStateMeasurement);
         SearchMeasurement fingerprintMeasurement = _run.Performance.Begin();
         StateFingerprint key = BuildStateKey(
             turn,
@@ -160,6 +165,7 @@ internal sealed partial class CombatBeamSolver
         }
         int projectedHp = threat.Hp;
         _run.Performance.End(SearchMetricPhase.ThreatProjection, threatMeasurement);
+        SearchMeasurement cardValuesMeasurement = _run.Performance.Begin();
         int cumulativePlayerHpLost = combat.GetCumulativeHpLost(_player.Creature);
         int recoveredPlayerHp = combat.GetRecoveredHp(_player.Creature);
         (
@@ -259,6 +265,8 @@ internal sealed partial class CombatBeamSolver
                 1,
                 (int)Math.Round(CardChoiceSupport.CardValue(liveCard.Preview)));
         }
+        _run.Performance.End(SearchMetricPhase.SnapshotCardValues, cardValuesMeasurement);
+        SearchMeasurement strategicEffectsMeasurement = _run.Performance.Begin();
         ThreatFocus focus = BuildThreatFocus(simulator, combat);
         IReadOnlyList<PowerModel> effectivePowers = combat.EffectivePowers();
         // Requirements and evaluation inspect the same immutable snapshot. Native
@@ -389,6 +397,8 @@ internal sealed partial class CombatBeamSolver
                 playerState.OrbQueue.Orbs,
                 aliveEnemyCount);
         }
+        _run.Performance.End(SearchMetricPhase.SnapshotStrategicEffects, strategicEffectsMeasurement);
+        SearchMeasurement futureResourcesMeasurement = _run.Performance.Begin();
         int latentSetupValue = 0;
         PersistentSetupTraits latentSetupTraits = PersistentSetupTraits.None;
         foreach (PredictedCard latentCard in liveCards)
@@ -459,6 +469,8 @@ internal sealed partial class CombatBeamSolver
                 soulCount++;
         }
         persistentBuffValue += soulCount;
+        _run.Performance.End(SearchMetricPhase.SnapshotFutureResources, futureResourcesMeasurement);
+        SearchMeasurement enemyControlMeasurement = _run.Performance.Begin();
         // Where + Sum 两个闭包加一个装箱的 ForkableList 枚举器，换成按下标累加：
         // 筛选条件、累加顺序与每项的整数运算完全不变。
         IReadOnlyList<Creature> knownEnemies = combat.KnownEnemies;
@@ -550,6 +562,8 @@ internal sealed partial class CombatBeamSolver
         if (risk)
             score += SolverWeights.RiskPenalty;
 
+        _run.Performance.End(SearchMetricPhase.SnapshotEnemyControl, enemyControlMeasurement);
+        SearchMeasurement resultMeasurement = _run.Performance.Begin();
         combat.TryGetPocketwatchState(
             _player,
             out int pocketwatchCardsPlayedThisTurn,
@@ -566,15 +580,18 @@ internal sealed partial class CombatBeamSolver
             if (use.Automatic)
                 automaticPotionUseCount++;
         }
+        SearchMeasurement reachableHandMeasurement = _run.Performance.Begin();
         (int reachableHandValue, int zeroCostPlayableCount) =
             CalculateReachableHandPotential(simulator, combat, playerState, _routePolicy);
+        _run.Performance.End(SearchMetricPhase.SnapshotReachableHand, reachableHandMeasurement);
         StateFingerprint potionInventoryKey = BuildPotionInventoryKey(combat);
         StateFingerprint cycleShapeKey = BuildCycleShapeKey(
             cyclePileShapeKey,
             aliveEnemyMask,
             potionInventoryKey,
             boundary);
-        return new SimulationSnapshot(
+        SearchMeasurement constructionMeasurement = _run.Performance.Begin();
+        SimulationSnapshot snapshot = new(
             score,
             key,
             unorderedPileKey,
@@ -665,6 +682,9 @@ internal sealed partial class CombatBeamSolver
             TeamLossRatio = teamLossRatio,
             WorstPlayerLossRatio = worstPlayerLossRatio,
         };
+        _run.Performance.End(SearchMetricPhase.SnapshotConstruction, constructionMeasurement);
+        _run.Performance.End(SearchMetricPhase.SnapshotResult, resultMeasurement);
+        return snapshot;
     }
 
     private (int CumulativeHpLost, double TeamLossRatio, double WorstPlayerLossRatio, bool AllAlive)

@@ -15,6 +15,8 @@ CI 只能证明其实际执行的层级；没有日志/steps 的 runner 失败�
 
 `U0U1PinnedHarness rng-restore` 对照旧 RNG 还原的计数器、状态、后续随机值及父状态隔离；完整请求对照复用 `request-hydration-benchmark-off`，高计数器压力夹具为 `multi-hit-high-counter`。不替代实机搜索或退出取证验证。
 
+`request-hydration-benchmark-off --measure` 另核对 Snapshot 全调用与子阶段调用数、不重叠阶段上界、结果内部子阶段和 worker 汇总；固定输入包含 shared-audit / draw-repeat / multi-hit，三敌覆盖 DOP=1/4。诊断开关对照验证完整根/路线/最终状态/质量/工作一致，不作为新增默认门禁或提速证明。
+
 ## 单人
 
 - 主线：稳定基线。
