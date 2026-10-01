@@ -3331,7 +3331,7 @@ internal static class Program
         int dop = int.Parse(Option("--dop", "1"));
         Require(iterations is > 0 and <= 100 && dop is > 0 and <= 16, "Invalid benchmark size or DOP.");
         bool measure = benchmarkArgs?.Contains("--measure") == true;
-        Require(fixture is "low-repeat" or "shared-audit" or "draw-repeat" or "multi-hit" or "multi-hit-high-counter" or "history-repeat", "Unknown hydration fixture.");
+        Require(fixture is "low-repeat" or "shared-audit" or "draw-repeat" or "multi-hit" or "multi-hit-high-counter" or "history-repeat" or "strategic-repeat", "Unknown hydration fixture.");
         if (fixture == "low-repeat")
             coordinated = coordinated with
             {
@@ -3360,10 +3360,25 @@ internal static class Program
                 CombatManager.Instance.History.CardDrawn(combat, player.PlayerCombatState!.Hand.Cards[0], false);
             root = CombatRootSnapshot.Capture(combat);
         }
+        if (fixture == "strategic-repeat")
+        {
+            foreach (PowerModel power in new PowerModel[]
+                     { ModelDb.Power<DarkEmbracePower>(), ModelDb.Power<CorruptionPower>(),
+                       ModelDb.Power<FeelNoPainPower>(), ModelDb.Power<StrengthPower>() })
+                power.ToMutable(0).ApplyInternal(player.Creature, 1, false);
+            foreach (string cardId in new[]
+                     { "BURNING_PACT", "BATTLE_TRANCE", "SHRUG_IT_OFF", "STOKE", "WHIRLWIND", "TWIN_STRIKE" })
+                player.PlayerCombatState!.DrawPile.AddInternal(combat.CreateCard(ResolveCard(cardId), player), -1);
+            Require(player.Creature.GetPower<DarkEmbracePower>()?.Amount == 1
+                && player.Creature.GetPower<CorruptionPower>()?.Amount == 1,
+                "Strategic fixture did not attach its native powers.");
+            root = CombatRootSnapshot.Capture(combat);
+        }
         // Warm both paths; detailed phase measurements are a separate diagnostic run.
         coordinated = coordinated with { MaxDegreeOfParallelism = dop, MeasurePhasePerformance = measure };
         SolverResult reference = CombatSearchCoordinator.Solve(root, names, damage,
             coordinated with { UseRequestTransitionHydration = false, MeasurePhasePerformance = false }, default, null);
+        string referenceRoute = JsonSerializer.Serialize(reference.BestNode.Actions, Json);
         CombatSearchCoordinator.Solve(root, names, damage,
             coordinated with { UseRequestTransitionHydration = true }, default, null);
         List<object> samples = [];
@@ -3378,14 +3393,21 @@ internal static class Program
             wall.Stop();
             long allocatedBytes = GC.GetTotalAllocatedBytes(precise: true) - allocatedBefore;
             int[] gcCollections = Enumerable.Range(0, 3).Select(g => GC.CollectionCount(g) - gcBefore[g]).ToArray();
-            Require(measured.BestNode.Actions.SequenceEqual(reference.BestNode.Actions)
+            string fullRoute = JsonSerializer.Serialize(measured.BestNode.Actions, Json);
+            Require(fullRoute == referenceRoute
                 && measured.PredictedFinalState == reference.PredictedFinalState
                 && measured.ProjectedBattleHpLost == reference.ProjectedBattleHpLost
                 && measured.TotalExpandedNodes == reference.TotalExpandedNodes
                 && measured.TotalTransitionCount == reference.TotalTransitionCount
                 && measured.CombatEndedTurn == reference.CombatEndedTurn
                 && measured.BoundaryReason == reference.BoundaryReason,
-                "Benchmark cache changed route, state, quality, boundary or logical work.");
+                $"Benchmark changed result: route={fullRoute == referenceRoute} "
+                + $"state={measured.PredictedFinalState == reference.PredictedFinalState} "
+                + $"loss={reference.ProjectedBattleHpLost}/{measured.ProjectedBattleHpLost} "
+                + $"work={reference.TotalExpandedNodes}/{reference.TotalTransitionCount}"
+                + $"->{measured.TotalExpandedNodes}/{measured.TotalTransitionCount} "
+                + $"boundary={reference.BoundaryReason}/{measured.BoundaryReason} "
+                + $"endTurn={reference.CombatEndedTurn}/{measured.CombatEndedTurn}.");
             Require(ContinuationStamp.CaptureLive(combat) == root.ContinuationStamp,
                 "Benchmark changed live combat.");
             ValidateRequestPhaseMetrics(measured, measure);
@@ -3395,6 +3417,7 @@ internal static class Program
                 measured.TotalExpandedNodes, measured.TotalTransitionCount, measured.ProjectedBattleHpLost,
                 measured.BoundaryReason, measured.CombatEndedTurn,
                 route = measured.BestNode.Actions.Select(ActionToken).ToArray(),
+                fullRoute,
                 finalState = measured.PredictedFinalState?.StateText, measured.RequestTransitionHydration,
                 measured.RequestPhaseMetrics,
                 skippedPlayCardSimulations = measured.RequestTransitionHydration?.HydrationHits ?? 0,

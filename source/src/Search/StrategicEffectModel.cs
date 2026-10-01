@@ -284,10 +284,10 @@ internal readonly record struct StrategicEffectContext(
             }
             // Keywords can consult the card's pile. Read Exhaust only for a requested
             // metric, and reuse it only within this read-only card evaluation.
-            bool? hasExhaustKeyword = needsExhaustCount
+            bool exhaustsAsSkill = skillsExhaust && cardType == CardType.Skill;
+            bool? hasExhaustKeyword = needsExhaustCount && !exhaustsAsSkill
                 ? card.Keywords.Contains(CardKeyword.Exhaust) : null;
-            bool exhaustsOnPlay = hasExhaustKeyword == true
-                || skillsExhaust && cardType == CardType.Skill;
+            bool exhaustsOnPlay = exhaustsAsSkill || hasExhaustKeyword == true;
             if (needsExhaustCount && exhaustsOnPlay)
                 exhaustCount++;
             if (needsShivCount)

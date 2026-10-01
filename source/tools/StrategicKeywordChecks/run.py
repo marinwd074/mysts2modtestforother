@@ -11,11 +11,11 @@ using=source[:source.index('[Flags]')]
 # Reverse only this optimization to keep the baseline's remaining formula in sync.
 baseline=source[source.index('    public static StrategicEffectContext Build('):end].rstrip()
 baseline=baseline[:baseline.rfind('}')]
-baseline=baseline.replace('''            // Keywords can consult the card's pile. Read Exhaust only for a requested
-            // metric, and reuse it only within this read-only card evaluation.
-            bool? hasExhaustKeyword = needsExhaustCount
+baseline=baseline.replace('''            bool exhaustsAsSkill = skillsExhaust && cardType == CardType.Skill;
+            bool? hasExhaustKeyword = needsExhaustCount && !exhaustsAsSkill
                 ? card.Keywords.Contains(CardKeyword.Exhaust) : null;
-            bool exhaustsOnPlay = hasExhaustKeyword == true''','''            bool exhaustsOnPlay = card.Keywords.Contains(CardKeyword.Exhaust)''')
+            bool exhaustsOnPlay = exhaustsAsSkill || hasExhaustKeyword == true;''','''            bool exhaustsOnPlay = card.Keywords.Contains(CardKeyword.Exhaust)
+                || skillsExhaust && cardType == CardType.Skill;''')
 baseline=baseline.replace('''                    hasExhaustKeyword ??= card.Keywords.Contains(CardKeyword.Exhaust);
                     if (!hasExhaustKeyword.Value) reusableShivCount++;''','''                    if (!card.Keywords.Contains(CardKeyword.Exhaust)) reusableShivCount++;''')
 baseline=baseline.replace('''                    if (generated > 0 && (cardType == CardType.Power

@@ -35,6 +35,11 @@ for(int mask=0;mask<1<<16;mask+=17)Check(cards,(StrategicEffectRequirements)mask
 Check([], (StrategicEffectRequirements)65535,false);
 Check([new(Card("STRIKE",CardType.Attack))],StrategicEffectRequirements.AttackHits,false);
 if(CardModel.KeywordReads!=0)throw new InvalidOperationException("Unused keywords were read");
+Check([new(Card("SIMPLE_SKILL",CardType.Skill))],StrategicEffectRequirements.ExhaustPlays,true);
+if(CardModel.KeywordReads!=0)throw new InvalidOperationException("Skill exhaust queried an unnecessary keyword");
+Check([new(Card("SHIV_SKILL",CardType.Skill,shiv:true))],
+ StrategicEffectRequirements.ExhaustPlays|StrategicEffectRequirements.ShivPlays,true);
+if(CardModel.KeywordReads!=1)throw new InvalidOperationException("Reusable shiv lost its intrinsic keyword query");
 CardModel weakOnly=Card("WEAK_ONLY",CardType.Skill);
 CardModel vulnerable=Card("VULNERABLE",CardType.Skill);
 vulnerable.DynamicVars.Remove("Weak");
