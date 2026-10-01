@@ -68,7 +68,11 @@ S0 已补齐全请求成员阶段统计：既有 ledger 收尾点在 worker drai
 
 第二次请求的线程累计热点：Snapshot 10.620s、Action 9.484s、RoundAdvance 5.173s、Fork 4.842s、Fingerprint 3.950s、Prune 1.795s；阶段有嵌套，不能相加作墙钟。Fork/Action 累计分配约 1.067/1.389GiB，不是峰值内存。辅助枚举/根捕获不在成员统计内，协调开销仅含原有回收统计。原始日志留在该实例，定向核对与汇总在 `.local/request-hydration-cost/live-phase-summary.json`，不新增默认门禁。
 
-退出时另有 `BUG_REPORT_CHECKPOINT_FAILURE label=combat_end`：原生跑局已释放，无法导出内存保存快照；发生在两次阶段记录完成后，不是搜索失败，但完整退出快照仍未验证。后续先处理该时序，再按实测优先检查 Snapshot 重复计算/指纹及 Fork 分配；保持当前预算、并行度、排序与模拟语义，用同根固定工作验证后再实机对照。通用后态缓存继续默认关闭，停止扩容和推广。
+退出取证已增加 `RunManager.CleanUp(bool)` Prefix：原生 Run 仍有效时采集 `run_cleanup`，同会话只排队一次；诊断异常保留失败事件且不阻止原生清理。后续 `CompleteCombat` 不再从已释放 Run 补采 `combat_end`，明确记录提前采集或原生状态不可用，不把早先检查点重标成终态。Release/结构检查通过；该采集依赖 Godot 原生 API，离线入口无法执行，实机退出检查点及序列化仍 UNVERIFIED。
+
+Snapshot/Fork 首项优化移除了 `PredictionExtensions.Clone/ToRng` 构造器按旧 Counter 的无效推进，随后仍逐字段恢复 Counter 与四个生成器状态字。`U0U1PinnedHarness rng-restore` 覆盖 4 seeds × 5 counters、3840 次后续随机值/状态比较及父 RNG 隔离，另通过 request-hydration 与 rolling-review。Cache-off 固定输入 before/after：普通三敌 DOP=1/4 各四进程 ABBA、每进程预热后 10 请求，176.95→177.57ms / 114.10→112.68ms，尚无稳定明显收益；抽牌 DOP=1 单进程对为 95.23→94.27ms，只作质量检查。
+
+新增 `multi-hit-high-counter` 压力夹具沿用三敌输入、先将真实 Shuffle RNG 推进至 Counter=10000；DOP=1 四进程 ABBA、每进程 10 请求，214.37→176.92ms（-17.5%），404 expanded / 2465 transitions、战损 11。所有旧/新请求的完整根、路线、最终状态、质量、边界及逻辑工作一致，JIT/预热设置同原基准；压力夹具不是自然实机样本，收益不外推到普通计数器。临时对照在 `.local/rng-restore-cost/`。预算、并行度、排序、模拟语义与缓存默认不变；下一节点为新 Release 的 owned Lab 搜索及 Graceful 退出验证，通用后态缓存继续关闭。
 
 ## 阶段 D 当前实现
 

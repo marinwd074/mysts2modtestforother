@@ -13,6 +13,8 @@
 
 CI 只能证明其实际执行的层级；没有日志/steps 的 runner 失败不能记作源码 FAIL。
 
+`U0U1PinnedHarness rng-restore` 对照旧 RNG 还原的计数器、状态、后续随机值及父状态隔离；完整请求对照复用 `request-hydration-benchmark-off`，高计数器压力夹具为 `multi-hit-high-counter`。不替代实机搜索或退出取证验证。
+
 ## 单人
 
 - 主线：稳定基线。

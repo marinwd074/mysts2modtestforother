@@ -19,7 +19,8 @@ internal static class PredictionExtensions
 {
     public static Rng Clone(this Rng rng)
     {
-        Rng clone = new(0U, rng.Counter);
+        // All generator words and the counter are restored below; constructor fast-forward is redundant.
+        Rng clone = new(0U);
         clone.Counter = rng.Counter;
         clone._random._s0 = rng._random._s0;
         clone._random._s1 = rng._random._s1;
@@ -30,7 +31,7 @@ internal static class PredictionExtensions
 
     public static Rng ToRng(this PredictionRngState state)
     {
-        Rng rng = new(0U, state.Counter);
+        Rng rng = new(0U);
         rng.Counter = state.Counter;
         rng._random._s0 = state.State0;
         rng._random._s1 = state.State1;

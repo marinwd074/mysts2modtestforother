@@ -42,10 +42,11 @@ internal static class Program
         bool continuationReplayOnly = args.Length > 0 && args[0] == "continuation-replay";
         bool pendulumDrawOnly = args.Length > 0 && args[0] == "pendulum-draw";
         bool completionScopeOnly = args.Length > 0 && args[0] == "completion-scope";
+        bool rngRestoreOnly = args.Length > 0 && args[0] == "rng-restore";
         bool requestHydrationOnly = args.Length > 0 && args[0] is "request-hydration"
             or "request-hydration-benchmark-on" or "request-hydration-benchmark-off";
         bool requestHydrationBenchmark = requestHydrationOnly && args[0] != "request-hydration";
-        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || requestHydrationOnly ? args[1..] : args,
+        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || requestHydrationOnly || rngRestoreOnly ? args[1..] : args,
             allowHydrationOptions: requestHydrationBenchmark);
         Directory.CreateDirectory(outputDirectory);
 
@@ -84,6 +85,11 @@ internal static class Program
                 MaxExpandedNodes,
                 BudgetMilliseconds);
             Console.WriteLine($"search_patches={patchCount}");
+            if (rngRestoreOnly)
+            {
+                ValidateRngRestore(outputDirectory);
+                return 0;
+            }
             if (!rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly)
             {
             ValidateDarkEmbracePredictionCoverage();
@@ -127,7 +133,8 @@ internal static class Program
             int hydrationFixtureIndex = Array.IndexOf(args, "--fixture");
             HarnessScenario scenario = new(
                 "IRONCLAD",
-                requestHydrationBenchmark && hydrationFixtureIndex >= 0 && args[hydrationFixtureIndex + 1] == "multi-hit"
+                requestHydrationBenchmark && hydrationFixtureIndex >= 0
+                    && args[hydrationFixtureIndex + 1] is "multi-hit" or "multi-hit-high-counter"
                     ? "EXOSKELETONS_WEAK" : "FUZZY_WURM_CRAWLER_WEAK",
                 "U0U1PINNED1",
                 Ascension: 0,
@@ -3015,6 +3022,56 @@ internal static class Program
         Console.WriteLine($"PASS Smart deadline: acceptable={acceptable} caller_cancel={cancelCaller}");
     }
 
+    private static void ValidateRngRestore(string outputDirectory)
+    {
+        static MegaCrit.Sts2.Core.Random.Rng Legacy(PredictionRngState state)
+        {
+            var rng = new MegaCrit.Sts2.Core.Random.Rng(0U, state.Counter);
+            rng.Counter = state.Counter;
+            rng._random._s0 = state.State0; rng._random._s1 = state.State1;
+            rng._random._s2 = state.State2; rng._random._s3 = state.State3;
+            return rng;
+        }
+        int checks = 0;
+        foreach (uint seed in new uint[] { 0, 1, 7123, uint.MaxValue })
+        foreach (int counter in new[] { 0, 1, 17, 1000, 10000 })
+        {
+            var source = new MegaCrit.Sts2.Core.Random.Rng(seed, counter);
+            PredictionRngState state = source.CaptureState();
+            var restored = state.ToRng();
+            var clone = source.Clone();
+            var reference = Legacy(state);
+            Require(restored.CaptureState() == state && clone.CaptureState() == state, "RNG restore lost state or counter.");
+            foreach (int bound in new[] { 1, 2, 3, 7, 101, int.MaxValue })
+            for (int draw = 0; draw < 32; draw++)
+            {
+                int expected = reference.NextInt(bound);
+                Require(restored.NextInt(bound) == expected && clone.NextInt(bound) == expected
+                    && restored.CaptureState() == reference.CaptureState()
+                    && clone.CaptureState() == reference.CaptureState(), "RNG restore changed subsequent draws.");
+                checks++;
+            }
+            Require(source.CaptureState() == state, "Restored RNG modified its parent.");
+        }
+        List<object> costs = [];
+        foreach (int counter in new[] { 0, 1000, 10000 })
+        {
+            PredictionRngState state = new MegaCrit.Sts2.Core.Random.Rng(7123U, counter).CaptureState();
+            foreach (bool legacy in new[] { true, false })
+            {
+                for (int i = 0; i < 10; i++) _ = legacy ? Legacy(state) : state.ToRng();
+                long allocated = GC.GetAllocatedBytesForCurrentThread();
+                long start = System.Diagnostics.Stopwatch.GetTimestamp();
+                for (int i = 0; i < 1000; i++) _ = legacy ? Legacy(state) : state.ToRng();
+                costs.Add(new { counter, legacy, iterations = 1000,
+                    elapsedMs = System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds,
+                    allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocated });
+            }
+        }
+        File.WriteAllText(Path.Combine(outputDirectory, "rng-restore.json"), JsonSerializer.Serialize(new { checks, costs }, Json));
+        Console.WriteLine($"RngRestore PASS ({checks} draw/state checks and parent isolation)");
+    }
+
     private static void ValidateRequestTransitionHydration(
         CombatState combat, SolverDisplayNames names, BattleDamageSnapshot damage,
         SearchPolicySnapshot captured, SolverSearchProfile originalProfile, string outputDirectory,
@@ -3266,7 +3323,7 @@ internal static class Program
         int dop = int.Parse(Option("--dop", "1"));
         Require(iterations is > 0 and <= 100 && dop is > 0 and <= 16, "Invalid benchmark size or DOP.");
         bool measure = benchmarkArgs?.Contains("--measure") == true;
-        Require(fixture is "low-repeat" or "shared-audit" or "draw-repeat" or "multi-hit", "Unknown hydration fixture.");
+        Require(fixture is "low-repeat" or "shared-audit" or "draw-repeat" or "multi-hit" or "multi-hit-high-counter", "Unknown hydration fixture.");
         if (fixture == "low-repeat")
             coordinated = coordinated with
             {
@@ -3280,10 +3337,12 @@ internal static class Program
             SetLiveEnergyForU5(player, 1);
             root = CombatRootSnapshot.Capture(combat);
         }
-        if (fixture == "multi-hit")
+        if (fixture is "multi-hit" or "multi-hit-high-counter")
         {
             foreach (string cardId in new[] { "WHIRLWIND", "TWIN_STRIKE" })
                 player.PlayerCombatState!.Hand.AddInternal(combat.CreateCard(ResolveCard(cardId), player), -1);
+            if (fixture == "multi-hit-high-counter")
+                combat.RunState.Rng.Shuffle.FastForwardCounter(10_000);
             root = CombatRootSnapshot.Capture(combat);
         }
         // Warm both paths; detailed phase measurements are a separate diagnostic run.

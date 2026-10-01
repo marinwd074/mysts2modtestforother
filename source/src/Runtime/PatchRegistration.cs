@@ -55,6 +55,7 @@ internal static class PatchRegistration
         patcher.RegisterPatch<CombatShowcaseSaveIsolationPatch>();
 #endif
         patcher.RegisterPatch<CombatShowcaseCleanupPatch>();
+        patcher.RegisterPatch<RunCleanupCheckpointPatch>();
         RitsuLibFramework.ApplyRequiredPatcher(patcher, onFailure);
     }
 }
