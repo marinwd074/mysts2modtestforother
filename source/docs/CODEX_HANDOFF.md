@@ -89,7 +89,7 @@ Snapshot/Fork 首项优化移除了 `PredictionExtensions.Clone/ToRng` 构造器
 
 旧 DLL / 新 DLL 计时关闭 / 新 DLL 计时开启的 DOP=1 三输入，加 DOP=4 三敌的开关对照，合计 33 个请求的完整根、路线、最终状态、质量、边界和逻辑工作逐项一致；不比较跨 DOP 工作量。Harness 检查每成员全部 Snapshot 子阶段调用数、非重叠量上界及 worker 汇总守恒；Release、request-hydration、结构门禁通过。复跑用原 `request-hydration-benchmark-off --fixture shared-audit|draw-repeat|multi-hit --iterations 3 --dop 1|4 --measure`，证据在 `.local/snapshot-cost/`。这是成本诊断，少量顺序样本和详细计时开销不能证明净提速或实机收益。
 
-### 根历史计数预聚合：已实现，待新构建实机采集
+### 根历史计数预聚合：已实现，新构建实机成本采集完成
 
 `AppendFingerprint` 定位到 calculated history 的重复扫描及捕获 lambda。现在根捕获时按原谓词预聚合生成牌、闪电球、未格挡受击、虚无出牌和抽牌数；Fork 共享只读根计数，本地主行动玩家用值快路径，预测事件仍由各分支累加。未知玩家及非玩家伤害保留原扫描；没有删指纹字段或改变次序。定位用的额外细分计时已移除。
 
@@ -104,7 +104,9 @@ Snapshot/Fork 首项优化移除了 `PredictionExtensions.Clone/ToRng` 构造器
 
 `history-repeat` 仅在不变棋盘记录 2000 次原生抽牌，是人工压力输入。Benchmark 从已捕获根计时，不包含新增根预聚合成本；普通样本波动与收益不能外推为实时多人净提速。Release、`root-history`（混合原生/预测事件、未知玩家/非玩家回退、Fork 隔离、新根更新）、`request-hydration`、9 项 `rolling-review`、DOP=4 Snapshot 阶段守恒及结构门禁通过。临时对照在 `.local/combat-fingerprint-cost/`，JSON 记录实际 DLL SHA256，不新增默认门禁。
 
-下一步：沿用 owned Host/Client Lab，刷新新 DLL、Client warm-up 后重启，再由用户进入两玩家战斗并点击搜索。采集 cache-off 请求及 Graceful 收尾，保留成员真实退出状态；新构建的实机收益与部署正确性仍 UNVERIFIED。预算、并行度、排序、缓存默认不变；暂不做快照对象池、放宽指纹或扩大后态缓存。
+`23366d0` 已完成 owned Lab 新构建采集：Client warm-up 后重启（PID 25724）、Host PID 25212，两玩家 local-core、cache-off，会话 `75cc89df84e6452e9045ae4225c7ad54`。三次请求的首次前台为 5.114 / 5.123 / 4.818s，墙钟为 16.901 / 15.979 / 11.964s，expanded/transitions 为 13965/65618、14563/68591、15103/70177；最后一次为用户点击重算。每请求 5 成员，首次与重算全部 Completed，中间为 3 Completed、1 Canceled、1 Disposed，保留真实状态。两端 Graceful 退出后 16872 行 JSON 完整、journal error=0；独立 E0 成员工作、全部阶段累计量和每成员 Snapshot 分区/内部子阶段守恒通过。退出前捕获 queued=True、FIFO 收尾 checkpoints=6，无捕获/序列化失败；`full=False`，检查点字节归档/恢复仍 UNVERIFIED。临时汇总为 `.local/combat-fingerprint-cost/live-phase-summary.json`。
+
+本轮请求存在不同工作量、系统内存压力及 GC 回退，不是新旧版本固定工作 A/B；没有执行路线。新构建实机收益与部署正确性仍 UNVERIFIED。手动重算 SnapshotEvaluation 累计 11.284s，其中 Fingerprint 3.546s（CombatFingerprint 0.601s）、SnapshotStrategicEffects 3.348s；嵌套阶段不能相加作墙钟。下一候选先定位 `SnapshotStrategicEffects` 内重复读取/枚举，以完整结果/工作及净收益对照决定是否修改。预算、并行度、排序、缓存默认不变；暂不做快照对象池、放宽指纹或扩大后态缓存。
 
 ## 阶段 D 当前实现
 
