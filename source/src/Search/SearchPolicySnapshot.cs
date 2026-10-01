@@ -130,6 +130,7 @@ internal sealed record SearchPolicySnapshot(
     /// </summary>
     public BeamWidthPortfolioTelemetry? PortfolioTelemetry { get; init; }
     public SearchRequestWorkTotals? RequestWorkTotals { get; init; }
+    public SearchRequestMemberKind RequestMemberKind { get; init; }
     // Suggestions from the prior turn; replay must evaluate them from the current root.
     public IReadOnlyList<PlanAction> ContinuationSeedActions { get; init; } = [];
     // Value-only route suggestions; never carry old simulator state or deployment authority.
@@ -152,6 +153,11 @@ internal sealed record SearchPolicySnapshot(
     // the validated R1 probe. The baseline may reuse only a forked predicted post-state;
     // Snapshot/evaluation, transposition, retention and deployment checks still rerun.
     public R1TransitionHydrationCache? R1TransitionHydrationCache { get; init; }
+
+    // Experimental, default off until net savings are proved. Request-owned ordinary
+    // PlayCard post-states need no R1 seed; null preserves the cache-off path.
+    public bool UseRequestTransitionHydration { get; init; }
+    public R1TransitionHydrationCache? RequestTransitionHydrationCache { get; init; }
 
     // Phase D3.4: shadow-only comparison of plain retained frontiers produced by the R1 probe
     // and the ordinary baseline. It never supplies nodes, simulators, pruning decisions or ordering.

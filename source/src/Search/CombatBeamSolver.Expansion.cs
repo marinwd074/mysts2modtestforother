@@ -2755,6 +2755,8 @@ internal sealed partial class CombatBeamSolver
             action, replayForkSeed, roundCheckpointCapture, cardChoiceCapture);
         bool r1HydrationEligible = CanUseR1TransitionHydration(
             action, replayForkSeed, roundCheckpointCapture, cardChoiceCapture);
+        bool requestHydrationEligible = TryRequestHydrationKey(parent, action, out ReplayCacheKey requestHydrationKey,
+            replayForkSeed, roundCheckpointCapture, cardChoiceCapture);
         if (r0MemoEligible
             && TryReadR0TerminalTransition(parent, action, out SimulationSnapshot cachedTerminal))
         {
@@ -2770,6 +2772,9 @@ internal sealed partial class CombatBeamSolver
         {
             return hydratedTransition;
         }
+        if (requestHydrationEligible
+            && TryReadRequestTransitionHydration(parent, requestHydrationKey, out SimulationSnapshot requestHydrated))
+            return requestHydrated;
 
         long shadowReplayStartedTicks =
             r0MemoEligible && WantsR0ShadowReplayTiming()
@@ -2790,6 +2795,8 @@ internal sealed partial class CombatBeamSolver
         RoundReplayCheckpoint? roundCheckpoint = !policy.VerifyIncrementalSearch
             && _roundReplayCheckpoint?.Matches(parent, action) == true ? _roundReplayCheckpoint : null;
         SimulationSnapshot result;
+        SearchMeasurementScope requestReplayMeasure = requestHydrationEligible
+            ? policy.RequestTransitionHydrationCache!.Measure(SearchMetricPhase.HydrationRealReplay) : default;
         try
         {
             if (executionCheckpoint != null)
@@ -2893,9 +2900,13 @@ internal sealed partial class CombatBeamSolver
         finally
         {
             gatedSeed?.Dispose();
+            if (requestHydrationEligible)
+                requestReplayMeasure.Dispose();
         }
 
         ObserveR1TransitionHydration(parent, action, result, r1HydrationEligible);
+        if (requestHydrationEligible)
+            ObserveRequestTransitionHydration(parent, requestHydrationKey, result);
         if (r0MemoEligible)
         {
             StoreR0TerminalTransition(parent, action, result);

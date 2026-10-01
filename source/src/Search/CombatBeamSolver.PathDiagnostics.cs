@@ -716,7 +716,7 @@ internal sealed partial class CombatBeamSolver
             AddText(PolicyChoiceIdentityToken(choice));
         AddText(node.GetTurnSetupPlayState()?.StateText);
 
-        IReadOnlyList<PlanAction> actions = node.Actions;
+        IReadOnlyList<PlanAction> actions = node.ActionsWithoutCaching();
         AddNumber(actions.Count);
         foreach (PlanAction action in actions)
             AddText(PolicyActionIdentityToken(action));

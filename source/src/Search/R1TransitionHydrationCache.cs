@@ -21,7 +21,9 @@ internal readonly record struct R1TransitionHydrationSnapshot(
     int OutputMismatches,
     int RejectedKeys,
     bool ReuseDisabled,
-    IReadOnlyList<R1TransitionHydrationRejectSample> RejectSamples);
+    IReadOnlyList<R1TransitionHydrationRejectSample> RejectSamples,
+    int RetainedSimulators = 0,
+    IReadOnlyDictionary<string, SearchPhaseMetric>? Performance = null);
 
 internal sealed class R1TransitionHydrationSeed(
     CombatPredictionSimulator simulator,
@@ -39,14 +41,18 @@ internal sealed class R1TransitionHydrationSeed(
     internal StateFingerprint ExpectedOutputStateKey { get; } = expectedOutputStateKey;
 }
 
-internal sealed class R1TransitionHydrationCache(int entryLimit = 32)
+internal sealed class R1TransitionHydrationCache(
+    int entryLimit = 32, bool learnFromSearch = false, bool measurePerformance = false)
 {
+    private readonly SearchPerformanceMetrics _performance = new(measurePerformance, threadSafe: true);
+    internal SearchMeasurementScope Measure(SearchMetricPhase phase) => _performance.Measure(phase);
+
     private sealed class Entry(
         string combatIdentity,
         string parentStateText,
         string outputStateText,
-        CombatPredictionSimulator outputSimulator,
-        ForkableSet<uint> processedEnemyDeaths,
+        CombatPredictionSimulator? outputSimulator,
+        ForkableSet<uint>? processedEnemyDeaths,
         int turn,
         int shufflesCrossed,
         SearchBoundaryReason boundaryReason,
@@ -56,8 +62,8 @@ internal sealed class R1TransitionHydrationCache(int entryLimit = 32)
         internal string CombatIdentity { get; } = combatIdentity;
         internal string ParentStateText { get; } = parentStateText;
         internal string OutputStateText { get; } = outputStateText;
-        internal CombatPredictionSimulator OutputSimulator { get; } = outputSimulator;
-        internal ForkableSet<uint> ProcessedEnemyDeaths { get; } = processedEnemyDeaths;
+        internal CombatPredictionSimulator? OutputSimulator { get; set; } = outputSimulator;
+        internal ForkableSet<uint>? ProcessedEnemyDeaths { get; set; } = processedEnemyDeaths;
         internal int Turn { get; } = turn;
         internal int ShufflesCrossed { get; } = shufflesCrossed;
         internal SearchBoundaryReason BoundaryReason { get; } = boundaryReason;
@@ -109,6 +115,64 @@ internal sealed class R1TransitionHydrationCache(int entryLimit = 32)
             return _entries.ContainsKey(key) && !_rejectedKeys.Contains(key);
     }
 
+    internal bool MayHydrate(ReplayCacheKey key)
+    {
+        if (Volatile.Read(ref _reuseDisabled) != 0)
+            return false;
+        lock (_gate)
+            return IsReusableKeyNoLock(key)
+                && _entries[key].OutputSimulator != null && _entries[key].ProcessedEnemyDeaths != null;
+    }
+
+    internal bool CanObserveSearchReplay(ReplayCacheKey key)
+    {
+        lock (_gate)
+        {
+            if (!learnFromSearch || _reuseDisabled != 0 || _rejectedKeys.Contains(key))
+                return false;
+            if (_entries.ContainsKey(key) || _entries.Count < _entryLimit)
+                return true;
+            _droppedStores++;
+            return false;
+        }
+    }
+
+    internal void ObserveSearchReplay(
+        ReplayCacheKey key, string combatIdentity, string parentStateText,
+        string outputStateText, SimulationSnapshot output)
+    {
+        lock (_gate)
+        {
+            if (!learnFromSearch || _reuseDisabled != 0 || _rejectedKeys.Contains(key))
+                return;
+            if (!IsSafeOutput(output))
+            {
+                if (_entries.ContainsKey(key))
+                {
+                    _outputMismatches++;
+                    RejectKeyNoLock(key, "unsafe_output");
+                }
+                return;
+            }
+            if (_entries.TryGetValue(key, out Entry? entry))
+            {
+                ValidateRealReplay(key, combatIdentity, parentStateText, output.StateKey, outputStateText);
+                // Cold requests retain only value metadata until the first independent replay
+                // validates a repeat. One-off actions never retain a simulator graph.
+                if (IsReusableKeyNoLock(key) && entry.OutputSimulator == null)
+                {
+                    using (Measure(SearchMetricPhase.HydrationPrototypeFork))
+                    {
+                        entry.OutputSimulator = output.Simulator.Fork();
+                        entry.ProcessedEnemyDeaths = ((ForkableSet<uint>)output.ProcessedEnemyDeaths).Fork();
+                    }
+                }
+            }
+            else
+                Store(key, combatIdentity, parentStateText, outputStateText, output);
+        }
+    }
+
     internal void Store(
         ReplayCacheKey key,
         string combatIdentity,
@@ -118,12 +182,7 @@ internal sealed class R1TransitionHydrationCache(int entryLimit = 32)
     {
         if (Volatile.Read(ref _frozen) != 0
             || Volatile.Read(ref _reuseDisabled) != 0
-            || !output.HasSimulator
-            || output.BoundaryReason != SearchBoundaryReason.None
-            || output.PlayerDead
-            || output.AllEnemiesDead
-            || output.HasRisk
-            || output.PredictionGaps.Any(static gap => !gap.Compensated))
+            || !IsSafeOutput(output))
         {
             return;
         }
@@ -156,10 +215,9 @@ internal sealed class R1TransitionHydrationCache(int entryLimit = 32)
                 return;
             }
 
-            CombatPredictionSimulator outputSimulator =
-                ((CombatPredictionSimulator)output.Simulator).Fork();
-            ForkableSet<uint> processedEnemyDeaths =
-                ((ForkableSet<uint>)output.ProcessedEnemyDeaths).Fork();
+            CombatPredictionSimulator? outputSimulator = learnFromSearch ? null : output.Simulator.Fork();
+            ForkableSet<uint>? processedEnemyDeaths = learnFromSearch ? null
+                : ((ForkableSet<uint>)output.ProcessedEnemyDeaths).Fork();
             _entries.Add(key, new Entry(
                 combatIdentity,
                 parentStateText,
@@ -181,7 +239,7 @@ internal sealed class R1TransitionHydrationCache(int entryLimit = 32)
         StateFingerprint outputStateKey,
         string outputStateText)
     {
-        if (Volatile.Read(ref _frozen) == 0
+        if ((!learnFromSearch && Volatile.Read(ref _frozen) == 0)
             || Volatile.Read(ref _reuseDisabled) != 0)
         {
             return;
@@ -229,7 +287,7 @@ internal sealed class R1TransitionHydrationCache(int entryLimit = 32)
         out R1TransitionHydrationSeed seed)
     {
         seed = null!;
-        if (Volatile.Read(ref _frozen) == 0
+        if ((!learnFromSearch && Volatile.Read(ref _frozen) == 0)
             || Volatile.Read(ref _reuseDisabled) != 0)
         {
             return false;
@@ -256,11 +314,12 @@ internal sealed class R1TransitionHydrationCache(int entryLimit = 32)
 
         lock (entry.ForkGate)
         {
-            if (Volatile.Read(ref _reuseDisabled) != 0)
-                return false;
+            lock (_gate)
+                if (!IsReusableKeyNoLock(key) || entry.OutputSimulator == null || entry.ProcessedEnemyDeaths == null)
+                    return false;
             seed = new R1TransitionHydrationSeed(
-                entry.OutputSimulator.Fork(),
-                entry.ProcessedEnemyDeaths.Fork(),
+                entry.OutputSimulator!.Fork(),
+                entry.ProcessedEnemyDeaths!.Fork(),
                 entry.Turn,
                 entry.ShufflesCrossed,
                 entry.BoundaryReason,
@@ -271,6 +330,11 @@ internal sealed class R1TransitionHydrationCache(int entryLimit = 32)
 
     internal void RecordHydrationHit()
         => Interlocked.Increment(ref _hydrationHits);
+
+    private static bool IsSafeOutput(SimulationSnapshot output)
+        => output.HasSimulator && output.BoundaryReason == SearchBoundaryReason.None
+            && !output.PlayerDead && !output.AllEnemiesDead && !output.HasRisk
+            && output.PredictionGaps.All(static gap => gap.Compensated);
 
     internal void RecordOutputMismatch(ReplayCacheKey key)
     {
@@ -295,7 +359,7 @@ internal sealed class R1TransitionHydrationCache(int entryLimit = 32)
     }
 
     private bool IsReusableKeyNoLock(ReplayCacheKey key)
-        => _frozen != 0
+        => (learnFromSearch || _frozen != 0)
             && _reuseDisabled == 0
             && !_rejectedKeys.Contains(key)
             && _validatedKeys.Contains(key)
@@ -321,28 +385,30 @@ internal sealed class R1TransitionHydrationCache(int entryLimit = 32)
 
     internal R1TransitionHydrationSnapshot Capture()
     {
-        int entries;
         lock (_gate)
-            entries = _entries.Count;
-        return new R1TransitionHydrationSnapshot(
-            _entryLimit,
-            entries,
-            Volatile.Read(ref _stores),
-            Volatile.Read(ref _duplicateStores),
-            Volatile.Read(ref _droppedStores),
-            Volatile.Read(ref _storeConflicts),
-            Volatile.Read(ref _firstValidations),
-            Volatile.Read(ref _validatedKeysCount),
-            Volatile.Read(ref _indexMisses),
-            Volatile.Read(ref _collisionRejects),
-            Volatile.Read(ref _hydrationHits),
-            Volatile.Read(ref _outputMismatches),
-            Volatile.Read(ref _rejectedKeysCount),
-            Volatile.Read(ref _reuseDisabled) != 0,
-            _rejectSamples.ToArray());
+            return new R1TransitionHydrationSnapshot(
+                _entryLimit,
+                _entries.Count,
+                Volatile.Read(ref _stores),
+                Volatile.Read(ref _duplicateStores),
+                Volatile.Read(ref _droppedStores),
+                Volatile.Read(ref _storeConflicts),
+                Volatile.Read(ref _firstValidations),
+                Volatile.Read(ref _validatedKeysCount),
+                Volatile.Read(ref _indexMisses),
+                Volatile.Read(ref _collisionRejects),
+                Volatile.Read(ref _hydrationHits),
+                Volatile.Read(ref _outputMismatches),
+                Volatile.Read(ref _rejectedKeysCount),
+                Volatile.Read(ref _reuseDisabled) != 0,
+                _rejectSamples.ToArray(),
+                _entries.Values.Count(static entry => entry.OutputSimulator != null),
+                measurePerformance ? Enum.GetValues<SearchMetricPhase>()
+                    .Where(static phase => phase is >= SearchMetricPhase.HydrationKey and <= SearchMetricPhase.HydrationRealReplay)
+                    .ToDictionary(static phase => phase.ToString(), phase => _performance.Snapshot(phase)) : null);
     }
 
-    internal static bool VerifyExactReuseGateForTesting()
+    internal static bool VerifyExactReuseGateForTesting(bool learnFromSearch = false)
     {
         ReplayCacheKey goodKey = new(
             new StateFingerprint(1, 2),
@@ -355,7 +421,7 @@ internal sealed class R1TransitionHydrationCache(int entryLimit = 32)
             "policy",
             ActionReplayCache.CurrentContractVersion);
 
-        R1TransitionHydrationCache cache = new(entryLimit: 2);
+        R1TransitionHydrationCache cache = new(entryLimit: 2, learnFromSearch: learnFromSearch);
         cache._entries.Add(goodKey, new Entry(
             "combat",
             "parent-good",
@@ -377,7 +443,10 @@ internal sealed class R1TransitionHydrationCache(int entryLimit = 32)
             boundaryReason: SearchBoundaryReason.None,
             outputStateKey: new StateFingerprint(7, 8)));
 
-        cache.FreezeStores();
+        if (cache.IsReusableKeyForTesting(goodKey) || cache.IsReusableKeyForTesting(badKey))
+            return false;
+        if (!learnFromSearch)
+            cache.FreezeStores();
         cache.ValidateRealReplay(
             goodKey,
             "combat",

@@ -110,7 +110,8 @@ internal sealed partial class CombatBeamSolver
         int gen0Collections,
         int gen1Collections,
         int gen2Collections,
-        TimeSpan gcPauseDuration)
+        TimeSpan gcPauseDuration,
+        string outcome)
     {
         policy.Diagnostics.Info(
             $"[CombatSolver/Test] ROUTING_CHOICE_SUMMARIES scope=solver " +
@@ -137,7 +138,7 @@ internal sealed partial class CombatBeamSolver
         }
         if (requestWorkTotals != null)
         {
-            requestWorkTotals.Record(new SearchSolverWorkContribution(
+            SearchSolverWorkContribution work = new(
                 _run.Expanded,
                 _run.TransitionCount,
                 _run.ChoiceBranchesEvaluated,
@@ -147,7 +148,13 @@ internal sealed partial class CombatBeamSolver
                 Math.Max(0, gen1Collections),
                 Math.Max(0, gen2Collections),
                 gcPauseDuration < TimeSpan.Zero ? TimeSpan.Zero : gcPauseDuration,
-                _run.WorkPacer.MaxObservedGcPause));
+                _run.WorkPacer.MaxObservedGcPause);
+            requestWorkTotals.Record(work, requestWorkTotals.MeasuresPhases
+                ? new SearchSolverPhaseContribution(
+                    (_continuationSeedProbe ? SearchRequestMemberKind.ContinuationSeed
+                        : policy.RequestMemberKind).ToString(),
+                    _profile.BeamWidth, _minimumPotionUses, _maximumPotionUses,
+                    outcome, work, _run.Performance.CapturePhases()) : null);
         }
         CompleteSearchEfficiencyMember();
     }
@@ -2846,11 +2853,20 @@ internal sealed partial class CombatBeamSolver
         if (!CanApplyFixedPrefixAction(node, action))
             return null;
 
-        SimulationSnapshot snapshot = Replay(
-            [action],
-            node.Snapshot,
-            node.Turn,
-            node.ActionCount);
+        SimulationSnapshot snapshot;
+        if (TryRequestHydrationKey(node, action, out ReplayCacheKey requestKey))
+        {
+            if (!TryReadRequestTransitionHydration(node, requestKey, out snapshot))
+            {
+                using (policy.RequestTransitionHydrationCache!.Measure(SearchMetricPhase.HydrationRealReplay))
+                    snapshot = Replay([action], node.Snapshot, node.Turn, node.ActionCount);
+                ObserveRequestTransitionHydration(node, requestKey, snapshot);
+            }
+        }
+        else
+        {
+            snapshot = Replay([action], node.Snapshot, node.Turn, node.ActionCount);
+        }
         StoreR1TransitionHydration(node, action, snapshot);
         bool terminal = snapshot.PlayerDead
             || snapshot.AllEnemiesDead
@@ -3284,7 +3300,8 @@ internal sealed partial class CombatBeamSolver
                 _gen0Collections,
                 _gen1Collections,
                 _gen2Collections,
-                _gcPauseDuration);
+                _gcPauseDuration,
+                _requestWorkTotals?.MeasuresPhases == true ? _state.Phase.ToString() : string.Empty);
         }
 
         private void DisposeCore(bool releaseLiveSimulators)

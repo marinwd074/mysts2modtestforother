@@ -35,6 +35,41 @@
 
 新增待实施任务：[多人战前预计算与 Boss 通关优先计划](CombatSolver_GPT_Architecture_Plan.md#11-多人战前预计算与-boss-通关优先2026-09-30)。仅完成静态可行性审计；先统一 Boss 质量排序，再验证多人离线恢复，未开放能力或修改相关源码。Showcase 已取消。
 
+### 通用非终局后态缓存：成本分解与首项优化完成，默认关闭
+
+`SearchPolicySnapshot.UseRequestTransitionHydration=true` 时，Coordinator 为同一 local-core 请求创建最多 32 项的普通 PlayCard 后态缓存，冷搜索/兼容成员/药水审计可共享；不依赖 R1。首版仅捕获回合内、完整普通动作前缀不超过 8 张、无 Choice/checkpoint 的非终局转移。首次只留值元数据，第一次重复仍真实模拟并验证，之后才从封存原型 Fork、重新 Snapshot/评分；完整路径、目标、策略、状态/RNG/损失上下文不一致则拒绝，结束/异常/取消后释放。R1 和生产预算/授权保持原合同。
+
+Release、`U0U1PinnedHarness request-hydration` 与 `rolling-review` 通过。Pinned 单人夹具使用 local-core policy 的冷请求 + 两层 Smart Potion 审计得到 17 entries / 14 validated keys / 14 hydration hits / 0 mismatch；完整路线、最终状态、质量、260 expanded / 904 logical transitions 与 cache-off 一致，另覆盖并发 Fork、隔离、容量、严格验证、目标/策略身份及取消释放。不是真实 Host/Client PASS。
+
+已增加请求级线程安全成本统计：构键、索引、父/后态校验、保存、原型 Fork、命中 Fork/Snapshot、真实普通动作 replay 的耗时/分配/次数；仅 `MeasurePhasePerformance=true` 输出到 `RequestTransitionHydration.Performance`。保存包含原型 Fork，真实 replay 包含普通 Fork/Snapshot；各线程阶段是累计耗时，不能相加当墙钟。命中数表示实际跳过的普通 PlayCard 模拟，逻辑转移仍计数。
+
+热点是完整状态校验。未首验的条目现在直接走真实 replay，只在观察结果时完整校验一次父态；首验及碰撞/RNG/路径拒绝合同保持。DOP=1 定向诊断中，药水审计父态校验 59→45 次、1,762,256→1,343,544 bytes，命中仍 14；抽牌审计 40→30 次、1,297,504→974,064 bytes，命中仍 10。无扩容、减预算或裁搜索。
+
+最新常规模式对照：每场景四个独立进程 ABBA，每进程各预热一次 off/on 后测 10 个全新请求，`DOTNET_TieredCompilation=0`、详细计时关闭；未注明的行 DOP=1，下表为进程中位数的中位数。所有请求及进程间根、路线、最终状态、质量、边界和逻辑工作一致。
+
+| Pinned 场景 | off / on 墙钟 | on 耗时变化 | on 分配变化 | 实际跳过模拟 | expanded / logical transitions |
+|---|---|---|---|---|---|
+| 低重复，关闭 portfolio/药水 | 19.71 / 21.21ms | +7.6% | +11.4% | 0 | 99 / 291 |
+| 两层 Smart Potion 审计 | 56.09 / 57.36ms | +2.3% | +8.0% | 14 | 260 / 904 |
+| 抽牌 + 低能量药水审计 | 95.91 / 96.70ms | +0.8% | +3.5% | 10 | 334 / 1515 |
+| 两层药水审计，DOP=4 | 42.03 / 43.75ms | +4.1% | +8.5% | 14 | 260 / 904 |
+| 三敌多段攻击 + 药水审计 | 177.37 / 181.53ms | +2.3% | +6.3% | 32 | 405 / 2466 |
+| 三敌多段攻击，DOP=4 | 113.36 / 117.43ms | +3.6% | +5.8% | 26 | 411 / 2472 |
+
+新增 `multi-hit` 为 pinned `EXOSKELETONS_WEAK` 三敌开局，原手牌追加 WHIRLWIND / TWIN_STRIKE，沿用两瓶 Fire Potion、Beam=8 / 600 节点上限和无 Burning Blood 的审计配置；不是自然捕获的实机快照。DOP=1/4 各四进程、合计 80 个完整请求均与各自 cache-off 的根/路线/最终状态/质量/边界/逻辑工作一致，战损均 11；不要求不同 DOP 的工作量相同。三敌样本满 32 项仍未获得净收益，现有范围的扩容/默认启用继续停止。
+
+Release、结构门禁、`request-hydration`（含并发统计、未首验惰性校验和默认关闭诊断）通过；DOP=4 药水审计固定输入也保持完整结果/工作一致。尚未证明净提速，因此继续默认 false，停止扩容和推广，不进入本功能的实机启用验证。当前统计只支持定位成本，不证明真实 Host/Client 或普遍性能。下一候选应先寻找确有昂贵重复转移的自然输入；否则按 [加速计划 §12](CombatSolver_GPT_Architecture_Plan.md#12-多人搜索加速2026-10-01) 转向其他已测热点。
+
+复跑：同一 `U0U1PinnedHarness` 的 `request-hydration-benchmark-off/on --fixture low-repeat|shared-audit|draw-repeat|multi-hit --iterations 10 --dop 1 --out .local/...`，成本诊断另加 `--measure`。逐进程按 off/on/on/off 顺序运行，不并发 benchmark。Benchmark 与缓存合同入口分开，仍共用固定策略；JSON 含环境/JIT/预热、GC、根与逐请求状态、结果和分配，并在详细模式保留该请求的现有 `SEARCH_PHASE` 日志。临时证据位于 `.local/request-hydration-cost/`，不作为新增默认门禁。
+
+S0 已补齐全请求成员阶段统计：既有 ledger 收尾点在 worker drain 后提交一次阶段贡献，结果与日志均含 `RequestPhaseMetrics` / `SEARCH_REQUEST_PHASE`。成员标注 baseline / beam refinement / Smart Potion / continuation seed / route replay / novelty；未覆盖的分类保留 `Unclassified`。三敌 DOP=1 捕获 baseline 120/568、两层药水 141/873 与 144/1025，合计 405/2466；DOP=4 为 411/2472。缓存 off/on、计时 off/on 的完整结果和逻辑工作一致，阶段汇总守恒；取消前无工作、DOP=4 yield 后取消均只贡献一次。`Disposed` 是真实提前退出状态，不能记为完成。
+
+2026-10-01 已完成单场真实 Host/Client 成本采集：`daeb135` Release、owned Lab、Client warm-up 后重启、两玩家 local-core、缓存关闭、正常并行配置。初次与用户点击重新计算分别记录 5 个已完成成员（Novelty / baseline / 三层 Smart Potion）、13988/66094 与 15074/70505 expanded/transitions；首次前台 5.073/4.873s，请求墙钟 16.049/15.160s。Graceful 停止两端后，全部 JSON 完整，成员工作与独立 E0 member telemetry 一致，全部阶段耗时/分配/次数逐项守恒。两请求 Novelty 工作不同，不是固定工作 A/B，也不是缓存实机收益或部署正确性 PASS。
+
+第二次请求的线程累计热点：Snapshot 10.620s、Action 9.484s、RoundAdvance 5.173s、Fork 4.842s、Fingerprint 3.950s、Prune 1.795s；阶段有嵌套，不能相加作墙钟。Fork/Action 累计分配约 1.067/1.389GiB，不是峰值内存。辅助枚举/根捕获不在成员统计内，协调开销仅含原有回收统计。原始日志留在该实例，定向核对与汇总在 `.local/request-hydration-cost/live-phase-summary.json`，不新增默认门禁。
+
+退出时另有 `BUG_REPORT_CHECKPOINT_FAILURE label=combat_end`：原生跑局已释放，无法导出内存保存快照；发生在两次阶段记录完成后，不是搜索失败，但完整退出快照仍未验证。后续先处理该时序，再按实测优先检查 Snapshot 重复计算/指纹及 Fork 分配；保持当前预算、并行度、排序与模拟语义，用同根固定工作验证后再实机对照。通用后态缓存继续默认关闭，停止扩容和推广。
+
 ## 阶段 D 当前实现
 
 ### R1 新根恢复

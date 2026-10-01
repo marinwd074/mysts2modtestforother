@@ -31,6 +31,16 @@ internal enum SearchMetricPhase
     CombatFingerprint,
     Prune,
     FinalSelection,
+    TransitionHydration,
+    HydrationKey,
+    HydrationLookup,
+    HydrationParentValidation,
+    HydrationOutputValidation,
+    HydrationStore,
+    HydrationPrototypeFork,
+    HydrationFork,
+    HydrationSnapshot,
+    HydrationRealReplay,
 }
 
 internal readonly record struct SearchMeasurement(long Timestamp, long AllocatedBytes)
@@ -38,11 +48,12 @@ internal readonly record struct SearchMeasurement(long Timestamp, long Allocated
     public static SearchMeasurement Disabled => new(0, 0);
 }
 
-internal sealed class SearchPerformanceMetrics(bool enabled)
+internal sealed class SearchPerformanceMetrics(bool enabled, bool threadSafe = false)
 {
     private readonly bool _enabled = enabled;
     private readonly long[] _ticks = new long[Enum.GetValues<SearchMetricPhase>().Length];
     private readonly long[] _allocatedBytes = new long[Enum.GetValues<SearchMetricPhase>().Length];
+    private readonly long[] _samples = new long[Enum.GetValues<SearchMetricPhase>().Length];
 
     public SearchMeasurement Begin()
         => _enabled
@@ -57,8 +68,20 @@ internal sealed class SearchPerformanceMetrics(bool enabled)
         if (!_enabled)
             return;
         int index = (int)phase;
-        _ticks[index] += Stopwatch.GetTimestamp() - measurement.Timestamp;
-        _allocatedBytes[index] += GC.GetAllocatedBytesForCurrentThread() - measurement.AllocatedBytes;
+        long ticks = Stopwatch.GetTimestamp() - measurement.Timestamp;
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - measurement.AllocatedBytes;
+        if (threadSafe)
+        {
+            Interlocked.Add(ref _ticks[index], ticks);
+            Interlocked.Add(ref _allocatedBytes[index], allocated);
+            Interlocked.Increment(ref _samples[index]);
+        }
+        else
+        {
+            _ticks[index] += ticks;
+            _allocatedBytes[index] += allocated;
+            _samples[index]++;
+        }
     }
 
     /// <summary>合并并清空一个已经越过完成 barrier 的持久 worker 阶段指标。</summary>
@@ -71,9 +94,11 @@ internal sealed class SearchPerformanceMetrics(bool enabled)
             {
                 _ticks[index] += worker._ticks[index];
                 _allocatedBytes[index] += worker._allocatedBytes[index];
+                _samples[index] += worker._samples[index];
             }
             worker._ticks[index] = 0;
             worker._allocatedBytes[index] = 0;
+            worker._samples[index] = 0;
         }
     }
 
@@ -82,8 +107,11 @@ internal sealed class SearchPerformanceMetrics(bool enabled)
         int index = (int)phase;
         return new SearchPhaseMetric(
             Stopwatch.GetElapsedTime(0, _ticks[index]),
-            _allocatedBytes[index]);
+            _allocatedBytes[index], _samples[index]);
     }
+
+    internal IReadOnlyDictionary<string, SearchPhaseMetric> CapturePhases()
+        => Enum.GetValues<SearchMetricPhase>().ToDictionary(phase => phase.ToString(), Snapshot);
 }
 
 internal readonly struct SearchMeasurementScope(
@@ -94,4 +122,4 @@ internal readonly struct SearchMeasurementScope(
     public void Dispose() => owner.End(phase, measurement);
 }
 
-internal readonly record struct SearchPhaseMetric(TimeSpan Elapsed, long AllocatedBytes);
+internal readonly record struct SearchPhaseMetric(TimeSpan Elapsed, long AllocatedBytes, long Samples = 0);

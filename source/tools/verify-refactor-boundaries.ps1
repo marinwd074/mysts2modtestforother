@@ -54,13 +54,18 @@ foreach ($localSearchStampRule in @(
     'CaptureLocalCoreSearchValidity',
     'ProjectLocalCoreSearchValidity',
     'IsLocalCoreSearchCompatible',
-    'name is "P" or "R"',
+    'name is "P"',
+    'NormalizeSharedShuffleRng(field)',
+    'return slash < 0 ? field : "R=*" + field[slash..]',
     'IsIndexedField(name, "E")',
     'IsIndexedField(name, "AI")',
     'IsIndexedField(name, "MS")')) {
     if (-not $liveCombatStampText.Contains($localSearchStampRule)) {
         $violations.Add("${liveCombatStampPath}: local-core search validity stamp drifted '$localSearchStampRule'")
     }
+}
+if ($liveCombatStampText.Contains('name is "P" or "R"')) {
+    $violations.Add("${liveCombatStampPath}: local-core validity must preserve non-shuffle RNG streams")
 }
 
 $solverControllerPath = Join-Path $repositoryRoot 'src/Runtime/SolverController.cs'
@@ -176,7 +181,7 @@ foreach ($enemyHpReuseRule in @(
     'livingEnemyHpDecreaseDrift',
     'exact_except_remote_enemy_hp',
     'remote_enemy_hp_decrease',
-    'IsInLethalRecalculationWindow(state.Enemies)')) {
+    'ShouldAllowLivingEnemyHpDecreaseReuse(')) {
     if (-not $searchLifecycleCompletionText.Contains($enemyHpReuseRule)) {
         $violations.Add("${searchLifecycleCompletionPath}: continuation enemy-HP reuse gating drifted '$enemyHpReuseRule'")
     }
@@ -1563,6 +1568,9 @@ $expectedBeamFiles = @(
     "CombatBeamSolver.Phases.cs",
     "CombatBeamSolver.PrimaryChoiceReplay.cs",
     "CombatBeamSolver.R0TransitionMemo.cs",
+    "CombatBeamSolver.R1TransitionHydration.cs",
+    "CombatBeamSolver.RequestTransitionHydration.cs",
+    "CombatBeamSolver.ContinuationRouteReplay.cs",
     "CombatBeamSolver.Retention.cs",
     "CombatBeamSolver.RetentionJobs.cs",
     "CombatBeamSolver.StateEvaluation.cs",
@@ -4613,7 +4621,7 @@ foreach ($p2BudgetRule in @(
 }
 
 if ($violations.Count -gt 0) {
-    $violations | ForEach-Object { Write-Error $_ }
+    Write-Error ($violations -join "`n")
     throw "Refactor boundary verification failed with $($violations.Count) violation(s)."
 }
 

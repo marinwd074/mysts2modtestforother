@@ -84,6 +84,7 @@ internal static partial class CombatSearchCoordinator
         SearchPolicySnapshot memberPolicy = policy with
         {
             P3SharedWallClockBudget = sharedBudget,
+            RequestMemberKind = SearchRequestMemberKind.Baseline,
         };
 
         using CombatBeamSolver.SearchMemberExecutionSession beamSession =
@@ -188,7 +189,7 @@ internal static partial class CombatSearchCoordinator
                         root,
                         displayNames,
                         battleDamage,
-                        memberPolicy,
+                        policy.MeasurePhasePerformance ? memberPolicy with { RequestMemberKind = SearchRequestMemberKind.SmartPotion } : memberPolicy,
                         cancellationToken,
                         progressCallback: null,
                         profile,

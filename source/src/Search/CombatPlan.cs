@@ -1290,6 +1290,7 @@ internal sealed record SearchNode(
     public bool CrossTurnSemanticInvisibleToModeledQuality { get; set; }
     public bool IsCycleProbeLane => CycleProbeLease != null;
     public IReadOnlyList<PlanAction> Actions => _actions ??= MaterializeActions();
+    internal IReadOnlyList<PlanAction> ActionsWithoutCaching() => _actions ?? MaterializeActions();
 
     public IReadOnlyList<PlanCardChoice> GetTurnSetupChoices()
     {
@@ -1790,6 +1791,9 @@ internal sealed class SolverResult
     public int NodeLimitSnapshotsReleased { get; init; }
     public required int TransitionCacheHits { get; init; }
     public int R1TransitionHydrationHits { get; init; }
+
+    public R1TransitionHydrationSnapshot? RequestTransitionHydration { get; set; }
+    public SearchRequestPhaseSnapshot? RequestPhaseMetrics { get; set; }
     public int ShadowReplayObservations { get; init; }
     public int ShadowReplayStores { get; init; }
     public int ShadowReplayValidatedHits { get; init; }

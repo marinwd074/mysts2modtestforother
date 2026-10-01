@@ -42,7 +42,11 @@ internal static class Program
         bool continuationReplayOnly = args.Length > 0 && args[0] == "continuation-replay";
         bool pendulumDrawOnly = args.Length > 0 && args[0] == "pendulum-draw";
         bool completionScopeOnly = args.Length > 0 && args[0] == "completion-scope";
-        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly ? args[1..] : args);
+        bool requestHydrationOnly = args.Length > 0 && args[0] is "request-hydration"
+            or "request-hydration-benchmark-on" or "request-hydration-benchmark-off";
+        bool requestHydrationBenchmark = requestHydrationOnly && args[0] != "request-hydration";
+        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || requestHydrationOnly ? args[1..] : args,
+            allowHydrationOptions: requestHydrationBenchmark);
         Directory.CreateDirectory(outputDirectory);
 
         try
@@ -80,7 +84,7 @@ internal static class Program
                 MaxExpandedNodes,
                 BudgetMilliseconds);
             Console.WriteLine($"search_patches={patchCount}");
-            if (!rollingReviewOnly && !continuationReplayOnly)
+            if (!rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly)
             {
             ValidateDarkEmbracePredictionCoverage();
             ValidateViciousStrategicValue();
@@ -120,9 +124,11 @@ internal static class Program
                 ValidateReviewOrdering();
             }
 
+            int hydrationFixtureIndex = Array.IndexOf(args, "--fixture");
             HarnessScenario scenario = new(
                 "IRONCLAD",
-                "FUZZY_WURM_CRAWLER_WEAK",
+                requestHydrationBenchmark && hydrationFixtureIndex >= 0 && args[hydrationFixtureIndex + 1] == "multi-hit"
+                    ? "EXOSKELETONS_WEAK" : "FUZZY_WURM_CRAWLER_WEAK",
                 "U0U1PINNED1",
                 Ascension: 0,
                 ActIndexForTest: 0);
@@ -153,6 +159,17 @@ internal static class Program
                 ValidateReviewSmartDeadline(combat, names, captured, profile, acceptable: false, cancelCaller: false);
                 ValidateReviewSmartDeadline(combat, names, captured, profile, acceptable: true, cancelCaller: true);
                 Console.WriteLine("RollingReview PASS (9 targeted scenarios)");
+                return 0;
+            }
+
+            if (requestHydrationOnly)
+            {
+                bool? benchmarkCacheEnabled = args[0] == "request-hydration" ? null
+                    : args[0] == "request-hydration-benchmark-on";
+                ValidateRequestTransitionHydration(combat, names, damage, captured, profile, outputDirectory,
+                    benchmarkCacheEnabled, args);
+                Console.WriteLine(benchmarkCacheEnabled.HasValue ? "RequestHydration benchmark completed"
+                    : "RequestHydration PASS (cold replay, first validation, isolation, capacity, audits and lifecycle)");
                 return 0;
             }
 
@@ -2998,13 +3015,389 @@ internal static class Program
         Console.WriteLine($"PASS Smart deadline: acceptable={acceptable} caller_cancel={cancelCaller}");
     }
 
-    private static string ParseOutput(string[] args)
+    private static void ValidateRequestTransitionHydration(
+        CombatState combat, SolverDisplayNames names, BattleDamageSnapshot damage,
+        SearchPolicySnapshot captured, SolverSearchProfile originalProfile, string outputDirectory,
+        bool? benchmarkCacheEnabled = null, string[]? benchmarkArgs = null)
+    {
+        Require(SolverSessionCapabilities.ShouldMeasureLabSearchPhases(true, true, "1")
+            && !SolverSessionCapabilities.ShouldMeasureLabSearchPhases(false, true, "1")
+            && !SolverSessionCapabilities.ShouldMeasureLabSearchPhases(true, false, "1")
+            && !SolverSessionCapabilities.ShouldMeasureLabSearchPhases(true, true, null),
+            "Lab phase measurement escaped its session, ownership or opt-in gate.");
+        if (benchmarkCacheEnabled is { } enabledFlag)
+        {
+            BenchmarkRequestTransitionHydration(combat, names, damage, captured, originalProfile,
+                outputDirectory, enabledFlag, benchmarkArgs);
+            return;
+        }
+        Require(R1TransitionHydrationCache.VerifyExactReuseGateForTesting()
+            && R1TransitionHydrationCache.VerifyExactReuseGateForTesting(learnFromSearch: true),
+            "R1 and request learning must validate before reuse and reject only the conflicting key.");
+        Player player = LocalContext.GetMe(combat)!;
+        SetLiveEnergyForU5(player, 3);
+        CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
+        SolverSearchProfile profile = originalProfile with { BeamWidth = 8, MaxExpandedNodes = 600 };
+        SearchPolicySnapshot plain = RequestHydrationPolicy(captured, profile);
+        PlanAction bash = new(PlanActionKind.PlayCard, root.StartTurnNumber, "BASH",
+            TargetIndex: 0, TargetCombatId: root.Enemies.Single().CombatId);
+        R1TransitionHydrationCache cache = new(entryLimit: 1, learnFromSearch: true, measurePerformance: true);
+        SearchPolicySnapshot cached = plain with { RequestTransitionHydrationCache = cache };
+        SimulationSnapshot Run(SearchPolicySnapshot policy, PlanAction action, out int hits,
+            Action<CombatPredictionSimulator>? prepare = null)
+        {
+            CombatBeamSolver solver = new(root, names, damage, policy, searchProfile: profile);
+            SimulationSnapshot result = solver.ReplayDiagnosticActionWithR0Memo(action, prepareParent: prepare);
+            hits = solver.R0TransitionCacheHitsForTesting;
+            return result;
+        }
+        string State(SimulationSnapshot snapshot)
+            => new CombatBeamSolver(root, names, damage, plain, searchProfile: profile)
+                .CaptureDiagnosticContinuation(snapshot).StateText;
+        void Same(SimulationSnapshot actual, SimulationSnapshot expected)
+        {
+            Require(actual.StateKey == expected.StateKey && State(actual) == State(expected)
+                && actual.Score == expected.Score && actual.CumulativePlayerHpLost == expected.CumulativePlayerHpLost
+                && actual.RecoveredPlayerHp == expected.RecoveredPlayerHp
+                && actual.HistoryEntryCount == expected.HistoryEntryCount
+                && actual.ProjectedDeathSaveUseCount == expected.ProjectedDeathSaveUseCount
+                && actual.GrowthRewards == expected.GrowthRewards && actual.RelicCounters == expected.RelicCounters
+                && actual.TeamCumulativeHpLost == expected.TeamCumulativeHpLost
+                && actual.TeamLossRatio == expected.TeamLossRatio && actual.WorstPlayerLossRatio == expected.WorstPlayerLossRatio,
+                "Hydrated state, score, history or path objectives differ from real replay.");
+        }
+        SimulationSnapshot off = Run(plain, bash, out _);
+        SimulationSnapshot first = Run(cached, bash, out int firstHits);
+        Require(firstHits == 0 && cache.Capture().Stores == 1 && cache.Capture().ValidatedKeys == 0
+            && cache.Capture().RetainedSimulators == 0,
+            "A cold request must store but cannot reuse its first observation.");
+        SimulationSnapshot validation = Run(cached, bash, out int validationHits);
+        Require(validationHits == 0 && cache.Capture().FirstValidations == 1 && cache.Capture().ValidatedKeys == 1
+            && cache.Capture().RetainedSimulators == 1,
+            "The first repeated action must still perform a real replay.");
+        Require(cache.Capture().Performance![nameof(SearchMetricPhase.HydrationParentValidation)].Samples == 2
+            && cache.Capture().Performance![nameof(SearchMetricPhase.HydrationFork)].Samples == 0,
+            "An unvalidated repeat eagerly captured its parent or attempted a hydrated Fork.");
+        SimulationSnapshot hydrated = Run(cached, bash, out int hydrationHits);
+        Require(hydrationHits == 1 && cache.Capture().HydrationHits == 1,
+            "A validated ordinary cold-search action did not hydrate.");
+        Same(first, off); Same(validation, off); Same(hydrated, off);
+        hydrated.Simulator.State.GetCreature(player.Creature).CurrentHp--;
+        SimulationSnapshot sibling = Run(cached, bash, out int siblingHits);
+        Require(siblingHits == 1, "The cached prototype did not survive a sibling mutation.");
+        Same(sibling, off);
+        SimulationSnapshot other = Run(cached, bash with { CardId = "STRIKE_IRONCLAD" }, out int otherHits);
+        Require(otherHits == 0 && cache.EntryCount == 1 && cache.Capture().DroppedStores > 0,
+            "The entry cap or action identity was bypassed.");
+        SimulationSnapshot strict = Run(cached with { VerifyIncrementalSearch = true }, bash, out int strictHits);
+        Require(strictHits == 0, "Incremental verification bypassed real replay.");
+        ConcurrentBag<SimulationSnapshot> concurrentForks = [];
+        Parallel.For(0, 8, _ =>
+        {
+            SimulationSnapshot result = Run(cached, bash, out int hits);
+            Require(hits == 1, "A validated concurrent request-local replay missed its owned Fork.");
+            Same(result, off);
+            result.Simulator.State.GetCreature(player.Creature).CurrentHp--;
+            concurrentForks.Add(result);
+        });
+        SimulationSnapshot afterConcurrent = Run(cached, bash, out int afterConcurrentHits);
+        Require(afterConcurrentHits == 1, "Concurrent Forks invalidated the immutable prototype.");
+        Same(afterConcurrent, off);
+        foreach (SimulationSnapshot item in concurrentForks)
+            item.ReleaseSimulator();
+        afterConcurrent.ReleaseSimulator();
+        Require(cache.Capture().Performance![nameof(SearchMetricPhase.HydrationSnapshot)].Samples == 11,
+            "Concurrent hydration measurements lost owned Fork/Snapshot samples.");
+        CombatBeamSolver missingHistory = new(root, names, damage, cached, searchProfile: profile);
+        SimulationSnapshot unboundPath = missingHistory.ReplayDiagnosticActionWithR0Memo(bash, priorActionCount: 1);
+        Require(missingHistory.R0TransitionCacheHitsForTesting == 0,
+            "A parent with unmatched action history was hydrated.");
+        unboundPath.ReleaseSimulator();
+        CombatBeamSolver missingTarget = new(root, names, damage, cached, searchProfile: profile);
+        try
+        {
+            SimulationSnapshot changedTarget = missingTarget.ReplayDiagnosticActionWithR0Memo(
+                bash with { TargetCombatId = null });
+            changedTarget.ReleaseSimulator();
+        }
+        catch (SearchTransitionException) { }
+        Require(missingTarget.R0TransitionCacheHitsForTesting == 0,
+            "A missing target was silently replaced by the cached target.");
+        SimulationSnapshot changedPolicy = Run(cached with { AcceptableBattleHpLoss = 11 }, bash, out int policyHits);
+        Require(policyHits == 0, "A different policy identity reused the same key.");
+        changedPolicy.ReleaseSimulator();
+        SimulationSnapshot changedRng = Run(cached, bash, out int rngHits,
+            simulator => simulator.Rng.CombatCardGeneration.NextInt(100));
+        Require(rngHits == 0 && State(changedRng) != State(off),
+            "A changed non-shuffle RNG stream reused the old post-state.");
+        changedRng.ReleaseSimulator();
+        PlanAction noOpChoice = bash with { Choice = new(PlanChoiceEffect.Exhaust, PileType.Hand, []) };
+        // Eligibility is tested before any replay so an unsupported Choice is never silently bypassed.
+        Require(!CombatTransitionMemo.IsActionEligibleForTesting(noOpChoice), "Choice was admitted as a plain action.");
+        foreach (SimulationSnapshot item in new[] { off, first, validation, hydrated, sibling, other, strict })
+            item.ReleaseSimulator();
+        cache.Release();
+        Require(cache.EntryCount == 0 && cache.Capture().ReuseDisabled, "Released cache still owns prototypes.");
+        SimulationSnapshot released = Run(cached, bash, out int releasedHits);
+        Require(releasedHits == 0, "A released cache still skipped simulation.");
+        released.ReleaseSimulator();
+        Require(ContinuationStamp.CaptureLive(combat) == root.ContinuationStamp,
+            "Cached forks changed the live combat.");
+
+        List<string> diagnostics = [];
+        Require(player.AddPotionInternal(ModelDb.AllPotions.Single(p => p.Id.Entry == "FIRE_POTION")
+            .ToMutable(), 0, silent: false).success, "Could not add the shared-audit fixture potion.");
+        Require(player.AddPotionInternal(ModelDb.AllPotions.Single(p => p.Id.Entry == "FIRE_POTION")
+            .ToMutable(), 1, silent: false).success, "Could not add the second shared-audit fixture potion.");
+        foreach (RelicModel relic in player.Relics.ToArray())
+            player.RemoveRelicInternal(relic, silent: true);
+        root = CombatRootSnapshot.Capture(combat);
+        SearchPolicySnapshot coordinated = plain with
+        {
+            UseRequestTransitionHydration = true,
+            PotionPolicy = SolverPotionPolicy.Smart, PotionStrategy = new(SolverPotionPolicy.Smart, []),
+            Diagnostics = new SearchDiagnosticsSink(diagnostics.Add, diagnostics.Add),
+        };
+        SolverResult baseline = CombatSearchCoordinator.Solve(root, names, damage,
+            coordinated with { UseRequestTransitionHydration = false }, default, null);
+        SolverResult enabled = CombatSearchCoordinator.Solve(root, names, damage, coordinated, default, null);
+        SolverResult nextRequest = CombatSearchCoordinator.Solve(root, names, damage, coordinated, default, null);
+        string[] Route(SolverResult result) => result.BestNode.Actions.Select(ActionToken).ToArray();
+        foreach (SolverResult result in new[] { enabled, nextRequest })
+        {
+            Require(Route(result).SequenceEqual(Route(baseline)) && result.PredictedFinalState == baseline.PredictedFinalState
+                && result.ProjectedBattleHpLost == baseline.ProjectedBattleHpLost
+                && result.ExpandedNodes == baseline.ExpandedNodes && result.TransitionCount == baseline.TransitionCount
+                && result.TotalTransitionCount == baseline.TotalTransitionCount
+                && result.CombatEndedTurn == baseline.CombatEndedTurn && result.BoundaryReason == baseline.BoundaryReason,
+                "Request cache changed portfolio route, quality, boundary or logical work.");
+            Require(result.RequestTransitionHydration is { Stores: > 0, FirstValidations: > 0, HydrationHits: > 0 },
+                "The coordinator did not create a fresh shared cold-search cache or no member hydrated: "
+                + JsonSerializer.Serialize(result.RequestTransitionHydration) + "\n"
+                + string.Join('\n', diagnostics.Where(line => line.Contains("BEAM_WIDTH_PORTFOLIO")
+                    || line.Contains("REQUEST_TRANSITION_HYDRATION"))));
+        }
+        Require(baseline.RequestTransitionHydration == null, "Cache-off allocated request hydration.");
+        Require(enabled.RequestTransitionHydration?.Performance == null,
+            "Phase measurements were allocated without opting into diagnostics.");
+        ValidateRequestPhaseMetrics(baseline, measured: false);
+        ValidateRequestPhaseMetrics(enabled, measured: false);
+        using CancellationTokenSource canceled = new();
+        canceled.Cancel();
+        try
+        {
+            CombatSearchCoordinator.Solve(root, names, damage, coordinated, canceled.Token, null);
+            throw new InvalidOperationException("Canceled request unexpectedly completed.");
+        }
+        catch (OperationCanceledException) { }
+        Require(diagnostics.Count(line => line.Contains("REQUEST_TRANSITION_HYDRATION")) == 3,
+            "Completed and canceled requests did not all close their cache lifecycle.");
+        SearchRequestWorkTotals canceledTotals = new(measurePhases: true);
+        CombatBeamSolver canceledSolver = new(root, names, damage,
+            plain with { RequestWorkTotals = canceledTotals, MeasurePhasePerformance = true },
+            searchProfile: profile);
+        using (CombatBeamSolver.SearchMemberExecutionSession session = canceledSolver.CreateExecutionSession())
+        {
+            Require(session.Step(new SearchWorkAllowance(1), canceled.Token).Status == SearchStepStatus.Canceled,
+                "Canceled member did not stop.");
+            session.Dispose();
+        }
+        SearchRequestPhaseSnapshot canceledPhases = canceledTotals.CapturePhases()!;
+        Require(canceledPhases.RecordedSolverCount == 1 && canceledPhases.Members.Count == 1
+            && canceledPhases.Members[0].Outcome == "Canceled"
+            && canceledPhases.ExpandedNodes == 0 && canceledPhases.LogicalTransitions == 0,
+            "Canceled member phases were duplicated, lost or did work.");
+        SearchRequestWorkTotals partialTotals = new(measurePhases: true);
+        CombatBeamSolver partialSolver = new(root, names, damage,
+            plain with { RequestWorkTotals = partialTotals, MeasurePhasePerformance = true, MaxDegreeOfParallelism = 4 },
+            searchProfile: profile);
+        using (CancellationTokenSource partialCancel = new())
+        using (CombatBeamSolver.SearchMemberExecutionSession session = partialSolver.CreateExecutionSession())
+        {
+            Require(session.Step(new SearchWorkAllowance(1), default).Status == SearchStepStatus.Yielded,
+                "Parallel cancellation fixture did not yield after work.");
+            partialCancel.Cancel();
+            Require(session.Step(new SearchWorkAllowance(1), partialCancel.Token).Status == SearchStepStatus.Canceled,
+                "Parallel member did not cancel after yielding.");
+        }
+        SearchRequestPhaseSnapshot partialPhases = partialTotals.CapturePhases()!;
+        Require(partialPhases.RecordedSolverCount == 1 && partialPhases.Members.Count == 1
+            && partialPhases.Members[0].Outcome == "Canceled"
+            && partialPhases.ExpandedNodes > 0 && partialPhases.LogicalTransitions > 0
+            && partialPhases.Phases[nameof(SearchMetricPhase.Fork)].Samples > 0,
+            "Canceled parallel member lost its drained work or phase samples.");
+        Require(ContinuationStamp.CaptureLive(combat) == root.ContinuationStamp, "Portfolio changed live combat.");
+        File.WriteAllText(Path.Combine(outputDirectory, "request-hydration.json"), JsonSerializer.Serialize(new
+        {
+            evidenceLevel = "pinned-headless", baseline.Elapsed, enabledElapsed = enabled.Elapsed,
+            baseline.ExpandedNodes, baseline.TotalTransitionCount,
+            enabled.RequestTransitionHydration, nextRequest = nextRequest.RequestTransitionHydration,
+        }, Json));
+        Console.WriteLine($"PASS request hydration: {JsonSerializer.Serialize(enabled.RequestTransitionHydration)}");
+    }
+
+    private static void BenchmarkRequestTransitionHydration(
+        CombatState combat, SolverDisplayNames names, BattleDamageSnapshot damage,
+        SearchPolicySnapshot captured, SolverSearchProfile originalProfile, string outputDirectory,
+        bool enabledFlag, string[]? benchmarkArgs)
+    {
+        Player player = LocalContext.GetMe(combat)!;
+        SetLiveEnergyForU5(player, 3);
+        foreach (RelicModel relic in player.Relics.ToArray())
+            player.RemoveRelicInternal(relic, silent: true);
+        for (int slot = 0; slot < 2; slot++)
+            Require(player.AddPotionInternal(ModelDb.AllPotions.Single(p => p.Id.Entry == "FIRE_POTION")
+                .ToMutable(), slot, silent: false).success, "Could not add hydration benchmark potion.");
+        CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
+        SolverSearchProfile profile = originalProfile with { BeamWidth = 8, MaxExpandedNodes = 600 };
+        List<string> diagnostics = [];
+        SearchPolicySnapshot coordinated = RequestHydrationPolicy(captured, profile) with
+        {
+            PotionPolicy = SolverPotionPolicy.Smart, PotionStrategy = new(SolverPotionPolicy.Smart, []),
+            Diagnostics = new SearchDiagnosticsSink(diagnostics.Add, diagnostics.Add),
+        };
+        string Option(string name, string fallback)
+        {
+            int index = Array.IndexOf(benchmarkArgs ?? [], name);
+            return index < 0 ? fallback : benchmarkArgs![index + 1];
+        }
+        string fixture = Option("--fixture", "shared-audit");
+        int iterations = int.Parse(Option("--iterations", "1"));
+        int dop = int.Parse(Option("--dop", "1"));
+        Require(iterations is > 0 and <= 100 && dop is > 0 and <= 16, "Invalid benchmark size or DOP.");
+        bool measure = benchmarkArgs?.Contains("--measure") == true;
+        Require(fixture is "low-repeat" or "shared-audit" or "draw-repeat" or "multi-hit", "Unknown hydration fixture.");
+        if (fixture == "low-repeat")
+            coordinated = coordinated with
+            {
+                PotionPolicy = SolverPotionPolicy.Disabled, PotionStrategy = new(SolverPotionPolicy.Disabled, []),
+                UseBeamWidthPortfolio = false,
+            };
+        if (fixture == "draw-repeat")
+        {
+            foreach (string cardId in new[] { "POMMEL_STRIKE", "BATTLE_TRANCE" })
+                player.PlayerCombatState!.Hand.AddInternal(combat.CreateCard(ResolveCard(cardId), player), -1);
+            SetLiveEnergyForU5(player, 1);
+            root = CombatRootSnapshot.Capture(combat);
+        }
+        if (fixture == "multi-hit")
+        {
+            foreach (string cardId in new[] { "WHIRLWIND", "TWIN_STRIKE" })
+                player.PlayerCombatState!.Hand.AddInternal(combat.CreateCard(ResolveCard(cardId), player), -1);
+            root = CombatRootSnapshot.Capture(combat);
+        }
+        // Warm both paths; detailed phase measurements are a separate diagnostic run.
+        coordinated = coordinated with { MaxDegreeOfParallelism = dop, MeasurePhasePerformance = measure };
+        SolverResult reference = CombatSearchCoordinator.Solve(root, names, damage,
+            coordinated with { UseRequestTransitionHydration = false, MeasurePhasePerformance = false }, default, null);
+        CombatSearchCoordinator.Solve(root, names, damage,
+            coordinated with { UseRequestTransitionHydration = true }, default, null);
+        List<object> samples = [];
+        for (int iteration = 0; iteration < iterations; iteration++)
+        {
+            int diagnosticsStart = diagnostics.Count;
+            long allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
+            int[] gcBefore = Enumerable.Range(0, 3).Select(GC.CollectionCount).ToArray();
+            var wall = System.Diagnostics.Stopwatch.StartNew();
+            SolverResult measured = CombatSearchCoordinator.Solve(root, names, damage,
+                coordinated with { UseRequestTransitionHydration = enabledFlag }, default, null);
+            wall.Stop();
+            long allocatedBytes = GC.GetTotalAllocatedBytes(precise: true) - allocatedBefore;
+            int[] gcCollections = Enumerable.Range(0, 3).Select(g => GC.CollectionCount(g) - gcBefore[g]).ToArray();
+            Require(measured.BestNode.Actions.SequenceEqual(reference.BestNode.Actions)
+                && measured.PredictedFinalState == reference.PredictedFinalState
+                && measured.ProjectedBattleHpLost == reference.ProjectedBattleHpLost
+                && measured.TotalExpandedNodes == reference.TotalExpandedNodes
+                && measured.TotalTransitionCount == reference.TotalTransitionCount
+                && measured.CombatEndedTurn == reference.CombatEndedTurn
+                && measured.BoundaryReason == reference.BoundaryReason,
+                "Benchmark cache changed route, state, quality, boundary or logical work.");
+            Require(ContinuationStamp.CaptureLive(combat) == root.ContinuationStamp,
+                "Benchmark changed live combat.");
+            ValidateRequestPhaseMetrics(measured, measure);
+            samples.Add(new
+            {
+                iteration, elapsedMs = wall.Elapsed.TotalMilliseconds, allocatedBytes, gcCollections,
+                measured.TotalExpandedNodes, measured.TotalTransitionCount, measured.ProjectedBattleHpLost,
+                measured.BoundaryReason, measured.CombatEndedTurn,
+                route = measured.BestNode.Actions.Select(ActionToken).ToArray(),
+                finalState = measured.PredictedFinalState?.StateText, measured.RequestTransitionHydration,
+                measured.RequestPhaseMetrics,
+                skippedPlayCardSimulations = measured.RequestTransitionHydration?.HydrationHits ?? 0,
+                phaseDiagnostics = measure ? diagnostics.Skip(diagnosticsStart)
+                    .Where(static line => line.Contains(" SEARCH_PHASE ")).ToArray() : null,
+            });
+        }
+        File.WriteAllText(Path.Combine(outputDirectory, "request-hydration-benchmark.json"),
+            JsonSerializer.Serialize(new
+            {
+                evidenceLevel = "pinned-headless", enabled = enabledFlag, fixture, dop, measure,
+                tieredCompilation = Environment.GetEnvironmentVariable("DOTNET_TieredCompilation"),
+                runtime = Environment.Version.ToString(), processorCount = Environment.ProcessorCount,
+                warmup = "one off and one on request", rootState = root.ContinuationStamp.StateText,
+                root = OfflineCombat.DescribeRoot(combat), samples,
+            }, Json));
+    }
+
+    private static void ValidateRequestPhaseMetrics(SolverResult result, bool measured)
+    {
+        if (!measured)
+        {
+            Require(result.RequestPhaseMetrics == null, "Default search collected request phase metrics.");
+            return;
+        }
+        SearchRequestPhaseSnapshot phases = result.RequestPhaseMetrics
+            ?? throw new InvalidOperationException("Measured request did not collect member phases.");
+        Require(phases.RecordedSolverCount == phases.Members.Count
+            && phases.ExpandedNodes == result.TotalExpandedNodes
+            && phases.LogicalTransitions == result.TotalTransitionCount
+            && phases.Members.Sum(m => (long)m.Work.ExpandedNodes) == phases.ExpandedNodes
+            && phases.Members.Sum(m => (long)m.Work.TransitionCount) == phases.LogicalTransitions,
+            "Request phases missed or duplicated member work.");
+        Require(phases.Members.All(m => m.Kind != "Unclassified" && m.Outcome is "Completed" or "Disposed"),
+            "Benchmark member phases were not classified or finalized: "
+            + string.Join(", ", phases.Members.Select(m => $"{m.Kind}/{m.Outcome}/{m.Work.ExpandedNodes}")));
+        foreach (SearchMetricPhase phase in Enum.GetValues<SearchMetricPhase>())
+        {
+            SearchPhaseMetric aggregate = phases.Phases[phase.ToString()];
+            Require(aggregate.Elapsed.Ticks == phases.Members.Sum(m => m.Phases[phase.ToString()].Elapsed.Ticks)
+                && aggregate.AllocatedBytes == phases.Members.Sum(m => m.Phases[phase.ToString()].AllocatedBytes)
+                && aggregate.Samples == phases.Members.Sum(m => m.Phases[phase.ToString()].Samples),
+                $"Request phase {phase} missed worker contributions.");
+        }
+    }
+
+    private static SearchPolicySnapshot RequestHydrationPolicy(
+        SearchPolicySnapshot captured, SolverSearchProfile profile)
+        => captured with
+        {
+            Profile = profile, RoutePolicy = SearchRoutePolicy.MultiplayerSinglePlayerCore,
+            CurrentTurnOnly = false, IncludeTurnSetup = false, UseMultiplayerTeamObjective = false,
+            UseMultiplayerTeammateForecast = false, UseMultiplayerScenarioReevaluation = false,
+            DetailedDiagnostics = false, VerifyIncrementalSearch = false, FixedBudget = true,
+            MeasurePhasePerformance = false,
+            MaxDegreeOfParallelism = 1, UseNoveltyPortfolio = false, NoveltySearch = null,
+            UseBeamWidthPortfolio = true, PotionPolicy = SolverPotionPolicy.Disabled,
+            StopAtAcceptableBattleHpLoss = false, Interaction = null,
+            R0TransitionMemo = null, R0TransitionPolicyIdentity = "",
+            R1TransitionHydrationCache = null, RequestTransitionHydrationCache = null,
+        };
+
+    private static string ParseOutput(string[] args, bool allowHydrationOptions = false)
     {
         string output = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
             "../../../../../.local/u0-u1-pinned"));
         for (int index = 0; index < args.Length; index++)
         {
+            if (allowHydrationOptions && args[index] == "--measure")
+                continue;
+            if (allowHydrationOptions && args[index] is "--fixture" or "--iterations" or "--dop")
+            {
+                if (++index >= args.Length)
+                    throw new ArgumentException("Missing hydration benchmark option value.");
+                continue;
+            }
             if (args[index] != "--out")
                 throw new ArgumentException($"Unknown option {args[index]}.");
             if (++index >= args.Length)

@@ -104,6 +104,13 @@ pwsh -NoLogo -NoProfile -File .\start-client.ps1 `
 
 然后再进行 Host/Join/Ready 和对应 Smoke。
 
+### 自然战斗搜索成本采集
+
+Agent 可在 `ClientCombatSolver` 的 `safe-execute-lab` 启动命令添加 `-MeasureSearchPhases`。
+该开关记录 `SEARCH_REQUEST_PHASE`：已收尾成员的 baseline / beam refinement / Smart Potion 等工作及全部阶段汇总，取消或提前退出的成员也计入。
+保留正常预算、并行度与搜索顺序，不启用通用后态缓存；单人、正式模式和非 owned Lab 不开放此诊断。改变开关前须停止 Client 再启动。
+各阶段有嵌套且并行线程累计，不能相加作墙钟；辅助枚举/根捕获不在成员统计内，`CoordinatorOverhead` 仅指现有回收统计。采集用于定位成本，不构成性能或 Host/Client 正确性 PASS。
+
 ## 完整 GM Console 测试源码
 
 为了后续多人测试方便，完整 `TheBookOfAges / GM Console` 已作为 **test-only submodule**

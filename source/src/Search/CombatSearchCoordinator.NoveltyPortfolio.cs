@@ -27,7 +27,7 @@ internal static partial class CombatSearchCoordinator
         // Missing mandatory potion routes are a defined search boundary. Beam still gets
         // the remainder; simulation errors and caller cancellation propagate normally.
         SolverResult? exploration = SolveOptionalPotionPosterior(new CombatBeamSolver(root, names, damage,
-            policy with { NoveltySearch = policy.NoveltySearch ?? new() }, cancellation,
+            policy with { NoveltySearch = policy.NoveltySearch ?? new(), RequestMemberKind = SearchRequestMemberKind.Novelty }, cancellation,
             progress, explorationProfile, potionPolicyOverride: potionOverride), policy, "novelty_exploration");
         long explorationExpanded = totals.Snapshot().ExpandedNodes - expandedBefore;
         long explorationElapsed = clock.ElapsedMilliseconds;
