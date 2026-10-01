@@ -150,7 +150,7 @@ Snapshot/Fork 首项优化移除了 `PredictionExtensions.Clone/ToRng` 构造器
 
 两请求均触发系统内存压力 GC 回退，工作量不同；本轮只验搜索和日志收尾，实机净收益与部署正确性仍 UNVERIFIED。手动重算 SnapshotEvaluation 累计 10.347s，其中 SnapshotStrategicEffects 2.593s、Fingerprint 3.626s（CombatFingerprint 0.679s），嵌套阶段不能相加作墙钟。费用查询的后续修正与当前下一步见下节。
 
-### 上下文能耗：绑定预测分支，待新版实机采集
+### 上下文能耗：绑定预测分支，新版实机成本采集完成
 
 `StrategicEffectContext.Build` 现在接收当前 simulator，技能/Power 费用复用既有 `GetEnergyCostValueWithModifiers`，关键词继续使用其 State。旧 `GetWithModifiers(All)` 会通过真实 Owner / 牌堆读取费用修改；原生对照复现了 26 次差异。保留 X 的零估值、负值截零和所有标量公式；此项修正评分输入的状态来源，可能改变路线，不是纯等价优化。未扩大缓存或调整预算、并行度、排序规则和部署授权，通用后态缓存仍默认 false。
 
@@ -167,7 +167,9 @@ Release 0 warning / 0 error；134932 个标量案例、462 个原生关键词上
 
 计时采用进程中位数的中位数，不证明稳定或实时多人收益。另跑新版持续效果 DOP=4 的 3 个详细请求，成员/阶段和 Snapshot 分区守恒通过；完整所选路线（含 Choice/目标）从原根独立 replay，最终 ContinuationStamp、零战损与第 2 回合胜利一致，真实夹具未改变。临时结果为 `.local/strategic-energy-cost/`，`correctness-summary.json` 保留不同工作范围；不新增默认门禁。
 
-下一步：刷新 owned Lab，Client warm-up 后重启，由用户完成 Host/Join/进入自然战斗并点击重算，再采集阶段成本和 Graceful 收尾；新版实机净收益、自然输入质量及部署正确性继续 UNVERIFIED。完成采集后按实测热点选下一项 S3/S4，不重复开启已停止的 S2 扩容。
+`9579c83` owned Lab、Client warm-up 后重启（PID 30672）、Host PID 3996，已完成两玩家 local-core/cache-off 会话 `8044d9d1835041ceae241df4ece2760a` 的初次搜索及 `generation=2 reason=Manual` 重算。首次前台 5.142 / 5.003s，墙钟 18.511 / 17.363s，expanded/transitions 为 11330/53596、13099/61671。每请求 5 成员，均为 4 Completed / 1 Canceled，Smart Potion `stop=deadline`；手动请求在 Graceful 停止前已完成。两端已正常退出且 owned 进程均 Absent；11899 行 JSON 完整、journal error=0，独立 E0 成员工作、全部阶段及 Snapshot 分区/内部子阶段守恒通过。所选路线的模拟重放无差异；不是实际执行验证。退出前 queued=True、FIFO checkpoints=6，无捕获/序列化失败；`full=False`，检查点字节归档/恢复仍 UNVERIFIED。定向核对与状态在 `.local/strategic-energy-cost/live-phase-summary.json` 和 `live-capture-state.json`。
+
+请求工作及退出范围不同，不能作为新旧固定工作 A/B；未执行路线，新版实机净收益、自然输入质量及部署正确性仍 UNVERIFIED。手动重算 SnapshotEvaluation 累计 7.407s，其中 Fingerprint 3.108s、ProjectedShuffle 1.612s、SnapshotStrategicEffects 1.324s；ProjectedShuffle 包含在 Fingerprint 内，不能相加当墙钟。下一项 S3 先拆分 `BuildProjectedShuffleOrder` 的排序/洗牌、卡牌指纹与 CardValue 成本，再选择有完整输出等价证据的优化；保留排序、RNG 消耗、卡牌键和值的全部语义，不扩大缓存或改预算/DOP。S1 专项实机验收与 S4 调度仍待完成。
 
 ## 阶段 D 当前实现
 
