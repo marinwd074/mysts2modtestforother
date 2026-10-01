@@ -19,6 +19,8 @@ CI 只能证明其实际执行的层级；没有日志/steps 的 runner 失败�
 
 `U0U1PinnedHarness root-history` 核对根历史预聚合与原扫描、预测事件叠加、未知玩家/非玩家回退、Fork 隔离及新根更新。完整请求对照沿用 `request-hydration-benchmark-off`；`history-repeat` 人工记录 2000 次抽牌但保持棋盘不变，只作长历史压力输入。JSON 含实际加载 DLL SHA256；请求计时不包含根捕获，不替代真实两玩家验证，不新增默认门禁。
 
+`U0U1PinnedHarness projected-shuffle` 对照原生 StableShuffle 和未缓存 CardValue：450 次值查询、288 个完整投影、32 个 DOP=4 分支，核对顺序、完整卡牌键、逐位置加权取整、四字 RNG/Counter 及原 RNG 隔离，覆盖重复牌、空列表、分数值、修改/升级/Clone/COW、冷并发查询、父/真实状态隔离和可外部修改模型的禁用合同。仅复用原生 Preview 纯值；不替代第三方模型或实机执行验证，不新增默认门禁。
+
 `tools/StrategicKeywordChecks/run.py` 比较 134932 个完整上下文，含 Corruption 已确定技能消耗时的按需读取及小刀固有关键词；`--native` 生成完整关键词集合 oracle 并显式编译进既有 harness，比较 462 个上下文/抽牌时机，覆盖 Hex 全局 Hook、移除/可写卡牌、NoDraw 顺序、Fork 隔离及 DOP=4。oracle 共享标量公式，不替代旧算法标量合同。同一入口的 `strategic-energy` 另核对 180 次原生费用、792 个上下文、48 个并发分支及查询前后 Power/history 指纹、真实 Owner 变化隔离，覆盖免费/消耗 Power、局部费用、X/负费用和牌堆移动；原生牌堆临时挂载仅限无头串行 oracle。原生完整请求使用人工 `strategic-repeat`（4 Power + 6 张抽牌堆卡牌），覆盖 DOP=1/4；Benchmark 以完整动作 JSON 值核对 Choice/目标，结果记录 `fullRoute`。不替代实机 Hook/部署验证，不新增默认门禁。
 
 ## 单人

@@ -17,6 +17,7 @@ using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.Models.Orbs;
 using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.Extensions;
 using MegaCrit.Sts2.Core.ValueProps;
 using OfflineSearchHarness;
 using U2DegenerateHarness;
@@ -46,12 +47,13 @@ internal static class Program
         bool completionScopeOnly = args.Length > 0 && args[0] == "completion-scope";
         bool rngRestoreOnly = args.Length > 0 && args[0] == "rng-restore";
         bool strategicEnergyOnly = args.Length > 0 && args[0] == "strategic-energy";
+        bool projectedShuffleOnly = args.Length > 0 && args[0] == "projected-shuffle";
         bool strategicContextOnly = args.Length > 0 && args[0] == "strategic-context";
         bool rootHistoryOnly = args.Length > 0 && args[0] == "root-history";
         bool requestHydrationOnly = args.Length > 0 && args[0] is "request-hydration"
             or "request-hydration-benchmark-on" or "request-hydration-benchmark-off";
         bool requestHydrationBenchmark = requestHydrationOnly && args[0] != "request-hydration";
-        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicEnergyOnly ? args[1..] : args,
+        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
             allowHydrationOptions: requestHydrationBenchmark);
         Directory.CreateDirectory(outputDirectory);
 
@@ -95,7 +97,7 @@ internal static class Program
                 ValidateRngRestore(outputDirectory);
                 return 0;
             }
-            if (!rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly && !rootHistoryOnly && !strategicContextOnly && !strategicEnergyOnly)
+            if (!rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly && !rootHistoryOnly && !strategicContextOnly && !strategicEnergyOnly && !projectedShuffleOnly)
             {
             ValidateDarkEmbracePredictionCoverage();
             ValidateViciousStrategicValue();
@@ -189,6 +191,12 @@ internal static class Program
                 ValidateReviewSmartDeadline(combat, names, captured, profile, acceptable: false, cancelCaller: false);
                 ValidateReviewSmartDeadline(combat, names, captured, profile, acceptable: true, cancelCaller: true);
                 Console.WriteLine("RollingReview PASS (9 targeted scenarios)");
+                return 0;
+            }
+
+            if (projectedShuffleOnly)
+            {
+                ValidateProjectedShuffle(combat, names, damage, captured, profile, outputDirectory);
                 return 0;
             }
 
@@ -3468,6 +3476,135 @@ internal static class Program
                 warmup = "one off and one on request", rootState = root.ContinuationStamp.StateText,
                 root = OfflineCombat.DescribeRoot(combat), samples,
             }, Json));
+    }
+
+    private static void ValidateProjectedShuffle(CombatState combat, SolverDisplayNames names,
+        BattleDamageSnapshot damage, SearchPolicySnapshot policy, SolverSearchProfile profile, string outputDirectory)
+    {
+        Player player = LocalContext.GetMe(combat)!;
+        foreach (string id in new[] { "DARK_EMBRACE", "BURNING_PACT", "WHIRLWIND", "DAZED", "SHIV" })
+            player.PlayerCombatState!.DrawPile.AddInternal(combat.CreateCard(ResolveCard(id), player), -1);
+        CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
+        CombatPredictionSimulator parent = root.ForkSimulator();
+        var parentPiles = parent.State.GetPlayerCombatState(player);
+        PredictedCard[] parentCards = parentPiles.DiscardPile.Cards.Concat(parentPiles.DrawPile.Cards)
+            .Concat(parentPiles.Hand.Cards).ToArray();
+        double[] parentValues = parentCards.Select(c => CardChoiceSupport.CardValue(c)).ToArray();
+        int queries = 0, projections = 0;
+        MethodInfo project = typeof(CombatBeamSolver).GetMethod("BuildProjectedShuffleOrder",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var seeds = new List<CombatPredictionSimulator>();
+        for (int mutation = 0; mutation < 6; mutation++)
+        {
+            CombatPredictionSimulator child = parent.Fork();
+            var piles = child.State.GetPlayerCombatState(player);
+            PredictedCard[] cards = piles.DiscardPile.Cards.Concat(piles.DrawPile.Cards)
+                .Concat(piles.Hand.Cards).ToArray();
+            foreach (PredictedCard sourceCard in cards)
+            {
+                PredictedCard card = sourceCard;
+                Require(CardChoiceSupport.CardValue(card) == CardChoiceSupport.CardValue(card.Preview), "Fork value differs.");
+                CardModel preview = card.MutablePreview;
+                foreach (string field in new[] { "Damage", "Block", "Cards" })
+                    if (preview.DynamicVars.TryGetValue(field, out var variable))
+                        variable.BaseValue += mutation == 1 ? 0.125m : mutation;
+                if (mutation == 2) card.Upgrade();
+                if (mutation == 3) card.InvalidateCaches();
+                if (mutation == 4) card.EnableAttachedModelForkIsolation();
+                if (mutation == 5) card = card.Clone();
+                for (int repeat = 0; repeat < 3; repeat++)
+                {
+                    Require(CardChoiceSupport.CardValue(card) == CardChoiceSupport.CardValue(card.Preview),
+                        "Cached intrinsic value differs after mutation/upgrade/clone.");
+                    queries++;
+                }
+                Require(card.TryGetCachedIntrinsicValue(out _) == (mutation != 4), "Opaque model cache gate differs.");
+                for (int edit = 0; edit < 2; edit++)
+                {
+                    CardModel writable = card.MutablePreview;
+                    if (writable.DynamicVars.TryGetValue("Damage", out var changed)) changed.BaseValue += 0.375m;
+                    Require(!card.TryGetCachedIntrinsicValue(out _), "Mutable access left intrinsic cache valid.");
+                    Require(CardChoiceSupport.CardValue(card) == CardChoiceSupport.CardValue(writable),
+                        "Repeated in-place mutation reused a stale value.");
+                    queries++;
+                }
+                if (mutation == 4)
+                {
+                    if (preview.DynamicVars.TryGetValue("Damage", out var damageVar)) damageVar.BaseValue += 3;
+                    Require(CardChoiceSupport.CardValue(card) == CardChoiceSupport.CardValue(card.Preview),
+                        "Externally mutable card reused a stale value.");
+                }
+            }
+            seeds.Add(child);
+            foreach (uint seed in new uint[] { 0, 17, 7123, uint.MaxValue })
+            foreach (int counter in new[] { 0, 7, 10000 })
+            foreach (int shape in new[] { 0, 1, 2, 3 })
+            {
+                List<PredictedCard> source = shape switch
+                {
+                    0 => [], 1 => [.. cards], 2 => [.. cards.Reverse()],
+                    _ => [.. cards, .. cards.Reverse(), cards[0]],
+                };
+                var rng = new MegaCrit.Sts2.Core.Random.Rng(seed, counter);
+                var rngState = rng.CaptureState();
+                var branchRng = child.Rng.Shuffle;
+                branchRng.Counter = rngState.Counter;
+                branchRng._random._s0 = rngState.State0;
+                branchRng._random._s1 = rngState.State1;
+                branchRng._random._s2 = rngState.State2;
+                branchRng._random._s3 = rngState.State3;
+                List<PredictedCard> expected = [.. source];
+                expected.StableShuffle(rng);
+                List<PredictedCard> ordered = [.. source];
+                var projectionRng = rngState.ToRng();
+                CombatBeamSolver.StableShuffleProjection(ordered, projectionRng);
+                Require(ordered.SequenceEqual(expected) && projectionRng.CaptureState() == rng.CaptureState(),
+                    "Native shuffle ordering or full RNG consumption differs.");
+                StateFingerprintBuilder key = new();
+                key.Add(counter); key.Add(expected.Count);
+                int value = 0;
+                for (int index = 0; index < expected.Count; index++)
+                {
+                    StateFingerprint cardKey = CombatBeamSolver.CaptureCardStateFingerprintForTesting(expected[index]);
+                    key.Add(cardKey.First); key.Add(cardKey.Second);
+                    value += (int)Math.Round(CardChoiceSupport.CardValue(expected[index].Preview) * (expected.Count - index));
+                }
+                CombatBeamSolver solver = new(root, names, damage, policy, searchProfile: profile);
+                var actual = ((StateFingerprint Key, int Value))project.Invoke(solver, [child, source])!;
+                Require(source.SequenceEqual(expected) && actual.Key == key.Finish() && actual.Value == value,
+                    "Projected shuffle order/full key/weighted rounding differs from native uncached oracle.");
+                Require(child.Rng.ShuffleState == rngState, "Projection changed branch RNG.");
+                projections++;
+            }
+        }
+        foreach (CombatPredictionSimulator seed in seeds)
+        {
+            var piles = seed.State.GetPlayerCombatState(player);
+            foreach (PredictedCard card in piles.Hand.Cards.Concat(piles.DrawPile.Cards)) card.InvalidateCaches();
+        }
+        Parallel.For(0, 32, new ParallelOptions { MaxDegreeOfParallelism = 4 }, index =>
+        {
+            CombatPredictionSimulator child = seeds[index % seeds.Count].Fork();
+            var piles = child.State.GetPlayerCombatState(player);
+            foreach (PredictedCard card in piles.Hand.Cards.Concat(piles.DrawPile.Cards))
+            {
+                for (int repeat = 0; repeat < 4; repeat++)
+                    Require(CardChoiceSupport.CardValue(card) == CardChoiceSupport.CardValue(card.Preview),
+                        "Parallel fork reused a stale intrinsic value.");
+                CardModel preview = card.MutablePreview;
+                if (preview.DynamicVars.TryGetValue("Block", out var block)) block.BaseValue += index;
+                Require(CardChoiceSupport.CardValue(card) == CardChoiceSupport.CardValue(preview),
+                    "Parallel mutable fork did not invalidate its value.");
+            }
+        });
+        Require(parentCards.Select(c => CardChoiceSupport.CardValue(c)).SequenceEqual(parentValues)
+            && parentCards.Select(c => CardChoiceSupport.CardValue(c.Preview)).SequenceEqual(parentValues),
+            "Mutable fork changed parent values.");
+        Require(ContinuationStamp.CaptureLive(combat) == root.ContinuationStamp, "Projection changed live fixture.");
+        File.WriteAllText(Path.Combine(outputDirectory, "projected-shuffle.json"), JsonSerializer.Serialize(new
+        { evidence = "pinned-headless; no multiplayer performance or deployment claim", queries, projections,
+            parallelBranches = 32, orderKeyValueRng = "identical", parentAndLive = "isolated" }, Json));
+        Console.WriteLine($"ProjectedShuffle PASS (queries={queries}, projections={projections}, parallelBranches=32)");
     }
 
     // Native headless oracle: temporarily attach a cloned preview to the corresponding native pile,

@@ -169,7 +169,27 @@ Release 0 warning / 0 error；134932 个标量案例、462 个原生关键词上
 
 `9579c83` owned Lab、Client warm-up 后重启（PID 30672）、Host PID 3996，已完成两玩家 local-core/cache-off 会话 `8044d9d1835041ceae241df4ece2760a` 的初次搜索及 `generation=2 reason=Manual` 重算。首次前台 5.142 / 5.003s，墙钟 18.511 / 17.363s，expanded/transitions 为 11330/53596、13099/61671。每请求 5 成员，均为 4 Completed / 1 Canceled，Smart Potion `stop=deadline`；手动请求在 Graceful 停止前已完成。两端已正常退出且 owned 进程均 Absent；11899 行 JSON 完整、journal error=0，独立 E0 成员工作、全部阶段及 Snapshot 分区/内部子阶段守恒通过。所选路线的模拟重放无差异；不是实际执行验证。退出前 queued=True、FIFO checkpoints=6，无捕获/序列化失败；`full=False`，检查点字节归档/恢复仍 UNVERIFIED。定向核对与状态在 `.local/strategic-energy-cost/live-phase-summary.json` 和 `live-capture-state.json`。
 
-请求工作及退出范围不同，不能作为新旧固定工作 A/B；未执行路线，新版实机净收益、自然输入质量及部署正确性仍 UNVERIFIED。手动重算 SnapshotEvaluation 累计 7.407s，其中 Fingerprint 3.108s、ProjectedShuffle 1.612s、SnapshotStrategicEffects 1.324s；ProjectedShuffle 包含在 Fingerprint 内，不能相加当墙钟。下一项 S3 先拆分 `BuildProjectedShuffleOrder` 的排序/洗牌、卡牌指纹与 CardValue 成本，再选择有完整输出等价证据的优化；保留排序、RNG 消耗、卡牌键和值的全部语义，不扩大缓存或改预算/DOP。S1 专项实机验收与 S4 调度仍待完成。
+请求工作及退出范围不同，不能作为新旧固定工作 A/B；未执行路线，新版实机净收益、自然输入质量及部署正确性仍 UNVERIFIED。手动重算 SnapshotEvaluation 累计 7.407s，其中 Fingerprint 3.108s、ProjectedShuffle 1.612s、SnapshotStrategicEffects 1.324s；ProjectedShuffle 包含在 Fingerprint 内，不能相加当墙钟。投影成本拆分及后续实现见下节；S1 专项实机验收与 S4 调度仍待完成。
+
+### ProjectedShuffle：复用卡牌纯值，待新版实机采集
+
+三输入（普通三敌 DOP=1、持续效果 DOP=1/4）各 3 个详细请求定位 CardValue 约占 ProjectedShuffle 累计时间三成。现在仅在投影路径使用 `CardChoiceSupport.CardValue(PredictedCard)`，在既有 PreviewStorage 中复用原生牌自身 Damage / Block / Cards / 类型派生的 double 值。MutablePreview、显式失效、升级及 COW 继续沿用现有缓存失效边界；Fork 只共享不可变 Preview 的元数据，Clone 保持新存储，第三方牌及可外部修改附加模型实时计算。没有修改排序/洗牌、卡牌指纹、位置权重、Math.Round、RNG 消耗或评分公式；不增加独立跨节点表、缓存范围、预算、DOP 或部署授权，通用后态缓存仍 false。临时细分计时已移除。
+
+`projected-shuffle` 合同通过 450 次纯值查询、288 个原生 StableShuffle / 完整指纹 / 加权值 / 全 RNG 对照、32 个冷查询 DOP=4 分支，覆盖重复/空列表、分数值、修改/升级/Clone/COW、可外部修改模型禁用以及父/真实夹具隔离。Release 0 warning / 0 error，CardHookReceiverChecks 78 项、request-hydration、9 项 rolling-review、结构门禁通过；新版持续效果 DOP=4 的 3 个详细请求成员/阶段及 Snapshot 分区守恒、所选路线独立 replay 通过。
+
+对照 `48cf087`（源码 DLL 为 `9579c83`），五输入各四个独立进程 ABBA，每进程 off/on 预热后测 10 个 cache-off 请求；关闭详细计时、`DOTNET_TieredCompilation=0`，实际 DLL hash 已核对。200 个请求完整根、动作值（含 Choice/目标）、最终状态、质量、边界和工作全部一致。下表为进程中位数的中位数。
+
+| Pinned 输入 | 旧 / 新墙钟 | 耗时变化 | expanded / transitions |
+|---|---:|---:|---:|
+| 三敌，DOP=1 | 187.85 / 182.00ms | -3.1% | 405 / 2466 |
+| 抽牌，DOP=1 | 108.67 / 98.72ms | -9.2% | 334 / 1515 |
+| 持续效果，DOP=1 | 112.60 / 110.57ms | -1.8% | 178 / 1082 |
+| 持续效果，DOP=4 | 83.11 / 83.81ms | +0.8% | 178 / 1082 |
+| 三敌，DOP=4 | 159.85 / 155.72ms | -2.6% | 411 / 2472 |
+
+分配增加约 0.003%～0.015%，来自 Preview 元数据；不能把本轮墙钟变化全部归因于 CardValue 或宣称普遍/稳定提速。详细模式下值查询累计时间下降约三至四成，仅支持定位。临时对照在 `.local/projected-shuffle-cost/`；不新增默认门禁。
+
+下一步刷新 owned Lab 并完成 Client warm-up 重启，由用户进入自然战斗并点击重算后采集成本与 Graceful 收尾。新版实机净收益、自然输入质量和部署正确性仍 UNVERIFIED；后续仅按实测成本选择 S3/S4，不扩大已停止的后态缓存实验。
 
 ## 阶段 D 当前实现
 

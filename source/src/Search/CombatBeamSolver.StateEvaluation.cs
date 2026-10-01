@@ -994,7 +994,7 @@ internal sealed partial class CombatBeamSolver
             key.Add(cardKey.First);
             key.Add(cardKey.Second);
             value += (int)Math.Round(
-                CardChoiceSupport.CardValue(cards[index].Preview) * (cards.Count - index));
+                CardChoiceSupport.CardValue(cards[index]) * (cards.Count - index));
         }
         return (key.Finish(), value);
     }
