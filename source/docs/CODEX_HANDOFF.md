@@ -215,17 +215,17 @@ Release 0 warning / 0 error；134932 个标量案例、462 个原生关键词上
 
 手动重算 SnapshotEvaluation 累计 6.578s，其中 Fingerprint 2.202s（嵌套 ProjectedShuffle 1.132s）、SnapshotStrategicEffects 1.467s。两请求 no_gc_starts 为 0/3，工作和退出范围也不同，不能作为固定工作 A/B。退出检查点 queued=True、提前采集标记及 FIFO checkpoints=6 收尾无失败，full=False 的归档/恢复仍 UNVERIFIED。实机净收益、自然输入质量及部署正确性仍 UNVERIFIED，通用后态缓存继续默认 false。
 
-### S1 首轮实机：公开变化回退通过，能量漂移已修复、待复验
+### S1 实机：跨回合能量隔离通过，新根完整重放仍待验收
 
-同一 DLL 的 owned Lab 会话 `c606b88cb4ef4365bc2c6228b14b0be8` 实际部署 8 张牌、原生 Safe EndTurn，并清除旧授权；T2 敌人 HP 665→625、HC 8→17、CardGeneration 397→402、Targets 115→116，严格续用以 `non_shuffle_rng_changed:card_generation` 拒绝，fresh Probe/Capture 后 cold search。`Reactive Carry B` 与 `Joint Mismatch`（local_state_mismatch）验证通过；后者原解析器把 JSON 末尾引号并入 reason，现先解码 Message，保留 plain log 支持及错误原因拒绝合同。seed=0、未触发 route replay，不构成 Targets-only 重放或 S1 全项 PASS。
+`cc9bdc0` owned Lab 会话 `118e77086e894e23b13c3ba07a6ebdd8` 已完成 Client 预热重启及双端 Graceful 收尾。实战进入 T3 后 2.122s，旧 T2 搜索成功回放 48 步；T2 EndTurn 后 expected/actual energy 均为 4，3 次 Burning Pact 选牌成功。15 次所选路线回放、283 步已记录 HP/block/energy/stars/hand-count 全部一致，5460 行 JSON 完整、error=0。覆盖上轮 live 回合推进导致能量 4→5 的边界，但不代表完整后态等价或旧 47 步动作逐项复现。
 
-T2 最终 47 动作重放在 EndTurn 首次出现能量 4→5，随后 Burning Pact 找不到 CONFLAGRATION，保留 SEARCH_FAILURE；此轮不是无错误运行。T1/T3 正常收尾为 9636/45367、9026/44819 expanded/transitions，各 4 Completed / 1 Canceled；失败 T2 为 5344/23297，原账本保留 Completed / Running。全部阶段数量守恒，失败请求没有独立 E0 member telemetry，不伪装为完整收尾 PASS。两端 Graceful 后 11555 行 JSON 完整、error=1；完整问题包 CRC 与 6 组 checkpoint/native/run-save 存在性通过，恢复仍 UNVERIFIED。
+三个请求分别为 13363/61561、8785/39115、10105/49062 expanded/transitions；5/3/5 个成员均 Completed，独立 E0 工作、全部阶段及 Snapshot 分区守恒，全部 footer 早于 Graceful stop。首前台 5.073/5.123/4.340s、墙钟 9.618/7.248/8.842s；输入与工作量不同，不构成提速 A/B。
 
-旧 DLL 已复现 PaelsFlesh 最大能量随 live 回合推进变化。现在在派生资源查询内，按原 Hook 位置为 PaelsFlesh / Bread 绑定预测回合，保留其他修饰器顺序；不再用根回合扣除真实 getter 的贡献。144 次原生对照覆盖根/未来/live 回合及熔化，1280 次 DOP=4 查询和 4 次完整 EndTurn 重放保持分支全态/RNG及真实状态隔离；pendulum-draw、continuation-replay、9 项 rolling-review、Release/结构门禁通过。异常成员现在记 Faulted，重复 Dispose 仍只贡献一次，request-hydration 合同通过。原始失败、修复对照和解析器合同在 `.local/reroot-runtime-acceptance/`。
+T1 实际部署 8 张牌、原生 Safe EndTurn 并清除旧授权；T2 因本地 HP 预测 68 / 实际 81，以 `field_changed:hp` 拒绝严格续用，从新根做 2 动作 R1 seed 后搜索。`Reactive Carry B` 与 `Joint Mismatch`（local_state_mismatch）均 PASS。未触发 `MP_LOCAL_XTURN_ROUTE_REPLAY status=accepted`，因此 Targets-only 跳过完整搜索、后续部署及 S1 全项仍 UNVERIFIED。
 
-启动检查发现临时 AbstractModel 适配类型会被 ModelDb 自动注册，`f46c3a6` 因缺无参构造启动失败。现已移除该类型和监听器替换，改为两处原生 ModifyMaxEnergy Prefix：仅线程内预测查询期间使用分支回合，finally 恢复前一上下文，真实调用仍走原生方法。原生/并行/EndTurn、request-hydration、pendulum-draw、continuation-replay、rolling-review、Release/结构检查重新通过；owned Client 预热重启及主菜单完成，64 applied / 0 ignored / 0 failed。启动失败与修复记录在 `.local/turn-energy-runtime-verify/`。
+生产能量查询用两处原生 ModifyMaxEnergy Prefix，只在线程内预测作用域读取分支回合，保留原 Hook 顺序；真实调用不变、无新增 AbstractModel。144 次原生对照、1280 次 DOP=4 查询及 4 次完整 EndTurn、相关回归/Release/结构门禁通过；启动 64 applied / 0 ignored / 0 failed。异常成员记 Faulted、重复 Dispose 只贡献一次。旧实机失败与原生反例保留在 `.local/reroot-runtime-acceptance/`，本轮核对及完整归档在 `.local/turn-energy-runtime-verify/`；归档 CRC、6 组 checkpoint/replay-state/native-state/run-state 完整性通过，恢复仍 UNVERIFIED。
 
-修复构建两端已准备；下一步由用户复验 T2 搜索期间推进到 T3 的同场边界，等待最终搜索完成，自然输入后续选牌重放正确性仍待确认。之后才继续 Targets-only、目标死亡、斩杀窗口及显式采用重复失效专项；不修改预算、DOP、GC、缓存或能力默认。
+下一步只验证 S1 新根路线重放及后续本地部署：自然高血战斗中 Client 按建议执行回合，Host 每回合仅打纯格挡牌并结束，连续观察 3 个回合；Agent 核对实际 reject 流、replay 准入/质量/回退及新授权。若未自然触发 Targets-only，则保留 UNVERIFIED，不放宽 gate 或把 R1 seed 当完整重放。目标死亡、斩杀窗口、显式采用重复失效专项随后逐项处理；预算、DOP、GC、缓存与能力默认不变。
 
 ## 阶段 D 当前实现
 
