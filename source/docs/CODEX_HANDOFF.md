@@ -223,7 +223,9 @@ T2 最终 47 动作重放在 EndTurn 首次出现能量 4→5，随后 Burning P
 
 旧 DLL 已复现 PaelsFlesh 最大能量随 live 回合推进变化。现在在派生资源查询内，按原 Hook 位置为 PaelsFlesh / Bread 绑定预测回合，保留其他修饰器顺序；不再用根回合扣除真实 getter 的贡献。144 次原生对照覆盖根/未来/live 回合及熔化，1280 次 DOP=4 查询和 4 次完整 EndTurn 重放保持分支全态/RNG及真实状态隔离；pendulum-draw、continuation-replay、9 项 rolling-review、Release/结构门禁通过。异常成员现在记 Faulted，重复 Dispose 仍只贡献一次，request-hydration 合同通过。原始失败、修复对照和解析器合同在 `.local/reroot-runtime-acceptance/`。
 
-下一步刷新同一 owned Lab，用修复构建复验 T2 搜索期间推进到 T3 的同场边界，等待最终搜索完成；自然输入后续选牌重放正确性仍待确认。之后才继续 Targets-only、目标死亡、斩杀窗口及显式采用重复失效专项；不修改预算、DOP、GC、缓存或能力默认。
+启动检查发现临时 AbstractModel 适配类型会被 ModelDb 自动注册，`f46c3a6` 因缺无参构造启动失败。现已移除该类型和监听器替换，改为两处原生 ModifyMaxEnergy Prefix：仅线程内预测查询期间使用分支回合，finally 恢复前一上下文，真实调用仍走原生方法。原生/并行/EndTurn、request-hydration、pendulum-draw、continuation-replay、rolling-review、Release/结构检查重新通过；owned Client 预热重启及主菜单完成，64 applied / 0 ignored / 0 failed。启动失败与修复记录在 `.local/turn-energy-runtime-verify/`。
+
+修复构建两端已准备；下一步由用户复验 T2 搜索期间推进到 T3 的同场边界，等待最终搜索完成，自然输入后续选牌重放正确性仍待确认。之后才继续 Targets-only、目标死亡、斩杀窗口及显式采用重复失效专项；不修改预算、DOP、GC、缓存或能力默认。
 
 ## 阶段 D 当前实现
 

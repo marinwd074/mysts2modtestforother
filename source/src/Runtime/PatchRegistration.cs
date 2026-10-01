@@ -33,6 +33,7 @@ internal static class PatchRegistration
         patcher.RegisterPatch<RitsuEmptyStarCostFastPathPatch>();
         patcher.RegisterPatch<RitsuEmptyCanPlayFastPathPatch>();
         patcher.RegisterPatch<SimulationCardPileLookupPatch>();
+        patcher.RegisterPatch<TurnBasedMaxEnergyPredictionPatch>();
         patcher.RegisterPatch<BaseLibCloneConcurrencyPatch>();
         patcher.RegisterPatch<BaseLibDynamicVarCloneMetadataPatch>();
         patcher.RegisterPatch<RitsuDynamicVarCloneMetadataPatch>();

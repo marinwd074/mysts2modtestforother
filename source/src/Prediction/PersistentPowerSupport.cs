@@ -37,22 +37,19 @@ internal static class PaleBlueDotHandDrawScope
 
 internal static class PersistentPowerSupport
 {
-    [ThreadStatic] private static int _maxEnergyHookDepth;
-    internal static bool UsesPredictedMaxEnergyTurn => _maxEnergyHookDepth > 0;
+    [ThreadStatic] private static SimulatedCombatState? _maxEnergyCombat;
+    internal static bool UsesPredictedMaxEnergyTurn => _maxEnergyCombat != null;
 
-    internal static AbstractModel BindMaxEnergyRelic(AbstractModel listener, SimulatedCombatState combat)
-        => listener is Bread or PaelsFlesh
-            ? new TurnBasedMaxEnergyListener((RelicModel)listener, combat)
-            : listener;
-
-    // Substitute in place so other native or modded modifiers keep their hook order.
-    private sealed class TurnBasedMaxEnergyListener(RelicModel relic, SimulatedCombatState combat) : AbstractModel
+    internal static bool TryModifyTurnBasedMaxEnergy(RelicModel relic, Player player,
+        decimal amount, out decimal result)
     {
-        public override bool ShouldReceiveCombatHooks => true;
-        public override decimal ModifyMaxEnergy(Player player, decimal amount)
-            => relic.Owner == player && !relic.IsMelted
-                ? amount + GetTurnBasedMaxEnergyContribution(relic, combat.GetPlayerTurnNumber(player))
-                : amount;
+        SimulatedCombatState? combat = _maxEnergyCombat;
+        result = amount;
+        if (combat == null)
+            return false;
+        if (relic.Owner == player && !relic.IsMelted)
+            result += GetTurnBasedMaxEnergyContribution(relic, combat.GetPlayerTurnNumber(player));
+        return true;
     }
 
     public static int ConsumeModifiedHandDraw(
@@ -86,12 +83,13 @@ internal static class PersistentPowerSupport
 
     public static int GetModifiedMaxEnergy(SimulatedCombatState combat, Player player)
     {
-        _maxEnergyHookDepth++;
+        SimulatedCombatState? previous = _maxEnergyCombat;
+        _maxEnergyCombat = combat;
         try
         {
             return Math.Max(0, (int)Hook.ModifyMaxEnergy(combat, player, player.MaxEnergy));
         }
-        finally { _maxEnergyHookDepth--; }
+        finally { _maxEnergyCombat = previous; }
     }
 
     private static decimal AdjustTurnBasedRelicHandDraw(
