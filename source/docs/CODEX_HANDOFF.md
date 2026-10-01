@@ -215,7 +215,7 @@ Release 0 warning / 0 error；134932 个标量案例、462 个原生关键词上
 
 手动重算 SnapshotEvaluation 累计 6.578s，其中 Fingerprint 2.202s（嵌套 ProjectedShuffle 1.132s）、SnapshotStrategicEffects 1.467s。两请求 no_gc_starts 为 0/3，工作和退出范围也不同，不能作为固定工作 A/B。退出检查点 queued=True、提前采集标记及 FIFO checkpoints=6 收尾无失败，full=False 的归档/恢复仍 UNVERIFIED。实机净收益、自然输入质量及部署正确性仍 UNVERIFIED，通用后态缓存继续默认 false。
 
-### S1 实机：跨回合能量隔离通过，新根完整重放仍待验收
+### S1 实机：跨回合能量隔离通过
 
 `cc9bdc0` owned Lab 会话 `118e77086e894e23b13c3ba07a6ebdd8` 已完成 Client 预热重启及双端 Graceful 收尾。实战进入 T3 后 2.122s，旧 T2 搜索成功回放 48 步；T2 EndTurn 后 expected/actual energy 均为 4，3 次 Burning Pact 选牌成功。15 次所选路线回放、283 步已记录 HP/block/energy/stars/hand-count 全部一致，5460 行 JSON 完整、error=0。覆盖上轮 live 回合推进导致能量 4→5 的边界，但不代表完整后态等价或旧 47 步动作逐项复现。
 
@@ -225,7 +225,33 @@ T1 实际部署 8 张牌、原生 Safe EndTurn 并清除旧授权；T2 因本地
 
 生产能量查询用两处原生 ModifyMaxEnergy Prefix，只在线程内预测作用域读取分支回合，保留原 Hook 顺序；真实调用不变、无新增 AbstractModel。144 次原生对照、1280 次 DOP=4 查询及 4 次完整 EndTurn、相关回归/Release/结构门禁通过；启动 64 applied / 0 ignored / 0 failed。异常成员记 Faulted、重复 Dispose 只贡献一次。旧实机失败与原生反例保留在 `.local/reroot-runtime-acceptance/`，本轮核对及完整归档在 `.local/turn-energy-runtime-verify/`；归档 CRC、6 组 checkpoint/replay-state/native-state/run-state 完整性通过，恢复仍 UNVERIFIED。
 
-下一步只验证 S1 新根路线重放及后续本地部署：自然高血战斗中 Client 按建议执行回合，Host 每回合仅打纯格挡牌并结束，连续观察 3 个回合；Agent 核对实际 reject 流、replay 准入/质量/回退及新授权。若未自然触发 Targets-only，则保留 UNVERIFIED，不放宽 gate 或把 R1 seed 当完整重放。目标死亡、斩杀窗口、显式采用重复失效专项随后逐项处理；预算、DOP、GC、缓存与能力默认不变。
+### S1 Targets-only：新根重放及后续部署 PASS
+
+同一生产 DLL 的会话 `d21bb8ccc2c54f9bae6fd186918093cf` 中，T2/T3 敌人 HP 比预测各低 6，local-core 仅以 `non_shuffle_rng_changed:targets` 拒绝严格续用。新根重放分别接受 6/3 动作、5.1/1.7ms、`quality=equivalent_partial`，预计战损均 16；完整请求各只有 1 个 Completed RouteReplay 成员、0 expanded / 6或3 transitions。fresh-search marker 到结果路线 capture 为 371/57ms，包含恢复编排但不包含 GUI 展示；纯 replay 耗时不能当完整响应时间。
+
+T1/T2/T3 分别部署 8/2/2 张本地牌，各有新 request/route 授权、逐动作原生校验、Safe EndTurn 与清除授权。`RouteReplay -MinReplays 2`、`Reactive Carry B -RequestId 1`、`Reactive Carry C` 和 `Joint Mismatch` 均 PASS。T4 旧路线已耗尽，正常重新搜索；保留 2 Completed / 1 Canceled / 2 Disposed，未把提前退出记为完成。4 请求全部成员、阶段及 Snapshot 分区守恒；两端 Graceful 后 6698 行 JSON 完整、error=0，10 次所选路线回放无已记录标量差异。完整归档 CRC 和 6 组四类状态产物通过，恢复仍 UNVERIFIED；证据在 `.local/s1-route-replay-live/`。
+
+此轮证明两次实际跳过完整搜索并正确部署，不是通用后态缓存或固定输入速度 A/B，不代表 S1 全项完成。既有 Joint validator 新增 RouteReplay 模式，按同一日志的请求窗口核对 Targets-only 新根、唯一零展开 replay ledger、评估范围、新路线授权及原生动作/结束回合；合成正例和旧授权、错请求/回合、混合账本、非法质量及缺失证据反例通过。
+
+### S1 目标死亡：截断旧 seed、新根恢复与部署 PASS
+
+同一 DLL 会话 `3217e9e264b54bc5b27e9392354570df`（SCROLLS_OF_BITING_NORMAL）中，T2 敌人集合从 combat ID 2/3/4/5 减为 2/3/4。严格续用拒绝后，R1 同战斗/玩家与 roster subset 准入为 none；10 个旧动作仅重放前 5 个，第 6 个 TAUNT 指向已死亡 ID 5，以 action_unavailable 截断。新根生成独立候选，最终选择 seed 派生的预计完整胜利、12 战损路线；新路线 TAUNT 指向存活 ID 3。T2 实际部署 12 张牌，全部目标属于新集合，Safe EndTurn 与清除新授权完整。Host 未结束 T2 已足够验收此边界，不代表后续胜利。
+
+`TargetDeath`、`Reactive Carry B -RequestId 13`、`Joint Mismatch` 均 PASS；新 validator 从 fresh marker 分别读取搜索代次与路线代次，避免跨战斗后 29/2 被误认为同一计数器。合成 plain/JSON、独立代次、替换敌人、死亡目标、未截断 seed、旧授权及错误账本反例通过，上一 Targets-only 实机日志回归仍 PASS。两个请求为 11256/110414、19256/159254 expanded/transitions；前者 2 Completed / 1 Canceled，后者 4 Completed，独立 E0、全部阶段与 Snapshot 分区守恒。两端 Graceful 后 12660 行 JSON 完整、error=0，6 次所选路线的 97 步已记录标量一致；归档 CRC 与 6 组四类状态产物通过，恢复仍 UNVERIFIED。证据在 `.local/s1-target-death-live/`；本轮仍运行主搜索，不是零展开 replay 或提速证明。
+
+### S1 斩杀窗口：公开伤害失效、新根搜索与部署已核对
+
+同一 DLL 会话 `028f45b262b04d2bb4666f42ba70275c`（FABRICATOR_NORMAL）中，Host 的 MIND_BLAST 使存活敌人 ID 2 从 126/360 降到 113/360，格挡为 0，前后均 `in_lethal_window=true`。Client 本地状态与已记录 RNG 不变；公开打牌同时改变 HC 历史，因此不宣称纯 HP-only stamp 等价。旧路线失效，搜索 generation 11 / route generation 4 从新根产出不同路线；新 request 4 授权部署 6 张牌，逐动作原生校验、Safe EndTurn 和授权清除完整。
+
+定向 journal/native 断言审计通过，两端 Graceful 后 5939 行 JSON 完整、error=0；4 请求全部成员、阶段及 Snapshot 分区守恒，保留实际 Canceled/Disposed。新根请求首前台 5.007s、墙钟 6.741s，不能与不同输入比较为提速。7 次所选路线共 72 步已记录标量一致，归档 CRC 与 6 组四类状态产物通过，恢复仍 UNVERIFIED。证据与审计在 `.local/s1-lethal-window-live/`，journal SHA256 `72448b568e6ec81131b93746bdbc9632b844ea6ad7a6273fe81309b9dce62fdc`。旧 MP2B normal smoke 禁止自动 EndTurn，Reactive Carry B 要求下一回合 fresh search；本样本不满足这两种入口范围，保留其输出，不把它们报为 PASS。
+
+### S1 显式采用：物化候选标记已修复，重复失效实机仍 UNVERIFIED
+
+旧 DLL 会话 `077e0ab339f6473ea08f49ea78a40133`（AEONGLASS）中，T6 点击采用 candidate 1，54ms 后 capture 仍为 SearchCompletion；首次后续 CardGeneration 529→535 在 capture 后 1012ms 才发生。唯一 SEARCH_RNG_REPLAN 在 T5、采用前，没有 SEARCH_RNG_ADOPTION_RECOVERY，因此不验收连续采用失效。T1–T6 共 26 张本地牌、6 次 Safe EndTurn 及授权清除完整，Reactive Carry B（request 3）PASS。两端 Graceful 后 22083 行 JSON 完整、journal error=0，10 请求成员/阶段/Snapshot 分区守恒，48 次路线回放共 767 步已记录标量一致；native 退出有 Godot 资源泄漏提示，本轮无 BUG_REPORT_EXPORTED 标记，归档 CRC/恢复仍 UNVERIFIED。证据在 `.local/s1-explicit-adoption-live/`，journal SHA256 `cdfa22e4ca4f6b62193ed016c3d9fee55bf49c0c40ab7fc26281d9dfdbfb74a7`。
+
+根因是已物化 incumbent 的采用 seed 返回普通完成结果；Coordinator 选择和 Runtime 最终收口现只在显式 AdoptRoute 请求下设置 RouteAdoption，保留屏幕所选身份，不增加部署授权。新增回归在旧 DLL 明确失败，新 DLL 的 continuation-replay、completion-scope、lifecycle/结构检查与 Release（0 warning/error）通过；两次额外 RNG 新根重放保持采用范围、质量、不同路线身份和 live 隔离。DLL SHA256 `6B679A6E3EBE9D9527212ED4543F5946C019517518828F93B09D4FF565B1036E`，当前修复仍须实机复测。
+
+下一步重测显式采用：Host 先开始连续推进共享 RNG，Client 搜索未结束且按钮可用时点击“采用当前路线”，Host 在采用/恢复期间继续生成牌并保持回合；Client 等恢复后执行。要求同一采用意图两次独立失效、各次新根恢复和最终新授权部署；仅采用完成后发生变化不计此专项。预算、DOP、GC、缓存与能力默认不变。
 
 ## 阶段 D 当前实现
 

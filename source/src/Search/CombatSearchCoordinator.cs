@@ -754,7 +754,13 @@ internal static partial class CombatSearchCoordinator
             return result;
         }
         if (request.Kind == SearchTakeoverKind.AdoptRoute)
-            return request.RouteAdoptionSeed?.Materialize();
+        {
+            if (request.RouteAdoptionSeed is not { } seed)
+                return null;
+            SolverResult exactDisplayed = seed.Materialize();
+            exactDisplayed.ResultScope = SolverResultScope.RouteAdoption;
+            return exactDisplayed;
+        }
         if (request.Kind == SearchTakeoverKind.ApplyCurrentTurn
             && request.CurrentTurnAdoptionSeed != null)
         {

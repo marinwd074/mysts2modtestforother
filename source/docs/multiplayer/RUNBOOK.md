@@ -362,10 +362,17 @@ PASS 必须同时证明：Safe Auto 在测量窗口只启用一次；至少 3 �
 
 ## Joint Forecast Continuation Smoke
 
-新联合预测的 continuation 实机验证分成两种，不再把“每回合都 Fresh Search”当作唯一正确结果：
+continuation 实机验证覆盖严格续用、失效回退及新根路线重放：
 
 - **Reuse**：选择尽量确定的局面（推荐让观察队友没有可打牌或不做额外动作），本地 Safe EndTurn 后等待下一本地回合。要求 Fresh Probe/Capture 后出现 `SEARCH_REUSED` 与 `MP_LOCAL_XTURN_CONTINUATION_REUSED ... local_state_exact=true reason=exact`；live/predicted `ContinuationStamp` 同时覆盖本地战斗状态与 Shuffle/CardGeneration/CardSelection/EnergyCosts/Targets/Orb/MonsterAi/Niche RNG。
 - **Mismatch**：在 EndTurn 后让观察队友执行与预测世界不同的可读动作。默认要求 `MP_LOCAL_XTURN_CONTINUATION_REJECTED ... reason=remote_public_mismatch`，随后 `SEARCH_REUSE_MISS` 使用同一 reject reason，并启动 Multiplayer Advisor 或 Safe Execute Fresh Search。不得再出现同一 turn/route 的 continuation reuse。
+- **RouteReplay**：高血战斗中 Client 正常执行，Host 只打纯格挡牌并结束，以观察招架盾等产生的 Targets-only 偏差。要求实际出现新根 replay accepted、完整请求只有一个零展开 RouteReplay 成员、保留评估范围，以及新路线重新授权后的逐动作原生部署和 Safe EndTurn。未触发或未部署保留 UNVERIFIED；不放宽严格状态/RNG gate。此入口验证新根搜索恢复，执行仍为本地 Safe Execute。
+- **TargetDeath**：Client 执行 T1 后，Host 击杀一个敌人并保留其他敌人，再结束回合；Client 等 T2 新根搜索后执行。验证 strict roster subset、旧 seed 因失效动作安全截断、独立恢复及存活目标的原生部署。Client T2 Safe EndTurn 与授权清除完成后即可收集，不要求 Host 再结束 T2。仅覆盖实际观察的 partial seed 恢复，不代表省去主搜索或已实战胜利。
+
+S1 同回合专项另按实际 journal/native 事件审计，不套用要求下一回合的 Reactive Carry B 或禁止自动 EndTurn 的旧 MP2B normal smoke：
+
+- **斩杀窗口**：单敌 HP+格挡 ≤35% 最大 HP、仍存活且 Client 已有路线时，Host 非致命伤害后保持回合；核对前后窗口、本地状态、伤害归属、旧路线失效、新根/新授权、原生部署与 Safe EndTurn。当前 FABRICATOR 会话已核对，详情见 [当前交接](../CODEX_HANDOFF.md#s1-斩杀窗口公开伤害失效新根搜索与部署已核对)。
+- **显式采用重复失效**：Host 先开始连续推进共享 RNG，Client 搜索未结束且按钮可用时点击“采用当前路线”，Host 在采用/恢复期间继续生成牌并保持回合。要求同一采用意图的两次独立失效、各次新根恢复、最终新授权部署；采用完成后才变化、只触发一次或仅普通重算均不计完成。已物化候选采用标记修复待当前 DLL 复测，仍 UNVERIFIED。
 
 验证命令：
 
@@ -380,9 +387,19 @@ pwsh -NoLogo -NoProfile -File .\validate-joint-continuation-results.ps1 `
   -Mode Mismatch `
   -ExpectedRejectReason remote_public_mismatch `
   -OutputPath '.\.local\multiplayer-lab\results\joint-continuation-mismatch.json'
+
+pwsh -NoLogo -NoProfile -File .\validate-joint-continuation-results.ps1 `
+  -LogPath '<post-restart-client-combat-journal.jsonl>' `
+  -Mode RouteReplay -MinReplays 2 `
+  -OutputPath '.\.local\multiplayer-lab\results\joint-route-replay.json'
+
+pwsh -NoLogo -NoProfile -File .\validate-joint-continuation-results.ps1 `
+  -LogPath '<post-restart-client-combat-journal.jsonl>' `
+  -Mode TargetDeath `
+  -OutputPath '.\.local\multiplayer-lab\results\joint-target-death.json'
 ~~~
 
-退出码仍为 0=PASS、1=FAIL、2=UNVERIFIED。Reuse 与 Mismatch 都通过后，才把 Joint continuation runtime 从合同覆盖提升为实机证据。
+退出码为 0=PASS、1=FAIL、2=UNVERIFIED。四种模式分别验收，新根恢复不能当 exact continuation PASS。搜索 generation 与每场重置的 route_generation 分别匹配，不要求数值相等；日志中的 quality 仍依赖生产准入合同，不能单凭标记证明公式或普遍提速。
 
 默认安装仍不因本手册自动进入 Safe Execute。显式 Safe Execute 已包含 Reactive Carry，
 并新增实验性 Safe Auto；Safe Auto 只持续重新授权当前本地安全边界，不等同于单人 Full Auto。

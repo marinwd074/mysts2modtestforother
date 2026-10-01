@@ -11,11 +11,12 @@ $validator = Join-Path $scriptRoot 'validate-joint-continuation-results.ps1'
 
 function Invoke-Validator {
     param(
-        [Parameter(Mandatory)][ValidateSet('Reuse', 'Mismatch')][string]$Mode,
+        [Parameter(Mandatory)][ValidateSet('Reuse', 'Mismatch', 'RouteReplay', 'TargetDeath')][string]$Mode,
         [Parameter(Mandatory)][int]$ExpectedExit,
-        [string]$ExpectedRejectReason = 'remote_public_mismatch'
+        [string]$ExpectedRejectReason = 'remote_public_mismatch',
+        [int]$MinReplays = 1
     )
-    & pwsh -NoLogo -NoProfile -File $validator -LogPath $fixture -Mode $Mode -ExpectedRejectReason $ExpectedRejectReason
+    & pwsh -NoLogo -NoProfile -File $validator -LogPath $fixture -Mode $Mode -ExpectedRejectReason $ExpectedRejectReason -MinReplays $MinReplays
     if ($LASTEXITCODE -ne $ExpectedExit) {
         throw "Joint continuation validator returned $LASTEXITCODE for $Mode, expected $ExpectedExit."
     }
@@ -52,6 +53,88 @@ try {
     Invoke-Validator -Mode Mismatch -ExpectedExit 0 -ExpectedRejectReason local_state_mismatch
     Invoke-Validator -Mode Mismatch -ExpectedExit 1
 
+    $replayFixture = @(
+        '[CombatSolver/Test] MP_LOCAL_XTURN_CONTINUATION_VALIDATE turn=2 route_identity=old source_world_version=10 minimum_world_version=11 actual_world_version=12 local_core_reject_reason=non_shuffle_rng_changed:targets allow_living_enemy_hp_decrease=true',
+        '[CombatSolver/Test] MP_LOCAL_XTURN_CONTINUATION_REJECTED turn=2 route_identity=old reason=local_state_mismatch',
+        '[CombatSolver/MultiplayerSafeExecute] MP_REACTIVE_FRESH_SEARCH generation=2 route_generation=2 turn=2 world_version=12 fresh_probe=true fresh_capture=true after_safe_end_turn=true previous_end_turn_request_id=1 cross_turn_reuse=false',
+        '[CombatSolver/Test] SEARCH_REQUEST generation=2 turn=2',
+        '[CombatSolver/Test] MP_LOCAL_XTURN_ROUTE_REPLAY status=accepted fresh_root=true expanded=0 actions=3 hp_loss=16 elapsed_ms=2.0 quality=equivalent_partial full_search_skipped=true',
+        '[CombatSolver/Test] SEARCH_REQUEST_PHASE {"RecordedSolverCount":1,"ExpandedNodes":0,"LogicalTransitions":3,"Members":[{"Kind":"RouteReplay","Outcome":"Completed","Work":{"ExpandedNodes":0,"TransitionCount":3}}]}',
+        '[CombatSolver/Test] SEARCH_RESULT_ROUTE_CAPTURE generation=2 deployment_scope=SearchCompletion route_scope=PartialLocalCrossTurnProjection route_identity=new',
+        '[CombatSolver/MultiplayerSafeExecute] MP2B_DEPLOY_START turn=2 request_id=2 route_generation=2 route_identity=new new_authorization=true action_count=1 search_world_version=12',
+        '[CombatSolver/MultiplayerSafeExecute] MP2B_ACTION_RECONCILED request_id=2 action_index=0 card=STRIKE_IRONCLAD decision=SafeToContinue native_action_captured=true action_queue_idle=true',
+        '[CombatSolver/MultiplayerSafeExecute] MP2B_END_TURN_REVALIDATED request_id=2 turn=2 decision=Safe',
+        '[CombatSolver/MultiplayerSafeExecute] NATIVE_ACTION_CAPTURED request_id=2 type=EndPlayerTurnAction',
+        '[CombatSolver/MultiplayerSafeExecute] MP2B_SAFE_END_TURN_ACCEPTED request_id=2 turn=2 route_identity=new action_count=1 session_cleared=true authorization_cleared=true automatic_end_turn=true custom_network_api_used=false'
+    )
+    [IO.File]::WriteAllLines($fixture, $replayFixture)
+    Invoke-Validator -Mode RouteReplay -ExpectedExit 0
+    $distinctGenerations = @($replayFixture | ForEach-Object {
+        $_.Replace('MP_REACTIVE_FRESH_SEARCH generation=2','MP_REACTIVE_FRESH_SEARCH generation=20').
+            Replace('SEARCH_REQUEST generation=2','SEARCH_REQUEST generation=20').
+            Replace('SEARCH_RESULT_ROUTE_CAPTURE generation=2','SEARCH_RESULT_ROUTE_CAPTURE generation=20')
+    })
+    [IO.File]::WriteAllLines($fixture, $distinctGenerations)
+    Invoke-Validator -Mode RouteReplay -ExpectedExit 0
+    [IO.File]::WriteAllLines($fixture, $replayFixture)
+    Invoke-Validator -Mode RouteReplay -MinReplays 2 -ExpectedExit 2
+    [IO.File]::WriteAllLines($fixture, @($replayFixture | ForEach-Object {
+        @{Time=1;Level='info';Message=$_} | ConvertTo-Json -Compress
+    }))
+    Invoke-Validator -Mode RouteReplay -ExpectedExit 0
+    foreach ($mutation in @(
+        @('new_authorization=true','new_authorization=false'),
+        @('local_core_reject_reason=non_shuffle_rng_changed:targets','local_core_reject_reason=non_shuffle_rng_changed:card_generation'),
+        @('"Kind":"RouteReplay"','"Kind":"Baseline"'),
+        @('generation=2 deployment_scope=SearchCompletion','generation=3 deployment_scope=SearchCompletion'),
+        @('MP2B_ACTION_RECONCILED request_id=2','MP2B_ACTION_RECONCILED request_id=1'),
+        @('route_identity=new','route_identity=old'),
+        @('quality=equivalent_partial','quality=not_proven'),
+        @('action_index=0','action_index=1'),
+        @('authorization_cleared=true','authorization_cleared=false')
+    )) {
+        [IO.File]::WriteAllLines($fixture, @($replayFixture | ForEach-Object { $_.Replace($mutation[0],$mutation[1]) }))
+        Invoke-Validator -Mode RouteReplay -ExpectedExit $(if($mutation[0] -like 'generation=*') {2} else {1})
+    }
+    $splitRequest = @($replayFixture[0..4]) + '[CombatSolver/Test] SEARCH_REQUEST generation=3 turn=3' + @($replayFixture[5..11])
+    [IO.File]::WriteAllLines($fixture, $splitRequest)
+    Invoke-Validator -Mode RouteReplay -ExpectedExit 1
+    [IO.File]::WriteAllLines($fixture, @($replayFixture | Where-Object { $_ -notmatch 'MP_LOCAL_XTURN_ROUTE_REPLAY ' }))
+    Invoke-Validator -Mode RouteReplay -ExpectedExit 2
+
+    $deathFixture = @(
+        $distinctGenerations[0].Replace('non_shuffle_rng_changed:targets','field_count_changed'),
+        '[CombatSolver/Test] SEARCH_REUSE_MISS turn=2 field=enemies expected={2:SCROLL_OF_BITING,5:SCROLL_OF_BITING} actual={2:SCROLL_OF_BITING}',
+        $distinctGenerations[1],
+        '[CombatSolver/Test] MP_LOCAL_XTURN_SEED_CAPTURE turn=2 admission_reason=none captured_actions=2',
+        $distinctGenerations[2],
+        $distinctGenerations[3],
+        '[CombatSolver/Test] SEARCH_CONTINUATION_SEED status=partial requested=2 replayed=1 reason=action_unavailable',
+        '[CombatSolver/Test] R1_REROOT_RECOVERY status=partial_hint actions=2 primary_budget_unchanged=true candidate_set_unchanged=true',
+        '[CombatSolver/Test] SEARCH_REQUEST_PHASE {"RecordedSolverCount":2,"ExpandedNodes":5,"LogicalTransitions":7,"Members":[{"Kind":"ContinuationSeed","Outcome":"Completed","Work":{"ExpandedNodes":4,"TransitionCount":5}},{"Kind":"Baseline","Outcome":"Completed","Work":{"ExpandedNodes":1,"TransitionCount":2}}]}',
+        $distinctGenerations[6].Replace('PartialLocalCrossTurnProjection','CompleteLocalBattleProjection'),
+        $distinctGenerations[7],
+        '[CombatSolver/Test] DEPLOY_ACTION turn=2 card=STRIKE_IRONCLAD target_combat_id=2'
+    ) + @($distinctGenerations[8..11])
+    [IO.File]::WriteAllLines($fixture, $deathFixture)
+    Invoke-Validator -Mode TargetDeath -ExpectedExit 0
+    [IO.File]::WriteAllLines($fixture, @($deathFixture | ForEach-Object {
+        @{Time=1;Level='info';Message=$_} | ConvertTo-Json -Compress
+    }))
+    Invoke-Validator -Mode TargetDeath -ExpectedExit 0
+    foreach ($mutation in @(
+        @('actual={2:SCROLL_OF_BITING}','actual={6:SCROLL_OF_BITING}'),
+        @('target_combat_id=2','target_combat_id=5'),
+        @('replayed=1','replayed=2'),
+        @('admission_reason=none','admission_reason=combat_identity_mismatch'),
+        @('primary_budget_unchanged=true','primary_budget_unchanged=false'),
+        @('new_authorization=true','new_authorization=false'),
+        @('"ExpandedNodes":5,"LogicalTransitions":7','"ExpandedNodes":6,"LogicalTransitions":7')
+    )) {
+        [IO.File]::WriteAllLines($fixture, @($deathFixture | ForEach-Object {$_.Replace($mutation[0],$mutation[1])}))
+        Invoke-Validator -Mode TargetDeath -ExpectedExit 1
+    }
+
     [IO.File]::WriteAllLines($fixture, @(
         '[CombatSolver/Test] MP_LOCAL_XTURN_CONTINUATION_VALIDATE turn=2 route_identity=route-c source_world_version=10 minimum_world_version=11 actual_world_version=12 fresh_probe_changed=true',
         '[CombatSolver/Test] SEARCH_REUSE_MISS turn=2 reason=state_mismatch cached_turns=2 previous_boundary=None continuation_reject_reason=scaling_mismatch local_state_exact=true diff_count=0 field=multiplayer_validation',
@@ -66,3 +149,4 @@ try {
         Remove-Item -LiteralPath $fixture -Force
     }
 }
+exit 0
