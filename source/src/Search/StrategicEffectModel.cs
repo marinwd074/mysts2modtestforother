@@ -4,6 +4,7 @@ using MegaCrit.Sts2.Core.Entities.Powers;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Powers;
 using CombatSolver.Engine.Common;
+using CombatSolver.Engine.InCombat.Simulation;
 
 namespace CombatSolver;
 
@@ -104,7 +105,7 @@ internal readonly record struct StrategicEffectContext(
     public int VulnerableApplications { get; init; }
 
     internal StrategicEffectContext WithExhaustDrawTiming(IReadOnlyList<PowerModel> powers,
-        IReadOnlyList<PredictedCard> hand, Creature owner)
+        IReadOnlyList<PredictedCard> hand, Creature owner, CombatPredictionState? predictionState = null)
     {
         int noDrawIndex = -1, embraceIndex = -1;
         bool skillsExhaust = false;
@@ -119,9 +120,9 @@ internal readonly record struct StrategicEffectContext(
         int ethereal = 0, exhaustingEthereal = 0;
         foreach (PredictedCard card in hand)
         {
-            if (!card.Preview.Keywords.Contains(CardKeyword.Ethereal)) continue;
+            if (!HasKeyword(card, predictionState, CardKeyword.Ethereal)) continue;
             ethereal++;
-            if (card.Preview.Keywords.Contains(CardKeyword.Exhaust)
+            if (HasKeyword(card, predictionState, CardKeyword.Exhaust)
                 || skillsExhaust && card.Preview.Type == CardType.Skill) exhaustingEthereal++;
         }
         return this with { ExhaustDrawPlays = CardMechanismFacts.ExhaustDrawPotential(
@@ -134,7 +135,8 @@ internal readonly record struct StrategicEffectContext(
         int enemyHp,
         int incomingDamage,
         int incomingHitCount,
-        StrategicEffectRequirements requirements, bool skillsExhaust = false)
+        StrategicEffectRequirements requirements, bool skillsExhaust = false,
+        CombatPredictionState? predictionState = null)
     {
         if (requirements == StrategicEffectRequirements.None)
         {
@@ -284,10 +286,10 @@ internal readonly record struct StrategicEffectContext(
             }
             // Keywords can consult the card's pile. Read Exhaust only for a requested
             // metric, and reuse it only within this read-only card evaluation.
-            bool? hasExhaustKeyword = needsExhaustCount
-                ? card.Keywords.Contains(CardKeyword.Exhaust) : null;
-            bool exhaustsOnPlay = hasExhaustKeyword == true
-                || skillsExhaust && cardType == CardType.Skill;
+            bool exhaustsAsSkill = skillsExhaust && cardType == CardType.Skill;
+            bool? hasExhaustKeyword = needsExhaustCount && !exhaustsAsSkill
+                ? HasKeyword(predicted, predictionState, CardKeyword.Exhaust) : null;
+            bool exhaustsOnPlay = exhaustsAsSkill || hasExhaustKeyword == true;
             if (needsExhaustCount && exhaustsOnPlay)
                 exhaustCount++;
             if (needsShivCount)
@@ -295,7 +297,7 @@ internal readonly record struct StrategicEffectContext(
                 if (card.Tags.Contains(CardTag.Shiv))
                 {
                     shivCount++;
-                    hasExhaustKeyword ??= card.Keywords.Contains(CardKeyword.Exhaust);
+                    hasExhaustKeyword ??= HasKeyword(predicted, predictionState, CardKeyword.Exhaust);
                     if (!hasExhaustKeyword.Value) reusableShivCount++;
                 }
                 if (card.GetType().Assembly == typeof(CardModel).Assembly)
@@ -307,7 +309,7 @@ internal readonly record struct StrategicEffectContext(
                     if (generated > 0) shivGeneratorCount++;
                     if (generated > 0 && (cardType == CardType.Power
                         || skillsExhaust && cardType == CardType.Skill
-                        || (hasExhaustKeyword ??= card.Keywords.Contains(CardKeyword.Exhaust)) == true))
+                        || (hasExhaustKeyword ??= HasKeyword(predicted, predictionState, CardKeyword.Exhaust)) == true))
                     {
                         singleUseGeneratedShivs += generated;
                         singleUseShivGenerators++;
@@ -397,6 +399,12 @@ internal readonly record struct StrategicEffectContext(
                 : 0,
         };
     }
+
+    // Search uses captured branch hooks; the native getter consults the card's live owner.
+    private static bool HasKeyword(PredictedCard card, CombatPredictionState? predictionState, CardKeyword keyword)
+        => predictionState == null
+            ? card.Preview.Keywords.Contains(keyword)
+            : card.HasKeyword(predictionState, keyword);
 
     private static int EnergyCost(CardModel card)
         => card.EnergyCost.CostsX

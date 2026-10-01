@@ -14,6 +14,7 @@ using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.Models.Powers;
+using MegaCrit.Sts2.Core.Models.Orbs;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.ValueProps;
 using OfflineSearchHarness;
@@ -43,10 +44,12 @@ internal static class Program
         bool pendulumDrawOnly = args.Length > 0 && args[0] == "pendulum-draw";
         bool completionScopeOnly = args.Length > 0 && args[0] == "completion-scope";
         bool rngRestoreOnly = args.Length > 0 && args[0] == "rng-restore";
+        bool strategicContextOnly = args.Length > 0 && args[0] == "strategic-context";
+        bool rootHistoryOnly = args.Length > 0 && args[0] == "root-history";
         bool requestHydrationOnly = args.Length > 0 && args[0] is "request-hydration"
             or "request-hydration-benchmark-on" or "request-hydration-benchmark-off";
         bool requestHydrationBenchmark = requestHydrationOnly && args[0] != "request-hydration";
-        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || requestHydrationOnly || rngRestoreOnly ? args[1..] : args,
+        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly ? args[1..] : args,
             allowHydrationOptions: requestHydrationBenchmark);
         Directory.CreateDirectory(outputDirectory);
 
@@ -90,7 +93,7 @@ internal static class Program
                 ValidateRngRestore(outputDirectory);
                 return 0;
             }
-            if (!rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly)
+            if (!rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly && !rootHistoryOnly && !strategicContextOnly)
             {
             ValidateDarkEmbracePredictionCoverage();
             ValidateViciousStrategicValue();
@@ -143,6 +146,18 @@ internal static class Program
             loop.RunUntilCompleted(enter, TimeSpan.FromSeconds(180), "U0/U1 enter combat");
             CombatState combat = OfflineCombat.WaitForPlayableCombat(loop);
             Console.WriteLine(OfflineCombat.DescribeRoot(combat));
+
+            if (strategicContextOnly)
+            {
+                ValidateStrategicContext(combat, outputDirectory);
+                return 0;
+            }
+
+            if (rootHistoryOnly)
+            {
+                ValidateRootCalculatedHistory(combat);
+                return 0;
+            }
 
             SolverSettingsSnapshot settings = SolverSettings.Capture();
             SolverSearchProfile profile = settings.Profile with
@@ -3323,7 +3338,7 @@ internal static class Program
         int dop = int.Parse(Option("--dop", "1"));
         Require(iterations is > 0 and <= 100 && dop is > 0 and <= 16, "Invalid benchmark size or DOP.");
         bool measure = benchmarkArgs?.Contains("--measure") == true;
-        Require(fixture is "low-repeat" or "shared-audit" or "draw-repeat" or "multi-hit" or "multi-hit-high-counter", "Unknown hydration fixture.");
+        Require(fixture is "low-repeat" or "shared-audit" or "draw-repeat" or "multi-hit" or "multi-hit-high-counter" or "history-repeat" or "strategic-repeat", "Unknown hydration fixture.");
         if (fixture == "low-repeat")
             coordinated = coordinated with
             {
@@ -3345,10 +3360,32 @@ internal static class Program
                 combat.RunState.Rng.Shuffle.FastForwardCounter(10_000);
             root = CombatRootSnapshot.Capture(combat);
         }
+        if (fixture == "history-repeat")
+        {
+            // Native records with an unchanged board isolate repeated root-history scans.
+            for (int index = 0; index < 2_000; index++)
+                CombatManager.Instance.History.CardDrawn(combat, player.PlayerCombatState!.Hand.Cards[0], false);
+            root = CombatRootSnapshot.Capture(combat);
+        }
+        if (fixture == "strategic-repeat")
+        {
+            foreach (PowerModel power in new PowerModel[]
+                     { ModelDb.Power<DarkEmbracePower>(), ModelDb.Power<CorruptionPower>(),
+                       ModelDb.Power<FeelNoPainPower>(), ModelDb.Power<StrengthPower>() })
+                power.ToMutable(0).ApplyInternal(player.Creature, 1, false);
+            foreach (string cardId in new[]
+                     { "BURNING_PACT", "BATTLE_TRANCE", "SHRUG_IT_OFF", "STOKE", "WHIRLWIND", "TWIN_STRIKE" })
+                player.PlayerCombatState!.DrawPile.AddInternal(combat.CreateCard(ResolveCard(cardId), player), -1);
+            Require(player.Creature.GetPower<DarkEmbracePower>()?.Amount == 1
+                && player.Creature.GetPower<CorruptionPower>()?.Amount == 1,
+                "Strategic fixture did not attach its native powers.");
+            root = CombatRootSnapshot.Capture(combat);
+        }
         // Warm both paths; detailed phase measurements are a separate diagnostic run.
         coordinated = coordinated with { MaxDegreeOfParallelism = dop, MeasurePhasePerformance = measure };
         SolverResult reference = CombatSearchCoordinator.Solve(root, names, damage,
             coordinated with { UseRequestTransitionHydration = false, MeasurePhasePerformance = false }, default, null);
+        string referenceRoute = JsonSerializer.Serialize(reference.BestNode.Actions, Json);
         CombatSearchCoordinator.Solve(root, names, damage,
             coordinated with { UseRequestTransitionHydration = true }, default, null);
         List<object> samples = [];
@@ -3363,14 +3400,21 @@ internal static class Program
             wall.Stop();
             long allocatedBytes = GC.GetTotalAllocatedBytes(precise: true) - allocatedBefore;
             int[] gcCollections = Enumerable.Range(0, 3).Select(g => GC.CollectionCount(g) - gcBefore[g]).ToArray();
-            Require(measured.BestNode.Actions.SequenceEqual(reference.BestNode.Actions)
+            string fullRoute = JsonSerializer.Serialize(measured.BestNode.Actions, Json);
+            Require(fullRoute == referenceRoute
                 && measured.PredictedFinalState == reference.PredictedFinalState
                 && measured.ProjectedBattleHpLost == reference.ProjectedBattleHpLost
                 && measured.TotalExpandedNodes == reference.TotalExpandedNodes
                 && measured.TotalTransitionCount == reference.TotalTransitionCount
                 && measured.CombatEndedTurn == reference.CombatEndedTurn
                 && measured.BoundaryReason == reference.BoundaryReason,
-                "Benchmark cache changed route, state, quality, boundary or logical work.");
+                $"Benchmark changed result: route={fullRoute == referenceRoute} "
+                + $"state={measured.PredictedFinalState == reference.PredictedFinalState} "
+                + $"loss={reference.ProjectedBattleHpLost}/{measured.ProjectedBattleHpLost} "
+                + $"work={reference.TotalExpandedNodes}/{reference.TotalTransitionCount}"
+                + $"->{measured.TotalExpandedNodes}/{measured.TotalTransitionCount} "
+                + $"boundary={reference.BoundaryReason}/{measured.BoundaryReason} "
+                + $"endTurn={reference.CombatEndedTurn}/{measured.CombatEndedTurn}.");
             Require(ContinuationStamp.CaptureLive(combat) == root.ContinuationStamp,
                 "Benchmark changed live combat.");
             ValidateRequestPhaseMetrics(measured, measure);
@@ -3380,6 +3424,7 @@ internal static class Program
                 measured.TotalExpandedNodes, measured.TotalTransitionCount, measured.ProjectedBattleHpLost,
                 measured.BoundaryReason, measured.CombatEndedTurn,
                 route = measured.BestNode.Actions.Select(ActionToken).ToArray(),
+                fullRoute,
                 finalState = measured.PredictedFinalState?.StateText, measured.RequestTransitionHydration,
                 measured.RequestPhaseMetrics,
                 skippedPlayCardSimulations = measured.RequestTransitionHydration?.HydrationHits ?? 0,
@@ -3393,9 +3438,223 @@ internal static class Program
                 evidenceLevel = "pinned-headless", enabled = enabledFlag, fixture, dop, measure,
                 tieredCompilation = Environment.GetEnvironmentVariable("DOTNET_TieredCompilation"),
                 runtime = Environment.Version.ToString(), processorCount = Environment.ProcessorCount,
+                combatSolverSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                    File.ReadAllBytes(typeof(CombatRootSnapshot).Assembly.Location))),
                 warmup = "one off and one on request", rootState = root.ContinuationStamp.StateText,
                 root = OfflineCombat.DescribeRoot(combat), samples,
             }, Json));
+    }
+
+    private static void ValidateStrategicContext(CombatState combat, string outputDirectory)
+    {
+#if STRATEGIC_CONTEXT_ORACLE
+        Player player = LocalContext.GetMe(combat)!;
+        ModelDb.Power<DarkEmbracePower>().ToMutable(0).ApplyInternal(player.Creature, 1, false);
+        foreach (string id in new[] { "DAZED", "ASCENDERS_BANE", "SHIV", "BLADE_DANCE", "BURNING_PACT" })
+            player.PlayerCombatState!.Hand.AddInternal(combat.CreateCard(ResolveCard(id), player), -1);
+        CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
+        CombatPredictionSimulator parent = root.ForkSimulator();
+        StrategicEffectRequirements[] masks = new[] { 0, 65535, 192, 32896, 576, 3264 }
+            .Concat(Enumerable.Range(0, 16).Select(bit => 1 << bit))
+            .Select(value => (StrategicEffectRequirements)value).ToArray();
+        int contexts = 0, keywords = 0, nativeContexts = 0, globalChanges = 0, liveGetterDifferences = 0;
+        List<object> cases = [];
+        for (int scenario = 0; scenario < 7; scenario++)
+        {
+            CombatPredictionSimulator child = parent.Fork();
+            var state = (SimulatedCombatState)child.State.CombatState;
+            var piles = child.State.GetPlayerCombatState(player);
+            if (scenario >= 1) state.SetAmount<HexPower>(player.Creature, 2);
+            if (scenario >= 2)
+            {
+                piles.Hand.Cards[0].MutablePreview.AddKeyword(CardKeyword.Ethereal);
+                piles.Hand.Cards[0].MutablePreview.AddKeyword(CardKeyword.Exhaust);
+            }
+            if (scenario >= 3) state.SetAmount<CorruptionPower>(player.Creature, 1);
+            if (scenario >= 4) state.SetAmount<HexPower>(player.Creature, 0);
+            if (scenario == 5)
+            {
+                state.SetAmount<DarkEmbracePower>(player.Creature, 0);
+                state.SetAmount<NoDrawPower>(player.Creature, 1);
+                state.SetAmount<DarkEmbracePower>(player.Creature, 1);
+            }
+            if (scenario == 6) state.SetAmount<NoDrawPower>(player.Creature, 1);
+            state.NormalizeCardAfflictions(child);
+            PredictedCard[] cards = piles.DiscardPile.Cards.Concat(piles.DrawPile.Cards)
+                .Concat(piles.Hand.Cards).ToArray();
+            int changedKeywords = 0;
+            foreach (PredictedCard card in cards)
+            {
+                IReadOnlySet<CardKeyword> oracle = card.GetKeywords(child.State);
+                foreach (CardKeyword keyword in Enum.GetValues<CardKeyword>())
+                {
+                    Require(card.HasKeyword(child.State, keyword) == oracle.Contains(keyword),
+                        $"Single-keyword query differs from materialized native Hook: {scenario}/{card.Preview.Id}/{keyword}.");
+                    keywords++;
+                }
+                changedKeywords += oracle.Except(card.Preview.LocalKeywords).Count()
+                    + card.Preview.LocalKeywords.Except(oracle).Count();
+            }
+            globalChanges += changedKeywords;
+            bool skillsExhaust = state.GetAmount<CorruptionPower>(player.Creature) > 0;
+            foreach (StrategicEffectRequirements mask in masks)
+            foreach (int enemyHp in new[] { -1, 0, 90 })
+            {
+                StrategicEffectContext native = StrategicEffectContext.Build(cards, enemyHp, 23, 4, mask, skillsExhaust);
+                StrategicEffectContext optimized = StrategicEffectContext.Build(cards, enemyHp, 23, 4, mask,
+                    skillsExhaust, child.State);
+                MaterializedKeywordContext oracle = MaterializedKeywordContext.Build(cards, enemyHp, 23, 4, mask,
+                    skillsExhaust, child.State);
+                Require(JsonSerializer.Serialize(oracle, Json) == JsonSerializer.Serialize(optimized, Json),
+                    $"Materialized native Hook context differs: {scenario}/{mask}.");
+                IReadOnlyList<PowerModel> powers = state.EffectivePowers();
+                StrategicEffectContext timed = optimized.WithExhaustDrawTiming(powers, piles.Hand.Cards,
+                    player.Creature, child.State);
+                Require(JsonSerializer.Serialize(oracle.WithExhaustDrawTiming(powers, piles.Hand.Cards,
+                    player.Creature, child.State), Json) == JsonSerializer.Serialize(timed, Json),
+                    $"Materialized native Hook exhaust timing differs: {scenario}/{mask}.");
+                // The old getter consults the live owner. Equality is required when its keywords agree;
+                // positive Hex branches deliberately expose that prior state-binding defect.
+                bool sameKeywords = cards.All(card => card.Preview.Keywords.SetEquals(card.GetKeywords(child.State)));
+                if (sameKeywords)
+                {
+                    Require(native == optimized && native.WithExhaustDrawTiming(powers, piles.Hand.Cards,
+                        player.Creature) == timed, $"Native getter context differs: {scenario}/{mask}.");
+                    nativeContexts++;
+                }
+                else if (native != optimized || native.WithExhaustDrawTiming(powers, piles.Hand.Cards,
+                    player.Creature) != timed) liveGetterDifferences++;
+                contexts++;
+            }
+            Require(ContinuationStamp.CaptureLive(combat) == root.ContinuationStamp,
+                "Context evaluation or branch mutation changed the live combat.");
+            Require(((SimulatedCombatState)parent.State.CombatState).GetAmount<HexPower>(player.Creature) == 0
+                && ((SimulatedCombatState)parent.State.CombatState).GetAmount<CorruptionPower>(player.Creature) == 0
+                && !parent.State.GetPlayerCombatState(player).Hand.Cards[0].Preview.LocalKeywords.Contains(CardKeyword.Ethereal),
+                "Child keyword or power mutation leaked into the parent.");
+            cases.Add(new { scenario, changedKeywords, skillsExhaust });
+        }
+        Require(globalChanges > 0 && liveGetterDifferences > 0,
+            "Native Hex fixture did not expose a positive global modifier and live-owner context mismatch.");
+        Parallel.For(0, 32, new ParallelOptions { MaxDegreeOfParallelism = 4 }, index =>
+        {
+            CombatPredictionSimulator child = parent.Fork();
+            var state = (SimulatedCombatState)child.State.CombatState;
+            state.SetAmount<HexPower>(player.Creature, index % 2);
+            state.NormalizeCardAfflictions(child);
+            foreach (PredictedCard card in child.State.GetPlayerCombatState(player).Hand.Cards)
+            foreach (CardKeyword keyword in Enum.GetValues<CardKeyword>())
+                Require(card.HasKeyword(child.State, keyword) == card.GetKeywords(child.State).Contains(keyword),
+                    "Concurrent keyword scratch query differs.");
+        });
+        File.WriteAllText(Path.Combine(outputDirectory, "strategic-context.json"), JsonSerializer.Serialize(new
+        {
+            evidence = "pinned-headless native; no multiplayer deployment or performance claim",
+            contexts, nativeContexts, keywords, globalChanges, liveGetterDifferences, parallelBranches = 32, cases,
+        }, Json));
+        Console.WriteLine($"StrategicContext PASS (contexts={contexts}, keywords={keywords}, globalChanges={globalChanges}, liveGetterDifferences={liveGetterDifferences}, parallelBranches=32)");
+#else
+        throw new InvalidOperationException("Run tools/StrategicKeywordChecks/run.py --native to build the materialized keyword oracle.");
+#endif
+    }
+
+    private static void ValidateRootCalculatedHistory(CombatState combat)
+    {
+        Player player = LocalContext.GetMe(combat)!;
+        Player foreign = Player.CreateForNewRun(ModelDb.Character<MegaCrit.Sts2.Core.Models.Characters.Ironclad>(),
+            MegaCrit.Sts2.Core.Saves.SaveManager.Instance.GenerateUnlockStateFromProgress(), 99UL);
+        var native = CombatManager.Instance.History;
+        CardModel Card(Player owner)
+        {
+            CardModel card = ResolveCard("DAZED").ToMutable();
+            card.Owner = owner;
+            return card;
+        }
+        LightningOrb Orb(Player owner)
+        {
+            var orb = (LightningOrb)ModelDb.Orb<LightningOrb>().ToMutable();
+            orb.Owner = owner;
+            return orb;
+        }
+        CardPlay Play(CardModel card) => new()
+        {
+            Card = card, Target = null, ResultPile = PileType.Discard, Resources = default,
+            IsAutoPlay = false, PlayIndex = 0, PlayCount = 1,
+        };
+        foreach (Player owner in new[] { player, foreign })
+        {
+            CardModel card = Card(owner);
+            native.CardDrawn(combat, card, false);
+            native.CardGenerated(combat, card, owner);
+            native.OrbChanneled(combat, Orb(owner));
+            native.CardPlayFinished(combat, Play(card));
+            native.DamageReceived(combat, owner.Creature, owner.Creature,
+                new DamageResult(owner.Creature, ValueProp.Unpowered) { UnblockedDamage = 1 }, card);
+        }
+        Creature enemy = combat.Enemies[0];
+        native.DamageReceived(combat, enemy, enemy,
+            new DamageResult(enemy, ValueProp.Unpowered) { UnblockedDamage = 1 }, null);
+        RootCombatHistorySnapshot captured = RootCombatHistorySnapshot.Capture();
+        Require(captured.CardsGenerated.Any(entry => entry.Creator == player)
+            && captured.OrbsChanneled.Any(entry => entry.Actor.Player == player && entry.Orb is LightningOrb)
+            && captured.CardPlaysFinished.Any(entry => entry.CardPlay.Card.Owner == player && entry.WasEthereal)
+            && captured.DamageReceived.Any(entry => entry.Receiver == player.Creature && entry.Result.UnblockedDamage > 0),
+            "Mixed-history fixture did not contain all positive root counters.");
+        CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
+        CombatPredictionSimulator parent = root.ForkSimulator();
+        SimulatedCombatState State(CombatPredictionSimulator simulator)
+            => (SimulatedCombatState)simulator.State.CombatState;
+        void Check(CombatPredictionSimulator simulator, Player owner)
+        {
+            var history = simulator.History;
+            var state = State(simulator);
+            Require(state.GetCardsDrawnBeforePrediction(owner)
+                    == captured.CardsDrawn.Count(entry => entry.Actor.Player == owner)
+                && state.GetGeneratedCardsForCalculatedVar(simulator, owner)
+                    == captured.CardsGenerated.Count(entry => entry.Creator == owner)
+                        + history.OfType<CombatPredictionCardGeneratedEntry>().Count(entry => entry.Creator == owner)
+                && state.GetLightningChannelsForCalculatedVar(simulator, owner)
+                    == captured.OrbsChanneled.Count(entry => entry.Actor.Player == owner && entry.Orb is LightningOrb)
+                        + history.OfType<CombatPredictionOrbChanneledEntry>().Count(entry => entry.Orb.Owner == owner && entry.Orb is LightningOrb)
+                && state.GetEtherealPlaysForCalculatedVar(simulator, owner)
+                    == captured.CardPlaysFinished.Count(entry => entry.CardPlay.Card.Owner == owner && entry.WasEthereal)
+                        + history.OfType<CombatPredictionCardPlayFinishedEntry>().Count(entry => entry.CardPlay.Card.Owner == owner && entry.WasEthereal)
+                && state.GetCardsDrawnForCalculatedVar(simulator, owner)
+                    == captured.CardsDrawn.Count(entry => entry.Actor.Player == owner)
+                        + history.OfType<CombatPredictionCardDrawnEntry>().Count(entry => entry.Card.Owner == owner),
+                "Captured history counts differed from the original scans.");
+            foreach (Creature receiver in new[] { owner.Creature, enemy })
+                Require(state.GetUnblockedDamageEventsForCalculatedVar(simulator, receiver)
+                        == captured.DamageReceived.Count(entry => entry.Receiver == receiver && entry.Result.UnblockedDamage > 0)
+                            + history.OfType<CombatPredictionDamageReceivedEntry>().Count(entry => entry.Receiver == receiver && entry.Result.UnblockedDamage > 0),
+                    "Player or non-player damage history changed.");
+        }
+        Check(parent, player);
+        Check(parent, foreign);
+        CombatPredictionSimulator child = parent.Fork();
+        PredictedCard predicted = new(Card(player));
+        child.History.CardDrawn(predicted, false);
+        child.History.CardGenerated(predicted, player, CardGenerationResultKind.Fixed);
+        child.History.CardGenerated(predicted, null, CardGenerationResultKind.Fixed);
+        child.History.OrbChanneled(Orb(player));
+        child.History.CardPlayFinished(predicted, Play(predicted.Preview), true);
+        child.History.DamageReceived(player.Creature, enemy,
+            new DamageResult(player.Creature, ValueProp.Unpowered) { UnblockedDamage = 1 }, null,
+            CombatDamageSource.Unknown);
+        child.History.DamageReceived(enemy, player.Creature,
+            new DamageResult(enemy, ValueProp.Unpowered) { UnblockedDamage = 0 }, null,
+            CombatDamageSource.Unknown);
+        Check(child, player);
+        Check(child, foreign);
+        Check(parent, player);
+        native.CardDrawn(combat, Card(player), false);
+        Check(parent, player);
+        Check(child, player);
+        CombatPredictionSimulator nextRoot = CombatRootSnapshot.Capture(combat).ForkSimulator();
+        Require(State(nextRoot).GetCardsDrawnBeforePrediction(player)
+                == State(parent).GetCardsDrawnBeforePrediction(player) + 1,
+            "New root failed to capture a later native event.");
+        Console.WriteLine("RootHistory PASS (mixed native counts, predicted events, foreign/non-player fallback, Fork isolation and new roots)");
     }
 
     private static void ValidateRequestPhaseMetrics(SolverResult result, bool measured)
@@ -3423,6 +3682,28 @@ internal static class Program
                 && aggregate.AllocatedBytes == phases.Members.Sum(m => m.Phases[phase.ToString()].AllocatedBytes)
                 && aggregate.Samples == phases.Members.Sum(m => m.Phases[phase.ToString()].Samples),
                 $"Request phase {phase} missed worker contributions.");
+        }
+        string[] snapshotParts =
+        [
+            "SnapshotEnemyState", "Fingerprint", "ThreatProjection", "SnapshotCardValues",
+            "SnapshotStrategicEffects", "SnapshotFutureResources", "SnapshotEnemyControl", "SnapshotResult",
+        ];
+        foreach (SearchSolverPhaseContribution member in phases.Members)
+        {
+            SearchPhaseMetric evaluation = member.Phases["SnapshotEvaluation"];
+            Require(evaluation.Samples > 0
+                && snapshotParts.All(part => member.Phases[part].Samples == evaluation.Samples),
+                "Snapshot decomposition missed a caller or worker contribution.");
+            Require(snapshotParts.Sum(part => member.Phases[part].Elapsed.Ticks) <= evaluation.Elapsed.Ticks
+                && snapshotParts.Sum(part => member.Phases[part].AllocatedBytes) <= evaluation.AllocatedBytes,
+                "Snapshot decomposition double-counted its non-overlapping parts.");
+            SearchPhaseMetric hand = member.Phases["SnapshotReachableHand"];
+            SearchPhaseMetric construction = member.Phases["SnapshotConstruction"];
+            SearchPhaseMetric resultPhase = member.Phases["SnapshotResult"];
+            Require(hand.Samples == evaluation.Samples && construction.Samples == evaluation.Samples
+                && hand.Elapsed.Ticks + construction.Elapsed.Ticks <= resultPhase.Elapsed.Ticks
+                && hand.AllocatedBytes + construction.AllocatedBytes <= resultPhase.AllocatedBytes,
+                "Snapshot result children escaped their parent scope.");
         }
     }
 

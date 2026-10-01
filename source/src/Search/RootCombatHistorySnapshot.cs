@@ -1,5 +1,7 @@
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Combat.History.Entries;
+using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Models.Orbs;
 
 namespace CombatSolver;
 
@@ -18,6 +20,14 @@ internal sealed record RootCombatHistorySnapshot(
     OrbChanneledEntry[] OrbsChanneled,
     BlockGainedEntry[] BlockGained)
 {
+    internal RootCalculatedHistoryCounts CountCalculatedEvents(Player player)
+        => new(
+            CardsGenerated.Count(entry => entry.Creator == player),
+            OrbsChanneled.Count(entry => entry.Actor.Player == player && entry.Orb is LightningOrb),
+            DamageReceived.Count(entry => entry.Receiver == player.Creature && entry.Result.UnblockedDamage > 0),
+            CardPlaysFinished.Count(entry => entry.CardPlay.Card.Owner == player && entry.WasEthereal),
+            CardsDrawn.Count(entry => entry.Actor.Player == player));
+
     public static RootCombatHistorySnapshot Capture()
     {
         var history = CombatManager.Instance.History;
@@ -37,3 +47,10 @@ internal sealed record RootCombatHistorySnapshot(
             history.Entries.OfType<BlockGainedEntry>().ToArray());
     }
 }
+
+internal readonly record struct RootCalculatedHistoryCounts(
+    int CardsGenerated,
+    int LightningChannels,
+    int UnblockedHitsReceived,
+    int EtherealPlays,
+    int CardsDrawn);

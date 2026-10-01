@@ -53,6 +53,9 @@ internal sealed partial class SimulatedCombatState
     private readonly EncounterModel? _encounter;
     private readonly IReadOnlyList<string> _encounterSlots;
     private readonly RootCombatHistorySnapshot _rootHistory;
+    private readonly IReadOnlyDictionary<Player, RootCalculatedHistoryCounts> _rootCalculatedHistory;
+    private readonly Player? _rootCalculatedHistoryOwner;
+    private readonly RootCalculatedHistoryCounts _rootPrimaryCalculatedHistory;
     private readonly IReadOnlySet<Creature> _rootCreatures;
     private readonly AbstractModel[] _rootHookListeners;
     private readonly AbstractModel[] _rootRunHookListeners;
@@ -280,6 +283,12 @@ internal sealed partial class SimulatedCombatState
         _encounter = inner.Encounter;
         _encounterSlots = inner.Encounter?.Slots.ToArray() ?? [];
         _rootHistory = RootCombatHistorySnapshot.Capture();
+        _rootCalculatedHistory = _players.ToDictionary(
+            static player => player,
+            player => _rootHistory.CountCalculatedEvents(player));
+        _rootCalculatedHistoryOwner = _rootActionPlayers.Count > 0 ? _rootActionPlayers[0] : null;
+        _rootPrimaryCalculatedHistory = _rootCalculatedHistoryOwner == null
+            ? default : _rootCalculatedHistory[_rootCalculatedHistoryOwner];
         _brightestFlameMaxHpSpent = CaptureBrightestFlameMaxHpSpent(
             _rootHistory.CardPlaysStarted,
             _rootActionPlayers);
@@ -503,6 +512,9 @@ internal sealed partial class SimulatedCombatState
         _encounter = source._encounter;
         _encounterSlots = source._encounterSlots;
         _rootHistory = source._rootHistory;
+        _rootCalculatedHistory = source._rootCalculatedHistory;
+        _rootCalculatedHistoryOwner = source._rootCalculatedHistoryOwner;
+        _rootPrimaryCalculatedHistory = source._rootPrimaryCalculatedHistory;
         _rootCreatures = source._rootCreatures;
         _rootHookListeners = source._rootHookListeners;
         _rootRunHookListeners = source._rootRunHookListeners;

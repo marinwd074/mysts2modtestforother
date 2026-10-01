@@ -27,7 +27,13 @@ internal sealed partial class SimulatedCombatState
             .Sum(entry => entry.CardPlay.Card.DynamicVars.MaxHp.IntValue);
 
     public int GetCardsDrawnBeforePrediction(Player player)
-        => _rootHistory.CardsDrawn.Count(entry => entry.Actor.Player == player);
+        => RootCalculatedHistoryFor(player).CardsDrawn;
+
+    private RootCalculatedHistoryCounts RootCalculatedHistoryFor(Player player)
+        => ReferenceEquals(player, _rootCalculatedHistoryOwner)
+            ? _rootPrimaryCalculatedHistory
+            : _rootCalculatedHistory.TryGetValue(player, out RootCalculatedHistoryCounts counts)
+                ? counts : _rootHistory.CountCalculatedEvents(player);
 
     public int GetFinishedCardPlaysForCalculatedVar(CombatPredictionSimulator simulator)
     {
@@ -46,20 +52,24 @@ internal sealed partial class SimulatedCombatState
     {
         int predicted = simulator.History.TryGetCounters(player, out CombatHistoryCounters counters)
                 ? counters.CardsGenerated
-                : simulator.History.OfType<CombatPredictionCardGeneratedEntry>()
-                    .Count(entry => entry.Creator == player);
-        return _rootHistory.CardsGenerated.Count(entry => entry.Creator == player) + predicted;
+                : CountPredicted(simulator, player);
+        return RootCalculatedHistoryFor(player).CardsGenerated + predicted;
+
+        static int CountPredicted(CombatPredictionSimulator simulator, Player player)
+            => simulator.History.OfType<CombatPredictionCardGeneratedEntry>()
+                .Count(entry => entry.Creator == player);
     }
 
     public int GetLightningChannelsForCalculatedVar(CombatPredictionSimulator simulator, Player player)
     {
         int predicted = simulator.History.TryGetCounters(player, out CombatHistoryCounters counters)
                 ? counters.LightningChannels
-                : simulator.History.OfType<CombatPredictionOrbChanneledEntry>()
-                    .Count(entry => entry.Orb.Owner == player && entry.Orb is LightningOrb);
-        return _rootHistory.OrbsChanneled.Count(entry =>
-                entry.Actor.Player == player && entry.Orb is LightningOrb)
-            + predicted;
+                : CountPredicted(simulator, player);
+        return RootCalculatedHistoryFor(player).LightningChannels + predicted;
+
+        static int CountPredicted(CombatPredictionSimulator simulator, Player player)
+            => simulator.History.OfType<CombatPredictionOrbChanneledEntry>()
+                .Count(entry => entry.Orb.Owner == player && entry.Orb is LightningOrb);
     }
 
     public int GetUnblockedDamageEventsForCalculatedVar(
@@ -70,31 +80,42 @@ internal sealed partial class SimulatedCombatState
         int predicted = player != null
             && simulator.History.TryGetCounters(player, out CombatHistoryCounters counters)
                 ? counters.UnblockedHitsReceived
-                : simulator.History.OfType<CombatPredictionDamageReceivedEntry>()
-                    .Count(entry => entry.Receiver == receiver && entry.Result.UnblockedDamage > 0);
-        return _rootHistory.DamageReceived.Count(entry =>
-                entry.Receiver == receiver && entry.Result.UnblockedDamage > 0)
-            + predicted;
+                : CountPredicted(simulator, receiver);
+        int captured = player != null && ReferenceEquals(receiver, player.Creature)
+            ? RootCalculatedHistoryFor(player).UnblockedHitsReceived
+            : CountRoot(_rootHistory, receiver);
+        return captured + predicted;
+
+        static int CountPredicted(CombatPredictionSimulator simulator, Creature receiver)
+            => simulator.History.OfType<CombatPredictionDamageReceivedEntry>()
+                .Count(entry => entry.Receiver == receiver && entry.Result.UnblockedDamage > 0);
+        static int CountRoot(RootCombatHistorySnapshot history, Creature receiver)
+            => history.DamageReceived.Count(entry =>
+                entry.Receiver == receiver && entry.Result.UnblockedDamage > 0);
     }
 
     public int GetEtherealPlaysForCalculatedVar(CombatPredictionSimulator simulator, Player player)
     {
         int predicted = simulator.History.TryGetCounters(player, out CombatHistoryCounters counters)
                 ? counters.EtherealPlays
-                : simulator.History.OfType<CombatPredictionCardPlayFinishedEntry>()
-                    .Count(entry => entry.CardPlay.Card.Owner == player && entry.WasEthereal);
-        return _rootHistory.CardPlaysFinished.Count(entry =>
-                entry.CardPlay.Card.Owner == player && entry.WasEthereal)
-            + predicted;
+                : CountPredicted(simulator, player);
+        return RootCalculatedHistoryFor(player).EtherealPlays + predicted;
+
+        static int CountPredicted(CombatPredictionSimulator simulator, Player player)
+            => simulator.History.OfType<CombatPredictionCardPlayFinishedEntry>()
+                .Count(entry => entry.CardPlay.Card.Owner == player && entry.WasEthereal);
     }
 
     public int GetCardsDrawnForCalculatedVar(CombatPredictionSimulator simulator, Player player)
     {
         int predicted = simulator.History.TryGetCounters(player, out CombatHistoryCounters counters)
                 ? counters.CardsDrawn
-                : simulator.History.OfType<CombatPredictionCardDrawnEntry>()
-                    .Count(entry => entry.Card.Owner == player);
+                : CountPredicted(simulator, player);
         return GetCardsDrawnBeforePrediction(player) + predicted;
+
+        static int CountPredicted(CombatPredictionSimulator simulator, Player player)
+            => simulator.History.OfType<CombatPredictionCardDrawnEntry>()
+                .Count(entry => entry.Card.Owner == player);
     }
 
     public static void AppendLiveCalculatedCardHistory(StringBuilder text, Player player)

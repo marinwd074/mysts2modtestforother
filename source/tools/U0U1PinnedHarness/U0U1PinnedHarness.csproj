@@ -11,6 +11,14 @@
     <RepoRoot>$(MSBuildProjectDirectory)/../..</RepoRoot>
   </PropertyGroup>
 
+  <!-- Optional native contract oracle is generated under .local by StrategicKeywordChecks. -->
+  <PropertyGroup Condition="'$(StrategicContextOracle)' != ''">
+    <DefineConstants>$(DefineConstants);STRATEGIC_CONTEXT_ORACLE</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(StrategicContextOracle)' != ''">
+    <Compile Include="$(StrategicContextOracle)" />
+  </ItemGroup>
+
   <Import Project="$(RepoRoot)/local.props" Condition="Exists('$(RepoRoot)/local.props')" />
 
   <PropertyGroup>

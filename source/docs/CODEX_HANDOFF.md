@@ -74,7 +74,81 @@ S0 已补齐全请求成员阶段统计：既有 ledger 收尾点在 worker drai
 
 Snapshot/Fork 首项优化移除了 `PredictionExtensions.Clone/ToRng` 构造器按旧 Counter 的无效推进，随后仍逐字段恢复 Counter 与四个生成器状态字。`U0U1PinnedHarness rng-restore` 覆盖 4 seeds × 5 counters、3840 次后续随机值/状态比较及父 RNG 隔离，另通过 request-hydration 与 rolling-review。Cache-off 固定输入 before/after：普通三敌 DOP=1/4 各四进程 ABBA、每进程预热后 10 请求，176.95→177.57ms / 114.10→112.68ms，尚无稳定明显收益；抽牌 DOP=1 单进程对为 95.23→94.27ms，只作质量检查。
 
-新增 `multi-hit-high-counter` 压力夹具沿用三敌输入、先将真实 Shuffle RNG 推进至 Counter=10000；DOP=1 四进程 ABBA、每进程 10 请求，214.37→176.92ms（-17.5%），404 expanded / 2465 transitions、战损 11。所有旧/新请求的完整根、路线、最终状态、质量、边界及逻辑工作一致，JIT/预热设置同原基准；压力夹具不是自然实机样本，收益不外推到普通计数器。临时对照在 `.local/rng-restore-cost/`。预算、并行度、排序、模拟语义与缓存默认不变；新 Release 实机搜索及退出日志采集已完成，尚无普遍提速证据。下一候选先用固定输入分解 Snapshot 的剩余成本，不直接启用缓存或追加算法；退出检查点字节归档/恢复作为独立未验证边界。
+新增 `multi-hit-high-counter` 压力夹具沿用三敌输入、先将真实 Shuffle RNG 推进至 Counter=10000；DOP=1 四进程 ABBA、每进程 10 请求，214.37→176.92ms（-17.5%），404 expanded / 2465 transitions、战损 11。所有旧/新请求的完整根、路线、最终状态、质量、边界及逻辑工作一致，JIT/预热设置同原基准；压力夹具不是自然实机样本，收益不外推到普通计数器。临时对照在 `.local/rng-restore-cost/`。预算、并行度、排序、模拟语义与缓存默认不变；新 Release 实机搜索及退出日志采集已完成，尚无普遍提速证据。Snapshot 剩余成本拆分见下节；退出检查点字节归档/恢复作为独立未验证边界。
+
+### Snapshot 剩余成本拆分：完成，仅增加可选诊断
+
+沿用 `MeasurePhasePerformance` / `SEARCH_REQUEST_PHASE`，新增 `SnapshotEvaluation` 覆盖所有 Snapshot 调用；原 `Snapshot` 只覆盖现有展开计时点，不能混用调用数。内部八个不重叠部分为敌人/覆盖、Fingerprint、ThreatProjection、牌与收益估值、持续效果、未来资源、敌人控制、结果；结果内另测 `SnapshotReachableHand` / `SnapshotConstruction`。未改变评分、键字段、预算、排序、部署及缓存默认。详细计时仍默认关闭；表中为每模式预热后 3 请求的平均线程累计时间，占比以 `SnapshotEvaluation` 为分母，括号中的子阶段不得再与父阶段相加。
+
+| Pinned 输入 | SnapshotEvaluation | Fingerprint（其中 CombatFingerprint） | 手牌可达价值 | 未来资源 | 对象构建 |
+|---|---:|---:|---:|---:|---:|
+| 两层药水审计，DOP=1 | 13.84ms | 42.8%（16.7%） | 13.2% | 17.1% | 2.1% |
+| 抽牌审计，DOP=1 | 24.67ms | 45.0%（16.8%） | 14.7% | 14.2% | 1.9% |
+| 三敌多段攻击，DOP=1 | 48.80ms | 42.7%（19.3%） | 12.5% | 11.3% | 1.7% |
+| 三敌多段攻击，DOP=4 | 84.40ms | 47.2%（22.2%） | 9.1% | 9.2% | 1.8% |
+
+旧 DLL / 新 DLL 计时关闭 / 新 DLL 计时开启的 DOP=1 三输入，加 DOP=4 三敌的开关对照，合计 33 个请求的完整根、路线、最终状态、质量、边界和逻辑工作逐项一致；不比较跨 DOP 工作量。Harness 检查每成员全部 Snapshot 子阶段调用数、非重叠量上界及 worker 汇总守恒；Release、request-hydration、结构门禁通过。复跑用原 `request-hydration-benchmark-off --fixture shared-audit|draw-repeat|multi-hit --iterations 3 --dop 1|4 --measure`，证据在 `.local/snapshot-cost/`。这是成本诊断，少量顺序样本和详细计时开销不能证明净提速或实机收益。
+
+### 根历史计数预聚合：已实现，新构建实机成本采集完成
+
+`AppendFingerprint` 定位到 calculated history 的重复扫描及捕获 lambda。现在根捕获时按原谓词预聚合生成牌、闪电球、未格挡受击、虚无出牌和抽牌数；Fork 共享只读根计数，本地主行动玩家用值快路径，预测事件仍由各分支累加。未知玩家及非玩家伤害保留原扫描；没有删指纹字段或改变次序。定位用的额外细分计时已移除。
+
+对照基线 `d3109b8`，每输入四个独立进程 before/after/after/before，每进程 off/on 预热后测 10 个 cache-off 请求；详细计时关闭、`DOTNET_TieredCompilation=0`，逐进程校验实际 DLL hash。160 个请求的完整根、路线、最终状态、质量、边界及逻辑工作一致；不比较跨 DOP 工作量。下表为进程中位数的中位数。
+
+| Pinned 输入 | 旧 / 新墙钟 | 耗时变化 | 分配变化 | expanded / transitions |
+|---|---:|---:|---:|---:|
+| 三敌多段攻击，DOP=1 | 178.76 / 169.69ms | -5.1% | -1.2% | 405 / 2466 |
+| 抽牌审计，DOP=1 | 92.66 / 89.86ms | -3.0% | -1.3% | 334 / 1515 |
+| 长历史压力，DOP=1 | 59.73 / 52.88ms | -11.5% | -1.3% | 261 / 905 |
+| 三敌多段攻击，DOP=4 | 112.44 / 111.71ms | -0.6% | -1.2% | 411 / 2472 |
+
+`history-repeat` 仅在不变棋盘记录 2000 次原生抽牌，是人工压力输入。Benchmark 从已捕获根计时，不包含新增根预聚合成本；普通样本波动与收益不能外推为实时多人净提速。Release、`root-history`（混合原生/预测事件、未知玩家/非玩家回退、Fork 隔离、新根更新）、`request-hydration`、9 项 `rolling-review`、DOP=4 Snapshot 阶段守恒及结构门禁通过。临时对照在 `.local/combat-fingerprint-cost/`，JSON 记录实际 DLL SHA256，不新增默认门禁。
+
+`23366d0` 已完成 owned Lab 新构建采集：Client warm-up 后重启（PID 25724）、Host PID 25212，两玩家 local-core、cache-off，会话 `75cc89df84e6452e9045ae4225c7ad54`。三次请求的首次前台为 5.114 / 5.123 / 4.818s，墙钟为 16.901 / 15.979 / 11.964s，expanded/transitions 为 13965/65618、14563/68591、15103/70177；最后一次为用户点击重算。每请求 5 成员，首次与重算全部 Completed，中间为 3 Completed、1 Canceled、1 Disposed，保留真实状态。两端 Graceful 退出后 16872 行 JSON 完整、journal error=0；独立 E0 成员工作、全部阶段累计量和每成员 Snapshot 分区/内部子阶段守恒通过。退出前捕获 queued=True、FIFO 收尾 checkpoints=6，无捕获/序列化失败；`full=False`，检查点字节归档/恢复仍 UNVERIFIED。临时汇总为 `.local/combat-fingerprint-cost/live-phase-summary.json`。
+
+本轮请求存在不同工作量、系统内存压力及 GC 回退，不是新旧版本固定工作 A/B；没有执行路线。新构建实机收益与部署正确性仍 UNVERIFIED。手动重算 SnapshotEvaluation 累计 11.284s，其中 Fingerprint 3.546s（CombatFingerprint 0.601s）、SnapshotStrategicEffects 3.348s；嵌套阶段不能相加作墙钟。持续效果定位与后续边界见下节。预算、并行度、排序、缓存默认不变；暂不做快照对象池、放宽指纹或扩大后态缓存。
+
+### 持续效果上下文：减少分配，新构建实机成本采集完成
+
+人工 `strategic-repeat` 在原 crawler 输入挂载 Dark Embrace / Corruption / Feel No Pain / Strength，并向抽牌堆添加 6 张牌。临时细分计时定位到上下文构建（19.44 / 22.15ms）；Corruption 已确定技能消耗时，现在跳过无须读取的原生 Exhaust 关键词，小刀复用仍检查牌自身关键词。没有跨 Snapshot 缓存、评分或模拟语义变化；临时细分计时已移除。`StrategicKeywordChecks` 134932 案例比较整个上下文，覆盖全部需求位、技能/固有消耗、小刀、第三方牌及两次评估间修改。
+
+对照 `83d5e2b`，五输入各四进程 ABBA、每进程 off/on 预热后 10 个 cache-off 请求，详细计时关闭、`DOTNET_TieredCompilation=0`，实际 DLL hash 已核对。200 请求的完整根、完整动作值（含 Choice/目标）、最终状态、质量、边界与工作逐项一致。Benchmark 原 `SequenceEqual` 把 Choice 列表按引用比较，现改为完整动作 JSON 值比较，并输出 `fullRoute`，没有放宽路线对照。
+
+| Pinned 输入 | 旧 / 新墙钟 | 耗时变化 | 分配变化 | expanded / transitions |
+|---|---:|---:|---:|---:|
+| 三敌，DOP=1 | 167.55 / 166.62ms | -0.6% | 约 0% | 405 / 2466 |
+| 抽牌，DOP=1 | 90.31 / 91.14ms | +0.9% | 约 0% | 334 / 1515 |
+| 持续效果，DOP=1 | 254.21 / 256.86ms | +1.0% | -1.3% | 419 / 2515 |
+| 持续效果，DOP=4 | 168.93 / 166.73ms | -1.3% | -1.2% | 419 / 2515 |
+| 三敌，DOP=4 | 111.58 / 111.30ms | -0.2% | 约 0% | 411 / 2472 |
+
+仅证明分配减少，尚未证明稳定墙钟提速；人工夹具不替代自然多人输入。Release、标量合同、request-hydration、9 项 rolling-review、持续效果 DOP=4 Snapshot 阶段守恒及结构门禁通过。临时对照在 `.local/strategic-effects-cost/`，不新增默认门禁。
+
+`4ecef09` owned Lab、Client warm-up 后重启（PID 2332）、Host PID 14908，已完成两玩家 local-core/cache-off 会话 `419e223620be4038bbaf4ea153688a35` 的三请求采集。首次前台 5.074 / 5.002 / 5.003s，墙钟 16.377 / 11.839 / 14.955s，expanded/transitions 为 12933/62379、15049/70736、14970/70433；第三次明确记录 `generation=3 reason=Manual`。每请求 5 成员，首次为 3 Completed、1 Canceled、1 Disposed，后两次全 Completed。Graceful 退出两端后 14364 行 JSON 完整、journal error=0；成员工作与独立 E0 ledger、全部阶段累计量及 Snapshot 分区/内部子阶段守恒通过。退出前捕获 queued=True、FIFO checkpoints=6，无捕获/序列化失败；`full=False`，检查点字节归档/恢复仍 UNVERIFIED。临时汇总在 `.local/strategic-effects-cost/live-phase-summary.json`。
+
+三请求均有系统内存压力 GC 回退，工作量不同，不能与上一构建作为净收益 A/B；没有执行路线，实机净收益/部署正确性仍 UNVERIFIED。手动重算 SnapshotEvaluation 累计 9.298s，其中持续效果 3.172s、Fingerprint 2.958s（CombatFingerprint 0.509s）。关键词查询的后续实现与当前下一步见下节；预算、排序和缓存默认保持不变。
+
+### 上下文关键词：复用分支查询，新构建实机成本采集完成
+
+`StrategicEffectContext.Build` 与 `WithExhaustDrawTiming` 现在传入当前 `CombatPredictionState`，复用既有 `PredictedCard.HasKeyword`：无全局修改者时读本地关键词，有修改者时保留原生 Hook 和递归隔离。没有新增跨节点缓存或改动能耗公式。原生 Hex 分支还复现了旧 getter 通过真实 Owner 查询关键词导致的抽牌时机偏差，现改为捕获分支的 Hook；因此此项同时修正状态来源，不能宣称所有场景语义完全未变。临时细分计时已移除。
+
+`StrategicKeywordChecks` 的 134932 个标量案例通过；可选 `--native` 扩展既有 harness，将生产上下文的单关键词查询替换为完整 `GetKeywords` 集合，比较 462 个完整上下文及抽牌时机、840 次关键词查询和 32 个 DOP=4 分支。覆盖 Hex 正向修改/移除、Corruption、可写卡牌、NoDraw/DarkEmbrace 顺序及父/真实状态隔离；264 个上下文与旧原生 getter 一致，198 个 Hex 上下文暴露旧状态来源差异并与捕获分支 Hook 一致。此 oracle 共享标量公式，只验证关键词路径与状态传递；标量公式由独立旧算法合同验证。
+
+对照 `72f5787`，五输入各四进程 ABBA、每进程 off/on 预热后 10 个 cache-off 请求，详细计时关闭、`DOTNET_TieredCompilation=0`，实际 DLL hash 已核对。200 个请求完整根、动作值（含 Choice/目标）、最终状态、质量、边界及工作一致。
+
+| Pinned 输入 | 旧 / 新墙钟 | 耗时变化 | 分配变化 | expanded / transitions |
+|---|---:|---:|---:|---:|
+| 三敌，DOP=1 | 171.60 / 173.89ms | +1.3% | -0.0% | 405 / 2466 |
+| 抽牌，DOP=1 | 94.33 / 90.59ms | -4.0% | -0.0% | 334 / 1515 |
+| 持续效果，DOP=1 | 250.92 / 234.19ms | -6.7% | -5.4% | 419 / 2515 |
+| 持续效果，DOP=4 | 176.91 / 163.16ms | -7.8% | -5.3% | 419 / 2515 |
+| 三敌，DOP=4 | 113.77 / 110.78ms | -2.6% | +0.0% | 411 / 2472 |
+
+持续效果人工输入本轮耗时降 6.7%～7.8%、分配降 5.3%～5.4%，不能推广为自然多人收益。Release、request-hydration、9 项 rolling-review、DOP=4 Snapshot 阶段守恒及结构门禁通过。临时对照在 `.local/strategic-context-cost/`；生成 oracle 仅在显式原生合同构建中编译，不成为生产依赖或默认门禁。
+
+`f47c169` owned Lab、Client warm-up 后重启（PID 8908）、Host PID 8712，已完成两玩家 local-core/cache-off 会话 `7cb3743a52c34105ba550b1ec1c51ec0` 的初次搜索和 `generation=2 reason=Manual` 重算。首次前台 5.303 / 5.004s，墙钟 16.510 / 11.903s，expanded/transitions 为 12510/60868、15040/70621。每请求 5 成员；首次为 3 Completed、1 Canceled、1 Disposed，重算全部 Completed。两端 Graceful 退出后，9606 行 JSON 完整、journal error=0；成员工作与独立 E0 ledger、全部阶段累计量及 Snapshot 分区/内部子阶段守恒通过。退出前捕获 queued=True、FIFO checkpoints=6，无捕获/序列化失败；`full=False`，未验证检查点字节归档/恢复。临时汇总在 `.local/strategic-context-cost/live-phase-summary.json`。
+
+两请求均触发系统内存压力 GC 回退，工作量不同；本轮只验搜索和日志收尾，实机净收益与部署正确性仍 UNVERIFIED。手动重算 SnapshotEvaluation 累计 10.347s，其中 SnapshotStrategicEffects 2.593s、Fingerprint 3.626s（CombatFingerprint 0.679s），嵌套阶段不能相加作墙钟。下一项核对 `StrategicEffectContext.Build` 能耗查询是否也读取真实 Owner：先用原生对照证明分支语义，再决定是否复用模拟器查询并测完整请求。预算、并行度、排序和缓存默认保持不变。
 
 ## 阶段 D 当前实现
 
