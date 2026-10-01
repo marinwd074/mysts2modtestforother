@@ -22,9 +22,9 @@
 
 ## 默认上下文纪律
 
-- 新任务默认先读取：本文件、`source/AGENTS.md`、`source/docs/CODEX_HANDOFF.md`、`source/docs/Rolling_Horizon_Reuse_Architecture.md`，再按任务需要读取 `source/docs/CombatSolver_Quality_First_Next.md`、`source/docs/CombatSolver_GPT_Architecture_Plan.md` 及直接涉及的源码/文档。
-- `source/docs/Rolling_Horizon_Reuse_Architecture.md` 是当前主执行目标，阶段顺序 A → B → C → D → E → F → G → H 优先于历史 Quality-first 阶段描述。`source/docs/CombatSolver_Quality_First_Next.md` 继续作为坏路线、执行质量和回归定位的专项参考，不再覆盖 Rolling Horizon 的主阶段顺序。
-- `source/docs/CombatSolver_GPT_Architecture_Plan.md` 是长期架构与执行计划，不等于当前实现事实；每轮必须先核对当前 HEAD、handoff 和实际调用链，已完成阶段不得重复施工。若计划与当前代码/新验证证据冲突，以当前代码和最新证据为准，并按需更新计划。
+- 新任务默认先读取：本文件、`source/AGENTS.md`、`source/docs/CODEX_HANDOFF.md`；涉及职责/状态所有权时再读 `source/docs/ARCHITECTURE.md`，其余资料按任务定向读取。
+- `source/docs/CODEX_HANDOFF.md` 是当前任务、未完成风险和下一步的唯一默认入口。旧阶段文档不得被当成当前执行顺序。
+- `source/docs/Rolling_Horizon_Reuse_Architecture.md`、`source/docs/Multiplayer_LocalCore_Search_Optimization.md`、`source/docs/CombatSolver_Quality_First_Next.md`、`source/docs/CombatSolver_GPT_Architecture_Plan.md` 现在都是实现档案/专项状态索引：用于查询“做了什么、在哪里、调用链是什么”，不用于自动继续历史阶段。
 - 不得为了“了解完整历史”自动批量读取 `source/docs/performance/`、`strategy/`、`audits/`、`issues/`、`releases/`、`history/`、`runtime-evidence/` 或 test-only submodule；只有定位特定回归、比较指定基线或用户明确要求时才定向读取。
 - `source/docs/TEST_MATRIX.md` 只在决定验证范围时读取；`source/docs/multiplayer/RUNBOOK.md` 只在真实 Host/Client Lab 操作前读取。
 - dated 报告、旧批次总结、旧 commit SHA 和历史 PASS 不是当前事实。当前状态以 `CODEX_HANDOFF.md` + 当前源码 + 当前验证结果为准。
