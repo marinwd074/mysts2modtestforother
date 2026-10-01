@@ -186,6 +186,7 @@ internal static class CombatBugReportExporter
         public int CachedCombatHistoryCount { get; set; }
         public SolverSettingsSnapshot? CachedCombatProfiles { get; set; }
         public ForensicCombatCapture? CachedCombatCapture { get; set; }
+        public bool RunCleanupCheckpointQueued { get; set; }
         public List<ForensicCheckpoint> Checkpoints { get; } = [];
         public long NextCheckpointSequence { get; set; }
         public CombatReplayRecording? Recording { get; init; }
@@ -324,6 +325,22 @@ internal static class CombatBugReportExporter
     internal static JsonElement CaptureShowcaseObjectState(object value)
         => JsonSerializer.SerializeToElement(CaptureObjectFields(value), JsonOptions);
 
+    internal static void RecordBeforeRunCleanup(SolverResult? result, string replanAudit)
+    {
+        ForensicSession? session = _currentSession;
+        if (session == null || session.RunCleanupCheckpointQueued)
+            return;
+        if (!NGame.IsMainThread())
+            throw new InvalidOperationException("跑局释放前取证只能从游戏主线程采集。");
+        RunManager manager = RunManager.Instance;
+        CombatState? live = CombatManager.Instance.DebugOnlyGetState();
+        if (!manager.IsInProgress || manager.DebugOnlyGetState() == null
+            || live == null || live.RunState.Rng.StringSeed != session.Seed)
+            return;
+        session.RunCleanupCheckpointQueued = RecordCheckpointCore(live, "run_cleanup", result, replanAudit);
+        Entry.Logger.Info($"[CombatSolver/Diagnostics] RUN_CLEANUP_CHECKPOINT queued={session.RunCleanupCheckpointQueued}");
+    }
+
     public static Task CompleteCombat(string reason, SolverResult? result, string replanAudit)
     {
         if (!NGame.IsMainThread())
@@ -336,10 +353,20 @@ internal static class CombatBugReportExporter
         CombatReplayOutcomeSnapshot? outcome = null;
         if (live != null && live.RunState.Rng.StringSeed == session.Seed)
         {
-            RecordCheckpointCore(live, "combat_end", result, replanAudit);
-            CombatReplayRecording.TestCombatEndObserver?.Invoke(live);
-            session.Outcome.Complete(live);
-            outcome = session.Outcome.Capture(live, ended: true);
+            bool runAvailable = RunManager.Instance.IsInProgress && RunManager.Instance.DebugOnlyGetState() != null;
+            if (runAvailable)
+            {
+                RecordCheckpointCore(live, "combat_end", result, replanAudit);
+                CombatReplayRecording.TestCombatEndObserver?.Invoke(live);
+                session.Outcome.Complete(live);
+                outcome = session.Outcome.Capture(live, ended: true);
+            }
+            else
+            {
+                string captureReason = session.RunCleanupCheckpointQueued ? "captured_before_run_cleanup" : "native_run_unavailable";
+                session.RuntimeEvidence.Record("checkpoint_unavailable", "combat_end", captureReason);
+                Entry.Logger.Info($"[CombatSolver/Diagnostics] COMBAT_END_CHECKPOINT_UNAVAILABLE reason={captureReason}");
+            }
             session.Recording?.Dispose();
         }
         Entry.Logger.Journal.EndCombat(reason);
@@ -634,7 +661,7 @@ internal static class CombatBugReportExporter
         BeginCombat(state);
     }
 
-    private static void RecordCheckpointCore(
+    private static bool RecordCheckpointCore(
         CombatState state, string label, SolverResult? result, string replanAudit)
     {
         ForensicSession session = _currentSession
@@ -653,7 +680,7 @@ internal static class CombatBugReportExporter
             Interlocked.Decrement(ref session.PendingCheckpointWrites);
             session.NextCheckpointSequence++;
             RegisterBackgroundFailure(session, label, new InvalidDataException("checkpoint_capture_backlog_limit"));
-            return;
+            return false;
         }
         session.PeakPendingCheckpointWrites = Math.Max(session.PeakPendingCheckpointWrites, pending);
         long started = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -675,6 +702,7 @@ internal static class CombatBugReportExporter
             session.CaptureTicks += elapsed;
             session.MaximumCaptureTicks = Math.Max(session.MaximumCaptureTicks, elapsed);
         }
+        return queued;
     }
 
     private static void CaptureCheckpointCore(

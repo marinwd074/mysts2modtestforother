@@ -1234,6 +1234,9 @@ internal static partial class SolverController
         ResetCore(reason);
     }
 
+    internal static void CaptureBeforeRunCleanup()
+        => CombatBugReportExporter.RecordBeforeRunCleanup(CurrentResultForBugReport, DescribeReplanAudit());
+
     private static void ResetCore(string reason)
     {
         int lifecycleGeneration = Interlocked.Increment(ref _combatLifecycleGeneration);
