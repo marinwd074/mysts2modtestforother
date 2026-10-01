@@ -68,11 +68,13 @@ S0 已补齐全请求成员阶段统计：既有 ledger 收尾点在 worker drai
 
 第二次请求的线程累计热点：Snapshot 10.620s、Action 9.484s、RoundAdvance 5.173s、Fork 4.842s、Fingerprint 3.950s、Prune 1.795s；阶段有嵌套，不能相加作墙钟。Fork/Action 累计分配约 1.067/1.389GiB，不是峰值内存。辅助枚举/根捕获不在成员统计内，协调开销仅含原有回收统计。原始日志留在该实例，定向核对与汇总在 `.local/request-hydration-cost/live-phase-summary.json`，不新增默认门禁。
 
-退出取证已增加 `RunManager.CleanUp(bool)` Prefix：原生 Run 仍有效时采集 `run_cleanup`，同会话只排队一次；诊断异常保留失败事件且不阻止原生清理。后续 `CompleteCombat` 不再从已释放 Run 补采 `combat_end`，明确记录提前采集或原生状态不可用，不把早先检查点重标成终态。Release/结构检查通过；该采集依赖 Godot 原生 API，离线入口无法执行，实机退出检查点及序列化仍 UNVERIFIED。
+退出取证已增加 `RunManager.CleanUp(bool)` Prefix：原生 Run 仍有效时采集 `run_cleanup`，同会话只排队一次；诊断异常保留失败事件且不阻止原生清理。后续 `CompleteCombat` 不再从已释放 Run 补采 `combat_end`，明确记录提前采集或原生状态不可用，不把早先检查点重标成终态。Release/结构检查通过。`c018c8c` owned Lab、Client 预热后重启、两端 Graceful 退出的会话 `2ca5341bebf2401eac2aa5133a657801` 已记录 `RUN_CLEANUP_CHECKPOINT queued=True`、`COMBAT_END_CHECKPOINT_UNAVAILABLE reason=captured_before_run_cleanup` 和 FIFO 收尾 `BUG_REPORT_COMBAT_CACHE_RELEASED checkpoints=6`，无捕获/后台序列化失败。日志及现有 FIFO 合同支持捕获与序列化收尾；本轮 `full=False` 未保留该检查点的导出字节，归档内容与恢复验证仍 UNVERIFIED。
+
+同场两次 cache-off 请求的首个前台为 5.068/5.004s、墙钟 15.489/15.713s，expanded/transitions 为 13848/65287、14427/67712；仍为两玩家 local-core，未执行路线。初次 5 个成员 Completed；手动重算为 3 Completed、1 Canceled、1 Disposed，Smart Potion `stop=deadline`，未将提前退出记为完成。Graceful 后 10989 行 JSON 完整、journal error=0，成员工作与独立 E0 ledger、全部阶段累计量逐项一致；原先仅接受全 Completed 的临时审计不适用于本轮，定向审计保留真实退出状态。结果保留 3 回合投影、预计战损 16、TurnLimit；工作/退出范围与旧构建不同，不是提速 A/B，也不是部署正确性 PASS。临时汇总在 `.local/rng-restore-cost/live-phase-summary.json`，不新增默认门禁。
 
 Snapshot/Fork 首项优化移除了 `PredictionExtensions.Clone/ToRng` 构造器按旧 Counter 的无效推进，随后仍逐字段恢复 Counter 与四个生成器状态字。`U0U1PinnedHarness rng-restore` 覆盖 4 seeds × 5 counters、3840 次后续随机值/状态比较及父 RNG 隔离，另通过 request-hydration 与 rolling-review。Cache-off 固定输入 before/after：普通三敌 DOP=1/4 各四进程 ABBA、每进程预热后 10 请求，176.95→177.57ms / 114.10→112.68ms，尚无稳定明显收益；抽牌 DOP=1 单进程对为 95.23→94.27ms，只作质量检查。
 
-新增 `multi-hit-high-counter` 压力夹具沿用三敌输入、先将真实 Shuffle RNG 推进至 Counter=10000；DOP=1 四进程 ABBA、每进程 10 请求，214.37→176.92ms（-17.5%），404 expanded / 2465 transitions、战损 11。所有旧/新请求的完整根、路线、最终状态、质量、边界及逻辑工作一致，JIT/预热设置同原基准；压力夹具不是自然实机样本，收益不外推到普通计数器。临时对照在 `.local/rng-restore-cost/`。预算、并行度、排序、模拟语义与缓存默认不变；下一节点为新 Release 的 owned Lab 搜索及 Graceful 退出验证，通用后态缓存继续关闭。
+新增 `multi-hit-high-counter` 压力夹具沿用三敌输入、先将真实 Shuffle RNG 推进至 Counter=10000；DOP=1 四进程 ABBA、每进程 10 请求，214.37→176.92ms（-17.5%），404 expanded / 2465 transitions、战损 11。所有旧/新请求的完整根、路线、最终状态、质量、边界及逻辑工作一致，JIT/预热设置同原基准；压力夹具不是自然实机样本，收益不外推到普通计数器。临时对照在 `.local/rng-restore-cost/`。预算、并行度、排序、模拟语义与缓存默认不变；新 Release 实机搜索及退出日志采集已完成，尚无普遍提速证据。下一候选先用固定输入分解 Snapshot 的剩余成本，不直接启用缓存或追加算法；退出检查点字节归档/恢复作为独立未验证边界。
 
 ## 阶段 D 当前实现
 
