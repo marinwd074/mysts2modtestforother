@@ -331,7 +331,7 @@ U6 实现与清理收口后即可独立评估本地精确斩杀、缓存、增�
 
 ## 12. 多人搜索加速（2026-10-01）
 
-**状态：架构建议；S2 首版实验实现和 pinned 对照已完成，默认关闭，其余阶段未实施。** 设计基线 `93dd5f9`，当前实施以 [交接](CODEX_HANDOFF.md) 和源码为准；§1–10 的历史实现描述不作为当前性能事实，不承诺固定倍数。
+**状态：架构建议；S2 首版实验、该缓存的 S0 成本分解及首项优化已完成，默认关闭；其他加速阶段未实施。** 设计基线 `93dd5f9`，当前实施以 [交接](CODEX_HANDOFF.md) 和源码为准；§1–10 的历史实现描述不作为当前性能事实，不承诺固定倍数。
 
 ### 12.1 当前已经有什么，以及还缺什么
 
@@ -391,7 +391,7 @@ flowchart TD
 
 S2 中，只有审计证明不影响单步输出的 Beam 宽度、节点额度或时间上限，才可移入独立 retention 身份；`CurrentTurnOnly`、边界/Choice 模式、模型选项、评分目标和资源政策不能随意删键。首版允许同配置共享，跨配置共享单独首验。把完整 Profile 从键移走不是独立安全优化。
 
-**S2 首版结论**：`UseRequestTransitionHydration` 默认 false；仅适用捕获回合内、完整普通 PlayCard 前缀不超过 8 张的无 Choice/checkpoint 转移，不缓存终局/EndTurn/药水动作或跨根图。保留原始完整 policy 身份和成员实际分支上限；单步模拟/StateEvaluation 不读取成员 Beam 宽度、rank band、节点/时间额度，兼容成员仍须先真实重复验证。`request-hydration` 覆盖冷根、首验、逐状态/路径目标差分、并发 Fork、容量/失效及两层 Smart Potion 审计，得到 14 次实际复用且结果/逻辑工作一致；`rolling-review` 和 Release 通过。四个 clean-process 预热后 ABBA 小样本未证明提速，分配约 +9.6%；因此未开放生产默认，真实 Host/Client 及净收益继续 UNVERIFIED。复跑性能用同一 harness 的 `request-hydration-benchmark-off/on`，结果仅写 `.local/`，不是新增门禁。
+**S2 当前结论**：`UseRequestTransitionHydration` 默认 false；仅适用捕获回合内、完整普通 PlayCard 前缀不超过 8 张的无 Choice/checkpoint 转移，不缓存终局/EndTurn/药水动作或跨根图。保留原始完整 policy 身份和成员实际分支上限；单步模拟/StateEvaluation 不读取成员 Beam 宽度、rank band、节点/时间额度，兼容成员仍须先真实重复验证。`request-hydration` 覆盖冷根、首验、逐状态/路径目标差分、并发 Fork、容量/失效及药水审计。成本分解定位完整父/后态校验，已去掉未首验查找的重复父态捕获，未弱化真实首验或等价合同。三个 DOP=1 输入及一个 DOP=4 药水审计各四进程 ABBA、每进程 10 个新请求，在关闭详细计时的模式仍未证明净提速，保持关闭并停止扩容/推广；数值和复跑参数只维护于 [当前交接](CODEX_HANDOFF.md#通用非终局后态缓存成本分解与首项优化完成默认关闭)。真实 Host/Client 和普遍性能继续 UNVERIFIED，其他 S0 样本尚未完成。复跑用现有 harness 的 `request-hydration-benchmark-off/on`，临时结果仅写 `.local/`，不是新增门禁。
 
 S4 的根变化优化只做“当前根立即取代旧根、同根合并重复请求、取消后不再准入新作业”，保留必要稳定捕获和取消屏障。先检查现有去重是否已覆盖，再补真实缺口；不额外添加固定 debounce，不放宽斩杀/RNG 敏感性。旧请求已完成且独立验证的纯值可以保留在合适缓存，但旧 worker 不得发布路线。
 

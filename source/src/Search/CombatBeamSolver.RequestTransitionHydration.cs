@@ -19,6 +19,7 @@ internal sealed partial class CombatBeamSolver
         if (policy.RequestTransitionHydrationCache == null)
             return false;
         using SearchMeasurementScope measure = _run.Performance.Measure(SearchMetricPhase.TransitionHydration);
+        using SearchMeasurementScope keyMeasure = policy.RequestTransitionHydrationCache.Measure(SearchMetricPhase.HydrationKey);
         if (policy.VerifyIncrementalSearch
             || _continuationSeedProbe || _includeTurnSetup || policy.CurrentTurnOnly
             || policy.UseMultiplayerTeamObjective || policy.UseMultiplayerTeammateForecast
@@ -70,6 +71,7 @@ internal sealed partial class CombatBeamSolver
 
     private ContinuationStamp CaptureRequestHydrationParent(SearchNode parent)
     {
+        using SearchMeasurementScope measure = policy.RequestTransitionHydrationCache!.Measure(SearchMetricPhase.HydrationParentValidation);
         SimulationSnapshot snapshot = parent.Snapshot;
         ContinuationStamp stamp = ContinuationStamp.CapturePredicted(
             _player, snapshot.Simulator, parent.Turn, _forecast, _startTurnNumber);
@@ -86,15 +88,22 @@ internal sealed partial class CombatBeamSolver
         snapshot = null!;
         R1TransitionHydrationCache cache = policy.RequestTransitionHydrationCache!;
         using SearchMeasurementScope measure = _run.Performance.Measure(SearchMetricPhase.TransitionHydration);
-        if (!cache.MayContain(key))
-            return false;
+        using (cache.Measure(SearchMetricPhase.HydrationLookup))
+            // Unvalidated metadata cannot hydrate. Its independent replay will capture
+            // and compare the full parent/output once; do not capture the parent twice.
+            if (!cache.MayHydrate(key))
+                return false;
         ContinuationStamp parentStamp = CaptureRequestHydrationParent(parent);
-        if (!cache.TryFork(key, parentStamp.CombatIdentity, parentStamp.StateText, out var seed))
-            return false;
+        R1TransitionHydrationSeed seed;
+        using (cache.Measure(SearchMetricPhase.HydrationFork))
+            if (!cache.TryFork(key, parentStamp.CombatIdentity, parentStamp.StateText, out seed))
+                return false;
 
         _run.ForkCount++;
-        SimulationSnapshot hydrated = Snapshot(seed.Simulator, seed.Turn, parent.ActionCount + 1,
-            seed.ShufflesCrossed, seed.BoundaryReason, seed.ProcessedEnemyDeaths);
+        SimulationSnapshot hydrated;
+        using (cache.Measure(SearchMetricPhase.HydrationSnapshot))
+            hydrated = Snapshot(seed.Simulator, seed.Turn, parent.ActionCount + 1,
+                seed.ShufflesCrossed, seed.BoundaryReason, seed.ProcessedEnemyDeaths);
         if (hydrated.StateKey != seed.ExpectedOutputStateKey)
         {
             hydrated.ReleaseSimulator();
@@ -113,8 +122,9 @@ internal sealed partial class CombatBeamSolver
     {
         R1TransitionHydrationCache cache = policy.RequestTransitionHydrationCache!;
         using SearchMeasurementScope measure = _run.Performance.Measure(SearchMetricPhase.TransitionHydration);
-        if (!cache.CanObserveSearchReplay(key))
-            return;
+        using (cache.Measure(SearchMetricPhase.HydrationLookup))
+            if (!cache.CanObserveSearchReplay(key))
+                return;
         if (!output.HasSimulator || output.BoundaryReason != SearchBoundaryReason.None
             || output.PlayerDead || output.AllEnemiesDead || output.HasRisk
             || output.PredictionGaps.Any(static gap => !gap.Compensated)
@@ -125,9 +135,12 @@ internal sealed partial class CombatBeamSolver
             return;
         }
         ContinuationStamp parentStamp = CaptureRequestHydrationParent(parent);
-        ContinuationStamp outputStamp = ContinuationStamp.CapturePredicted(
-            _player, output.Simulator, output.Turn, _forecast, _startTurnNumber);
-        cache.ObserveSearchReplay(key, parentStamp.CombatIdentity, parentStamp.StateText,
-            outputStamp.StateText, output);
+        ContinuationStamp outputStamp;
+        using (cache.Measure(SearchMetricPhase.HydrationOutputValidation))
+            outputStamp = ContinuationStamp.CapturePredicted(
+                _player, output.Simulator, output.Turn, _forecast, _startTurnNumber);
+        using (cache.Measure(SearchMetricPhase.HydrationStore))
+            cache.ObserveSearchReplay(key, parentStamp.CombatIdentity, parentStamp.StateText,
+                outputStamp.StateText, output);
     }
 }

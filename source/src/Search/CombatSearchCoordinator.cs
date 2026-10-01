@@ -132,7 +132,7 @@ internal static partial class CombatSearchCoordinator
             && !policy.VerifyIncrementalSearch && !policy.IncludeTurnSetup && !policy.CurrentTurnOnly
             && !policy.UseMultiplayerTeamObjective && !policy.UseMultiplayerTeammateForecast
             && !policy.UseMultiplayerScenarioReevaluation
-                ? new(learnFromSearch: true) : null;
+                ? new(learnFromSearch: true, measurePerformance: policy.MeasurePhasePerformance) : null;
         try
         {
             SolverResult result = SolveRequest(root, displayNames, battleDamage,

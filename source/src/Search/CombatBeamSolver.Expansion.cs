@@ -2795,6 +2795,8 @@ internal sealed partial class CombatBeamSolver
         RoundReplayCheckpoint? roundCheckpoint = !policy.VerifyIncrementalSearch
             && _roundReplayCheckpoint?.Matches(parent, action) == true ? _roundReplayCheckpoint : null;
         SimulationSnapshot result;
+        SearchMeasurementScope requestReplayMeasure = requestHydrationEligible
+            ? policy.RequestTransitionHydrationCache!.Measure(SearchMetricPhase.HydrationRealReplay) : default;
         try
         {
             if (executionCheckpoint != null)
@@ -2898,6 +2900,8 @@ internal sealed partial class CombatBeamSolver
         finally
         {
             gatedSeed?.Dispose();
+            if (requestHydrationEligible)
+                requestReplayMeasure.Dispose();
         }
 
         ObserveR1TransitionHydration(parent, action, result, r1HydrationEligible);

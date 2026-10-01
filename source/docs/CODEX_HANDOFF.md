@@ -35,13 +35,28 @@
 
 新增待实施任务：[多人战前预计算与 Boss 通关优先计划](CombatSolver_GPT_Architecture_Plan.md#11-多人战前预计算与-boss-通关优先2026-09-30)。仅完成静态可行性审计；先统一 Boss 质量排序，再验证多人离线恢复，未开放能力或修改相关源码。Showcase 已取消。
 
-### 通用非终局后态缓存：首版实验实现，默认关闭
+### 通用非终局后态缓存：成本分解与首项优化完成，默认关闭
 
 `SearchPolicySnapshot.UseRequestTransitionHydration=true` 时，Coordinator 为同一 local-core 请求创建最多 32 项的普通 PlayCard 后态缓存，冷搜索/兼容成员/药水审计可共享；不依赖 R1。首版仅捕获回合内、完整普通动作前缀不超过 8 张、无 Choice/checkpoint 的非终局转移。首次只留值元数据，第一次重复仍真实模拟并验证，之后才从封存原型 Fork、重新 Snapshot/评分；完整路径、目标、策略、状态/RNG/损失上下文不一致则拒绝，结束/异常/取消后释放。R1 和生产预算/授权保持原合同。
 
 Release、`U0U1PinnedHarness request-hydration` 与 `rolling-review` 通过。Pinned 单人夹具使用 local-core policy 的冷请求 + 两层 Smart Potion 审计得到 17 entries / 14 validated keys / 14 hydration hits / 0 mismatch；完整路线、最终状态、质量、260 expanded / 904 logical transitions 与 cache-off 一致，另覆盖并发 Fork、隔离、容量、严格验证、目标/策略身份及取消释放。不是真实 Host/Client PASS。
 
-四个 clean-process、关闭 tiered JIT、预热后 ABBA 样本中，cache-off 为 66.410/67.549ms，on 为 66.970/72.306ms；on 分配约 +9.6%，未证明净收益。因此开关默认 false，尚不作为玩家加速能力启用。后续只在更有重复/更昂贵动作的固定输入证明净节省并获得真实多人证据后再决定推广；见 [加速计划 §12](CombatSolver_GPT_Architecture_Plan.md#12-多人搜索加速2026-10-01)。
+已增加请求级线程安全成本统计：构键、索引、父/后态校验、保存、原型 Fork、命中 Fork/Snapshot、真实普通动作 replay 的耗时/分配/次数；仅 `MeasurePhasePerformance=true` 输出到 `RequestTransitionHydration.Performance`。保存包含原型 Fork，真实 replay 包含普通 Fork/Snapshot；各线程阶段是累计耗时，不能相加当墙钟。命中数表示实际跳过的普通 PlayCard 模拟，逻辑转移仍计数。
+
+热点是完整状态校验。未首验的条目现在直接走真实 replay，只在观察结果时完整校验一次父态；首验及碰撞/RNG/路径拒绝合同保持。DOP=1 定向诊断中，药水审计父态校验 59→45 次、1,762,256→1,343,544 bytes，命中仍 14；抽牌审计 40→30 次、1,297,504→974,064 bytes，命中仍 10。无扩容、减预算或裁搜索。
+
+最新常规模式对照：每场景四个独立进程 ABBA，每进程各预热一次 off/on 后测 10 个全新请求，`DOTNET_TieredCompilation=0`、详细计时关闭；未注明的行 DOP=1，下表为进程中位数的中位数。所有请求及进程间根、路线、最终状态、质量、边界和逻辑工作一致。
+
+| Pinned 场景 | off / on 墙钟 | on 耗时变化 | on 分配变化 | 实际跳过模拟 | expanded / logical transitions |
+|---|---|---|---|---|---|
+| 低重复，关闭 portfolio/药水 | 19.71 / 21.21ms | +7.6% | +11.4% | 0 | 99 / 291 |
+| 两层 Smart Potion 审计 | 56.09 / 57.36ms | +2.3% | +8.0% | 14 | 260 / 904 |
+| 抽牌 + 低能量药水审计 | 95.91 / 96.70ms | +0.8% | +3.5% | 10 | 334 / 1515 |
+| 两层药水审计，DOP=4 | 42.03 / 43.75ms | +4.1% | +8.5% | 14 | 260 / 904 |
+
+Release、结构门禁、`request-hydration`（含并发统计、未首验惰性校验和默认关闭诊断）通过；DOP=4 药水审计固定输入也保持完整结果/工作一致。尚未证明净提速，因此继续默认 false，停止扩容和推广，不进入本功能的实机启用验证。当前统计只支持定位成本，不证明真实 Host/Client 或普遍性能。下一候选应先寻找确有昂贵重复转移的自然输入；否则按 [加速计划 §12](CombatSolver_GPT_Architecture_Plan.md#12-多人搜索加速2026-10-01) 转向其他已测热点。
+
+复跑：同一 `U0U1PinnedHarness` 的 `request-hydration-benchmark-off/on --fixture low-repeat|shared-audit|draw-repeat --iterations 10 --dop 1 --out .local/...`，成本诊断另加 `--measure`。逐进程按 off/on/on/off 顺序运行，不并发 benchmark。JSON 含环境/JIT/预热、GC、根与逐请求状态、结果和分配；临时证据位于 `.local/request-hydration-cost/`，不作为新增默认门禁。
 
 ## 阶段 D 当前实现
 

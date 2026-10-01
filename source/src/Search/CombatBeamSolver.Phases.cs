@@ -2851,7 +2851,8 @@ internal sealed partial class CombatBeamSolver
         {
             if (!TryReadRequestTransitionHydration(node, requestKey, out snapshot))
             {
-                snapshot = Replay([action], node.Snapshot, node.Turn, node.ActionCount);
+                using (policy.RequestTransitionHydrationCache!.Measure(SearchMetricPhase.HydrationRealReplay))
+                    snapshot = Replay([action], node.Snapshot, node.Turn, node.ActionCount);
                 ObserveRequestTransitionHydration(node, requestKey, snapshot);
             }
         }
