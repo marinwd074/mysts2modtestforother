@@ -3689,6 +3689,18 @@ internal static class Program
             }
             int expectedSkills = 0, expectedPowers = 0;
             PredictedCard[] cards = piles.DiscardPile.Cards.Concat(piles.DrawPile.Cards).Concat(piles.Hand.Cards).ToArray();
+            if (scenario == 7)
+            {
+                // Warm the shared pure-value path, then invalidate it with fractional base edits.
+                // The generated context oracle reads uncached native values and applies Ceil itself.
+                foreach (PredictedCard card in cards)
+                {
+                    _ = CardChoiceSupport.CardValue(card);
+                    CardModel preview = card.MutablePreview;
+                    foreach (string field in new[] { "Damage", "Block", "Cards" })
+                        if (preview.DynamicVars.TryGetValue(field, out var variable)) variable.BaseValue += 0.125m;
+                }
+            }
             StateFingerprint beforeQueries = Fingerprint(child);
             List<int> expectedCosts = [];
             foreach (PredictedCard card in cards)

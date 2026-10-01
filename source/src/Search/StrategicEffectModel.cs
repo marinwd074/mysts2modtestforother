@@ -219,7 +219,10 @@ internal readonly record struct StrategicEffectContext(
             int cardValue = 0;
             if (needsAllCardValues || (needsAttackValues && cardType == CardType.Attack))
             {
-                cardValue = Math.Max(1, (int)Math.Ceiling(CardChoiceSupport.CardValue(card)));
+                double intrinsicValue = simulator == null
+                    ? CardChoiceSupport.CardValue(card)
+                    : CardChoiceSupport.CardValue(predicted);
+                cardValue = Math.Max(1, (int)Math.Ceiling(intrinsicValue));
                 if (needsAllCardValues)
                 {
                     totalCardValue += cardValue;

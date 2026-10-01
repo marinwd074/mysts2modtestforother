@@ -40,6 +40,8 @@ namespace CombatSolver {
  using MegaCrit.Sts2.Core.Entities.Cards;
  using MegaCrit.Sts2.Core.Models;
  internal static class CardChoiceSupport {
+  internal static double CardValue(CombatSolver.Engine.Common.PredictedCard card)
+   => throw new NotSupportedException("Use the native harness for cached intrinsic card values");
   internal static double CardValue(CardModel card) {
    double Value(string key)=>card.DynamicVars.TryGetValue(key,out var v)?(double)v.BaseValue:0d;
    double damage=Value("Damage"), block=Value("Block"), draw=Value("Cards"), power=card.Type==CardType.Power?8d:0d;

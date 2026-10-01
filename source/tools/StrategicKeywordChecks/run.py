@@ -8,7 +8,7 @@ repo=Path(__file__).resolve().parents[2]
 out=repo/'.local/strategic-keyword-checks';out.mkdir(parents=True,exist_ok=True)
 source=(repo/'src/Search/StrategicEffectModel.cs').read_text(encoding='utf-8')
 parser=argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--native', action='store_true', help='run native keyword/energy context and branch isolation contracts')
+parser.add_argument('--native', action='store_true', help='run native context query and branch isolation contracts')
 parser.add_argument('--out', type=Path)
 parser.add_argument('--steam-root', type=Path)
 args=parser.parse_args()
@@ -17,7 +17,8 @@ if args.native:
  native=native.replace('StrategicEffectContext','MaterializedKeywordContext')
  for original,replacement in [
   ('card.HasKeyword(predictionState, keyword)', 'card.GetKeywords(predictionState).Contains(keyword)'),
-  ('card.GetEnergyCostValueWithModifiers(simulator)', 'U0U1PinnedHarness.Program.NativeEnergyCost(card, simulator)')]:
+  ('card.GetEnergyCostValueWithModifiers(simulator)', 'U0U1PinnedHarness.Program.NativeEnergyCost(card, simulator)'),
+  ('CardChoiceSupport.CardValue(predicted)', 'CardChoiceSupport.CardValue(card)')]:
   if native.count(original)!=1:raise RuntimeError(f'Update native oracle transformation: {original}')
   native=native.replace(original,replacement)
  oracle=out/'MaterializedKeywordContext.cs'
