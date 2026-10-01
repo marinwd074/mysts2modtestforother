@@ -44,11 +44,12 @@ internal static class Program
         bool pendulumDrawOnly = args.Length > 0 && args[0] == "pendulum-draw";
         bool completionScopeOnly = args.Length > 0 && args[0] == "completion-scope";
         bool rngRestoreOnly = args.Length > 0 && args[0] == "rng-restore";
+        bool strategicContextOnly = args.Length > 0 && args[0] == "strategic-context";
         bool rootHistoryOnly = args.Length > 0 && args[0] == "root-history";
         bool requestHydrationOnly = args.Length > 0 && args[0] is "request-hydration"
             or "request-hydration-benchmark-on" or "request-hydration-benchmark-off";
         bool requestHydrationBenchmark = requestHydrationOnly && args[0] != "request-hydration";
-        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly ? args[1..] : args,
+        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly ? args[1..] : args,
             allowHydrationOptions: requestHydrationBenchmark);
         Directory.CreateDirectory(outputDirectory);
 
@@ -92,7 +93,7 @@ internal static class Program
                 ValidateRngRestore(outputDirectory);
                 return 0;
             }
-            if (!rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly && !rootHistoryOnly)
+            if (!rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly && !rootHistoryOnly && !strategicContextOnly)
             {
             ValidateDarkEmbracePredictionCoverage();
             ValidateViciousStrategicValue();
@@ -145,6 +146,12 @@ internal static class Program
             loop.RunUntilCompleted(enter, TimeSpan.FromSeconds(180), "U0/U1 enter combat");
             CombatState combat = OfflineCombat.WaitForPlayableCombat(loop);
             Console.WriteLine(OfflineCombat.DescribeRoot(combat));
+
+            if (strategicContextOnly)
+            {
+                ValidateStrategicContext(combat, outputDirectory);
+                return 0;
+            }
 
             if (rootHistoryOnly)
             {
@@ -3436,6 +3443,119 @@ internal static class Program
                 warmup = "one off and one on request", rootState = root.ContinuationStamp.StateText,
                 root = OfflineCombat.DescribeRoot(combat), samples,
             }, Json));
+    }
+
+    private static void ValidateStrategicContext(CombatState combat, string outputDirectory)
+    {
+#if STRATEGIC_CONTEXT_ORACLE
+        Player player = LocalContext.GetMe(combat)!;
+        ModelDb.Power<DarkEmbracePower>().ToMutable(0).ApplyInternal(player.Creature, 1, false);
+        foreach (string id in new[] { "DAZED", "ASCENDERS_BANE", "SHIV", "BLADE_DANCE", "BURNING_PACT" })
+            player.PlayerCombatState!.Hand.AddInternal(combat.CreateCard(ResolveCard(id), player), -1);
+        CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
+        CombatPredictionSimulator parent = root.ForkSimulator();
+        StrategicEffectRequirements[] masks = new[] { 0, 65535, 192, 32896, 576, 3264 }
+            .Concat(Enumerable.Range(0, 16).Select(bit => 1 << bit))
+            .Select(value => (StrategicEffectRequirements)value).ToArray();
+        int contexts = 0, keywords = 0, nativeContexts = 0, globalChanges = 0, liveGetterDifferences = 0;
+        List<object> cases = [];
+        for (int scenario = 0; scenario < 7; scenario++)
+        {
+            CombatPredictionSimulator child = parent.Fork();
+            var state = (SimulatedCombatState)child.State.CombatState;
+            var piles = child.State.GetPlayerCombatState(player);
+            if (scenario >= 1) state.SetAmount<HexPower>(player.Creature, 2);
+            if (scenario >= 2)
+            {
+                piles.Hand.Cards[0].MutablePreview.AddKeyword(CardKeyword.Ethereal);
+                piles.Hand.Cards[0].MutablePreview.AddKeyword(CardKeyword.Exhaust);
+            }
+            if (scenario >= 3) state.SetAmount<CorruptionPower>(player.Creature, 1);
+            if (scenario >= 4) state.SetAmount<HexPower>(player.Creature, 0);
+            if (scenario == 5)
+            {
+                state.SetAmount<DarkEmbracePower>(player.Creature, 0);
+                state.SetAmount<NoDrawPower>(player.Creature, 1);
+                state.SetAmount<DarkEmbracePower>(player.Creature, 1);
+            }
+            if (scenario == 6) state.SetAmount<NoDrawPower>(player.Creature, 1);
+            state.NormalizeCardAfflictions(child);
+            PredictedCard[] cards = piles.DiscardPile.Cards.Concat(piles.DrawPile.Cards)
+                .Concat(piles.Hand.Cards).ToArray();
+            int changedKeywords = 0;
+            foreach (PredictedCard card in cards)
+            {
+                IReadOnlySet<CardKeyword> oracle = card.GetKeywords(child.State);
+                foreach (CardKeyword keyword in Enum.GetValues<CardKeyword>())
+                {
+                    Require(card.HasKeyword(child.State, keyword) == oracle.Contains(keyword),
+                        $"Single-keyword query differs from materialized native Hook: {scenario}/{card.Preview.Id}/{keyword}.");
+                    keywords++;
+                }
+                changedKeywords += oracle.Except(card.Preview.LocalKeywords).Count()
+                    + card.Preview.LocalKeywords.Except(oracle).Count();
+            }
+            globalChanges += changedKeywords;
+            bool skillsExhaust = state.GetAmount<CorruptionPower>(player.Creature) > 0;
+            foreach (StrategicEffectRequirements mask in masks)
+            foreach (int enemyHp in new[] { -1, 0, 90 })
+            {
+                StrategicEffectContext native = StrategicEffectContext.Build(cards, enemyHp, 23, 4, mask, skillsExhaust);
+                StrategicEffectContext optimized = StrategicEffectContext.Build(cards, enemyHp, 23, 4, mask,
+                    skillsExhaust, child.State);
+                MaterializedKeywordContext oracle = MaterializedKeywordContext.Build(cards, enemyHp, 23, 4, mask,
+                    skillsExhaust, child.State);
+                Require(JsonSerializer.Serialize(oracle, Json) == JsonSerializer.Serialize(optimized, Json),
+                    $"Materialized native Hook context differs: {scenario}/{mask}.");
+                IReadOnlyList<PowerModel> powers = state.EffectivePowers();
+                StrategicEffectContext timed = optimized.WithExhaustDrawTiming(powers, piles.Hand.Cards,
+                    player.Creature, child.State);
+                Require(JsonSerializer.Serialize(oracle.WithExhaustDrawTiming(powers, piles.Hand.Cards,
+                    player.Creature, child.State), Json) == JsonSerializer.Serialize(timed, Json),
+                    $"Materialized native Hook exhaust timing differs: {scenario}/{mask}.");
+                // The old getter consults the live owner. Equality is required when its keywords agree;
+                // positive Hex branches deliberately expose that prior state-binding defect.
+                bool sameKeywords = cards.All(card => card.Preview.Keywords.SetEquals(card.GetKeywords(child.State)));
+                if (sameKeywords)
+                {
+                    Require(native == optimized && native.WithExhaustDrawTiming(powers, piles.Hand.Cards,
+                        player.Creature) == timed, $"Native getter context differs: {scenario}/{mask}.");
+                    nativeContexts++;
+                }
+                else if (native != optimized || native.WithExhaustDrawTiming(powers, piles.Hand.Cards,
+                    player.Creature) != timed) liveGetterDifferences++;
+                contexts++;
+            }
+            Require(ContinuationStamp.CaptureLive(combat) == root.ContinuationStamp,
+                "Context evaluation or branch mutation changed the live combat.");
+            Require(((SimulatedCombatState)parent.State.CombatState).GetAmount<HexPower>(player.Creature) == 0
+                && ((SimulatedCombatState)parent.State.CombatState).GetAmount<CorruptionPower>(player.Creature) == 0
+                && !parent.State.GetPlayerCombatState(player).Hand.Cards[0].Preview.LocalKeywords.Contains(CardKeyword.Ethereal),
+                "Child keyword or power mutation leaked into the parent.");
+            cases.Add(new { scenario, changedKeywords, skillsExhaust });
+        }
+        Require(globalChanges > 0 && liveGetterDifferences > 0,
+            "Native Hex fixture did not expose a positive global modifier and live-owner context mismatch.");
+        Parallel.For(0, 32, new ParallelOptions { MaxDegreeOfParallelism = 4 }, index =>
+        {
+            CombatPredictionSimulator child = parent.Fork();
+            var state = (SimulatedCombatState)child.State.CombatState;
+            state.SetAmount<HexPower>(player.Creature, index % 2);
+            state.NormalizeCardAfflictions(child);
+            foreach (PredictedCard card in child.State.GetPlayerCombatState(player).Hand.Cards)
+            foreach (CardKeyword keyword in Enum.GetValues<CardKeyword>())
+                Require(card.HasKeyword(child.State, keyword) == card.GetKeywords(child.State).Contains(keyword),
+                    "Concurrent keyword scratch query differs.");
+        });
+        File.WriteAllText(Path.Combine(outputDirectory, "strategic-context.json"), JsonSerializer.Serialize(new
+        {
+            evidence = "pinned-headless native; no multiplayer deployment or performance claim",
+            contexts, nativeContexts, keywords, globalChanges, liveGetterDifferences, parallelBranches = 32, cases,
+        }, Json));
+        Console.WriteLine($"StrategicContext PASS (contexts={contexts}, keywords={keywords}, globalChanges={globalChanges}, liveGetterDifferences={liveGetterDifferences}, parallelBranches=32)");
+#else
+        throw new InvalidOperationException("Run tools/StrategicKeywordChecks/run.py --native to build the materialized keyword oracle.");
+#endif
     }
 
     private static void ValidateRootCalculatedHistory(CombatState combat)

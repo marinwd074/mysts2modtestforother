@@ -126,7 +126,27 @@ Snapshot/Fork 首项优化移除了 `PredictionExtensions.Clone/ToRng` 构造器
 
 `4ecef09` owned Lab、Client warm-up 后重启（PID 2332）、Host PID 14908，已完成两玩家 local-core/cache-off 会话 `419e223620be4038bbaf4ea153688a35` 的三请求采集。首次前台 5.074 / 5.002 / 5.003s，墙钟 16.377 / 11.839 / 14.955s，expanded/transitions 为 12933/62379、15049/70736、14970/70433；第三次明确记录 `generation=3 reason=Manual`。每请求 5 成员，首次为 3 Completed、1 Canceled、1 Disposed，后两次全 Completed。Graceful 退出两端后 14364 行 JSON 完整、journal error=0；成员工作与独立 E0 ledger、全部阶段累计量及 Snapshot 分区/内部子阶段守恒通过。退出前捕获 queued=True、FIFO checkpoints=6，无捕获/序列化失败；`full=False`，检查点字节归档/恢复仍 UNVERIFIED。临时汇总在 `.local/strategic-effects-cost/live-phase-summary.json`。
 
-三请求均有系统内存压力 GC 回退，工作量不同，不能与上一构建作为净收益 A/B；没有执行路线，实机净收益/部署正确性仍 UNVERIFIED。手动重算 SnapshotEvaluation 累计 9.298s，其中持续效果 3.172s、Fingerprint 2.958s（CombatFingerprint 0.509s）。下一步继续定位 `StrategicEffectContext.Build` 内能耗/关键词查询的剩余成本，先证明具体热点和完整请求净收益；预算、排序和缓存默认保持不变。
+三请求均有系统内存压力 GC 回退，工作量不同，不能与上一构建作为净收益 A/B；没有执行路线，实机净收益/部署正确性仍 UNVERIFIED。手动重算 SnapshotEvaluation 累计 9.298s，其中持续效果 3.172s、Fingerprint 2.958s（CombatFingerprint 0.509s）。关键词查询的后续实现与当前下一步见下节；预算、排序和缓存默认保持不变。
+
+### 上下文关键词：复用分支查询，等待新构建实机采集
+
+`StrategicEffectContext.Build` 与 `WithExhaustDrawTiming` 现在传入当前 `CombatPredictionState`，复用既有 `PredictedCard.HasKeyword`：无全局修改者时读本地关键词，有修改者时保留原生 Hook 和递归隔离。没有新增跨节点缓存或改动能耗公式。原生 Hex 分支还复现了旧 getter 通过真实 Owner 查询关键词导致的抽牌时机偏差，现改为捕获分支的 Hook；因此此项同时修正状态来源，不能宣称所有场景语义完全未变。临时细分计时已移除。
+
+`StrategicKeywordChecks` 的 134932 个标量案例通过；可选 `--native` 扩展既有 harness，将生产上下文的单关键词查询替换为完整 `GetKeywords` 集合，比较 462 个完整上下文及抽牌时机、840 次关键词查询和 32 个 DOP=4 分支。覆盖 Hex 正向修改/移除、Corruption、可写卡牌、NoDraw/DarkEmbrace 顺序及父/真实状态隔离；264 个上下文与旧原生 getter 一致，198 个 Hex 上下文暴露旧状态来源差异并与捕获分支 Hook 一致。此 oracle 共享标量公式，只验证关键词路径与状态传递；标量公式由独立旧算法合同验证。
+
+对照 `72f5787`，五输入各四进程 ABBA、每进程 off/on 预热后 10 个 cache-off 请求，详细计时关闭、`DOTNET_TieredCompilation=0`，实际 DLL hash 已核对。200 个请求完整根、动作值（含 Choice/目标）、最终状态、质量、边界及工作一致。
+
+| Pinned 输入 | 旧 / 新墙钟 | 耗时变化 | 分配变化 | expanded / transitions |
+|---|---:|---:|---:|---:|
+| 三敌，DOP=1 | 171.60 / 173.89ms | +1.3% | -0.0% | 405 / 2466 |
+| 抽牌，DOP=1 | 94.33 / 90.59ms | -4.0% | -0.0% | 334 / 1515 |
+| 持续效果，DOP=1 | 250.92 / 234.19ms | -6.7% | -5.4% | 419 / 2515 |
+| 持续效果，DOP=4 | 176.91 / 163.16ms | -7.8% | -5.3% | 419 / 2515 |
+| 三敌，DOP=4 | 113.77 / 110.78ms | -2.6% | +0.0% | 411 / 2472 |
+
+持续效果人工输入本轮耗时降 6.7%～7.8%、分配降 5.3%～5.4%，不能推广为自然多人收益。Release、request-hydration、9 项 rolling-review、DOP=4 Snapshot 阶段守恒及结构门禁通过。临时对照在 `.local/strategic-context-cost/`；生成 oracle 仅在显式原生合同构建中编译，不成为生产依赖或默认门禁。
+
+当前下一步：在相同 owned Host/Client 复用实例、Client warm-up 后重启，采集 cache-off 初次搜索及手动重算，再 Graceful 收尾核对成员工作和全部阶段守恒。用户只做当前 GUI 步骤。新版实机净收益与部署正确性仍 UNVERIFIED；预算、并行度、排序和缓存默认保持不变。
 
 ## 阶段 D 当前实现
 

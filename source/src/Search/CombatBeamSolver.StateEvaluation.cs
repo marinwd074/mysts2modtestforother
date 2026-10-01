@@ -323,7 +323,8 @@ internal sealed partial class CombatBeamSolver
             if (strategicContext is null)
             {
                 StrategicEffectContext context = StrategicEffectContext.Build(
-                    liveCards, enemyHp, focus.TotalThreat, focus.IncomingHitCount, strategicRequirements, skillsExhaust) with
+                    liveCards, enemyHp, focus.TotalThreat, focus.IncomingHitCount, strategicRequirements, skillsExhaust,
+                    simulator.State) with
                 {
                     Act3BossInteractions = policy.Act3BossStrategy,
                     FirstAttackDamage = policy.Act3BossStrategy && needsFirstAttackDamage
@@ -364,7 +365,7 @@ internal sealed partial class CombatBeamSolver
                     };
                 }
                 strategicContext = needsExhaustDrawTiming
-                    ? context.WithExhaustDrawTiming(effectivePowers, playerState.Hand.Cards, _player.Creature) : context;
+                    ? context.WithExhaustDrawTiming(effectivePowers, playerState.Hand.Cards, _player.Creature, simulator.State) : context;
             }
             StrategicEffectContext effectContext = strategicContext.Value;
             if (power is OrbitPower orbit)
