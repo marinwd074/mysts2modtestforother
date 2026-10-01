@@ -108,7 +108,7 @@ Snapshot/Fork 首项优化移除了 `PredictionExtensions.Clone/ToRng` 构造器
 
 本轮请求存在不同工作量、系统内存压力及 GC 回退，不是新旧版本固定工作 A/B；没有执行路线。新构建实机收益与部署正确性仍 UNVERIFIED。手动重算 SnapshotEvaluation 累计 11.284s，其中 Fingerprint 3.546s（CombatFingerprint 0.601s）、SnapshotStrategicEffects 3.348s；嵌套阶段不能相加作墙钟。持续效果定位与后续边界见下节。预算、并行度、排序、缓存默认不变；暂不做快照对象池、放宽指纹或扩大后态缓存。
 
-### 持续效果上下文：减少分配，待新构建实机采集
+### 持续效果上下文：减少分配，新构建实机成本采集完成
 
 人工 `strategic-repeat` 在原 crawler 输入挂载 Dark Embrace / Corruption / Feel No Pain / Strength，并向抽牌堆添加 6 张牌。临时细分计时定位到上下文构建（19.44 / 22.15ms）；Corruption 已确定技能消耗时，现在跳过无须读取的原生 Exhaust 关键词，小刀复用仍检查牌自身关键词。没有跨 Snapshot 缓存、评分或模拟语义变化；临时细分计时已移除。`StrategicKeywordChecks` 134932 案例比较整个上下文，覆盖全部需求位、技能/固有消耗、小刀、第三方牌及两次评估间修改。
 
@@ -122,7 +122,11 @@ Snapshot/Fork 首项优化移除了 `PredictionExtensions.Clone/ToRng` 构造器
 | 持续效果，DOP=4 | 168.93 / 166.73ms | -1.3% | -1.2% | 419 / 2515 |
 | 三敌，DOP=4 | 111.58 / 111.30ms | -0.2% | 约 0% | 411 / 2472 |
 
-仅证明分配减少，尚未证明稳定墙钟提速；人工夹具不替代自然多人输入。Release、标量合同、request-hydration、9 项 rolling-review、持续效果 DOP=4 Snapshot 阶段守恒及结构门禁通过。临时对照在 `.local/strategic-effects-cost/`，不新增默认门禁。下一步刷新 owned Lab、Client warm-up 后重启，由用户进战斗并点击重算，再核对请求及 Graceful 收尾；实机净收益/部署正确性仍 UNVERIFIED，缓存继续默认关闭。
+仅证明分配减少，尚未证明稳定墙钟提速；人工夹具不替代自然多人输入。Release、标量合同、request-hydration、9 项 rolling-review、持续效果 DOP=4 Snapshot 阶段守恒及结构门禁通过。临时对照在 `.local/strategic-effects-cost/`，不新增默认门禁。
+
+`4ecef09` owned Lab、Client warm-up 后重启（PID 2332）、Host PID 14908，已完成两玩家 local-core/cache-off 会话 `419e223620be4038bbaf4ea153688a35` 的三请求采集。首次前台 5.074 / 5.002 / 5.003s，墙钟 16.377 / 11.839 / 14.955s，expanded/transitions 为 12933/62379、15049/70736、14970/70433；第三次明确记录 `generation=3 reason=Manual`。每请求 5 成员，首次为 3 Completed、1 Canceled、1 Disposed，后两次全 Completed。Graceful 退出两端后 14364 行 JSON 完整、journal error=0；成员工作与独立 E0 ledger、全部阶段累计量及 Snapshot 分区/内部子阶段守恒通过。退出前捕获 queued=True、FIFO checkpoints=6，无捕获/序列化失败；`full=False`，检查点字节归档/恢复仍 UNVERIFIED。临时汇总在 `.local/strategic-effects-cost/live-phase-summary.json`。
+
+三请求均有系统内存压力 GC 回退，工作量不同，不能与上一构建作为净收益 A/B；没有执行路线，实机净收益/部署正确性仍 UNVERIFIED。手动重算 SnapshotEvaluation 累计 9.298s，其中持续效果 3.172s、Fingerprint 2.958s（CombatFingerprint 0.509s）。下一步继续定位 `StrategicEffectContext.Build` 内能耗/关键词查询的剩余成本，先证明具体热点和完整请求净收益；预算、排序和缓存默认保持不变。
 
 ## 阶段 D 当前实现
 
