@@ -268,6 +268,7 @@ internal static partial class CardChoiceSupport
         // duplicate test without rescanning that range at every combination depth.
         Span<int> previousEqualIndex = ordered.Count <= 128
             ? stackalloc int[ordered.Count] : new int[ordered.Count];
+        bool hasRepeatedOptions = false;
         for (int index = 0; index < ordered.Count; index++)
         {
             previousEqualIndex[index] = -1;
@@ -276,6 +277,7 @@ internal static partial class CardChoiceSupport
                 if (!string.Equals(orderedSemanticKeys[prior], orderedSemanticKeys[index], StringComparison.Ordinal))
                     continue;
                 previousEqualIndex[index] = prior;
+                hasRepeatedOptions = true;
                 break;
             }
         }
@@ -313,7 +315,9 @@ internal static partial class CardChoiceSupport
                 .Take(effectiveBranchLimit - retained.Count));
         }
 
-        if (IsIdentityChangingPersistentChoiceEffect(spec.Effect))
+        bool needsOccurrenceRepresentatives = hasRepeatedOptions
+            && IsIdentityChangingPersistentChoiceEffect(spec.Effect);
+        if (needsOccurrenceRepresentatives)
         {
             ReserveIdentityOccurrenceRepresentatives(
                 spec,
@@ -324,15 +328,18 @@ internal static partial class CardChoiceSupport
 
         IEnumerable<IReadOnlyList<PredictedCard>> orderedRetained = retained
             .OrderByDescending(selection => ChoicePriority(spec, selection));
-        if (IsIdentityChangingPersistentChoiceEffect(spec.Effect))
+        if (needsOccurrenceRepresentatives)
             orderedRetained = OrderSemanticSelectionsBeforeOccurrenceSupplements(orderedRetained);
 
+        // Share immutable token values only while constructing this one choice set.
+        Dictionary<PredictedCard, PlanCardToken>? tokensByCard = maxTake > 1 && retained.Count > 1
+            ? new(ReferenceEqualityComparer.Instance) : null;
         return orderedRetained
             .Take(spec.MaxBranches ?? int.MaxValue)
             .Select(selection => new PlanCardChoice(
                 spec.Effect,
                 spec.SourcePile,
-                ToTokens(selection, spec.Options, spec.SourceCards, displayNames.Card),
+                ToTokensWithReuse(selection, spec.Options, spec.SourceCards, displayNames.Card, tokensByCard),
                 ContextId: spec.ContextId))
             .ToList();
     }
@@ -626,6 +633,40 @@ internal static partial class CardChoiceSupport
     }
 
     private static IReadOnlyList<PredictedCard>? BuildTailOccurrenceRepresentative(
+        IReadOnlyList<PredictedCard> selection,
+        IReadOnlyList<PredictedCard> options)
+    {
+        if (selection.Count > 16)
+            return BuildTailOccurrenceRepresentativeGrouped(selection, options);
+        PredictedCard[]? representative = null;
+        for (int index = 0; index < selection.Count; index++)
+        {
+            string key = ChoiceCardKey(selection[index]);
+            int remaining = 0;
+            for (int later = index + 1; later < selection.Count; later++)
+                if (string.Equals(ChoiceCardKey(selection[later]), key, StringComparison.Ordinal))
+                    remaining++;
+            PredictedCard? mapped = null;
+            for (int option = options.Count - 1; option >= 0; option--)
+            {
+                if (!string.Equals(ChoiceCardKey(options[option]), key, StringComparison.Ordinal))
+                    continue;
+                if (remaining-- != 0)
+                    continue;
+                mapped = options[option];
+                break;
+            }
+            if (mapped is null)
+                return null;
+            if (ReferenceEquals(mapped, selection[index]))
+                continue;
+            representative ??= selection.ToArray();
+            representative[index] = mapped;
+        }
+        return representative;
+    }
+
+    private static IReadOnlyList<PredictedCard>? BuildTailOccurrenceRepresentativeGrouped(
         IReadOnlyList<PredictedCard> selection,
         IReadOnlyList<PredictedCard> options)
     {
@@ -927,21 +968,36 @@ internal static partial class CardChoiceSupport
         IReadOnlyList<PredictedCard> options,
         IReadOnlyList<PredictedCard> source,
         Func<CardModel, string> displayName)
+        => ToTokensWithReuse(selected, options, source, displayName, null);
+
+    private static IReadOnlyList<PlanCardToken> ToTokensWithReuse(
+        IReadOnlyList<PredictedCard> selected,
+        IReadOnlyList<PredictedCard> options,
+        IReadOnlyList<PredictedCard> source,
+        Func<CardModel, string> displayName,
+        Dictionary<PredictedCard, PlanCardToken>? tokensByCard)
     {
-        List<PlanCardToken> tokens = [];
+        List<PlanCardToken> tokens = new(selected.Count);
         foreach (PredictedCard card in selected)
         {
+            if (tokensByCard is not null && tokensByCard.TryGetValue(card, out PlanCardToken? cached))
+            {
+                tokens.Add(cached);
+                continue;
+            }
             string stateKey = ChoiceCardKey(card);
             int sourceOccurrence = CountTokenOccurrence(source, card);
             int optionOccurrence = ReferenceEquals(source, options)
                 ? sourceOccurrence : CountTokenOccurrence(options, card);
-            tokens.Add(new PlanCardToken(
+            PlanCardToken token = new(
                 card.Preview.Id.Entry,
                 card.Preview.CurrentUpgradeLevel,
                 stateKey,
                 sourceOccurrence,
                 optionOccurrence,
-                displayName(card.Preview)));
+                displayName(card.Preview));
+            tokensByCard?.Add(card, token);
+            tokens.Add(token);
         }
         return tokens;
     }
@@ -1158,6 +1214,7 @@ internal static partial class CardChoiceSupport
                 card,
                 discoverUnregisteredBaseLibModifiers))
             key.Append('-');
+        CardCostStateSupport.Append(key, card);
         return key.ToString();
     }
 

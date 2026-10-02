@@ -16,6 +16,7 @@ the corresponding `project-v` tag and version log identify its local implementat
 | Project version | Upstream reference | Adaptation |
 | --- | --- | --- |
 | 4.28 | [512b142](https://github.com/Torch1230/CombatSolver/commit/512b142909da67e25f640dcaba4fdc75486beea5), [PR 140](https://github.com/Torch1230/CombatSolver/pull/140) | Delay mod ModelId caching until the pinned Ritsu registry freezes; pin mod files at startup; share worker identity across the API and dispatcher, keeping UI monitoring out of the isolated worker. Preserve fork request retries, owned cleanup, diagnostics and release-only worker protocol. |
+| 4.29 | [e6dc57a](https://github.com/Torch1230/CombatSolver/commit/e6dc57ae320061b900b2bd5b9a8e91b0a14d9c95), [79f8ff7](https://github.com/Torch1230/CombatSolver/commit/79f8ff7310cc6472d26250d36c39341760ae7c71) | Include ordered energy/star cost modifiers and expiration in card fingerprints, choices and continuation text. Skip impossible duplicate representatives and share tokens within one choice construction. Preserve pinned Abundance behavior, local card-value caching and physical occurrence order. |
 
 ## Import rules
 

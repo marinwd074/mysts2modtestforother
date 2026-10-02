@@ -494,6 +494,7 @@ internal sealed record ContinuationStamp(string StateText)
                 text.Append('-');
                 break;
         }
+        CardCostStateSupport.Append(text, card);
         text.Append("/keywords=[");
         text.AppendJoin(',', card.GetKeywordsWithSources(KeywordSources.Local).Order());
         text.Append("]/baselib=");

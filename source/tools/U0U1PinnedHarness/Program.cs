@@ -39,6 +39,7 @@ internal static class Program
     private static int Main(string[] args)
     {
         bool modelIdCacheOnly = args.Length > 0 && args[0] == "model-id-cache";
+        bool cardChoiceIdentityOnly = args.Length > 0 && args[0] == "card-choice-identity";
         bool darkEmbracePactOnly = args.Length > 0 && args[0] == "dark-embrace-pact";
         bool rollingReviewOnly = args.Length > 0 && args[0] == "rolling-review";
         bool choiceRngOnly = args.Length > 0 && args[0] == "choice-rng";
@@ -55,7 +56,7 @@ internal static class Program
         bool requestHydrationOnly = args.Length > 0 && args[0] is "request-hydration"
             or "request-hydration-benchmark-on" or "request-hydration-benchmark-off";
         bool requestHydrationBenchmark = requestHydrationOnly && args[0] != "request-hydration";
-        string outputDirectory = ParseOutput(modelIdCacheOnly || darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
+        string outputDirectory = ParseOutput(cardChoiceIdentityOnly || modelIdCacheOnly || darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
             allowHydrationOptions: requestHydrationBenchmark);
         Directory.CreateDirectory(outputDirectory);
 
@@ -105,7 +106,7 @@ internal static class Program
                 ValidateRngRestore(outputDirectory);
                 return 0;
             }
-            if (!turnEnergyOnly && !rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly && !rootHistoryOnly && !strategicContextOnly && !strategicEnergyOnly && !projectedShuffleOnly)
+            if (!cardChoiceIdentityOnly && !turnEnergyOnly && !rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly && !rootHistoryOnly && !strategicContextOnly && !strategicEnergyOnly && !projectedShuffleOnly)
             {
             ValidateDarkEmbracePredictionCoverage();
             ValidateViciousStrategicValue();
@@ -185,6 +186,13 @@ internal static class Program
                 SoftTimeBudgetMilliseconds = BudgetMilliseconds,
             };
             SolverDisplayNames names = SolverDisplayNames.Capture(combat);
+            if (cardChoiceIdentityOnly)
+            {
+                Console.WriteLine(CardChoiceIdentityChecks.Run(
+                    LocalContext.GetMe(combat) ?? throw new InvalidOperationException("Missing fixture player."),
+                    names, outputDirectory));
+                return 0;
+            }
             BattleDamageSnapshot damage = BattleDamageTracker.Observe(combat);
             SearchPolicySnapshot captured = SolverController.CaptureSearchPolicy(
                 settings,

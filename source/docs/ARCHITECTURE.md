@@ -134,6 +134,8 @@ PR #43 集成修正：Mod 使用独立文件复制，游戏程序继续使用硬
 
 `ModelDbGetIdCachePatch` 只缓存类型与不可变 ID。原版类型可立即缓存；模组类型等待 pinned Ritsu 的 `ModelRegistryInitializedEvent` / `ModContentRegistry.IsFrozen`，避免注册期临时无前缀 ID 被固化。未收到冻结信号时继续原生解析。离线宿主在 `ModelDb.Init` 完成后显式标记注册完成。
 
+`CardCostStateSupport` 从分支 Preview 读取原生费用修正的顺序、基底、期限和 reduce-only 属性；能量与星费使用同一身份规则写入卡牌指纹、选牌键与 continuation。相同显示费用不能覆盖不同后续费用行为。选牌 token 的引用缓存只存在于单次构建内，Fork / Preview 的既有写入失效边界保持不变。
+
 `RitsuEmptyCapabilityFastPathPatches` 的标签入口只在模拟隔离域且已证明 capability 集为空时返回原 `IEnumerable<CardTag>`，不枚举、不复制、不缓存标签值；已有空集合和精确类型默认来源代次沿用公共判定。非空贡献者、晚注册默认来源及 live 调用仍执行框架管线。
 
 RitsuLib 0.6.0 自身拥有 BaseLib 目标类型的外部登记查询、按程序集弱键缓存和动态程序集旁路。CombatSolver 不再修补该桥的私有查询闭包或重复维护缺失证据；目标类型语义继续通过 RitsuLib 的公开能力入口读取。项目构建导入 RitsuLib 随包提供的多程序集引用表，Windows/Linux 无头快照复制同一完整版本包，避免编译期与运行期落在不同兼容分支。
