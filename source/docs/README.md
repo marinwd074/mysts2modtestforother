@@ -1,58 +1,43 @@
 # CombatSolver 文档导航
 
-当前工作树只保留**长期真源、当前计划和可重跑合同**。历史实验、运行日志、旧阶段报告和问题包由 Git history 或本地实验目录保存，不进入默认上下文。
+当前工作树把**当前任务**与**已完成实现说明**分开：未来工作只进 handoff；旧计划文件只解释现有代码。
 
 ## 默认入口
 
 | 目的 | 文件 |
 |---|---|
-| 当前状态 / 下一任务 | [CODEX_HANDOFF.md](CODEX_HANDOFF.md) |
-| 当前主执行计划（A → H） | [Rolling_Horizon_Reuse_Architecture.md](Rolling_Horizon_Reuse_Architecture.md) |
-| 坏路线 / 质量专项参考 | [CombatSolver_Quality_First_Next.md](CombatSolver_Quality_First_Next.md) |
-| 多人本地核心搜索效率任务书（P0–P4 已关闭） | [Multiplayer_LocalCore_Search_Optimization.md](Multiplayer_LocalCore_Search_Optimization.md) |
-| 多人总体架构计划 | [CombatSolver_GPT_Architecture_Plan.md](CombatSolver_GPT_Architecture_Plan.md) |
+| 当前状态 / 未完成风险 / 下一任务 | [CODEX_HANDOFF.md](CODEX_HANDOFF.md) |
 | 架构、职责、状态所有权 | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | 当前验证入口 | [TEST_MATRIX.md](TEST_MATRIX.md) |
-| 0.107.1 兼容边界 | [compat/0.107.1/README.md](compat/0.107.1/README.md) |
-| 多人架构与当前边界 | [multiplayer/README.md](multiplayer/README.md) |
+| 项目版本与功能更新 | [PROJECT_VERSION](../PROJECT_VERSION) · [PROJECT_VERSION_HISTORY.md](PROJECT_VERSION_HISTORY.md) |
 | 多人 Host/Client 操作 | [multiplayer/RUNBOOK.md](multiplayer/RUNBOOK.md) |
-| 多人已知限制 | [multiplayer/LIMITATIONS.md](multiplayer/LIMITATIONS.md) |
-| 测试分层 | [TESTING_LAYERS.md](TESTING_LAYERS.md) |
-| 性能护栏 | [PERFORMANCE_GUARDRAILS.md](PERFORMANCE_GUARDRAILS.md) |
-| 仓库保留/清理规则 | [REPOSITORY_MAINTENANCE.md](REPOSITORY_MAINTENANCE.md) |
-| 本 fork 版本演进 | [PROJECT_VERSION_HISTORY.md](PROJECT_VERSION_HISTORY.md) |
-| 上游同步策略 | [../../UPSTREAM.md](../../UPSTREAM.md) |
-| 贡献与 PR 规则 | [../../CONTRIBUTING.md](../../CONTRIBUTING.md) |
 
-## 专题资料
+## 已完成实现档案
 
-按具体任务定向读取，不要整批加载：
+| 主题 | 文件 | 现在记录什么 |
+|---|---|---|
+| Rolling Horizon / R0 / R1 / 新根 replay / foreground | [Rolling_Horizon_Reuse_Architecture.md](Rolling_Horizon_Reuse_Architecture.md) | 做了什么、函数位置、Runtime/Search 调用链、复用边界 |
+| local-single-core 搜索效率 P0–P4 | [Multiplayer_LocalCore_Search_Optimization.md](Multiplayer_LocalCore_Search_Optimization.md) | 候选保留、bounded refresh、seed、incumbent、Smart 调度、热点优化 |
+| 多人出牌质量修复 | [CombatSolver_Quality_First_Next.md](CombatSolver_Quality_First_Next.md) | 药水、current-turn、排序、斩杀窗口、Safe Execute 等已落地修复 |
+| 单多人总体架构 / U0–U6 / 搜索加速状态 | [CombatSolver_GPT_Architecture_Plan.md](CombatSolver_GPT_Architecture_Plan.md) | 已实现架构和专项当前落点；不再保存执行卡 |
+| Rolling Horizon 代码审查 | [Rolling_Horizon_Reuse_Code_Review.md](Rolling_Horizon_Reuse_Code_Review.md) | 已修复问题与可重跑审查入口 |
 
-- `compat/0.107.1/`：固定版本机制、卡牌、Hook 与怪物目标审计。
-- `refactoring/`：仍有效的重构路线。
-- `workshop/`：发布文案。
-- `third-party-*.md` / `THIRD_PARTY_ADAPTERS.md`：第三方适配长期规范。
-- `HEADLESS_TESTING.md`、`OFFLINE_SEARCH_HARNESS.md`、`CHECKPOINT_REPLAY.md`：可重跑测试入口。
+## 稳定专题
 
-## 不进入当前树
+- [multiplayer/README.md](multiplayer/README.md)：多人当前架构与能力边界。
+- [PERFORMANCE_GUARDRAILS.md](PERFORMANCE_GUARDRAILS.md)：性能优化不可越过的质量护栏。
+- [TESTING_LAYERS.md](TESTING_LAYERS.md)：测试证据分层。
+- [OFFLINE_SEARCH_HARNESS.md](OFFLINE_SEARCH_HARNESS.md)、[CHECKPOINT_REPLAY.md](CHECKPOINT_REPLAY.md)：可重跑离线/恢复入口。
+- [compat/0.107.1/README.md](compat/0.107.1/README.md)：固定版本语义。
+- [THIRD_PARTY_ADAPTERS.md](THIRD_PARTY_ADAPTERS.md) 与 `third-party-*.md`：第三方适配长期规范。
+- [REPOSITORY_MAINTENANCE.md](REPOSITORY_MAINTENANCE.md)：仓库保留/清理规则。
 
-以下内容只保存在 Git history、`.local/`、外部问题包或用户明确提供的附件中：
+## 维护规则
 
-- dated audit / issue / PR review；
-- U0–U6、P0–P3 等已完成阶段过程文档；
-- runtime evidence、原始日志、bug-report ZIP；
-- 一次性 performance / strategy 报告和机器结果；
-- prototype 生成的 `results*.json`；
-- 被当前计划替代的 NEXT 文档。
+- `CODEX_HANDOFF.md` 可以写“还要做什么”；实现档案不写下一阶段任务。
+- 实现档案统一回答四件事：**做了什么、有什么用、代码在哪里、调用链怎么走**。
+- 阶段名 P/U/A–H 只作为 Git 历史索引，不再代表自动执行顺序。
+- 未进入生产的旧设想只记录“未实现/未启用”这一事实，不保留施工步骤。
+- dated audit、原始日志、问题包和一次性 benchmark 由 Git history 或 `.local/` 保存，不重新堆进默认文档。
 
-需要历史事实时按 commit 或问题包定向恢复，不把整段历史重新复制进 handoff。
-
-## 维护原则
-
-- `CODEX_HANDOFF.md` 只保留当前状态、当前风险和下一任务。
-- 当前计划只保留仍指导生产决策的计划文件。
-- 新文档必须有长期用途，或被本索引/稳定专题索引引用。
-- 可重跑事实优先固化为测试/fixture，不用日志证明长期正确性。
-- 清理规则见 [REPOSITORY_MAINTENANCE.md](REPOSITORY_MAINTENANCE.md)。
-
-<!-- repository-maintenance-marker: 2026-09-28 -->
+<!-- repository-maintenance-marker: 2026-10-02 -->

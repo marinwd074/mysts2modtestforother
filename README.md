@@ -14,6 +14,7 @@ The fork keeps the upstream solver/simulation foundation while adding substantia
 - RitsuLib compatibility target: **0.107.1**
 - Production project: [`source/`](source/)
 - Pinned game snapshot: [`game-body/`](game-body/) through Git LFS
+- Project milestone version: [source/PROJECT_VERSION](source/PROJECT_VERSION); [version history](source/docs/PROJECT_VERSION_HISTORY.md)
 - Current project state: [`source/docs/CODEX_HANDOFF.md`](source/docs/CODEX_HANDOFF.md)
 - Documentation index: [`source/docs/README.md`](source/docs/README.md)
 
@@ -61,6 +62,8 @@ For wrong routes, unexpected recalculation, Choice failures, multiplayer executi
 Do not commit runtime evidence or problem ZIPs into the repository.
 
 ## Releases
+
+Project milestone versions start at **1.01**: small updates add **0.01**, large feature or architecture updates add **0.10**. Each functional commit has a `project-vX.XX` tag and a detailed history entry. These tags record development milestones; they do not invoke the package-release workflow or change the upstream Mod/game compatibility version.
 
 Pushing a version tag in the form `vMAJOR.MINOR.PATCH` runs the pinned 0.107.1 Release build and prepares a **draft GitHub Release** containing:
 

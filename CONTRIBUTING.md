@@ -69,6 +69,21 @@ A pull request should explain the problem, the behavioral change, evidence, and 
 
 Prefer **squash merge** for focused pull requests so `main` records one durable change rather than every exploratory commit. Keep separate commits only when their separation has lasting review or bisect value.
 
+## Project versions
+
+Use `source/PROJECT_VERSION` and [the version history](source/docs/PROJECT_VERSION_HISTORY.md) for this fork's milestone versions. Start at **1.01**, add **0.01** for a small update or **0.10** for a large feature/architecture update, and retain two decimal places.
+
+Include code, relevant tests and the version entry in the same functional commit. Fold implementation repairs and routine evidence/doc follow-ups into that task before pushing; split independently useful or independently reversible features. A genuinely independent follow-up fix may use the next small version.
+
+```powershell
+pwsh -File source/tools/new-project-version.ps1 -Kind Minor -Title '搜索：减少快照分配' -Optimized '复用已冻结的根历史计数。'
+pwsh -File source/tools/new-project-version.ps1 -Check
+```
+
+Use `-Kind Major` for a large update; `-Added`, `-Optimized`, `-Fixed` and `-Notes` record concrete changes and remaining limits. The script edits only the version file and history. After committing, create an annotated `project-vX.XX` tag at that commit and push the branch and that tag together. `vMAJOR.MINOR.PATCH` remains the separate package-release tag format.
+
+Shared history is normally preserved. This one-time reorganization was explicitly requested; the original main remains on `archive/main-before-versioning-20261002-0a104a1`. Preserve branches with unmerged work and use an exact remote lease for any authorized history rewrite.
+
 ## Upstream and third-party code
 
 Read [UPSTREAM.md](UPSTREAM.md) before importing upstream changes. This fork does not bulk-merge newer CombatSolver game-version assumptions into the 0.107.1 branch.

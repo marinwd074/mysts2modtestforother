@@ -12,9 +12,9 @@
 - MultiplayerOnly 牌保留真实牌堆占位与抽牌距离，但不进入主动搜索/自动执行。
 - 多人 Safe Execute 只部署本地玩家动作；队友观察不会获得部署权限。
 
-## 当前主目标：Rolling Horizon Reuse
+## 已完成主线：Rolling Horizon Reuse
 
-主计划：[`Rolling_Horizon_Reuse_Architecture.md`](Rolling_Horizon_Reuse_Architecture.md)
+实现档案：[`Rolling_Horizon_Reuse_Architecture.md`](Rolling_Horizon_Reuse_Architecture.md)
 
 阶段顺序固定为：
 
@@ -33,7 +33,7 @@
 
 `CombatSolver_Quality_First_Next.md` 继续用于坏路线、执行质量和回归定位，但不覆盖 Rolling Horizon 的主阶段顺序。
 
-新增待实施任务：[多人战前预计算与 Boss 通关优先计划](CombatSolver_GPT_Architecture_Plan.md#11-多人战前预计算与-boss-通关优先2026-09-30)。仅完成静态可行性审计；先统一 Boss 质量排序，再验证多人离线恢复，未开放能力或修改相关源码。Showcase 已取消。
+待实施专项：多人战前预计算与 Boss 通关优先；静态审计和已有代码基础见 [总体架构实现记录 §11](CombatSolver_GPT_Architecture_Plan.md#11-多人战前预计算与-boss-通关优先2026-09-30)。仅完成静态可行性审计；先统一 Boss 质量排序，再验证多人离线恢复，未开放能力或修改相关源码。Showcase 已取消。
 
 ### 通用非终局后态缓存：成本分解与首项优化完成，默认关闭
 
@@ -58,7 +58,7 @@ Release、`U0U1PinnedHarness request-hydration` 与 `rolling-review` 通过。Pi
 
 新增 `multi-hit` 为 pinned `EXOSKELETONS_WEAK` 三敌开局，原手牌追加 WHIRLWIND / TWIN_STRIKE，沿用两瓶 Fire Potion、Beam=8 / 600 节点上限和无 Burning Blood 的审计配置；不是自然捕获的实机快照。DOP=1/4 各四进程、合计 80 个完整请求均与各自 cache-off 的根/路线/最终状态/质量/边界/逻辑工作一致，战损均 11；不要求不同 DOP 的工作量相同。三敌样本满 32 项仍未获得净收益，现有范围的扩容/默认启用继续停止。
 
-Release、结构门禁、`request-hydration`（含并发统计、未首验惰性校验和默认关闭诊断）通过；DOP=4 药水审计固定输入也保持完整结果/工作一致。尚未证明净提速，因此继续默认 false，停止扩容和推广，不进入本功能的实机启用验证。当前统计只支持定位成本，不证明真实 Host/Client 或普遍性能。下一候选应先寻找确有昂贵重复转移的自然输入；否则按 [加速计划 §12](CombatSolver_GPT_Architecture_Plan.md#12-多人搜索加速2026-10-01) 转向其他已测热点。
+Release、结构门禁、`request-hydration`（含并发统计、未首验惰性校验和默认关闭诊断）通过；DOP=4 药水审计固定输入也保持完整结果/工作一致。尚未证明净提速，因此继续默认 false，停止扩容和推广，不进入本功能的实机启用验证。当前统计只支持定位成本，不证明真实 Host/Client 或普遍性能。下一候选应先寻找确有昂贵重复转移的自然输入；否则按 [加速实现记录 §12](CombatSolver_GPT_Architecture_Plan.md#12-多人搜索加速2026-10-01) 转向其他已测热点。
 
 复跑：同一 `U0U1PinnedHarness` 的 `request-hydration-benchmark-off/on --fixture low-repeat|shared-audit|draw-repeat|multi-hit --iterations 10 --dop 1 --out .local/...`，成本诊断另加 `--measure`。逐进程按 off/on/on/off 顺序运行，不并发 benchmark。Benchmark 与缓存合同入口分开，仍共用固定策略；JSON 含环境/JIT/预热、GC、根与逐请求状态、结果和分配，并在详细模式保留该请求的现有 `SEARCH_PHASE` 日志。临时证据位于 `.local/request-hydration-cost/`，不作为新增默认门禁。
 
