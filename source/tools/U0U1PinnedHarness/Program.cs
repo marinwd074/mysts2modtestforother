@@ -38,6 +38,7 @@ internal static class Program
 
     private static int Main(string[] args)
     {
+        bool modelIdCacheOnly = args.Length > 0 && args[0] == "model-id-cache";
         bool darkEmbracePactOnly = args.Length > 0 && args[0] == "dark-embrace-pact";
         bool rollingReviewOnly = args.Length > 0 && args[0] == "rolling-review";
         bool choiceRngOnly = args.Length > 0 && args[0] == "choice-rng";
@@ -54,7 +55,7 @@ internal static class Program
         bool requestHydrationOnly = args.Length > 0 && args[0] is "request-hydration"
             or "request-hydration-benchmark-on" or "request-hydration-benchmark-off";
         bool requestHydrationBenchmark = requestHydrationOnly && args[0] != "request-hydration";
-        string outputDirectory = ParseOutput(darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
+        string outputDirectory = ParseOutput(modelIdCacheOnly || darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
             allowHydrationOptions: requestHydrationBenchmark);
         Directory.CreateDirectory(outputDirectory);
 
@@ -87,6 +88,12 @@ internal static class Program
             GameBootstrap.ApplyGodotBypasses();
             GameBootstrap.SkipGodotNodeStaticConstructors();
             Console.WriteLine(GameBootstrap.InitializeStaticState());
+            if (modelIdCacheOnly)
+            {
+                ModelIdCacheChecks.Run();
+                Console.WriteLine("ModelIdCache PASS (native types, mod registration, frozen ID, null inputs)");
+                return 0;
+            }
             int patchCount = U2Runtime.Initialize(
                 Path.Combine(outputDirectory, "logs"),
                 BeamWidth,

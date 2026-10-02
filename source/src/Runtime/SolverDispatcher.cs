@@ -45,8 +45,12 @@ internal sealed partial class SolverDispatcher : Node
                 Entry.Logger.Error($"[CombatSolver/Test] MAIN_THREAD_CALLBACK_FAILURE exception={ex}");
             }
         }
-        SolverController.MonitorCombatPresence();
-        SolverController.RefreshSearchProgress();
+        // A headless forecast worker still drains callbacks, but owns no combat UI.
+        if (!Entry.IsPreCombatWorker)
+        {
+            SolverController.MonitorCombatPresence();
+            SolverController.RefreshSearchProgress();
+        }
         if (PerformanceRecording.Enabled)
             PerformanceRecording.Dispatcher(Stopwatch.GetElapsedTime(now).TotalMilliseconds,
                 GC.GetAllocatedBytesForCurrentThread() - allocated);

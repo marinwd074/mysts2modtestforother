@@ -3,6 +3,19 @@ using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Models;
 
 int passed = 0;
+await Check("worker cannot start a nested forecast", async () =>
+{
+    CombatSolver.Entry.IsPreCombatWorker = true;
+    try
+    {
+        Equal(false, PreCombatForecastApi.IsAvailable);
+        Equal(PreCombatForecastStatus.Unsupported, (await Forecast(NewRun())).Status);
+    }
+    finally
+    {
+        CombatSolver.Entry.IsPreCombatWorker = false;
+    }
+});
 await Check("force refresh bypasses an active request", async () =>
 {
     RunState run = NewRun();

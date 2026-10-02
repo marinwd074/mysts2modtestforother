@@ -19,6 +19,8 @@ CI 只能证明其实际执行的层级；没有日志/steps 的 runner 失败�
 
 `U0U1PinnedHarness continuation-replay` 另覆盖已物化 incumbent 的显式采用：Coordinator 选择/worker 最终结果保留采用范围与屏幕身份，普通完成不获得采用标记；连续两次 RNG 新根重放核对质量、不同路线身份及 live 隔离。当前标记修复的 Host/Client 复测仍 UNVERIFIED。
 
+`U0U1PinnedHarness model-id-cache` 核对原版类型、注册期模组临时 ID、冻结后 ID、重复通知和空参数；`PreCombatRequestChecks` 另核对 worker 不得启动嵌套预报。两者是 pinned / 合同证据，不证明实际 worker 进程或 Host/Client 成功。
+
 `tools/multiplayer-lab/test-joint-continuation-validator.ps1` 覆盖 plain/JSON、reason 解析及错误原因拒绝；RouteReplay 检查同日志/请求的新根与完整账本、评估范围、新授权及原生部署。TargetDeath 另检查 roster strict subset、旧 seed 截断、恢复与存活目标部署；搜索代次和路线代次独立匹配。反例包含错请求/回合、旧授权/路线、混合成员、无质量证明、动作顺序、未清授权、替换敌人、死亡目标、预算变化及缺失证据；只有真实 Host/Client journal 的对应模式通过才构成实机证据。入口见 [多人 RUNBOOK](multiplayer/RUNBOOK.md#joint-forecast-continuation-smoke)。
 
 `request-hydration-benchmark-off --measure` 另核对 Snapshot 全调用与子阶段调用数、不重叠阶段上界、结果内部子阶段和 worker 汇总；固定输入包含 shared-audit / draw-repeat / multi-hit，三敌覆盖 DOP=1/4。诊断开关对照验证完整根/路线/最终状态/质量/工作一致，不作为新增默认门禁或提速证明。

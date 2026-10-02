@@ -23,6 +23,11 @@ public static class Entry
     public static CombatSolverLog Logger { get; private set; } = null!;
     public static bool Enabled { get; private set; } = true;
 
+    // Fixed by the parent process before the isolated forecast worker starts.
+    internal static bool IsPreCombatWorker { get; } = string.Equals(
+        System.Environment.GetEnvironmentVariable("COMBATSOLVER_PRECOMBAT_WORKER"),
+        "1", StringComparison.Ordinal);
+
     public static void Initialize()
     {
         string logDirectory;
@@ -46,12 +51,24 @@ public static class Entry
         Logger = new CombatSolverLog(logDirectory);
         if (!centralizedLogs)
             Logger.Warn("[CombatSolver/Diagnostics] CENTRALIZED_LOG_DIRECTORY_UNAVAILABLE");
+        try
+        {
+            PreCombatForecastWorker.PinMainProcessModSources();
+        }
+        catch (Exception error)
+        {
+            Logger.Warn($"[CombatSolver/PreCombatApi] MOD_SOURCE_PINNING_UNAVAILABLE error={error}");
+        }
         SolverSettings.Load();
         SolverUiTokens.ConfigureTheme(SolverSettings.Current.OverlayTheme);
         SolverController.ApplyPersistentSettings(SolverSettings.Capture());
         ModTypeDiscoveryHub.RegisterModAssembly(ModId, Assembly.GetExecutingAssembly());
         RitsuLibFramework.SubscribeLifecycle<CombatStartingEvent>(evt => SolverController.BeginCombat(evt.CombatState));
         RitsuLibFramework.SubscribeLifecycle<CombatEndedEvent>(_ => SolverController.Reset("combat_ended"));
+        RitsuLibFramework.SubscribeLifecycle<ModelRegistryInitializedEvent>(
+            _ => ModelDbGetIdCachePatch.MarkModelRegistryInitialized());
+        if (STS2RitsuLib.Content.ModContentRegistry.IsFrozen)
+            ModelDbGetIdCachePatch.MarkModelRegistryInitialized();
         CombatManager.Instance.TurnStarted += OnTurnStarted;
 
         PatchRegistration.ApplyRequiredPatches(ModId, DisableMod);

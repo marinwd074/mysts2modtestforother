@@ -6,6 +6,17 @@ This repository is derived from **Torch1230/CombatSolver** and retains its MIT a
 
 Upstream may target a newer game version. Therefore upstream updates are reviewed and ported selectively rather than merged wholesale.
 
+## Reviewed updates (2026-10-02)
+
+Reviewed upstream `d231e9e51a0e58d6bfa1373c6265cce13ffd9a45` through
+`53c26b26c50bec027de8f7d2c76deb223cd6971d` (manifest 0.47.3, game 0.111.0).
+The fork continues to target 0.107.1. Each row records an adapted functional commit;
+the corresponding `project-v` tag and version log identify its local implementation.
+
+| Project version | Upstream reference | Adaptation |
+| --- | --- | --- |
+| 4.28 | [512b142](https://github.com/Torch1230/CombatSolver/commit/512b142909da67e25f640dcaba4fdc75486beea5), [PR 140](https://github.com/Torch1230/CombatSolver/pull/140) | Delay mod ModelId caching until the pinned Ritsu registry freezes; pin mod files at startup; share worker identity across the API and dispatcher, keeping UI monitoring out of the isolated worker. Preserve fork request retries, owned cleanup, diagnostics and release-only worker protocol. |
+
 ## Import rules
 
 Classify upstream changes before porting them:

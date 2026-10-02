@@ -6,21 +6,27 @@ using STS2RitsuLib.Patching.Models;
 namespace CombatSolver;
 
 /// <summary>
-/// ModelDb.GetId(Type) is a pure Type-to-ModelId mapping in the pinned game API.
-/// Cache only the immutable value; model instances and ModelDb content remain untouched.
+/// Cache immutable Type-to-ModelId values. Content mods can change their ID prefix
+/// during registration, so their values are cacheable only after the registry freezes.
 /// </summary>
 internal sealed class ModelDbGetIdCachePatch : IPatchMethod
 {
     private static readonly ConcurrentDictionary<Type, ModelId> Cache = new();
+    private static volatile bool _modelRegistryInitialized;
 
     public static string PatchId => "combat_solver_model_db_get_id_cache";
-    public static string Description => "缓存 ModelDb.GetId(Type) 的纯类型→ModelId 映射";
+    public static string Description => "缓存 ModelDb.GetId(Type)，模组类型等待注册完成";
     public static bool IsCritical => false;
 
     public static ModPatchTarget[] GetTargets()
         => [new(typeof(ModelDb), "GetId", [typeof(Type)])];
 
     internal static int CachedEntryCount => Cache.Count;
+
+    internal static void MarkModelRegistryInitialized() => _modelRegistryInitialized = true;
+
+    private static bool IsCacheable(Type type)
+        => type.Assembly == typeof(ModelDb).Assembly || _modelRegistryInitialized;
 
     [HarmonyPriority(Priority.First)]
     public static bool Prefix(Type type, ref ModelId __result)
@@ -35,7 +41,7 @@ internal sealed class ModelDbGetIdCachePatch : IPatchMethod
 
     public static void Postfix(Type type, ModelId __result)
     {
-        if (type is not null && __result is not null)
+        if (type is not null && __result is not null && IsCacheable(type))
             Cache.TryAdd(type, __result);
     }
 }

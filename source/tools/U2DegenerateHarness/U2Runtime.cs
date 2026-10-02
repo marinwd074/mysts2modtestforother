@@ -92,6 +92,7 @@ internal static class U2Runtime
             if (patched > 0)
                 applied++;
         }
+        ModelDbGetIdCachePatch.MarkModelRegistryInitialized();
         return applied;
     }
 

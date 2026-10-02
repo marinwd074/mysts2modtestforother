@@ -50,6 +50,8 @@ internal static class ModRuntime
         ApplyFixedBudgetSettings(options);
         ApplyUnattendedOverrides(options);
         int applied = ApplySearchPatches();
+        // GameBootstrap has completed ModelDb.Init; no lifecycle event is raised offline.
+        ModelDbGetIdCachePatch.MarkModelRegistryInitialized();
 
         SolverSettingsSnapshot snapshot = SolverSettings.Capture();
         return $"patches_applied={applied}/{SearchPatchTypes.Length} "
