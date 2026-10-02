@@ -5,12 +5,28 @@ on:
     branches:
       - main
     paths:
-      - '.github/workflows/compatibility.yml'
+      - '.github/**'
       - '.editorconfig'
       - '.gitignore'
       - '.gitattributes'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'UPSTREAM.md'
+      - 'AGENTS.md'
+      - 'game-body/README.md'
       - 'source/**'
-      - '!source/docs/**'
+  pull_request:
+    paths:
+      - '.github/**'
+      - '.editorconfig'
+      - '.gitignore'
+      - '.gitattributes'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'UPSTREAM.md'
+      - 'AGENTS.md'
+      - 'game-body/README.md'
+      - 'source/**'
   workflow_dispatch:
 
 permissions:
@@ -35,6 +51,7 @@ jobs:
         run: |
           ./source/tools/verify-target-version.ps1
           ./source/tools/verify-refactor-boundaries.ps1
+          ./source/tools/verify-repository-hygiene.ps1
 
           [xml]$project = Get-Content -LiteralPath './source/CombatSolver.csproj' -Raw
           if ($project.Project.Sdk -ne 'Godot.NET.Sdk/4.5.1') {
@@ -48,6 +65,6 @@ jobs:
             throw 'build-target.json does not describe the supported 0.107.1 target.'
           }
 
-# Default push CI intentionally stays tiny: one Linux structural/version gate.
+# Default push/PR CI stays tiny: one Linux structural/version/documentation gate.
 # Heavy pinned builds, runtime replays, monster IL audits, and full contracts are
 # manual workflows. Tag releases still perform their own pinned Release build.

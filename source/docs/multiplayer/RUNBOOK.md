@@ -3,6 +3,8 @@
 本文件记录已经在真实 Host/Client 流程中确认、且新对话不应重新试错的操作事实。
 任何 Multiplayer Lab 运行前先读本页。
 
+历史 Smoke 的 JSON 摘要已退出当前树，下文文件名只用于定位 Git history；重跑仍须保存新的 Host/Client journal 并执行对应 validator，旧 PASS 不作为当前 HEAD 的验证结果。
+
 ## 职责分工
 
 - **Codex/Agent 负责游戏进程与技术流程**：构建代码、准备/刷新隔离实例、执行 `start-host.ps1` / `start-client.ps1`、完成 Mod warm-up 后的必要重启、按需要执行 Graceful stop、定位日志、运行 validator、分析证据和修复代码。
@@ -141,7 +143,7 @@ git submodule update --init --recursive -- source/tools/multiplayer-lab/Multipla
 
 - Host 和所有参与 Client 使用同一测试工具源码 revision / 构建产物。
 - 测试工具只用于 Multiplayer Lab，不进入 CombatSolver 正式发布包。
-- pinned 0.107.1 的一次最小 Host/Client Smoke 已确认同构 DLL/PCK 正常进战斗、双向 `energy 1` 与单张原生加牌同步；见 [`evidence/gm-console-multiplayer-smoke-2026-09-22.json`](evidence/gm-console-multiplayer-smoke-2026-09-22.json)。Tag Team 实际出牌语义仍未验证。
+- pinned 0.107.1 的一次最小 Host/Client Smoke 已确认同构 DLL/PCK 正常进战斗、双向 `energy 1` 与单张原生加牌同步；见 `gm-console-multiplayer-smoke-2026-09-22.json`（历史记录）。Tag Team 实际出牌语义仍未验证。
 
 ## Quality-first 主 Beam A/B 实机诊断
 
@@ -255,7 +257,7 @@ pwsh -NoLogo -NoProfile -File .\validate-mp2b-interference-results.ps1 `
 完成 `DEFEND_IRONCLAD`、`STRIKE_IRONCLAD` 两张本地普通牌；远端干扰验证器对真实
 `request_id=1` 返回 `MULTIPLAYER_MP-2B_REMOTE_ABORT_PASS`，第一张牌完成后捕获到
 远端公开变化，未捕获第二张原生牌，并启动新的搜索。摘要见
-[`evidence/mp2b-smoke-2026-09-20.json`](evidence/mp2b-smoke-2026-09-20.json)。同一日志若包含
+`mp2b-smoke-2026-09-20.json`（历史记录）。同一日志若包含
 多次用户尝试，干扰验证器可用 `-RequestId <deployment-request-id>` 选择一个完整 session。
 
 ## MP-2C 当前回合 bounded N-action Smoke
@@ -300,7 +302,7 @@ Codex 只负责启动/停止进程、读取 journal 和运行验证器。2026-09
 `2/0`，返回 `MULTIPLAYER_MP-2C_PASS`；干扰运行在同一 `request_id=1` 完成前两张后，
 用户通过另一 Client 打出公开牌，主 Client 返回 `MP2B_REMOTE_DELTA_ABORT`，未捕获第 3 张
 原生动作并启动 fresh search，返回 `MULTIPLAYER_MP-2C-remote-interference_PASS`。摘要见
-[`evidence/mp2c-smoke-2026-09-20.json`](evidence/mp2c-smoke-2026-09-20.json)。
+`mp2c-smoke-2026-09-20.json`（历史记录）。
 
 ## Reactive Carry Foundation Smoke
 
@@ -331,7 +333,7 @@ pwsh -NoLogo -NoProfile -File .\validate-reactive-carry-results.ps1 `
 
 Smoke C 不传 `-RequestId`，以便验证整份正式 journal 没有中止或旧授权复用。退出码仍为
 0=PASS、1=FAIL、2=UNVERIFIED。2026-09-20 的 A/B/C 均已通过，机器摘要见
-[`evidence/reactive-carry-smoke-2026-09-20.json`](evidence/reactive-carry-smoke-2026-09-20.json)。
+`reactive-carry-smoke-2026-09-20.json`（历史记录）。
 
 ## Carry v2 / Multiplayer Safe Auto Smoke
 
@@ -358,7 +360,7 @@ PASS 必须同时证明：Safe Auto 在测量窗口只启用一次；至少 3 �
 3 个回合都有自动 arm、Safe EndTurn、fresh Probe/capture；每个下一回合要么出现 exact Joint continuation reuse，且 `SEARCH_REUSED` 明确 `old_authorization_dead=true new_authorization_pending=true`，要么走 Fresh Search；启用后没有新的
 `UI_ACTION action=deploy`；没有 `MP_SAFE_AUTO_STOP`、远端部署中止、旧 request 复用或
 自定义网络路径。2026-09-22 真实 Host/Client 三回合 Smoke 已通过上述验证器，
-结果见 [`evidence/safe-auto-runtime-2026-09-22.json`](evidence/safe-auto-runtime-2026-09-22.json)。
+结果见 `safe-auto-runtime-2026-09-22.json`（历史记录）。
 
 ## Joint Forecast Continuation Smoke
 

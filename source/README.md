@@ -156,9 +156,9 @@ Linux 构建命令：
 
 - [文档总目录](docs/README.md)：当前指南、版本日志和各专题索引
 - [架构与职责地图](docs/ARCHITECTURE.md)
-- [开发记录](docs/DEVELOPMENT_NOTES.md)
+- [当前状态与待办](docs/CODEX_HANDOFF.md)
 - [测试矩阵](docs/TEST_MATRIX.md)
-- [重构路线](docs/refactoring/refactor-roadmap.md)
+- [构建、验证与维护工具](tools/README.md)
 - [0.107.1 兼容证据链](docs/compat/0.107.1/README.md)
 - [性能与质量护栏](docs/PERFORMANCE_GUARDRAILS.md)
 

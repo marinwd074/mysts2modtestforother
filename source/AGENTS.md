@@ -80,7 +80,7 @@ Agent 可以在当前目标需要时自主：
 
 ## 7. 文档、Git 与发布
 
-- `DEVELOPMENT_NOTES.md`、`TEST_MATRIX.md`、`ARCHITECTURE.md` 只在对应事实真的改变时更新，不写流水账。
+- `CODEX_HANDOFF.md`、`TEST_MATRIX.md`、`ARCHITECTURE.md` 只在对应事实真的改变时更新，不写流水账；入口见 `docs/README.md`。
 - 普通开发可按需要使用一个或多个逻辑 commit，完成后推送当前分支。
 - 临时输出、完整日志、Profiler、`.local/`、`bin/`、`obj/` 和 `.godot/` 不进入源码树；确有长期价值的关键证据例外。
 - Agent 可以清理无引用的旧文档、测试产物和一次性工具，但不得删除用户数据或正式游戏安装。

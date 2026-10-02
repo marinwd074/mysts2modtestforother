@@ -37,3 +37,24 @@ enforce it as an automated CI gate.
 
 The 0.107.1 compatibility smokes are functional records only and therefore do
 not establish a performance baseline.
+
+## Retired experiment decisions
+
+The former standalone candidate probes froze old implementations and are no
+longer current validation inputs. Durable decisions remain:
+
+- Keep the adopted small type-count storage, immediate overflow-dictionary ref
+  update, and two generation paths that reuse existing eligibility caches.
+  Validate their current production code with the relevant contracts; allocation
+  reductions alone do not establish a whole-search timing improvement.
+- Deferred top-k was not adopted: ordinary heaps changed equal-score output
+  identities, while the conservative fallback still required full sorting on
+  the meaningful captured inputs.
+- The tested inlining hint, two-chain SIMD, and local string-copy candidates
+  were not adopted. They do not justify changing host-wide JIT configuration.
+- ForkableList storage inheritance was withdrawn. Keep the production-list
+  contract and existing copy-on-write semantics; the rejected generator is not
+  a current tool.
+
+Old reports and prototype implementations can be recovered from Git history.
+Reopening a candidate requires fresh fixed-work evidence against current code.

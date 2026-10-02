@@ -6,14 +6,14 @@ dotnet run --project tools/BfwsResearchChecks/BfwsResearchChecks.csproj -c Relea
 
 无需游戏依赖，直接编译生产元组表、祖先配额、双端队列和预算代码。字符串表只作为测试参考实现，不进入 Mod DLL。检查覆盖新颖性优先顺序、跨分区新颖性、12,000 个混合事实状态及容量边界、同一新颖祖先下共享熟悉后代配额、稳定队列淘汰与总预算扣减。
 
-完整请求使用 [固定输入](../../coverage/novelty-search) 和 [预先冻结的选择方案](../../docs/strategy/bounded-novelty-search-plan-20260916.json)。Linux 可通过可选包装器测量一个独立进程：
+完整请求需按 [生成场景说明](../../docs/GENERATED_COMBAT_SCENARIOS.md) 准备并冻结输入、设置和研究配置，存放在 `.local/novelty-search/`；旧固定样本及选择报告已退出当前树，不由本项目分发。Linux 可通过可选包装器测量一个独立进程：
 
 ```bash
 python3 tools/run-novelty-benchmark.py \
   --build /absolute/path/to/release-build \
-  --input coverage/novelty-search/dev-00-ironclad-elite.json \
-  --settings coverage/novelty-search/settings.json \
-  --options coverage/novelty-search/portfolio.json \
+  --input .local/novelty-search/dev-00-ironclad-elite.json \
+  --settings .local/novelty-search/settings.json \
+  --options .local/novelty-search/portfolio.json \
   --output /absolute/path/to/new-evidence-directory \
   --game-root /absolute/path/to/game \
   --ritsu-workshop-root /absolute/path/to/ritsu \

@@ -2,6 +2,16 @@
 
 目标：让当前工作树只包含**生产源码、长期配置、可重跑测试、必要 fixture、当前真源文档**。历史过程由 Git history 保存，不把仓库当日志归档。
 
+## 参考项目与本仓库布局
+
+| 参考项目 | 可借鉴做法 | 本仓库落点 |
+|---|---|---|
+| [STS2-RitsuLib](https://github.com/BAKAOLC/STS2-RitsuLib) | `src/`、`docs/`、`scripts/`、`tools/` 分工，贡献说明作为稳定入口 | 保持 `source/src/`、`source/docs/`、`source/tools/` 分区，README 按任务导航 |
+| [ModTemplate-StS2](https://github.com/Alchyr/ModTemplate-StS2) | Godot 模板要求 solution 与项目同目录 | 保持 `source/` 内项目和 Godot 文件的关系，目录整理不迁移构建根 |
+| [sts2-mod-template](https://github.com/sethmcleod/sts2-mod-template) | README 明确源码、资源、脚本用途，并提供文档地图和环境检查入口 | 补齐工具任务表，复用现有检查与版本工具，生成产物继续隔离 |
+
+根 README 面向安装与项目概览；`source/README.md` 面向玩家与构建；`docs/README.md` 索引当前规范；`tools/README.md` 选择最窄验证入口。采用这些组织方法不引入参考项目的依赖或游戏版本。
+
 ## 永久保留
 
 - `source/src/`、构建文件、测试/验证工具和仍在使用的 fixture。
@@ -30,6 +40,8 @@
 - 同一事实不要同时复制进 handoff、计划、README 和阶段报告。
 - 已完成过程不追加“归档文档”；Git history 已经承担归档职责。
 - 新 Markdown 若既不属于长期规范，也未被稳定索引引用，应留在本地而不是提交。
+- 当前 Markdown 的本地链接必须指向 Git 跟踪的文件或非空目录，不能依赖只在本机存在的输出；外部 URL、页内锚点和代码示例不作文件链接校验。
+- 历史证据退出当前树后保留文件名与验证范围，用 Git history 定位，不保留失效的本地链接；历史 PASS 不代表当前 HEAD 已重跑。
 
 ## 清理检查
 
@@ -43,6 +55,10 @@
 6. 删除项是否只存在于历史，不影响当前 build/test 输入。
 
 删除历史资料时不重写 Git 历史；需要时按 commit 恢复。
+
+`tools/verify-repository-hygiene.ps1` 执行跟踪文件、文档链接、版本日志及固定快照检查；它已接入快速 push/PR CI 和本地 `run-ci-gates.ps1`。链接检查不访问网络，也不下载 LFS 内容。
+
+已退役的旧开发笔记、完成的滚动重构路线、旧性能候选原型和被撤回的集合生成器由 Git history 恢复。当前状态由 handoff 管理，架构边界由 `ARCHITECTURE.md` 管理，性能候选取舍归入 [性能护栏](PERFORMANCE_GUARDRAILS.md)；生产源码与可重跑合同继续保留。
 
 ## 网络功能边界
 

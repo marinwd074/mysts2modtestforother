@@ -1,4 +1,6 @@
-# Multiplayer 当前限制与验证事实（2026-09-20）
+# Multiplayer 限制与历史验证范围
+
+当前产品状态和未完成风险见 [handoff](../CODEX_HANDOFF.md)，重跑入口见 [测试矩阵](../TEST_MATRIX.md)。下文注明日期的 PASS 是对应历史构建的受控验证，不代表当前 HEAD 已重跑；已退役的证据 JSON 以文件名定位 Git history，不再链接本机输出。
 
 ## 2026-09-22 readable-state root 更新
 
@@ -7,7 +9,7 @@
 - continuation 的 legacy `RemotePublicFingerprint` 名称暂时保留兼容性，但内容已经覆盖本地可读队友状态；任何该 fingerprint 变化都要求 Fresh Search，不再允许 remote-public soft reuse。
 - 下方历史章节里“remote private 不可访问”“local-player-only root”的文字记录的是当时实现与 Smoke 结论。它们仍可作为历史证据，但不能再用来推断当前客户端内存中不存在队友状态。`282393c9` 的 post-yield stale-read 方案已确认会和现有 Fork/Attach 机制冲突，不再作为当前边界。
 
-本文件同时保留当前多人结论与早期历史证据。机器事实以 [Phase 0 矩阵](../evidence/phase0-matrix-2026-09-19.json) 及后续提交为准：MP-0 Core 与受控生命周期 Hardening 为 `PASS`；早期 Advisor 的远端药水 fail-closed 记录属于旧 local-player-only root 证据，当前 readable-state root 已可捕获本地进程中实际物化的队友药水/战斗状态；MP-2A 显式一动作 Safe Execute、MP-2B 两动作正常/干扰 Smoke 与 MP-2C bounded N-action 正常/干扰 Smoke 均已通过。
+本文件同时保留当前多人结论与早期历史证据。机器事实以 `phase0-matrix-2026-09-19.json`（历史记录） 及后续提交为准：MP-0 Core 与受控生命周期 Hardening 为 `PASS`；早期 Advisor 的远端药水 fail-closed 记录属于旧 local-player-only root 证据，当前 readable-state root 已可捕获本地进程中实际物化的队友药水/战斗状态；MP-2A 显式一动作 Safe Execute、MP-2B 两动作正常/干扰 Smoke 与 MP-2C bounded N-action 正常/干扰 Smoke 均已通过。
 
 ## 当前状态
 
@@ -15,11 +17,11 @@
 - **MP-0 Hardening：PASS（受控生命周期）**：Host 退出并重新创建房间后，Client 收到 Quit、重新握手、Join、Ready，并再次进入有效战斗；进程停止不计作生命周期证据。
 - **MP-1 Advisor：SMOKE PASS（受控范围）**：静态合同与历史 Release 构建已通过；默认仍是 Probe，只有 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才进入只读路线显示，不执行动作。早期 `-bbfix` Smoke 发生在 local-player-only root 阶段；当前 root 已扩大为本地可读队友状态捕获，但这不等于所有跨玩家牌/怪物效果都已 runtime-confirmed。
 - **MP-2A Safe Execute Lab Smoke：PASS（受控范围，2026-09-20）**：HostVanilla + ClientCombatSolver 在 `safe-execute-lab` 中完成一次本地普通牌的原生 `PlayCardAction`；能量/手牌/敌方生命按预期变化，且验证器 7 项检查全部 PASS。
-- **MP-2A Safe Execute：PASS（显式一动作范围，2026-09-20）**：正式 `safe-execute` token 已在 HostVanilla + ClientCombatSolver 中完成一次本地普通牌 Smoke；验证器 7 项检查全部 PASS。摘要见 [`evidence/mp2-safe-execute-formal-2026-09-20.json`](../evidence/mp2-safe-execute-formal-2026-09-20.json)。这是 MP2B 之前的一动作基线，不代表当前两动作实机已通过。
-- **MP-2B Safe Execute：实机 PASS（2026-09-20）**：显式 SafeExecutionSession、两动作上限、动作后稳定世界等待、预期本地变化与远端/未知变化归因已通过真实 Host/Client Smoke。正常验证器返回 `MULTIPLAYER_MP-2B_PASS`，远端干扰验证器返回 `MULTIPLAYER_MP-2B_REMOTE_ABORT_PASS`；摘要见 [`mp2b-smoke-2026-09-20.json`](evidence/mp2b-smoke-2026-09-20.json)。
-- **MP-2C bounded N-action：实机 PASS（2026-09-20）**：`MaxActionsPerDeployment=6`，安全路线只取连续本地普通 `PlayCard` 前缀；同一 SafeExecutionSession 在每张牌后等待原生队列、稳定 `WorldVersion` 并做重验证。正常 Smoke 自动完成 3 张牌且不 EndTurn；远端干扰在完成 2 张后中止、没有第 3 张原生动作并重新搜索。摘要见 [`evidence/mp2c-smoke-2026-09-20.json`](evidence/mp2c-smoke-2026-09-20.json)。
-- **Multiplayer Local Cross-Turn T3 Fix：实机 PASS（2026-09-20）**：T3 route 保留当前回合普通牌，不再因等价路线的短 `ActionCount` 退化为 EndTurn-only；T3→T4 精确 continuation reuse、新 authorization 和 mismatch→Fresh Search 均通过。摘要见 [`evidence/local-cross-turn-t3-fix-smoke-2026-09-20.json`](evidence/local-cross-turn-t3-fix-smoke-2026-09-20.json)。
-- **Multiplayer Local Cross-Turn X2：实机 PASS（2026-09-20）**：队友 Client 1001 通过原生 `STRIKE_IRONCLAD` 改变公开敌方 HP `180→171`；旧 future continuation 被拒绝，Fresh Probe/Root/Search 生成新 route 和新 authorization，旧 future action 未入队。摘要见 [`evidence/local-cross-turn-x2-smoke-2026-09-20.json`](evidence/local-cross-turn-x2-smoke-2026-09-20.json)。
+- **MP-2A Safe Execute：PASS（显式一动作范围，2026-09-20）**：正式 `safe-execute` token 已在 HostVanilla + ClientCombatSolver 中完成一次本地普通牌 Smoke；验证器 7 项检查全部 PASS。摘要见 `mp2-safe-execute-formal-2026-09-20.json`（历史记录）。这是 MP2B 之前的一动作基线，不代表当前两动作实机已通过。
+- **MP-2B Safe Execute：实机 PASS（2026-09-20）**：显式 SafeExecutionSession、两动作上限、动作后稳定世界等待、预期本地变化与远端/未知变化归因已通过真实 Host/Client Smoke。正常验证器返回 `MULTIPLAYER_MP-2B_PASS`，远端干扰验证器返回 `MULTIPLAYER_MP-2B_REMOTE_ABORT_PASS`；摘要见 `mp2b-smoke-2026-09-20.json`（历史记录）。
+- **MP-2C bounded N-action：实机 PASS（2026-09-20）**：`MaxActionsPerDeployment=6`，安全路线只取连续本地普通 `PlayCard` 前缀；同一 SafeExecutionSession 在每张牌后等待原生队列、稳定 `WorldVersion` 并做重验证。正常 Smoke 自动完成 3 张牌且不 EndTurn；远端干扰在完成 2 张后中止、没有第 3 张原生动作并重新搜索。摘要见 `mp2c-smoke-2026-09-20.json`（历史记录）。
+- **Multiplayer Local Cross-Turn T3 Fix：实机 PASS（2026-09-20）**：T3 route 保留当前回合普通牌，不再因等价路线的短 `ActionCount` 退化为 EndTurn-only；T3→T4 精确 continuation reuse、新 authorization 和 mismatch→Fresh Search 均通过。摘要见 `local-cross-turn-t3-fix-smoke-2026-09-20.json`（历史记录）。
+- **Multiplayer Local Cross-Turn X2：实机 PASS（2026-09-20）**：队友 Client 1001 通过原生 `STRIKE_IRONCLAD` 改变公开敌方 HP `180→171`；旧 future continuation 被拒绝，Fresh Probe/Root/Search 生成新 route 和新 authorization，旧 future action 未入队。摘要见 `local-cross-turn-x2-smoke-2026-09-20.json`（历史记录）。
 
 ## AB 组连接实机结果（2026-09-19）
 
@@ -65,7 +67,7 @@
 
 ## MP-0 生命周期与重连后 Advisor 边界（2026-09-19）
 
-- Host 日志记录 `Stopping host. Reason: Quit`、Client 断开、新握手、`ClientLoadJoinRequestMessage`、Ready、run load 和 `Combat started`；Client 日志同步记录 Quit、重新 Join、epoch 4、Ready、run load 和 `PHROG_PARASITE_ELITE` 战斗开始。证据见 [`evidence/phase0-matrix-2026-09-19.json`](../evidence/phase0-matrix-2026-09-19.json) 与 [`evidence/mp1-advisor-smoke-2026-09-19.json`](../evidence/mp1-advisor-smoke-2026-09-19.json)。
+- Host 日志记录 `Stopping host. Reason: Quit`、Client 断开、新握手、`ClientLoadJoinRequestMessage`、Ready、run load 和 `Combat started`；Client 日志同步记录 Quit、重新 Join、epoch 4、Ready、run load 和 `PHROG_PARASITE_ELITE` 战斗开始。证据见 `phase0-matrix-2026-09-19.json`（历史记录） 与 `mp1-advisor-smoke-2026-09-19.json`（历史记录）。
 - 重连后的 Probe `257/257` 保持 `readOnly=true`，`actionsEnqueued=0`、`customNetworkPacketSent=0`；NIBBIT、SLIMES、PHROG 战斗均重新取得公开状态和回合变化。
 - 重连后的 Advisor 记录 `MP_ADVISOR_SEARCH_START=7`、`ROOT_CAPTURE_BEGIN=7`、`FAIL_CLOSED=7`、`SEARCH_COMPLETE=0`，原因是远端私有药水库存不可见。这是当前 Unknown 私有语义的预期 fail-closed 边界，不把该轮误记为 Advisor 搜索通过。
 
@@ -73,13 +75,13 @@
 
 - 当前源码构建（commit `1b6028502ab00e9c1394e51ffd3cb1661fcd533c`，DLL SHA-256 `864EC2A8276845B0C412106259D75AE2D30333826D415BE03A7371FD3A3B474F`）在新的隔离 Host/Client 上完成了 Host 重建房间后的 Client 重新加入，并再次进入 `SLIMES_WEAK` 战斗。
 - 重连后的 combat journal 记录 `SEARCH_START=4`、`ROOT_CAPTURE_BEGIN=4`、`SEARCH_COMPLETE=3`、`FAIL_CLOSED=0`、`SEARCH_FAILURE=0`；成功路线有 `ROUTE_REPLAY=3`、`ROUTE_ACTION=7`、`UI_STATE=ready=3`。1 个 generation 在 world invalidation/debounce 期间未发布，不把它计作成功。
-- Probe `130/130` 为 `readOnly=true`，动作入队和自定义网络包均为 `0`；本轮本地药水槽为空，因此只证明“无远端私有药水”的受控重连稳定性，不覆盖既有的非空远端私有药水阻碍。机器摘要见 [`evidence/mp1-advisor-stability-2026-09-20.json`](../evidence/mp1-advisor-stability-2026-09-20.json)。
+- Probe `130/130` 为 `readOnly=true`，动作入队和自定义网络包均为 `0`；本轮本地药水槽为空，因此只证明“无远端私有药水”的受控重连稳定性，不覆盖既有的非空远端私有药水阻碍。机器摘要见 `mp1-advisor-stability-2026-09-20.json`（历史记录）。
 
 ## MP-1 Advisor 非空远端药水复验（2026-09-20）
 
 - 新一轮按游戏规则完成 Host 退出、重建房间，Client 重新加入、Ready 并再次进入战斗；远端玩家实际使用了 `FIRE_POTION` 与 `COLORLESS_POTION`。
 - 远端私有药水仍存在时，Advisor 的 `generation=38..44` 均在 root capture 以 `InvalidOperationException: Player 1 is outside the captured potion inventory` fail-closed；记录为 `SEARCH_START=9`、`ROOT_CAPTURE_BEGIN=9`、`FAIL_CLOSED=7`、`SEARCH_SETUP_FAILURE=7`。这证明阻碍场景已被实际覆盖，且没有通过读取或猜测远端私有库存来绕过门禁。
-- 远端药水消耗后，`generation=45`/`46` 成功完成当前回合搜索；Probe `259/259` 仍只读，无动作入队或自定义网络包。机器摘要见 [`evidence/mp1-advisor-potion-2026-09-20.json`](../evidence/mp1-advisor-potion-2026-09-20.json)。
+- 远端药水消耗后，`generation=45`/`46` 成功完成当前回合搜索；Probe `259/259` 仍只读，无动作入队或自定义网络包。机器摘要见 `mp1-advisor-potion-2026-09-20.json`（历史记录）。
 - 正常退出时游戏写入 `progress.save` 等实例存档；退出收尾另出现 `RunManager.ToSave_Patch1` 经 `CombatBugReportExporter` 的 `NullReferenceException`，这是独立的诊断/存档导出问题，未改变前述 Advisor fail-closed 结论。
 
 ## 当前限制
@@ -99,6 +101,6 @@
 
 ## Source of truth
 
-- [Phase 0 机器矩阵](../evidence/phase0-matrix-2026-09-19.json)
+- `phase0-matrix-2026-09-19.json`（历史记录）
 - [多人适配入口](../README.md)
 - 旧过程日志和完整快照保留在 Git history，不再作为当前事实入口。

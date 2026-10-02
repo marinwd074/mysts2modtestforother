@@ -95,6 +95,8 @@ Every architectural directory has a local `README.md` describing its ownership a
 
 Runtime logs, generated benchmark results, problem ZIPs, temporary evidence, `bin/`, `obj/`, `.local/`, and `artifacts/` are intentionally excluded from the active Git tree. See [repository maintenance rules](source/docs/REPOSITORY_MAINTENANCE.md).
 
+Use the [tool task map](source/tools/README.md) to select a build or validation entry. The fast push/PR gate also checks local Markdown destinations against Git, so generated local reports cannot serve as permanent documentation links.
+
 ## License and source history
 
 This fork retains the MIT license and upstream attribution.

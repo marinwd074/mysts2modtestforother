@@ -4,7 +4,7 @@
 
 ## 基线
 
-- 项目记录版本 `4.30`；版本内容与功能提交见 [`PROJECT_VERSION_HISTORY.md`](PROJECT_VERSION_HISTORY.md)，上游适配来源见仓库根 `UPSTREAM.md`。
+- 项目记录版本 `4.31`；版本内容与功能提交见 [`PROJECT_VERSION_HISTORY.md`](PROJECT_VERSION_HISTORY.md)，上游适配来源见仓库根 `UPSTREAM.md`。
 - CombatSolver `0.40.2`
 - STS2 / RitsuLib pinned `0.107.1`
 - .NET 9 / Godot 4.5.1 / `STS2_01071`

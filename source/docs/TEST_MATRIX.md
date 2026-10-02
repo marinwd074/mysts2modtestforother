@@ -8,10 +8,11 @@
 |---|---|---|
 | Target | `tools/verify-target-version.ps1` | 0.107.1 / RitsuLib / compatibility symbol |
 | Architecture | `tools/verify-refactor-boundaries.ps1` | 依赖和职责边界 |
+| Repository | `tools/verify-repository-hygiene.ps1` | Git 跟踪文件、Markdown 本地链接、项目版本日志与 LFS 边界 |
 | L1 contracts | `tools/run-contract-tests.ps1` | Search / Prediction / Multiplayer 纯合同 |
 | Release | `dotnet build CombatSolver.csproj -c Release` | 当前本机真实依赖下编译 |
 
-CI 只能证明其实际执行的层级；没有日志/steps 的 runner 失败不能记作源码 FAIL。
+快速 Linux main push / PR 运行 Target、Architecture、Repository；定向 Windows 回归和手动 pinned 矩阵按工作流各自触发规则执行。CI 只能证明其实际执行的层级；没有日志/steps 的 runner 失败不能记作源码 FAIL。
 
 `U0U1PinnedHarness rng-restore` 对照旧 RNG 还原的计数器、状态、后续随机值及父状态隔离；完整请求对照复用 `request-hydration-benchmark-off`，高计数器压力夹具为 `multi-hit-high-counter`。不替代实机搜索或退出取证验证。
 

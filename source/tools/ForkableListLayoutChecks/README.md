@@ -12,19 +12,6 @@ PowerShell 先设置 `$env:DOTNET_TieredCompilation = '0'`，再运行相同 dot
 
 每种形状预热 1,024 次，测 5 块、每块 10,000 次；对象写入静态引用，使用线程累计分配计数。输出的 B/操作是局部分配，不是存活堆、RSS 或完整搜索性能。
 
-用同一合同对照上游源码：
+若确需与旧实现对照，可用 `-p:CollectionsSource=...` 指定本地保存的源码，并先确认同一合同适用于两份实现。旧候选生成器已经退役，恢复历史实验使用 Git history。
 
-```bash
-mkdir -p .local/list-layout-baseline
-git show eff8cf4:src/Search/ForkableCollections.cs > .local/list-layout-baseline/ForkableCollections.cs
-DOTNET_TieredCompilation=0 dotnet run --project tools/ForkableListLayoutChecks -c Release -p:CollectionsSource="$PWD/.local/list-layout-baseline/ForkableCollections.cs"
-```
-
-生成候选并用同一合同测量；生成器不修改生产文件：
-
-```bash
-python3 tools/ForkableListLayoutChecks/make_candidate.py .local/list-layout-candidate/ForkableCollections.cs
-DOTNET_TieredCompilation=0 dotnet run --project tools/ForkableListLayoutChecks -c Release -p:CollectionsSource="$PWD/.local/list-layout-candidate/ForkableCollections.cs"
-```
-
-报告与完整搜索口径见 [精简分支报告](../../docs/performance/surgical-fixes-20260912.md)。
+采用/撤回结论与完整搜索口径见 [性能护栏](../../docs/PERFORMANCE_GUARDRAILS.md)。

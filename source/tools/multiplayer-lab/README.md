@@ -1,5 +1,7 @@
 # Multiplayer Phase 0 lab
 
+本文历史 Smoke 的 JSON 文件名用于定位 Git history。新一轮结果保存在 `.local/`，必须由新 journal 和 validator 证明，历史 PASS 不代表当前 HEAD 已重跑。
+
 本目录只提供可审计的 MP-0A/MP-0B 实机测试基础设施。它不会启动自动
 Lobby，也不会把 `UNVERIFIED` 推断为 `PASS`。Client 默认仍是 Probe；显式传入
 `-MultiplayerMode advisor` 只启用 Advisor 搜索。MP-2 提供显式的
@@ -299,7 +301,7 @@ pwsh -NoLogo -NoProfile -File .\validate-reactive-carry-results.ps1 `
 
 Smoke A/B 在同一 journal 含有额外尝试时传 `-RequestId`；Smoke C 不传该参数并要求至少
 3 个 distinct request/turn。2026-09-20 A/B/C 均 PASS，摘要见
-[`reactive-carry-smoke-2026-09-20.json`](../../docs/multiplayer/evidence/reactive-carry-smoke-2026-09-20.json)。
+`reactive-carry-smoke-2026-09-20.json`（历史记录）。
 
 ## Multiplayer Carry Ranking v1 R1/R2 Smoke
 

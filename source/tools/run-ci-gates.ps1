@@ -29,6 +29,7 @@ Push-Location -LiteralPath $repositoryRoot
 try {
     Invoke-Gate 'TargetVersion' 'tools/verify-target-version.ps1'
     Invoke-Gate 'RefactorBoundaries' 'tools/verify-refactor-boundaries.ps1'
+    Invoke-Gate 'RepositoryHygiene' 'tools/verify-repository-hygiene.ps1'
 
     $contractArguments = @()
     if ($NoRestore) { $contractArguments += '-NoRestore' }

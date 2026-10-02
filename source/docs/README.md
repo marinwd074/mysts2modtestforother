@@ -28,9 +28,12 @@
 - [PERFORMANCE_GUARDRAILS.md](PERFORMANCE_GUARDRAILS.md)：性能优化不可越过的质量护栏。
 - [TESTING_LAYERS.md](TESTING_LAYERS.md)：测试证据分层。
 - [OFFLINE_SEARCH_HARNESS.md](OFFLINE_SEARCH_HARNESS.md)、[CHECKPOINT_REPLAY.md](CHECKPOINT_REPLAY.md)：可重跑离线/恢复入口。
+- [HEADLESS_TESTING.md](HEADLESS_TESTING.md)、[GENERATED_COMBAT_SCENARIOS.md](GENERATED_COMBAT_SCENARIOS.md)：隔离无人测试与可重复场景。
+- [BUG_REPORT_PROTOCOL.md](BUG_REPORT_PROTOCOL.md)、[COMBAT_HOOK_COVERAGE.md](COMBAT_HOOK_COVERAGE.md)：问题包协议与 Hook 覆盖。
 - [compat/0.107.1/README.md](compat/0.107.1/README.md)：固定版本语义。
-- [THIRD_PARTY_ADAPTERS.md](THIRD_PARTY_ADAPTERS.md) 与 `third-party-*.md`：第三方适配长期规范。
+- [THIRD_PARTY_ADAPTERS.md](THIRD_PARTY_ADAPTERS.md)：第三方适配入口；专题为 [模型状态](third-party-model-state.md)、[OnPlay](third-party-onplay-patches.md)、[回合阶段](third-party-turn-phase-mirrors.md)、[策略效果](third-party-strategic-effects.md)。
 - [REPOSITORY_MAINTENANCE.md](REPOSITORY_MAINTENANCE.md)：仓库保留/清理规则。
+- [工具任务表](../tools/README.md)、[Workshop 文案](workshop/README.md)：构建/验证入口与发布素材。
 
 ## 维护规则
 
