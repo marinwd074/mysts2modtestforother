@@ -239,7 +239,10 @@ internal static partial class SolverController
             pressure.ProjectedMemoryLoadBytes,
             systemMemoryLimit,
             pressure.Reclaiming,
-            SearchGcPolicy.IsBackgroundReclaiming);
+            SearchGcPolicy.IsBackgroundReclaiming)
+        {
+            PhysicalMemoryTotalBytes = physicalMemory.IsPhysicalSample ? physicalMemory.TotalBytes : 0,
+        };
     }
     internal static void LogSearchMemoryDisplayState(
         SearchMemoryUsageSnapshot snapshot,
@@ -258,11 +261,12 @@ internal static partial class SolverController
             $"projected_memory_load={snapshot.ProjectedSystemMemoryLoadBytes} " +
             $"system_memory_limit={snapshot.SystemMemoryLimitBytes} " +
             $"physical_memory_used={snapshot.PhysicalMemoryUsedBytes} " +
+            $"physical_memory_total={snapshot.PhysicalMemoryTotalBytes} " +
+            $"physical_memory_available={snapshot.PhysicalMemoryAvailableBytes?.ToString() ?? "unknown"} " +
             $"system_occupied={snapshot.SystemOccupiedBytes} " +
-            $"process_memory_limit={snapshot.ProcessMemoryLimitBytes} " +
             $"system_segment={snapshot.SystemSegmentRatio:F3} " +
             $"process_segment={snapshot.ProcessSegmentRatio:F3} " +
-            $"process_pressure={snapshot.ProcessMemoryPressureRatio:F3} " +
+            $"cleanup_pressure={snapshot.CleanupPressureRatio:F3} " +
             $"allocation_pressure={snapshot.AllocationPressureRatio:F3} " +
             $"system_pressure={snapshot.SystemPressureRatio:F3} " +
             $"system_pressure_dominates={snapshot.SystemPressureDominates.ToString().ToLowerInvariant()} " +

@@ -16,6 +16,5 @@
     <Compile Include="../../src/Runtime/SearchGcPolicy.Diagnostics.cs" Link="Production/SearchGcPolicy.Diagnostics.cs" />
     <Compile Include="../../src/Runtime/SearchGcPolicy.TestHooks.cs" Link="Production/SearchGcPolicy.TestHooks.cs" />
     <Compile Include="../../src/Runtime/PhysicalMemoryUsage.cs" Link="Production/PhysicalMemoryUsage.cs" />
-    <Compile Include="../../src/Runtime/ProcessWorkingSetTrimmer.cs" Link="Production/ProcessWorkingSetTrimmer.cs" />
   </ItemGroup>
 </Project>

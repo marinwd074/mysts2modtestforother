@@ -43,10 +43,7 @@ internal sealed partial class SolverMemoryUsageBar : PanelContainer
         MouseFilter = MouseFilterEnum.Pass;
         TooltipText =
             SolverText.Get("求解器内存与性能监视\n") +
-            SolverText.Get("- 灰色：系统和其他程序当前占用的内存。\n") +
-            SolverText.Get("- 彩色：游戏进程当前占用的内存，包含求解器与其他已加载 Mod。\n") +
-            SolverText.Get("- 当前占用 / 上限：游戏进程占用 / 安全总量扣除系统占用后的动态上限。\n") +
-            SolverText.Get("- 系统内存变化时，上限和进度条会自动调整；正在整理或后台清理属于正常释放阶段。");
+            SolverText.Get("- 整条表示物理内存总量。灰色为其他占用估计，彩色为游戏工作集，空白为系统可用。\n");
         AddThemeStyleboxOverride("panel", SolverUiTokens.CreateBox(
             SolverUiTokens.Palette.SurfaceRaised,
             SolverUiTokens.Palette.Border,
@@ -125,7 +122,7 @@ internal sealed partial class SolverMemoryUsageBar : PanelContainer
             ProjectedSystemMemoryLoadBytes: 8_000_000_000L,
             SystemMemoryLimitBytes: 22_000_000_000L,
             Reclaiming: false,
-            BackgroundReclaiming: false));
+            BackgroundReclaiming: false) { PhysicalMemoryTotalBytes = 32_000_000_000L });
         MemoryBarDisplay reclaiming = BuildDisplay(new SearchMemoryUsageSnapshot(
             6_100_000_000L,
             20_000_000_000L,
@@ -136,7 +133,7 @@ internal sealed partial class SolverMemoryUsageBar : PanelContainer
             ProjectedSystemMemoryLoadBytes: 10_000_000_000L,
             SystemMemoryLimitBytes: 22_000_000_000L,
             Reclaiming: true,
-            BackgroundReclaiming: false));
+            BackgroundReclaiming: false) { PhysicalMemoryTotalBytes = 32_000_000_000L });
         MemoryBarDisplay idle = BuildDisplay(new SearchMemoryUsageSnapshot(
             2_000_000_000L,
             8_000_000_000L,
@@ -147,7 +144,7 @@ internal sealed partial class SolverMemoryUsageBar : PanelContainer
             ProjectedSystemMemoryLoadBytes: 0L,
             SystemMemoryLimitBytes: 12_000_000_000L,
             Reclaiming: false,
-            BackgroundReclaiming: false));
+            BackgroundReclaiming: false) { PhysicalMemoryTotalBytes = 16_000_000_000L });
         MemoryBarDisplay background = BuildDisplay(new SearchMemoryUsageSnapshot(
             8_000_000_000L,
             18_000_000_000L,
@@ -158,7 +155,7 @@ internal sealed partial class SolverMemoryUsageBar : PanelContainer
             ProjectedSystemMemoryLoadBytes: 0L,
             SystemMemoryLimitBytes: 22_000_000_000L,
             Reclaiming: false,
-            BackgroundReclaiming: true));
+            BackgroundReclaiming: true) { PhysicalMemoryTotalBytes = 32_000_000_000L });
         MemoryBarDisplay systemLimited = BuildDisplay(new SearchMemoryUsageSnapshot(
             7_200_000_000L,
             21_200_000_000L,
@@ -166,28 +163,44 @@ internal sealed partial class SolverMemoryUsageBar : PanelContainer
             SearchActive: true,
             SearchAllocatedBytes: 2_000_000_000L,
             SearchAllocationLimitBytes: 10_000_000_000L,
-            ProjectedSystemMemoryLoadBytes: 9_600_000_000L,
+            ProjectedSystemMemoryLoadBytes: 21_200_000_000L,
             SystemMemoryLimitBytes: 22_000_000_000L,
             Reclaiming: false,
-            BackgroundReclaiming: false));
-        return active.Text == "当前内存占用 6.4 GB / 搜索总可用 7.0 GB  ·  即将整理"
-            && Math.Abs(active.PressureRatio - 6.4d / 7d) < 0.001d
+            BackgroundReclaiming: false) { PhysicalMemoryTotalBytes = 32_000_000_000L });
+        SearchMemoryUsageSnapshot aboveThreshold = new(
+            6_000_000_000L, 24_000_000_000L, 16_000_000_000L, true,
+            0, long.MaxValue, 24_000_000_000L, 22_000_000_000L, false, false)
+        { PhysicalMemoryTotalBytes = 32_000_000_000L };
+        MemoryBarDisplay automatic = BuildDisplay(aboveThreshold);
+        MemoryBarDisplay differentThreshold = BuildDisplay(aboveThreshold with { SystemMemoryLimitBytes = 16_000_000_000L });
+        MemoryBarDisplay unavailable = BuildDisplay(aboveThreshold with { PhysicalMemoryTotalBytes = 0 });
+        return active.Text == FormatSummary(6_400_000_000L, 10_600_000_000L) + SolverText.Get("  ·  即将整理")
+            && Math.Abs(active.PressureRatio - 21.4d / 22d) < 0.001d
             && active.Tone == MemoryPressureTone.Danger
-            && reclaiming.Text == "当前内存占用 6.1 GB / 搜索总可用 8.1 GB  ·  正在整理…"
-            && Math.Abs(reclaiming.PressureRatio - 6.1d / 8.1d) < 0.001d
-            && idle.Text == "当前内存占用 2.0 GB / 搜索总可用 6.0 GB"
-            && Math.Abs(idle.PressureRatio - 1d / 3d) < 0.001d
-            && background.Text == "当前内存占用 8.0 GB / 搜索总可用 12.0 GB  ·  后台清理中"
-            && Math.Abs(background.PressureRatio - 2d / 3d) < 0.001d
+            && reclaiming.Text == FormatSummary(6_100_000_000L, 12_000_000_000L) + SolverText.Get("  ·  正在整理…")
+            && reclaiming.State == MemoryDisplayState.ForegroundReclaim
+            && idle.Text == FormatSummary(2_000_000_000L, 8_000_000_000L)
+            && idle.State == MemoryDisplayState.Idle
+            && background.Text == FormatSummary(8_000_000_000L, 14_000_000_000L) + SolverText.Get("  ·  后台清理中")
             && background.Tone == MemoryPressureTone.Warning
-            && systemLimited.Text == "当前内存占用 7.2 GB / 搜索总可用 8.0 GB  ·  即将整理"
-            && Math.Abs(systemLimited.PressureRatio - 0.9d) < 0.001d;
+            && systemLimited.State == MemoryDisplayState.SearchNearLimit
+            && Math.Abs(systemLimited.PressureRatio - 21.2d / 22d) < 0.001d
+            && automatic.Text == FormatSummary(6_000_000_000L, 8_000_000_000L) + SolverText.Get("  ·  自动管理")
+            && automatic.SystemRatio == 18d / 32d && automatic.ProcessRatio == 6d / 32d
+            && automatic.SystemRatio + automatic.ProcessRatio == 24d / 32d
+            && automatic.Text == differentThreshold.Text && automatic.SystemRatio == differentThreshold.SystemRatio
+            && automatic.ProcessRatio == differentThreshold.ProcessRatio
+            && unavailable.Text == FormatSummary(6_000_000_000L, null) + SolverText.Get("  ·  自动管理")
+            && unavailable.SystemRatio == 0 && unavailable.ProcessRatio == 0
+            && BuildTooltip(aboveThreshold).Contains("32.0 GB", StringComparison.Ordinal)
+            && BuildTooltip(aboveThreshold).Contains("22.0 GB", StringComparison.Ordinal);
     }
 
     private void RefreshDisplay()
     {
         SearchMemoryUsageSnapshot snapshot = SolverController.CaptureSearchMemoryUsage();
         MemoryBarDisplay display = BuildDisplay(snapshot);
+        TooltipText = BuildTooltip(snapshot);
         Color color = ToneColor(display.Tone);
         _label.Text = display.Text;
         _label.AddThemeColorOverride("font_color", color);
@@ -223,10 +236,8 @@ internal sealed partial class SolverMemoryUsageBar : PanelContainer
 
     private static MemoryBarDisplay BuildDisplay(SearchMemoryUsageSnapshot snapshot)
     {
-        string summary =
-            SolverText.Get("当前内存占用 ") + FormatGigabytes(snapshot.ProcessWorkingSetBytes) + " GB" +
-            SolverText.Get(" / 搜索总可用 ") + FormatGigabytes(snapshot.ProcessMemoryLimitBytes) + " GB";
-        double pressureRatio = snapshot.ProcessMemoryPressureRatio;
+        string summary = FormatSummary(snapshot.ProcessWorkingSetBytes, snapshot.PhysicalMemoryAvailableBytes);
+        double pressureRatio = snapshot.CleanupPressureRatio;
         double systemRatio = snapshot.SystemSegmentRatio;
         double processRatio = snapshot.ProcessSegmentRatio;
         if (snapshot.Reclaiming)
@@ -277,6 +288,24 @@ internal sealed partial class SolverMemoryUsageBar : PanelContainer
             pressureRatio,
             ToneForRatio(pressureRatio),
             pressureRatio >= 0.9d ? MemoryDisplayState.SearchNearLimit : MemoryDisplayState.Search);
+    }
+
+    private static string FormatSummary(long processBytes, long? availableBytes)
+        => availableBytes is long available
+            ? SolverText.Format($"游戏占用 {FormatGigabytes(processBytes)} GB · 系统可用 {FormatGigabytes(available)} GB")
+            : SolverText.Format($"游戏占用 {FormatGigabytes(processBytes)} GB · 系统可用未知");
+
+    private static string BuildTooltip(SearchMemoryUsageSnapshot snapshot)
+    {
+        string total = snapshot.HasPhysicalMemorySample
+            ? FormatGigabytes(snapshot.PhysicalMemoryTotalBytes) : SolverText.Get("未知");
+        string threshold = snapshot.SystemMemoryLimitBytes == long.MaxValue
+            ? SolverText.Get("未知") : FormatGigabytes(snapshot.SystemMemoryLimitBytes);
+        return SolverText.Get("求解器内存与性能监视\n")
+            + SolverText.Get("- 游戏占用是进程工作集，包含求解器和其他 Mod；系统可用是操作系统当前可用的物理内存，两者不是用量与上限。\n")
+            + SolverText.Get("- 整条表示物理内存总量。灰色为其他占用估计，彩色为游戏工作集，空白为系统可用。\n")
+            + SolverText.Format($"物理内存总量：{total} GB；GC 压力阈值：{threshold} GB。\n")
+            + SolverText.Get("GC 阈值用于回收压力判断，不是物理容量或游戏可用上限。GB = 1,000,000,000 字节。");
     }
 
     private static string FormatGigabytes(long bytes)

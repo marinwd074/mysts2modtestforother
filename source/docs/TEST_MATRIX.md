@@ -23,6 +23,8 @@ CI 只能证明其实际执行的层级；没有日志/steps 的 runner 失败�
 
 `U0U1PinnedHarness card-choice-identity` 覆盖 11 组费用有效期/隐藏层/顺序/星费、原生清理和 Fork 隔离；另以 40 个唯一/重复牌选牌场景核对实体 occurrence 并输出有序结果 SHA-256 与局部 allocation probe。优化前后 1,647 个分支顺序一致；该 probe 不代表全战搜索速度。
 
+`U0U1PinnedHarness memory-display` 核对物理容量、缺失采样、回收压力与显示文案，可用 `DOTNET_gcServer=0/1` 分别验证两种 CLR 模式；`CombatSolver.GcPolicyChecks manual-release` 使用真实 CLR 核对搜索退出屏障、重复请求合并、存活数据和空闲堆页归还。`recovery` 覆盖 40 次恢复、饱和退避、结构性退出与预算限制；`recovery-lifecycle` 需要真实恢复余量，不足 512 MB 时失败不计为 PASS。
+
 `tools/multiplayer-lab/test-joint-continuation-validator.ps1` 覆盖 plain/JSON、reason 解析及错误原因拒绝；RouteReplay 检查同日志/请求的新根与完整账本、评估范围、新授权及原生部署。TargetDeath 另检查 roster strict subset、旧 seed 截断、恢复与存活目标部署；搜索代次和路线代次独立匹配。反例包含错请求/回合、旧授权/路线、混合成员、无质量证明、动作顺序、未清授权、替换敌人、死亡目标、预算变化及缺失证据；只有真实 Host/Client journal 的对应模式通过才构成实机证据。入口见 [多人 RUNBOOK](multiplayer/RUNBOOK.md#joint-forecast-continuation-smoke)。
 
 `request-hydration-benchmark-off --measure` 另核对 Snapshot 全调用与子阶段调用数、不重叠阶段上界、结果内部子阶段和 worker 汇总；固定输入包含 shared-audit / draw-repeat / multi-hit，三敌覆盖 DOP=1/4。诊断开关对照验证完整根/路线/最终状态/质量/工作一致，不作为新增默认门禁或提速证明。

@@ -15,8 +15,10 @@ else if (args is ["parallelism"])
     SearchParallelismControllerChecks.Run();
 else if (args is ["scopes"])
     GcScopeLifecycleChecks.Run();
+else if (args is ["manual-release"])
+    GcManualMemoryReleaseChecks.Run();
 else if (args.Length == 0)
     GcPolicyChecks.Run();
 else
-    throw new ArgumentException("Expected no arguments, 'parallelism', 'scopes', 'checkpoint', 'memory', 'recovery' or 'recovery-lifecycle'.");
+    throw new ArgumentException("Expected no arguments, 'parallelism', 'scopes', 'checkpoint', 'memory', 'recovery', 'recovery-lifecycle' or 'manual-release'.");
 Console.WriteLine($"GC policy checks passed: {PolicyCheck.Completed} scenarios.");

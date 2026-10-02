@@ -40,6 +40,7 @@ internal static class Program
     {
         bool modelIdCacheOnly = args.Length > 0 && args[0] == "model-id-cache";
         bool cardChoiceIdentityOnly = args.Length > 0 && args[0] == "card-choice-identity";
+        bool memoryDisplayOnly = args.Length > 0 && args[0] == "memory-display";
         bool darkEmbracePactOnly = args.Length > 0 && args[0] == "dark-embrace-pact";
         bool rollingReviewOnly = args.Length > 0 && args[0] == "rolling-review";
         bool choiceRngOnly = args.Length > 0 && args[0] == "choice-rng";
@@ -56,7 +57,7 @@ internal static class Program
         bool requestHydrationOnly = args.Length > 0 && args[0] is "request-hydration"
             or "request-hydration-benchmark-on" or "request-hydration-benchmark-off";
         bool requestHydrationBenchmark = requestHydrationOnly && args[0] != "request-hydration";
-        string outputDirectory = ParseOutput(cardChoiceIdentityOnly || modelIdCacheOnly || darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
+        string outputDirectory = ParseOutput(memoryDisplayOnly || cardChoiceIdentityOnly || modelIdCacheOnly || darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
             allowHydrationOptions: requestHydrationBenchmark);
         Directory.CreateDirectory(outputDirectory);
 
@@ -89,6 +90,17 @@ internal static class Program
             GameBootstrap.ApplyGodotBypasses();
             GameBootstrap.SkipGodotNodeStaticConstructors();
             Console.WriteLine(GameBootstrap.InitializeStaticState());
+            if (memoryDisplayOnly)
+            {
+                Require(SolverMemoryUsageBar.ExerciseFormattingForTesting(),
+                    "Physical-capacity formatting, pressure, unknown samples and CLR-independent segments.");
+                PhysicalMemoryUsage sample = PhysicalMemoryUsage.Capture(GC.GetGCMemoryInfo());
+                Require(!OperatingSystem.IsWindows() || sample.IsPhysicalSample && sample.TotalBytes > 0
+                    && sample.UsedBytes >= 0 && sample.UsedBytes <= sample.TotalBytes,
+                    "Windows must provide a current physical memory sample.");
+                Console.WriteLine($"MemoryDisplay PASS clr_server_gc={System.Runtime.GCSettings.IsServerGC} physical_total={sample.TotalBytes} physical_used={sample.UsedBytes}");
+                return 0;
+            }
             if (modelIdCacheOnly)
             {
                 ModelIdCacheChecks.Run();

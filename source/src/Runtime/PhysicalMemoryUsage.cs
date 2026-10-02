@@ -6,6 +6,7 @@ internal readonly record struct PhysicalMemoryUsage(
     long UsedBytes,
     long TotalBytes)
 {
+    public bool IsPhysicalSample { get; init; }
     public static PhysicalMemoryUsage Capture(GCMemoryInfo fallback)
     {
         if (!OperatingSystem.IsWindows())
@@ -34,7 +35,7 @@ internal readonly record struct PhysicalMemoryUsage(
             : (long)status.AvailablePhysicalMemory;
         return new PhysicalMemoryUsage(
             Math.Max(0, total - Math.Min(total, available)),
-            total);
+            total) { IsPhysicalSample = true };
     }
 
     [StructLayout(LayoutKind.Sequential)]

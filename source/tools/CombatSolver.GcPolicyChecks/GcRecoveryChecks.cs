@@ -4,6 +4,9 @@ internal static class GcRecoveryChecks
 {
     public static void RunLifecycle()
     {
+        List<string> events = [];
+        Action<string>? previousSink = Entry.Logger.InfoSink;
+        Entry.Logger.InfoSink = events.Add;
         UnattendedTestRunner.IsActive = true;
         using CancellationTokenSource deadline = new(TimeSpan.FromSeconds(20));
         SearchMemoryPressureSignal signal = new();
@@ -12,7 +15,8 @@ internal static class GcRecoveryChecks
         {
             SearchGcPolicy.ReclaimIfPendingAsync("recovery_setup", true).GetAwaiter().GetResult();
             scope = SearchGcPolicy.EnterSearchScope(true, 1_000_000_000, signal, deadline.Token);
-            PolicyCheck.Require(signal.IsEnabled, "Exercise a real region in the production policy.");
+            PolicyCheck.Require(signal.IsEnabled, "Exercise a real region in the production policy. "
+                + events.LastOrDefault(message => message.Contains("GC_LATENCY", StringComparison.Ordinal)));
             GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: false);
             PolicyCheck.Require(signal.HasUnexpectedNoGcLoss(), "The test's external GC ends the region.");
             signal.ReclaimAndContinue(deadline.Token, "recovery_external_gc");
@@ -22,9 +26,15 @@ internal static class GcRecoveryChecks
                 signal.TryRecoverNoGc(64 * 1024 * 1024, new CancellationToken(true)));
             signal.TryRecoverNoGc(64 * 1024 * 1024, deadline.Token);
             SearchGcLifecycleSnapshot delta = SearchGcPolicy.CaptureLifecycle().DeltaFrom(before);
+            GCMemoryInfo recoveryMemory = GC.GetGCMemoryInfo();
+            long recoveryLoad = PhysicalMemoryUsage.Capture(recoveryMemory).UsedBytes;
+            long availableRecoveryBudget = SearchGcPolicy.RecoveryBudget(1_000_000_000,
+                SearchGcPolicy.ResolveSystemMemoryLimit(recoveryMemory), recoveryLoad);
             PolicyCheck.Require(signal.IsEnabled
                 && System.Runtime.GCSettings.LatencyMode == System.Runtime.GCLatencyMode.NoGCRegion,
-                "The checkpoint's confirmed post-loss GC and adequate headroom recover the actual CLR region immediately.");
+                "The checkpoint's confirmed post-loss GC and adequate headroom recover the actual CLR region immediately. "
+                + $"recovery_budget={availableRecoveryBudget} physical_load={recoveryLoad} "
+                + string.Join(" | ", events.Where(message => message.Contains("GC_NO_GC_RECOVERY", StringComparison.Ordinal))));
             PolicyCheck.Require(delta.NoGcStartAttempts == 1 && delta.NoGcRestarts == 1
                 && delta.ForcedCollections == 0,
                 "The recovery callback itself makes one bounded reservation and no forced collection.");
@@ -39,6 +49,7 @@ internal static class GcRecoveryChecks
             scope?.Dispose();
             SearchGcPolicy.ReclaimIfPendingAsync("recovery_cleanup", true).GetAwaiter().GetResult();
             UnattendedTestRunner.IsActive = false;
+            Entry.Logger.InfoSink = previousSink;
         }
     }
 
@@ -112,21 +123,38 @@ internal static class GcRecoveryChecks
             PolicyCheck.Require(!backoff.ShouldObserve(7_999), "Failed reservations back off.");
             PolicyCheck.Require(!backoff.ObserveCompletedCollection(8_000, 11), "Do not retry the same heap after a failed reservation.");
         });
-        PolicyCheck.Run("successful recovery does not reset the per-search attempt cap", () =>
+        PolicyCheck.Run("later recoverable losses keep a bounded retry cooldown", () =>
         {
             SearchGcPolicy.NoGcRecoveryBackoff backoff = new();
             long now = 0;
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < 40; i++)
             {
                 PolicyCheck.Require(!backoff.ObserveCompletedCollection(now, 2 * i), "Each new fallback starts a new observation window.");
                 now += 2_000;
                 PolicyCheck.Require(backoff.ObserveCompletedCollection(now, 2 * i + 1), "New collection permits an attempt.");
                 backoff.RecordAttempt(now, 2 * i + 1);
                 backoff.RecordRecovery();
-                now += 2_000L << backoff.Attempts;
+                now += Math.Min(60_000L, 2_000L << Math.Min(backoff.Attempts, 5));
             }
-            PolicyCheck.Require(backoff.Attempts == 3 && !backoff.ShouldObserve(long.MaxValue),
-                "Repeated external collections cannot cause an unbounded restart loop.");
+            PolicyCheck.Require(backoff.Attempts == 40 && backoff.ShouldObserve(now),
+                "A long search can recover after its third loss without retrying every drained boundary.");
+            backoff.RecordAttempt(long.MaxValue - 1_000, 100);
+            PolicyCheck.Require(!backoff.ShouldObserve(long.MaxValue - 1) && backoff.ShouldObserve(long.MaxValue),
+                "The saturated deadline must not wrap into an immediate retry.");
+        });
+        PolicyCheck.Run("structural and explicit fallback cannot rearm recovery", () =>
+        {
+            var outcomeType = typeof(SearchGcPolicy).GetNestedType("NoGcRegionStartOutcome",
+                System.Reflection.BindingFlags.NonPublic)!;
+            var classify = typeof(SearchGcPolicy).GetMethod("IsRecoverableNoGcOutcome",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+            foreach (object outcome in Enum.GetValues(outcomeType))
+            {
+                bool expected = outcome.ToString() is "InsufficientMemory" or "SystemHeadroomInsufficient"
+                    or "SkippedAfterUnexpectedLoss";
+                PolicyCheck.Require((bool)classify.Invoke(null, [outcome])! == expected,
+                    $"Only memory-driven outcomes may retry: {outcome}.");
+            }
         });
         PolicyCheck.Run("recovery reservation leaves physical hysteresis and honors configuration", () =>
         {

@@ -431,9 +431,11 @@ internal static partial class SearchGcPolicy
     private static BackgroundGen2Completion CollectGeneration2ForManualMemoryRelease()
     {
         GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-        CollectGeneration2(blocking: true, compacting: true);
+        // Decommit unused managed pages without paging out live game data.
+        Lifecycle.RecordForcedCollection();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
         return new BackgroundGen2Completion(
-            "full_blocking_compacting",
+            "full_blocking_aggressive",
             GC.GetGCMemoryInfo(GCKind.FullBlocking).Index,
             Requests: 1);
     }

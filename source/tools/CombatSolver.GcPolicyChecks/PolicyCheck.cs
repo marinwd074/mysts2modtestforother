@@ -38,7 +38,7 @@ internal static class PolicyCheck
 }
 
 // Only game-host glue is substituted. The runtime policy itself is linked from production source;
-// these checks never request a NoGC region, force GC or trim the process working set.
+// explicit lifecycle/manual-release modes exercise real CLR regions and collections.
 internal static class Entry
 {
     public static CheckLogger Logger { get; } = new();

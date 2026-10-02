@@ -4,6 +4,7 @@
 
 ## 基线
 
+- 项目记录版本 `4.30`；版本内容与功能提交见 [`PROJECT_VERSION_HISTORY.md`](PROJECT_VERSION_HISTORY.md)，上游适配来源见仓库根 `UPSTREAM.md`。
 - CombatSolver `0.40.2`
 - STS2 / RitsuLib pinned `0.107.1`
 - .NET 9 / Godot 4.5.1 / `STS2_01071`
@@ -11,6 +12,10 @@
 - 生产多人默认使用 **local-single-core**：本地单人质量排序 + 多人真实状态/WorldVersion + 本地玩家执行权限。Team Objective、teammate forecast、Scenario/Robust 等实验多人预测由 `UseMultiplayerPrediction` 单独开启，默认不作为生产质量层。
 - MultiplayerOnly 牌保留真实牌堆占位与抽牌距离，但不进入主动搜索/自动执行。
 - 多人 Safe Execute 只部署本地玩家动作；队友观察不会获得部署权限。
+
+## 上游适配
+
+本次上游适配核对到 `53c26b26c50bec027de8f7d2c76deb223cd6971d`（上游 0.47.3 / 游戏 0.111.0），保持本项目 pinned 0.107.1。已移植模型 ID 注册门禁、隔离 worker UI 边界、费用有效期身份、选牌分配优化、物理容量显示及手动 heap decommit。Release、相应 pinned / 请求 / GC 合同通过；真实 NoGC 恢复因本机可用恢复预算约 461 MB 低于 512 MB 门槛，仍 UNVERIFIED。未执行真实 worker 或 Host/Client 验证，既有 AdoptRoute 实机未完成项保持开放。
 
 ## 已完成主线：Rolling Horizon Reuse
 

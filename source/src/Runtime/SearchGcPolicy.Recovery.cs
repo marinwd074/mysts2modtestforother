@@ -113,7 +113,7 @@ internal static partial class SearchGcPolicy
         private bool _armed;
         public int Attempts { get; private set; }
 
-        public bool ShouldObserve(long now) => Attempts < 3 && now >= _nextObservation;
+        public bool ShouldObserve(long now) => now >= _nextObservation;
 
         public void ArmFallback(long now, long gen2Index)
         {
@@ -132,7 +132,7 @@ internal static partial class SearchGcPolicy
             // evidence instead of allocating under ordinary GC just to wait for another one.
             _lastGen2Index = Math.Max(_lastGen2Index, completedGen2Index - 1);
             // Only the first recovery can be immediate. Later losses retain the previous
-            // attempt's backoff and the same per-scope hard cap.
+            // attempt's cooldown and cumulative attempt count.
             _nextObservation = Math.Max(_nextObservation, now);
         }
 
@@ -154,7 +154,10 @@ internal static partial class SearchGcPolicy
         {
             Attempts++;
             _lastGen2Index = gen2Index;
-            _nextObservation = now + (2_000L << Attempts);
+            // Saturate the delay and deadline; later recoverable losses may still retry.
+            int shift = Math.Min(Attempts, 5);
+            long delay = Math.Min(60_000L, 2_000L << shift);
+            _nextObservation = now > long.MaxValue - delay ? long.MaxValue : now + delay;
         }
 
         public void RecordRecovery() => _armed = false;
