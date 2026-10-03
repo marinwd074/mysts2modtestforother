@@ -22,7 +22,7 @@ internal sealed class SolverRouteAdoptionSeed(
         LazyThreadSafetyMode.ExecutionAndPublication);
 
     public int CandidateVersion { get; } = candidateVersion;
-    public IReadOnlyList<PlanAction> Actions { get; } = actions;
+    public IReadOnlyList<PlanAction> Actions { get; } = actions.ToArray();
 
     public SolverResult Materialize()
         => _materialized.Value;
@@ -127,6 +127,7 @@ internal sealed class SearchInteractionState
         SolverSpeculativeRoutePreview? preview)
         => seed != null
             && preview != null
+            && seed.CandidateVersion == preview.CandidateVersion
             && seed.Actions.SequenceEqual(preview.Turns.SelectMany(static turn => turn.Actions));
 
     private static bool CurrentTurnSeedMatchesApprovedPreview(
@@ -134,6 +135,7 @@ internal sealed class SearchInteractionState
         SolverCurrentTurnPreview? preview)
         => seed != null
             && preview != null
+            && seed.CandidateVersion == preview.CandidateVersion
             && seed.Actions.SequenceEqual(preview.Actions);
 
     public void ResetForSearch()
@@ -177,28 +179,30 @@ internal sealed class SearchInteractionState
 
     public SolverResult FinalizeWorkerResult(SolverResult result)
     {
+        SearchTakeoverRequest? request;
         lock (_gate)
         {
             Volatile.Write(ref _acceptingTakeover, 0);
-            SearchTakeoverRequest? request = CurrentTakeoverRequest;
-            if (request?.Kind == SearchTakeoverKind.AdoptRoute
-                && request.RouteAdoptionSeed != null
-                && result.ResultScope != SolverResultScope.RouteAdoption)
-            {
-                SolverResult exactDisplayed = request.RouteAdoptionSeed.Materialize();
-                exactDisplayed.ResultScope = SolverResultScope.RouteAdoption;
-                return exactDisplayed;
-            }
-            if (request?.Kind == SearchTakeoverKind.ApplyCurrentTurn
-                && request.CurrentTurnAdoptionSeed != null
-                && result.ResultScope != SolverResultScope.CurrentTurnAdoption)
-            {
-                SolverResult exactDisplayed = request.CurrentTurnAdoptionSeed.Materialize();
-                exactDisplayed.ResultScope = SolverResultScope.CurrentTurnAdoption;
-                return exactDisplayed;
-            }
-            return result;
+            request = CurrentTakeoverRequest;
         }
+
+        if (request?.Kind == SearchTakeoverKind.AdoptRoute
+            && request.RouteAdoptionSeed != null
+            && result.ResultScope != SolverResultScope.RouteAdoption)
+        {
+            SolverResult exactDisplayed = request.RouteAdoptionSeed.Materialize();
+            exactDisplayed.ResultScope = SolverResultScope.RouteAdoption;
+            return exactDisplayed;
+        }
+        if (request?.Kind == SearchTakeoverKind.ApplyCurrentTurn
+            && request.CurrentTurnAdoptionSeed != null
+            && result.ResultScope != SolverResultScope.CurrentTurnAdoption)
+        {
+            SolverResult exactDisplayed = request.CurrentTurnAdoptionSeed.Materialize();
+            exactDisplayed.ResultScope = SolverResultScope.CurrentTurnAdoption;
+            return exactDisplayed;
+        }
+        return result;
     }
 
     public void PreserveStoppedResult(SolverResult result, LiveCombatStamp stamp)
