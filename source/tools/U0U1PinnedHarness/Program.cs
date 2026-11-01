@@ -16,6 +16,7 @@ using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.Models.Orbs;
+using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Extensions;
 using MegaCrit.Sts2.Core.ValueProps;
@@ -68,6 +69,8 @@ internal static class Program
                 ValidateCompletionForegroundScope();
                 ValidateApprovedForegroundPreviewContract();
                 ValidateRenderedCurrentTurnTakeoverContract();
+                ValidateDeploymentSessionPlan();
+                ValidateSearchSessionLifetime();
                 Console.WriteLine("CompletionScope PASS (forecast scope and existing foreground ordering)");
                 return 0;
             }
@@ -259,6 +262,7 @@ internal static class Program
             if (continuationReplayOnly)
             {
                 ValidateContinuationRouteReplay(combat, names, damage, captured, profile);
+                ValidateDeferredSearchEntry(combat);
                 Console.WriteLine("ContinuationReplay PASS");
                 return 0;
             }
@@ -436,8 +440,30 @@ internal static class Program
                 && displayed.RouteAdoptionSeed == null,
             "E1 display did not preserve the approved preview without granting execution.");
 
-        SolverRouteAdoptionSeed matchingSeed = new(
+        SolverRouteAdoptionSeed wrongVersionSeed = new(
             candidateVersion: 99,
+            actions: [approvedAction],
+            materialize: static () => null!);
+        SolverRouteAdoptionSeed wrongActionSeed = new(
+            candidateVersion: 7,
+            actions: [new PlanAction(PlanActionKind.EndTurn, 2)],
+            materialize: static () => null!);
+        foreach (SolverRouteAdoptionSeed mismatched in new[] { wrongVersionSeed, wrongActionSeed })
+        {
+            interaction.PublishProgress(approved with
+            {
+                RouteAdoptionSeed = mismatched,
+                OfficialPublishedOrigin = null,
+                OfficialPublishedEvaluationContextId = null,
+            });
+            now += SolverWeights.ProgressUiIntervalMilliseconds + 10;
+            Require(interaction.TryCreateDisplayProgress(now, out SolverProgress rejected)
+                    && rejected.RouteAdoptionSeed == null,
+                "E1 exposed a seed whose version or action sequence differs from the approved preview.");
+        }
+
+        SolverRouteAdoptionSeed matchingSeed = new(
+            candidateVersion: 7,
             actions: [approvedAction],
             materialize: static () => null!);
         interaction.PublishProgress(approved with
@@ -456,6 +482,480 @@ internal static class Program
             "E1 did not expose execution only after a matching materialized route became available.");
     }
 
+    private static void ValidateDeferredSearchEntry(CombatState combat)
+    {
+        Type controller = typeof(SolverController);
+        FieldInfo current = controller.GetField("_deferredSearch", BindingFlags.Static | BindingFlags.NonPublic)!;
+        FieldInfo epoch = controller.GetField("_combatLifecycleGeneration", BindingFlags.Static | BindingFlags.NonPublic)!;
+        FieldInfo pending = controller.GetField("PendingDeferredSearchReleases", BindingFlags.Static | BindingFlags.NonPublic)!;
+        MethodInfo defer = controller.GetMethod("DeferSearchUntilRootCaptureBarrier", BindingFlags.Static | BindingFlags.NonPublic)!;
+        MethodInfo resume = controller.GetMethod("ResumeDeferredSearchAsync", BindingFlags.Static | BindingFlags.NonPublic)!;
+        MethodInfo cancel = controller.GetMethod("CancelDeferredSearch", BindingFlags.Static | BindingFlags.NonPublic)!;
+        MethodInfo drain = controller.GetMethod("DrainDeferredSearchReleases", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var callbacks = (ConcurrentQueue<Action>)typeof(SolverDispatcher).GetField("Queue", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+        Require(current.GetValue(null) == null && callbacks.IsEmpty
+                && ReferenceEquals(CombatManager.Instance.DebugOnlyGetState(), combat),
+            "Deferred-entry fixture must own the real pinned combat and an idle dispatcher.");
+        object previousEpoch = epoch.GetValue(null)!;
+        SolverResult replay = (SolverResult)RuntimeHelpers.GetUninitializedObject(typeof(SolverResult));
+        replay.ResultScope = SolverResultScope.RouteAdoption;
+        Task Start(Task barrier, SolverResult? payload, bool deploy,
+            Action<NGame, CombatState, SearchReason, bool, SolverResult?> entry)
+        {
+            defer.Invoke(null, [null, combat, SearchReason.DeploymentDrift, deploy, payload, barrier, entry]);
+            return ((List<Task>)pending.GetValue(null)!)[^1];
+        }
+        Action NextCallback()
+        {
+            Require(SpinWait.SpinUntil(() => !callbacks.IsEmpty, 2_000), "Deferred request did not reach the real dispatcher.");
+            Require(callbacks.TryDequeue(out Action? callback), "Deferred dispatcher callback was lost.");
+            return callback!;
+        }
+        void FinishTracked()
+            => Require(((Task)drain.Invoke(null, null)!).Wait(2_000), "Deferred reference drain did not complete.");
+        bool Faulted(Task operation)
+        {
+            try { operation.GetAwaiter().GetResult(); return false; }
+            catch (InvalidOperationException error) when (error.Message == "expected barrier failure") { return true; }
+        }
+        try
+        {
+            // Re-enter the actual deferral adapter twice as RequestSearch does when
+            // GC and then native-action barriers are pending. Intercept only entry UI;
+            // the production exact-owner/epoch/live-state checks still run.
+            TaskCompletionSource gc = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            TaskCompletionSource native = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            Task? nativeOperation = null;
+            SolverDeferredSearchRequest? nativeOwner = null;
+            int stages = 0;
+            Action<NGame, CombatState, SearchReason, bool, SolverResult?> check = (host, state, reason, deploy, payload) =>
+            {
+                Require(host == null && ReferenceEquals(state, combat) && reason == SearchReason.DeploymentDrift
+                        && deploy && ReferenceEquals(payload, replay), "Deferred entry dropped or rewrote the complete adoption intent.");
+                stages++;
+            };
+            Task gcOperation = Start(gc.Task, replay, true, (host, state, reason, deploy, payload) =>
+            {
+                check(host, state, reason, deploy, payload);
+                nativeOperation = Start(native.Task, payload, deploy, check);
+                nativeOwner = (SolverDeferredSearchRequest)current.GetValue(null)!;
+            });
+            Require(stages == 0 && !gcOperation.IsCompleted, "GC barrier was bypassed.");
+            gc.SetResult();
+            NextCallback()();
+            Require(gcOperation.Wait(2_000) && stages == 1 && nativeOperation != null && !nativeOperation.IsCompleted
+                    && ReferenceEquals(current.GetValue(null), nativeOwner), "Old GC completion cleared the newer native barrier owner.");
+            native.SetResult();
+            NextCallback()();
+            Require(nativeOperation!.Wait(2_000) && stages == 2 && current.GetValue(null) == null,
+                "Native barrier did not resume the exact same adoption intent.");
+            FinishTracked();
+
+            bool plainEntry = false;
+            Task plain = Start(Task.CompletedTask, null, false, (_, state, _, deploy, payload) =>
+                plainEntry = ReferenceEquals(state, combat) && !deploy && payload == null);
+            NextCallback()();
+            Require(plain.Wait(2_000) && plainEntry, "Ordinary deferred entry acquired adoption/deployment intent.");
+            FinishTracked();
+
+            int rejectedEntries = 0;
+            Action<NGame, CombatState, SearchReason, bool, SolverResult?> mustNotResume = (_, _, _, _, _) => rejectedEntries++;
+            TaskCompletionSource unopened = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            Task beforeBarrier = Start(unopened.Task, replay, true, mustNotResume);
+            cancel.Invoke(null, null);
+            Require(beforeBarrier.Wait(2_000) && callbacks.IsEmpty && current.GetValue(null) == null,
+                "Cancel before barrier did not retire its exact request.");
+            FinishTracked();
+
+            Task queued = Start(Task.CompletedTask, replay, true, mustNotResume);
+            Action queuedCallback = NextCallback();
+            cancel.Invoke(null, null);
+            Require(!queued.IsCompleted, "Cancelled queued callback was falsely declared drained.");
+            queuedCallback();
+            Require(queued.Wait(2_000), "Cancelled queued callback did not release its references.");
+            FinishTracked();
+
+            Task old = Start(Task.CompletedTask, replay, true, mustNotResume);
+            Action oldCallback = NextCallback();
+            TaskCompletionSource newerBarrier = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            Task newer = Start(newerBarrier.Task, null, false, (_, _, _, deploy, payload) =>
+                Require(!deploy && payload == null, "Newer request inherited the old adoption intent."));
+            object newerOwner = current.GetValue(null)!;
+            oldCallback();
+            Require(old.Wait(2_000) && ReferenceEquals(current.GetValue(null), newerOwner), "Stale callback cleared a newer request.");
+            newerBarrier.SetResult();
+            NextCallback()();
+            Require(newer.Wait(2_000), "Replacement request did not resume.");
+            FinishTracked();
+
+            Task staleEpoch = Start(Task.CompletedTask, replay, true, mustNotResume);
+            Action epochCallback = NextCallback();
+            epoch.SetValue(null, (int)previousEpoch + 1);
+            epochCallback();
+            Require(staleEpoch.Wait(2_000) && current.GetValue(null) == null, "Lifecycle reset admitted an old deferred request.");
+            epoch.SetValue(null, previousEpoch);
+            FinishTracked();
+            Require(rejectedEntries == 0, "Canceled/replaced/reset intent reached the resume adapter.");
+
+            // Exercise the real wrapper's non-cancellation failure cleanup without
+            // TaskHelper's intentional failure logging, and preserve an unrelated owner.
+            foreach (bool replace in new[] { false, true })
+            {
+                SolverDeferredSearchRequest failed = new(null!, combat, SearchReason.DeploymentDrift, true, replay, (int)previousEpoch);
+                TaskCompletionSource fault = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                current.SetValue(null, failed);
+                Task failure = (Task)resume.Invoke(null, [failed, fault.Task, mustNotResume])!;
+                SolverDeferredSearchRequest? replacement = replace
+                    ? new(null!, combat, SearchReason.Manual, false, null, (int)previousEpoch) : null;
+                if (replacement != null) current.SetValue(null, replacement);
+                fault.SetException(new InvalidOperationException("expected barrier failure"));
+                Require(Faulted(failure) && ReferenceEquals(current.GetValue(null), replacement),
+                    "Barrier fault left the disposed owner active or cleared its replacement.");
+                failed.Cancel(); // Finished/disposed request cancellation is safe.
+                if (replacement != null)
+                {
+                    cancel.Invoke(null, null);
+                    Require(replacement.WaitAndDispatchAsync(Task.CompletedTask, action => action(), () => { }).Wait(2_000),
+                        "Replacement cleanup did not finish.");
+                }
+            }
+            Require(callbacks.IsEmpty, "Deferred contracts left dispatcher work behind.");
+        }
+        finally
+        {
+            epoch.SetValue(null, previousEpoch);
+            cancel.Invoke(null, null);
+            FinishTracked();
+        }
+        Console.WriteLine("DeferredSearchEntry PASS (GC/native intent round-trip, queued cancel/replacement/reset, exact-owner fault cleanup)");
+    }
+
+    private static void ValidateSearchSessionLifetime()
+    {
+        SolverSearchSession Session() => new(77, null!, new LiveCombatStamp("lifetime_contract"), false);
+        bool Throws<T>(Action action) where T : Exception
+        {
+            try { action(); return false; }
+            catch (Exception error) when (error is T) { return true; }
+        }
+        SolverSearchSession setupFailed = Session();
+        Require(Throws<InvalidOperationException>(() => setupFailed.TryStartWorker(
+                    () => throw new InvalidOperationException("expected worker setup failure"), _ => { }))
+                && setupFailed.ReleaseReferencesAsync().Wait(2_000) && Throws<ObjectDisposedException>(() => _ = setupFailed.Token),
+            "Worker factory failure waited for a nonexistent callback.");
+        SolverSearchSession registrationFailed = Session();
+        TaskCompletionSource<SolverResult> pendingRegistrationWorker = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Require(Throws<InvalidOperationException>(() => registrationFailed.TryStartWorker(
+                    () => pendingRegistrationWorker.Task, _ => throw new InvalidOperationException("expected registration failure"))),
+            "Callback registration failure was swallowed.");
+        Task registrationDrain = registrationFailed.ReleaseReferencesAsync();
+        Require(!registrationDrain.IsCompleted && registrationFailed.Token.CanBeCanceled,
+            "Failed callback registration released a still-running worker.");
+        pendingRegistrationWorker.SetException(new InvalidOperationException("expected worker failure"));
+        Require(registrationDrain.Wait(2_000) && Throws<ObjectDisposedException>(() => _ = registrationFailed.Token),
+            "Registration failure did not drain the faulted worker without a callback.");
+        SolverSearchSession earlyCallback = Session();
+        TaskCompletionSource<SolverResult> earlyWorker = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Require(earlyCallback.TryStartWorker(() => earlyWorker.Task,
+                _ => { earlyCallback.CompleteCallback(); Require(earlyCallback.Token.CanBeCanceled, "Callback disposed an unfinished startup/worker"); }),
+            "Early callback fixture was not admitted.");
+        Task earlyDrain = earlyCallback.ReleaseReferencesAsync();
+        Require(!earlyDrain.IsCompleted && earlyCallback.Token.CanBeCanceled, "Callback acknowledgement skipped worker drain.");
+        earlyWorker.SetResult(null!); // No result consumer exists in this lifecycle-only fixture.
+        Require(earlyDrain.Wait(2_000) && Throws<ObjectDisposedException>(() => _ = earlyCallback.Token), "Early callback did not settle exactly once after worker completion.");
+
+        SolverSearchSession synchronousCallback = Session();
+        int beforeSynchronousDispose = SolverSearchSession.CancellationDisposeCountForTesting;
+        Require(synchronousCallback.TryStartWorker(() => Task.FromResult<SolverResult>(null!),
+                    _ => synchronousCallback.CompleteCallback())
+                && Throws<ObjectDisposedException>(() => _ = synchronousCallback.Token)
+                && SolverSearchSession.CancellationDisposeCountForTesting == beforeSynchronousDispose + 1,
+            "Synchronous completed-worker callback did not retry disposal after startup settled.");
+        synchronousCallback.CompleteCallback();
+        Require(SolverSearchSession.CancellationDisposeCountForTesting == beforeSynchronousDispose + 1,
+            "Synchronous callback disposed its cancellation source twice.");
+
+        // Use the real Controller registration/cancellation/completion adapters. A newer
+        // owner makes CompleteSearch return before any live state, UI or result access.
+        Type controller = typeof(SolverController);
+        FieldInfo active = controller.GetField("_search", BindingFlags.Static | BindingFlags.NonPublic)!;
+        PropertyInfo disposeCount = controller.GetProperty("SearchCtsDisposeCountForTesting", BindingFlags.Static | BindingFlags.NonPublic)!;
+        FieldInfo scheduledCount = controller.GetField("_searchReferenceReleaseScheduledCountForTesting", BindingFlags.Static | BindingFlags.NonPublic)!;
+        FieldInfo completedCount = controller.GetField("_searchReferenceReleaseCompletedCountForTesting", BindingFlags.Static | BindingFlags.NonPublic)!;
+        MethodInfo register = controller.GetMethod("RegisterSearchCompletion", BindingFlags.Static | BindingFlags.NonPublic)!;
+        MethodInfo cancel = controller.GetMethod("CancelSearch", BindingFlags.Static | BindingFlags.NonPublic)!;
+        MethodInfo drain = controller.GetMethod("DrainSearchReferenceReleases", BindingFlags.Static | BindingFlags.NonPublic)!;
+        MethodInfo queueRelease = controller.GetMethod("QueueSearchReferenceRelease", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var callbacks = (ConcurrentQueue<Action>)typeof(SolverDispatcher).GetField("Queue", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+        Type game = typeof(MegaCrit.Sts2.Core.Nodes.NGame);
+        FieldInfo mainThread = game.GetField("_mainThreadId", BindingFlags.Static | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Pinned main-thread fixture changed.");
+        Require(callbacks.IsEmpty, "Pinned dispatcher fixture changed.");
+        object? previousSearch = active.GetValue(null);
+        object? previousThread = mainThread.GetValue(null);
+        int beforeDispose = (int)disposeCount.GetValue(null)!;
+        int beforeScheduled = (int)scheduledCount.GetValue(null)!;
+        int beforeCompleted = (int)completedCount.GetValue(null)!;
+        SolverSearchSession newer = Session();
+        void Register(SolverSearchSession search, Task<SolverResult> worker)
+            => register.Invoke(null, [null, search, worker]);
+        Task CancelAndDrain(SolverSearchSession search)
+        {
+            active.SetValue(null, search);
+            cancel.Invoke(null, null);
+            queueRelease.Invoke(null, [search]); // Repeated release must remain one owned drain.
+            return (Task)drain.Invoke(null, null)!;
+        }
+        Action NextCallback()
+        {
+            Require(SpinWait.SpinUntil(() => !callbacks.IsEmpty, 2_000), "Worker completion was not posted to the dispatcher.");
+            Require(callbacks.TryDequeue(out Action? callback), "Dispatcher lost the posted callback.");
+            return callback!;
+        }
+        try
+        {
+            mainThread.SetValue(null, Environment.CurrentManagedThreadId);
+            Require(MegaCrit.Sts2.Core.Nodes.NGame.IsMainThread(), "Pinned main-thread identity was not established.");
+            SolverSearchSession noWorker = Session();
+            CancellationToken noWorkerToken = noWorker.Token;
+            Require(CancelAndDrain(noWorker).Wait(2_000) && noWorkerToken.IsCancellationRequested
+                    && Throws<ObjectDisposedException>(() => _ = noWorker.Token), "Cancel before startup did not finish its empty lifecycle.");
+            bool lateFactoryRan = false;
+            Require(!noWorker.TryStartWorker(() => { lateFactoryRan = true; return Task.FromResult<SolverResult>(null!); }, _ => { })
+                    && !lateFactoryRan, "Cancelled startup admitted a late worker.");
+
+            SolverSearchSession queued = Session();
+            TaskCompletionSource<SolverResult> worker = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            Require(queued.TryStartWorker(() => worker.Task, task => Register(queued, task)), "Queued callback fixture was not admitted.");
+            Task queuedDrain = CancelAndDrain(queued);
+            Require(!queuedDrain.IsCompleted && queued.Token.IsCancellationRequested, "Cancellation released an active worker.");
+            active.SetValue(null, newer);
+            worker.SetResult(null!);
+            Action callback = NextCallback();
+            Require(queued.IsWorkerCompleted && !queuedDrain.IsCompleted && queued.Token.IsCancellationRequested,
+                "Worker completion released a still-queued main-thread callback.");
+            callback();
+            Require(queuedDrain.Wait(2_000) && ReferenceEquals(active.GetValue(null), newer)
+                    && Throws<ObjectDisposedException>(() => _ = queued.Token), "Stale callback changed the new owner or leaked its own CTS.");
+
+            SolverSearchSession callbackThrows = Session();
+            Require(callbackThrows.TryStartWorker(() => Task.FromException<SolverResult>(new InvalidOperationException("expected fault")),
+                    task => Register(callbackThrows, task)), "Faulted worker fixture was not admitted.");
+            Task throwingDrain = CancelAndDrain(callbackThrows);
+            active.SetValue(null, newer);
+            Action throwingCallback = NextCallback();
+            mainThread.SetValue(null, -1); // Exercise actual CompleteSearch finally when its main-thread guard throws.
+            try { Require(Throws<InvalidOperationException>(throwingCallback), "Controller callback exception was swallowed."); }
+            finally { mainThread.SetValue(null, Environment.CurrentManagedThreadId); }
+            Require(throwingDrain.Wait(2_000) && ReferenceEquals(active.GetValue(null), newer),
+                "Throwing callback did not settle its own cleanup or changed the new owner.");
+
+            SolverSearchSession reentrant = Session();
+            TaskCompletionSource<SolverResult> reentrantWorker = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            Task? reentrantDrain = null;
+            active.SetValue(null, reentrant);
+            Require(reentrant.TryStartWorker(() =>
+            {
+                cancel.Invoke(null, null);
+                reentrantDrain = (Task)drain.Invoke(null, null)!;
+                Require(!reentrantDrain.IsCompleted && reentrant.Token.IsCancellationRequested,
+                    "Reentrant cancellation drained before worker attachment/registration.");
+                return reentrantWorker.Task;
+            }, task => Register(reentrant, task)), "Reentrant startup fixture was not admitted.");
+            active.SetValue(null, newer);
+            reentrantWorker.SetCanceled();
+            Action reentrantCallback = NextCallback();
+            Require(!reentrantDrain!.IsCompleted, "Cancelled worker omitted its queued callback.");
+            reentrantCallback();
+            Require(reentrantDrain.Wait(2_000) && ReferenceEquals(active.GetValue(null), newer),
+                "Reentrant cancellation did not drain its worker and callback.");
+            Require((int)disposeCount.GetValue(null)! == beforeDispose + 4
+                    && (int)scheduledCount.GetValue(null)! == beforeScheduled + 4
+                    && (int)completedCount.GetValue(null)! == beforeCompleted + 4 && callbacks.IsEmpty,
+                "Search lifecycle release/CTS counters did not remain exactly once per owner.");
+        }
+        finally
+        {
+            mainThread.SetValue(null, previousThread);
+            active.SetValue(null, previousSearch);
+            newer.Cancel();
+            newer.ReleaseReferencesAsync().Wait(2_000);
+        }
+        Console.WriteLine("SearchSessionLifetime PASS (startup, worker + queued callback, registration failure, real Controller stale/throw/reentrant cleanup)");
+    }
+
+    private static void ValidateDeploymentSessionPlan()
+    {
+        PlanAction play = new(PlanActionKind.PlayCard, 2, CardId: "STRIKE_IRONCLAD");
+        PlanAction end = new(PlanActionKind.EndTurn, 2);
+        PlanAction unsupported = new(PlanActionKind.PlayCard, 2);
+        PlanAction forecast = new(PlanActionKind.TeammateForecast, 2);
+        SolverDeploymentSession Capture(IReadOnlyList<PlanAction> actions, bool safe = true)
+            => new(actions, 2, safe, routeGeneration: 7, worldVersion: 11);
+        bool Throws<T>(Action action) where T : Exception
+        {
+            try { action(); return false; }
+            catch (Exception error) when (error is T) { return true; }
+        }
+
+        foreach (bool safe in new[] { false, true })
+        {
+            List<PlanAction> route = [play with { Turn = 1 }, play, end, play, play with { Turn = 3 }];
+            SolverDeploymentSession session = Capture(route, safe);
+            Require(session.PlannedActions.Count == 3 && session.Actions.Count == (safe ? 1 : 2)
+                    && ReferenceEquals(session.PlannedEndTurn, end)
+                    && !session.RejectedBeforeStart && session.RouteGeneration == 7 && session.WorldVersion == 11,
+                "Deployment session lost its existing current-turn/EndTurn projection.");
+            Require(session.SafeExecutionSession?.MaxActions == (safe ? 1 : null),
+                "Safe capacity did not use the same captured action prefix.");
+            route[1] = unsupported;
+            Require(ReferenceEquals(session.Actions[0], play)
+                    && Throws<NotSupportedException>(() => ((IList<PlanAction>)session.Actions)[0] = unsupported),
+                "Deployment plan leaked its outer action-list snapshot.");
+            session.DisposeCancellationOnce();
+        }
+
+        SolverDeploymentSession rejected = Capture([unsupported, play]);
+        Task rejectedDrain = rejected.ReleaseOperationReferencesAsync();
+        Require(!rejectedDrain.IsCompleted, "Unattached deployment was incorrectly considered drained.");
+        Require(rejected.RejectedBeforeStart && rejected.Actions.Count == 0
+                && !rejected.StructuralStop.IsSafe && rejected.SafeExecutionSession?.MaxActions == 0,
+            "Unsupported first action did not retain the existing pre-start rejection.");
+        Require(rejected.DisposeRejectedBeforeStart() && !rejected.DisposeRejectedBeforeStart()
+                && !rejected.DisposeCancellationOnce()
+                && Throws<ObjectDisposedException>(() => _ = rejected.Token)
+                && Throws<InvalidOperationException>(() => rejected.StartOperation(() => Task.CompletedTask)),
+            "Rejected deployment did not dispose exactly once or admitted a later operation.");
+        Require(rejectedDrain.Wait(2_000), "Rejected-before-start terminal decision left its drain waiting forever.");
+
+        // Exercise the actual Controller terminal seam used by StartDeployment's
+        // unsupported-prefix return, including stale completion and dispose telemetry.
+        FieldInfo activeDeployment = typeof(SolverController).GetField("_deployment", BindingFlags.Static | BindingFlags.NonPublic)!;
+        FieldInfo disposedCount = typeof(SolverController).GetField("_deploymentCtsDisposeCountForTesting", BindingFlags.Static | BindingFlags.NonPublic)!;
+        MethodInfo completeDeployment = typeof(SolverController).GetMethod("CompleteDeployment", BindingFlags.Static | BindingFlags.NonPublic)!;
+        object? previousDeployment = activeDeployment.GetValue(null);
+        int beforeDisposed = (int)disposedCount.GetValue(null)!;
+        SolverDeploymentSession current = Capture([play]);
+        SolverDeploymentSession staleRejected = Capture([unsupported]);
+        SolverDeploymentSession currentRejected = Capture([unsupported]);
+        try
+        {
+            activeDeployment.SetValue(null, current);
+            completeDeployment.Invoke(null, [staleRejected]);
+            completeDeployment.Invoke(null, [staleRejected]);
+            Require(ReferenceEquals(activeDeployment.GetValue(null), current)
+                    && Throws<ObjectDisposedException>(() => _ = staleRejected.Token)
+                    && (int)disposedCount.GetValue(null)! == beforeDisposed + 1,
+                "Controller pre-start rejection lost stale-session isolation or disposed twice.");
+            activeDeployment.SetValue(null, currentRejected);
+            completeDeployment.Invoke(null, [currentRejected]);
+            Require(activeDeployment.GetValue(null) == null
+                    && Throws<ObjectDisposedException>(() => _ = currentRejected.Token)
+                    && (int)disposedCount.GetValue(null)! == beforeDisposed + 2,
+                "Controller unsupported-prefix terminal path did not detach and dispose its owner.");
+        }
+        finally
+        {
+            activeDeployment.SetValue(null, previousDeployment);
+            current.DisposeCancellationOnce();
+            staleRejected.DisposeCancellationOnce();
+            currentRejected.DisposeCancellationOnce();
+        }
+
+        SolverDeploymentSession endOnly = Capture([end]);
+        Require(!endOnly.RejectedBeforeStart && endOnly.Actions.Count == 0
+                && ReferenceEquals(endOnly.PlannedEndTurn, end), "EndTurn-only plan was rejected as unsupported.");
+        endOnly.DisposeCancellationOnce();
+        foreach (bool safe in new[] { false, true })
+        {
+            SolverDeploymentSession boundary = Capture([play, forecast, play, end], safe);
+            Require(boundary.Actions.SequenceEqual([play]) && boundary.PlannedEndTurn == null,
+                "Forecast boundary admitted a contingent local suffix or EndTurn.");
+            boundary.DisposeCancellationOnce();
+        }
+        SolverDeploymentSession partial = Capture([play, unsupported, end]);
+        Require(!partial.RejectedBeforeStart && partial.Actions.SequenceEqual([play])
+                && partial.PlannedEndTurn == null && !partial.StructuralStop.IsSafe,
+            "Safe prefix skipped an unsupported action to reach EndTurn.");
+        partial.DisposeCancellationOnce();
+
+        SolverDeploymentSession attached = Capture([unsupported]);
+        TaskCompletionSource operation = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        _ = attached.StartOperation(() => operation.Task);
+        Require(Throws<InvalidOperationException>(() => attached.DisposeRejectedBeforeStart())
+                && Throws<InvalidOperationException>(() => attached.StartOperation(() => Task.CompletedTask)),
+            "An attached operation admitted premature rejection disposal or replacement.");
+        attached.Cancel();
+        Require(attached.Token.IsCancellationRequested, "Deployment cancellation lost its owned token.");
+        Task release = attached.ReleaseOperationReferencesAsync();
+        Require(!release.IsCompleted,
+            "Deployment released the operation before completion.");
+        operation.SetException(new InvalidOperationException("expected deployment test failure"));
+        Require(release.Wait(2_000) && release.IsCompletedSuccessfully
+                && attached.DisposeCancellationOnce() && !attached.DisposeCancellationOnce(),
+            "Faulted operation did not drain and dispose exactly once.");
+        SolverDeploymentSession synchronous = Capture([play]);
+        Require(synchronous.DisposeCancellationOnce(), "Synchronous completion fixture did not dispose.");
+        _ = synchronous.StartOperation(() => Task.CompletedTask); // async body completed before returning its task
+        Require(synchronous.ReleaseOperationReferencesAsync().Wait(2_000)
+                && !synchronous.DisposeCancellationOnce(), "Synchronous completion disposed twice after attachment.");
+
+        SolverDeploymentSession reentrant = Capture([play]);
+        TaskCompletionSource body = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        MethodInfo cancelDeployment = typeof(SolverController).GetMethod("CancelDeployment", BindingFlags.Static | BindingFlags.NonPublic)!;
+        MethodInfo drainDeployments = typeof(SolverController).GetMethod("DrainDeploymentReferenceReleases", BindingFlags.Static | BindingFlags.NonPublic)!;
+        Task? controllerDrain = null;
+        int beforeReentrantDispose = (int)disposedCount.GetValue(null)!;
+        try
+        {
+            activeDeployment.SetValue(null, reentrant);
+            _ = reentrant.StartOperation(() =>
+            {
+                // Real caller re-enters cancellation before the async body returns
+                // its task. The old CompletedTask placeholder disposed CTS here.
+                cancelDeployment.Invoke(null, null);
+                controllerDrain = (Task)drainDeployments.Invoke(null, null)!;
+                Require(!controllerDrain.IsCompleted && reentrant.Token.IsCancellationRequested
+                        && (int)disposedCount.GetValue(null)! == beforeReentrantDispose,
+                    "Controller reentrant cancellation drained before operation attachment.");
+                return body.Task;
+            });
+            Require(!controllerDrain!.IsCompleted, "Attached pending body was omitted from the Controller drain.");
+            body.SetResult();
+            Require(controllerDrain.Wait(2_000) && (int)disposedCount.GetValue(null)! == beforeReentrantDispose + 1,
+                "Controller did not wait for the attached body and dispose exactly once.");
+        }
+        finally
+        {
+            body.TrySetResult();
+            controllerDrain?.Wait(2_000);
+            activeDeployment.SetValue(null, previousDeployment);
+            reentrant.DisposeCancellationOnce();
+        }
+        SolverDeploymentSession setupFailed = Capture([play]);
+        Task setupDrain = setupFailed.ReleaseOperationReferencesAsync();
+        Require(Throws<InvalidOperationException>(() => setupFailed.StartOperation(
+                    () => throw new InvalidOperationException("expected synchronous setup failure")))
+                && setupDrain.Wait(2_000) && setupFailed.DisposeCancellationOnce(),
+            "Synchronous setup failure left the operation-attachment drain open.");
+
+        for (int i = 0; i < 20; i++)
+        {
+            SolverDeploymentSession raced = Capture([unsupported]);
+            bool attachedWon = false, rejectedWon = false;
+            Parallel.Invoke(
+                () => { try { _ = raced.StartOperation(() => Task.CompletedTask); attachedWon = true; } catch (InvalidOperationException) { } },
+                () => { try { rejectedWon = raced.DisposeRejectedBeforeStart(); } catch (InvalidOperationException) { } });
+            Require(attachedWon != rejectedWon, "Pre-start disposal raced past operation ownership.");
+            if (attachedWon)
+                Require(!raced.Token.IsCancellationRequested && raced.DisposeCancellationOnce(),
+                    "Rejection disposed an operation that had already attached.");
+            else
+                Require(Throws<ObjectDisposedException>(() => _ = raced.Token), "Rejected owner retained its token source.");
+        }
+        Console.WriteLine("DeploymentPlan PASS (captured prefixes, EndTurn/forecast boundaries, pre-start disposal, operation drain and ownership race)");
+    }
+
     private static void ValidateRenderedCurrentTurnTakeoverContract()
     {
         SearchInteractionState interaction = new();
@@ -465,7 +965,17 @@ internal static class Program
             actions: [displayedAction],
             materialize: static () => null!);
 
-        interaction.RenderedCurrentTurnAdoptionSeed = displayedSeed;
+        SolverProgress published = new(1, 1, 1, 1, 1, 1, 10, 1, 0, 0, "rendered_contract",
+            CurrentTurnPreview: new SolverCurrentTurnPreview(17, 1, [displayedAction], 0, 0, 0, 0, false))
+        {
+            CurrentTurnAdoptionSeed = displayedSeed,
+        };
+        interaction.PublishProgress(published);
+        Require(interaction.TryCreateDisplayProgress(
+                    Environment.TickCount64 + SolverWeights.ProgressUiIntervalMilliseconds + 10,
+                    out SolverProgress displayed)
+                && interaction.MarkRenderedProgress(displayed),
+            "Rendered current-turn fixture was not actually displayed.");
         Require(
             interaction.RequestApplyCurrentTurn(
                 interaction.RenderedCurrentTurnAdoptionSeed),
@@ -968,16 +1478,23 @@ internal static class Program
             candidateVersion: 31,
             actions: [foregroundAction],
             materialize: static () => null!);
+        SolverProgress currentTurnProgress = new(
+            StartTurnNumber: 1, CurrentTurnNumber: 1, CompletedTurnLayers: 0, PlayDepth: 0,
+            ExpandedNodes: 0, ReviewedWorldlines: 0, MaxNodes: 1, FrontierNodes: 0,
+            EndedNodes: 0, ElapsedMilliseconds: 0, Phase: "test", CurrentTurnPreview: currentTurnPreview)
+        {
+            CurrentTurnAdoptionSeed = currentTurnSeed,
+        };
         Require(
-            CombatSearchCoordinator.CurrentTurnSeedMatchesPreview(
-                currentTurnSeed,
-                currentTurnPreview)
-            && !CombatSearchCoordinator.CurrentTurnSeedMatchesPreview(
-                new SolverRouteAdoptionSeed(
-                    candidateVersion: 32,
-                    actions: [new PlanAction(PlanActionKind.EndTurn, 2)],
-                    materialize: static () => null!),
-                currentTurnPreview),
+            ReferenceEquals(SolverCandidatePresentation.Capture(currentTurnProgress).CurrentTurnAdoptionSeed, currentTurnSeed)
+            && SolverCandidatePresentation.Capture(currentTurnProgress with
+            {
+                CurrentTurnAdoptionSeed = new SolverRouteAdoptionSeed(32, [foregroundAction], static () => null!),
+            }).CurrentTurnAdoptionSeed == null
+            && SolverCandidatePresentation.Capture(currentTurnProgress with
+            {
+                CurrentTurnAdoptionSeed = new SolverRouteAdoptionSeed(31, [new PlanAction(PlanActionKind.EndTurn, 2)], static () => null!),
+            }).CurrentTurnAdoptionSeed == null,
             "E3 completion current-turn fallback did not require the exact approved foreground prefix.");
     }
 
@@ -2877,6 +3394,33 @@ internal static class Program
             Require(new SearchInteractionState().FinalizeWorkerResult(old).ResultScope
                     == SolverResultScope.SearchCompletion,
                 "Ordinary completion gained explicit adoption without a takeover request.");
+            SearchInteractionState cancelledInteraction = new();
+            int cancellationMaterializations = 0;
+            SolverRouteAdoptionSeed cancelledSeed = new(29,
+                old.BestNode.Actions.Where(action => action.Turn == old.StartTurnNumber).ToArray(),
+                () => { cancellationMaterializations++; return old; });
+            Require(cancelledInteraction.RequestApplyCurrentTurn(cancelledSeed),
+                "Cancelled current-turn adoption fixture was not admitted.");
+            List<string> cancellationDiagnostics = [];
+            using (CancellationTokenSource cancelled = new())
+            {
+                cancelled.Cancel();
+                SolverResult cancellationAdoption = CombatSearchCoordinator.Solve(oldRoot, names, damage,
+                    policy with
+                    {
+                        Interaction = cancelledInteraction,
+                        ContinuationRouteReplayActions = [],
+                        ContinuationRouteReplayBaseline = null,
+                        Diagnostics = new SearchDiagnosticsSink(cancellationDiagnostics.Add, _ => { }),
+                    }, cancelled.Token, progressCallback: null);
+                Require(ReferenceEquals(cancellationAdoption, old)
+                        && cancellationAdoption.ResultScope == SolverResultScope.CurrentTurnAdoption
+                        && cancellationMaterializations == 1
+                        && cancellationDiagnostics.Any(message => message.Contains("SEARCH_INTERIM_ADOPTED")),
+                    "Coordinator cancellation did not resolve the exact seed through the interaction module.");
+            }
+            _ = cancelledInteraction.CompleteTakeover();
+            old.ResultScope = SolverResultScope.SearchCompletion;
             Require(!old.Snapshot.AllEnemiesDead && old.ExpandedNodes == 0,
                 "Old route must be incomplete and replay must not expand Beam nodes.");
 

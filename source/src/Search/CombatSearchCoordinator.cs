@@ -194,10 +194,7 @@ internal static partial class CombatSearchCoordinator
         SolverProgress? lastProgress = null;
         int currentTurnPreviewVersion = 0;
         int speculativeRouteVersion = 0;
-        SolverCurrentTurnPreview? currentTurnPreview = null;
-        SolverSpeculativeRoutePreview? speculativeRoutePreview = null;
-        SolverRouteAdoptionSeed? currentTurnAdoptionSeed = null;
-        SolverRouteAdoptionSeed? currentRouteAdoptionSeed = null;
+        SolverCandidatePresentation displayedCandidate = SolverCandidatePresentation.Empty;
         SolverResult? currentMaterializedForegroundResult = null;
         long? firstForegroundPublishedTicks = null;
         long? lastForegroundImprovementTicks = null;
@@ -225,7 +222,7 @@ internal static partial class CombatSearchCoordinator
         {
             SolverInterimResult summary = BuildInterimResult(root, policy, result);
             if (currentDisplayedResult == summary
-                && RouteMatchesPreview(result.BestNode.Actions, speculativeRoutePreview))
+                && RouteMatchesPreview(result.BestNode.Actions, displayedCandidate.SpeculativeRoutePreview))
             {
                 currentMaterializedForegroundResult = result;
                 policy.Diagnostics.Info(
@@ -251,37 +248,17 @@ internal static partial class CombatSearchCoordinator
             portfolioTelemetry.RecordCandidatePublished(
                 result.SearchEfficiencyOrigin,
                 result.SearchEfficiencyEvaluationContextId ?? string.Empty);
-            currentTurnPreview = SolverCurrentTurnPreview.FromResult(
-                result,
-                ++currentTurnPreviewVersion);
-            speculativeRoutePreview = SolverSpeculativeRoutePreview.FromResult(
-                result,
-                ++speculativeRouteVersion);
-            currentTurnAdoptionSeed = new SolverRouteAdoptionSeed(
-                currentTurnPreview.CandidateVersion,
-                currentTurnPreview.Actions,
-                () =>
-                {
-                    result.ResultScope = SolverResultScope.CurrentTurnAdoption;
-                    return result;
-                });
-            currentRouteAdoptionSeed = new SolverRouteAdoptionSeed(
-                speculativeRoutePreview.CandidateVersion,
-                result.BestNode.Actions,
-                () => result);
+            displayedCandidate = SolverCandidatePresentation.FromResult(
+                result, ++currentTurnPreviewVersion, ++speculativeRouteVersion);
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] SEARCH_INTERIM_RESULT potions={result.ProjectedBattlePotionCount} " +
                 $"projected_battle_hp_lost={result.ProjectedBattleHpLost}");
             if (lastProgress != null && progressCallback != null)
             {
-                lastProgress = lastProgress with
+                lastProgress = displayedCandidate.ApplyTo(lastProgress with
                 {
                     CurrentBestResult = currentDisplayedResult,
-                    CurrentTurnPreview = currentTurnPreview,
-                    SpeculativeRoutePreview = speculativeRoutePreview,
-                    RouteAdoptionSeed = currentRouteAdoptionSeed,
-                    CurrentTurnAdoptionSeed = currentTurnAdoptionSeed,
-                };
+                });
                 progressCallback(lastProgress);
             }
         }
@@ -295,7 +272,7 @@ internal static partial class CombatSearchCoordinator
                 // same globally promoted Beam result. A shallow early boundary such as Strike
                 // must not independently lock the preview after a better multi-turn route appears.
                 SolverInterimResult? previousDisplayedResult = currentDisplayedResult;
-                SolverSpeculativeRoutePreview? previousRoutePreview = speculativeRoutePreview;
+                SolverSpeculativeRoutePreview? previousRoutePreview = displayedCandidate.SpeculativeRoutePreview;
                 SolverInterimResult? evaluatedCandidate = progress.CurrentBestResult;
                 bool acceptsRouteUpdate = currentDisplayedResult == null;
                 if (evaluatedCandidate is { } candidate)
@@ -358,21 +335,18 @@ internal static partial class CombatSearchCoordinator
                     // Current-turn and future-route previews are one displayed candidate bundle.
                     // Replace or clear them together so the UI can never combine a newer
                     // current-turn line with an older speculative future.
-                    currentTurnPreview = progress.CurrentTurnPreview;
-                    currentTurnAdoptionSeed = progress.CurrentTurnAdoptionSeed;
-                    speculativeRoutePreview = progress.SpeculativeRoutePreview;
-                    currentRouteAdoptionSeed = progress.RouteAdoptionSeed;
-                    if (currentTurnPreview != null)
+                    displayedCandidate = SolverCandidatePresentation.Capture(progress);
+                    if (displayedCandidate.CurrentTurnPreview != null)
                     {
                         currentTurnPreviewVersion = Math.Max(
                             currentTurnPreviewVersion,
-                            currentTurnPreview.CandidateVersion);
+                            displayedCandidate.CurrentTurnPreview.CandidateVersion);
                     }
-                    if (speculativeRoutePreview != null)
+                    if (displayedCandidate.SpeculativeRoutePreview != null)
                     {
                         speculativeRouteVersion = Math.Max(
                             speculativeRouteVersion,
-                            speculativeRoutePreview.CandidateVersion);
+                            displayedCandidate.SpeculativeRoutePreview.CandidateVersion);
                     }
                     if (progress.OfficialPublishedOrigin is { } officialOrigin
                         && !string.IsNullOrWhiteSpace(
@@ -392,16 +366,12 @@ internal static partial class CombatSearchCoordinator
                     acceptsRouteUpdate ? progress.OfficialPublishedOrigin : null;
                 string? approvedForegroundContextId =
                     acceptsRouteUpdate ? progress.OfficialPublishedEvaluationContextId : null;
-                progressCallback(progress with
+                progressCallback(displayedCandidate.ApplyTo(progress with
                 {
                     CurrentBestResult = currentDisplayedResult,
-                    CurrentTurnPreview = currentTurnPreview,
-                    SpeculativeRoutePreview = speculativeRoutePreview,
-                    RouteAdoptionSeed = currentRouteAdoptionSeed,
-                    CurrentTurnAdoptionSeed = currentTurnAdoptionSeed,
                     OfficialPublishedOrigin = approvedForegroundOrigin,
                     OfficialPublishedEvaluationContextId = approvedForegroundContextId,
-                });
+                }));
             };
 
         void LogFinalVsForeground(SolverResult selected)
@@ -523,7 +493,7 @@ internal static partial class CombatSearchCoordinator
                     SolverResult? exactForeground = null;
                     string materializationSource = "none";
                     int candidateVersion = -1;
-                    if (currentRouteAdoptionSeed is { } foregroundSeed)
+                    if (displayedCandidate.RouteAdoptionSeed is { } foregroundSeed)
                     {
                         exactForeground = foregroundSeed.Materialize();
                         materializationSource = "route_seed";
@@ -532,15 +502,12 @@ internal static partial class CombatSearchCoordinator
                     else if (currentMaterializedForegroundResult is { } materializedForeground
                              && RouteMatchesPreview(
                                  materializedForeground.BestNode.Actions,
-                                 speculativeRoutePreview))
+                                 displayedCandidate.SpeculativeRoutePreview))
                     {
                         exactForeground = materializedForeground;
                         materializationSource = "completed_member";
                     }
-                    else if (currentTurnAdoptionSeed is { } turnSeed
-                             && CurrentTurnSeedMatchesPreview(
-                                 turnSeed,
-                                 currentTurnPreview))
+                    else if (displayedCandidate.CurrentTurnAdoptionSeed is { } turnSeed)
                     {
                         exactForeground = turnSeed.Materialize();
                         materializationSource = "current_turn_seed";
@@ -551,7 +518,7 @@ internal static partial class CombatSearchCoordinator
                     {
                         bool completeVictory = IsCompleteVictory(exactForeground);
                         if (!CompletionForegroundCoversRoute(
-                                exactForeground.BestNode.Actions, speculativeRoutePreview,
+                                exactForeground.BestNode.Actions, displayedCandidate.SpeculativeRoutePreview,
                                 exactForeground.SearchedTurns, selected.SearchedTurns,
                                 completeVictory,
                                 exactForeground.ResultScope == SolverResultScope.CurrentTurnAdoption))
@@ -605,10 +572,10 @@ internal static partial class CombatSearchCoordinator
                   && (interaction.CurrentTakeoverRequest.CurrentTurnAdoptionSeed != null
                       || currentCompleteAdoptableResult != null))
         {
-            SolverResult adopted =
-                interaction.CurrentTakeoverRequest.CurrentTurnAdoptionSeed?.Materialize()
-                ?? currentCompleteAdoptableResult!;
-            adopted.ResultScope = SolverResultScope.CurrentTurnAdoption;
+            SolverResult? requested = interaction.ResolveTakeoverResult();
+            SolverResult adopted = requested ?? currentCompleteAdoptableResult!;
+            if (requested == null)
+                adopted.ResultScope = SolverResultScope.CurrentTurnAdoption;
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] SEARCH_INTERIM_ADOPTED " +
                 $"candidate_version=" +
@@ -718,12 +685,6 @@ internal static partial class CombatSearchCoordinator
         => preview != null
             && actions.SequenceEqual(preview.Turns.SelectMany(static turn => turn.Actions));
 
-    internal static bool CurrentTurnSeedMatchesPreview(
-        SolverRouteAdoptionSeed seed,
-        SolverCurrentTurnPreview? preview)
-        => preview != null
-            && seed.Actions.SequenceEqual(preview.Actions);
-
     internal static bool CompletionForegroundCoversRoute(
         IReadOnlyList<PlanAction> actions, SolverSpeculativeRoutePreview? preview,
         int foregroundTurns, int finalTurns, bool completeVictory, bool currentTurnAdoption)
@@ -745,30 +706,10 @@ internal static partial class CombatSearchCoordinator
         SolverResult result,
         SearchInteractionState? interaction)
     {
-        SearchTakeoverRequest? request = interaction?.CurrentTakeoverRequest;
-        if (request == null)
+        if (interaction?.CurrentTakeoverRequest == null)
             return null;
-        if (result.ResultScope is SolverResultScope.CurrentTurnAdoption
-            or SolverResultScope.RouteAdoption)
-        {
-            return result;
-        }
-        if (request.Kind == SearchTakeoverKind.AdoptRoute)
-        {
-            if (request.RouteAdoptionSeed is not { } seed)
-                return null;
-            SolverResult exactDisplayed = seed.Materialize();
-            exactDisplayed.ResultScope = SolverResultScope.RouteAdoption;
-            return exactDisplayed;
-        }
-        if (request.Kind == SearchTakeoverKind.ApplyCurrentTurn
-            && request.CurrentTurnAdoptionSeed != null)
-        {
-            SolverResult exactDisplayed = request.CurrentTurnAdoptionSeed.Materialize();
-            exactDisplayed.ResultScope = SolverResultScope.CurrentTurnAdoption;
-            return exactDisplayed;
-        }
-        return IsAdoptionResult(result) ? result : null;
+        return interaction.ResolveTakeoverResult(result)
+            ?? (IsAdoptionResult(result) ? result : null);
     }
 
     private static SolverResult SolveCore(

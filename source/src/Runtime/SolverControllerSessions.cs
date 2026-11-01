@@ -1,4 +1,5 @@
 using MegaCrit.Sts2.Core.Combat;
+using MegaCrit.Sts2.Core.Nodes;
 
 namespace CombatSolver;
 
@@ -70,49 +71,6 @@ internal readonly record struct SearchMemoryUsageSnapshot(
                 1d)) : 0d;
 }
 
-internal sealed class SearchProgressDisplayState(long startedAtTick)
-{
-    public SearchProgressDisplayState() : this(Environment.TickCount64)
-    {
-    }
-
-    public long StartedAtTick { get; private set; } = startedAtTick;
-    public long LastRenderAtTick { get; private set; } = startedAtTick;
-    public SolverProgress? RenderedProgress { get; private set; }
-
-    public void Restart(long nowTick)
-    {
-        StartedAtTick = nowTick;
-        LastRenderAtTick = nowTick;
-        RenderedProgress = null;
-    }
-
-    public bool TryCreate(
-        SolverProgress? progress,
-        long nowTick,
-        out SolverProgress displayProgress)
-    {
-        if (progress == null
-            || nowTick - LastRenderAtTick < SolverWeights.ProgressUiIntervalMilliseconds)
-        {
-            displayProgress = null!;
-            return false;
-        }
-
-        long elapsedMilliseconds = Math.Max(
-            progress.ElapsedMilliseconds,
-            Math.Max(
-                RenderedProgress?.ElapsedMilliseconds ?? 0L,
-                Math.Max(0L, nowTick - StartedAtTick)));
-        displayProgress = elapsedMilliseconds == progress.ElapsedMilliseconds
-            ? progress
-            : progress with { ElapsedMilliseconds = elapsedMilliseconds };
-        LastRenderAtTick = nowTick;
-        RenderedProgress = displayProgress;
-        return true;
-    }
-}
-
 internal sealed class SolverCombatSession
 {
     public CombatState? State { get; set; }
@@ -163,6 +121,16 @@ internal sealed class SolverSearchSession(
     private static readonly double[] FrameBucketUpperBounds =
         [16.7d, 25d, 33d, 50d, 100d, double.MaxValue];
     private readonly int[] _frameBuckets = new int[FrameBucketUpperBounds.Length];
+    private readonly object _workerGate = new();
+    private readonly CancellationTokenSource _cancellation = new();
+    private readonly TaskCompletionSource _workerStartup = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _callbackCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private Task _workerCompletion = Task.CompletedTask;
+    private bool _workerStarted;
+    private bool _startupClosed;
+    private int _referenceReleaseState;
+    private int _cancellationDisposeState;
+    private static int _disposedCancellationCount;
 
     public int Generation { get; } = generation;
     public int StartTurnNumber { get; init; }
@@ -173,13 +141,9 @@ internal sealed class SolverSearchSession(
     public bool UseRouteScopedCompletion { get; set; }
     public CombatState State { get; } = state;
     public LiveCombatStamp Stamp { get; } = stamp;
-    public CancellationTokenSource Cancellation { get; } = new();
-    public Task WorkerCompletion { get; set; } = Task.CompletedTask;
-    public TaskCompletionSource CallbackCompletion { get; } = new(
-        TaskCreationOptions.RunContinuationsAsynchronously);
-    public bool CallbackScheduled { get; set; }
-    public int ReferenceReleaseState;
-    public int CancellationDisposeState;
+    public CancellationToken Token => _cancellation.Token;
+    public bool IsWorkerCompleted => _workerStartup.Task.IsCompleted && Volatile.Read(ref _workerCompletion).IsCompleted;
+    public static int CancellationDisposeCountForTesting => Volatile.Read(ref _disposedCancellationCount);
     public bool DeployWhenReady { get; set; } = deployWhenReady;
     public int ForegroundPublishedCandidateVersion { get; set; } = -1;
     public int MaxDegreeOfParallelism { get; set; } = 1;
@@ -193,6 +157,90 @@ internal sealed class SolverSearchSession(
 
     public long ProcessAllocatedBytesAtStart { get; } = GC.GetTotalAllocatedBytes(precise: false);
     public TimeSpan ProcessGcPauseAtStart { get; } = GC.GetTotalPauseDuration();
+
+    // Search owns two quiescence boundaries: the worker and its main-thread callback.
+    // Dispatcher/activity selection stays in the caller's registration adapter.
+    public bool TryStartWorker(
+        Func<Task<SolverResult>> start, Action<Task<SolverResult>> registerCompletion)
+    {
+        ArgumentNullException.ThrowIfNull(start);
+        ArgumentNullException.ThrowIfNull(registerCompletion);
+        lock (_workerGate)
+        {
+            if (_workerStarted)
+                throw new InvalidOperationException("The search session already owns a worker.");
+            if (_startupClosed || _cancellation.IsCancellationRequested)
+            {
+                _startupClosed = true;
+                _callbackCompletion.TrySetResult();
+                _workerStartup.TrySetResult();
+                return false;
+            }
+            _workerStarted = true;
+        }
+        bool callbackScheduled = false;
+        try
+        {
+            Task<SolverResult> worker = start();
+            ArgumentNullException.ThrowIfNull(worker);
+            Volatile.Write(ref _workerCompletion, worker);
+            registerCompletion(worker);
+            callbackScheduled = true;
+            return true;
+        }
+        finally
+        {
+            if (!callbackScheduled)
+                _callbackCompletion.TrySetResult(); // No callback exists after setup failure.
+            _workerStartup.TrySetResult();
+            DisposeCancellationOnce();
+        }
+    }
+
+    public void Cancel()
+    {
+        try { _cancellation.Cancel(); }
+        catch (ObjectDisposedException) when (Volatile.Read(ref _cancellationDisposeState) != 0) { }
+        lock (_workerGate)
+        {
+            if (_workerStarted)
+                return; // Startup/registration or the callback still owns completion.
+            _startupClosed = true;
+            _callbackCompletion.TrySetResult();
+            _workerStartup.TrySetResult();
+        }
+    }
+
+    public void CompleteCallback()
+    {
+        _callbackCompletion.TrySetResult();
+        DisposeCancellationOnce();
+    }
+
+    public async Task ReleaseReferencesAsync()
+    {
+        try
+        {
+            await _workerStartup.Task.ConfigureAwait(false);
+            await Volatile.Read(ref _workerCompletion).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            await _callbackCompletion.Task.ConfigureAwait(false);
+            Volatile.Write(ref _workerCompletion, Task.CompletedTask);
+        }
+        finally { DisposeCancellationOnce(); }
+    }
+
+    public bool TryBeginReferenceRelease()
+        => Interlocked.Exchange(ref _referenceReleaseState, 1) == 0;
+
+    private void DisposeCancellationOnce()
+    {
+        if (!_workerStartup.Task.IsCompleted || !Volatile.Read(ref _workerCompletion).IsCompleted
+            || !_callbackCompletion.Task.IsCompleted
+            || Interlocked.Exchange(ref _cancellationDisposeState, 1) != 0)
+            return;
+        _cancellation.Dispose();
+        Interlocked.Increment(ref _disposedCancellationCount);
+    }
 
     public void ObserveFrame(double milliseconds)
     {
@@ -234,17 +282,170 @@ internal sealed class SolverSearchSession(
     }
 }
 
+// Owns one deferred entry's complete intent and its barrier/queued-callback lifetime.
+// Controller still owns exact-current-request, combat epoch/state and live authorization.
+internal sealed class SolverDeferredSearchRequest(
+    NGame host, CombatState state, SearchReason reason, bool deployWhenReady,
+    SolverResult? adoptedRouteReplay, int lifecycleGeneration)
+{
+    private readonly CancellationTokenSource _cancellation = new();
+    private int _cancelled;
+    private int _started;
+    private int _disposed;
+
+    public NGame Host { get; } = host;
+    public CombatState State { get; } = state;
+    public SearchReason Reason { get; } = reason;
+    public bool DeployWhenReady { get; } = deployWhenReady;
+    public SolverResult? AdoptedRouteReplay { get; } = adoptedRouteReplay;
+    public int LifecycleGeneration { get; } = lifecycleGeneration;
+    public bool IsCancellationRequested => Volatile.Read(ref _cancelled) != 0;
+
+    public void Cancel()
+    {
+        Interlocked.Exchange(ref _cancelled, 1);
+        try { _cancellation.Cancel(); }
+        catch (ObjectDisposedException) when (Volatile.Read(ref _disposed) != 0) { }
+    }
+
+    public async Task WaitAndDispatchAsync(Task barrier, Action<Action> post, Action resume)
+    {
+        if (Interlocked.Exchange(ref _started, 1) != 0)
+            throw new InvalidOperationException("The deferred search request already owns an operation.");
+        CancellationToken token = _cancellation.Token;
+        try
+        {
+            await barrier.WaitAsync(token).ConfigureAwait(false);
+            token.ThrowIfCancellationRequested();
+            TaskCompletionSource callbackCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            post(() =>
+            {
+                try { resume(); }
+                finally { callbackCompleted.TrySetResult(); }
+            });
+            // Canceling a queued request cannot release the old combat references
+            // before its queued callback has actually run and rejected/resumed it.
+            await callbackCompleted.Task.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        finally
+        {
+            Interlocked.Exchange(ref _disposed, 1);
+            _cancellation.Dispose();
+        }
+    }
+}
+
 internal sealed class SolverDeploymentSession
 {
+    private readonly object _operationGate = new();
+    private readonly TaskCompletionSource _operationAttachment = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private Task _operation = Task.CompletedTask;
+    private bool _operationAttached;
+    private bool _rejectedBeforeStart;
+    private int _cancellationDisposeState;
+    private readonly CancellationTokenSource _cancellation = new();
+
+    // The structural plan is one immutable snapshot for capacity, UI and execution.
+    // It grants no live authority: the deployment loop still revalidates every action.
+    public SolverDeploymentSession(
+        IReadOnlyList<PlanAction> routeActions, int startTurnNumber, bool safeExecute,
+        int routeGeneration, long worldVersion)
+    {
+        StartTurnNumber = startTurnNumber;
+        RouteGeneration = routeGeneration;
+        WorldVersion = worldVersion;
+        PlanAction[] planned = routeActions.Where(action =>
+            MultiplayerLocalCrossTurnContracts.IsCurrentTurnAction(action.Turn, startTurnNumber)).ToArray();
+        PlannedActions = Array.AsReadOnly(planned);
+        if (safeExecute)
+        {
+            IReadOnlyList<PlanAction> safe = MultiplayerSafeLocalActionClassifier.TakeBoundedDeploymentSlice(
+                planned, out SafeLocalActionDecision stop);
+            Actions = Array.AsReadOnly(safe.ToArray());
+            StructuralStop = stop;
+            PlannedEndTurn = safe.Count < planned.Length && planned[safe.Count].Kind == PlanActionKind.EndTurn
+                ? planned[safe.Count] : null;
+            RejectedBeforeStart = safe.Count == 0 && planned.Length > 0 && PlannedEndTurn == null;
+            SafeExecutionSession = new(startTurnNumber, routeGeneration, worldVersion, safe.Count);
+        }
+        else
+        {
+            PlanAction[] beforeForecast = planned.TakeWhile(action => !action.IsForecastOnlyObservation).ToArray();
+            Actions = Array.AsReadOnly(beforeForecast.Where(action => action.IsExecutable).ToArray());
+            PlannedEndTurn = beforeForecast.FirstOrDefault(action => action.Kind == PlanActionKind.EndTurn);
+            StructuralStop = SafeLocalActionDecision.Allow;
+        }
+    }
+
+    public SolverDeploymentSession() : this([], 0, false, 0, 0) { }
+
     public CombatState? State { get; init; }
-    public int StartTurnNumber { get; init; }
-    public long WorldVersion { get; init; }
-    public int RouteGeneration { get; init; }
+    public int StartTurnNumber { get; }
+    public long WorldVersion { get; }
+    public int RouteGeneration { get; }
     public int CombatLifecycleGeneration { get; init; }
-    public MultiplayerSafeExecutionSession? SafeExecutionSession { get; init; }
-    public PlanAction? SafeEndTurnAction { get; set; }
-    public CancellationTokenSource Cancellation { get; } = new();
-    public Task Operation { get; set; } = Task.CompletedTask;
+    public MultiplayerSafeExecutionSession? SafeExecutionSession { get; }
+    public IReadOnlyList<PlanAction> PlannedActions { get; }
+    public IReadOnlyList<PlanAction> Actions { get; }
+    public PlanAction? PlannedEndTurn { get; }
+    public SafeLocalActionDecision StructuralStop { get; }
+    public bool RejectedBeforeStart { get; }
+    public CancellationToken Token => _cancellation.Token;
     public int ReferenceReleaseState;
-    public int CancellationDisposeState;
+
+    public Task StartOperation(Func<Task> start)
+    {
+        ArgumentNullException.ThrowIfNull(start);
+        lock (_operationGate)
+        {
+            if (_operationAttached || _rejectedBeforeStart)
+                throw new InvalidOperationException("The deployment already owns an operation or was rejected before start.");
+            _operationAttached = true;
+        }
+        try
+        {
+            // An async body's synchronous prefix may re-enter cancellation. Reserve
+            // ownership first, then publish its returned task before draining can finish.
+            Task operation = start();
+            ArgumentNullException.ThrowIfNull(operation);
+            Volatile.Write(ref _operation, operation);
+            return operation;
+        }
+        finally
+        {
+            // A synchronous setup failure created no returned operation; its caller
+            // still receives the exception, and queued cancellation must not hang.
+            _operationAttachment.TrySetResult();
+        }
+    }
+
+    public void Cancel() => _cancellation.Cancel();
+
+    public async Task ReleaseOperationReferencesAsync()
+    {
+        await _operationAttachment.Task.ConfigureAwait(false);
+        await Volatile.Read(ref _operation).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        Volatile.Write(ref _operation, Task.CompletedTask);
+    }
+
+    public bool DisposeRejectedBeforeStart()
+    {
+        lock (_operationGate)
+        {
+            if (!RejectedBeforeStart || _operationAttached)
+                throw new InvalidOperationException("Only a structurally rejected deployment with no operation may finish before start.");
+            _rejectedBeforeStart = true;
+        }
+        _operationAttachment.TrySetResult();
+        return DisposeCancellationOnce();
+    }
+
+    public bool DisposeCancellationOnce()
+    {
+        if (Interlocked.Exchange(ref _cancellationDisposeState, 1) != 0)
+            return false;
+        _cancellation.Dispose();
+        return true;
+    }
 }

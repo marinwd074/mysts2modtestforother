@@ -234,7 +234,7 @@ internal static partial class SolverController
         Entry.Logger.Info($"[CombatSolver/Test] SOLVER_DISABLED disabled={disabled}");
         if (disabled)
         {
-            bool controllerSearchCanceled = _search != null || _deferredSearchCts != null;
+            bool controllerSearchCanceled = _search != null || _deferredSearch != null;
             PlayerTurnSetupCoordinator.CancelForSolverDisabled();
             CancelDeferredSearch();
             CancelSearch();
@@ -278,7 +278,7 @@ internal static partial class SolverController
         if (!IsSearching)
             return;
 
-        bool controllerSearchCanceled = _search != null || _deferredSearchCts != null;
+        bool controllerSearchCanceled = _search != null || _deferredSearch != null;
         int? generation = _search?.Generation;
         _combat.FullAutoEnabled = false;
         _combat.MultiplayerSafeAutoEnabled = false;

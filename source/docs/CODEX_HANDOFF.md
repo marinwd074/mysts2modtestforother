@@ -13,6 +13,35 @@
 - MultiplayerOnly 牌保留真实牌堆占位与抽牌距离，但不进入主动搜索/自动执行。
 - 多人 Safe Execute 只部署本地玩家动作；队友观察不会获得部署权限。
 
+## 候选展示与采用状态
+
+当前代码把双预览/seed 配对、已显示选择与采用收口集中到 `Runtime/SearchInteractionState.cs`；Search 保留排序/质量决定，两个显示 adapter 保留原 Play/TurnSetup 差异，Runtime 的真实动作授权不变。进度槽/节流器已封闭到 module，显式 seed 取消也走共享物化，删除 Search 侧重复身份转发；无 seed 完整结果 fallback 仍归 Search。无游戏合同入口为 `tools/SearchInteractionChecks`；与真实类型集成仍使用 `U0U1PinnedHarness completion-scope` / `continuation-replay`。本次 .NET 9 / pinned 0.107.1 Release 与 U0U1 harness 编译均为 0 warning/error；25 项生产源码交互合同、`completion-scope`、`continuation-replay`、`rolling-review` 与默认 U0/U1（含 Phase C）均通过。Linux 结构门禁的五项规则漂移已在后续脚本对齐中修正，见下节；不把静态门禁当成实机证据。既有显式采用重复 RNG 失效的 Host/Client 未验证项保持开放。
+
+
+
+## 延迟入口意图
+
+GC 与 native-action 两条 barrier 原先遗漏 adoptedRouteReplay；现在由已有 Sessions 文件内的 `SolverDeferredSearchRequest` 保留完整入口载荷，恢复默认重入原 RequestSearch，fresh-root/回合/质量/权限校验不变。精确 owner 取代重复 id+CTS 身份，非取消 fault/cancel 清理不会遗留 disposed CTS 或清掉新请求；queued callback 仍纳入引用排空。Release/harness 零警告错误，受控双 barrier 的实际 Defer/Resume 合同与 continuation-replay 通过。合同保留实际 owner/epoch/CombatManager-state guard，仅截获最后 UI 入口；没有证明真实 GC/native action 触发或 Host/Client 按钮恢复。
+
+## 搜索会话排空
+
+现有 `SolverSearchSession` 已集中拥有 worker 启动/注册、主线程 callback、取消与 CTS 一次释放/计数；Controller 仅保留 dispatcher/activity adapter、当前 owner/live/UI 判断与全局释放队列。取消/完成/排空调用方不再直接写 task、callback TCS/flag 或操作 CTS。搜索仍同时等待 worker 和 callback，不与部署机械共用框架。Release/harness 零警告错误；completion-scope 用真实 Controller 注册/取消/排空/完成入口覆盖排队 callback、stale owner、异常、重入与同步完成。Release tracker 为 inert，活动无人 tracker 的 acquisition/disposal 仅静态核对；未把此合同当成真实游戏或活动无人运行证明。
+
+## 部署会话计划
+
+当前回合/forecast 投影与结构 Safe prefix 已由既有 `SolverDeploymentSession` 捕获一次，容量、UI 与执行共用计划；逐动作 live 分类/授权未改。首动作结构拒绝此前没有进入 async finally，现由既有 Controller 完成入口一次性释放 CTS；operation 启动与前启动拒绝互斥；drain 等待 Task 附着和真实操作，同步前缀重入取消不再提前释放 CTS。实际 Controller 调用回归覆盖旧 owner 隔离、一次计数与这个重入时序。搜索的 worker + 主线程 callback 排空没有与部署机械合并。当前 Release/harness 零警告错误，completion-scope 的部署计划/Controller 收尾回归通过；真实 Windows/UI 部署仍未验证。
+
+## Worker 会话生命周期
+
+`Api/PreCombatWorkerSession.cs` 现拥有精确进程、请求/result/ready/归档清理尝试与复用状态；外层 worker 保留环境准备、串行 Gate 与预测语义。停止未确认时保留原 owner 并禁止复用/替换，API 不以取消或 live drift 掩盖此失败；状态查询不等待五秒停止确认，已结束 idle token 的释放竞争不会跳过停止。公开 API/设置、Windows 隔离、Mod 固定副本与协议字段不变，归档删除仍为原 best-effort 策略。
+
+本轮 27 项链接生产 outer-worker/session/protocol 的合同、13 项公开请求合同与阶段 1 的 22 项交互合同通过；Release / pinned harness 为 0 warning/error，completion-scope、continuation-replay、rolling-review、默认 U0/U1（含 Phase C）再次通过。真实 Windows 游戏 worker 启动/镜像和 Host/Client 未执行；两个实际子进程仅为合同测试程序。随后仅修正 Linux 结构脚本中的五项陈旧规则，生产实现保持不变。
+
+
+## 结构规则对齐
+
+Linux 架构门禁现与 PowerShell 的五组现有合同对齐：ContinuationStamp 保留 capturedPlayers；精确 Beam partial 名单补齐七个既有文件；routing-position 分支归 BeamRanking；固定前缀调用归 OpeningExpansion；手动选牌 Fork 先共享准备、再 RequireRemap。未修改生产源码或放宽精确文件集/所有权边界。`tools/verify-refactor-boundaries-tests.py` 在隔离源码副本中执行完整 Linux 正例和八项负向变异，并静态核对五组规则与 PowerShell 等价。PowerShell 运行时未执行；Windows worker 与 Host/Client 验收仍开放。
+
 ## 上游适配
 
 本次上游适配核对到 `53c26b26c50bec027de8f7d2c76deb223cd6971d`（上游 0.47.3 / 游戏 0.111.0），保持本项目 pinned 0.107.1。已移植模型 ID 注册门禁、隔离 worker UI 边界、费用有效期身份、选牌分配优化、物理容量显示及手动 heap decommit。Release、相应 pinned / 请求 / GC 合同通过；真实 NoGC 恢复因本机可用恢复预算约 461 MB 低于 512 MB 门槛，仍 UNVERIFIED。未执行真实 worker 或 Host/Client 验证，既有 AdoptRoute 实机未完成项保持开放。

@@ -7,7 +7,8 @@
 | 层 | 入口 | 证明范围 |
 |---|---|---|
 | Target | `tools/verify-target-version.ps1` | 0.107.1 / RitsuLib / compatibility symbol |
-| Architecture | `tools/verify-refactor-boundaries.ps1` | 依赖和职责边界 |
+| Architecture | `tools/verify-refactor-boundaries.ps1` / `.sh` | 依赖和职责边界 |
+| Architecture rule contracts | `python3 tools/verify-refactor-boundaries-tests.py` | 当前 Linux 门禁正例 + 八项负向变异；五组规则跨脚本静态等价，不代替 PowerShell 执行 |
 | Repository | `tools/verify-repository-hygiene.ps1` | Git 跟踪文件、Markdown 本地链接、项目版本日志与 LFS 边界 |
 | L1 contracts | `tools/run-contract-tests.ps1` | Search / Prediction / Multiplayer 纯合同 |
 | Release | `dotnet build CombatSolver.csproj -c Release` | 当前本机真实依赖下编译 |
@@ -18,7 +19,17 @@
 
 `U0U1PinnedHarness turn-based-energy` 对照 PaelsFlesh / Bread 原生最大能量：144 次根/未来/live 回合及熔化查询、1280 次 DOP=4 查询、4 次完整 EndTurn 重放，核对全分支状态/RNG及真实回合隔离。`request-hydration` 另覆盖异常成员 Faulted、释放与重复 Dispose 的单次贡献。
 
+`SearchInteractionChecks` 是无游戏 .NET 9 合同：直接链接生产候选交互 module 与进度 DTO，覆盖发布/批准/显示/采用/后台更新/完成、清理发布不重置显示/接管、无 ordinary result 的显式 seed 取消、版本与动作分别失配、TurnSetup 原有无 seed 接管、锁外单次物化、只读列表、清理与停止结果 stamp。外部搜索/游戏 DTO 使用最小替身，不宣称验证完整 PlanAction 嵌套选择、搜索质量或真实部署。`U0U1PinnedHarness completion-scope` 保留真实类型下的 scope/前台排序/显示合同；正例 seed 与预览同版本，并独立拒绝同动作不同版本、同版本不同动作的反例。
+
+`continuation-replay` 另用受控 GC/native held tasks 驱动真实 Controller Defer/Resume/dispatcher，核对 replay 引用、reason/deploy 的两轮往返、queued 取消/替换/epoch 拒绝、noncancel fault exact-owner 清理；实际 owner/epoch/CombatManager-state guard 保留，仅记录最终 UI entry 参数。它不是实际 GC/native-action 触发或 RequestSearch UI/live-root 的运行证明。
+
 `U0U1PinnedHarness continuation-replay` 另覆盖已物化 incumbent 的显式采用：Coordinator 选择/worker 最终结果保留采用范围与屏幕身份，普通完成不获得采用标记；连续两次 RNG 新根重放核对质量、不同路线身份及 live 隔离。当前标记修复的 Host/Client 复测仍 UNVERIFIED。
+
+`completion-scope` 另覆盖真实 `SolverSearchSession`：factory/注册失败、取消前启动、worker 完成而 callback 仍排队、同步 callback、实际 Controller 的 stale/抛异常完成与重入 Cancel/Drain；核对四个 owner 各一次 scheduled/completed/CTS 计数。测试临时设置并恢复固定游戏 main-thread ID，未启动 UI；Release 的 tracker 桥接为 inert，活动无人 activity 分支只静态核对。
+
+`U0U1PinnedHarness completion-scope` 另链接真实 `SolverDeploymentSession` / classifier，检查计划快照、Safe 容量、EndTurn-only、forecast/不支持边界、启动/拒绝竞争、同步完成、启动异常及 fault drain；调用实际 Controller 完成入口核对拒绝时一次性释放 CTS 和旧会话隔离，并在同步 factory 前缀重入 CancelDeployment/Drain，核对 Task 附着与真实操作完成前不会释放。它不启动真实 UI 或原生部署。
+
+`PreCombatWorkerSessionChecks` 链接生产 session、公开 contracts 与 protocol/JSON 源码，使用真实临时协议文件和受控进程 adapter；另以两个真实测试子进程核对只停止精确 owner。覆盖 result/ready/cleanup 顺序、旧 requestId、Held、取消、格式错误、进程退出、停止超时与失败后保留所有权，以及停止确认期间状态查询不阻塞。`PreCombatRequestChecks` 覆盖公开完成适配不以取消或 live drift 覆盖退出未确认失败。它们不启动真实游戏，也不证明 Windows 镜像/Steam/worker 完整流程通过。
 
 `U0U1PinnedHarness model-id-cache` 核对原版类型、注册期模组临时 ID、冻结后 ID、重复通知和空参数；`PreCombatRequestChecks` 另核对 worker 不得启动嵌套预报。两者是 pinned / 合同证据，不证明实际 worker 进程或 Host/Client 成功。
 

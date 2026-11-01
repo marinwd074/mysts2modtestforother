@@ -68,6 +68,7 @@ internal static partial class SolverController
                 state,
                 reason,
                 deployWhenReady,
+                adoptedRouteReplay,
                 rootCaptureBarrier);
             return;
         }
@@ -122,7 +123,7 @@ internal static partial class SolverController
             : actionExecutor.FinishedExecutingActions();
         if (!nativeActionBarrier.IsCompleted)
         {
-            DeferSearchUntilRootCaptureBarrier(host, state, reason, deployWhenReady, nativeActionBarrier);
+            DeferSearchUntilRootCaptureBarrier(host, state, reason, deployWhenReady, adoptedRouteReplay, nativeActionBarrier);
             return;
         }
         nativeActionBarrier.GetAwaiter().GetResult();
@@ -488,7 +489,7 @@ internal static partial class SolverController
                     : null,
             };
             _search = search;
-            CancellationToken token = search.Cancellation.Token;
+            CancellationToken token = search.Token;
             int generation = search.Generation;
             if (capabilities.Kind == SolverSessionKind.MultiplayerAdvisor)
             {
@@ -673,7 +674,7 @@ internal static partial class SolverController
 
             setupStage = "worker_schedule";
             SolvedRouteCache routeCache = SolvedRouteCache.Capture(state, rootSnapshot, searchPolicy, battleDamage);
-            Task<SolverResult> solveTask = Task.Run(() =>
+            _ = search.TryStartWorker(() => Task.Run(() =>
             {
                 if (MultiplayerLocalCrossTurnContracts.CanUsePersistentRouteCache(searchPolicy.RoutePolicy)
                     && !searchPolicy.VerifyIncrementalSearch && !searchPolicy.MeasurePhasePerformance
@@ -729,44 +730,7 @@ internal static partial class SolverController
                             gcLifecycle.ToDiagnosticString());
                     }
                 }
-            }, token);
-            search.WorkerCompletion = solveTask;
-            if (!UnattendedAsyncActivityTracker.IsRequestActive)
-            {
-                // Preserve the production continuation path exactly. The extra lifecycle
-                // ownership is needed only while a reusable unattended request is active.
-                solveTask.ContinueWith(task =>
-                {
-                    SolverDispatcher.Post(() => CompleteSearch(host, search, task));
-                }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
-                search.CallbackScheduled = true;
-                return;
-            }
-
-            IDisposable? unattendedActivity = UnattendedAsyncActivityTracker.BeginActivity();
-            solveTask.ContinueWith(task =>
-            {
-                try
-                {
-                    SolverDispatcher.Post(() =>
-                    {
-                        try
-                        {
-                            CompleteSearch(host, search, task);
-                        }
-                        finally
-                        {
-                            unattendedActivity?.Dispose();
-                        }
-                    });
-                }
-                catch
-                {
-                    unattendedActivity?.Dispose();
-                    throw;
-                }
-            }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
-            search.CallbackScheduled = true;
+            }, token), solveTask => RegisterSearchCompletion(host, search, solveTask));
         }
         catch (Exception ex)
         {
@@ -794,26 +758,61 @@ internal static partial class SolverController
         }
     }
 
+    private static void RegisterSearchCompletion(
+        NGame host, SolverSearchSession search, Task<SolverResult> solveTask)
+    {
+        Action<Task<SolverResult>> postCompletion = task =>
+            SolverDispatcher.Post(() => CompleteSearch(host, search, task));
+        IDisposable? unattendedActivity = null;
+        if (UnattendedAsyncActivityTracker.IsRequestActive)
+        {
+            unattendedActivity = UnattendedAsyncActivityTracker.BeginActivity();
+            postCompletion = task =>
+            {
+                try
+                {
+                    SolverDispatcher.Post(() =>
+                    {
+                        try { CompleteSearch(host, search, task); }
+                        finally { unattendedActivity?.Dispose(); }
+                    });
+                }
+                catch
+                {
+                    unattendedActivity?.Dispose();
+                    throw;
+                }
+            };
+        }
+        try
+        {
+            solveTask.ContinueWith(postCompletion, CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        }
+        catch
+        {
+            unattendedActivity?.Dispose();
+            throw;
+        }
+    }
+
     private static async Task ReleaseSearchSessionAsync(SolverSearchSession? search)
     {
         if (search == null)
             return;
         try
         {
-            await search.WorkerCompletion.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
-            await search.CallbackCompletion.Task.ConfigureAwait(false);
-            search.WorkerCompletion = Task.CompletedTask;
+            await search.ReleaseReferencesAsync().ConfigureAwait(false);
         }
         finally
         {
-            DisposeSearchCancellationOnce(search);
             Interlocked.Increment(ref _searchReferenceReleaseCompletedCountForTesting);
         }
     }
 
     private static void QueueSearchReferenceRelease(SolverSearchSession search)
     {
-        if (Interlocked.Exchange(ref search.ReferenceReleaseState, 1) != 0)
+        if (!search.TryBeginReferenceRelease())
             return;
         PendingSearchReferenceReleases.RemoveAll(static task => task.IsCompleted);
         Interlocked.Increment(ref _searchReferenceReleaseScheduledCountForTesting);
@@ -827,14 +826,6 @@ internal static partial class SolverController
         Task[] releases = [.. PendingSearchReferenceReleases];
         PendingSearchReferenceReleases.Clear();
         return Task.WhenAll(releases);
-    }
-
-    private static void DisposeSearchCancellationOnce(SolverSearchSession search)
-    {
-        if (Interlocked.Exchange(ref search.CancellationDisposeState, 1) != 0)
-            return;
-        search.Cancellation.Dispose();
-        Interlocked.Increment(ref _searchCtsDisposeCountForTesting);
     }
 
     private static void PublishSearchProgress(SolverSearchSession search, SolverProgress progress)
@@ -854,8 +845,7 @@ internal static partial class SolverController
         }
         finally
         {
-            search.CallbackCompletion.TrySetResult();
-            DisposeSearchCancellationOnce(search);
+            search.CompleteCallback();
         }
     }
 
@@ -868,7 +858,7 @@ internal static partial class SolverController
         if (!ReferenceEquals(_search, search))
             return;
         _search = null;
-        Volatile.Write(ref search.Interaction.Progress, null);
+        search.Interaction.ClearProgress();
         int generation = search.Generation;
         Entry.Logger.Info($"[CombatSolver/Test] SEARCH_CALLBACK generation={generation} thread={System.Environment.CurrentManagedThreadId} main_thread={NGame.IsMainThread()}");
         Entry.Logger.Info(
@@ -1189,101 +1179,64 @@ internal static partial class SolverController
     }
 
     private static void DeferSearchUntilRootCaptureBarrier(
-        NGame host,
-        CombatState state,
-        SearchReason reason,
-        bool deployWhenReady,
-        Task barrier)
+        NGame host, CombatState state, SearchReason reason, bool deployWhenReady,
+        SolverResult? adoptedRouteReplay, Task barrier,
+        Action<NGame, CombatState, SearchReason, bool, SolverResult?>? resumeSearch = null)
     {
         CancelDeferredSearch();
-        CancellationTokenSource cancellation = new();
-        _deferredSearchCts = cancellation;
-        int requestId = ++_deferredSearchId;
-        int lifecycleGeneration = Volatile.Read(ref _combatLifecycleGeneration);
+        SolverDeferredSearchRequest request = new(host, state, reason, deployWhenReady,
+            adoptedRouteReplay, Volatile.Read(ref _combatLifecycleGeneration));
+        Volatile.Write(ref _deferredSearch, request);
         Entry.Logger.Info(
-            $"[CombatSolver/Test] SEARCH_ROOT_CAPTURE_DEFERRED reason={reason} " +
-            $"lifecycle_epoch={lifecycleGeneration}");
+            $"[CombatSolver/Test] SEARCH_ROOT_CAPTURE_DEFERRED reason={request.Reason} " +
+            $"lifecycle_epoch={request.LifecycleGeneration}");
         PendingDeferredSearchReleases.RemoveAll(static task => task.IsCompleted);
-        Task operation = ResumeDeferredSearchAsync(
-            host,
-            state,
-            reason,
-            deployWhenReady,
-            barrier,
-            cancellation,
-            requestId,
-            lifecycleGeneration);
+        Task operation = ResumeDeferredSearchAsync(request, barrier, resumeSearch);
         PendingDeferredSearchReleases.Add(operation);
         TaskHelper.RunSafely(operation);
     }
 
     private static async Task ResumeDeferredSearchAsync(
-        NGame host,
-        CombatState state,
-        SearchReason reason,
-        bool deployWhenReady,
-        Task barrier,
-        CancellationTokenSource cancellation,
-        int requestId,
-        int lifecycleGeneration)
+        SolverDeferredSearchRequest request, Task barrier,
+        Action<NGame, CombatState, SearchReason, bool, SolverResult?>? resumeSearch = null)
     {
-        CancellationToken token = cancellation.Token;
         try
         {
-            await barrier.WaitAsync(token).ConfigureAwait(false);
-            token.ThrowIfCancellationRequested();
-            TaskCompletionSource callbackCompleted = new(
-                TaskCreationOptions.RunContinuationsAsynchronously);
-            SolverDispatcher.Post(() =>
-            {
-                try
-                {
-                    bool ownsDeferredRequest = requestId == _deferredSearchId
-                        && ReferenceEquals(_deferredSearchCts, cancellation);
-                    if (token.IsCancellationRequested
-                        || !ownsDeferredRequest
-                        || Volatile.Read(ref _combatLifecycleGeneration) != lifecycleGeneration
-                        || !ReferenceEquals(CombatManager.Instance.DebugOnlyGetState(), state))
-                    {
-                        if (ownsDeferredRequest)
-                            _deferredSearchCts = null;
-                        return;
-                    }
-                    _deferredSearchCts = null;
-                    Entry.Logger.Info(
-                        $"[CombatSolver/Test] SEARCH_ROOT_CAPTURE_RESUMED reason={reason} " +
-                        $"lifecycle_epoch={lifecycleGeneration}");
-                    RequestSearch(host, state, reason, deployWhenReady);
-                }
-                finally
-                {
-                    callbackCompleted.TrySetResult();
-                }
-            });
-            // Even a canceled request waits for its queued callback. That callback owns the
-            // final references to the old combat graph, so the combat-end barrier must not
-            // declare quiescence merely because its token was canceled.
-            await callbackCompleted.Task.ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (token.IsCancellationRequested)
-        {
-            // Reset/newer request owns the deferred-search cancellation.
+            await request.WaitAndDispatchAsync(barrier, SolverDispatcher.Post,
+                () => ResumeDeferredSearchRequest(request, resumeSearch)).ConfigureAwait(false);
         }
         finally
         {
-            cancellation.Dispose();
+            // Fault/cancellation also retires this exact owner, never a newer request.
+            Interlocked.CompareExchange(ref _deferredSearch, null, request);
         }
     }
 
-    private static void CancelDeferredSearch()
+    private static void ResumeDeferredSearchRequest(
+        SolverDeferredSearchRequest request,
+        Action<NGame, CombatState, SearchReason, bool, SolverResult?>? resumeSearch)
     {
-        CancellationTokenSource? cancellation = _deferredSearchCts;
-        _deferredSearchCts = null;
-        if (cancellation == null)
+        bool ownsDeferredRequest = ReferenceEquals(Volatile.Read(ref _deferredSearch), request);
+        if (request.IsCancellationRequested || !ownsDeferredRequest
+            || Volatile.Read(ref _combatLifecycleGeneration) != request.LifecycleGeneration
+            || !ReferenceEquals(CombatManager.Instance.DebugOnlyGetState(), request.State))
+        {
+            if (ownsDeferredRequest)
+                Interlocked.CompareExchange(ref _deferredSearch, null, request);
             return;
-        _deferredSearchId++;
-        cancellation.Cancel();
+        }
+        Interlocked.CompareExchange(ref _deferredSearch, null, request);
+        Entry.Logger.Info(
+            $"[CombatSolver/Test] SEARCH_ROOT_CAPTURE_RESUMED reason={request.Reason} " +
+            $"lifecycle_epoch={request.LifecycleGeneration}");
+        // The production adapter always re-enters the normal entry point: fresh
+        // capabilities, barriers, root capture and replay validation all run again.
+        Action<NGame, CombatState, SearchReason, bool, SolverResult?> resume = resumeSearch ?? RequestSearch;
+        resume(request.Host, request.State, request.Reason, request.DeployWhenReady, request.AdoptedRouteReplay);
     }
+
+    private static void CancelDeferredSearch()
+        => Interlocked.Exchange(ref _deferredSearch, null)?.Cancel();
 
     private static IReadOnlyList<PlanAction> CaptureContinuationSeedActions(
         IReadOnlyList<PlanAction> actions,
@@ -1334,9 +1287,7 @@ internal static partial class SolverController
         _search = null;
         if (search == null)
             return;
-        search.Cancellation.Cancel();
-        if (!search.CallbackScheduled)
-            search.CallbackCompletion.TrySetResult();
+        search.Cancel();
         QueueSearchReferenceRelease(search);
     }
 

@@ -180,3 +180,7 @@ public sealed record PreCombatForecastResult
 
     public bool IsSuccess => Status == PreCombatForecastStatus.Succeeded;
 }
+
+// Internal lifecycle failure category; no public API or wire-contract change.
+internal sealed class PreCombatWorkerExitUnconfirmedException(string message, Exception inner)
+    : InvalidOperationException(message, inner);

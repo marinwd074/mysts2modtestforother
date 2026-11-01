@@ -99,83 +99,42 @@ internal static partial class SolverController
         _combat.LatestResult = null;
         _combat.LatestStamp = null;
         CancelDeployment();
-        IReadOnlyList<PlanAction> plannedTurnActions = result.BestNode.Actions
-            .Where(action => MultiplayerLocalCrossTurnContracts.IsCurrentTurnAction(
-                action.Turn,
-                result.StartTurnNumber))
-            .ToArray();
-        IReadOnlyList<PlanAction> preForecastTurnActions = plannedTurnActions
-            .TakeWhile(action => !action.IsForecastOnlyObservation)
-            .ToArray();
-        int safeSessionActionCapacity = capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute
-            ? MultiplayerSafeLocalActionClassifier.TakeBoundedDeploymentSlice(
-                state,
-                plannedTurnActions,
-                out _).Count
-            : 0;
         SolverSettingsSnapshot deploymentSettings = SolverSettings.Capture();
-        SolverDeploymentSession deployment = new()
+        SolverDeploymentSession deployment = new(
+            result.BestNode.Actions, result.StartTurnNumber,
+            safeExecute: capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute,
+            routeGeneration: _combat.SearchesStarted,
+            worldVersion: capabilities.IsMultiplayer ? MultiplayerWorldTracker.WorldVersion : 0)
         {
             State = state,
-            StartTurnNumber = result.StartTurnNumber,
-            WorldVersion = capabilities.IsMultiplayer
-                ? MultiplayerWorldTracker.WorldVersion
-                : 0,
-            RouteGeneration = _combat.SearchesStarted,
             CombatLifecycleGeneration = Volatile.Read(ref _combatLifecycleGeneration),
-            SafeExecutionSession = capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute
-                ? new MultiplayerSafeExecutionSession(
-                    result.StartTurnNumber,
-                     _combat.SearchesStarted,
-                     capabilities.IsMultiplayer ? MultiplayerWorldTracker.WorldVersion : 0,
-                     safeSessionActionCapacity)
-                : null,
         };
         _deployment = deployment;
-        int actionCount;
-        PlanAction? safeEndTurnAction = null;
-        if (capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute)
+        if (capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute && deployment.RejectedBeforeStart)
         {
-            IReadOnlyList<PlanAction> safeActions =
-                MultiplayerSafeLocalActionClassifier.TakeBoundedDeploymentSlice(
-                    state,
-                    plannedTurnActions,
-                    out SafeLocalActionDecision stop);
-            safeEndTurnAction = FindSafeEndTurnAction(plannedTurnActions, safeActions.Count);
-            if (safeActions.Count == 0 && plannedTurnActions.Count > 0 && safeEndTurnAction == null)
+            try
             {
+                SafeLocalActionDecision stop = deployment.StructuralStop;
                 _combat.MultiplayerSafeExecuteDeploymentRequested = false;
                 StopMultiplayerSafeAutoAtUnsupportedBoundary(stop, result.StartTurnNumber);
                 deployment.SafeExecutionSession?.Abort(stop.Reason);
                 Entry.Logger.Info(
                     $"[CombatSolver/MultiplayerSafeExecute] MP2B_DEPLOY_STOP " +
                     $"turn={result.StartTurnNumber} reason={stop.Reason} " +
-                    DescribeSafeExecutionStopAction(plannedTurnActions, safeActions.Count));
-                CompleteDeployment(deployment);
-                return;
+                    DescribeSafeExecutionStopAction(deployment.PlannedActions, deployment.Actions.Count));
             }
-            actionCount = safeActions.Count;
+            finally { CompleteDeployment(deployment); }
+            return;
         }
-        else
+        Task deploymentTask = deployment.StartOperation(() =>
         {
-            actionCount = preForecastTurnActions.Count(action => action.IsExecutable);
-        }
-        deployment.SafeEndTurnAction = safeEndTurnAction;
-        SolverOverlay.ShowDeploying(
-            host,
-            result.StartTurnNumber,
-            actionCount,
-            willEndTurn: safeEndTurnAction != null
-                || (capabilities.Kind != SolverSessionKind.MultiplayerSafeExecute
-                    && preForecastTurnActions.Any(action => action.Kind == PlanActionKind.EndTurn)));
-        Task deploymentTask = DeployCurrentTurn(
-            host,
-            state,
-            result,
-            deploymentSettings,
-            deployment,
-            deployment.Cancellation.Token);
-        deployment.Operation = deploymentTask;
+            SolverOverlay.ShowDeploying(
+                host,
+                result.StartTurnNumber,
+                deployment.Actions.Count,
+                willEndTurn: deployment.PlannedEndTurn != null);
+            return DeployCurrentTurn(host, state, result, deploymentSettings, deployment, deployment.Token);
+        });
         if (UnattendedAsyncActivityTracker.IsRequestActive)
             deploymentTask = UnattendedAsyncActivityTracker.Track(deploymentTask);
         TaskHelper.RunSafely(deploymentTask);
@@ -197,42 +156,24 @@ internal static partial class SolverController
         int turn = result.StartTurnNumber;
         SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
         bool safeExecute = capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute;
-        IReadOnlyList<PlanAction> plannedTurnActions = result.BestNode.Actions
-            .Where(action => MultiplayerLocalCrossTurnContracts.IsCurrentTurnAction(
-                action.Turn,
-                turn))
-            .ToArray();
-        IReadOnlyList<PlanAction> preForecastTurnActions = plannedTurnActions
-            .TakeWhile(action => !action.IsForecastOnlyObservation)
-            .ToArray();
-        List<PlanAction> actions;
-        SafeLocalActionDecision safeStop = SafeLocalActionDecision.Allow;
+        IReadOnlyList<PlanAction> actions = deployment.Actions;
+        SafeLocalActionDecision safeStop = deployment.StructuralStop;
         MultiplayerSafeExecutionSession? safeSession = deployment.SafeExecutionSession;
         if (safeExecute)
         {
-            actions = [.. MultiplayerSafeLocalActionClassifier.TakeBoundedDeploymentSlice(
-                state,
-                plannedTurnActions,
-                out safeStop)];
             if (!safeStop.IsSafe)
             {
                 Entry.Logger.Info(
                     $"[CombatSolver/MultiplayerSafeExecute] DEPLOY_PREFIX_STOP " +
                     $"turn={turn} reason={safeStop.Reason} " +
-                    DescribeSafeExecutionStopAction(plannedTurnActions, actions.Count));
+                    DescribeSafeExecutionStopAction(deployment.PlannedActions, actions.Count));
             }
         }
-        else
-        {
-            // Forecast-only teammate observations are hard deployment boundaries in every
-            // session kind. Never skip one and execute a contingent local suffix.
-            actions = preForecastTurnActions.Where(action => action.IsExecutable).ToList();
-        }
         PlanAction? plannedEndTurn = safeExecute
-            ? deployment.SafeEndTurnAction
+            ? deployment.PlannedEndTurn
             : !capabilities.CanEndTurnAutomatically
                 ? null
-                : preForecastTurnActions.FirstOrDefault(action => action.Kind == PlanActionKind.EndTurn);
+                : deployment.PlannedEndTurn;
         FastModeType originalFastMode = SaveManager.Instance.PrefsSave.FastMode;
         SolverDeploymentFastMode allowedFastMode = capabilities.CanUseFastDeployment
             ? deploymentSettings.DeploymentFastMode
@@ -938,17 +879,6 @@ internal static partial class SolverController
             $"reason={stop.Reason} turn={turn}");
     }
 
-    private static PlanAction? FindSafeEndTurnAction(
-        IReadOnlyList<PlanAction> plannedTurnActions,
-        int safeActionCount)
-    {
-        if (safeActionCount < 0 || safeActionCount >= plannedTurnActions.Count)
-            return null;
-
-        PlanAction candidate = plannedTurnActions[safeActionCount];
-        return candidate.Kind == PlanActionKind.EndTurn ? candidate : null;
-    }
-
     private static async Task ExecuteSafeEndTurnAsync(
         NGame host,
         CombatState state,
@@ -1433,7 +1363,7 @@ internal static partial class SolverController
         if (deployment == null)
             return;
         deployment.SafeExecutionSession?.Abort("deployment_cancelled");
-        deployment.Cancellation.Cancel();
+        deployment.Cancel();
         QueueDeploymentReferenceRelease(deployment);
     }
 
@@ -1441,8 +1371,7 @@ internal static partial class SolverController
     {
         try
         {
-            await deployment.Operation.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
-            deployment.Operation = Task.CompletedTask;
+            await deployment.ReleaseOperationReferencesAsync().ConfigureAwait(false);
         }
         finally
         {
@@ -1471,14 +1400,17 @@ internal static partial class SolverController
 
     private static void DisposeDeploymentCancellationOnce(SolverDeploymentSession deployment)
     {
-        if (Interlocked.Exchange(ref deployment.CancellationDisposeState, 1) != 0)
+        if (!deployment.DisposeCancellationOnce())
             return;
-        deployment.Cancellation.Dispose();
         Interlocked.Increment(ref _deploymentCtsDisposeCountForTesting);
     }
 
     private static void CompleteDeployment(SolverDeploymentSession deployment)
     {
+        // Rejection never created DeployCurrentTurn, so no asynchronous finally
+        // can own disposal. An attached operation must retain its normal drain.
+        if (deployment.RejectedBeforeStart && deployment.DisposeRejectedBeforeStart())
+            Interlocked.Increment(ref _deploymentCtsDisposeCountForTesting);
         if (ReferenceEquals(_deployment, deployment))
             _deployment = null;
     }

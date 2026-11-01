@@ -95,7 +95,11 @@ namespace CombatSolver
         public static bool IsPreCombatWorker;
         public static TestLogger Logger = new();
     }
-    public sealed class TestLogger { public void Error(string message) => throw new Exception(message); }
+    public sealed class TestLogger
+    {
+        public List<string> Errors { get; } = [];
+        public void Error(string message) => Errors.Add(message);
+    }
     public static class SolverDispatcher { public static void Post(Action action) => action(); }
 }
 namespace CombatSolver.Api
@@ -113,6 +117,8 @@ namespace CombatSolver.Api
         internal sealed record Work(PreCombatForecastOptions Options, CancellationToken Cancellation)
         {
             public TaskCompletionSource<PreCombatForecastResult> Completion = new();
+            public void FailCleanup() => Completion.SetException(new PreCombatWorkerExitUnconfirmedException(
+                "Worker exit remains unconfirmed", new TimeoutException()));
             public void Succeed(string id) => Completion.SetResult(new()
             {
                 Status = PreCombatForecastStatus.Succeeded, RequestId = id,

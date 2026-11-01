@@ -99,6 +99,27 @@ await Check("owned force refresh forwards cancellation and awaits worker cleanup
     work.Succeed("owned");
     Equal(PreCombatForecastStatus.Cancelled, (await request).Status);
 });
+await Check("owned cancellation does not hide an unconfirmed worker exit", async () =>
+{
+    RunState run = NewRun();
+    using var cancellation = new CancellationTokenSource();
+    var request = Forecast(run, new() { ForceRefresh = true, CancelWorkerWhenCallerCancels = true }, cancellation.Token);
+    var work = await NextWork();
+    cancellation.Cancel();
+    work.FailCleanup();
+    var result = await request;
+    Equal(PreCombatForecastStatus.Failed, result.Status);
+    Equal(true, result.Error?.Contains("unconfirmed", StringComparison.Ordinal) == true);
+});
+await Check("live state drift does not hide an unconfirmed worker exit", async () =>
+{
+    RunState run = NewRun();
+    var request = Forecast(run, new() { ForceRefresh = true });
+    var work = await NextWork();
+    run.Token = "changed";
+    work.FailCleanup();
+    Equal(PreCombatForecastStatus.Failed, (await request).Status);
+});
 await Check("live state changes invalidate worker results", async () =>
 {
     RunState run = NewRun();
@@ -129,6 +150,8 @@ await Check("cancelled cache hits do not change worker lifetime", async () =>
     Equal(PreCombatForecastStatus.Cancelled, result.Status);
     Equal(applied, PreCombatForecastWorker.AppliedLifetimes.Count);
 });
+Equal(2, CombatSolver.Entry.Logger.Errors.Count);
+Equal(true, CombatSolver.Entry.Logger.Errors.All(message => message.Contains("unconfirmed", StringComparison.Ordinal)));
 Console.WriteLine($"Passed {passed} pre-combat request checks.");
 
 async Task Check(string name, Func<Task> body)
