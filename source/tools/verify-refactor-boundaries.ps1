@@ -228,7 +228,7 @@ foreach ($routeScopedCompletionRule in @(
     'LiveCombatStamp.CaptureLocalCoreSearchValidity(state)',
     'searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore',
     'MultiplayerSearchCompletionContracts.IsStale(',
-    '_combat.LatestStamp = currentStamp!;',
+    '_combat.CaptureLatestResult(result, currentStamp!);',
     'SEARCH_COMPATIBLE_WORLD_DELTA')) {
     if (-not $searchLifecycleCompletionText.Contains($routeScopedCompletionRule)) {
         $violations.Add("${searchLifecycleCompletionPath}: route-scoped search completion drifted '$routeScopedCompletionRule'")

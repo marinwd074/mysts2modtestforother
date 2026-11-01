@@ -71,6 +71,7 @@ internal static class Program
                 ValidateRenderedCurrentTurnTakeoverContract();
                 ValidateDeploymentSessionPlan();
                 ValidateSearchSessionLifetime();
+                ValidatePlanRefreshChoiceIdentity();
                 Console.WriteLine("CompletionScope PASS (forecast scope and existing foreground ordering)");
                 return 0;
             }
@@ -263,6 +264,7 @@ internal static class Program
             {
                 ValidateContinuationRouteReplay(combat, names, damage, captured, profile);
                 ValidateDeferredSearchEntry(combat);
+                ValidateLatestRouteOwnership(combat);
                 Console.WriteLine("ContinuationReplay PASS");
                 return 0;
             }
@@ -480,6 +482,98 @@ internal static class Program
                 && executableDisplay.SpeculativeRoutePreview?.CandidateVersion == 7
                 && ReferenceEquals(executableDisplay.RouteAdoptionSeed, matchingSeed),
             "E1 did not expose execution only after a matching materialized route became available.");
+    }
+
+    private static void ValidatePlanRefreshChoiceIdentity()
+    {
+        MethodInfo compare = typeof(SolverController).GetMethod("HasSameExecutionIdentity", BindingFlags.Static | BindingFlags.NonPublic)!;
+        PlanCardToken a = new("A", 1, "state-a", 0, 1, "title-a");
+        PlanCardToken b = new("B", 0, "state-b", 2, 3, "title-b");
+        PlanCardChoice choice = new(PlanChoiceEffect.Discard, PileType.Hand, [a, b], "source", "context");
+        PlanAction expected = new(PlanActionKind.PlayCard, 2, "card", Choice: choice,
+            NestedChoices: [choice], CardUpgradeLevel: 1, CardEnchantmentId: "enchantment");
+        bool Same(PlanAction actual) => (bool)compare.Invoke(null, [actual, expected])!;
+        PlanCardChoice copy = choice with { Cards = new[] { a with { Title = "translated" }, b with { } } };
+        Require(Same(expected with { Choice = copy, NestedChoices = new[] { copy } }),
+            "Materialized prefix rejected equal choice values stored in fresh lists.");
+        Require(!Same(expected with { NestedChoicesBeforePrimary = 1 }),
+            "Materialized prefix ignored primary/nested choice execution order.");
+        Require(!Same(expected with { Choice = choice with { Cards = new[] { b, a } } }),
+            "Materialized prefix ignored card token order.");
+        foreach (PlanCardToken changed in new[] {
+            a with { CardId = "other" }, a with { UpgradeLevel = 2 }, a with { StateKey = "other" },
+            a with { SourceOccurrence = 3 }, a with { OptionOccurrence = 5 } })
+            Require(!Same(expected with { Choice = choice with { Cards = new[] { changed, b } } }),
+                "Materialized prefix ignored a card token identity field.");
+        foreach (PlanCardChoice changed in new[] {
+            choice with { Effect = PlanChoiceEffect.Exhaust }, choice with { SourcePile = PileType.Draw },
+            choice with { SourceId = "other" }, choice with { ContextId = "other" },
+            choice with { Timing = PlanChoiceTiming.PlayerTurnStart } })
+            Require(!Same(expected with { NestedChoices = new[] { changed } }),
+                "Materialized prefix ignored a nested choice identity field.");
+        Require(!Same(expected with { CardUpgradeLevel = 2 })
+                && !Same(expected with { CardEnchantmentId = "other" }),
+            "Choice refactor weakened existing upgrade/enchantment action identity.");
+        Require(PlanCardChoice.HasSameExecutionSequence(null, null)
+                && !PlanCardChoice.HasSameExecutionSequence(null, Array.Empty<PlanCardChoice>())
+                && !PlanCardChoice.HasSameExecutionIdentity(null, choice),
+            "Choice refactor changed null/empty sequence identity.");
+        Console.WriteLine("PlanRefreshChoiceIdentity PASS (fresh value lists, execution order, token fields, choice fields, action identity, null boundary)");
+    }
+
+    private static void ValidateLatestRouteOwnership(CombatState combat)
+    {
+        FieldInfo active = typeof(SolverController).GetField("_combat", BindingFlags.Static | BindingFlags.NonPublic)!;
+        MethodInfo compatible = typeof(SolverController).GetMethod("IsLatestResultDeploymentCompatible", BindingFlags.Static | BindingFlags.NonPublic)!;
+        object previous = active.GetValue(null)!;
+        SolverSettingsData settings = SolverSettings.Current;
+        SolverCombatSession session = new();
+        SolverResult result = (SolverResult)RuntimeHelpers.GetUninitializedObject(typeof(SolverResult));
+        LiveCombatStamp current = LiveCombatStamp.Capture(combat);
+        LiveCombatStamp remoteOnly = new(current.StateText + ";P=remote_only_drift");
+        SolverSessionCapabilitySet multiplayer = default(SolverSessionCapabilitySet) with
+        {
+            Kind = SolverSessionKind.MultiplayerSafeExecute,
+        };
+        bool Compatible(LiveCombatStamp stamp) => (bool)compatible.Invoke(null, [combat, multiplayer, stamp])!;
+        MultiplayerRouteChangeTracker.Reset();
+        try
+        {
+            active.SetValue(null, session);
+            SolverSettings.ApplyForTesting(settings with { UseMultiplayerPrediction = false });
+            MultiplayerRouteChangeTracker.SignalSchedulingBoundary("route_owner_contract");
+            Require(MultiplayerRouteChangeTracker.Version != MultiplayerRouteChangeTracker.InvalidationVersion,
+                "Route owner contract requires divergent scheduling and invalidation counters.");
+            session.ContinuationSource = result;
+            session.CaptureLatestResult(result, remoteOnly);
+            Require(ReferenceEquals(session.LatestResult, result)
+                    && session.LatestStamp == remoteOnly
+                    && session.LatestRouteInvalidationVersion == 0,
+                "Accepted route must capture invalidation, not scheduling identity.");
+            Require(Compatible(current), "Accepted route rejected compatible remote-only drift after a scheduling boundary.");
+            Require(Compatible(remoteOnly), "Exact deployment stamp stopped being compatible.");
+            MultiplayerRouteChangeTracker.ObserveEnemyHp(new StateFingerprint(1, 1), false, "baseline");
+            MultiplayerRouteChangeTracker.ObserveEnemyHp(new StateFingerprint(2, 2), true, "invalidation");
+            Require(!Compatible(current), "Accepted route ignored a real invalidation after remote-only drift.");
+            session.RefreshLatestStamp(remoteOnly);
+            Require(session.LatestRouteInvalidationVersion == 1 && Compatible(current),
+                "Validated deployment refresh did not replace the route invalidation identity.");
+            session.ClearLatestResult();
+            Require(session.LatestResult == null && session.LatestStamp == null
+                    && session.LatestRouteInvalidationVersion == 0 && !Compatible(current)
+                    && ReferenceEquals(session.ContinuationSource, result),
+                "Clearing deployment identity must clear all three fields without discarding continuation.");
+            foreach (string property in new[] { "LatestResult", "LatestStamp", "LatestRouteInvalidationVersion" })
+                Require(typeof(SolverCombatSession).GetProperty(property)!.SetMethod!.IsPrivate,
+                    "Route identity setters must remain session-owned.");
+        }
+        finally
+        {
+            active.SetValue(null, previous);
+            SolverSettings.ApplyForTesting(settings);
+            MultiplayerRouteChangeTracker.Reset();
+        }
+        Console.WriteLine("LatestRouteOwnership PASS (scheduling vs invalidation, actual deployment compatibility, refresh, clear, independent continuation)");
     }
 
     private static void ValidateDeferredSearchEntry(CombatState combat)

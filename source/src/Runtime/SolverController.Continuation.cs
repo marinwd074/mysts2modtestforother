@@ -42,11 +42,7 @@ internal static partial class SolverController
         if (result == null)
             return false;
 
-        _combat.LatestResult = result;
-        _combat.LatestStamp = stamp;
-        _combat.LatestRouteInvalidationVersion = SolverSessionCapabilities.Capture(state).IsMultiplayer
-            ? MultiplayerRouteChangeTracker.InvalidationVersion
-            : 0;
+        _combat.CaptureLatestResult(result, stamp);
         _combat.ContinuationSource = result;
         BattleDamageTracker.RegisterPlan(state, result);
         SolverOverlaySnapshot snapshot = SolverOverlaySnapshot.CaptureWithReviewedWorldlines(
@@ -101,11 +97,7 @@ internal static partial class SolverController
         CancelSearch();
         RecordReviewedWorldlines(result);
         _combat.State = state;
-        _combat.LatestResult = result;
-        _combat.LatestStamp = stamp;
-        _combat.LatestRouteInvalidationVersion = SolverSessionCapabilities.Capture(state).IsMultiplayer
-            ? MultiplayerRouteChangeTracker.InvalidationVersion
-            : 0;
+        _combat.CaptureLatestResult(result, stamp);
         bool retainCurrentTurnRoute =
             result.ResultScope == SolverResultScope.CurrentTurnAdoption
             && MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnContinuation(

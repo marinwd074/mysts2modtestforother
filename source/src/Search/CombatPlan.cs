@@ -118,7 +118,45 @@ internal sealed record PlanCardChoice(
     IReadOnlyList<PlanCardToken> Cards,
     string SourceId = "",
     string ContextId = "",
-    PlanChoiceTiming Timing = PlanChoiceTiming.Action);
+    PlanChoiceTiming Timing = PlanChoiceTiming.Action)
+{
+    // Execution identity is ordered value equality. Localized display titles are not identity.
+    internal static bool HasSameExecutionSequence(
+        IReadOnlyList<PlanCardChoice>? left,
+        IReadOnlyList<PlanCardChoice>? right)
+    {
+        if (left == null || right == null)
+            return left == null && right == null;
+        if (left.Count != right.Count)
+            return false;
+        for (int index = 0; index < left.Count; index++)
+        {
+            if (!HasSameExecutionIdentity(left[index], right[index]))
+                return false;
+        }
+        return true;
+    }
+
+    internal static bool HasSameExecutionIdentity(PlanCardChoice? left, PlanCardChoice? right)
+    {
+        if (left == null || right == null)
+            return left == null && right == null;
+        if (left.Effect != right.Effect || left.SourcePile != right.SourcePile
+            || left.SourceId != right.SourceId || left.ContextId != right.ContextId
+            || left.Timing != right.Timing || left.Cards.Count != right.Cards.Count)
+            return false;
+        for (int index = 0; index < left.Cards.Count; index++)
+        {
+            PlanCardToken a = left.Cards[index];
+            PlanCardToken b = right.Cards[index];
+            if (a.CardId != b.CardId || a.UpgradeLevel != b.UpgradeLevel
+                || a.StateKey != b.StateKey || a.SourceOccurrence != b.SourceOccurrence
+                || a.OptionOccurrence != b.OptionOccurrence)
+                return false;
+        }
+        return true;
+    }
+}
 
 internal sealed record PredictionGap(
     string SourceId,

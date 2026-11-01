@@ -74,8 +74,8 @@ internal readonly record struct SearchMemoryUsageSnapshot(
 internal sealed class SolverCombatSession
 {
     public CombatState? State { get; set; }
-    public SolverResult? LatestResult { get; set; }
-    public LiveCombatStamp? LatestStamp { get; set; }
+    public SolverResult? LatestResult { get; private set; }
+    public LiveCombatStamp? LatestStamp { get; private set; }
     public SolverResult? ContinuationSource { get; set; }
     public SearchInteractionState? StoppedSearch { get; set; }
     public bool FullAutoEnabled { get; set; }
@@ -107,7 +107,29 @@ internal sealed class SolverCombatSession
     public bool AwaitingMultiplayerContinuation { get; set; }
     public bool PendingMultiplayerPlanRefresh { get; set; }
     public long? LastPlanRefreshDecisionTimestampMilliseconds { get; set; }
-    public long LatestRouteInvalidationVersion { get; set; }
+    public long LatestRouteInvalidationVersion { get; private set; }
+
+    // Main-thread acceptance keeps the result and its deployment identity together.
+    // Scheduling boundaries do not invalidate routes; never capture Version here.
+    public void CaptureLatestResult(SolverResult result, LiveCombatStamp stamp)
+    {
+        LatestResult = result;
+        RefreshLatestStamp(stamp);
+    }
+
+    public void RefreshLatestStamp(LiveCombatStamp stamp)
+    {
+        LatestStamp = stamp;
+        LatestRouteInvalidationVersion = MultiplayerRouteChangeTracker.InvalidationVersion;
+    }
+
+    public void ClearLatestResult()
+    {
+        LatestResult = null;
+        LatestStamp = null;
+        LatestRouteInvalidationVersion = 0;
+    }
+
     public CombatBugReportIssueLedger BugReportIssues { get; } = new();
     public CombatTransitionMemo TransitionMemo { get; } = new();
 }

@@ -204,6 +204,7 @@ Smart 层间使用 `SmartLayerMemoryForecast` 的同窗分配和转移高水位�
 
 - 内嵌模拟引擎负责可 Fork 的状态、卡牌/遗物/Power mirror 和确定性 RNG；原生兼容反射与 Harmony 参数形状集中在 `src/Compatibility/`，不泄漏到 Search。
 - `SolverController` 及其 SearchLifecycle、Deployment、Continuation partial 拥有主线程会话、取消、部署和跨回合续用；`SolverCombatSession`、`SolverSearchSession`、`SolverDeploymentSession` 分别持有对应状态。
+- `SolverCombatSession` 统一接受、刷新和清理最新路线的 result / live stamp / invalidation version；调度 version 不充当路线失效身份，跨回合 continuation 仍可独立保留。`PlanCardChoice` 提供按执行字段及顺序比较的值语义，供路线诊断与多人前缀复核共用；显示标题不参与身份，各调用方仍保留自己的动作字段合同。
 - `SolverOverlaySnapshot` 是 UI 的单向输入。面板拥有输入与设置提交，部署仍由 Runtime 驱动；控件不得持有或重新读取 worker/live 状态。
 
 ## 5. Unattended 测试边界

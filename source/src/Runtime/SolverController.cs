@@ -142,16 +142,6 @@ internal static partial class SolverController
             && LiveCombatStamp.IsLocalCoreSearchCompatible(latestStamp, state);
     }
 
-    private static void RefreshLatestDeploymentStamp(
-        CombatState state,
-        LiveCombatStamp current)
-    {
-        _combat.LatestStamp = current;
-        _combat.LatestRouteInvalidationVersion = SolverSessionCapabilities.Capture(state).IsMultiplayer
-            ? MultiplayerRouteChangeTracker.InvalidationVersion
-            : 0;
-    }
-
     /// <summary>
     /// True whenever the current session is classified as multiplayer, including a
     /// network transition or a state with more than one player. The solver must stay
@@ -913,7 +903,7 @@ internal static partial class SolverController
         {
             if (_combat.LatestStamp != current)
             {
-                RefreshLatestDeploymentStamp(state, current);
+                _combat.RefreshLatestStamp(current);
                 Entry.Logger.Info(
                     $"[CombatSolver/Test] DEPLOY_COMPATIBLE_WORLD_DELTA " +
                     $"turn={LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0} " +
@@ -1024,8 +1014,7 @@ internal static partial class SolverController
         SolverSettings.Update(SolverSettings.Current with { BrightestFlameMaxHpLossLimit = limit });
         _combat.ContinuationSource = null;
         _combat.PendingCompleteProjectionBaseline = null;
-        _combat.LatestResult = null;
-        _combat.LatestStamp = null;
+        _combat.ClearLatestResult();
         RequestSearch(host, state, SearchReason.Manual);
         SolverOverlay.RefreshControls();
     }
@@ -1361,8 +1350,7 @@ internal static partial class SolverController
         }
         int actionCount = result.BestNode.Actions.Count(action =>
             action.Turn == result.StartTurnNumber && action.IsExecutable);
-        _combat.LatestResult = null;
-        _combat.LatestStamp = null;
+        _combat.ClearLatestResult();
         SolverOverlay.ShowDeploymentComplete(
             host,
             result.StartTurnNumber,
@@ -1577,8 +1565,7 @@ internal static partial class SolverController
         }
         else
         {
-            _combat.LatestResult = null;
-            _combat.LatestStamp = null;
+            _combat.ClearLatestResult();
             if (!preservePendingContinuation)
                 _combat.ContinuationSource = null;
         }
@@ -1826,8 +1813,7 @@ internal static partial class SolverController
         CancelDeployment();
         _combat.State = state;
         _combat.ShowcaseMode = true;
-        _combat.LatestResult = result;
-        _combat.LatestStamp = LiveCombatStamp.Capture(state);
+        _combat.CaptureLatestResult(result, LiveCombatStamp.Capture(state));
         _combat.ContinuationSource = result;
         _combat.AutomaticSearchPaused = false;
         _combat.FullAutoEnabled = false;
@@ -1845,8 +1831,7 @@ internal static partial class SolverController
     {
         _combat.FullAutoEnabled = false;
         _combat.AutomaticSearchPaused = true;
-        _combat.LatestResult = null;
-        _combat.LatestStamp = null;
+        _combat.ClearLatestResult();
         _combat.ContinuationSource = null;
         SolverOverlay.Show(host, $"[b]录像路线已停止[/b]\n{message}\n此临时对局不会自动重新计算。");
         Entry.Logger.Warn("[CombatSolver/Showcase] ROUTE_MISMATCH stopped=true replan=false");

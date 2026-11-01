@@ -279,9 +279,7 @@ internal static partial class SolverController
             {
                 CancelSearch();
                 _combat.State = state;
-                _combat.LatestResult = reused;
-                _combat.LatestStamp = stamp;
-                _combat.LatestRouteInvalidationVersion = MultiplayerRouteChangeTracker.Version;
+                _combat.CaptureLatestResult(reused!, stamp);
                 _combat.ContinuationSource = reused;
                 _combat.AwaitingMultiplayerContinuation = false;
                 _combat.LastSafeEndTurnWorldVersion = null;
@@ -639,8 +637,7 @@ internal static partial class SolverController
                 R0TransitionPolicyIdentity = CombatTransitionMemo.CapturePolicyIdentity(searchPolicy),
             };
             _combat.State = state;
-            _combat.LatestResult = null;
-            _combat.LatestStamp = null;
+            _combat.ClearLatestResult();
             _combat.LastPlanRefreshDecisionTimestampMilliseconds = null;
             LastCompletedResultForTesting = null;
             LastSearchFailureForTesting = null;
@@ -738,8 +735,7 @@ internal static partial class SolverController
             CombatBugReportExporter.RecordRuntimeException("search_setup", ex);
             CancelSearch();
             _combat.State = null;
-            _combat.LatestResult = null;
-            _combat.LatestStamp = null;
+            _combat.ClearLatestResult();
             _combat.ContinuationSource = null;
             _combat.PendingCompleteProjectionBaseline = null;
             _combat.PendingManualProjectionBaseline = null;
@@ -946,8 +942,7 @@ internal static partial class SolverController
                 $"第 {LocalContext.GetMe(searchedState)?.PlayerCombatState?.TurnNumber ?? 0} 回合");
             _combat.PendingCompleteProjectionBaseline = null;
             _combat.PendingManualProjectionBaseline = null;
-            _combat.LatestResult = null;
-            _combat.LatestStamp = null;
+            _combat.ClearLatestResult();
             SolverOverlay.Show(
                 host,
                 "[b]战斗路线求解器[/b]\n战斗状态在计算期间发生变化，已丢弃过期结果。\n" +
@@ -1046,9 +1041,7 @@ internal static partial class SolverController
             return;
         }
 
-        _combat.LatestResult = result;
-        _combat.LatestStamp = currentStamp!;
-        _combat.LatestRouteInvalidationVersion = currentRouteInvalidationVersion;
+        _combat.CaptureLatestResult(result, currentStamp!);
         bool retainCurrentTurnRoute = currentTurnAdopted
             && MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnContinuation(
                 result.MultiplayerScope,

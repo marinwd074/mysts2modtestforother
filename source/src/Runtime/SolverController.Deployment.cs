@@ -96,8 +96,7 @@ internal static partial class SolverController
             return;
         }
 
-        _combat.LatestResult = null;
-        _combat.LatestStamp = null;
+        _combat.ClearLatestResult();
         CancelDeployment();
         SolverSettingsSnapshot deploymentSettings = SolverSettings.Capture();
         SolverDeploymentSession deployment = new(
@@ -961,8 +960,7 @@ internal static partial class SolverController
             futureRoute?.Continuations.Count ?? 0,
             futureRoute?.MultiplayerScope ?? MultiplayerSearchResultScope.CurrentTurnOnly);
         _combat.MultiplayerSafeExecuteDeploymentRequested = false;
-        _combat.LatestResult = null;
-        _combat.LatestStamp = null;
+        _combat.ClearLatestResult();
         _combat.LastSafeEndTurnRequestId = safeSession.RequestId;
         _combat.LastSafeEndTurnNumber = turn;
         _combat.LastSafeEndTurnWorldVersion = afterWorldVersion;
@@ -1156,8 +1154,7 @@ internal static partial class SolverController
         safeSession?.Abort(reason);
         _combat.MultiplayerSafeExecuteDeploymentRequested = false;
         _combat.ContinuationSource = null;
-        _combat.LatestResult = null;
-        _combat.LatestStamp = null;
+        _combat.ClearLatestResult();
         InvalidateRenderedRouteAdoptionSeed();
         CompleteDeployment(deployment);
         SolverOverlay.ShowDeploymentComplete(

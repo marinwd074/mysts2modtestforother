@@ -19,6 +19,10 @@
 
 
 
+## 已接受路线身份
+
+最新路线的 result / live stamp / invalidation version 已收进现有 `SolverCombatSession`，调用方不再分别写入或清空；continuation 独立保留。修正跨回合复用误把 scheduling version 当 invalidation version 的问题，避免仅调度边界后兼容远端变化被误拒。多人刷新前缀与诊断共用 `PlanCardChoice` 的有序值比较，不再依赖列表引用，并核对主选择相对嵌套选择的位置。未改变搜索排序、预算或多人能力范围；实际游戏/Host-Client 验证仍开放。
+
 ## 延迟入口意图
 
 GC 与 native-action 两条 barrier 原先遗漏 adoptedRouteReplay；现在由已有 Sessions 文件内的 `SolverDeferredSearchRequest` 保留完整入口载荷，恢复默认重入原 RequestSearch，fresh-root/回合/质量/权限校验不变。精确 owner 取代重复 id+CTS 身份，非取消 fault/cancel 清理不会遗留 disposed CTS 或清掉新请求；queued callback 仍纳入引用排空。Release/harness 零警告错误，受控双 barrier 的实际 Defer/Resume 合同与 continuation-replay 通过。合同保留实际 owner/epoch/CombatManager-state guard，仅截获最后 UI 入口；没有证明真实 GC/native action 触发或 Host/Client 按钮恢复。
