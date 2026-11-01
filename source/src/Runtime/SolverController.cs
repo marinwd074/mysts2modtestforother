@@ -639,22 +639,7 @@ internal static partial class SolverController
     {
         AssertMainThread();
         RecordReviewedWorldlines(result);
-        bool retainCurrentTurnRoute =
-            result.ResultScope == SolverResultScope.CurrentTurnAdoption
-            && MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnContinuation(
-                result.MultiplayerScope,
-                result.Continuations.Count);
-        SolverOverlaySnapshot snapshot =
-            result.ResultScope == SolverResultScope.CurrentTurnAdoption
-            && !retainCurrentTurnRoute
-                ? SolverOverlaySnapshot.CaptureCurrentTurn(
-                    SolverCurrentTurnPreview.FromResult(result))
-                : SolverOverlaySnapshot.CaptureWithReviewedWorldlines(
-                    result,
-                    UnexpectedReplanCount > 0,
-                    _combat.ReviewedWorldlinesTotal);
-        if (result.ResultScope == SolverResultScope.RouteAdoption)
-            snapshot = MarkRouteAdopted(snapshot);
+        SolverOverlaySnapshot snapshot = CaptureCompletedResultSnapshot(result);
         SolverOverlay.ShowResult(host, snapshot);
         SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Succeeded);
         Entry.Logger.Info(

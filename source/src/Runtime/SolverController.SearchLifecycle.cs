@@ -1042,13 +1042,8 @@ internal static partial class SolverController
         }
 
         _combat.CaptureLatestResult(result, currentStamp!);
-        bool retainCurrentTurnRoute = currentTurnAdopted
-            && MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnContinuation(
-                result.MultiplayerScope,
-                result.Continuations.Count);
-        _combat.ContinuationSource = !currentTurnAdopted || retainCurrentTurnRoute
-            ? result
-            : null;
+        bool retainCurrentTurnRoute = currentTurnAdopted && result.PreservesContinuationSource;
+        _combat.ContinuationSource = result.PreservesContinuationSource ? result : null;
         Entry.Logger.Info(
             $"[CombatSolver/Test] SEARCH_RESULT_ROUTE_CAPTURE generation={generation} " +
             $"deployment_scope={result.ResultScope} route_scope={result.MultiplayerScope} " +
@@ -1067,17 +1062,7 @@ internal static partial class SolverController
                     : "search_completed",
             result,
             DescribeReplanAudit());
-        SolverOverlaySnapshot completedSnapshot =
-            currentTurnAdopted && !retainCurrentTurnRoute
-                ? SolverOverlaySnapshot.CaptureCurrentTurn(
-                    SolverCurrentTurnPreview.FromResult(result))
-                : SolverOverlaySnapshot.CaptureWithReviewedWorldlines(
-                    result,
-                    UnexpectedReplanCount > 0,
-                    _combat.ReviewedWorldlinesTotal);
-        SolverOverlay.ShowResult(
-            host,
-            routeAdopted ? MarkRouteAdopted(completedSnapshot) : completedSnapshot);
+        SolverOverlay.ShowResult(host, CaptureCompletedResultSnapshot(result));
         if (SolverSessionCapabilities.Capture(searchedState).Kind == SolverSessionKind.MultiplayerAdvisor)
         {
             Entry.Logger.Info(

@@ -521,6 +521,62 @@ internal static class Program
         Console.WriteLine("PlanRefreshChoiceIdentity PASS (fresh value lists, execution order, token fields, choice fields, action identity, null boundary)");
     }
 
+    private static void ValidateCompletedResultPresentation(SolverResult result)
+    {
+        MethodInfo capture = typeof(SolverController).GetMethod(
+            "CaptureCompletedResultSnapshot", BindingFlags.Static | BindingFlags.NonPublic)!;
+        FieldInfo active = typeof(SolverController).GetField("_combat", BindingFlags.Static | BindingFlags.NonPublic)!;
+        SolverCombatSession previous = (SolverCombatSession)active.GetValue(null)!;
+        SolverCombatSession session = new() { ReviewedWorldlinesTotal = 123, ContinuationSource = result };
+        session.CaptureLatestResult(result, new LiveCombatStamp("completed_presentation_contract"));
+        SolverResultScope originalScope = result.ResultScope;
+        MultiplayerSearchResultScope originalMultiplayerScope = result.MultiplayerScope;
+        IReadOnlyList<CachedContinuation> originalContinuations = result.Continuations;
+        PropertyInfo continuations = typeof(SolverResult).GetProperty(nameof(SolverResult.Continuations))!;
+        int checks = 0;
+        try
+        {
+            active.SetValue(null, session);
+            foreach (SolverResultScope scope in Enum.GetValues<SolverResultScope>())
+            foreach (MultiplayerSearchResultScope multiplayerScope in Enum.GetValues<MultiplayerSearchResultScope>())
+            foreach (int count in new[] { 0, 1 })
+            {
+                result.ResultScope = scope;
+                result.MultiplayerScope = multiplayerScope;
+                // Presentation reads only continuation count; no cached state is replayed here.
+                continuations.SetValue(result, count == 0 ? Array.Empty<CachedContinuation>()
+                    : new[] { (CachedContinuation)RuntimeHelpers.GetUninitializedObject(typeof(CachedContinuation)) });
+                bool currentTurnOnly = scope == SolverResultScope.CurrentTurnAdoption
+                    && !(count > 0 && multiplayerScope is MultiplayerSearchResultScope.CompleteLocalBattleProjection
+                        or MultiplayerSearchResultScope.PartialLocalCrossTurnProjection);
+                Require(result.PreservesContinuationSource == !currentTurnOnly,
+                    $"Completed-result retention changed for {scope}/{multiplayerScope}/{count}.");
+                SolverOverlaySnapshot expected = currentTurnOnly
+                    ? SolverOverlaySnapshot.CaptureCurrentTurn(SolverCurrentTurnPreview.FromResult(result))
+                    : SolverOverlaySnapshot.CaptureWithReviewedWorldlines(result, false, 123);
+                if (scope == SolverResultScope.RouteAdoption)
+                    expected = expected with { StatusText = "方案就绪 · 已采用当前路线", StatusTone = SolverOverlayTone.Success };
+                SolverOverlaySnapshot actual = (SolverOverlaySnapshot)capture.Invoke(null, [result])!;
+                Require(JsonSerializer.Serialize(actual, Json) == JsonSerializer.Serialize(expected, Json),
+                    $"Completed-result presentation changed for {scope}/{multiplayerScope}/{count}.");
+                Require(ReferenceEquals(session.LatestResult, result)
+                        && ReferenceEquals(session.ContinuationSource, result)
+                        && session.LatestStamp == new LiveCombatStamp("completed_presentation_contract")
+                        && session.ReviewedWorldlinesTotal == 123,
+                    "Completed-result preview mutated accepted route or review accounting.");
+                checks++;
+            }
+        }
+        finally
+        {
+            result.ResultScope = originalScope;
+            result.MultiplayerScope = originalMultiplayerScope;
+            continuations.SetValue(result, originalContinuations);
+            active.SetValue(null, previous);
+        }
+        Console.WriteLine($"CompletedResultPresentation PASS ({checks} scope/count combinations, exact snapshot equivalence, no acceptance side effects)");
+    }
+
     private static void ValidateLatestRouteOwnership(CombatState combat)
     {
         FieldInfo active = typeof(SolverController).GetField("_combat", BindingFlags.Static | BindingFlags.NonPublic)!;
@@ -3462,6 +3518,7 @@ internal static class Program
             CombatRootSnapshot oldRoot = CombatRootSnapshot.Capture(combat);
             SolverResult old = new CombatBeamSolver(oldRoot, names, damage, policy,
                 searchProfile: profile, continuationRouteReplayActions: actions).Solve();
+            ValidateCompletedResultPresentation(old);
             SearchInteractionState routeInteraction = new();
             SolverRouteAdoptionSeed materializedSeed = new(17, old.BestNode.Actions, () => old);
             Require(old.ResultScope == SolverResultScope.SearchCompletion

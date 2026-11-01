@@ -107,6 +107,8 @@ MP-0 Core 的多人只读证据已通过；退出/重新加入生命周期仍属
 
 `src/Runtime/SearchInteractionState.cs` 是候选展示与采用的深 module：`SolverCandidatePresentation` 将当前回合/完整路线预览及各自 seed 一起替换，按版本与完整动作序列拒绝不匹配 seed。Coordinator 保留评分与提升决定，只通过同一 presentation 交接；普通 Play 与 TurnSetup 的显示 adapter 通过 `MarkRenderedProgress` 确认实际投影，不能单独写入可采用 seed。已批准的显示可以没有 seed；取得 seed 也不代表拥有真实动作授权。请求冻结已显示的 seed，后续后台更新不改写该请求；Coordinator 的显式 seed 取消处理与 worker 完成共享同一物化/scope 收口，无 seed 的完整结果质量 fallback 仍由 Search 拥有。进度发布槽与显示节流器保持私有；调用方只读进度，并通过 ClearProgress 清理 live 发布，不会顺带清空显示批准或接管请求。seed 独占只读动作列表快照，`Lazy` 仍只执行一次，物化始终在交互锁外。TurnSetup 保留原无 seed 当前回合接管，能力门禁及实际部署授权不进入此 module。
 
+完成结果的 continuation 保留资格由 `SolverResult.PreservesContinuationSource` 计算：当前回合采用仅在已有本地跨回合投影且 continuation 非空时保留，其他完成范围沿用原保留规则。普通搜索完成、回合准备预览/激活共用 Runtime 的 `CaptureCompletedResultSnapshot`，统一完整路线/当前回合投影及采用标记；预览不写入已接受路线。停止结果和 pending-turn-setup 展示仍走各自入口，不因此取得采用或执行权限。
+
 `SolverProgress.cs` 只保留进度/预览 DTO 与结果投影；显示节流与时间单调合同归交互 module。`SearchInteractionChecks` 链接这两份生产源码，用最小外部 DTO adapter 验证完整交互 seam；它不替代真实 `PlanAction`、pinned 搜索与 Host/Client 验证。集中所有权提高 locality，使一处合同覆盖两个生产显示 adapter 的共同规则；不创建第二套搜索后端或评分政策。
 
 `SolverDeferredSearchRequest` 拥有 GC/native-action barrier 期间的完整只读入口意图（host/state、reason、有效 deploy 标记、adoptedRouteReplay、epoch）与取消/queued callback 排空；Controller 只保留精确 owner、epoch 与当前 CombatState 校验，默认仍重新进入 RequestSearch，重新核对能力、root 与 replay。Owner 引用就是请求身份，不再维护重复 requestId；fault/cancel finally 以 CompareExchange 只清旧 owner。取消已排队请求仍要等待 callback，不能提前释放旧战斗引用。请求载荷保存原 replay 引用，不复制或授予旧部署权限。

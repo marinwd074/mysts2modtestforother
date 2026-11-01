@@ -98,16 +98,9 @@ internal static partial class SolverController
         RecordReviewedWorldlines(result);
         _combat.State = state;
         _combat.CaptureLatestResult(result, stamp);
-        bool retainCurrentTurnRoute =
-            result.ResultScope == SolverResultScope.CurrentTurnAdoption
-            && MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnContinuation(
-                result.MultiplayerScope,
-                result.Continuations.Count);
-        _combat.ContinuationSource =
-            result.ResultScope != SolverResultScope.CurrentTurnAdoption
-            || retainCurrentTurnRoute
-                ? result
-                : null;
+        bool retainCurrentTurnRoute = result.ResultScope == SolverResultScope.CurrentTurnAdoption
+            && result.PreservesContinuationSource;
+        _combat.ContinuationSource = result.PreservesContinuationSource ? result : null;
         if (!result.WasRestoredFromCache)
         {
             _combat.SearchesStarted++;
@@ -131,17 +124,7 @@ internal static partial class SolverController
             },
             result,
             DescribeReplanAudit());
-        SolverOverlaySnapshot snapshot =
-            result.ResultScope == SolverResultScope.CurrentTurnAdoption
-            && !retainCurrentTurnRoute
-                ? SolverOverlaySnapshot.CaptureCurrentTurn(
-                    SolverCurrentTurnPreview.FromResult(result))
-                : SolverOverlaySnapshot.CaptureWithReviewedWorldlines(
-                    result,
-                    UnexpectedReplanCount > 0,
-                    _combat.ReviewedWorldlinesTotal);
-        if (result.ResultScope == SolverResultScope.RouteAdoption)
-            snapshot = MarkRouteAdopted(snapshot);
+        SolverOverlaySnapshot snapshot = CaptureCompletedResultSnapshot(result);
         SolverOverlay.ShowResult(host, snapshot);
         Entry.Logger.Info(
             $"[CombatSolver/Test] TURN_SETUP_RESULT_ACCEPTED turn={player.PlayerCombatState.TurnNumber} " +
@@ -341,6 +324,17 @@ internal static partial class SolverController
             ReplanCause.ExplicitRequest => "explicit_request",
             _ => throw new ArgumentOutOfRangeException(nameof(cause), cause, null),
         };
+
+    private static SolverOverlaySnapshot CaptureCompletedResultSnapshot(SolverResult result)
+    {
+        SolverOverlaySnapshot snapshot = result.PreservesContinuationSource
+            ? SolverOverlaySnapshot.CaptureWithReviewedWorldlines(
+                result, UnexpectedReplanCount > 0, _combat.ReviewedWorldlinesTotal)
+            : SolverOverlaySnapshot.CaptureCurrentTurn(SolverCurrentTurnPreview.FromResult(result));
+        return result.ResultScope == SolverResultScope.RouteAdoption
+            ? MarkRouteAdopted(snapshot)
+            : snapshot;
+    }
 
     private static SolverOverlaySnapshot MarkRouteAdopted(SolverOverlaySnapshot snapshot)
         => snapshot with
