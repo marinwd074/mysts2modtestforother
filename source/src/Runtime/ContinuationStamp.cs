@@ -1,4 +1,5 @@
 using System.Text;
+using STS2RitsuLib;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Cards;
@@ -94,7 +95,8 @@ internal sealed record ContinuationStamp(string StateText)
                 }
                 else
                 {
-                    differences.Add(DescribeValueDifference(expectedName, expectedValue, actualValue));
+                    differences.AddRange(DescribeValueDifference(expectedName, expectedValue, actualValue)
+                        .Take(maximumDifferences - differences.Count));
                 }
             }
             if (differences.Count >= maximumDifferences)
@@ -177,6 +179,7 @@ internal sealed record ContinuationStamp(string StateText)
             state.RunState.Rng.CombatOrbGeneration.CaptureState(),
             state.RunState.Rng.MonsterAi.CaptureState(),
             state.RunState.Rng.Niche.CaptureState());
+        text.Append(";max_hand_size=").Append(RitsuLibFramework.GetMaxHandSize(player));
         return new ContinuationStamp(text.ToString());
     }
 
@@ -249,6 +252,7 @@ internal sealed record ContinuationStamp(string StateText)
             simulator.Rng.CombatOrbGenerationState,
             simulator.Rng.MonsterAiState,
             simulator.Rng.NicheState);
+        text.Append(";max_hand_size=").Append(simulator.GetMaxHandSize(player));
         return new ContinuationStamp(text.ToString());
     }
 
@@ -309,7 +313,15 @@ internal sealed record ContinuationStamp(string StateText)
             : (field[..separator], field[(separator + 1)..]);
     }
 
-    private static string DescribeValueDifference(string name, string expected, string actual)
+    /// <summary>
+    /// 单个状态字段的差异描述。牌堆 / Power 字段可能同时有多处不同，必须逐处报出：
+    /// 同名牌在文本里只靠 <c>DeckVersion != null</c> 一位区分，只报第一个不同下标会把
+    /// 「预测侧丢了牌组身份」和「预测侧把身份记在另一个同名牌上」压成同一条现场证据，
+    /// 使现场包无法裁决。超出上限时显式写出剩余数量，不做静默截断。
+    /// </summary>
+    private const int MaximumItemDifferencesPerField = 8;
+
+    private static IReadOnlyList<string> DescribeValueDifference(string name, string expected, string actual)
     {
         string[]? partNames = name switch
         {
@@ -331,7 +343,7 @@ internal sealed record ContinuationStamp(string StateText)
                 if (string.Equals(expectedPart, actualPart, StringComparison.Ordinal))
                     continue;
                 string partName = index < partNames.Length ? partNames[index] : $"part_{index}";
-                return $"field={name}.{partName} expected={LogValue(expectedPart)} actual={LogValue(actualPart)}";
+                return [$"field={name}.{partName} expected={LogValue(expectedPart)} actual={LogValue(actualPart)}"];
             }
         }
 
@@ -340,18 +352,29 @@ internal sealed record ContinuationStamp(string StateText)
             IReadOnlyList<string> expectedItems = SplitTopLevelItems(expected);
             IReadOnlyList<string> actualItems = SplitTopLevelItems(actual);
             int count = Math.Max(expectedItems.Count, actualItems.Count);
+            List<string> itemDifferences = [];
+            int differingItems = 0;
             for (int index = 0; index < count; index++)
             {
                 string expectedItem = index < expectedItems.Count ? expectedItems[index] : "<missing>";
                 string actualItem = index < actualItems.Count ? actualItems[index] : "<missing>";
                 if (string.Equals(expectedItem, actualItem, StringComparison.Ordinal))
                     continue;
-                return $"field={name}[{index}] expected={LogValue(expectedItem)} actual={LogValue(actualItem)} " +
-                       $"expected_count={expectedItems.Count} actual_count={actualItems.Count}";
+                differingItems++;
+                if (itemDifferences.Count >= MaximumItemDifferencesPerField)
+                    continue;
+                itemDifferences.Add($"field={name}[{index}] expected={LogValue(expectedItem)} actual={LogValue(actualItem)} " +
+                                    $"expected_count={expectedItems.Count} actual_count={actualItems.Count}");
             }
+            if (itemDifferences.Count == 0)
+                return [$"field={name} expected={LogValue(expected)} actual={LogValue(actual)}"];
+            if (differingItems > itemDifferences.Count)
+                itemDifferences.Add($"field={name} additional_differences={differingItems - itemDifferences.Count} " +
+                                    $"expected_count={expectedItems.Count} actual_count={actualItems.Count}");
+            return itemDifferences;
         }
 
-        return $"field={name} expected={LogValue(expected)} actual={LogValue(actual)}";
+        return [$"field={name} expected={LogValue(expected)} actual={LogValue(actual)}"];
     }
 
     private static IReadOnlyList<string> SplitTopLevelItems(string value)

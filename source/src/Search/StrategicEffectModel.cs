@@ -238,8 +238,8 @@ internal readonly record struct StrategicEffectContext(
             if ((needsBlockSkillCount && cardType == CardType.Skill) || needsDebuffCount)
             {
                 // DynamicVarSet 的 GetEnumerator 会把内部 Dictionary 的结构体枚举器装箱，
-                // 每张牌每次快照都要跑一遍；直接枚举其（已 publicize 的）内部字典。
-                foreach (KeyValuePair<string, MegaCrit.Sts2.Core.Localization.DynamicVars.DynamicVar> dynamicVar in card.DynamicVars._vars)
+                // 经访问桥枚举内部字典，字段不可用时回退公开枚举。
+                foreach (KeyValuePair<string, MegaCrit.Sts2.Core.Localization.DynamicVars.DynamicVar> dynamicVar in new DynamicVarSetAccess.EntryEnumerable(card.DynamicVars))
                 {
                     bool resolved = ObserveDynamicVarKey(
                         dynamicVar.Key,

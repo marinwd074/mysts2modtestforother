@@ -39,6 +39,7 @@ internal static class Program
     private static int Main(string[] args)
     {
         bool modelIdCacheOnly = args.Length > 0 && args[0] == "model-id-cache";
+        bool upstreamPortOnly = args.Length > 0 && args[0] == "upstream-port";
         bool cardChoiceIdentityOnly = args.Length > 0 && args[0] == "card-choice-identity";
         bool memoryDisplayOnly = args.Length > 0 && args[0] == "memory-display";
         bool darkEmbracePactOnly = args.Length > 0 && args[0] == "dark-embrace-pact";
@@ -57,7 +58,7 @@ internal static class Program
         bool requestHydrationOnly = args.Length > 0 && args[0] is "request-hydration"
             or "request-hydration-benchmark-on" or "request-hydration-benchmark-off";
         bool requestHydrationBenchmark = requestHydrationOnly && args[0] != "request-hydration";
-        string outputDirectory = ParseOutput(memoryDisplayOnly || cardChoiceIdentityOnly || modelIdCacheOnly || darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
+        string outputDirectory = ParseOutput(upstreamPortOnly || memoryDisplayOnly || cardChoiceIdentityOnly || modelIdCacheOnly || darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
             allowHydrationOptions: requestHydrationBenchmark);
         Directory.CreateDirectory(outputDirectory);
 
@@ -118,7 +119,7 @@ internal static class Program
                 ValidateRngRestore(outputDirectory);
                 return 0;
             }
-            if (!cardChoiceIdentityOnly && !turnEnergyOnly && !rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly && !rootHistoryOnly && !strategicContextOnly && !strategicEnergyOnly && !projectedShuffleOnly)
+            if (!upstreamPortOnly && !cardChoiceIdentityOnly && !turnEnergyOnly && !rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly && !rootHistoryOnly && !strategicContextOnly && !strategicEnergyOnly && !projectedShuffleOnly)
             {
             ValidateDarkEmbracePredictionCoverage();
             ValidateViciousStrategicValue();
@@ -198,6 +199,11 @@ internal static class Program
                 SoftTimeBudgetMilliseconds = BudgetMilliseconds,
             };
             SolverDisplayNames names = SolverDisplayNames.Capture(combat);
+            if (upstreamPortOnly)
+            {
+                Console.WriteLine(UpstreamPortChecks.Run(combat, names, outputDirectory));
+                return 0;
+            }
             if (cardChoiceIdentityOnly)
             {
                 Console.WriteLine(CardChoiceIdentityChecks.Run(
@@ -436,10 +442,29 @@ internal static class Program
                 && displayed.RouteAdoptionSeed == null,
             "E1 display did not preserve the approved preview without granting execution.");
 
-        SolverRouteAdoptionSeed matchingSeed = new(
+        SolverRouteAdoptionSeed wrongVersionSeed = new(
             candidateVersion: 99,
             actions: [approvedAction],
             materialize: static () => null!);
+        interaction.PublishProgress(approved with
+        {
+            ElapsedMilliseconds = 250,
+            RouteAdoptionSeed = wrongVersionSeed,
+            OfficialPublishedOrigin = null,
+            OfficialPublishedEvaluationContextId = null,
+        });
+        Require(interaction.TryCreateDisplayProgress(
+                now + SolverWeights.ProgressUiIntervalMilliseconds + 10, out SolverProgress wrongVersionDisplay)
+            && wrongVersionDisplay.RouteAdoptionSeed == null,
+            "Equal actions from a different candidate version gained execution authority.");
+        List<PlanAction> seedActions = [approvedAction];
+        SolverRouteAdoptionSeed matchingSeed = new(
+            candidateVersion: 7,
+            actions: seedActions,
+            materialize: static () => null!);
+        seedActions.Clear();
+        Require(matchingSeed.Actions.SequenceEqual([approvedAction]),
+            "A route-adoption seed retained its caller's mutable action list.");
         interaction.PublishProgress(approved with
         {
             ElapsedMilliseconds = 300,
@@ -449,7 +474,7 @@ internal static class Program
         });
         Require(
             interaction.TryCreateDisplayProgress(
-                now + SolverWeights.ProgressUiIntervalMilliseconds + 10,
+                now + 2 * SolverWeights.ProgressUiIntervalMilliseconds + 20,
                 out SolverProgress executableDisplay)
                 && executableDisplay.SpeculativeRoutePreview?.CandidateVersion == 7
                 && ReferenceEquals(executableDisplay.RouteAdoptionSeed, matchingSeed),

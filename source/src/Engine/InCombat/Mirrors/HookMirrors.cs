@@ -42,12 +42,13 @@ internal static partial class HookMirrors
         out List<AbstractModel> modifiers)
     {
         modifiers = [];
+        bool blockOverflowed = false;
 
         var cardModel = cardSource?.Preview;
         if (cardModel?.Enchantment is { } enchantment)
         {
             block += enchantment.EnchantBlockAdditive(block);
-            block *= enchantment.EnchantBlockMultiplicative(block);
+            block = MultiplyBlockWithinSettlement(block, enchantment.EnchantBlockMultiplicative(block), ref blockOverflowed);
         }
 
         foreach (var listener in IterateCombatHookListeners(simulator, MirroredHookMask.ModifyBlockAdditive))
@@ -82,7 +83,7 @@ internal static partial class HookMirrors
         {
             context.Amount = block;
             var multiplier = ModifyBlockMultiplicativeMirrors.Invoke(listener, context);
-            block *= multiplier;
+            block = MultiplyBlockWithinSettlement(block, multiplier, ref blockOverflowed);
             if (multiplier != 1)
             {
                 modifiers.Add(listener);
@@ -97,7 +98,30 @@ internal static partial class HookMirrors
             }
         }
 
-        return Math.Max(0, block);
+        return blockOverflowed
+            ? Math.Clamp(block, 0m, SimCreatureState.BlockSettlementCeiling)
+            : Math.Max(0, block);
+    }
+
+    /// <summary>
+    /// Preserves representable native products and carries decimal overflow through the
+    /// remaining modifiers. Native reductions such as Frail must run before settlement;
+    /// a zero amount or factor always produces zero, including after overflow.
+    /// </summary>
+    private static decimal MultiplyBlockWithinSettlement(decimal block, decimal multiplier, ref bool overflowed)
+    {
+        if (block == 0m || multiplier == 0m)
+            return 0m;
+        if (multiplier == decimal.MaxValue)
+            overflowed = true;
+        if (Math.Abs(multiplier) > 1m && Math.Abs(block) > decimal.MaxValue / Math.Abs(multiplier))
+        {
+            overflowed = true;
+            return (block < 0m) ^ (multiplier < 0m)
+                ? decimal.MinValue
+                : decimal.MaxValue;
+        }
+        return block * multiplier;
     }
 
     /// <summary>
@@ -670,7 +694,8 @@ internal static partial class HookMirrors
     {
         if (simulator.IsCapturingExecutionContinuation)
         {
-            ResumeAfterPlayExecution(simulator, card, cardPlay, 0, CaptureUnfilteredExecutionHookListeners(simulator), 0);
+            ResumeAfterPlayExecution(simulator, card, cardPlay, 0,
+                CaptureAfterPlayExecutionHookListeners(simulator, late: false), 0);
             return;
         }
         var context = new AfterCardPlayedMirrorContext
@@ -1450,6 +1475,12 @@ internal static partial class HookMirrors
         string hookName,
         Func<AbstractModel, bool> wouldActOnUnfilteredPath)
     {
+        if (listeners is ISegmentedModelList segmented)
+        {
+            VerifyMaskedListenersAreNoOps(segmented.Prefix, mask, hookName, wouldActOnUnfilteredPath);
+            VerifyMaskedListenersAreNoOps(segmented.Suffix, mask, hookName, wouldActOnUnfilteredPath);
+            return;
+        }
         if (listeners is not MirroredHookListenerSnapshot snapshot)
             return;
 

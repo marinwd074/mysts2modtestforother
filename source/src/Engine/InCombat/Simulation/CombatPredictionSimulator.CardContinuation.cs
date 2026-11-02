@@ -129,9 +129,14 @@ internal sealed partial class CombatPredictionSimulator
     {
         using (_trace.ResumeManualCardChoice(frame.Trace))
         {
-            if (!frame.Choice.Resolve(this, frame.Card))
-                return false;
-            if (CompleteManualCardPlayTail(frame.Card, frame.Target, frame.Play, frame.OwnerBlockBefore))
+            bool completed;
+            using (BeginCardOrPotionEffect(frame.Play.Card.Owner))
+            {
+                if (!frame.Choice.Resolve(this, frame.Card))
+                    return false;
+                completed = CompleteManualCardPlayTail(frame.Card, frame.Target, frame.Play, frame.OwnerBlockBefore);
+            }
+            if (completed)
                 CompleteManualCardResultTail(frame.Card, frame.Play.Card.Owner, frame.Result);
         }
         if (History.HasCardPlayStartedSince(frame.HistoryStart, frame.Trace) && !HasPendingChoice)

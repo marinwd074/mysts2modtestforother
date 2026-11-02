@@ -162,6 +162,12 @@ internal static class PredictionUtils
             return true;
         }
 
+        foreach (TemporaryCardCost starCost in card._temporaryStarCosts)
+        {
+            if (starCost.ClearsWhenTurnEnds)
+                return true;
+        }
+
         CardEnergyCost cost = card.EnergyCost;
         List<LocalCostModifier> localModifiers = GetLocalCostModifiers(cost);
         if (localModifiers.Count == 0)

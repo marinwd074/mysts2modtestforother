@@ -149,10 +149,40 @@ internal static partial class CardChoiceSupport
             PredictedCard replacement = PredictedCard.Create(replacementCanonical, original.Preview.Owner);
             if (upgradeReplacement)
                 replacement.Upgrade();
-            if (!ReplaceTransformedCard(
+            if (!ReplaceTransformedCard(simulator, original, replacement, CardGenerationResultKind.Fixed))
+                return false;
+        }
+        return true;
+    }
+
+    public static bool TransformCardBatch(
+        CombatPredictionSimulator simulator,
+        IEnumerable<PredictedCard> cards,
+        CardModel replacementCanonical,
+        bool upgradeReplacement)
+    {
+        List<(PredictedCard Original, PredictedCard Replacement, SimCardPile Pile, int Index)> transformations = [];
+        foreach (PredictedCard original in cards.ToList())
+        {
+            PredictedCard replacement = PredictedCard.Create(replacementCanonical, original.Preview.Owner);
+            if (upgradeReplacement)
+                replacement.Upgrade();
+            (SimCardPile pile, int index) = RemoveTransformedCard(simulator, original);
+            transformations.Add((original, replacement, pile, index));
+        }
+        // CardCmd.Transform removes every original before inserting the replacements, and records
+        // each index in the shrinking pile. Its pile/index sort determines insertion and hook order.
+        transformations.Sort(static (left, right) => left.Pile.Type != right.Pile.Type
+            ? left.Pile.Type.CompareTo(right.Pile.Type)
+            : left.Index.CompareTo(right.Index));
+        foreach (var transformation in transformations)
+        {
+            if (!AddTransformedCard(
                 simulator,
-                original,
-                replacement,
+                transformation.Original,
+                transformation.Replacement,
+                transformation.Pile,
+                transformation.Index,
                 CardGenerationResultKind.Fixed))
             {
                 return false;
@@ -194,6 +224,14 @@ internal static partial class CardChoiceSupport
         PredictedCard replacement,
         CardGenerationResultKind resultKind)
     {
+        (SimCardPile pile, int index) = RemoveTransformedCard(simulator, original);
+        return AddTransformedCard(simulator, original, replacement, pile, index, resultKind);
+    }
+
+    private static (SimCardPile Pile, int Index) RemoveTransformedCard(
+        CombatPredictionSimulator simulator,
+        PredictedCard original)
+    {
         SimCardPile pile = original.GetPile(simulator.State)
             ?? throw new InvalidOperationException($"变换时找不到 {original.Preview.Id.Entry} 所在牌堆。");
         int index = -1;
@@ -208,6 +246,17 @@ internal static partial class CardChoiceSupport
             throw new InvalidOperationException($"变换时找不到 {original.Preview.Id.Entry} 的牌堆位置。");
 
         simulator.RemoveFromCombat(original);
+        return (pile, index);
+    }
+
+    private static bool AddTransformedCard(
+        CombatPredictionSimulator simulator,
+        PredictedCard original,
+        PredictedCard replacement,
+        SimCardPile pile,
+        int index,
+        CardGenerationResultKind resultKind)
+    {
         replacement.MutablePreview.HasBeenRemovedFromState = false;
         replacement.NotifyHookListenerStructureChanged();
         pile.Insert(Math.Min(index, pile.Cards.Count), replacement);

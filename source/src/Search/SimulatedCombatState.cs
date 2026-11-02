@@ -261,6 +261,9 @@ internal sealed partial class SimulatedCombatState
         _cardMultiplayerConstraint = inner.RunState.CardMultiplayerConstraint;
         _playerCreatures = inner.PlayerCreatures.ToArray();
         _players = inner.Players.ToArray();
+        List<CardModel> liveCombatCards = (List<CardModel>)AllCombatCardsField.GetValue(inner)!;
+        LiveCollectionGuard.Window rootLiveCollectionWindow = LiveCollectionGuard.BeginWindow(
+            ("CombatState._allCards", liveCombatCards));
         if (localPlayerOnly != null && !_players.Contains(localPlayerOnly))
             throw new InvalidOperationException("本地玩家不在当前战斗玩家名册中。");
         if (localActionPlayer != null && !_players.Contains(localActionPlayer))
@@ -372,7 +375,7 @@ internal sealed partial class SimulatedCombatState
             .Where(player => player.PlayerCombatState != null)
             .SelectMany(player => player.PlayerCombatState!.AllCards)
             .ToHashSet();
-        _rootFloatingCards = ((List<CardModel>)AllCombatCardsField.GetValue(inner)!)
+        _rootFloatingCards = LiveCollectionGuard.SnapshotStable(liveCombatCards, "CombatState._allCards")
             .Where(card => card.Owner == null || _rootCapturedPlayers.Contains(card.Owner))
             .Where(card => !piledCards.Contains(card))
             .ToHashSet();
@@ -484,6 +487,7 @@ internal sealed partial class SimulatedCombatState
             _playerTurnNumbers.Add(player, playerState.TurnNumber);
             _simulatedPlayerGold.Add(player, player.Gold);
         }
+        rootLiveCollectionWindow.Verify();
     }
 
     private SimulatedCombatState(
@@ -2411,6 +2415,12 @@ internal sealed partial class SimulatedCombatState
         ref StateFingerprintBuilder fingerprint,
         CombatPredictionSimulator simulator)
     {
+        fingerprint.Add("max_hand_sizes");
+        foreach (Player player in _rootCapturedPlayers)
+        {
+            fingerprint.Add(player.NetId);
+            fingerprint.Add(GetMaxHandSize(player));
+        }
         if (AdaptedOnPlay is { } adaptedOnPlay)
         {
             fingerprint.Add("onplay_configuration");
@@ -2525,8 +2535,8 @@ internal sealed partial class SimulatedCombatState
         ulong dynamicFirst = 0;
         ulong dynamicSecond = 0;
         int dynamicCount = 0;
-        // DynamicVarSet.GetEnumerator 会装箱内部字典的枚举器；直接枚举已 publicize 的 _vars。
-        foreach (var dynamicVar in power.DynamicVars._vars)
+        // Preserve the allocation-free field path while supporting rewritten game assemblies.
+        foreach (var dynamicVar in new DynamicVarSetAccess.EntryEnumerable(power.DynamicVars))
         {
             if (!SemanticStateFieldPolicy.IsSemantic(power, dynamicVar.Key, dynamicVar.Value))
                 continue;

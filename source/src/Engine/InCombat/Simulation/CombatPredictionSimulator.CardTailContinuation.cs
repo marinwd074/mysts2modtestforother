@@ -111,7 +111,9 @@ internal sealed partial class CombatPredictionSimulator
             if (HasPendingChoice) return Suspend(CardResultStage.HandEmpty);
             stage = CardResultStage.HandEmpty;
         }
-        if (stage == CardResultStage.HandEmpty && State.CombatState is ICombatPredictionCardEventSink handSink)
+        if (stage == CardResultStage.HandEmpty && IsInProgress
+            && !IsExecutingCardOrPotionEffect(originalOwner)
+            && State.CombatState is ICombatPredictionCardEventSink handSink)
         {
             using (BeginExecutionDispatch()) handSink.AfterHandEmptied(this, originalOwner);
             if (HasPendingChoice) return Suspend(CardResultStage.Cleanup);
@@ -136,6 +138,8 @@ internal sealed partial class CombatPredictionSimulator
     {
         public ICombatPredictionExecutionFrame Fork(PredictionForkContext context)
             => this with { Card = context.RequireRemap(Card) };
-        public bool Resume(CombatPredictionSimulator simulator) => simulator.ContinueCardResultExecution(Card, Owner, Result, Stage);
+        public bool Resume(CombatPredictionSimulator simulator)
+            => simulator.State.GetCreature(Owner.Creature).IsDead
+                || simulator.ContinueCardResultExecution(Card, Owner, Result, Stage);
     }
 }

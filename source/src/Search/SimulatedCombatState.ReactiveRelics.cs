@@ -162,6 +162,8 @@ internal sealed partial class SimulatedCombatState
         Player player)
     {
         SimPlayerCombatState state = simulator.State.GetPlayerCombatState(player);
+        if (!simulator.IsInProgress || simulator.IsExecutingCardOrPotionEffect(player))
+            return;
         if (state.Phase is not (MegaCrit.Sts2.Core.Combat.PlayerTurnPhase.AutoPrePlay
             or MegaCrit.Sts2.Core.Combat.PlayerTurnPhase.Play
             or MegaCrit.Sts2.Core.Combat.PlayerTurnPhase.AutoPostPlay))

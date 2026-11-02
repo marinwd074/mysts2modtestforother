@@ -4,7 +4,7 @@
 
 ## 基线
 
-- 项目记录版本 `4.31`；版本内容与功能提交见 [`PROJECT_VERSION_HISTORY.md`](PROJECT_VERSION_HISTORY.md)，上游适配来源见仓库根 `UPSTREAM.md`。
+- 项目记录版本 `4.32`；版本内容与功能提交见 [`PROJECT_VERSION_HISTORY.md`](PROJECT_VERSION_HISTORY.md)，上游适配来源见仓库根 `UPSTREAM.md`。
 - CombatSolver `0.40.2`
 - STS2 / RitsuLib pinned `0.107.1`
 - .NET 9 / Godot 4.5.1 / `STS2_01071`
@@ -15,7 +15,9 @@
 
 ## 上游适配
 
-本次上游适配核对到 `53c26b26c50bec027de8f7d2c76deb223cd6971d`（上游 0.47.3 / 游戏 0.111.0），保持本项目 pinned 0.107.1。已移植模型 ID 注册门禁、隔离 worker UI 边界、费用有效期身份、选牌分配优化、物理容量显示及手动 heap decommit。Release、相应 pinned / 请求 / GC 合同通过；真实 NoGC 恢复因本机可用恢复预算约 461 MB 低于 512 MB 门槛，仍 UNVERIFIED。未执行真实 worker 或 Host/Client 验证，既有 AdoptRoute 实机未完成项保持开放。
+2026-11-02 对比到 `5c773caaec742bc55588bc9ee21c361326a732f0`（上游 0.50.1 / 游戏 0.111.0），选择性适配卡牌 COW 身份、牌堆移动失效、星费清理、批量变换/选牌顺序、空手触发作用域、终局监听器捕获、格挡溢出、手牌上限身份、动态变量访问桥和根集合稳定性。保留 pinned 0.107.1、本地玩家边界及全 RNG 诊断；未整仓合并。已同步 origin/main 的候选身份修复，并修正相关旧夹具、加入错误版本拒绝和动作列表隔离断言。
+
+Release 与 `upstream-port` 12 组合同、card-choice-identity / continuation-replay / completion-scope / rolling-review / request-hydration / choice-rng / continuation-audit 通过。原生选牌只核对 pinned 字段形状，真实 UI 时序、完整原生效果/执行检查点差分与 Host/Client 未在本轮验证。上游回复证明、共享 incumbent、Smart 用药策略、额外回合/金币/临时属性等原生语义及 GC/UI/回放改动仍需独立适配，明细见根 `UPSTREAM.md`；该核对点不表示这些项目已移植。既有 NoGC 恢复与 AdoptRoute 实机未完成项继续保留。
 
 ## 已完成主线：Rolling Horizon Reuse
 

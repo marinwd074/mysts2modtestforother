@@ -193,6 +193,8 @@ internal sealed partial class CombatPredictionSimulator
             throw new InvalidOperationException("Combat prediction cannot be forked while a damage source is active.");
         if (_activeDrawDepth != 0)
             throw new InvalidOperationException("Combat prediction cannot be forked during draw resolution.");
+        if (_activeCardOrPotionEffects is { Count: > 0 })
+            throw new InvalidOperationException("Combat prediction cannot be forked during a card or potion effect.");
         if (ActionRelicTriggers is not null)
             throw new InvalidOperationException("Combat prediction cannot be forked while action relic triggers are being recorded.");
         if (State.CombatState is IPredictionForkBoundary combatBoundary)

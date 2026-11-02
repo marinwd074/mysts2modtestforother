@@ -24,6 +24,8 @@
 
 `U0U1PinnedHarness card-choice-identity` 覆盖 11 组费用有效期/隐藏层/顺序/星费、原生清理和 Fork 隔离；另以 40 个唯一/重复牌选牌场景核对实体 occurrence 并输出有序结果 SHA-256 与局部 allocation probe。优化前后 1,647 个分支顺序一致；该 probe 不代表全战搜索速度。
 
+`U0U1PinnedHarness upstream-port --out <ignored-directory>` 覆盖 12 组 pinned 0.107.1 合同：32 个 DOP=4 COW 分支及游戏克隆身份、DynamicVar 字段/公开回退、原生星费清理、9 组路由剩余牌序、12 个 Seeker RNG 状态、批量变换、效果嵌套/Fork 拒绝/释放、同数量集合写入、手牌上限指纹/续用及父状态隔离、多项差分上限、三选一原生字段形状、6 档格挡溢出与普通原生倍率。所有检查后 live continuation 不变；不证明原生 UI 时序、完整原生效果/执行检查点差分或 Host/Client。`completion-scope` 同时核对不同候选版本不得接管，以及种子必须复制外部动作列表。
+
 `U0U1PinnedHarness memory-display` 核对物理容量、缺失采样、回收压力与显示文案，可用 `DOTNET_gcServer=0/1` 分别验证两种 CLR 模式；`CombatSolver.GcPolicyChecks manual-release` 使用真实 CLR 核对搜索退出屏障、重复请求合并、存活数据和空闲堆页归还。`recovery` 覆盖 40 次恢复、饱和退避、结构性退出与预算限制；`recovery-lifecycle` 需要真实恢复余量，不足 512 MB 时失败不计为 PASS。
 
 `tools/multiplayer-lab/test-joint-continuation-validator.ps1` 覆盖 plain/JSON、reason 解析及错误原因拒绝；RouteReplay 检查同日志/请求的新根与完整账本、评估范围、新授权及原生部署。TargetDeath 另检查 roster strict subset、旧 seed 截断、恢复与存活目标部署；搜索代次和路线代次独立匹配。反例包含错请求/回合、旧授权/路线、混合成员、无质量证明、动作顺序、未清授权、替换敌人、死亡目标、预算变化及缺失证据；只有真实 Host/Client journal 的对应模式通过才构成实机证据。入口见 [多人 RUNBOOK](multiplayer/RUNBOOK.md#joint-forecast-continuation-smoke)。

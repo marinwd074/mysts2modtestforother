@@ -6,7 +6,51 @@ This repository is derived from **Torch1230/CombatSolver** and retains its MIT a
 
 Upstream may target a newer game version. Therefore upstream updates are reviewed and ported selectively rather than merged wholesale.
 
-## Reviewed updates (2026-10-02)
+## Current integration (2026-11-02)
+
+Compared upstream `53c26b26c50bec027de8f7d2c76deb223cd6971d` through
+`5c773caaec742bc55588bc9ee21c361326a732f0` (0.50.1, game 0.111.0; 341 commits including merges).
+Project **4.32** selectively adapts these state/choice fixes to **0.107.1**.
+This is an integration review marker, not a wholesale Git merge or a claim that all intervening changes were imported.
+
+| Upstream reference | Adaptation |
+| --- | --- |
+| [8312bdf6](https://github.com/Torch1230/CombatSolver/commit/8312bdf6) | Cached DynamicVarSet field bridge with public-enumeration fallback; retain local card-value and strategic-context caches. |
+| [aa970774](https://github.com/Torch1230/CombatSolver/commit/aa970774) | Reject changed live card collections during root capture, including same-count writes; preserve local-player-only capture. |
+| [21a5abdf](https://github.com/Torch1230/CombatSolver/commit/21a5abdf), [58427631](https://github.com/Torch1230/CombatSolver/commit/58427631) | Preserve card identity across COW previews; invalidate listener projections on pile moves; clean temporary star costs; preserve batch-transform/Seeker option order and terminal AfterCardPlayed capture. Keep pinned CardPlay ownership through `Card.Owner`. |
+| [b61224f6](https://github.com/Torch1230/CombatSolver/commit/b61224f6) | Carry nested card/potion effect ownership through execution checkpoints; defer empty-hand callbacks and reject ordinary Fork inside an active effect. |
+| [1171c5f5](https://github.com/Torch1230/CombatSolver/commit/1171c5f5) | Saturate overflowing block multiplication at settlement, preserving later modifiers and zero block. Check ordinary Shadowmeld factors against pinned native behavior. |
+| [89798a78](https://github.com/Torch1230/CombatSolver/commit/89798a78), [c866ada7](https://github.com/Torch1230/CombatSolver/commit/c866ada7) | Include readable players' captured hand limits in state keys/continuation. Preserve distinct residual pile orders under an active Sandpit countdown, retaining ordinary routing representatives and configured budgets. |
+| [2bdbf437](https://github.com/Torch1230/CombatSolver/commit/2bdbf437), [5249110e](https://github.com/Torch1230/CombatSolver/commit/5249110e) | Report multiple pile differences, preserving all-stream RNG diagnostics and caller limits. Validate ChooseCard instances, native opening time and accepted completion; retain existing deployment-session ownership. |
+
+Already covered locally: root-owned calculated history (including Voltaic), intrinsic card-value caching,
+cost-expiration identity, branch-owned turn energy and local-core multiplayer isolation. Keep those implementations.
+
+Remaining work must not be treated as imported:
+
+- **Search policies:** healing certificates/component bounds, shared/resource incumbents, victory-witness reuse,
+  Smart potion cost/admission/dedicated layers, portfolio/power-route retention and offensive continuations.
+  These change pruning, ranking or scheduling and need a separate adaptation to rolling-horizon/request/multiplayer contracts.
+  The Entropic Brew cost-provenance gap below remains open.
+- **Native semantics:** gold/max-HP healing hooks, extra-turn registries, temporary-stat listener order,
+  Joss Paper/Pael state and other card/power/monster fixes require pinned native differential cases.
+  Newer upstream code alone does not establish 0.107.1 behavior.
+- **Runtime/product:** default-GC admission/Mono support, overlay visibility/deployment presentation,
+  content-mod attribution/adapter APIs and checkpoint replay/schema changes remain separate work.
+  The optional phase-selection detachment API was excluded with its deployment callers.
+- **Excluded:** game/Ritsu upgrades, repository/test-directory reorganization, monitoring services,
+  telemetry and private uploads; preserve this fork's build target, repository rules and product boundaries.
+
+Validation: zero-warning/error pinned Release; `U0U1PinnedHarness upstream-port` covers 12 groups (32 parallel COW forks,
+native star cleanup, 9 routing combinations, 12 Seeker RNG states, batch transform, effect-scope/Fork boundaries,
+collection writes, hand-limit identity, diagnostics, native UI field shapes and block saturation).
+Existing card-choice-identity, continuation-replay, completion-scope, rolling-review, request-hydration,
+choice-rng and continuation-audit regressions pass. Retain origin/main's candidate-identity fix and update its
+positive fixture alongside explicit wrong-version rejection and mutable-list isolation checks.
+These are pinned/offline contracts: real ChooseCard timing, full native effect/checkpoint differentials
+and Host/Client behavior remain unverified by this integration.
+
+## Earlier integration (2026-10-02)
 
 Reviewed upstream `d231e9e51a0e58d6bfa1373c6265cce13ffd9a45` through
 `53c26b26c50bec027de8f7d2c76deb223cd6971d` (manifest 0.47.3, game 0.111.0).

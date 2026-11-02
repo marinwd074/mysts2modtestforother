@@ -134,7 +134,6 @@ internal sealed partial class CombatPredictionSimulator
                     HookMirrors.AbortCardPlayed(this, activePlay!);
             }
         }
-        CompleteManualCardResultTail(card, owner, result);
         return !HasPendingChoice;
     }
 

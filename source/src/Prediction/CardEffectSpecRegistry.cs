@@ -285,7 +285,7 @@ internal static class CardEffectSpecRegistry
                 PredictedCard[] statuses = simulator.State.GetPlayerCombatState(card.Owner).Hand.Cards
                     .Where(candidate => candidate.Preview.IsTransformable && candidate.Preview.Type == CardType.Status)
                     .ToArray();
-                CardChoiceSupport.TransformCards(
+                CardChoiceSupport.TransformCardBatch(
                     simulator,
                     statuses,
                     CanonicalModels.Card<Fuel>(),

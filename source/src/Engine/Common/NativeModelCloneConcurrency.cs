@@ -30,7 +30,7 @@ internal static class NativeModelCloneConcurrency
         };
         if (variables == null)
             return false;
-        foreach (var variable in variables._vars.Values)
+        foreach (var variable in DynamicVarSetAccess.Values(variables))
         {
             if (variable.GetType().Assembly != typeof(AbstractModel).Assembly)
                 return false;

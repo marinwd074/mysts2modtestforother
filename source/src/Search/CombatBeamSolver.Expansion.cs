@@ -675,6 +675,11 @@ internal sealed partial class CombatBeamSolver
         }
         else
         {
+            // With a forced-death countdown, equal cards in separate runs leave different future draws.
+            choiceSpec = choiceSpec with
+            {
+                PreserveOrderedRoutingResidues = probeSnapshot.SandpitRemaining > 0,
+            };
             IReadOnlyList<PlanCardChoice> builtChoices = CardChoiceSupport.BuildChoices(
                 choiceSpec,
                 displayNames,

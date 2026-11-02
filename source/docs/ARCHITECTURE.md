@@ -193,6 +193,9 @@ Smart 层间使用 `SmartLayerMemoryForecast` 的同窗分配和转移高水位�
 
 ## 4. 模拟引擎、UI 与部署边界
 
+- `PredictedCard` 用弱身份登记维持 COW 前后同一战斗牌的引用匹配，游戏生成的 clone 使用新身份；换牌堆通知既有监听器投影失效。手牌上限只把已捕获可读玩家的值加入状态键，续用同时比较本地上限。
+- `CombatPredictionSimulator.EffectScope` 持有嵌套出牌/药水效果的玩家身份；执行检查点按值携带身份序列，恢复后严格核对释放，普通 Fork 拒绝活动效果。空手回调在最外层效果退出后触发；不建立新的战斗状态后端。
+- `LiveCollectionGuard` 在主线程建根窗口核对真实卡牌列表版本，同数量写入也拒绝该根；`DynamicVarSetAccess` 缓存字段读取委托，字段缺失时使用公开枚举，不让 worker 回读 live 值。
 - 内嵌模拟引擎负责可 Fork 的状态、卡牌/遗物/Power mirror 和确定性 RNG；原生兼容反射与 Harmony 参数形状集中在 `src/Compatibility/`，不泄漏到 Search。
 - `SolverController` 及其 SearchLifecycle、Deployment、Continuation partial 拥有主线程会话、取消、部署和跨回合续用；`SolverCombatSession`、`SolverSearchSession`、`SolverDeploymentSession` 分别持有对应状态。
 - `SolverOverlaySnapshot` 是 UI 的单向输入。面板拥有输入与设置提交，部署仍由 Runtime 驱动；控件不得持有或重新读取 worker/live 状态。
