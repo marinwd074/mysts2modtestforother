@@ -10,7 +10,7 @@ Upstream may target a newer game version. Therefore upstream updates are reviewe
 
 Compared upstream `53c26b26c50bec027de8f7d2c76deb223cd6971d` through
 `5c773caaec742bc55588bc9ee21c361326a732f0` (0.50.1, game 0.111.0; 341 commits including merges).
-Project **4.32** selectively adapts these state/choice fixes to **0.107.1**.
+Project **4.32** adapts the state/choice fixes below; **4.42** adds the bounded search adaptations that follow, all for **0.107.1**.
 This is an integration review marker, not a wholesale Git merge or a claim that all intervening changes were imported.
 
 | Upstream reference | Adaptation |
@@ -26,11 +26,27 @@ This is an integration review marker, not a wholesale Git merge or a claim that 
 Already covered locally: root-owned calculated history (including Voltaic), intrinsic card-value caching,
 cost-expiration identity, branch-owned turn energy and local-core multiplayer isolation. Keep those implementations.
 
+Search adaptations in **4.42** retain the fork's coordinator, rolling-horizon ownership and shared budgets:
+
+| Upstream reference | Adaptation |
+| --- | --- |
+| [a820dcff](https://github.com/Torch1230/CombatSolver/commit/a820dcff), [45f87cd3](https://github.com/Torch1230/CombatSolver/commit/45f87cd3) | A separate pinned healing certificate admits only audited starter/status cards, powers, relics, potions and FuzzyWurmCrawler/Nibbit enemies. Root/run listeners, mod subscribers and foreign patches to the native assembly are checked at root capture. Unknown sources or risky branches retain full healing headroom. The newer native certificate is not reused. |
+| [d9f8bc0e](https://github.com/Torch1230/CombatSolver/commit/d9f8bc0e), [9d08f8df](https://github.com/Torch1230/CombatSolver/commit/9d08f8df) | Request-owned, exact-root sharing of finalized, eligible no-potion victory bounds and their complete route witnesses. Only closed zero-potion members consume the shared bound; strictly worse optimistic HP can be pruned. Final selection can retain the witness. No simulator or execution authority is transferred. |
+| [be19b370](https://github.com/Torch1230/CombatSolver/commit/be19b370), [PR 207](https://github.com/Torch1230/CombatSolver/pull/207) | Single-player Smart admission sums actual eligible slot costs, keeps possible healing of root missing HP, and prunes certified exact-use branches that cannot meet the audited no-potion threshold. Final ranking and exact-layer incumbents honor optional-potion opportunity cost; saving a death-prevention resource remains protected. Keep the existing gradient scheduler and early-stop policy. |
+| [5d9a2d92](https://github.com/Torch1230/CombatSolver/commit/5d9a2d92), [c9ebae2f](https://github.com/Torch1230/CombatSolver/commit/c9ebae2f), [057bb3c7](https://github.com/Torch1230/CombatSolver/commit/057bb3c7) | Reuse existing retention seats for shield-breaking attack continuations, safe discard continuations and delayed-lethal stand-pat probes. Heuristic hand/delayed values select probes; exact simulation still determines victory. No larger beam or budget. |
+| [002aa636](https://github.com/Torch1230/CombatSolver/commit/002aa636) | A real Runtime reclamation checkpoint replaces the cumulative-allocation estimate for portfolio memory admission. Node/time limits and per-batch memory pressure remain; estimate multiplication saturates rather than overflowing. |
+
+The mathematical search bounds exclude growth/relic goals, forced potion directives, stolen-resource protection,
+team objectives and multiplayer raw-loss-first routes. Multiplayer retains its existing primary ordering and
+Smart admission contract. `UseUpstreamSearchOptimizations` is an internal default-on A/B control, not a UI setting.
+Pinned native evidence: MVID `97f10687-c306-4798-ab75-8b9f23f34dfb`, SHA256
+`a1f9e653f1e28e4076558fee1e60d218619cb7e057b887c6417f62c62c6d7a52`.
+
 Remaining work must not be treated as imported:
 
-- **Search policies:** healing certificates/component bounds, shared/resource incumbents, victory-witness reuse,
-  Smart potion cost/admission/dedicated layers, portfolio/power-route retention and offensive continuations.
-  These change pruning, ranking or scheduling and need a separate adaptation to rolling-horizon/request/multiplayer contracts.
+- **Search policies:** broad component-specific healing certificates, growth/resource incumbent buckets,
+  the newer request/frontier scheduler, dedicated Smart-layer scheduling and distinct power-capability retention.
+  The narrow bounds and existing-seat continuations above do not import those complete systems.
   The Entropic Brew cost-provenance gap below remains open.
 - **Native semantics:** gold/max-HP healing hooks, extra-turn registries, temporary-stat listener order,
   Joss Paper/Pael state and other card/power/monster fixes require pinned native differential cases.
@@ -49,6 +65,13 @@ choice-rng and continuation-audit regressions pass. Retain origin/main's candida
 positive fixture alongside explicit wrong-version rejection and mutable-list isolation checks.
 These are pinned/offline contracts: real ChooseCard timing, full native effect/checkpoint differentials
 and Host/Client behavior remain unverified by this integration.
+
+Search validation: `upstream-search` completes 17 requests and 17 independent full-final-state replays, including
+ABBA controls, actual shared-bound hits and unknown-source fallback. In the artificial 100-HP/no-relic fixture,
+expanded/transitions fall from 520/3634 to 258/1758; with two Fire Potions, 671/9071 to 277/3901.
+Complete victory quality is unchanged. Incremental verification is enabled, so these are logical-work results,
+not general wall-clock benchmarks. Potion strategy, portfolio (82 checks), multiplayer cross-turn (86 checks),
+rolling-review, continuation-replay, completion-scope and request-hydration regressions pass.
 
 ## Earlier integration (2026-10-02)
 

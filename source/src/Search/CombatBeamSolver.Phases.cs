@@ -809,6 +809,7 @@ internal sealed partial class CombatBeamSolver
             SolverResult result = new()
             {
                 PredictedFinalState = policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
+                    || policy.VerifyIncrementalSearch
                     ? ContinuationStamp.CapturePredicted(_player, finalSnapshot.Simulator,
                         finalSnapshot.Turn, _forecast, _startTurnNumber)
                     : null,
@@ -2742,6 +2743,14 @@ internal sealed partial class CombatBeamSolver
             finalEvaluationContextId);
         foreach (SearchNode candidate in finalCandidates)
             candidate.Snapshot.ReleaseSimulator();
+        if (policy.OptimizationSession is { } optimization && optimization.Matches(root))
+            optimization.Observe(result, policy, ActEndingBossPolicy.StrategicHpDeficit(
+                result.Snapshot.CumulativePlayerHpLost,
+                Math.Max(0, root.InitialPlayerMaxHp - result.Snapshot.PlayerMaxHp),
+                result.Snapshot.RecoveredPlayerHp + ActEndingBossPolicy.RankedPostCombatRelicHeal(
+                    root.PostCombatRelicHeal, result.Snapshot.AllEnemiesDead,
+                    result.Snapshot.PlayerHp, result.Snapshot.PlayerMaxHp),
+                _strategicBossHpRelief, result.Snapshot.DeathSaveHpRestored) - result.Snapshot.StrategicHpCredit);
         execution.Result = result;
         yield break;
     }

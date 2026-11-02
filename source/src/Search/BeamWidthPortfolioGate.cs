@@ -65,9 +65,9 @@ internal static class BeamWidthPortfolioGate
         ArgumentOutOfRangeException.ThrowIfNegative(baselineCost);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(baselineBeamWidth);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(memberBeamWidth);
-        long numerator = baselineCost * memberBeamWidth * SafetyNumerator;
+        Int128 numerator = (Int128)baselineCost * memberBeamWidth * SafetyNumerator;
         long denominator = (long)baselineBeamWidth * SafetyDenominator;
-        return (numerator + denominator - 1) / denominator;
+        return (long)Int128.Min(long.MaxValue, (numerator + denominator - 1) / denominator);
     }
 
     /// <summary>
@@ -89,7 +89,8 @@ internal static class BeamWidthPortfolioGate
         long remainingNodes,
         long remainingMilliseconds,
         long timeBudgetMilliseconds,
-        long remainingMemoryBytes)
+        long remainingMemoryBytes,
+        bool supportsReclaimCheckpoints = false)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(memberBeamWidth);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(baseline.BeamWidth);
@@ -108,7 +109,7 @@ internal static class BeamWidthPortfolioGate
         {
             return SkippedTimeHeadroom;
         }
-        if (remainingMemoryBytes != long.MaxValue
+        if (!supportsReclaimCheckpoints && remainingMemoryBytes != long.MaxValue
             && EstimateMemberCost(baseline.AllocatedBytes, baseline.BeamWidth, memberBeamWidth)
                 > remainingMemoryBytes)
         {

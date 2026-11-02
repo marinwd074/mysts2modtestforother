@@ -4,7 +4,7 @@
 
 ## 基线
 
-- 项目记录版本 `4.32`；版本内容与功能提交见 [`PROJECT_VERSION_HISTORY.md`](PROJECT_VERSION_HISTORY.md)，上游适配来源见仓库根 `UPSTREAM.md`。
+- 项目记录版本 `4.42`；版本内容与功能提交见 [`PROJECT_VERSION_HISTORY.md`](PROJECT_VERSION_HISTORY.md)，上游适配来源见仓库根 `UPSTREAM.md`。
 - CombatSolver `0.40.2`
 - STS2 / RitsuLib pinned `0.107.1`
 - .NET 9 / Godot 4.5.1 / `STS2_01071`
@@ -17,7 +17,13 @@
 
 2026-11-02 对比到 `5c773caaec742bc55588bc9ee21c361326a732f0`（上游 0.50.1 / 游戏 0.111.0），选择性适配卡牌 COW 身份、牌堆移动失效、星费清理、批量变换/选牌顺序、空手触发作用域、终局监听器捕获、格挡溢出、手牌上限身份、动态变量访问桥和根集合稳定性。保留 pinned 0.107.1、本地玩家边界及全 RNG 诊断；未整仓合并。已同步 origin/main 的候选身份修复，并修正相关旧夹具、加入错误版本拒绝和动作列表隔离断言。
 
-Release 与 `upstream-port` 12 组合同、card-choice-identity / continuation-replay / completion-scope / rolling-review / request-hydration / choice-rng / continuation-audit 通过。原生选牌只核对 pinned 字段形状，真实 UI 时序、完整原生效果/执行检查点差分与 Host/Client 未在本轮验证。上游回复证明、共享 incumbent、Smart 用药策略、额外回合/金币/临时属性等原生语义及 GC/UI/回放改动仍需独立适配，明细见根 `UPSTREAM.md`；该核对点不表示这些项目已移植。既有 NoGC 恢复与 AdoptRoute 实机未完成项继续保留。
+状态适配的 Release 与 `upstream-port` 12 组合同、card-choice-identity / continuation-replay / completion-scope / rolling-review / request-hydration / choice-rng / continuation-audit 通过。原生选牌只核对 pinned 字段形状，真实 UI 时序、完整原生效果/执行检查点差分与 Host/Client 未在本轮验证。额外回合/金币/临时属性等原生语义及其余 GC/UI/回放改动仍需独立适配，明细见根 `UPSTREAM.md`。既有 NoGC 恢复与 AdoptRoute 实机未完成项继续保留。
+
+`4.42` 默认接入请求级完整无药胜利见证、同根共享胜利界、有限回复证明及 Smart 无资格分支剪枝。回复证明独立核对本机 `0.107.1` DLL（MVID `97f10687-c306-4798-ab75-8b9f23f34dfb`），只接受封闭的原生卡牌/能力/遗物/药水和 FuzzyWurmCrawler/Nibbit 来源；未知模型、附加效果、第三方原生补丁或风险分支退回完整回复余量。单人 Smart 按实际槽位代价准入并统一机会成本排序，避免小幅省血或早获胜绕过药水代价。既有保留席位新增破盾进攻、安全弃牌续招和延迟斩杀探针；精炼成员只有真实 Runtime 回收检查点时才替代累计分配内存估算。无 Beam/节点/时间/内存扩容。
+
+新数学界旁路成长/遗物目标、被盗资源保护、强制药水、team objective 和多人 raw-loss-first 路线；多人原质量轴及 Smart 准入保留。共享见证仅属于同一请求、同一个根对象，来源必须是收尾后的完整合规胜利，不保留模拟器、旧根或执行授权。未引入上游完整调度器、广泛组件回复证明或成长资源分桶。
+
+`upstream-search` 17 个请求及 17 次完整末态独立重放通过；包含 ABBA、共享界实际命中、第三方补丁拒绝和未知回复回退。人工 100HP/无遗物场景 expanded/transitions 为 520/3634 → 258/1758，两瓶火药场景为 671/9071 → 277/3901，获胜质量一致。此轮开启增量验证，只证明固定夹具工作量减少，不证明普遍耗时收益。药水策略、portfolio 82 项、多人跨回合 86 项、rolling-review / continuation-replay / completion-scope / request-hydration 回归通过；原生执行、UI 和真实 Host/Client 仍未在本轮验证。
 
 ## 已完成主线：Rolling Horizon Reuse
 

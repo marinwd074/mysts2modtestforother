@@ -105,6 +105,7 @@ internal sealed class SearchMemoryPressureSignal
     }
 
     public bool IsEnabled => AllocationLimitBytes != long.MaxValue;
+    internal bool HasReclaimCheckpoint => Volatile.Read(ref _reclaimAndContinue) != null;
 
     /// <summary>
     /// Keeps allocation-heavy waves narrow only when the runtime reported that system

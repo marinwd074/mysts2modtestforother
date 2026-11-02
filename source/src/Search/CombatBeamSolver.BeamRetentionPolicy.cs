@@ -96,7 +96,8 @@ internal sealed partial class CombatBeamSolver
         R1EvaluationShadowCache? _r1EvaluationShadowCache,
         bool _continuationSeedProbe,
         Func<SearchNode, StandPatEvaluation> _evaluateStandPat,
-        Action<IEnumerable<SearchNode>>? _prepareStandPat = null)
+        Action<IEnumerable<SearchNode>>? _prepareStandPat = null,
+        bool _useUpstreamSearchOptimizations = true)
     {
         private void ForEachRetentionIndex(
             int count,
@@ -808,6 +809,9 @@ internal sealed partial class CombatBeamSolver
                         routingNodes,
                         FindBestTargetPressure(routingNodes));
                     List<SearchNode> candidates = [];
+                    if (_useUpstreamSearchOptimizations && orderedRoutingContexts[contextIndex].Key.Effect
+                        is PlanChoiceEffect.Discard or PlanChoiceEffect.DiscardAndDraw)
+                        AddRoutingCandidate(candidates, FindBestSafeDiscardContinuation(routingNodes));
                     if (routingNodes.Min(ActionsSinceRetainedRoutingChoice) <= 1)
                     {
                         AddRoutingCandidate(candidates, group.BestSetup);
@@ -1122,6 +1126,8 @@ internal sealed partial class CombatBeamSolver
                              .OrderBy(group => group.Key))
                 {
                     IReadOnlyList<SearchNode> group = potionGroup.ToList();
+                    if (_useUpstreamSearchOptimizations)
+                        AddRequired(required, FindBestDamagingContinuation(group), limit);
                     AddRequired(required, FindBestFreshResourceStandPat(group), limit);
                     AddRequired(required, FindBestStandPat(group, SearchRouteTraits.Scaling), limit);
                     AddRequired(required, FindBestStandPat(group, SearchRouteTraits.Resource), limit);
@@ -2328,6 +2334,20 @@ internal sealed partial class CombatBeamSolver
                 .Take(limit)
                 .ToList();
 
+            if (_useUpstreamSearchOptimizations && trait == SearchRouteTraits.Control)
+            {
+                SearchNode? delayedFinish = nodes
+                    .Where(node => !node.IsTerminal && node.Traits.HasFlag(trait)
+                        && node.Snapshot.EnemyHp > 0 && node.Snapshot.DelayedDamageValue >= node.Snapshot.EnemyHp)
+                    .OrderBy(node => node.Snapshot.CumulativePlayerHpLost)
+                    .ThenByDescending(node => node.Snapshot.PlayerHp)
+                    .ThenBy(node => node.Snapshot.EnemyHp).ThenByDescending(node => node.Score).FirstOrDefault();
+                if (delayedFinish != null && !ContainsReference(probes, delayedFinish))
+                {
+                    if (probes.Count == limit) probes.RemoveAt(limit - 1);
+                    probes.Add(delayedFinish);
+                }
+            }
             _prepareStandPat?.Invoke(probes);
             SearchNode? best = null;
             StandPatEvaluation bestEvaluation = default;

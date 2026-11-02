@@ -26,6 +26,8 @@
 
 `U0U1PinnedHarness upstream-port --out <ignored-directory>` 覆盖 12 组 pinned 0.107.1 合同：32 个 DOP=4 COW 分支及游戏克隆身份、DynamicVar 字段/公开回退、原生星费清理、9 组路由剩余牌序、12 个 Seeker RNG 状态、批量变换、效果嵌套/Fork 拒绝/释放、同数量集合写入、手牌上限指纹/续用及父状态隔离、多项差分上限、三选一原生字段形状、6 档格挡溢出与普通原生倍率。所有检查后 live continuation 不变；不证明原生 UI 时序、完整原生效果/执行检查点差分或 Host/Client。`completion-scope` 同时核对不同候选版本不得接管，以及种子必须复制外部动作列表。
 
+`U0U1PinnedHarness upstream-search --out <ignored-directory>` 对四个 pinned 人工夹具做 ABBA，外加一次共享完整胜利见证搜索，共 17 个请求与 17 次独立完整末态重放；拒绝时间截断，核对质量不退化和 live 隔离。覆盖有限回复、未知根/分支来源回退、第三方原生补丁拒绝、见证根身份/资源目标隔离、实际共享界与 Smart 剪枝命中。原开局 99/660 工作不变，100HP/无遗物为 520/3634 → 258/1758，两瓶火药为 671/9071 → 277/3901，未知 Feed 为 575/8528 不变（expanded/transitions）。这些不是自然实机快照；增量验证开启，耗时不作为普遍性能证据。另以 `BeamWidthPortfolioChecks/run.py` 82 项核对机会成本、多人原质量、饱和估算和真实回收检查点准入，`PotionStrategyChecks` 及 `MultiplayerLocalCrossTurnChecks` 86 项保留策略边界。均不代表原生执行、UI 或真实 Host/Client PASS。
+
 `U0U1PinnedHarness memory-display` 核对物理容量、缺失采样、回收压力与显示文案，可用 `DOTNET_gcServer=0/1` 分别验证两种 CLR 模式；`CombatSolver.GcPolicyChecks manual-release` 使用真实 CLR 核对搜索退出屏障、重复请求合并、存活数据和空闲堆页归还。`recovery` 覆盖 40 次恢复、饱和退避、结构性退出与预算限制；`recovery-lifecycle` 需要真实恢复余量，不足 512 MB 时失败不计为 PASS。
 
 `tools/multiplayer-lab/test-joint-continuation-validator.ps1` 覆盖 plain/JSON、reason 解析及错误原因拒绝；RouteReplay 检查同日志/请求的新根与完整账本、评估范围、新授权及原生部署。TargetDeath 另检查 roster strict subset、旧 seed 截断、恢复与存活目标部署；搜索代次和路线代次独立匹配。反例包含错请求/回合、旧授权/路线、混合成员、无质量证明、动作顺序、未清授权、替换敌人、死亡目标、预算变化及缺失证据；只有真实 Host/Client journal 的对应模式通过才构成实机证据。入口见 [多人 RUNBOOK](multiplayer/RUNBOOK.md#joint-forecast-continuation-smoke)。

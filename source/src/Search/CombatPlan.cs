@@ -1502,6 +1502,7 @@ internal sealed class SimulationSnapshot(
     public int PocketwatchCardsPlayedLastTurn { get; } = pocketwatchCardsPlayedLastTurn;
     public int PocketwatchCardThreshold { get; } = pocketwatchCardThreshold;
     public int PotionUseCount { get; } = potionUseCount;
+    public int PlayableAttackCount { get; init; }
     public int PotionStrategicCost { get; } = potionStrategicCost;
     public int AutomaticPotionUseCount { get; } = automaticPotionUseCount;
     public bool CanStillTriggerPocketwatch => PocketwatchCardThreshold >= 0
@@ -1794,6 +1795,7 @@ internal sealed class SolverResult
 
     public R1TransitionHydrationSnapshot? RequestTransitionHydration { get; set; }
     public SearchRequestPhaseSnapshot? RequestPhaseMetrics { get; set; }
+    public SearchOptimizationMetrics? OptimizationMetrics { get; set; }
     public int ShadowReplayObservations { get; init; }
     public int ShadowReplayStores { get; init; }
     public int ShadowReplayValidatedHits { get; init; }

@@ -582,7 +582,7 @@ internal sealed partial class CombatBeamSolver
                 automaticPotionUseCount++;
         }
         SearchMeasurement reachableHandMeasurement = _run.Performance.Begin();
-        (int reachableHandValue, int zeroCostPlayableCount) =
+        (int reachableHandValue, int zeroCostPlayableCount, int playableAttackCount) =
             CalculateReachableHandPotential(simulator, combat, playerState, _routePolicy);
         _run.Performance.End(SearchMetricPhase.SnapshotReachableHand, reachableHandMeasurement);
         StateFingerprint potionInventoryKey = BuildPotionInventoryKey(combat);
@@ -678,6 +678,7 @@ internal sealed partial class CombatBeamSolver
             DeathSavePotionHpRestored = deathSavePotionHpRestored,
             DeathSaveUseCount = combat.DeathSaveUseCount,
             ProjectedDeathSaveUseCount = combat.DeathSaveUseCount + threat.DeathSaveUseCount,
+            PlayableAttackCount = playableAttackCount,
             AllPlayersAlive = allPlayersAlive,
             TeamCumulativeHpLost = teamCumulativeHpLost,
             TeamLossRatio = teamLossRatio,
@@ -781,7 +782,7 @@ internal sealed partial class CombatBeamSolver
         return key.Finish();
     }
 
-    private static (int Value, int ZeroCostPlayableCount) CalculateReachableHandPotential(
+    private static (int Value, int ZeroCostPlayableCount, int PlayableAttackCount) CalculateReachableHandPotential(
         CombatPredictionSimulator simulator,
         SimulatedCombatState combat,
         SimPlayerCombatState playerState,
@@ -793,6 +794,7 @@ internal sealed partial class CombatBeamSolver
             : new (int, int, int)[handCount];
         int playableCount = 0;
         int zeroCostPlayableCount = 0;
+        int playableAttackCount = 0;
         foreach (PredictedCard card in playerState.Hand)
         {
             if (!CanConsiderCardAction(routePolicy, card)
@@ -804,6 +806,7 @@ internal sealed partial class CombatBeamSolver
             starCost = Math.Max(0, starCost);
             int value = Math.Max(1, (int)Math.Ceiling(CardChoiceSupport.CardValue(card.Preview)));
             playable[playableCount++] = (energyCost, starCost, value);
+            if (card.Preview.Type == CardType.Attack) playableAttackCount++;
             if (energyCost == 0
                 && starCost == 0
                 && !card.Preview.EnergyCost.CostsX
@@ -814,7 +817,7 @@ internal sealed partial class CombatBeamSolver
         }
 
         return (ReachableHandValue.Calculate(playable[..playableCount], playerState.Energy, playerState.Stars),
-            zeroCostPlayableCount);
+            zeroCostPlayableCount, playableAttackCount);
     }
 
     /// <summary>

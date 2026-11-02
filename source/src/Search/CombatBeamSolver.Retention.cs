@@ -281,7 +281,7 @@ internal sealed partial class CombatBeamSolver
                 hasOrderedMutationWork,
                 hasCycleExitWork,
                 cycleRegionTransaction);
-            List<SearchNode> bounded = ApplyPrimaryIncumbentBound(finalized);
+            List<SearchNode> bounded = ApplyUpstreamOptimizationBounds(ApplyPrimaryIncumbentBound(finalized));
             CompleteMultiplayerBeamObjectiveAb(retentionBoundaryId, finalized, bounded);
             // Emit all watched final aliases, after every portfolio and the incumbent.
             // The paired value events avoid equating a `with` clone with a dropped route.
@@ -413,7 +413,9 @@ internal sealed partial class CombatBeamSolver
         int? candidateCombatEndedTurn,
         ref PrimarySearchIncumbent? incumbent,
         SolverPotionPolicy? effectivePotionPolicy = null,
-        int candidateDeathSaveUseCount = 0)
+        int candidateDeathSaveUseCount = 0,
+        int candidatePotionStrategicCost = 0,
+        bool enforcePotionOpportunityCost = true)
     {
         if (!candidateCompleteVictory
             || !candidateSatisfiesHardRules
@@ -432,6 +434,9 @@ internal sealed partial class CombatBeamSolver
         bool eligibleExactPotionVictory = auditedPotionFreeBaseline is { } baseline
             && minimumPotionUses > 0
             && maximumPotionUses == minimumPotionUses
+            && (!enforcePotionOpportunityCost || PotionUsePolicy.IsEligible(SolverPotionPolicy.Smart, candidateExplicitPotionUses,
+                candidatePotionStrategicCost, baseline.Won, baseline.HpDeficit, true, true,
+                candidateStrategicHpDeficit))
             && SolverInterimResultOrdering.ComparePrimaryQuality(
                 candidateCompleteVictory: true,
                 candidateStrategicHpDeficit,
@@ -473,11 +478,9 @@ internal sealed partial class CombatBeamSolver
             return false;
         bool canEstablishPotionFreeIncumbent = _minimumPotionUses == 0
             && _potionPolicy is SolverPotionPolicy.Disabled or SolverPotionPolicy.Smart;
-        // The strict-primary escape in FinalPlanOrdering is guaranteed to make an
-        // exact-layer victory policy-eligible only when every explicit use is optional.
-        // Smart-gradient exact layers use a policy override and therefore do not enforce
-        // per-slot directives here. Future forced-directive exact solvers must prove their
-        // optional-use facts separately before they may tighten this bound.
+        // Exact layers require a final-policy-eligible victory. Their override makes
+        // every explicit use optional; the single-player path also proves its potion
+        // opportunity cost. Forced-directive solvers need a separate optional-use proof.
         bool canEstablishExactPotionIncumbent = _potionFreePolicyBaseline != null
             && _minimumPotionUses > 0
             && _maximumPotionUses == _minimumPotionUses
@@ -530,7 +533,11 @@ internal sealed partial class CombatBeamSolver
                 node.Snapshot.CombatEndedTurn,
                 ref tightened,
                 effectivePotionPolicy: _potionPolicy,
-                candidateDeathSaveUseCount: node.Snapshot.ProjectedDeathSaveUseCount);
+                candidateDeathSaveUseCount: node.Snapshot.ProjectedDeathSaveUseCount,
+                candidatePotionStrategicCost: PotionUsePolicy.SmartRequiredHpSaved(
+                    node.PotionStrategicCost, _strategicBossHpRelief),
+                enforcePotionOpportunityCost: policy.UseUpstreamSearchOptimizations
+                    && !MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(policy.RoutePolicy));
         }
 
         if (Nullable.Equals(tightened, _primaryIncumbent))

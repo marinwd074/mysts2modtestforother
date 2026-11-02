@@ -1546,6 +1546,7 @@ $expectedBeamFiles = @(
     "CombatBeamSolver.BeamRetentionPolicy.Choice.cs",
     "CombatBeamSolver.BeamRetentionPolicy.Potion.cs",
     "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs",
+    "CombatBeamSolver.BeamRetentionPolicy.Offense.cs",
     "CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs",
     "CombatBeamSolver.BeamRetentionPolicy.Cycle.cs",
     "CombatBeamSolver.BeamRanking.cs",
@@ -1560,6 +1561,7 @@ $expectedBeamFiles = @(
     "CombatBeamSolver.MultiplayerScenarioReevaluation.cs",
     "CombatBeamSolver.NoveltySearch.cs",
     "CombatBeamSolver.OpeningExpansion.cs",
+    "CombatBeamSolver.OptimizationBounds.cs",
     "CombatBeamSolver.Transpositions.cs",
     "CombatBeamSolver.OrderedMutationRetention.cs",
     "CombatBeamSolver.P3Scheduling.cs",
@@ -2402,7 +2404,7 @@ foreach ($check in $metadataReuseChecks) {
 }
 
 # Keep the no-op dispatch metadata complete when callbacks are added to the facade.
-foreach ($file in @("CombatBeamSolver.RetentionJobs.cs", "CombatBeamSolver.BeamRetentionPolicy.cs", "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs", "CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs", "CombatBeamSolver.BeamRetentionPolicy.Cycle.cs")) {
+foreach ($file in @("CombatBeamSolver.RetentionJobs.cs", "CombatBeamSolver.BeamRetentionPolicy.cs", "CombatBeamSolver.BeamRetentionPolicy.Mutation.cs", "CombatBeamSolver.BeamRetentionPolicy.Offense.cs", "CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs", "CombatBeamSolver.BeamRetentionPolicy.Cycle.cs")) {
     foreach ($forbidden in @("Parallel.For(", "Task.Run(")) {
         if (Select-String -LiteralPath (Join-Path $searchRoot $file) -SimpleMatch $forbidden -Quiet) {
             $violations.Add("$($file): retention work bypassed fixed lanes '$forbidden'")

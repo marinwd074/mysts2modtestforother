@@ -31,7 +31,8 @@ internal sealed partial class CombatBeamSolver
         bool enableMultiplayerScenarioReevaluation,
         Func<IReadOnlyList<SearchNode>, IReadOnlyList<MultiplayerScenarioDecisionEvaluation>>?
             scenarioReevaluator,
-        PotionStrategicCostLookup? potionStrategicCosts = null)
+        PotionStrategicCostLookup? potionStrategicCosts = null,
+        bool useUpstreamSearchOptimizations = true)
     {
         private readonly PotionStrategicCostLookup _potionStrategicCosts = potionStrategicCosts ?? new();
         /// <summary>
@@ -442,7 +443,11 @@ internal sealed partial class CombatBeamSolver
             var policyEligibleCandidates = policyCandidates
                 .Where(candidate =>
                 {
-                    bool strictPrimaryImprovement = hasPotionFreeBaseline
+                    bool strictPrimaryImprovement = useUpstreamSearchOptimizations && !useRollingHorizonLossFirst
+                        ? hasPotionFreeBaseline && potionFreeWon && candidate.CompleteVictory
+                            && potionPolicy != SolverPotionPolicy.Disabled && candidate.OptionalPotionCount > 0
+                            && candidate.Snapshot.ProjectedDeathSaveUseCount < potionFreeDeathSaveUseCount
+                        : hasPotionFreeBaseline
                         && potionPolicy != SolverPotionPolicy.Disabled
                         && candidate.OptionalPotionCount > 0
                         && SolverInterimResultOrdering.ComparePrimaryQuality(
@@ -551,6 +556,9 @@ internal sealed partial class CombatBeamSolver
                 // Local HP/resource policy remains a secondary tie-break after the multiplayer
                 // team objective. Single-player reaches this point with no added team keys.
                 // Compare HP after the requested recovery objective.
+                .ThenBy(candidate => useUpstreamSearchOptimizations && !useRollingHorizonLossFirst
+                    && candidate.CompleteVictory
+                        ? (long)candidate.StrategicHpDeficit + ScalePotionCost(candidate.OptionalPotionStrategicCost) : 0L)
                 .ThenBy(candidate => candidate.StrategicHpDeficit)
                 .ThenByDescending(candidate => candidate.Snapshot.StrategyGoalHpCredit)
                 .ThenByDescending(candidate => candidate.Snapshot.StrategyGoalCount)

@@ -134,10 +134,20 @@ internal static partial class CombatSearchCoordinator
             && !policy.UseMultiplayerScenarioReevaluation
                 ? new(learnFromSearch: true, measurePerformance: policy.MeasurePhasePerformance) : null;
         SearchRequestWorkTotals totals = new(measurePhases: policy.MeasurePhasePerformance);
+        SearchOptimizationSession? optimizations = policy.UseUpstreamSearchOptimizations ? new(root) : null;
         try
         {
             SolverResult result = SolveRequest(root, displayNames, battleDamage,
-                policy with { RequestTransitionHydrationCache = cache, RequestWorkTotals = totals }, cancellationToken, progressCallback);
+                policy with { RequestTransitionHydrationCache = cache, RequestWorkTotals = totals,
+                    OptimizationSession = optimizations }, cancellationToken, progressCallback);
+            if (result.ResultScope == SolverResultScope.SearchCompletion
+                && optimizations?.PotionFreeWitness is { } witness
+                && IsBetterPotionPolicyResult(root, policy, witness, result))
+            {
+                result = witness;
+                PopulateRequestWorkTotals(result, totals.Snapshot());
+            }
+            result.OptimizationMetrics = optimizations?.Capture();
             result.RequestPhaseMetrics = totals.CapturePhases();
             if (cache != null)
                 result.RequestTransitionHydration = cache.Capture();
@@ -159,6 +169,9 @@ internal static partial class CombatSearchCoordinator
                         $"validated_keys={stats.ValidatedKeys} hydration_hits={stats.HydrationHits} " +
                         $"output_mismatches={stats.OutputMismatches} rejected_keys={stats.RejectedKeys}");
                 }
+                if (optimizations != null)
+                    policy.Diagnostics.Info("[CombatSolver/Test] SEARCH_OPTIMIZATIONS "
+                        + System.Text.Json.JsonSerializer.Serialize(optimizations.Capture()));
             }
             finally { cache?.Release(); }
         }
@@ -1571,7 +1584,8 @@ internal static partial class CombatSearchCoordinator
                     profile.MaxExpandedNodes - expandedByMembers,
                     RemainingMilliseconds(),
                     profile.SoftTimeBudgetMilliseconds,
-                    policy.MemoryPressureSignal.RemainingBytes)
+                    policy.MemoryPressureSignal.RemainingBytes,
+                    policy.UseUpstreamSearchOptimizations && policy.MemoryPressureSignal.HasReclaimCheckpoint)
                 : null;
 
         BeamWidthPortfolioOutcome<SolverResult> outcome = policy.UseBeamWidthPortfolio
@@ -3637,6 +3651,14 @@ internal static partial class CombatSearchCoordinator
             candidate.Won, candidate.OutstandingStolenResource, current.Won, current.OutstandingStolenResource);
         if (recovery != 0)
             return recovery;
+        // Opportunity cost participates before the single-player HP/turn tie-break.
+        // The production multiplayer raw-loss-first contract retains its primary axes.
+        if (!rollingHorizonLossFirst && candidate.Won && current.Won)
+        {
+            int opportunity = ((long)candidate.StrategicHpDeficit + candidate.PotionStrategicCost)
+                .CompareTo((long)current.StrategicHpDeficit + current.PotionStrategicCost);
+            if (opportunity != 0) return opportunity;
+        }
         int primaryQuality = SolverInterimResultOrdering.ComparePrimaryQuality(
             candidate.Won,
             candidate.StrategicHpDeficit,
@@ -3987,15 +4009,30 @@ internal static partial class CombatSearchCoordinator
             .ToArray();
         if (!potionFreeWon || policy.TheftPolicy == SolverTheftPolicy.PreserveResources)
             return allowedPotions.Length;
-        int paidPotionHpRequired = PotionUsePolicy.SmartRequiredHpSaved(
-            SolverWeights.PotionMinimumHpSaved,
-            StrategicBossHpRelief(root, policy));
-        int paidPotionCapacity = paidPotionHpRequired >= int.MaxValue / 4
-            ? 0
-            : Math.Max(0, potionFreeHpDeficit) / paidPotionHpRequired;
-        return Math.Min(
-            allowedPotions.Length,
-            allowedPotions.Count(potion => potion.StrategicHpCost == 0) + paidPotionCapacity);
+        if (!policy.UseUpstreamSearchOptimizations
+            || MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(policy.RoutePolicy))
+        {
+            int paidPotionHpRequired = PotionUsePolicy.SmartRequiredHpSaved(
+                SolverWeights.PotionMinimumHpSaved, StrategicBossHpRelief(root, policy));
+            int paidPotionCapacity = paidPotionHpRequired >= int.MaxValue / 4
+                ? 0 : Math.Max(0, potionFreeHpDeficit) / paidPotionHpRequired;
+            return Math.Min(allowedPotions.Length,
+                allowedPotions.Count(potion => potion.StrategicHpCost == 0) + paidPotionCapacity);
+        }
+        // Sum the cheapest actual eligible slots. Potential recovery of the root's
+        // missing HP remains available; unknown healing is never assumed absent.
+        long savingRoom = Math.Max(0L, (long)potionFreeHpDeficit - ProvableStrategicHpFloor(root, policy));
+        long minimumCost = 0;
+        int maximum = 0, count = 0;
+        foreach (var potion in allowedPotions.OrderBy(potion => potion.StrategicHpCost))
+        {
+            minimumCost += Math.Max(0, potion.StrategicHpCost);
+            count++;
+            int required = PotionUsePolicy.SmartRequiredHpSaved((int)Math.Min(int.MaxValue, minimumCost),
+                StrategicBossHpRelief(root, policy));
+            if (required <= savingRoom) maximum = count;
+        }
+        return maximum;
     }
 
     private static BossHpRelief StrategicBossHpRelief(

@@ -604,17 +604,17 @@ Check(
         refreshBase,
         refreshTargetDeath,
         out string deathRefreshReason)
-        && deathRefreshReason == "strong_field_change:E0"
+        && deathRefreshReason.StartsWith("strong_field_change:E0:", StringComparison.Ordinal)
         && !MultiplayerPlanRefreshContracts.IsReplayCompatible(
             refreshBase,
             refreshEnergy,
             out string energyRefreshReason)
-        && energyRefreshReason == "strong_field_change:energy"
+        && energyRefreshReason.StartsWith("strong_field_change:energy:", StringComparison.Ordinal)
         && !MultiplayerPlanRefreshContracts.IsReplayCompatible(
             refreshBase,
             refreshRng,
             out string rngRefreshReason)
-        && rngRefreshReason == "strong_field_change:R",
+        && rngRefreshReason.StartsWith("strong_field_change:R:", StringComparison.Ordinal),
     "Quality-first bounded refresh rejects target death, local resource drift and RNG drift as full-search signals.");
 
 Check(

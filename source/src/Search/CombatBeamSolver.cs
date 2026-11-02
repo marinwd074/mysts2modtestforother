@@ -157,7 +157,8 @@ internal sealed partial class CombatBeamSolver(
         policy.R1EvaluationShadowCache,
         _continuationSeedProbe,
         EvaluateStandPat,
-        PrepareStandPatProbes);
+        PrepareStandPatProbes,
+        policy.UseUpstreamSearchOptimizations);
     private FinalPlanOrdering? _finalOrdering;
     private FinalPlanOrdering FinalOrdering => _finalOrdering ??= new FinalPlanOrdering(
         _potionPolicy,
@@ -187,7 +188,8 @@ internal sealed partial class CombatBeamSolver(
         policy.UseMultiplayerScenarioReevaluation
             ? ReevaluateCurrentDecisionsAcrossScenarios
             : null,
-        _run.PotionStrategicCosts);
+        _run.PotionStrategicCosts,
+        policy.UseUpstreamSearchOptimizations);
 
     private bool CanConsiderCardAction(PredictedCard card)
         => CanConsiderCardAction(_routePolicy, card);

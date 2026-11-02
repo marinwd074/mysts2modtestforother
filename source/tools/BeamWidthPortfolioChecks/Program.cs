@@ -36,6 +36,18 @@ Require(NoveltyPortfolioBudget.CrossFamilyScout(
 static SolverInterimResult Outcome(bool won, int hpDeficit, int potions = 0, double score = 0)
     => new(won, 0, hpDeficit, hpDeficit, 0, potions, 0, score);
 
+var potionBaseline = Outcome(true, 10) with { CombatEndedTurn = 4 };
+var minorPotionWin = Outcome(true, 9, 1) with { PotionStrategicCost = 9, CombatEndedTurn = 2 };
+Require(!CombatSearchCoordinator.IsBetterPotionPolicyResult(null, minorPotionWin, potionBaseline),
+    "An earlier one-HP improvement outranked its nine-HP potion opportunity cost.");
+Require(CombatSearchCoordinator.IsBetterPotionPolicyResult(null,
+        minorPotionWin with { StrategicHpDeficit = 0 }, potionBaseline),
+    "A potion victory with a lower total HP/resource burden was rejected.");
+Require(CombatSearchCoordinator.IsBetterPotionPolicyResult(null,
+        minorPotionWin with { RollingHorizonLossFirst = true },
+        potionBaseline with { RollingHorizonLossFirst = true }),
+    "Single-player opportunity-cost ordering changed multiplayer raw-loss-first quality.");
+
 static Func<SolverSearchProfile, BeamWidthPortfolioRun<SolverInterimResult>> Member(
     long expanded, string termination, bool terminal, SolverInterimResult result, bool stop = false)
     => _ => new BeamWidthPortfolioRun<SolverInterimResult>(
@@ -85,11 +97,11 @@ static BeamWidthPortfolioMemberSpec Base(int width) => new(width, BaseScoreOnly:
 // followed by narrow/wide refinements and the base-score-only member.
 Require(BeamWidthPortfolio.ProductionMembers(24, null).SequenceEqual([Width(24), Band(24), Width(16), Width(36), Base(24)]),
     "Production default membership changed.");
-Require(BeamWidthPortfolio.ProductionMembers(45, null).SequenceEqual([Width(45), Width(30), Width(68), Band(45), Base(45)]),
+Require(BeamWidthPortfolio.ProductionMembers(45, null).SequenceEqual([Width(45), Band(45), Width(30), Width(68), Base(45)]),
     "Act-ending boss baseline membership changed.");
-Require(BeamWidthPortfolio.ProductionMembers(135, null).SequenceEqual([Width(135), Width(90), Width(203), Band(135), Base(135)]),
+Require(BeamWidthPortfolio.ProductionMembers(135, null).SequenceEqual([Width(135), Band(135), Width(90), Width(203), Base(135)]),
     "VeryHigh baseline membership changed.");
-Require(BeamWidthPortfolio.ProductionMembers(1, null).SequenceEqual([Width(1), Width(2), Band(1), Base(1)]),
+Require(BeamWidthPortfolio.ProductionMembers(1, null).SequenceEqual([Width(1), Band(1), Width(2), Base(1)]),
     "Production membership repeated the baseline width or admitted a non-positive width.");
 Require(BeamWidthPortfolio.ProductionMembers(24, [24, 23, 25, 96]).SequenceEqual([Width(24), Width(23), Width(25), Width(96)]),
     "A configured membership was rewritten or gained a band or base-score member.");
@@ -312,6 +324,14 @@ Require(Gate(Baseline(allocated: 400_000_000), memberWidth: 96, remainingMemoryB
     "A refinement started without enough reported memory headroom.");
 Require(Gate(Baseline(allocated: long.MaxValue / 1024), remainingMemoryBytes: long.MaxValue) == null,
     "A disabled memory pressure signal blocked a refinement.");
+Require(BeamWidthPortfolioGate.RejectRefinement(Baseline(), 96, 16_000, 55_000, Budget, 1,
+        supportsReclaimCheckpoints: true) == null,
+    "Total allocations blocked a member with an active runtime reclamation checkpoint.");
+Require(BeamWidthPortfolioGate.RejectRefinement(Baseline(), 96, 3_999, 55_000, Budget, 1,
+        supportsReclaimCheckpoints: true) == BeamWidthPortfolioGate.SkippedNodeHeadroom,
+    "Reclamation support bypassed the shared node budget.");
+Require(BeamWidthPortfolioGate.EstimateMemberCost(long.MaxValue, 1, int.MaxValue) == long.MaxValue,
+    "Extreme cost estimates overflowed instead of saturating.");
 
 // The gate plugs into the combinator's rejection hook: rejected members keep their line and spend nothing.
 var gated = Portfolio([24, 96], 20_000,

@@ -31,17 +31,20 @@ search = root / 'src/Search'
     (search / 'BeamWidthPortfolioGate.cs').read_text(encoding='utf-8'), encoding='utf-8')
 (out / 'SolverSearchProfile.cs').write_text(
     (search / 'SolverSearchProfile.cs').read_text(encoding='utf-8'), encoding='utf-8')
+(out / 'NoveltyPortfolioBudget.cs').write_text(
+    (search / 'NoveltyPortfolioBudget.cs').read_text(encoding='utf-8'), encoding='utf-8')
+(out / 'SolverInterimResultOrdering.cs').write_text(
+    (search / 'SolverInterimResultOrdering.cs').read_text(encoding='utf-8'), encoding='utf-8')
 (out / 'Ordering.cs').write_text(
     'namespace CombatSolver;\n'
     + block(search / 'TheftEncounterStrategy.cs', 'internal enum SolverTheftPolicy') + '\n'
     + block(root / 'src/Runtime/SolverProgress.cs', 'internal sealed record SolverInterimResult(') + '\n'
-    + 'internal static class SolverInterimResultOrdering {\n'
-    + block(search / 'SolverInterimResultOrdering.cs', '    public static int ComparePrimaryQuality(') + '\n}\n'
     + 'internal static class TheftEncounterStrategy {\n'
     + block(search / 'TheftEncounterStrategy.cs', '    public static int CompareRecovery(SolverTheftPolicy? policy,') + '\n}\n'
     + 'internal static partial class CombatSearchCoordinator {\n'
     + block(search / 'CombatSearchCoordinator.cs',
-            '    internal static bool IsBetterPotionPolicyResult(\n        SolverTheftPolicy? theftPolicy,') + '\n}\n',
+            '    internal static bool IsBetterPotionPolicyResult(\n        SolverTheftPolicy? theftPolicy,') + '\n'
+    + block(search / 'CombatSearchCoordinator.cs', '    private static int ComparePotionPolicyQuality(') + '\n}\n',
     encoding='utf-8')
 (out / 'Program.cs').write_text(
     (Path(__file__).parent / 'Program.cs').read_text(encoding='utf-8'), encoding='utf-8')

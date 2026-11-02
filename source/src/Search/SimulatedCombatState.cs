@@ -2305,6 +2305,14 @@ internal sealed partial class SimulatedCombatState
     internal HookListenerSegmentStatistics HookListenerSegmentStatistics
         => _modHookSubscribers.MirroredHookFilter.ListenerSegmentStatistics;
     internal int RootRunHookListenerCount => _rootRunHookListeners.Length;
+    internal bool RootSourcesSatisfy(Func<AbstractModel, bool> accepts)
+    {
+        foreach (AbstractModel source in _rootHookListeners)
+            if (!accepts(source)) return false;
+        foreach (AbstractModel source in _rootRunHookListeners)
+            if (!accepts(source)) return false;
+        return true;
+    }
     internal int RootRunModSubscriberCount => _modHookSubscribers.RunSubscribers.Length;
     internal int RootCombatModSubscriberCount => _modHookSubscribers.CombatSubscribers.Length;
     internal bool RootHasBaseLibCardModifiers => _modHookSubscribers.HasBaseLibCardModifiers;

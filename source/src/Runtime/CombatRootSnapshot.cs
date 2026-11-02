@@ -61,6 +61,7 @@ internal sealed class CombatRootSnapshot
     public bool HasUnusedCardReplayAllocator { get; }
     public bool HasRenewablePotionShapedRock { get; }
     public PostCombatRelicHealProfile PostCombatRelicHeal { get; }
+    internal bool HasPinnedHealingCertificate { get; }
     /// <summary>
     /// Exact detached teammate state available to future shadow planning. These snapshots
     /// are observation-only; RootActionPlayers remains local-player-only.
@@ -167,6 +168,7 @@ internal sealed class CombatRootSnapshot
         PostCombatRelicHeal = postCombatRelicHeal;
         TeammateForecastStates = teammateForecastStates;
         CarryRankingContext = carryRankingContext;
+        HasPinnedHealingCertificate = PinnedHealingBound.CanCertify(rootSimulator, playerIdentity);
     }
 
     public static CombatRootSnapshot Capture(CombatState state)

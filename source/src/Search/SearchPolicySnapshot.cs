@@ -24,6 +24,9 @@ internal sealed record SearchPolicySnapshot(
     SearchFramePressureSignal FramePressureSignal,
     SearchMemoryPressureSignal MemoryPressureSignal)
 {
+    // Internal A/B control. Production uses the proved bounds and existing-budget retention.
+    public bool UseUpstreamSearchOptimizations { get; init; } = true;
+    internal SearchOptimizationSession? OptimizationSession { get; init; }
     /// <summary>
     /// Explicitly names the route horizon. Keep this separate from the legacy
     /// <see cref="CurrentTurnOnly"/> switch so multiplayer local cross-turn planning
