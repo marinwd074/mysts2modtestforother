@@ -22,6 +22,22 @@ pwsh -NoProfile -File source/tools/verify-repository-hygiene.ps1
 
 ## 按边界验证
 
+### 不启动游戏的完整验证
+
+Windows / PowerShell 7.4+、.NET 9 和 Python 环境下，可以直接使用匹配的游戏安装与 `local.props` 中的 RitsuLib 路径：
+
+```powershell
+pwsh -NoProfile -File source/tools/run-offline-validation.ps1 -GameDir 'D:\SteamLibrary\steamapps\common\Slay the Spire 2'
+```
+
+入口 [run-offline-validation.ps1](run-offline-validation.ps1) 先拒绝错误游戏版本，再运行三项静态门禁、Release、L1 合同、portfolio 合同及 16 个 pinned 模式。后者在独立 .NET 进程加载原生 DLL，以测试替代层绕过 Godot 服务；不会启动实际游戏、登录 Steam 或部署 Mod。快照基础设施合同使用复制并改名的 `cmd.exe` 夹具，不是游戏进程。
+
+日志与含 DLL SHA-256 的 `summary.json` 写入仓库 `.local/` 的新目录；`-OutputDirectory` 可指定其下尚不存在的目录，`-Modes` 可选择本入口允许的定向模式。摘要保留权限不足等跳过子项。缺少 Python、依赖或任一步骤失败会报告失败；旧输出不被覆盖。
+
+这是代码层与 pinned 模拟证据，不替代可见 UI、原生输入时序或真实 Host/Client 并发验证；也不要求本机额外物化 `game-body` 二进制。固定快照仍供 CI 使用。
+
+### 定向入口
+
 | 目的 | 项目或入口 | 使用说明 |
 |---|---|---|
 | 固定游戏语义与搜索 | [E0PinnedHarness/](E0PinnedHarness/)、[U0U1PinnedHarness/](U0U1PinnedHarness/)、[U2DegenerateHarness/](U2DegenerateHarness/)、[P0P1PinnedHarness/](P0P1PinnedHarness/) | 选择相关模式；[测试矩阵](../docs/TEST_MATRIX.md) 是模式与证据入口 |

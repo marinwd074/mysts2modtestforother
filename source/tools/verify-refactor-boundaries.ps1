@@ -134,7 +134,8 @@ if (-not $solverRouteRowText.Contains('TriggeredActions')) {
     $violations.Add("${solverRouteRowPath}: implicit autoplay child pills are no longer rendered")
 }
 $searchCoordinatorPath = Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.cs'
-$searchCoordinatorText = [IO.File]::ReadAllText($searchCoordinatorPath)
+$searchCoordinatorText = (Get-ChildItem -LiteralPath $searchRoot -Filter 'CombatSearchCoordinator*.cs' |
+    Sort-Object Name | ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join "`n"
 foreach ($retiredPreviewLockRule in @(
     'CurrentTurnBestResult',
     'SEARCH_CURRENT_TURN_PROMOTED',
@@ -2336,7 +2337,7 @@ $mirrorRegistryPath = Join-Path $repositoryRoot "src\Engine\Common\Mirrors\Metho
 foreach ($check in @(
     @{ File = 'src/Search/SearchPolicySnapshot.cs'; Text = 'IReadOnlyList<RelicCounterTarget> RelicTargets' },
     @{ File = 'src/Search/CombatBeamSolver.Phases.cs'; Text = 'policy.RelicTargetsSatisfied(node.Snapshot.RelicCounters)' },
-    @{ File = 'src/Search/CombatSearchCoordinator.cs'; Text = 'policy.RelicTargetsSatisfied(result.Snapshot.RelicCounters)' },
+    @{ File = 'src/Search/CombatSearchCoordinator.ResultPolicy.cs'; Text = 'policy.RelicTargetsSatisfied(result.Snapshot.RelicCounters)' },
     @{ File = 'src/Runtime/SolvedRouteCache.cs'; Text = 'policy.RelicTargets' },
     @{ File = 'src/Search/CombatBeamSolver.OpeningExpansion.cs'; Text = 'ApplyFixedPrefix(seed, prefix)' },
     @{ File = 'src/UI/SolverRelicStrategyPanel.cs'; Text = 'row.Enabled.ButtonPressed' })) {
@@ -2555,10 +2556,10 @@ if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/Comb
 if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.cs') -SimpleMatch 'PotionStrategy = policy.PotionStrategy.ForForcedBaseline()' -Quiet)) {
     $violations.Add('Mixed Smart potion search must establish a forced-only baseline')
 }
-if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.cs') -SimpleMatch 'result.PotionStrategicCostByTurn.Values.Sum() - forced.ForcedStrategicHpCost' -Quiet)) {
+if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.ResultPolicy.cs') -SimpleMatch 'result.PotionStrategicCostByTurn.Values.Sum() - forced.ForcedStrategicHpCost' -Quiet)) {
     $violations.Add('Smart potion opportunity cost must exclude forced potion cost')
 }
-if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.cs') -SimpleMatch '!= SolverPotionDirective.Force' -Quiet)) {
+if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.ResultPolicy.cs') -SimpleMatch '!= SolverPotionDirective.Force' -Quiet)) {
     $violations.Add('Smart potion layer capacity must exclude forced directives')
 }
 if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/PotionStrategySnapshot.cs') -SimpleMatch 'if (_onlyForcedUses)' -Quiet)) {
@@ -4486,7 +4487,7 @@ foreach ($localCoreNoveltyHorizonRule in @(
     }
 }
 $p1CoordinatorPath = Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.cs'
-$p1CoordinatorText = [IO.File]::ReadAllText($p1CoordinatorPath)
+$p1CoordinatorText = $searchCoordinatorText
 if (-not $p1CoordinatorText.Contains('ShouldRunEarlySmartPotionScout(')) {
     $violations.Add("${p1CoordinatorPath}: Novelty must gate the provisional Smart-potion scout for local-core")
 }

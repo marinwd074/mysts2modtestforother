@@ -11,8 +11,11 @@
 | Repository | `tools/verify-repository-hygiene.ps1` | Git 跟踪文件、Markdown 本地链接、项目版本日志与 LFS 边界 |
 | L1 contracts | `tools/run-contract-tests.ps1` | Search / Prediction / Multiplayer 纯合同 |
 | Release | `dotnet build CombatSolver.csproj -c Release` | 当前本机真实依赖下编译 |
+| 不启动游戏的组合验证 | `tools/run-offline-validation.ps1 -GameDir <安装目录>` | 外部版本校验、上述静态检查/Release、L1、portfolio 与 16 个 pinned 模式；逐步日志、DLL 摘要及跳过子项 |
 
 快速 Linux main push / PR 运行 Target、Architecture、Repository；定向 Windows 回归和手动 pinned 矩阵按工作流各自触发规则执行。CI 只能证明其实际执行的层级；没有日志/steps 的 runner 失败不能记作源码 FAIL。
+
+组合验证只运行 .NET 合同及带 Godot 服务替代层的进程内模拟，不启动真实游戏。快照基础设施自测使用改名的 `cmd.exe` 夹具；无符号链接权限时明确跳过 reparse 子项，其余项仍可验证。该入口不能证明原生 UI/输入时序或真实 Host/Client 并发。
 
 `U0U1PinnedHarness rng-restore` 对照旧 RNG 还原的计数器、状态、后续随机值及父状态隔离；完整请求对照复用 `request-hydration-benchmark-off`，高计数器压力夹具为 `multi-hit-high-counter`。不替代实机搜索或退出取证验证。
 

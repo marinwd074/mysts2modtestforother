@@ -21,3 +21,12 @@ namespace MegaCrit.Sts2.Core.Entities.Players
         public int NetId { get; set; }
     }
 }
+
+namespace MegaCrit.Sts2.Core.Entities.Creatures
+{
+    sealed class Creature
+    {
+        public Players.Player? Player { get; init; }
+        public Players.Player? PetOwner { get; init; }
+    }
+}

@@ -444,7 +444,7 @@ src/Prediction/ModelPredictionStateMirrors.cs	boundary.AssertForkable()
 src/Search/SimulatedCombatState.cs	ModelPredictionStateMirrors.CaptureRootState(simulator,
 src/Search/SimulatedCombatState.cs	ModelPredictionStateMirrors.AppendPredicted(ref fingerprint,
 src/Search/SimulatedCombatState.cs	_rootModifierSources = null;
-src/Runtime/ContinuationStamp.cs	ModelPredictionStateMirrors.AppendLiveContinuation(text, state)
+src/Runtime/ContinuationStamp.cs	ModelPredictionStateMirrors.AppendLiveContinuation(text, state, capturedPlayers)
 src/Runtime/ContinuationStamp.cs	ModelPredictionStateMirrors.AppendPredicted(ref adapterFingerprint,
 src/Search/SimulatedCombatState.Fork.cs	_activeActionChoices
 src/Search/SimulatedCombatState.Fork.cs	_activeCardExecutionDeaths
@@ -599,6 +599,7 @@ expected_beam_files=(
     CombatBeamSolver.BeamRetentionPolicy.Choice.cs
     CombatBeamSolver.BeamRetentionPolicy.Potion.cs
     CombatBeamSolver.BeamRetentionPolicy.Mutation.cs
+    CombatBeamSolver.BeamRetentionPolicy.Offense.cs
     CombatBeamSolver.BeamRetentionPolicy.CrossTurn.cs
     CombatBeamSolver.BeamRetentionPolicy.Cycle.cs
     CombatBeamSolver.BlockPotionInsertion.cs
@@ -618,6 +619,14 @@ expected_beam_files=(
     CombatBeamSolver.Phases.cs
     CombatBeamSolver.PrimaryChoiceReplay.cs
     CombatBeamSolver.R0TransitionMemo.cs
+    CombatBeamSolver.R1TransitionHydration.cs
+    CombatBeamSolver.RequestTransitionHydration.cs
+    CombatBeamSolver.ContinuationRouteReplay.cs
+    CombatBeamSolver.MultiplayerInterleaving.cs
+    CombatBeamSolver.MultiplayerScenarioReevaluation.cs
+    CombatBeamSolver.BeamRanking.cs
+    CombatBeamSolver.SearchEfficiencyDiagnostics.cs
+    CombatBeamSolver.OptimizationBounds.cs
     CombatBeamSolver.Retention.cs
     CombatBeamSolver.RetentionJobs.cs
     CombatBeamSolver.StateEvaluation.cs
@@ -761,7 +770,7 @@ require_fixed \
 
 path_diagnostics_path="$search_root/CombatBeamSolver.PathDiagnostics.cs"
 require_fixed "$search_root/CombatBeamSolver.BeamRetentionPolicy.cs" 'HasRetainedRoutingChoice: RetainedRoutingChoice(node) != null' 'ordinary tactical ties must use the existing retained routing semantics:'
-require_fixed "$search_root/CombatBeamSolver.BeamRetentionPolicy.cs" 'if (values.HasRetainedRoutingChoice)' 'ordinary tactical ties must leave routing positions unchanged:'
+require_fixed "$search_root/CombatBeamSolver.BeamRanking.cs" 'if (values.HasRetainedRoutingChoice)' 'ordinary tactical ties must leave routing positions unchanged:'
 require_fixed "$repository_root/src/Testing/UnattendedTestRunner.SearchPolicy.cs" 'seven, [], [0, 7, 1, 4, 2, 5, 6], useTacticalOrder: true);' 'ordinary tactical ties lost the interleaved routing-position contract:'
 require_fixed "$repository_root/src/Testing/UnattendedTestRunner.Executor.cs" 'KNOWN-SOUL-GENERATION-CONTEXT-V0111' 'generation context replay lost its executor entry:'
 require_fixed "$repository_root/src/Testing/UnattendedTestRunner.Executor.cs" 'KNOWN-SOUL-GENERATION-SUFFIX-V0111' 'generation context frozen suffix replay lost its executor entry:'
@@ -1118,9 +1127,9 @@ while IFS=$'\t' read -r relative_path text; do
 done <<'EOF'
 src/Search/SearchPolicySnapshot.cs	IReadOnlyList<RelicCounterTarget> RelicTargets
 src/Search/CombatBeamSolver.Phases.cs	policy.RelicTargetsSatisfied(node.Snapshot.RelicCounters)
-src/Search/CombatSearchCoordinator.cs	policy.RelicTargetsSatisfied(result.Snapshot.RelicCounters)
+src/Search/CombatSearchCoordinator.ResultPolicy.cs	policy.RelicTargetsSatisfied(result.Snapshot.RelicCounters)
 src/Runtime/SolvedRouteCache.cs	policy.RelicTargets
-src/Search/CombatBeamSolver.Expansion.cs	ApplyFixedPrefix(seed, prefix)
+src/Search/CombatBeamSolver.OpeningExpansion.cs	ApplyFixedPrefix(seed, prefix)
 src/UI/SolverRelicStrategyPanel.cs	row.Enabled.ButtonPressed
 EOF
 for rule in 'SimulationNotificationIsolation.IsActive' '"DynamicVarUpgrades"' 'table.TryGetValue(source' 'Tips.TryGetValue(__0'; do
@@ -1229,7 +1238,8 @@ while IFS=$'\t' read -r relative_path text; do
     require_fixed "$repository_root/$relative_path" "$text" 'missing card continuation ownership boundary'
 done <<'EOF'
 src/Engine/InCombat/Simulation/CombatPredictionSimulator.cs	GuardOrdinaryCardContinuationFork();
-src/Engine/InCombat/Simulation/CombatPredictionSimulator.CardContinuation.cs	context.Register(source.Play, play);
+src/Engine/InCombat/Simulation/CombatPredictionSimulator.CardContinuation.cs	PrepareExecutionCardPlay(source.Card, source.Play, context);
+src/Engine/InCombat/Simulation/CombatPredictionSimulator.CardContinuation.cs	CardPlay play = context.RequireRemap(source.Play);
 src/Engine/InCombat/Simulation/CombatPredictionSimulator.CardContinuation.cs	StateStore.SupportsManualCardChoiceContinuation
 src/Engine/InCombat/Simulation/CombatPredictionSimulator.CardContinuation.cs	DetachPendingManualCardChoice();
 src/Engine/InCombat/Simulation/CombatPredictionSimulator.CardContinuation.cs	source.Choice.Fork(context)

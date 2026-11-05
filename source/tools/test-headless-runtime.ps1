@@ -186,7 +186,7 @@ if ($MultiplayerSnapshot) {
         $liveProcess = $null
         try {
             $liveProcess = Start-Process -FilePath (Join-Path $context.GameRoot 'SlayTheSpire2.exe') `
-                -ArgumentList @('/c', 'ping', '127.0.0.1', '-n', '30') -PassThru
+                -ArgumentList @('/c', 'ping', '127.0.0.1', '-n', '30') -WindowStyle Hidden -PassThru
             Start-Sleep -Milliseconds 300
             $liveProcess.Refresh()
             Assert-HostFixture (-not $liveProcess.HasExited) 'live snapshot fixture process exited early'
@@ -218,8 +218,7 @@ if ($MultiplayerSnapshot) {
             New-Item -ItemType SymbolicLink -Path $solverOverlayPath -Target (Join-Path $buildRoot 'CombatSolver.dll') | Out-Null
         }
         catch {
-            if ($_.Exception.Message -notlike '*Administrator privilege*' -and
-                $_.Exception.Message -notlike '*privilege*') { throw }
+            if ($_.FullyQualifiedErrorId -ne 'NewItemSymbolicLinkElevationRequired,Microsoft.PowerShell.Commands.NewItemCommand') { throw }
             $reparseFixtureAvailable = $false
         }
         if ($reparseFixtureAvailable) {

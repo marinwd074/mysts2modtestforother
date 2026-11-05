@@ -1,6 +1,7 @@
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Relics;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Entities.Creatures;
 using CombatSolver;
 using CombatSolver.Engine.Common;
 using System.Runtime.CompilerServices;
@@ -53,6 +54,21 @@ void PlayerBoundaryContractChecks()
     Player local = (Player)RuntimeHelpers.GetUninitializedObject(typeof(Player));
     Player remote = (Player)RuntimeHelpers.GetUninitializedObject(typeof(Player));
     IReadOnlyList<Player> captured = [local, remote];
+
+    Check(MultiplayerAdvisorBoundaryContracts.IsCapturedPlayerOwnedCreature([local], new Creature()),
+        "An ownerless enemy/public creature stays visible.");
+    Check(MultiplayerAdvisorBoundaryContracts.IsCapturedPlayerOwnedCreature([local], new Creature { Player = local }),
+        "A captured player's own creature stays visible.");
+    Check(MultiplayerAdvisorBoundaryContracts.IsCapturedPlayerOwnedCreature([local], new Creature { PetOwner = local }),
+        "A captured player's pet stays visible.");
+    Check(!MultiplayerAdvisorBoundaryContracts.IsCapturedPlayerOwnedCreature([local], new Creature { Player = remote }),
+        "An uncaptured player's creature cannot enter private-state prediction.");
+    Check(!MultiplayerAdvisorBoundaryContracts.IsCapturedPlayerOwnedCreature([local], new Creature { PetOwner = remote }),
+        "An uncaptured player's pet cannot bypass the private-state boundary.");
+    Check(MultiplayerAdvisorBoundaryContracts.IsCapturedPlayerOwnedCreature(captured, new Creature { PetOwner = remote }),
+        "A readable captured teammate's pet is admitted without granting action authority.");
+    Check(!MultiplayerAdvisorBoundaryContracts.IsCapturedPlayerOwnedCreature([local], new Creature { Player = remote, PetOwner = local }),
+        "A concrete player owner takes precedence over pet ownership.");
 
     Check(
         MultiplayerAdvisorBoundaryContracts.IsCapturedPlayer(captured, local),
