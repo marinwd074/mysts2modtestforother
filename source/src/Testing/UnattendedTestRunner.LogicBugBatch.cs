@@ -214,8 +214,8 @@ internal sealed partial class UnattendedTestRunner
             await InjectCardAsync(combat, player, new UnattendedCardInjection { CardId = cardId, Pile = "Hand" });
             if (cardId == "FUEL")
             {
-                // Fuel's native OnPlay gains energy first, then draws two cards. Keep
-                // real cards in the draw pile so the command test catches a missing draw.
+                // Fuel's native OnPlay gains energy first, then draws its Cards amount. Keep
+                // two cards in the draw pile so the command test catches missing or duplicate draws.
                 await InjectCardAsync(combat, player, new UnattendedCardInjection
                 { CardId = "STRIKE_IRONCLAD", Pile = "Draw", Count = 2 });
             }

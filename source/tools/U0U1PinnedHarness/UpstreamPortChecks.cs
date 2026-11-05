@@ -121,7 +121,36 @@ internal static class UpstreamPortChecks
             "Batch transform did not remove all originals before insertion.");
         Check(parent.State.GetPlayerCombatState(player).Hand.Cards.All(card => card.Preview is not Fuel),
             "Batch transform mutated the parent.");
-        passed.Add("batch_transform:shrinking_pile_positions:parent_isolation");
+        {
+            var fuelState = transformed.State.GetPlayerCombatState(player);
+            fuelState.DrawPile.Clear();
+            fuelState.DiscardPile.Clear();
+            fuelState.DrawPile.Add(New<MegaCrit.Sts2.Core.Models.Cards.Void>());
+            fuelState.DrawPile.Add(New<StrikeIronclad>());
+            fuelState.DrawPile.Add(New<DefendIronclad>());
+            fuelState.DrawPile.Add(New<Bash>());
+            fuelState.LoseEnergy(fuelState.Energy);
+            PredictedCard baseFuel = hand.Cards[0];
+            PredictedCard upgradedFuel = hand.Cards[1];
+            upgradedFuel.Upgrade();
+            Check(transformed.ManualPlay(baseFuel, target: null, out _),
+                "Base Fuel play suspended unexpectedly.");
+            Check(fuelState.Energy == 0,
+                $"Base Fuel must gain 1 energy before Void draw drains 1 energy, but energy was {fuelState.Energy}.");
+            Check(hand.Cards.Select(card => card.Preview.Id.Entry).SequenceEqual(
+                ["FUEL", "STRIKE_IRONCLAD", "DEFEND_IRONCLAD", "VOID"]),
+                $"Base Fuel must draw exactly 1 card, but hand was {string.Join(',', hand.Cards.Select(card => card.Preview.Id.Entry))}.");
+            Check(transformed.ManualPlay(upgradedFuel, target: null, out _),
+                "Upgraded Fuel play suspended unexpectedly.");
+            Check(fuelState.Energy == 1,
+                $"Upgraded Fuel must gain 1 energy, but energy was {fuelState.Energy}.");
+            Check(hand.Cards.Select(card => card.Preview.Id.Entry).SequenceEqual(
+                ["STRIKE_IRONCLAD", "DEFEND_IRONCLAD", "VOID", "STRIKE_IRONCLAD", "DEFEND_IRONCLAD"]),
+                $"Upgraded Fuel must draw exactly 2 cards, but hand was {string.Join(',', hand.Cards.Select(card => card.Preview.Id.Entry))}.");
+            Check(fuelState.DrawPile.Cards.Select(card => card.Preview.Id.Entry).SequenceEqual(["BASH"]),
+                "Upgraded Fuel consumed the wrong number of draw-pile cards.");
+        }
+        passed.Add("batch_transform:shrinking_pile_positions:parent_isolation:fuel_single_draw");
 
         CombatPredictionSimulator scoped = parent.Fork();
         using (scoped.BeginCardOrPotionEffect(player))

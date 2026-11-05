@@ -115,6 +115,7 @@ internal static partial class CardOnPlayMirrors
         registry.Register<Expertise>(CardDrawCardMirrors.ExpertiseOnPlay);
         registry.Register<Fetch>(CardDrawCardMirrors.FetchOnPlay);
         registry.Register<Ftl>(CardDrawCardMirrors.FtlOnPlay);
+        registry.Register<Fuel>(static (_, _) => { });
         registry.Register<HuddleUp>(CardDrawCardMirrors.HuddleUpOnPlay);
         registry.Register<Impatience>(CardDrawCardMirrors.ImpatienceOnPlay);
         registry.Register<Pillage>(CardDrawCardMirrors.PillageOnPlay);

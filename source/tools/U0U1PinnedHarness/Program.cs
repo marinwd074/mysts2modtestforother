@@ -202,6 +202,7 @@ internal static class Program
             SolverDisplayNames names = SolverDisplayNames.Capture(combat);
             if (upstreamPortOnly)
             {
+                ValidateDarkEmbracePredictionCoverage();
                 Console.WriteLine(UpstreamPortChecks.Run(combat, names, outputDirectory));
                 return 0;
             }
@@ -1022,6 +1023,13 @@ internal static class Program
         Require(
             CardEffectSpecRegistry.Contains(darkEmbrace),
             "Dark Embrace power application is missing from CardEffectSpecRegistry.");
+        CardModel fuel = (CardModel)RuntimeHelpers.GetUninitializedObject(typeof(Fuel));
+        Require(
+            CardOnPlayMirrors.CanMirror(fuel),
+            "Fuel OnPlay is not explicitly mirrored; inferred draw would duplicate CardOnPlaySupport.");
+        Require(
+            CardOnPlayCompensationCatalog.Contains(fuel),
+            "Fuel OnPlay compensation is missing from CardOnPlayCompensationCatalog.");
     }
 
     private static void ValidateDarkEmbraceBurningPactDraw(
@@ -1070,6 +1078,36 @@ internal static class Program
                 + $"next={predicted.DrawPile.Cards[0].Preview.Id.Entry}.");
         }
         finally { afterPact.ReleaseSimulator(); }
+
+        foreach (CardModel existing in state.Hand.Cards.ToArray())
+            state.Hand.RemoveInternal(existing);
+        CardModel upgradedCompact = combat.CreateCard(ResolveCard("COMPACT"), player);
+        upgradedCompact.UpgradeInternal();
+        state.Hand.AddInternal(upgradedCompact, -1);
+        state.Hand.AddInternal(combat.CreateCard(ResolveCard("DAZED"), player), -1);
+        state.Hand.AddInternal(combat.CreateCard(ResolveCard("SLIMED"), player), -1);
+        foreach (string id in new[] { "BUFFER", "GUNK_UP", "OVERCLOCK", "STRIKE_DEFECT" })
+            state.DrawPile.AddInternal(combat.CreateCard(ResolveCard(id), player), 0);
+        PlanAction compactPlay = new(PlanActionKind.PlayCard, turn, CardId: "COMPACT");
+        PlanAction fuelPlay = new(PlanActionKind.PlayCard, turn, CardId: "FUEL");
+        CombatBeamSolver compactFuelReplay = new(CombatRootSnapshot.Capture(combat), names, damage, policy,
+            searchProfile: profile);
+        SimulationSnapshot afterCompactFuel = compactFuelReplay.ReplayDiagnosticPrefix([compactPlay, fuelPlay]);
+        try
+        {
+            Require(afterCompactFuel.BoundaryReason == SearchBoundaryReason.None,
+                $"Compact -> Fuel replay reached {afterCompactFuel.BoundaryReason}.");
+            SimPlayerCombatState predicted = afterCompactFuel.Simulator.State.GetPlayerCombatState(player);
+            string[] hand = predicted.Hand.Cards.Select(card => card.Preview.Id.Entry).ToArray();
+            Require(hand.Count(id => id == "FUEL") == 1
+                && hand.Contains("STRIKE_DEFECT") && hand.Contains("OVERCLOCK")
+                && !hand.Contains("GUNK_UP") && !hand.Contains("BUFFER")
+                && predicted.DrawPile.Cards[0].Preview.Id.Entry == "GUNK_UP"
+                && predicted.DrawPile.Cards[1].Preview.Id.Entry == "BUFFER",
+                $"Upgraded Compact -> Fuel+1 predicted the wrong draw: hand={string.Join(',', hand)}; "
+                + $"next={predicted.DrawPile.Cards[0].Preview.Id.Entry}.");
+        }
+        finally { afterCompactFuel.ReleaseSimulator(); }
     }
 
     private static U0Evidence RunU0(

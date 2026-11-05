@@ -3559,6 +3559,9 @@ else {
     if ($fuelEnergy -lt 0 -or $fuelDraw -lt 0 -or $fuelDraw -le $fuelEnergy) {
         $violations.Add("${cardOnPlaySupportPath}: 0.107.1 Fuel must gain Energy then draw its Cards amount")
     }
+    if (-not $cardOnPlayMirrorText.Contains('registry.Register<Fuel>(static (_, _) => { });')) {
+        $violations.Add("${cardOnPlayMirrorPath}: 0.107.1 Fuel must suppress inferred OnPlay draw so CardOnPlaySupport does not double-draw")
+    }
 }
 
 $compactStart = $cardEffectSpecText.IndexOf('case Compact:')
