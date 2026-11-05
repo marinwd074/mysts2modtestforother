@@ -67,7 +67,8 @@
 | MultiplayerOnly runtime boundary | UNVERIFIED |
 | Tag Team 原生双 Client 语义 | UNVERIFIED |
 | TAG_TEAM Safe Execute whitelist | NOT ENABLED |
-| Potion / Choice / Replay / teammate-target / Multiplayer Instant | FAIL-CLOSED |
+| 本地 Potion / 计划内 Choice | Safe Execute 已实现；完整 current-build Host/Client 场景仍待复验，不能记作全面 PASS |
+| Replay 语义 / teammate-target / Multiplayer Instant | FAIL-CLOSED |
 
 真实 multiplayer PASS 必须来自 Host/Client journal + 对应 validator；合成 validator self-test 不能替代实机。
 

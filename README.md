@@ -18,7 +18,7 @@ The fork keeps the upstream solver/simulation foundation while adding substantia
 - Current project state: [`source/docs/CODEX_HANDOFF.md`](source/docs/CODEX_HANDOFF.md)
 - Documentation index: [`source/docs/README.md`](source/docs/README.md)
 
-Single-player and multiplayer share the same main search/simulation core. Production multiplayer defaults to the local single-player quality core with world-version tracking and local-player-only execution boundaries; teammate forecasting, team objectives, and scenario reevaluation remain behind the experimental multiplayer prediction switch.
+Single-player and multiplayer share the same main search/simulation core. Network multiplayer starts in read-only Probe unless `COMBATSOLVER_MULTIPLAYER_MODE` explicitly enables `advisor` or `safe-execute`. Once search is enabled, production multiplayer defaults to the local single-player quality core with world-version tracking and local-player-only execution boundaries; teammate forecasting, team objectives, and scenario reevaluation remain behind the experimental multiplayer prediction switch. See [current multiplayer capabilities](source/docs/multiplayer/LIMITATIONS.md).
 
 Rolling-horizon reuse product work is complete through final quality/response acceptance. F0 scenario prewarming remains shadow-only inside the experimental multiplayer prediction mode, and SSD cold storage is deferred; neither is required by the default local-single-core path.
 

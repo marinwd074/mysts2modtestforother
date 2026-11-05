@@ -1,6 +1,8 @@
 # 战斗路线求解器 / Combat Solver
 
-Combat Solver 是一个面向《杀戮尖塔 2》的战斗路线求解器。单人和多人复用同一套搜索/模拟核心；多人额外加入队友情景、团队目标、同步边界与本地玩家执行约束。进入战斗后，它会在后台模拟当前手牌、牌堆、敌人行动、药水、遗物、选牌和跨回合状态，并在预算范围内给出推荐路线、预计战损与关键行动。
+Combat Solver 是一个面向《杀戮尖塔 2》的战斗路线求解器。单人和已启用搜索的多人会话复用同一套搜索/模拟核心；多人保留同步边界与本地玩家执行约束，队友情景和团队目标仅在显式开启实验预测时使用。进入战斗后，它会在后台模拟当前手牌、牌堆、敌人行动、药水、遗物、选牌和跨回合状态，并在预算范围内给出推荐路线、预计战损与关键行动。
+
+网络多人默认只读 Probe；`advisor` / `safe-execute` 需要显式设置。启用搜索后默认采用 local-single-core。能力边界与验证范围见 [多人说明](docs/multiplayer/README.md) 和 [能力限制](docs/multiplayer/LIMITATIONS.md)。
 
 玩家可以只查看建议，也可以让求解器执行当前回合，或连续接管整场战斗。搜索不会修改游戏 RNG，也不会在后台操作真实战斗状态。
 
@@ -77,7 +79,7 @@ if (PreCombatForecastApi.IsAvailable)
 - [RitsuLib](https://steamcommunity.com/sharedfiles/filedetails/?id=3747602295) `0.6.2` 或更高版本
 - 单人战斗；多人模式按 `docs/multiplayer/README.md` 的当前能力边界运行
 
-推荐通过 Steam 创意工坊订阅。使用 GitHub Release 手动安装时，在游戏目录的 `mods/CombatSolver` 下放置以下文件：
+本 fork 固定支持 `0.107.1`；不能把上游工坊最新包视为本分支的兼容安装包。使用本 fork 的匹配 GitHub Release 手动安装时，在游戏目录的 `mods/CombatSolver` 下放置以下文件：
 
 ```text
 CombatSolver.dll

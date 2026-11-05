@@ -16,21 +16,27 @@
 
 ## 当前层次
 
+### 会话权限与搜索策略
+
+未设置 `COMBATSOLVER_MULTIPLAYER_MODE` 时，网络多人会话进入只读 Probe，不搜索或执行。显式 `advisor` 开启建议搜索；显式 `safe-execute` 开启本地安全执行；`safe-execute-lab` 另需受管理的 Client 实例与 Probe evidence。权限由 `SolverSessionCapabilities` 和 `MultiplayerSafeExecutePolicy` 决定。
+
+下文的“默认 local-single-core”描述**已经获准搜索后的策略**，不代表默认开启多人搜索或执行。完整能力与限制统一见 [LIMITATIONS.md](LIMITATIONS.md)。
+
 ### Shared search core
 
 单人和多人共用主要 CombatBeam/Search/Novelty/Growth/Relic/Potion 逻辑。多人不应因为“安全”而默认退化成只看当前回合的简化算法。
 
 ### Team objective and scenario reevaluation
 
-多人候选额外评估团队战损、终局速度和队友情景。生产默认仍使用 Robust 解释，但当前 Quality-first 工作要求用真实坏路线证据验证它是否真的改善选择；没有证据不调整权重。
+只有显式开启 `UseMultiplayerPrediction` 时才启用团队目标、队友预测和情景重评。该设置默认关闭；生产 local-single-core 不使用 Team Objective 或 Scenario Robust 改写本地路线质量。
 
 ### Teammate interleaving
 
-支持本地动作与 forecast-only teammate observation 交错模拟。队友节点属于预测环境，不获得 authority。共享 RNG、易伤/攻击顺序、抽牌/资源等顺序敏感状态必须进入 fingerprint/equivalence 判断。
+实验预测栈支持本地动作与 forecast-only teammate observation 交错模拟。生产 local-single-core 不预测队友未来动作；它仍观察真实队友和共享状态变化。队友节点不获得 authority。共享 RNG、易伤/攻击顺序、抽牌/资源等顺序敏感状态必须进入 fingerprint/equivalence 判断。
 
 ### Bounded route refresh
 
-队友造成轻量 HP/Block drift 时，可在新根对少量已保留候选做有界重放和小搜索，输出 Continue / Reselect / FullRestart。目标死亡、资源、Power、牌堆、RNG 或无法重新物化的变化直接 FullRestart。
+严格 continuation 校验失败后，部分已建模的敌人血量、Targets RNG 或目标死亡变化可进入新根路线重放 / R1 恢复；接受路线前仍须证明状态、质量和当前动作合法性。恢复失败才退回普通搜索。实验预测栈的 bounded refresh 与生产 local-core 恢复是不同入口；具体合同见 [当前架构](../ARCHITECTURE.md)，实机证据边界见 [当前交接](../CODEX_HANDOFF.md#当前未验证边界)。
 
 ### Safe Execute
 

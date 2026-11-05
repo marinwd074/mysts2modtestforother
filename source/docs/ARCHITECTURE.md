@@ -50,7 +50,9 @@ Harmony 参数形状的条件编译位于回合补丁入口；这是当前兼容
 
 搜索 worker 接收 `CombatRootSnapshot`、`SearchPolicySnapshot`、诊断 sink、帧压力信号和取消令牌。它不读取全局设置、控制器、UI 或无人测试状态。
 
-MP-0 Core 的多人只读证据已通过；退出/重新加入生命周期仍属于 MP-0 Hardening，完整矩阵继续保持 `UNVERIFIED`。`SolverSessionCapabilities` 是 Runtime 的唯一能力合同：网络多人默认进入 `MultiplayerProbe`，只有显式设置 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 或精确 `safe-execute` 才进入对应能力；搜索、部署、回合准备接管、选择驱动、药水、Full Auto、Instant、跨回合复用和 Showcase 仍关闭，Safe Execute 已通过显式一动作 Smoke。`SolverPerspective` 明确 Knowledge 不等于 Authority，`MultiplayerRootCaptureContracts` 只允许 local-player-only root，并对远端私有状态和未建模遗物 hook fail closed。`MultiplayerClientProbe` 只在主线程读取本地玩家、敌方和远端公开状态；Probe 证据仅在 Lab 环境写入 JSONL schema v2（`runSeed`、`combatSegmentId`）和紧凑 fingerprint，可按需逐条 flush。`MultiplayerWorldTracker` 只维护观察 fingerprint、world version 和稳定确认窗口，不拥有网络、不修改 live state、不发送动作。
+`SolverSessionCapabilities` 是 Runtime 的会话能力合同：网络多人默认进入只读 `MultiplayerProbe`；显式 `advisor` 开启建议搜索，显式 `safe-execute` 开启本地安全执行，Lab 模式另核对实例 ownership 与 Probe evidence。已获准搜索的会话默认使用 local-single-core；只有 `UseMultiplayerPrediction` 开启时才进入实验团队预测。Safe Execute 的本地药水、计划内 Choice、安全 EndTurn 与独立 Safe Auto 已有实现；原生多人完整验证仍按具体场景区分。完整权限、动作限制与证据入口统一见 [多人能力与限制](multiplayer/LIMITATIONS.md)，不再沿用早期一动作 Smoke 的能力描述。
+
+`SolverPerspective` 明确 Knowledge 不等于 Authority，`MultiplayerRootCaptureContracts` 保持 local-player-only action root，只冻结本地可读状态并对未知语义 fail closed。`MultiplayerClientProbe` 在主线程观察本地战斗与队友可读状态；Probe 证据仅在 Lab 环境写入 JSONL schema v2（`runSeed`、`combatSegmentId`）和紧凑 fingerprint。`MultiplayerWorldTracker` 只维护观察 fingerprint、world version 和稳定确认窗口，不拥有网络、不修改 live state、不发送动作。
 
 成长策略由 `GrowthBudgets` 随请求冻结，每次实际收益按对应来源取得 HP 额度，中间保路和终局排序沿用同一份额度；成长侧栏只编辑原有额度和忽略收益开关。`CardMechanismFacts` 提供小刀数量、攻击命中与消耗抽牌的纯值估计，`StrategicEffectModel` 消费分支状态；StateEvaluation 的首攻击估值只在原版致命消费者存在或外部战略登记表非空时构建，外部既有字段上下文保持；当前没有奖励／商店评分模块。
 

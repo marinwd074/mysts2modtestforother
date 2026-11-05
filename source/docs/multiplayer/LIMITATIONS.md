@@ -1,106 +1,49 @@
-# Multiplayer 限制与历史验证范围
+# Multiplayer 当前能力与限制
 
-当前产品状态和未完成风险见 [handoff](../CODEX_HANDOFF.md)，重跑入口见 [测试矩阵](../TEST_MATRIX.md)。下文注明日期的 PASS 是对应历史构建的受控验证，不代表当前 HEAD 已重跑；已退役的证据 JSON 以文件名定位 Git history，不再链接本机输出。
+本文件只记录当前能力合同。旧 MP-0/MP-1/MP-2 日志与阶段结论从 Git history 恢复；当前待复验项统一见 [CODEX_HANDOFF](../CODEX_HANDOFF.md#当前未验证边界)，验证入口见 [TEST_MATRIX](../TEST_MATRIX.md#multiplayer)。历史 PASS 不代表当前构建已经复跑。
 
-## 2026-09-22 readable-state root 更新
+## 会话权限
 
-- 当前原则是 **本地进程已经物化的数据可以读取，但不能据此预测队友未来动作**。多人 root 可捕获当前可读的队友 `PlayerCombatState`；动作所有权仍由 `RootActionPlayers` 限定为本地玩家，读取权限不会升级成队友控制权。
-- 队友 Hand/Draw/Discard/Exhaust、Energy、Stars、OrbQueue 等本地可读状态在**单次搜索内按 root 时刻冻结**；搜索不模拟队友未来动作。不能在本地 EndTurn 后把这些对象一概标成“读取即过期”，因为预测 Fork/Hook materialization 本身会再次访问已捕获玩家并误杀合法 T2/T3 路线。真实世界进入后续本地回合时，continuation 会重新采集可读队友 fingerprint；任何变化都必须 Fresh Search。
-- continuation 的 legacy `RemotePublicFingerprint` 名称暂时保留兼容性，但内容已经覆盖本地可读队友状态；任何该 fingerprint 变化都要求 Fresh Search，不再允许 remote-public soft reuse。
-- 下方历史章节里“remote private 不可访问”“local-player-only root”的文字记录的是当时实现与 Smoke 结论。它们仍可作为历史证据，但不能再用来推断当前客户端内存中不存在队友状态。`282393c9` 的 post-yield stale-read 方案已确认会和现有 Fork/Attach 机制冲突，不再作为当前边界。
+`COMBATSOLVER_MULTIPLAYER_MODE` 控制会话权限；它与路线评分策略的开关是两件事。
 
-本文件同时保留当前多人结论与早期历史证据。机器事实以 `phase0-matrix-2026-09-19.json`（历史记录） 及后续提交为准：MP-0 Core 与受控生命周期 Hardening 为 `PASS`；早期 Advisor 的远端药水 fail-closed 记录属于旧 local-player-only root 证据，当前 readable-state root 已可捕获本地进程中实际物化的队友药水/战斗状态；MP-2A 显式一动作 Safe Execute、MP-2B 两动作正常/干扰 Smoke 与 MP-2C bounded N-action 正常/干扰 Smoke 均已通过。
+| 模式 | 激活条件 | 能力 |
+|---|---|---|
+| Probe | 未设置或未匹配受支持模式 | 只读观察；不搜索、不执行 |
+| Advisor | 显式 `advisor` | 本地建议、未来回合规划与严格续用；不执行 |
+| Safe Execute | 显式 `safe-execute` | 搜索、本地安全动作、计划内 Choice、本地药水、安全 EndTurn 与独立 Safe Auto |
+| Lab Safe Execute | `safe-execute-lab` + Probe evidence + 合法受管理 Client 实例 | 同一安全执行合同；不向普通实例授予 Lab 权限 |
 
-## 当前状态
+真源为 [`SolverSessionCapabilities.cs`](../../src/Runtime/SolverSessionCapabilities.cs) 与 [`MultiplayerSafeExecutePolicy.cs`](../../src/Runtime/MultiplayerSafeExecutePolicy.cs)。Safe Execute 授权在进程内有惰性缓存，切换启动环境后应重启实例。
 
-- **MP-0 Core：PASS**：A/B/C 连接矩阵、本地私有状态只读采集、远端公开战斗状态、双 Client 公共敌人状态对照和 Probe 只读契约均有证据。
-- **MP-0 Hardening：PASS（受控生命周期）**：Host 退出并重新创建房间后，Client 收到 Quit、重新握手、Join、Ready，并再次进入有效战斗；进程停止不计作生命周期证据。
-- **MP-1 Advisor：SMOKE PASS（受控范围）**：静态合同与历史 Release 构建已通过；默认仍是 Probe，只有 `COMBATSOLVER_MULTIPLAYER_MODE=advisor` 才进入只读路线显示，不执行动作。早期 `-bbfix` Smoke 发生在 local-player-only root 阶段；当前 root 已扩大为本地可读队友状态捕获，但这不等于所有跨玩家牌/怪物效果都已 runtime-confirmed。
-- **MP-2A Safe Execute Lab Smoke：PASS（受控范围，2026-09-20）**：HostVanilla + ClientCombatSolver 在 `safe-execute-lab` 中完成一次本地普通牌的原生 `PlayCardAction`；能量/手牌/敌方生命按预期变化，且验证器 7 项检查全部 PASS。
-- **MP-2A Safe Execute：PASS（显式一动作范围，2026-09-20）**：正式 `safe-execute` token 已在 HostVanilla + ClientCombatSolver 中完成一次本地普通牌 Smoke；验证器 7 项检查全部 PASS。摘要见 `mp2-safe-execute-formal-2026-09-20.json`（历史记录）。这是 MP2B 之前的一动作基线，不代表当前两动作实机已通过。
-- **MP-2B Safe Execute：实机 PASS（2026-09-20）**：显式 SafeExecutionSession、两动作上限、动作后稳定世界等待、预期本地变化与远端/未知变化归因已通过真实 Host/Client Smoke。正常验证器返回 `MULTIPLAYER_MP-2B_PASS`，远端干扰验证器返回 `MULTIPLAYER_MP-2B_REMOTE_ABORT_PASS`；摘要见 `mp2b-smoke-2026-09-20.json`（历史记录）。
-- **MP-2C bounded N-action：实机 PASS（2026-09-20）**：`MaxActionsPerDeployment=6`，安全路线只取连续本地普通 `PlayCard` 前缀；同一 SafeExecutionSession 在每张牌后等待原生队列、稳定 `WorldVersion` 并做重验证。正常 Smoke 自动完成 3 张牌且不 EndTurn；远端干扰在完成 2 张后中止、没有第 3 张原生动作并重新搜索。摘要见 `mp2c-smoke-2026-09-20.json`（历史记录）。
-- **Multiplayer Local Cross-Turn T3 Fix：实机 PASS（2026-09-20）**：T3 route 保留当前回合普通牌，不再因等价路线的短 `ActionCount` 退化为 EndTurn-only；T3→T4 精确 continuation reuse、新 authorization 和 mismatch→Fresh Search 均通过。摘要见 `local-cross-turn-t3-fix-smoke-2026-09-20.json`（历史记录）。
-- **Multiplayer Local Cross-Turn X2：实机 PASS（2026-09-20）**：队友 Client 1001 通过原生 `STRIKE_IRONCLAD` 改变公开敌方 HP `180→171`；旧 future continuation 被拒绝，Fresh Probe/Root/Search 生成新 route 和新 authorization，旧 future action 未入队。摘要见 `local-cross-turn-x2-smoke-2026-09-20.json`（历史记录）。
+## 搜索与队友状态
 
-## AB 组连接实机结果（2026-09-19）
+- 获准搜索后默认使用 **local-single-core**：真实多人战斗根、本地单人质量轴、共享 WorldVersion 与本地执行权限。
+- `UseMultiplayerPrediction` 默认关闭；Team Objective、teammate forecast、Scenario Robust 仅属于显式实验预测栈。
+- 根捕获只冻结本地进程已物化、能够读取的数据；未知或未建模语义必须拒绝。后台搜索不得回读变化中的 live 状态。
+- 读取队友可见状态不扩大 `RootActionPlayers`；不会部署队友动作，也不发送 CombatSolver 自定义网络包。
+- MultiplayerOnly 牌保留真实牌堆占位和抽牌距离，当前不进入主动搜索/自动执行；Tag Team 未进入白名单。
 
-- `HostVanilla + ClientVanilla`、`HostVanilla + ClientRitsuOnly`、`HostVanilla + ClientCombatSolver` 均完成 Lobby、Ready、MapCoord `(3,0)`、战斗创建和 `Combat started`；对应归档仍按矩阵登记。
-- 这些结果证明连接兼容入口，不把缺少生命周期闭环误报为完整 MP-0 PASS。
+## 执行动作
 
-## C 组非空 Probe 实机结果（2026-09-19）
+- Safe Execute 可提交本地 `PlayCard` 和 `UsePotion`。药水必须重新核对槽位、身份和目标，动作后继续核对预测/实机状态。
+- 计划内 Choice / NestedChoices 使用原生计划驱动器；不能把 `CanDriveChoices=true` 理解为支持任意未知选牌语义。
+- 后续回合已有明确计划的 turn-start Choice 可重放；这不开放新的多人 turn-setup 搜索或 `CanInterceptTurnSetup`。
+- 执行长度取自当前回合的安全路线切片，不再使用历史“最多 6 张牌”作为当前上限。每个动作后仍须做归因和状态复核。
+- Replay 语义、队友目标、未知目标、MultiplayerOnly 和无法证明后态的动作继续拒绝。
+- Safe EndTurn 需要当前本地可操作回合、无待选牌、世界稳定且生命周期一致；后续回合必须取得新授权。
+- 多人 Safe Auto 是 [`SolverController.Automation.cs`](../../src/Runtime/SolverController.Automation.cs) 中独立的受校验循环；单人 Full Auto、Fast/Instant、Showcase 与战前预测能力没有因此开放给多人。
 
-- Vanilla Host + CombatSolver Client 的最终新 DLL 归档包含 `339` 条 Probe 记录、`4` 个战斗段；牌 token、抽牌前缀、洗牌、Discard/Exhaust、敌人变化和远端摘要变化均有直接证据。
-- `339/339` 条记录保持 `readOnly=true`、`searchStarted=false`、`actionsEnqueued=false`、`customNetworkPacketSent=false`；本轮未启用 Advisor/Safe Execute。
+## 续用与恢复
 
-## 双 Client 对照最终收尾快照（2026-09-19）
+旧 request/generation/WorldVersion 的部署授权不能直接继承到新根。严格 continuation 不匹配后，可按已有合同在新根重放候选或使用 R1 恢复；必须重新证明完整状态、路线质量和当前动作合法性，失败则重新搜索。
 
-- Vanilla Host 同时承载 Client A `netId=1000` 和 Client B `netId=1001`；两端分别记录 `234` / `243` 条 Probe，合计 `477/477` 条满足只读契约。
-- 独立 Client-to-Client 的公开敌人状态报告为 `PASS`，三段同 Seed、状态差集均为 `0`。这不是自定义 Host 协议证据。
-- Host、A、B 均记录三场战斗开始、两场结束；该历史双 Client 快照不包含生命周期，但最新 Advisor follow-up 已单独完成 Host 重建房间后的 Client 重新加入闭环。
+部分敌人公开伤害、Targets RNG 与目标死亡情景已有定向恢复合同及实机证据。不能因此忽略所有 RNG、牌堆、Power 或目标变化，也不能把所有队友状态变化都描述成必须完整重搜。
 
-## MP-1 Advisor 首轮 Smoke（2026-09-19）
+## 仍有的验证缺口
 
-- Vanilla Host 与 Advisor Client 成功完成 Lobby、Ready、MapCoord 和普通战斗创建；Client 端加载 CombatSolver `0.40.2`，63 个补丁全部成功。
-- Advisor combat log 记录 `MP_ADVISOR_SEARCH_START=16`、`MP_ADVISOR_SEARCH_COMPLETE=0`、`MP_ADVISOR_FAIL_CLOSED(root_capture)=16`。每次失败均为 `PredictionUnsupportedException`：远端玩家的 `RELIC.BURNING_BLOOD` hook 尚无公开语义 capture。
-- Client Probe 本轮 134/134 条仍为 `readOnly=true`，且 `searchStarted=false`、`actionsEnqueued=false`、`customNetworkPacketSent=false`；未产生 Solver 动作或自定义网络包。
-- 已修正多人诊断路径的单人假设：`CombatReplayOutcome` 改为观察本地玩家；该修复已提交并推送。当前仍保持远端遗物 fail-closed，不把本轮记为 Advisor Smoke PASS。
+- 显式采用路线后的连续 RNG 失效恢复、Headbutt / turn-start Choice、Vicious 估值等仍有 current-build Host/Client 待复验项。
+- 本地药水执行、实验 teammate observation 时序、MultiplayerOnly / Tag Team 原生语义未完成全面真实多人验收。
+- Carry Ranking R2 decisive flip 仍为可选补充证据，不能以无决定性差异的场景记为 PASS。
+- 编译、合同、pinned replay、validator self-test 与真实 Host/Client 是不同证据层；本文件的能力核对不新增实机 PASS。
 
-## MP-1 Advisor BurningBlood 语义审计与修复（2026-09-19）
-
-- STS2 `0.107.1` 原生 `BurningBlood` 只声明 `AfterCombatVictory(CombatRoom)`；其状态机只在胜利后检查持有者死亡、闪烁并治疗持有者，不影响 CurrentTurnOnly 搜索中的 combat hook、敌人或当前评分。
-- `afa6a64` 只允许精确 `BurningBlood` 从远端 root listener 表省略；未知远端遗物仍由 `RootUnsupportedRemotePublicRelicListenerCount` fail closed，未捕获的远端 `RelicsOf(remote)` 仍抛出，避免私有清单读取和 live listener 泄漏。
-- `MultiplayerRootCaptureChecks` 4 项通过；新 DLL SHA-256 为 `507FAFDCAF72E3E56ED537BCB3A4B15BCC99A63277308F3714B910C2BBA85E11`。新的 Host/Client 快照目录带 `-bbfix` 后缀，真实 Advisor Smoke 仍待手动进入战斗复验。
-
-## MP-1 Advisor side-turn / block scaling 修复（2026-09-19）
-
-- BurningBlood 修复后的首轮实机已进入 combat，但 generation 6 报告 `RelicsOf(remote)` 被 side-turn relic phase 误访问，generation 7 报告多人 block mirror 对本地 `DEFEND` 过早抛出 single-player guard；两者均保持 fail-closed，未发布路线。
-- `ffad49b` 只让 side-turn relic 遍历参与且已捕获玩家；原生 block mirror 复刻 enemy/powered-block early-exit，并复用原生 scaling table。未知远端 turn 仍抛出 `PredictionUnsupportedException`，没有读取远端私有遗物。
-- 新 DLL SHA-256 为 `70FA663D661056317093EE9F6FAFE7FA37699FEB3681B16FF5B9FD420A6D384C`；`-bbfix` client 已替换并重启，下一轮真实 Smoke 随后由 `37592ca` 继续修正并完成。
-- `37592ca` 进一步把 EndTurn replay 的玩家阶段限制为 `RootCapturedPlayers`，修正 local-player-only root 对远端私有 combat state 的 materialize；当前 runtime DLL SHA-256 为 `281A286A109F4A2EC428290E0CAEF9B05A034DE837C6793533590EF695BC4A75`，client 已于 23:17 重启。
-
-## MP-1 Advisor 真实 Smoke PASS（2026-09-19）
-
-- 当前 combat log：`SEARCH_START=10`、`ROOT_CAPTURE_BEGIN=10`、`SEARCH_COMPLETE=5`、`SEARCH_STALE=1`、`FAIL_CLOSED=0`、`SEARCH_FAILURE=0`；完成通知为 `kind=Succeeded native=shown`，并有 `ROUTE_REPLAY` / `ROUTE_ACTION` / `UI_STATE=ready` 记录。
-- 当前 Probe 共 `51` 条，`readOnly=true` 为 `51/51`，`actionsEnqueued=true` 为 `0`，`customNetworkPacketSent=true` 为 `0`。路线动作是模拟回放记录，不是 live action enqueue。
-- 证据文件：`.local/multiplayer-lab/runtime-mp-advisor-client-20260919-bbfix/diagnostics/CombatSolver-BugReports/logs/CombatSolver/40228-d303f91cf2004ad5a218de87817320ee/`；运行中的 Host PID `38548` 与 Client PID `40228` 均正常响应。
-
-## MP-0 生命周期与重连后 Advisor 边界（2026-09-19）
-
-- Host 日志记录 `Stopping host. Reason: Quit`、Client 断开、新握手、`ClientLoadJoinRequestMessage`、Ready、run load 和 `Combat started`；Client 日志同步记录 Quit、重新 Join、epoch 4、Ready、run load 和 `PHROG_PARASITE_ELITE` 战斗开始。证据见 `phase0-matrix-2026-09-19.json`（历史记录） 与 `mp1-advisor-smoke-2026-09-19.json`（历史记录）。
-- 重连后的 Probe `257/257` 保持 `readOnly=true`，`actionsEnqueued=0`、`customNetworkPacketSent=0`；NIBBIT、SLIMES、PHROG 战斗均重新取得公开状态和回合变化。
-- 重连后的 Advisor 记录 `MP_ADVISOR_SEARCH_START=7`、`ROOT_CAPTURE_BEGIN=7`、`FAIL_CLOSED=7`、`SEARCH_COMPLETE=0`，原因是远端私有药水库存不可见。这是当前 Unknown 私有语义的预期 fail-closed 边界，不把该轮误记为 Advisor 搜索通过。
-
-## MP-1 Advisor Stability 新一轮（2026-09-20）
-
-- 当前源码构建（commit `1b6028502ab00e9c1394e51ffd3cb1661fcd533c`，DLL SHA-256 `864EC2A8276845B0C412106259D75AE2D30333826D415BE03A7371FD3A3B474F`）在新的隔离 Host/Client 上完成了 Host 重建房间后的 Client 重新加入，并再次进入 `SLIMES_WEAK` 战斗。
-- 重连后的 combat journal 记录 `SEARCH_START=4`、`ROOT_CAPTURE_BEGIN=4`、`SEARCH_COMPLETE=3`、`FAIL_CLOSED=0`、`SEARCH_FAILURE=0`；成功路线有 `ROUTE_REPLAY=3`、`ROUTE_ACTION=7`、`UI_STATE=ready=3`。1 个 generation 在 world invalidation/debounce 期间未发布，不把它计作成功。
-- Probe `130/130` 为 `readOnly=true`，动作入队和自定义网络包均为 `0`；本轮本地药水槽为空，因此只证明“无远端私有药水”的受控重连稳定性，不覆盖既有的非空远端私有药水阻碍。机器摘要见 `mp1-advisor-stability-2026-09-20.json`（历史记录）。
-
-## MP-1 Advisor 非空远端药水复验（2026-09-20）
-
-- 新一轮按游戏规则完成 Host 退出、重建房间，Client 重新加入、Ready 并再次进入战斗；远端玩家实际使用了 `FIRE_POTION` 与 `COLORLESS_POTION`。
-- 远端私有药水仍存在时，Advisor 的 `generation=38..44` 均在 root capture 以 `InvalidOperationException: Player 1 is outside the captured potion inventory` fail-closed；记录为 `SEARCH_START=9`、`ROOT_CAPTURE_BEGIN=9`、`FAIL_CLOSED=7`、`SEARCH_SETUP_FAILURE=7`。这证明阻碍场景已被实际覆盖，且没有通过读取或猜测远端私有库存来绕过门禁。
-- 远端药水消耗后，`generation=45`/`46` 成功完成当前回合搜索；Probe `259/259` 仍只读，无动作入队或自定义网络包。机器摘要见 `mp1-advisor-potion-2026-09-20.json`（历史记录）。
-- 正常退出时游戏写入 `progress.save` 等实例存档；退出收尾另出现 `RunManager.ToSave_Patch1` 经 `CombatBugReportExporter` 的 `NullReferenceException`，这是独立的诊断/存档导出问题，未改变前述 Advisor fail-closed 结论。
-
-## 当前限制
-
-- 直接 Host 逐时刻敌人公开状态导出仍未单独采集；当前 `enemyStateSync` 仅表示两个独立 CombatSolver Client 的公开状态集合对照。
-- MP-1 Advisor 的早期无药水/非空远端药水场景仍保留为历史回归证据，但其中“未知远端遗物/药水必须不可读”的门禁已被 readable-state root 架构取代。当前真正必须保留的是：只读取本地进程已经物化的数据、后台搜索不回读 live state、队友动作不被预测、真实 teammate fingerprint 变化必须 Fresh Search。对照证据见 `runtime-evidence/20260920-post-mp1-performance/`。
-- 当前客户端若已物化队友药水库存，readable-state root 可以读取并冻结该状态；不再以“远端私有药水一律不可访问”作为当前门禁。仍未完成逐项语义/执行验证的跨玩家效果继续 fail-closed。退出阶段的 `CombatBugReportExporter` `NullReferenceException` 仍是独立 triage 项。
-- MP-2 Safe Execute 的正式能力只接受显式 `COMBATSOLVER_MULTIPLAYER_MODE=safe-execute` opt-in；一动作与两动作 Host/Client Smoke 是历史基线，当前 MP-2C 运行时最多执行 6 张连续安全本地普通 PlayCard，并在每张牌后做动作归因与重验证。默认多人仍是 Probe；`safe-execute-lab` 继续要求 Multiplayer Lab、匹配的 `ClientCombatSolver` ownership/profile marker 和 Probe evidence。Safe EndTurn 已在显式 `safe-execute` 下通过；药水、选择、Replay、队友目标、Full Auto 和 Instant 仍关闭。Local Cross-Turn 的 T3 Fix/X2 已有本轮实机证据，但默认多人仍不改变为自动执行模式。
-- Multiplayer Carry Ranking v1 只使用远端公开 HP/MaxHP/Block/回合阶段、公开 Powers、敌人公开状态和公开多人约束；不读取或预测远端手牌、牌堆、能量、药水、私有遗物或下一张牌。原版怪物公开 AttackIntent 依据 0.107.1 `AttackCommand.FromMonster` 的 all-opponents 合同标为 `AllPlayers`；非攻击和第三方怪物仍保持 Unknown/neutral，且 Carry 只在本地质量兼容候选之间比较。
-- Multiplayer Local Cross-Turn 当前限制：搜索结果可包含本地未来回合，但只允许部署当前真实本地回合；Safe EndTurn 后旧 authorization 必须失效，只有对本地/敌人/**本地可读队友状态** fingerprint、多人约束和单调 WorldVersion 完成严格对账后才复用 continuation。任何不匹配都必须 Fresh Probe + Fresh Root + Fresh Search；队友未来动作仍不作为确定输入。T3 Fix 与 X2 已完成实机验证；本地 Play 且当前 turn 缺失 cached continuation 的核心调度状态转换已由运行时共用 `MultiplayerContinuationScheduleDecision` 和 12 项合同收口；自然 Host/Client marker 仅保留为可选额外证据。
-
-## 当前安全边界
-
-- Runtime 默认 `MultiplayerProbe`：只读采集，不搜索、不部署、不自动选牌、不自动 EndTurn、不发送自定义网络包；Carry Ranking 不在 Probe 模式启用。
-- Advisor 仅显式环境变量 opt-in，并受 **readable-state root + local-action scope** 约束；Safe Execute 也仅显式 opt-in。读取队友本地可见状态不会扩大 `RootActionPlayers`，未验证的跨玩家语义继续 fail-closed。MP-2C bounded N-action、Reactive Carry、Local Cross-Turn T3/X2 与 Shared-RNG Shuffle Boundary 均已有实机证据。Carry Ranking R1 已真实 PASS，current-turn threat window 也已真实 PASS；R2 decisive flip 仍为 `UNVERIFIED`，仅表示尚未自然遇到完整 pre-carry tie。两次正式 fixture 中 threat durability=15、当前回合攻击无法精确 lethal，validator 正确保持 UNVERIFIED。该项现为可选补充证据，不再要求继续人工刷场景。
-- 证据文件仅由 Lab 环境写入；schema v2 使用 `runSeed` / `combatSegmentId`，紧凑 fingerprint 不能替代缺失的生命周期证据。
-
-## Source of truth
-
-- `phase0-matrix-2026-09-19.json`（历史记录）
-- [多人适配入口](../README.md)
-- 旧过程日志和完整快照保留在 Git history，不再作为当前事实入口。
+操作前使用 [RUNBOOK](RUNBOOK.md)，结果按 [当前交接](../CODEX_HANDOFF.md) 与 [测试矩阵](../TEST_MATRIX.md) 的证据边界解释。
