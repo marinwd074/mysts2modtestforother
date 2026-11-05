@@ -124,11 +124,9 @@ internal static class MultiplayerSafeLocalActionClassifier
     /// is the authority for admitting the next action.
     /// </summary>
     public static IReadOnlyList<PlanAction> TakeBoundedDeploymentSlice(
-        CombatState state,
         IReadOnlyList<PlanAction> actions,
         out SafeLocalActionDecision stop)
     {
-        _ = state;
         // Preflight only the immutable/plan-level safety boundary here. A later action may
         // legitimately enter the hand after an earlier draw/generation effect. The deployment
         // loop calls Classify(state, action) again immediately before every native action, so

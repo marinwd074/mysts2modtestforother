@@ -16,8 +16,7 @@ internal static partial class SolverController
         CombatReplayRecording.TestCombatEndObserver = onCombatEnd;
         _combat.AutomaticSearchPaused = false;
         _combat.AutomaticSearchPausedTurn = null;
-        _combat.LatestResult = result;
-        _combat.LatestStamp = LiveCombatStamp.Capture(state);
+        _combat.CaptureLatestResult(result, LiveCombatStamp.Capture(state));
         _combat.ContinuationSource = result;
         _combat.FullAutoEnabled = true;
         _combat.SearchesStarted = 1;

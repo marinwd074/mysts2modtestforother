@@ -86,7 +86,7 @@ foreach ($routeScopedDeployRule in @(
 
 foreach ($displayedCurrentTurnRule in @(
     'RenderedCurrentTurnAdoptionSeed',
-    'progress.CurrentTurnAdoptionSeed',
+    'MarkRenderedProgress(progress)',
     'search.Interaction.RenderedCurrentTurnAdoptionSeed != null')) {
     if (-not $solverControllerText.Contains($displayedCurrentTurnRule)) {
         $violations.Add("${solverControllerPath}: rendered current-turn takeover drifted '$displayedCurrentTurnRule'")
@@ -105,11 +105,47 @@ $solverProgressPath = Join-Path $repositoryRoot 'src/Runtime/SolverProgress.cs'
 $solverProgressText = [IO.File]::ReadAllText($solverProgressPath)
 foreach ($routeAnnotationUiRule in @(
     'KillsAfterAction { get; init; }',
-    'result.KillsAfterAction.TryGetValue(',
-    'RenderedCurrentTurnAdoptionSeed',
-    'CurrentTurnAdoptionSeed: renderedSeed')) {
+    'result.KillsAfterAction.TryGetValue(')) {
     if (-not $solverProgressText.Contains($routeAnnotationUiRule)) {
         $violations.Add("${solverProgressPath}: route-preview kill annotations drifted '$routeAnnotationUiRule'")
+    }
+}
+$searchInteractionPath = Join-Path $repositoryRoot 'src/Runtime/SearchInteractionState.cs'
+$searchInteractionText = [IO.File]::ReadAllText($searchInteractionPath)
+foreach ($candidateRule in @(
+    'internal sealed class SolverCandidatePresentation',
+    'Array.AsReadOnly(actions.ToArray())',
+    'seed.CandidateVersion == preview.CandidateVersion',
+    'seed.Actions.SequenceEqual(',
+    'CurrentTurnAdoptionSeed: renderedSeed',
+    'MarkRenderedProgress(',
+    'InvalidateRenderedCandidate()',
+    'ResolveExactCandidate(')) {
+    if (-not $searchInteractionText.Contains($candidateRule)) {
+        $violations.Add("${searchInteractionPath}: candidate interaction ownership drifted '$candidateRule'")
+    }
+}
+if ($searchInteractionText -match 'Rendered(CurrentTurn|Route)AdoptionSeed\s*\{[^}]*set;') {
+    $violations.Add("${searchInteractionPath}: callers can mutate the rendered candidate's executable seeds")
+}
+$workerSessionPath = Join-Path $repositoryRoot 'src/Api/PreCombatWorkerSession.cs'
+$workerSessionText = [IO.File]::ReadAllText($workerSessionPath)
+$workerOwnerPath = Join-Path $repositoryRoot 'src/Api/PreCombatForecastWorker.cs'
+$workerOwnerText = [IO.File]::ReadAllText($workerOwnerPath)
+foreach ($sessionRule in @('IOwnedPreCombatWorkerProcess', 'Phase.AwaitingCleanup',
+    'process.WaitForExit(5_000)', 'PreCombatWorkerExitUnconfirmedException', 'lock (_stopSync)')) {
+    if (-not $workerSessionText.Contains($sessionRule)) {
+        $violations.Add("${workerSessionPath}: owned worker lifecycle drifted '$sessionRule'")
+    }
+}
+if ($workerSessionText.Contains('Process.GetProcessById(') -or
+    $workerOwnerText.Contains('Interlocked.Exchange(ref _session, null)')) {
+    $violations.Add('Worker process ownership may be discovered or forgotten before confirmed exit')
+}
+foreach ($ownerRule in @('session.EnsureStopped();', 'await session.WaitForResultAsync(',
+    'await session.WaitForReadyAsync(', 'session.CompleteRequestCleanup(')) {
+    if (-not $workerOwnerText.Contains($ownerRule)) {
+        $violations.Add("${workerOwnerPath}: worker bypasses session lifecycle '$ownerRule'")
     }
 }
 $actionTriggerRecorderPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Simulation/ActionRelicTriggerRecorder.cs'
@@ -142,6 +178,7 @@ foreach ($retiredPreviewLockRule in @(
     'RouteStartsWithCurrentTurn(',
     'currentTurnDisplayedResult')) {
     if ($solverProgressText.Contains($retiredPreviewLockRule) -or
+        $searchInteractionText.Contains($retiredPreviewLockRule) -or
         $searchCoordinatorText.Contains($retiredPreviewLockRule)) {
         $violations.Add("Retired independent current-turn preview lock returned: '$retiredPreviewLockRule'")
     }
@@ -149,17 +186,17 @@ foreach ($retiredPreviewLockRule in @(
 foreach ($coupledPreviewRule in @(
     'bool acceptsRouteUpdate = currentDisplayedResult == null;',
     'if (acceptsRouteUpdate)',
-    'SpeculativeRoutePreview = speculativeRoutePreview')) {
+    'displayedCandidate.ApplyTo(progress with')) {
     if (-not $searchCoordinatorText.Contains($coupledPreviewRule)) {
         $violations.Add("${searchCoordinatorPath}: coupled Beam preview drifted '$coupledPreviewRule'")
     }
 }
 
 foreach ($atomicPreviewRule in @(
-    'currentTurnPreview = progress.CurrentTurnPreview;',
-    'currentTurnAdoptionSeed = progress.CurrentTurnAdoptionSeed;',
-    'speculativeRoutePreview = progress.SpeculativeRoutePreview;',
-    'currentRouteAdoptionSeed = progress.RouteAdoptionSeed;')) {
+    'SolverCandidatePresentation displayedCandidate = SolverCandidatePresentation.Empty;',
+    'displayedCandidate = SolverCandidatePresentation.Capture(progress);',
+    'displayedCandidate = SolverCandidatePresentation.FromResult(',
+    'return interaction.ResolveTakeoverResult(result)')) {
     if (-not $searchCoordinatorText.Contains($atomicPreviewRule)) {
         $violations.Add("${searchCoordinatorPath}: current/future displayed candidate bundle is no longer replaced atomically '$atomicPreviewRule'")
     }
@@ -191,7 +228,7 @@ foreach ($routeScopedCompletionRule in @(
     'LiveCombatStamp.CaptureLocalCoreSearchValidity(state)',
     'searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore',
     'MultiplayerSearchCompletionContracts.IsStale(',
-    '_combat.LatestStamp = currentStamp!;',
+    '_combat.CaptureLatestResult(result, currentStamp!);',
     'SEARCH_COMPATIBLE_WORLD_DELTA')) {
     if (-not $searchLifecycleCompletionText.Contains($routeScopedCompletionRule)) {
         $violations.Add("${searchLifecycleCompletionPath}: route-scoped search completion drifted '$routeScopedCompletionRule'")

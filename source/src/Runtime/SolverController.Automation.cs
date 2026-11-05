@@ -87,7 +87,7 @@ internal static partial class SolverController
                 current))
         {
             if (_combat.LatestStamp != current)
-                RefreshLatestDeploymentStamp(state, current);
+                _combat.RefreshLatestStamp(current);
             StartFullAutoDeployment(host, state, _combat.LatestResult!);
             return;
         }
@@ -141,7 +141,7 @@ internal static partial class SolverController
             if (IsLatestResultDeploymentCompatible(state, capabilities, current))
             {
                 if (_combat.LatestStamp != current)
-                    RefreshLatestDeploymentStamp(state, current);
+                    _combat.RefreshLatestStamp(current);
                 Entry.Logger.Info(
                     $"[CombatSolver/MultiplayerSafeExecute] MP_SAFE_AUTO_ARMED " +
                     $"source=existing_result turn={LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0} " +
@@ -234,7 +234,7 @@ internal static partial class SolverController
         Entry.Logger.Info($"[CombatSolver/Test] SOLVER_DISABLED disabled={disabled}");
         if (disabled)
         {
-            bool controllerSearchCanceled = _search != null || _deferredSearchCts != null;
+            bool controllerSearchCanceled = _search != null || _deferredSearch != null;
             PlayerTurnSetupCoordinator.CancelForSolverDisabled();
             CancelDeferredSearch();
             CancelSearch();
@@ -245,8 +245,7 @@ internal static partial class SolverController
             _combat.MultiplayerSafeAutoEnabled = false;
             _combat.MultiplayerSafeExecuteDeploymentRequested = false;
             _combat.State = null;
-            _combat.LatestResult = null;
-            _combat.LatestStamp = null;
+            _combat.ClearLatestResult();
             _combat.ContinuationSource = null;
             _combat.PendingCompleteProjectionBaseline = null;
             if (NGame.Instance is { } host)
@@ -278,7 +277,7 @@ internal static partial class SolverController
         if (!IsSearching)
             return;
 
-        bool controllerSearchCanceled = _search != null || _deferredSearchCts != null;
+        bool controllerSearchCanceled = _search != null || _deferredSearch != null;
         int? generation = _search?.Generation;
         _combat.FullAutoEnabled = false;
         _combat.MultiplayerSafeAutoEnabled = false;

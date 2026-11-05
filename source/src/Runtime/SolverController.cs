@@ -61,12 +61,10 @@ internal static partial class SolverController
     private static readonly List<Task> PendingCombatDeferredOperations = [];
     private static int _searchReferenceReleaseScheduledCountForTesting;
     private static int _searchReferenceReleaseCompletedCountForTesting;
-    private static int _searchCtsDisposeCountForTesting;
     private static int _deploymentReferenceReleaseScheduledCountForTesting;
     private static int _deploymentReferenceReleaseCompletedCountForTesting;
     private static int _deploymentCtsDisposeCountForTesting;
-    private static CancellationTokenSource? _deferredSearchCts;
-    private static int _deferredSearchId;
+    private static SolverDeferredSearchRequest? _deferredSearch;
     private static CancellationTokenSource _combatDeferredOperationCancellation = new();
     private static CancellationTokenSource? _multiplayerDebounceCts;
     private static int _multiplayerDebounceId;
@@ -74,7 +72,7 @@ internal static partial class SolverController
 
     public static bool IsSearching
         => _search != null
-           || _deferredSearchCts != null
+           || _deferredSearch != null
            || PlayerTurnSetupCoordinator.IsSearching;
     public static bool IsDeploying => _deployment != null;
     public static bool IsStoppingSearch
@@ -107,8 +105,7 @@ internal static partial class SolverController
     {
         if (_search != null)
         {
-            _search.Interaction.RenderedCurrentTurnAdoptionSeed = null;
-            _search.Interaction.RenderedRouteAdoptionSeed = null;
+            _search.Interaction.InvalidateRenderedCandidate();
         }
         PlayerTurnSetupCoordinator.InvalidateRenderedRouteAdoptionSeed();
     }
@@ -143,16 +140,6 @@ internal static partial class SolverController
             && _combat.LatestRouteInvalidationVersion
                 == MultiplayerRouteChangeTracker.InvalidationVersion
             && LiveCombatStamp.IsLocalCoreSearchCompatible(latestStamp, state);
-    }
-
-    private static void RefreshLatestDeploymentStamp(
-        CombatState state,
-        LiveCombatStamp current)
-    {
-        _combat.LatestStamp = current;
-        _combat.LatestRouteInvalidationVersion = SolverSessionCapabilities.Capture(state).IsMultiplayer
-            ? MultiplayerRouteChangeTracker.InvalidationVersion
-            : 0;
     }
 
     /// <summary>
@@ -288,7 +275,7 @@ internal static partial class SolverController
     internal static int SearchReferenceReleaseCompletedCountForTesting
         => Volatile.Read(ref _searchReferenceReleaseCompletedCountForTesting);
     internal static int SearchCtsDisposeCountForTesting
-        => Volatile.Read(ref _searchCtsDisposeCountForTesting);
+        => SolverSearchSession.CancellationDisposeCountForTesting;
     internal static int PendingSearchReferenceReleaseCountForTesting
         => PendingSearchReferenceReleases.Count(static task => !task.IsCompleted);
     internal static bool WasCardDeployedForTesting(string cardId)
@@ -358,10 +345,12 @@ internal static partial class SolverController
         TaskCompletionSource secondCompletion = new(
             TaskCreationOptions.RunContinuationsAsynchronously);
 
-        SolverDeploymentSession first = new() { Operation = firstCompletion.Task };
+        SolverDeploymentSession first = new();
+        _ = first.StartOperation(() => firstCompletion.Task);
         _deployment = first;
         CancelDeployment();
-        SolverDeploymentSession second = new() { Operation = secondCompletion.Task };
+        SolverDeploymentSession second = new();
+        _ = second.StartOperation(() => secondCompletion.Task);
         _deployment = second;
         CompleteDeployment(first);
         bool staleCompletionPreservedCurrentSession = ReferenceEquals(_deployment, second);
@@ -650,22 +639,7 @@ internal static partial class SolverController
     {
         AssertMainThread();
         RecordReviewedWorldlines(result);
-        bool retainCurrentTurnRoute =
-            result.ResultScope == SolverResultScope.CurrentTurnAdoption
-            && MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnContinuation(
-                result.MultiplayerScope,
-                result.Continuations.Count);
-        SolverOverlaySnapshot snapshot =
-            result.ResultScope == SolverResultScope.CurrentTurnAdoption
-            && !retainCurrentTurnRoute
-                ? SolverOverlaySnapshot.CaptureCurrentTurn(
-                    SolverCurrentTurnPreview.FromResult(result))
-                : SolverOverlaySnapshot.CaptureWithReviewedWorldlines(
-                    result,
-                    UnexpectedReplanCount > 0,
-                    _combat.ReviewedWorldlinesTotal);
-        if (result.ResultScope == SolverResultScope.RouteAdoption)
-            snapshot = MarkRouteAdopted(snapshot);
+        SolverOverlaySnapshot snapshot = CaptureCompletedResultSnapshot(result);
         SolverOverlay.ShowResult(host, snapshot);
         SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Succeeded);
         Entry.Logger.Info(
@@ -914,7 +888,7 @@ internal static partial class SolverController
         {
             if (_combat.LatestStamp != current)
             {
-                RefreshLatestDeploymentStamp(state, current);
+                _combat.RefreshLatestStamp(current);
                 Entry.Logger.Info(
                     $"[CombatSolver/Test] DEPLOY_COMPATIBLE_WORLD_DELTA " +
                     $"turn={LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0} " +
@@ -1025,8 +999,7 @@ internal static partial class SolverController
         SolverSettings.Update(SolverSettings.Current with { BrightestFlameMaxHpLossLimit = limit });
         _combat.ContinuationSource = null;
         _combat.PendingCompleteProjectionBaseline = null;
-        _combat.LatestResult = null;
-        _combat.LatestStamp = null;
+        _combat.ClearLatestResult();
         RequestSearch(host, state, SearchReason.Manual);
         SolverOverlay.RefreshControls();
     }
@@ -1245,7 +1218,7 @@ internal static partial class SolverController
     {
         int lifecycleGeneration = Interlocked.Increment(ref _combatLifecycleGeneration);
         CancelMultiplayerDebouncedSearch();
-        bool deferredSearchCanceled = _deferredSearchCts != null;
+        bool deferredSearchCanceled = _deferredSearch != null;
         CancelDeferredSearch();
         Task deferredSearchRelease = DrainDeferredSearchReleases();
         Task combatDeferredRelease = CancelAndDrainCombatDeferredOperations();
@@ -1362,8 +1335,7 @@ internal static partial class SolverController
         }
         int actionCount = result.BestNode.Actions.Count(action =>
             action.Turn == result.StartTurnNumber && action.IsExecutable);
-        _combat.LatestResult = null;
-        _combat.LatestStamp = null;
+        _combat.ClearLatestResult();
         SolverOverlay.ShowDeploymentComplete(
             host,
             result.StartTurnNumber,
@@ -1578,8 +1550,7 @@ internal static partial class SolverController
         }
         else
         {
-            _combat.LatestResult = null;
-            _combat.LatestStamp = null;
+            _combat.ClearLatestResult();
             if (!preservePendingContinuation)
                 _combat.ContinuationSource = null;
         }
@@ -1627,7 +1598,7 @@ internal static partial class SolverController
         if (host == null
             || _search != null
             || _deployment != null
-            || _deferredSearchCts != null
+            || _deferredSearch != null
             || PendingCombatDeferredOperations.Any(task => !task.IsCompleted)
             || (!AutomaticCalculationEnabled && !_combat.MultiplayerSafeAutoEnabled)
             || !UnattendedTestRunner.AutomaticTurnSearchEnabled
@@ -1760,7 +1731,7 @@ internal static partial class SolverController
         if (approvedVersion > search.ForegroundPublishedCandidateVersion)
         {
             search.ForegroundPublishedCandidateVersion = approvedVersion;
-            bool backgroundContinues = !search.WorkerCompletion.IsCompleted;
+            bool backgroundContinues = !search.IsWorkerCompleted;
             Entry.Logger.Info(
                 $"[CombatSolver/Test] SEARCH_E_FOREGROUND_PUBLISHED " +
                 $"generation={search.Generation} candidate_version={approvedVersion} " +
@@ -1782,12 +1753,7 @@ internal static partial class SolverController
             : progress.CurrentTurnPreview is { } currentTurn
                 ? SolverOverlaySnapshot.CaptureCurrentTurn(currentTurn)
                 : null;
-        search.Interaction.RenderedCurrentTurnAdoptionSeed = preview == null
-            ? null
-            : progress.CurrentTurnAdoptionSeed;
-        search.Interaction.RenderedRouteAdoptionSeed = progress.SpeculativeRoutePreview == null
-            ? null
-            : progress.RouteAdoptionSeed;
+        search.Interaction.MarkRenderedProgress(progress);
         SolverOverlay.ShowProgress(
             progress,
             search.DeployWhenReady,
@@ -1815,7 +1781,7 @@ internal static partial class SolverController
         search.ObserveFrame(milliseconds);
         if (milliseconds >= 100d)
         {
-            SolverProgress? progress = Volatile.Read(ref search.Interaction.Progress);
+            SolverProgress? progress = search.Interaction.Progress;
             Entry.Logger.Info(
                 $"[CombatSolver/Test] MAIN_THREAD_LONG_FRAME gap_ms={milliseconds:F1} " +
                 $"frame={search.FrameCount} expanded={progress?.ExpandedNodes ?? -1} " +
@@ -1832,8 +1798,7 @@ internal static partial class SolverController
         CancelDeployment();
         _combat.State = state;
         _combat.ShowcaseMode = true;
-        _combat.LatestResult = result;
-        _combat.LatestStamp = LiveCombatStamp.Capture(state);
+        _combat.CaptureLatestResult(result, LiveCombatStamp.Capture(state));
         _combat.ContinuationSource = result;
         _combat.AutomaticSearchPaused = false;
         _combat.FullAutoEnabled = false;
@@ -1851,8 +1816,7 @@ internal static partial class SolverController
     {
         _combat.FullAutoEnabled = false;
         _combat.AutomaticSearchPaused = true;
-        _combat.LatestResult = null;
-        _combat.LatestStamp = null;
+        _combat.ClearLatestResult();
         _combat.ContinuationSource = null;
         SolverOverlay.Show(host, $"[b]录像路线已停止[/b]\n{message}\n此临时对局不会自动重新计算。");
         Entry.Logger.Warn("[CombatSolver/Showcase] ROUTE_MISMATCH stopped=true replan=false");

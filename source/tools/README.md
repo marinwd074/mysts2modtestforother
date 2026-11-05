@@ -8,6 +8,7 @@
 |---|---|---|
 | 固定版本一致性 | [verify-target-version.ps1](verify-target-version.ps1) / [Linux](verify-target-version.sh) | 游戏、RitsuLib、条件编译与构建目标 |
 | 架构职责 | [verify-refactor-boundaries.ps1](verify-refactor-boundaries.ps1) / [Linux](verify-refactor-boundaries.sh) | Search / Runtime / UI / Testing 边界 |
+| 架构规则反例 | [verify-refactor-boundaries-tests.py](verify-refactor-boundaries-tests.py) | Python 3 / Bash / rg；隔离源码副本中的完整 Linux 门禁与八项负向变异，另核对五组规则的 PowerShell 静态等价 |
 | 仓库与文档 | [verify-repository-hygiene.ps1](verify-repository-hygiene.ps1) | 跟踪文件、LFS、文档本地链接、项目版本日志 |
 | 本地构建 | [build-local-stack.ps1](build-local-stack.ps1) / [Linux](build-local-stack.sh) | Release 与工具构建；不自动启动游戏 |
 | 项目版本 | [new-project-version.ps1](new-project-version.ps1) | `-Check` 校验；`-Kind Minor/Major` 记录功能更新 |
@@ -25,6 +26,8 @@ pwsh -NoProfile -File source/tools/verify-repository-hygiene.ps1
 | 目的 | 项目或入口 | 使用说明 |
 |---|---|---|
 | 固定游戏语义与搜索 | [E0PinnedHarness/](E0PinnedHarness/)、[U0U1PinnedHarness/](U0U1PinnedHarness/)、[U2DegenerateHarness/](U2DegenerateHarness/)、[P0P1PinnedHarness/](P0P1PinnedHarness/) | 选择相关模式；[测试矩阵](../docs/TEST_MATRIX.md) 是模式与证据入口 |
+| 候选展示 / 采用状态 | [SearchInteractionChecks/](SearchInteractionChecks/README.md) | 链接生产交互 module 的无游戏合同；pinned / 实机证据另验 |
+| 战前 worker 生命周期 | [PreCombatWorkerSessionChecks/](PreCombatWorkerSessionChecks/README.md)、[PreCombatRequestChecks/](PreCombatRequestChecks/README.md) | 生产会话/协议与公开适配合同，含真实测试子进程；不启动真实游戏 |
 | GC / 释放 / 并发合同 | [CombatSolver.GcPolicyChecks/](CombatSolver.GcPolicyChecks/README.md)、[CombatSolver.WavePolicyChecks/](CombatSolver.WavePolicyChecks/) | 纯状态机与真实 CLR 模式分开，真实 NoGC 需要足够内存 |
 | 原生兼容与覆盖 | [CompatibilitySmoke/](CompatibilitySmoke/)、[CoverageCatalog/](CoverageCatalog/)、[Sts2LocalInspector/](Sts2LocalInspector/README.md) | 固定 0.107.1 依赖；IL 审计按需运行 |
 | 离线 / 检查点 / 生成场景 | [OfflineSearchHarness/](OfflineSearchHarness/)、[CheckpointTool/](CheckpointTool/)、[GeneratedCombatScenarios/](GeneratedCombatScenarios/) | [离线说明](../docs/OFFLINE_SEARCH_HARNESS.md)、[检查点说明](../docs/CHECKPOINT_REPLAY.md)、[场景说明](../docs/GENERATED_COMBAT_SCENARIOS.md) |

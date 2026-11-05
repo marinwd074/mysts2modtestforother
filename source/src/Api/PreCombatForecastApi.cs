@@ -551,11 +551,17 @@ public static class PreCombatForecastApi
         async Task AwaitWorkerAsync()
         {
             PreCombatForecastResult result;
+            bool workerExitUnconfirmed = false;
             try
             {
                 result = awaitOwnedWorkerCancellation
                     ? await worker.ConfigureAwait(false)
                     : await worker.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (PreCombatWorkerExitUnconfirmedException ex)
+            {
+                workerExitUnconfirmed = true;
+                result = Failure(PreCombatForecastStatus.Failed, Guid.NewGuid().ToString("N"), ex.Message);
             }
             catch (OperationCanceledException)
             {
@@ -574,6 +580,11 @@ public static class PreCombatForecastApi
 
             SolverDispatcher.Post(() =>
             {
+                if (workerExitUnconfirmed)
+                {
+                    completion.TrySetResult(result);
+                    return; // Never hide retained process ownership behind cancellation/live drift.
+                }
                 if (cancellationToken.IsCancellationRequested)
                 {
                     completion.TrySetResult(result with

@@ -212,9 +212,7 @@ internal static partial class SolverController
             bool firstActionChanged = decision == MultiplayerPlanRefreshDecision.Reselect;
 
             _combat.State = state;
-            _combat.LatestResult = refreshed;
-            _combat.LatestStamp = currentStamp;
-            _combat.LatestRouteInvalidationVersion = MultiplayerRouteChangeTracker.InvalidationVersion;
+            _combat.CaptureLatestResult(refreshed, currentStamp);
             _combat.ContinuationSource = refreshed;
             _combat.AwaitingMultiplayerContinuation = false;
             _combat.LastPlanRefreshDecisionTimestampMilliseconds =
@@ -274,15 +272,15 @@ internal static partial class SolverController
                 actual.CardEnchantmentId,
                 expected.CardEnchantmentId,
                 StringComparison.Ordinal)
-            && Equals(actual.Choice, expected.Choice)
-            && Equals(actual.NestedChoices, expected.NestedChoices);
+            && actual.NestedChoicesBeforePrimary == expected.NestedChoicesBeforePrimary
+            && PlanCardChoice.HasSameExecutionIdentity(actual.Choice, expected.Choice)
+            && PlanCardChoice.HasSameExecutionSequence(actual.NestedChoices, expected.NestedChoices);
 
     private static void DropRetainedPlanForFullRestart()
     {
         _combat.PendingMultiplayerPlanRefresh = false;
         _combat.LastPlanRefreshDecisionTimestampMilliseconds = null;
-        _combat.LatestResult = null;
-        _combat.LatestStamp = null;
+        _combat.ClearLatestResult();
         _combat.ContinuationSource = null;
         InvalidateRenderedRouteAdoptionSeed();
         SolverOverlay.RefreshControls();

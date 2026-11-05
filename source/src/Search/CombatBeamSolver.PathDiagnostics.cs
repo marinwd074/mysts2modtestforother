@@ -776,7 +776,7 @@ internal sealed partial class CombatBeamSolver
             || before.PotionStrategicCost != after.PotionStrategicCost
             || before.CumulativePlayerHpLost != after.CumulativePlayerHpLost
             || before.Actions.Count != after.Actions.Count
-            || !SameObservedChoices(before.RootTurnSetupChoices, after.RootTurnSetupChoices))
+            || !PlanCardChoice.HasSameExecutionSequence(before.RootTurnSetupChoices, after.RootTurnSetupChoices))
             return false;
         for (int index = 0; index < before.Actions.Count; index++)
         {
@@ -789,47 +789,12 @@ internal sealed partial class CombatBeamSolver
                 || left.PotionId != right.PotionId || left.PotionSlot != right.PotionSlot
                 || left.ReplayCount != right.ReplayCount || left.EndsPlayerTurn != right.EndsPlayerTurn
                 || left.NestedChoicesBeforePrimary != right.NestedChoicesBeforePrimary
-                || !SameObservedChoice(left.Choice, right.Choice)
-                || !SameObservedChoices(left.NestedChoices, right.NestedChoices)
-                || !SameObservedChoices(left.TurnStartChoices, right.TurnStartChoices))
+                || !PlanCardChoice.HasSameExecutionIdentity(left.Choice, right.Choice)
+                || !PlanCardChoice.HasSameExecutionSequence(left.NestedChoices, right.NestedChoices)
+                || !PlanCardChoice.HasSameExecutionSequence(left.TurnStartChoices, right.TurnStartChoices))
                 return false;
         }
         return true;
     }
 
-    private static bool SameObservedChoices(
-        IReadOnlyList<PlanCardChoice>? left,
-        IReadOnlyList<PlanCardChoice>? right)
-    {
-        if (left == null || right == null)
-            return left == null && right == null;
-        if (left.Count != right.Count)
-            return false;
-        for (int index = 0; index < left.Count; index++)
-        {
-            if (!SameObservedChoice(left[index], right[index]))
-                return false;
-        }
-        return true;
-    }
-
-    private static bool SameObservedChoice(PlanCardChoice? left, PlanCardChoice? right)
-    {
-        if (left == null || right == null)
-            return left == null && right == null;
-        if (left.Effect != right.Effect || left.SourcePile != right.SourcePile
-            || left.SourceId != right.SourceId || left.ContextId != right.ContextId
-            || left.Timing != right.Timing || left.Cards.Count != right.Cards.Count)
-            return false;
-        for (int index = 0; index < left.Cards.Count; index++)
-        {
-            PlanCardToken a = left.Cards[index];
-            PlanCardToken b = right.Cards[index];
-            if (a.CardId != b.CardId || a.UpgradeLevel != b.UpgradeLevel
-                || a.StateKey != b.StateKey || a.SourceOccurrence != b.SourceOccurrence
-                || a.OptionOccurrence != b.OptionOccurrence)
-                return false;
-        }
-        return true;
-    }
 }

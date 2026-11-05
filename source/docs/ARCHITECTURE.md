@@ -2,6 +2,8 @@
 
 > 本文是维护者和 coding agent 的当前职责入口；退役快照与逐批审计从 Git history 恢复。当前入口见 [文档导航](README.md)，玩家说明见 [source/README.md](../README.md)，职责迁移时同步更新 Windows/Linux 结构门禁。
 
+领域术语见仓库根 [GLOSSARY.md](../../GLOSSARY.md)。
+
 ## 当前精简分支的局部合同
 
 普通 Power 的 Target 保留原生 null；显式定向入口继续保存传入目标。临时力量复用上游施加入口，首次回调仍先于计数加入，封顶后按修正请求量触发数量回调。Weak/Vulnerable/Frail 的跳过首次持续时间扣减只由各自 Power 保存，影响状态指纹与 ContinuationStamp；其他能力的无效 Skip 元数据不参与该等价性判断。未新增战斗后端或状态存储副本。
@@ -75,7 +77,7 @@ MP-0 Core 的多人只读证据已通过；退出/重新加入生命周期仍属
 | `src/Runtime/MultiplayerClientProbe.cs` | 主线程只读记录网络多人客户端的本地可见状态、公共敌人状态和远端公开玩家摘要，生成 schema v2 与紧凑 fingerprint | 搜索、部署、RNG/CombatState 修改、网络包和队友隐藏状态 |
 | `src/Runtime/MultiplayerWorldTracker.cs` | 维护多人观察的 `WorldVersion`、dirty 标志和 debounce 稳定边界 | 网络事件订阅、路线修复、搜索调度和 live 状态读取 |
 | `src/Runtime/MultiplayerSafeLocalActionClassifier.cs` | 对未来 Safe Execute 的本地普通 PlayCard 做保守前缀分类；未知交互直接停止 | 搜索语义、网络协议、队友动作和 EndTurn |
-| `src/Runtime/SolverController.SearchLifecycle.cs` | 搜索请求、root barrier 延迟/取消、worker 回调、结果发布、搜索引用释放与 CTS 生命周期 | 部署动作顺序、Beam 内部算法和 UI 布局 |
+| `src/Runtime/SolverController.SearchLifecycle.cs` | 搜索请求、root barrier 延迟/取消、dispatcher/activity adapter、结果发布与全局搜索引用释放聚合 | 部署动作顺序、Beam 内部算法和 UI 布局 |
 | `src/Runtime/SolverController.Deployment.cs` | 全自动部署、动作入队与原生选择驱动、部署间隔、取消/完成及部署引用释放 | 搜索策略、搜索 worker 生命周期和 UI 布局 |
 | `src/Runtime/SolverController.Continuation.cs` | 跨回合续用校验、路线采用、回合准备续接预览、重算原因/状态差异审计与手动分歧记录 | 搜索 worker 调度、部署动作顺序和 Beam 内部算法 |
 | `src/Runtime/SolverControllerSessions.cs` | combat/search/deployment 三类会话的状态与取消所有权 | 跨会话全局静态字段堆积 |
@@ -103,7 +105,15 @@ MP-0 Core 的多人只读证据已通过；退出/重新加入生命周期仍属
 | `src/Replay/CombatShowcaseRuntime.cs` | 校验录像协议与文件摘要，从主菜单建立不保存跑局、恢复精确战斗根，并把预计算结果交给 Controller | 远端目录 UI、重新搜索、正式存档与统计写入 |
 | `src/Runtime/SearchCompletionNotifier.cs` | 搜索成功、失败、停止或过期后按设置决定是否通知；Windows 使用原生通知和系统提示音，先核对前台进程并在非 Windows/headless 环境停止 | 搜索生命周期、跨平台伪通知和自定义声音播放 |
 
-`SolverCombatSession` 持有本场路线、续用和重算状态；`SolverSearchSession` 持有 generation、取消、进度和帧观测；`SolverDeploymentSession` 持有部署取消。旧回调只能写回创建它的 search session。
+`src/Runtime/SearchInteractionState.cs` 是候选展示与采用的深 module：`SolverCandidatePresentation` 将当前回合/完整路线预览及各自 seed 一起替换，按版本与完整动作序列拒绝不匹配 seed。Coordinator 保留评分与提升决定，只通过同一 presentation 交接；普通 Play 与 TurnSetup 的显示 adapter 通过 `MarkRenderedProgress` 确认实际投影，不能单独写入可采用 seed。已批准的显示可以没有 seed；取得 seed 也不代表拥有真实动作授权。请求冻结已显示的 seed，后续后台更新不改写该请求；Coordinator 的显式 seed 取消处理与 worker 完成共享同一物化/scope 收口，无 seed 的完整结果质量 fallback 仍由 Search 拥有。进度发布槽与显示节流器保持私有；调用方只读进度，并通过 ClearProgress 清理 live 发布，不会顺带清空显示批准或接管请求。seed 独占只读动作列表快照，`Lazy` 仍只执行一次，物化始终在交互锁外。TurnSetup 保留原无 seed 当前回合接管，能力门禁及实际部署授权不进入此 module。
+
+完成结果的 continuation 保留资格由 `SolverResult.PreservesContinuationSource` 计算：当前回合采用仅在已有本地跨回合投影且 continuation 非空时保留，其他完成范围沿用原保留规则。普通搜索完成、回合准备预览/激活共用 Runtime 的 `CaptureCompletedResultSnapshot`，统一完整路线/当前回合投影及采用标记；预览不写入已接受路线。停止结果和 pending-turn-setup 展示仍走各自入口，不因此取得采用或执行权限。
+
+`SolverProgress.cs` 只保留进度/预览 DTO 与结果投影；显示节流与时间单调合同归交互 module。`SearchInteractionChecks` 链接这两份生产源码，用最小外部 DTO adapter 验证完整交互 seam；它不替代真实 `PlanAction`、pinned 搜索与 Host/Client 验证。集中所有权提高 locality，使一处合同覆盖两个生产显示 adapter 的共同规则；不创建第二套搜索后端或评分政策。
+
+`SolverDeferredSearchRequest` 拥有 GC/native-action barrier 期间的完整只读入口意图（host/state、reason、有效 deploy 标记、adoptedRouteReplay、epoch）与取消/queued callback 排空；Controller 只保留精确 owner、epoch 与当前 CombatState 校验，默认仍重新进入 RequestSearch，重新核对能力、root 与 replay。Owner 引用就是请求身份，不再维护重复 requestId；fault/cancel finally 以 CompareExchange 只清旧 owner。取消已排队请求仍要等待 callback，不能提前释放旧战斗引用。请求载荷保存原 replay 引用，不复制或授予旧部署权限。
+
+`SolverCombatSession` 持有本场路线、续用和重算状态；`SolverSearchSession` 持有 generation、进度和帧观测，并私有拥有 CTS、worker 启动/注册屏障、worker 与主线程 callback 两个完成边界。Controller 只提供 dispatcher/activity adapter，不再写 task/TCS/flag 或判断 CTS 何时释放；取消前启动、注册失败、同步 callback 与 stale callback 都经同一一次性释放收口，处置计数也归 owner。引用排空先等启动结束，再等 worker 和 callback，最后清除 worker 引用；`SolverDeploymentSession` 一次捕获当前回合动作、forecast 硬边界、结构前缀/stop 与 EndTurn；Safe Session 容量、UI 数量与实际执行列表共用该只读计划，仍逐动作进行 live 分类与后态授权。它私有拥有 CTS/一次性释放状态，拒绝前启动与 operation 启动互斥；StartOperation 先保留唯一 owner，再在锁外调用 factory，drain 先等 Task 附着屏障，再等真实操作。同步前缀重入取消不能把占位 Task 当成已排空；结构拒绝和同步启动异常也结束该屏障。无 operation 的结构拒绝由既有 CompleteDeployment 收尾，真实操作仍等待原 drain/finally。旧回调只能写回创建它的 search session。
 
 `src/Api/CombatShowcaseApi.cs` 是本地录像/复现工具的公开入口，只暴露协议兼容信息和按本地包路径进入临时对局的异步调用。API 不直接操作 Controller 或 CombatManager；Runtime 完成建局与恢复。后台自动采集、私有上传 transport 和服务器元数据已删除。录像会话使用既有精确 continuation 续接和部署入口，任何失配都停止会话，禁止调用重算。
 
@@ -112,7 +122,7 @@ MP-0 Core 的多人只读证据已通过；退出/重新加入生命周期仍属
 搜索内检查点在 Gate 外直接等待非压缩后台 Gen2 primitive，不加入上述 deferred 链。primitive 先观察最新已完成 Gen2 的 index 与新 LOH 弱哨兵，仅在上一轮已完成却未覆盖哨兵时再次请求；不按定时器盲重发。全部异步等待不捕获调用方上下文。已发出的回收不能随搜索取消而放弃：确认完成后取消才落到默认 GC，超时或确认异常先显式阻塞排空，不能提前重建 NoGC。回收开始前的手动 GC 有独立完成信号，回收确认成功但搜索取消/超时不使它误报失败；开始后的手动请求与新的引用释放义务继续等待后续安全回收。日志分开记录请求模式、实际完成类型/index、CLR Concurrent 标志及阻塞超时兜底，不承诺每次都采用并发 GC 或没有暂停。
 ### 2.1 战前预测 API 隔离边界
 
-NoGC 因内存不足或意外收集退出后，`Recovery` 仅在 coordinator 的 `EnsureMemoryForNextCommit` 已排空边界尝试恢复。退出后的检查点若已确认完成 Gen2、且尚未在该堆上尝试失败的预留，可直接复用这份完成证据；已经失败的预留或首次准入失败则等待新的已完成 Gen2，观察间隔至少两秒。每 scope 最多三次预留尝试，后续尝试保持退避，不因另一轮退出而清零。当前物理余量的一半作为恢复预留上限，且已知下一次不可分割工作必须能放入。恢复上限延续到本 scope 的后续区域重建，配置值仍为原始上限。恢复不主动收集、不加入 deferred 链；新 scope、退出 NoGC 和 Dispose 使旧探针代次失效。显式关闭、不支持的平台/区域尺寸、不可分割提交主动回退、取消和收集确认超时不自动恢复。Search 仍只消费信号，原并行增减策略、接纳顺序和工作预算不变。
+NoGC 因内存不足或意外收集退出后，`Recovery` 仅在 coordinator 的 `EnsureMemoryForNextCommit` 已排空边界尝试恢复。退出后的检查点若已确认完成 Gen2、且尚未在该堆上尝试失败的预留，可直接复用这份完成证据；已经失败的预留或首次准入失败则等待新的已完成 Gen2，观察间隔至少两秒。每 scope 的预留尝试次数累计，不因另一轮退出而清零；可恢复的临时内存失败不设三次上限，按累计尝试次数退避，冷却最多 60 秒。当前物理余量的一半作为恢复预留上限，且已知下一次不可分割工作必须能放入。恢复上限延续到本 scope 的后续区域重建，配置值仍为原始上限。恢复不主动收集、不加入 deferred 链；新 scope、退出 NoGC 和 Dispose 使旧探针代次失效。显式关闭、不支持的平台/区域尺寸、不可分割提交主动回退、取消和收集确认超时不自动恢复。Search 仍只消费信号，原并行增减策略、接纳顺序和工作预算不变。
 
 PR #43 集成修正：Mod 使用独立文件复制，游戏程序继续使用硬链接；运行目录按主进程 PID 隔离。普通退出会移除大型游戏与 Mod 副本，保留会话诊断材料。启动快照缺失时 API 显式失败。当前账号目录由游戏路径 API 解析，并映射到禁用 Steam 的 worker 账号目录。求解设置按值冻结、进入状态令牌与 worker 签名，配置改变时重建 worker 并写入捕获值；整体期限从排队前开始，显式 Stop 会取消活动请求。
 
@@ -126,7 +136,8 @@ PR #43 集成修正：Mod 使用独立文件复制，游戏程序继续使用硬
 - 调用方可读取 worker PID、忙闲、工作集、私有内存、峰值工作集、静音标记与空闲期限，也可显式停止或重启/预热。默认空闲期限为两分钟；API 可在 worker 待命时把期限重新设为任意合法毫秒值并重新计时，或以 `null` 取消空闲关闭。单个确定请求或一个调用方组织的样本批次可以在 reusable 屏障后选择立即关闭；生命周期选择不改变结果缓存键。
 - 默认调用仍共享相同请求；显式可见的手动面板可要求独占取消和强制重算。独占取消会等待其精确拥有的 worker 进程结束后才完成，不能留下后台计算。
 - `PreCombatForecastWorker` 串行拥有一个 Windows 子进程会话。主进程初始化期间先在游戏目录下带所有权标记的 `.combatsolver-precombat/startup-mods` 中钉住本次会话选中的 Mod 文件，后续 worker 从这些固定文件镜像实际加载的全部 Mod；工坊目录在运行中被 Steam 替换不会改变 worker 的版本。worker 另行硬链接游戏文件、复制必要配置，并使用独立的 `APPDATA` / `LOCALAPPDATA`、关闭 Steam 和 NoGC。隔离设置中的主音量、BGM、音效和环境音均强制为零并回读验证。
-- 相同游戏根、用户根和 Mod 集合的连续请求会在同一子进程中依次执行。父进程只有在收到匹配 runId 的 result，并等到子进程返回主菜单、后台活动归零及 matching ready 屏障后才允许复用；达到调用方选择的空闲期限、显式释放、失败、超时、取消或主进程退出都会关闭拥有的进程。“一直维持”仍会在显式停止、失败或主进程退出时清理，不会留下脱离所有权的进程。
+- `PreCombatWorkerSession` 是 worker 生命周期 module，拥有请求文件发布、matching result → matching non-Held ready → best-effort request cleanup attempt → reuse 的状态与顺序。`PreCombatForecastWorker` 保留串行 Gate、环境镜像、请求参数与结果语义；`OwnedPreCombatWorkerProcess` adapter 只包装 StartWorker 返回的精确 Process，不按 PID 发现或接管对象。停止时先标为不可复用，在短状态锁之外确认退出；状态查询不等待五秒停止锁。只有确认退出后才释放会话所有权/句柄或删除运行目录；超时/停止失败继续保留原 owner，公开完成适配不能用 Cancelled/LiveStateChanged 掩盖此失败。空闲、签名改变、显式 Stop/Restart、取消与进程退出都复用同一停止 seam。
+- 相同游戏根、用户根和 Mod 集合的连续请求仍在同一子进程依次执行；签名、公开设置、隔离文件与 JSON 协议不变。仅新增生命周期所有权及结果/ready/cleanup 的 locality，不引入通用进程池或第二套战斗后端。生产源码链接合同与真实进程 adapter 合同提高该 module 的 depth 和测试 leverage，不能替代真实 Windows worker 验证。
 - 子进程由 `ScenarioBuilder` 直接恢复完整跑局，加载资源和地图后再次规范化序列化并核对精确哈希；只有通过后才按顺序补记已确定的中间非战斗地图历史，应用可选入战 HP，并用目标坐标、房间和节点类型进入遭遇。确定预测由此保持目标 `TotalFloor`、地图坐标、怪物局部种子、正常开战 Hook、首回合初始化和搜索流程一致。假设样本则在哈希核对之后、怪物生成之前注入独立样本 RNG。中间房间的购买、奖励、锻造和其他玩家状态变化不会被擅自执行，必须由调用方标为条件场景。
 
 `src/Api` 禁止直接调用 `SolverController.RequestSearch`、`CombatManager.SetUpCombat` 或 `RunManager.EnterRoomDebug`。这些静态边界由 Windows/Linux 两份 `verify-refactor-boundaries` 脚本共同检查。`Entry.IsPreCombatWorker` 启动时一次读取 `COMBATSOLVER_PRECOMBAT_WORKER=1`，统一关闭嵌套 API 和 Dispatcher 的战斗 UI 监控；worker 仍排空主线程回调。模组文件在 Entry 初始化时留存，既有请求入口保留初始化失败后的重试。
@@ -204,6 +215,7 @@ Smart 层间使用 `SmartLayerMemoryForecast` 的同窗分配和转移高水位�
 - `LiveCollectionGuard` 在主线程建根窗口核对真实卡牌列表版本，同数量写入也拒绝该根；`DynamicVarSetAccess` 缓存字段读取委托，字段缺失时使用公开枚举，不让 worker 回读 live 值。
 - 内嵌模拟引擎负责可 Fork 的状态、卡牌/遗物/Power mirror 和确定性 RNG；原生兼容反射与 Harmony 参数形状集中在 `src/Compatibility/`，不泄漏到 Search。
 - `SolverController` 及其 SearchLifecycle、Deployment、Continuation partial 拥有主线程会话、取消、部署和跨回合续用；`SolverCombatSession`、`SolverSearchSession`、`SolverDeploymentSession` 分别持有对应状态。
+- `SolverCombatSession` 统一接受、刷新和清理最新路线的 result / live stamp / invalidation version；调度 version 不充当路线失效身份，跨回合 continuation 仍可独立保留。`PlanCardChoice` 提供按执行字段及顺序比较的值语义，供路线诊断与多人前缀复核共用；显示标题不参与身份，各调用方仍保留自己的动作字段合同。
 - `SolverOverlaySnapshot` 是 UI 的单向输入。面板拥有输入与设置提交，部署仍由 Runtime 驱动；控件不得持有或重新读取 worker/live 状态。
 
 ## 5. Unattended 测试边界
