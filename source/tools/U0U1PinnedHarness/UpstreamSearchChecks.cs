@@ -101,6 +101,7 @@ internal static class UpstreamSearchChecks
             "Portfolio admission overflowed instead of saturating.");
         List<object> rows = [];
         int requests = 0, replays = 0;
+        CheckPotionCostSnapshots(firstRoot, names, damage, plain, profile, defend);
         MethodInfo summary = typeof(CombatSearchCoordinator).GetMethod("BuildInterimResult",
             BindingFlags.NonPublic | BindingFlags.Static)!;
         SolverInterimResult Quality(CombatRootSnapshot root, SearchPolicySnapshot policy, SolverResult result)
@@ -153,6 +154,9 @@ internal static class UpstreamSearchChecks
                         && replay.CumulativePlayerHpLost == result.Snapshot.CumulativePlayerHpLost
                         && replay.AllEnemiesDead == result.Snapshot.AllEnemiesDead,
                         "The selected route's independent replay disagreed with its final state.");
+                    var uses = ((SimulatedCombatState)replay.Simulator.State.CombatState).PotionUses;
+                    Check(replay.ExplicitPotionStrategicCost == uses.Where(use => !use.Automatic).Sum(use => use.StrategicHpCost),
+                        "Replayed explicit potion cost disagreed with the branch use ledger.");
                     replays++;
                 }
                 finally { replay.ReleaseSimulator(); }
@@ -204,5 +208,57 @@ internal static class UpstreamSearchChecks
             new { requests, replays, evidence = "pinned-offline", nativeMvid = PinnedHealingBound.AuditedNativeMvid,
                 rows }, new JsonSerializerOptions { WriteIndented = true }));
         return $"UpstreamSearch PASS requests={requests} independent_replays={replays}; native/UI/Host-Client unverified";
+    }
+
+    private static void CheckPotionCostSnapshots(CombatRootSnapshot root, SolverDisplayNames names,
+        BattleDamageSnapshot damage, SearchPolicySnapshot policy, SolverSearchProfile profile, PlanAction defend)
+    {
+        var player = root.PlayerIdentity;
+        // Exercise the actual branch ledger and Snapshot/Fork path without UI or
+        // triggering native death animations. Automatic consumption itself is a
+        // ledger input here, not a claim about native death-preventer timing.
+        foreach (string scenario in new[] { "empty", "manual", "automatic", "mixed", "reused-slot" })
+        {
+            CombatBeamSolver solver = new(root, names, damage, policy, searchProfile: profile);
+            SimulationSnapshot snapshot = solver.ReplayDiagnosticActionWithR0Memo(defend, prepareParent: sim =>
+            {
+                var combat = (SimulatedCombatState)sim.State.CombatState;
+                void Consume(PotionModel potion, bool automatic)
+                {
+                    Check(combat.TryProcurePotion(player, potion), "Could not prepare branch potion.");
+                    int slot = Enumerable.Range(0, root.PotionSlotCount)
+                        .Single(index => combat.GetPotionAtSlot(player, index)?.Id == potion.Id);
+                    if (automatic) combat.ConsumePotion(combat.GetPotionAtSlot(player, slot)!);
+                    else combat.ConsumePotion(player, slot);
+                }
+                if (scenario is "manual" or "reused-slot") Consume(ModelDb.Potion<FirePotion>(), false);
+                if (scenario == "reused-slot") Consume(ModelDb.Potion<FirePotion>(), false);
+                if (scenario == "mixed") Consume(ModelDb.Potion<SwiftPotion>(), false);
+                if (scenario is "automatic" or "mixed") Consume(ModelDb.Potion<FairyInABottle>(), true);
+            });
+            try
+            {
+                int expected = scenario switch {
+                    "manual" => SolverWeights.PotionMinimumHpSaved,
+                    "mixed" => SolverWeights.PotionHighValueHpSaved,
+                    "reused-slot" => 2 * SolverWeights.PotionMinimumHpSaved,
+                    _ => 0
+                };
+                int automaticCost = scenario is "automatic" or "mixed" ? SolverWeights.PotionMinimumHpSaved : 0;
+                Check(snapshot.ExplicitPotionStrategicCost == expected
+                    && snapshot.PotionStrategicCost == expected + automaticCost,
+                    $"{scenario}: automatic consumption leaked into explicit cost or manual costs were lost.");
+                var parent = (SimulatedCombatState)snapshot.Simulator.State.CombatState;
+                int originalUses = parent.PotionUses.Count;
+                var child = (SimulatedCombatState)snapshot.Simulator.Fork().State.CombatState;
+                Check(child.TryProcurePotion(player, ModelDb.Potion<FirePotion>()), "Could not prepare fork potion.");
+                child.ConsumePotion(player, 0);
+                Check(parent.PotionUses.Count == originalUses && child.PotionUses.Count == originalUses + 1
+                    && snapshot.ExplicitPotionStrategicCost == expected,
+                    "A child potion use changed the parent ledger or frozen cost.");
+            }
+            finally { snapshot.ReleaseSimulator(); }
+        }
+        Console.WriteLine("POTION_COST_SNAPSHOT_PASS empty/manual/automatic/mixed/reused-slot/fork-isolation");
     }
 }

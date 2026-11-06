@@ -20,6 +20,8 @@
 
 多人交错合同直接测试主线程纯状态边界，未覆盖完整 Controller 或传输层。2026-11-05 的隔离副本变异检查分别去掉过期版本保护、将 debounce 缩短为 199ms、放行重复观察和放行取消后 AcceptAction；四个副本均触发可重放断言失败。完整 35 组 L1、Release 与 `upstream-search` 17 请求/17 重放通过；符号链接权限子项仍明确跳过。
 
+`upstream-search` 同时核对显式药水成本快照：空记录、普通主动消耗、自动消耗、高价主动+自动混合、同一槽位连续消耗，以及 Fork 后父 ledger/快照隔离。自动消耗由测试直接输入 ledger，不是原生救命药水时序证据。成本快照优化前后 17 请求的完整动作、质量、工作量及优化计数相同；JSON 对照只排除 elapsed，末态在各构建内部独立重放验证。
+
 `U0U1PinnedHarness rng-restore` 对照旧 RNG 还原的计数器、状态、后续随机值及父状态隔离；完整请求对照复用 `request-hydration-benchmark-off`，高计数器压力夹具为 `multi-hit-high-counter`。不替代实机搜索或退出取证验证。
 
 `U0U1PinnedHarness turn-based-energy` 对照 PaelsFlesh / Bread 原生最大能量：144 次根/未来/live 回合及熔化查询、1280 次 DOP=4 查询、4 次完整 EndTurn 重放，核对全分支状态/RNG及真实回合隔离。`request-hydration` 另覆盖异常成员 Faulted、释放与重复 Dispose 的单次贡献。

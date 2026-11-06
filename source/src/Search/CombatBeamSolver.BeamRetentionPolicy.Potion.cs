@@ -45,7 +45,7 @@ internal sealed partial class CombatBeamSolver
 
         private FinalPolicyQualificationFacts BuildFinalPolicyQualificationFacts(SearchNode node)
         {
-            int explicitPotionStrategicCost = 0;
+            int explicitPotionStrategicCost = node.Snapshot.ExplicitPotionStrategicCost;
             int explicitAmbergrisCount = 0;
             for (SearchNode? cursor = node; cursor?.Action is { } action; cursor = cursor.Parent)
             {
@@ -53,9 +53,6 @@ internal sealed partial class CombatBeamSolver
                     continue;
                 if (string.IsNullOrEmpty(action.PotionId))
                     throw new InvalidOperationException("用药动作缺少药水 ID。");
-                explicitPotionStrategicCost += _run.PotionStrategicCosts.Get(
-                    action.PotionId,
-                    _renewablePotionShapedRock);
                 if (string.Equals(action.PotionId, "AMBERGRIS", StringComparison.Ordinal))
                     explicitAmbergrisCount++;
             }

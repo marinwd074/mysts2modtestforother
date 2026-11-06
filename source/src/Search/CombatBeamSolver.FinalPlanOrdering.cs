@@ -210,11 +210,7 @@ internal sealed partial class CombatBeamSolver
                             renewablePotionShapedRock,
                             _potionStrategicCosts)
                         : new ForcedPotionUseEvaluation(true, 0, 0, 0);
-                    int explicitPotionStrategicCost = candidate.Node.Actions
-                        .Where(action => action.Kind == PlanActionKind.UsePotion)
-                        .Sum(action => _potionStrategicCosts.Get(
-                            action.PotionId!,
-                            renewablePotionShapedRock));
+                    int explicitPotionStrategicCost = candidate.Snapshot.ExplicitPotionStrategicCost;
                     int optionalPotionCount = Math.Max(
                         0,
                         explicitPotionCount - forced.ForcedUseCount);

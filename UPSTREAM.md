@@ -21,6 +21,18 @@ The instance observer accepts monotonic time; the production facade retains the 
 Schedules cover duplicate observations, stale read/confirm races, cancellation, turn/route/world identities,
 at-most-once completion/EndTurn and independent observer/local authority boundaries. Failure output includes a replay ID.
 
+Selectively adapt the cost-snapshot idea from upstream
+[6e62cd1b](https://github.com/Torch1230/CombatSolver/commit/6e62cd1b375ac02e45e2d0f4cbb301cc18b69431):
+capture `ExplicitPotionStrategicCost` in the existing branch-ledger aggregation loop and use the frozen value
+in beam final-policy qualification and final route ordering. This removes repeated ID-price lookups and one
+action-list sum per candidate without retaining the simulator or changing request budgets.
+Automatic consumption stays in total cost but is excluded from explicit cost.
+This is only the reusable cost aggregation, **not** the full Entropic Brew provenance port below:
+generated-potion pricing, forced-slot matching, Smart layer admission and retained-route policy remain unchanged.
+Pinned checks cover empty/manual/automatic/mixed/reused-slot ledgers and Fork isolation.
+The before/after 17-request evidence has identical complete routes, quality, work and optimization metrics
+(excluding elapsed time); each build independently replays all 17 final states. No general speedup is claimed.
+
 ## Current integration (2026-11-02)
 
 Compared upstream `53c26b26c50bec027de8f7d2c76deb223cd6971d` through

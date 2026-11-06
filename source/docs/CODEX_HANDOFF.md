@@ -19,6 +19,8 @@
 
 ## 上游适配
 
+2026-11-05 复查上游主线仍为 `5c773caa`。本轮从 `6e62cd1b` 仅适配显式药水成本快照：已有 ledger 聚合循环同时缓存显式成本，Beam 最终资格和最终排序直接读取，自动触发药水仍计总成本但不混入显式成本。五类 ledger 场景及 Fork 隔离通过；前后 17 个固定请求的完整路线、质量、节点/转移和优化计数一致，双方各 17 次独立末态重放通过。不扩大预算、不宣称普遍提速；Entropic Brew 生成物免费、强制槽位与保路成本的完整适配仍未完成。
+
 2026-11-02 对比到 `5c773caaec742bc55588bc9ee21c361326a732f0`（上游 0.50.1 / 游戏 0.111.0），选择性适配卡牌 COW 身份、牌堆移动失效、星费清理、批量变换/选牌顺序、空手触发作用域、终局监听器捕获、格挡溢出、手牌上限身份、动态变量访问桥和根集合稳定性。保留 pinned 0.107.1、本地玩家边界及全 RNG 诊断；未整仓合并。已同步 origin/main 的候选身份修复，并修正相关旧夹具、加入错误版本拒绝和动作列表隔离断言。
 
 状态适配的 Release 与 `upstream-port` 12 组合同、card-choice-identity / continuation-replay / completion-scope / rolling-review / request-hydration / choice-rng / continuation-audit 通过。原生选牌只核对 pinned 字段形状，真实 UI 时序、完整原生效果/执行检查点差分与 Host/Client 未在本轮验证。额外回合/金币/临时属性等原生语义及其余 GC/UI/回放改动仍需独立适配，明细见根 `UPSTREAM.md`。既有 NoGC 恢复与 AdoptRoute 实机未完成项继续保留。

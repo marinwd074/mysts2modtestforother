@@ -573,6 +573,7 @@ internal sealed partial class CombatBeamSolver
         IReadOnlyList<PredictedPotionUse> potionUses = combat.PotionUses;
         int potionUseCount = potionUses.Count;
         int potionStrategicCost = 0;
+        int explicitPotionStrategicCost = 0;
         int automaticPotionUseCount = 0;
         for (int potionIndex = 0; potionIndex < potionUses.Count; potionIndex++)
         {
@@ -580,6 +581,8 @@ internal sealed partial class CombatBeamSolver
             potionStrategicCost = checked(potionStrategicCost + use.StrategicHpCost);
             if (use.Automatic)
                 automaticPotionUseCount++;
+            else
+                explicitPotionStrategicCost = checked(explicitPotionStrategicCost + use.StrategicHpCost);
         }
         SearchMeasurement reachableHandMeasurement = _run.Performance.Begin();
         (int reachableHandValue, int zeroCostPlayableCount, int playableAttackCount) =
@@ -669,6 +672,7 @@ internal sealed partial class CombatBeamSolver
             simulator.TerminalStamp)
         {
             StateEvaluationScore = stateEvaluationScore,
+            ExplicitPotionStrategicCost = explicitPotionStrategicCost,
             GrowthHpCredit = growthHpCredit,
             RelicCounters = relicCounters,
             GrowthRewards = growthRewards,

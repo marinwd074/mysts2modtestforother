@@ -1504,6 +1504,9 @@ internal sealed class SimulationSnapshot(
     public int PotionUseCount { get; } = potionUseCount;
     public int PlayableAttackCount { get; init; }
     public int PotionStrategicCost { get; } = potionStrategicCost;
+    // Captured from the branch's use ledger; ranking must not reconstruct paid
+    // costs from potion IDs or accidentally include automatic death prevention.
+    public int ExplicitPotionStrategicCost { get; init; }
     public int AutomaticPotionUseCount { get; } = automaticPotionUseCount;
     public bool CanStillTriggerPocketwatch => PocketwatchCardThreshold >= 0
         && PocketwatchCardsPlayedThisTurn <= PocketwatchCardThreshold;
