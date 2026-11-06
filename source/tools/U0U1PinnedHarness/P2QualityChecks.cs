@@ -14,7 +14,7 @@ namespace U0U1PinnedHarness;
 internal static class P2QualityChecks
 {
     internal static string Run(CombatState live, SolverDisplayNames names,
-        SearchPolicySnapshot captured, string fixture, string output)
+        SearchPolicySnapshot captured, string fixture, string output, string? prefixPath = null)
     {
         if (fixture is not ("setup-single" or "setup-mp" or "retained-mp" or "delayed-mp" or "defense-mp"))
             throw new ArgumentException("Unknown P2 quality fixture: " + fixture);
@@ -70,6 +70,34 @@ internal static class P2QualityChecks
         CombatRootSnapshot root = CombatRootSnapshot.Capture(live);
         var damage = BattleDamageTracker.Observe(live);
         string before = ContinuationStamp.CaptureLive(live).StateText;
+        object? prefixEvidence = null;
+        PlanAction[]? prefix = null;
+        if (prefixPath != null)
+        {
+            if (fixture != "delayed-mp") throw new ArgumentException("Tail comparison only supports the delayed fixture.");
+            using var document = JsonDocument.Parse(File.ReadAllText(prefixPath));
+            var recorded = document.RootElement;
+            if (recorded.GetProperty("Root").GetString() != before)
+                throw new InvalidOperationException("Recorded route belongs to a different fixture root.");
+            prefix = recorded.GetProperty("Actions").Deserialize<PlanAction[]>()!;
+            var prefixVerifier = new CombatBeamSolver(root, names, damage, policy, searchProfile: profile);
+            var predicted = prefixVerifier.ReplayDiagnosticPrefix(prefix);
+            try
+            {
+                string predictedText = prefixVerifier.CaptureDiagnosticContinuation(predicted).StateText;
+                if (predictedText != recorded.GetProperty("FinalState").GetString())
+                    throw new InvalidOperationException("Recorded prefix no longer replays to its recorded state.");
+                var adopted = new CombatBeamSolver(root, names, damage, policy, searchProfile: profile,
+                    continuationRouteReplayActions: prefix).Solve();
+                if (adopted.ExpandedNodes != 0 || adopted.EvaluationWindow != predicted.EvaluationWindow
+                    || JsonSerializer.Serialize(adopted.BestNode.Actions) != JsonSerializer.Serialize(prefix))
+                    throw new InvalidOperationException("Ordinary route adoption unexpectedly searched beyond its prefix.");
+                prefixEvidence = new { Source = Path.GetFullPath(prefixPath), Actions = prefix.Length,
+                    predicted.CumulativePlayerHpLost, StateMatches = true, AdoptionExpanded = adopted.ExpandedNodes };
+            }
+            finally { predicted.ReleaseSimulator(); }
+            policy = policy with { RoutePolicy = SearchRoutePolicy.SinglePlayerFullRoute };
+        }
         var verifier = new CombatBeamSolver(root, names, damage, policy, searchProfile: profile);
         var initial = verifier.ReplayDiagnosticPrefix([]);
         int initialDelayed = initial.DelayedDamageValue;
@@ -93,9 +121,19 @@ internal static class P2QualityChecks
             }
             finally { defended.ReleaseSimulator(); }
         }
-        SolverResult result = new CombatBeamSolver(root, names, damage, policy, searchProfile: profile).Solve();
+        SolverResult result = new CombatBeamSolver(root, names, damage, policy, searchProfile: profile,
+            continuationRouteReplayActions: prefix, continueRouteSearchForTesting: prefix != null).Solve();
         if (result.BoundaryReason == SearchBoundaryReason.TimeLimit || result.ExpandedNodes > profile.MaxExpandedNodes)
             throw new InvalidOperationException("P2 comparison was not bounded by its fixed logical budget.");
+        // PlanAction contains collection-valued annotations; compare their values,
+        // not record equality of freshly materialized collection references.
+        if (prefix != null && (JsonSerializer.Serialize(result.BestNode.Actions.Take(prefix.Length).ToArray())
+                != JsonSerializer.Serialize(prefix) || result.ExpandedNodes < prefix.Length))
+        {
+            File.WriteAllText(Path.Combine(output, "prefix-mismatch.json"), JsonSerializer.Serialize(
+                new { Expected = prefix, Actual = result.BestNode.Actions.Take(prefix.Length).ToArray(), result.ExpandedNodes }));
+            throw new InvalidOperationException("Tail search changed its prefix or failed to charge replay work.");
+        }
         var replay = verifier.ReplayDiagnosticPrefix(result.BestNode.Actions);
         try
         {
@@ -106,9 +144,9 @@ internal static class P2QualityChecks
                 throw new InvalidOperationException("Selected P2 route failed independent replay/root isolation.");
             if (fixture == "defense-mp" && (replay.PlayerDead || replay.EvaluationWindow is not { CoversTarget: true }))
                 throw new InvalidOperationException("Search lost the independently verified defense route.");
-            File.WriteAllText(Path.Combine(output, fixture + ".json"), JsonSerializer.Serialize(new
+            File.WriteAllText(Path.Combine(output, fixture + (prefixPath == null ? "" : "-tail") + ".json"), JsonSerializer.Serialize(new
             {
-                Fixture = fixture, DefenseWitness = defenseWitness,
+                Fixture = fixture, DefenseWitness = defenseWitness, Prefix = prefixEvidence,
                 DllSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(typeof(CombatBeamSolver).Assembly.Location))),
                 Root = root.ContinuationStamp.StateText, Profile = profile, result.EvaluationWindow,
                 result.ExpandedNodes, Boundary = result.BoundaryReason.ToString(),
@@ -121,4 +159,5 @@ internal static class P2QualityChecks
         }
         finally { replay.ReleaseSimulator(); }
     }
+
 }

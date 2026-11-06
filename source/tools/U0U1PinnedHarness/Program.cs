@@ -65,7 +65,7 @@ internal static class Program
             or "request-hydration-benchmark-on" or "request-hydration-benchmark-off";
         bool requestHydrationBenchmark = requestHydrationOnly && args[0] != "request-hydration";
         string outputDirectory = ParseOutput(multiplayerRefreshOnly || entropicCostOnly || upstreamSearchOnly || upstreamPortOnly || memoryDisplayOnly || cardChoiceIdentityOnly || modelIdCacheOnly || darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicTailOnly || p2QualityOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
-            allowHydrationOptions: requestHydrationBenchmark || p2QualityOnly);
+            allowHydrationOptions: requestHydrationBenchmark || p2QualityOnly, allowRoutePrefix: p2QualityOnly);
         Directory.CreateDirectory(outputDirectory);
         if (multiplayerRefreshOnly || p2QualityOnly && args.Any(value => value.EndsWith("-mp", StringComparison.Ordinal)))
             Environment.SetEnvironmentVariable(SolverSessionCapabilities.MultiplayerModeEnvironmentVariable, "advisor");
@@ -236,7 +236,9 @@ internal static class Program
             }
             if (p2QualityOnly)
             {
-                Console.WriteLine(P2QualityChecks.Run(combat, names, captured, p2Fixture, outputDirectory));
+                int prefixIndex = Array.IndexOf(args, "--prefix");
+                Console.WriteLine(P2QualityChecks.Run(combat, names, captured, p2Fixture, outputDirectory,
+                    prefixIndex >= 0 ? args[prefixIndex + 1] : null));
                 return 0;
             }
             if (multiplayerRefreshOnly)
@@ -4383,7 +4385,7 @@ internal static class Program
             R1TransitionHydrationCache = null, RequestTransitionHydrationCache = null,
         };
 
-    private static string ParseOutput(string[] args, bool allowHydrationOptions = false)
+    private static string ParseOutput(string[] args, bool allowHydrationOptions = false, bool allowRoutePrefix = false)
     {
         string output = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
@@ -4392,10 +4394,11 @@ internal static class Program
         {
             if (allowHydrationOptions && args[index] == "--measure")
                 continue;
-            if (allowHydrationOptions && args[index] is "--fixture" or "--iterations" or "--dop")
+            if (allowHydrationOptions && args[index] is "--fixture" or "--iterations" or "--dop"
+                || allowRoutePrefix && args[index] == "--prefix")
             {
                 if (++index >= args.Length)
-                    throw new ArgumentException("Missing hydration benchmark option value.");
+                    throw new ArgumentException("Missing diagnostic option value.");
                 continue;
             }
             if (args[index] != "--out")

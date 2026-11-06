@@ -105,6 +105,9 @@ internal sealed partial class CombatBeamSolver
             && !dead
             && !combat.HasPendingChoice
             && simulator.TerminalStamp is { Outcome: CombatTerminalOutcome.Victory };
+        // All combat-only future values share this actual terminal boundary. A
+        // rolling-horizon boundary is not terminal: pending/setup value survives it.
+        bool hasFutureCombat = !won && !dead;
         CoverageSummary coverage = GetCoverageSummary(simulator);
         IReadOnlyList<PredictionGap> predictionGaps = coverage.Gaps;
         bool risk = coverage.HasUncompensatedRisk;
@@ -263,7 +266,7 @@ internal sealed partial class CombatBeamSolver
         int retainedAttackValue = 0;
         foreach (PredictedCard liveCard in liveCards)
         {
-            if (liveCard.Preview.Type != CardType.Attack)
+            if (!hasFutureCombat || liveCard.Preview.Type != CardType.Attack)
                 continue;
             retainedAttackValue += Math.Max(
                 1,
@@ -294,7 +297,7 @@ internal sealed partial class CombatBeamSolver
             PowerModel power = effectivePowers[powerIndex];
             // A terminal battle has no future combat-power payoff. Actual growth,
             // healing and resource costs are accounted for separately above.
-            contributes[powerIndex] = !won && !dead
+            contributes[powerIndex] = hasFutureCombat
                 && StrategicEffectMirrors.Contributes(power, _player.Creature);
             if (!contributes[powerIndex])
                 continue;
@@ -398,7 +401,7 @@ internal sealed partial class CombatBeamSolver
             persistentSetupTraits |= PersistentPowerSetupTrait(power);
         }
         int persistentBuffValue = strategicEffects.RetentionValue;
-        if (playerState.OrbQueue.Orbs.Count > 0)
+        if (hasFutureCombat && playerState.OrbQueue.Orbs.Count > 0)
         {
             persistentSetupTraits |= PersistentSetupTraits.OrbEngine;
             persistentBuffValue += OrbRetentionValue(
@@ -410,8 +413,9 @@ internal sealed partial class CombatBeamSolver
         SearchMeasurement futureResourcesMeasurement = _run.Performance.Begin();
         int latentSetupValue = 0;
         PersistentSetupTraits latentSetupTraits = PersistentSetupTraits.None;
-        foreach (PredictedCard latentCard in liveCards)
+        for (int cardIndex = 0; hasFutureCombat && cardIndex < liveCards.Count; cardIndex++)
         {
+            PredictedCard latentCard = liveCards[cardIndex];
             CardModel preview = latentCard.Preview;
             PersistentSetupTraits trait = LatentCardSetupTrait(preview);
             latentSetupTraits |= trait;
@@ -421,10 +425,10 @@ internal sealed partial class CombatBeamSolver
                 latentSetupValue += LatentCardSetupValue(preview);
             }
         }
-        int replayPotentialValue = ReplayPotentialValue(liveCards);
+        int replayPotentialValue = hasFutureCombat ? ReplayPotentialValue(liveCards) : 0;
         int retainedHandValue = 0;
         IReadOnlyList<PredictedCard> handCards = playerState.Hand.Cards;
-        for (int cardIndex = 0; cardIndex < handCards.Count; cardIndex++)
+        for (int cardIndex = 0; hasFutureCombat && cardIndex < handCards.Count; cardIndex++)
         {
             PredictedCard card = handCards[cardIndex];
             if (!card.Preview.ShouldRetainThisTurn)
@@ -434,7 +438,7 @@ internal sealed partial class CombatBeamSolver
                 1,
                 (int)Math.Ceiling(CardChoiceSupport.CardValue(card.Preview) * 2d)));
         }
-        int freeCardOpportunityValue = FreeCardOpportunityValue(
+        int freeCardOpportunityValue = hasFutureCombat ? FreeCardOpportunityValue(
             simulator,
             combat,
             playerState,
@@ -445,8 +449,8 @@ internal sealed partial class CombatBeamSolver
                 combat,
                 playerState,
                 _player.Creature,
-                _routePolicy);
-        int summonNextTurn = combat.GetAmount<SummonNextTurnPower>(_player.Creature);
+                _routePolicy) : 0;
+        int summonNextTurn = hasFutureCombat ? combat.GetAmount<SummonNextTurnPower>(_player.Creature) : 0;
         int summonNextTurnValue = 0;
         if (summonNextTurn != 0)
         {
@@ -459,20 +463,20 @@ internal sealed partial class CombatBeamSolver
             summonNextTurnValue = summonNextTurn
                 * (4 + Math.Min(12, ostyAttackCardCount * 2));
         }
-        int futureResourceValue = combat.GetAmount<EnergyNextTurnPower>(_player.Creature) * 16
+        int futureResourceValue = hasFutureCombat ? combat.GetAmount<EnergyNextTurnPower>(_player.Creature) * 16
             + combat.GetAmount<DrawCardsNextTurnPower>(_player.Creature) * 8
             + combat.GetAmount<StarNextTurnPower>(_player.Creature) * 8
             + combat.GetAmount<RetainHandPower>(_player.Creature) * 4
             + summonNextTurnValue
             + retainedHandValue
-            + freeCardOpportunityValue;
+            + freeCardOpportunityValue : 0;
         Creature? currentOsty = combat.GetOsty(_player);
         int ostyHp = currentOsty == null
             ? 0
             : simulator.State.GetCreature(currentOsty).CurrentHp;
         int ostyMaxHp = combat.GetOstyMaxHp(simulator, _player);
         int soulCount = 0;
-        for (int cardIndex = 0; cardIndex < liveCards.Count; cardIndex++)
+        for (int cardIndex = 0; hasFutureCombat && cardIndex < liveCards.Count; cardIndex++)
         {
             if (liveCards[cardIndex].Preview is Soul)
                 soulCount++;
@@ -484,7 +488,7 @@ internal sealed partial class CombatBeamSolver
         // Overkill on one enemy must not look like progress against the others.
         IReadOnlyList<Creature> knownEnemies = combat.KnownEnemies;
         int delayedDamageValue = 0;
-        for (int enemyIndex = 0; enemyIndex < knownEnemies.Count; enemyIndex++)
+        for (int enemyIndex = 0; hasFutureCombat && enemyIndex < knownEnemies.Count; enemyIndex++)
         {
             Creature enemy = knownEnemies[enemyIndex];
             if (!combat.ContainsCreature(enemy) || !simulator.State.GetCreature(enemy).IsAlive)
@@ -496,11 +500,11 @@ internal sealed partial class CombatBeamSolver
             delayedDamageValue = checked(delayedDamageValue
                 + StrategicEffectModel.EnemyBoundDelayedValue(currentHp, poison, demise, doom));
         }
-        int reactiveDamageValue = Math.Max(
+        int reactiveDamageValue = hasFutureCombat ? Math.Max(
             0,
-            combat.GetAmount<SleightOfFleshPower>(_player.Creature));
+            combat.GetAmount<SleightOfFleshPower>(_player.Creature)) : 0;
         bool hasBlockDamagePayoff = false;
-        for (int cardIndex = 0; cardIndex < liveCards.Count; cardIndex++)
+        for (int cardIndex = 0; hasFutureCombat && cardIndex < liveCards.Count; cardIndex++)
         {
             if (liveCards[cardIndex].Preview is not BodySlam)
                 continue;

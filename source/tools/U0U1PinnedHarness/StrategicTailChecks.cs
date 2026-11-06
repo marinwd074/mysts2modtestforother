@@ -93,6 +93,21 @@ internal static class StrategicTailChecks
             }
         }
         Check(ContinuationStamp.CaptureLive(live).StateText == before, "Tail replay mutated the live fixture.");
+        try
+        {
+            _ = new CombatBeamSolver(root, names, damage,
+                policy with { RoutePolicy = SearchRoutePolicy.SinglePlayerFullRoute },
+                searchProfile: SolverSearchProfile.Default with { MaxExpandedNodes = 1, SoftTimeBudgetMilliseconds = 20_000 },
+                continuationRouteReplayActions: [new(PlanActionKind.EndTurn, root.StartTurnNumber),
+                    new(PlanActionKind.EndTurn, root.StartTurnNumber + 1)],
+                continueRouteSearchForTesting: true).Solve();
+            throw new InvalidOperationException("Diagnostic continuation bypassed its replay node budget.");
+        }
+        catch (ContinuationSeedRejectedException error)
+        {
+            Check(error.Reason == "route_node_budget" && ContinuationStamp.CaptureLive(live).StateText == before,
+                "Budget-limited continuation changed its rejection or mutated the root.");
+        }
 
         Check(StrategicEffectModel.EnemyBoundDelayedValue(10, 100, 100, 100) == 10
             && StrategicEffectModel.EnemyBoundDelayedValue(10, 2, 3, 5) == 7,
@@ -118,22 +133,36 @@ internal static class StrategicTailChecks
         Check(player.AddPotionInternal(ModelDb.Potion<FirePotion>().ToMutable(), 0, true).success,
             "Terminal fixture potion setup failed.");
         live.Enemies.Single().SetCurrentHpInternal(1);
+        ModelDb.Power<EnergyNextTurnPower>().ToMutable(0).ApplyInternal(player.Creature, 1, false);
+        ModelDb.Power<DrawCardsNextTurnPower>().ToMutable(0).ApplyInternal(player.Creature, 1, false);
+        player.PlayerCombatState!.Hand.Cards.First().AddKeyword(MegaCrit.Sts2.Core.Entities.Cards.CardKeyword.Retain);
         root = CombatRootSnapshot.Capture(live);
         before = ContinuationStamp.CaptureLive(live).StateText;
         var terminalSolver = new CombatBeamSolver(root, names, damage,
             policy with { RoutePolicy = SearchRoutePolicy.SinglePlayerFullRoute });
+        var pending = terminalSolver.ReplayDiagnosticPrefix([]);
+        replays++;
+        try
+        {
+            Check(!pending.AllEnemiesDead && pending.FutureResourceValue > 0 && pending.RetainedAttackValue > 0,
+                "Ongoing battle lost its pending resource/retained-card value.");
+        }
+        finally { pending.ReleaseSimulator(); }
         var won = terminalSolver.ReplayDiagnosticPrefix([new(PlanActionKind.UsePotion, root.StartTurnNumber,
             TargetIndex: 0, TargetCombatId: live.Enemies.Single().CombatId, PotionSlot: 0, PotionId: "FIRE_POTION")]);
         replays++;
         try
         {
             Check(won.AllEnemiesDead && won.StrategicEffects == StrategicEffectVector.Zero
+                && won.FutureResourceValue == 0 && won.RetainedAttackValue == 0 && won.ReplayPotentialValue == 0
+                && won.PersistentBuffValue == 0 && won.LatentSetupValue == 0 && won.DelayedDamageValue == 0
+                && won.OffensiveProgressValue == 0
                 && ContinuationStamp.CaptureLive(live).StateText == before,
-                "Completed battle retained hypothetical power benefits or mutated the root.");
+                "Completed battle retained hypothetical combat benefits or mutated the root.");
         }
         finally { won.ReleaseSimulator(); }
         File.WriteAllText(Path.Combine(output, "strategic-tail.json"), JsonSerializer.Serialize(
-            new { Checks = checks, NativeModelReplays = replays, Cases = evidence },
+            new { Checks = checks, NativeModelReplays = replays, BudgetLimitedContinuations = 1, Cases = evidence },
             new JsonSerializerOptions { WriteIndented = true }));
         return $"StrategicTail PASS checks={checks} native_model_replays={replays}";
     }

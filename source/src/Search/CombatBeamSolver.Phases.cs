@@ -1458,8 +1458,11 @@ internal sealed partial class CombatBeamSolver
                 continue;
             }
 
+            if (_continueRouteSearchForTesting && (_continuationRouteReplayActions == null
+                || policy.RoutePolicy != SearchRoutePolicy.SinglePlayerFullRoute))
+                throw new InvalidOperationException("Diagnostic continuation requires a route and a full-battle search target.");
             SearchNode? compatibleRoot = _continuationRouteReplayActions is { } replayActions
-                ? ReplayContinuationRoute(root, replayActions, stopwatch)
+                ? ReplayContinuationRoute(root, replayActions, stopwatch, chargeCompletionWork: _continueRouteSearchForTesting)
                 : ApplyFixedPrefix(root);
             if (compatibleRoot == null)
                 continue;
@@ -1479,7 +1482,9 @@ internal sealed partial class CombatBeamSolver
         member.PotionFreeBoundaryFallbackScore = double.NegativeInfinity;
         member.PotionBoundaryFallback = null;
         member.PotionBoundaryFallbackScore = double.NegativeInfinity;
-        if (_continuationRouteReplayActions != null)
+        // Diagnostics can evaluate the unmodelled tail using this same search. Normal
+        // route adoption still materializes only the reviewed replay and never extends it.
+        if (_continuationRouteReplayActions != null && !_continueRouteSearchForTesting)
         {
             SearchNode replayed = member.Fallback;
             FinalPlanSelection replayOrdering = FinalOrdering.Select(

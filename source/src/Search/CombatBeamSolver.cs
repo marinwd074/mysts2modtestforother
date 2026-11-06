@@ -47,7 +47,8 @@ internal sealed partial class CombatBeamSolver(
     PrimarySearchIncumbent? primaryIncumbent = null,
     bool reserveScenarioReevaluationBudget = true,
     bool continuationSeedProbe = false,
-    IReadOnlyList<PlanAction>? continuationRouteReplayActions = null)
+    IReadOnlyList<PlanAction>? continuationRouteReplayActions = null,
+    bool continueRouteSearchForTesting = false)
 {
     private readonly int _totalExpandedNodeBudget =
         (searchProfile ?? SolverSearchProfile.Default).MaxExpandedNodes;
@@ -113,6 +114,7 @@ internal sealed partial class CombatBeamSolver(
     private readonly IReadOnlyList<PlanAction> _fixedPrefixActions = fixedPrefixActions ?? [];
     private readonly bool _continuationSeedProbe = continuationSeedProbe;
     private readonly IReadOnlyList<PlanAction>? _continuationRouteReplayActions = continuationRouteReplayActions;
+    private readonly bool _continueRouteSearchForTesting = continueRouteSearchForTesting;
     private readonly string? _progressPhaseOverride = DescribePotionProgressPhase(
         displayNames,
         potionPolicyOverride,
