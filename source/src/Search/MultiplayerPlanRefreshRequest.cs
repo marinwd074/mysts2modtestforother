@@ -9,24 +9,58 @@ internal sealed record MultiplayerPlanRefreshRequest(
 {
     internal int? EvaluationTurn { get; init; }
     internal bool SourceWasCompleteVictory { get; init; }
+    internal bool IsCrossTurn { get; init; }
 
     internal static MultiplayerPlanRefreshRequest Capture(SolverResult source)
+        => CaptureAtTurn(source, source.StartTurnNumber, isCrossTurn: false);
+
+    private static MultiplayerPlanRefreshRequest CaptureAtTurn(SolverResult source, int currentTurn, bool isCrossTurn)
         => new(source.RouteIdentity,
-            Array.AsReadOnly(source.MultiplayerReplayCandidates.Take(3)
-                .Where(candidate => candidate.Prefix.Concat(candidate.Route)
-                    .All(action => action.ShadowForecast == null && !action.IsForecastOnlyObservation))
-                .Select(candidate => candidate with
-                {
-                    Prefix = CopyActions(candidate.Prefix), Route = CopyActions(candidate.Route),
-                    Baseline = candidate.Baseline is { } baseline ? baseline with { ExplicitRouteAdoption = false } : null,
-                }).ToArray()),
-            source.BestNode.Actions.Any(action => action.ShadowForecast != null)
-                ? [] : CopyActions(source.BestNode.Actions),
+            CaptureRemainingCandidates(source.MultiplayerReplayCandidates, currentTurn),
+            CaptureRemainingRoute(source.BestNode.Actions, currentTurn),
             CaptureBaseline(source))
         {
             EvaluationTurn = source.Snapshot.Turn,
             SourceWasCompleteVictory = source.Snapshot.AllEnemiesDead && !source.Snapshot.PlayerDead,
+            IsCrossTurn = isCrossTurn,
         };
+
+    // Called only after Runtime's existing cross-turn lineage/RNG admission. This
+    // slices suggestions, not an old simulator or authorization. Battle HP is an
+    // absolute ceiling; fresh replay accounts only remaining actions from the new root.
+    internal static MultiplayerPlanRefreshRequest CaptureContinuation(SolverResult source, int currentTurn)
+    {
+        if (currentTurn < source.StartTurnNumber)
+            throw new ArgumentOutOfRangeException(nameof(currentTurn), "Continuation cannot precede the source turn.");
+        // Repeated invalidation may revisit the source turn; retain the existing
+        // independent-continuation allowance without another copy of every route.
+        return CaptureAtTurn(source, currentTurn, isCrossTurn: true);
+    }
+
+    internal static IReadOnlyList<PlanAction> CaptureRemainingRoute(IReadOnlyList<PlanAction> actions, int currentTurn)
+        => actions.Any(action => action.ShadowForecast != null || action.IsForecastOnlyObservation)
+            ? [] : CopyActions(actions.Where(action => action.Turn >= currentTurn).ToArray());
+
+    internal static IReadOnlyList<MultiplayerReplayCandidate> CaptureRemainingCandidates(
+        IReadOnlyList<MultiplayerReplayCandidate> candidates, int currentTurn)
+        => Array.AsReadOnly(candidates.Take(3)
+            .Where(candidate => candidate.Prefix.Concat(candidate.Route)
+                .All(action => action.ShadowForecast == null && !action.IsForecastOnlyObservation))
+            .Select(candidate =>
+            {
+                IReadOnlyList<PlanAction> route = CaptureRemainingRoute(candidate.Route, currentTurn);
+                return candidate with
+                {
+                    Route = route,
+                    Prefix = route.Count > 0 ? CapturePrefix(route, currentTurn)
+                        : CopyActions(candidate.Prefix.Where(action => action.Turn == currentTurn).ToArray()),
+                    Baseline = candidate.Baseline is { } baseline ? baseline with { ExplicitRouteAdoption = false } : null,
+                };
+            }).ToArray());
+
+    private static IReadOnlyList<PlanAction> CapturePrefix(IReadOnlyList<PlanAction> actions, int currentTurn)
+        => CopyActions(actions.TakeWhile(action => action.Turn == currentTurn
+            && action.Kind == PlanActionKind.PlayCard && !action.EndsPlayerTurn && action.IsExecutable).Take(2).ToArray());
 
     internal static ContinuationRouteReplayBaseline? CaptureBaseline(SolverResult source)
         => source.PredictedFinalState is { } finalState
@@ -34,9 +68,7 @@ internal sealed record MultiplayerPlanRefreshRequest(
                 source.Snapshot.GrowthRewards, source.Snapshot.RelicCounters) : null;
 
     internal static MultiplayerReplayCandidate CaptureCandidate(int rank, SolverResult source)
-        => new(rank, CopyActions(source.BestNode.Actions.TakeWhile(action =>
-            action.Turn == source.StartTurnNumber && action.Kind == PlanActionKind.PlayCard
-            && !action.EndsPlayerTurn && action.IsExecutable).Take(2).ToArray()))
+        => new(rank, CapturePrefix(source.BestNode.Actions, source.StartTurnNumber))
         {
             Route = CopyActions(source.BestNode.Actions), Baseline = CaptureBaseline(source),
         };
@@ -64,6 +96,7 @@ internal sealed record MultiplayerPlanRefreshReport(
     int RemainingMilliseconds, int RemainingExpandedNodes)
 {
     public int? SelectedOriginalRank { get; init; }
+    public bool IsCrossTurn { get; init; }
     public IReadOnlyList<MultiplayerFullRouteReplayReport> FullRoutes { get; init; } = [];
 }
 

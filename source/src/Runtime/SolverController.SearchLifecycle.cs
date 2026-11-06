@@ -455,14 +455,7 @@ internal static partial class SolverController
                         if (MultiplayerLocalCrossTurnContracts.ShouldReplayContinuationRoute(
                                 followedBySolver, allowLivingEnemyHpDecrease, localCoreRejectionReason))
                         {
-                            continuationReplayActions = source.BestNode.Actions
-                                .Where(action => action.Turn >= currentTurn)
-                                .Select(action => action with { RelicEffects = null, AutoPlayedCards = null })
-                                .ToArray();
-                            if (source.PredictedFinalState is { } finalState)
-                                continuationReplayBaseline = new(finalState, source.ProjectedBattleHpLost,
-                                    source.Snapshot.ProjectedDeathSaveUseCount,
-                                    source.Snapshot.GrowthRewards, source.Snapshot.RelicCounters);
+                            planRefresh = MultiplayerPlanRefreshRequest.CaptureContinuation(source, currentTurn);
                         }
                     }
                     Entry.Logger.Info(

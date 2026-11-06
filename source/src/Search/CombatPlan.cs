@@ -2072,6 +2072,8 @@ internal sealed class SolverResult
             WasReused = true,
             ReusedFromTurn = StartTurnNumber,
             PredictedFinalState = PredictedFinalState,
+            MultiplayerReplayCandidates = MultiplayerPlanRefreshRequest.CaptureRemainingCandidates(
+                MultiplayerReplayCandidates, currentTurn),
             MultiplayerScope = MultiplayerScope,
             RouteIdentity = RouteIdentity,
             RecalculatedAfterCompleteProjection = RecalculatedAfterCompleteProjection,

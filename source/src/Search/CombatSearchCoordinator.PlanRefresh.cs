@@ -17,8 +17,8 @@ internal static partial class CombatSearchCoordinator
         long nodesBefore = totals.Snapshot().ExpandedNodes;
         SolverSearchProfile probeProfile = policy.Profile with
         {
-            SoftTimeBudgetMilliseconds = Math.Min(60, policy.Profile.SoftTimeBudgetMilliseconds),
-            MaxExpandedNodes = Math.Min(192, policy.Profile.MaxExpandedNodes),
+            SoftTimeBudgetMilliseconds = Math.Min(request.IsCrossTurn ? 600 : 60, policy.Profile.SoftTimeBudgetMilliseconds),
+            MaxExpandedNodes = request.IsCrossTurn ? policy.Profile.MaxExpandedNodes : Math.Min(192, policy.Profile.MaxExpandedNodes),
         };
         SearchPolicySnapshot replayPolicy = policy with
         {
@@ -89,7 +89,9 @@ internal static partial class CombatSearchCoordinator
         {
             decision = MultiplayerPlanRefreshDecision.FullRestart;
             reason = "recovery_probe_exhausted";
-            if (ContinuationSeedIncumbentBudget.Remaining(probeProfile, clock.ElapsedMilliseconds,
+            // Cross-turn failure continues through the existing R1/current search path.
+            // The two-action same-turn materialization is not a second recovery allowance.
+            if (!request.IsCrossTurn && ContinuationSeedIncumbentBudget.Remaining(probeProfile, clock.ElapsedMilliseconds,
                     totals.Snapshot().ExpandedNodes - nodesBefore) is { } prefixProfile
                 && !budget.IsExpired && budget.HasExpandedNodeBudgetRemaining)
             {
@@ -114,7 +116,7 @@ internal static partial class CombatSearchCoordinator
             wholeRoute, metrics, clock.ElapsedMilliseconds, totals.Snapshot().ExpandedNodes - nodesBefore,
             remaining?.SoftTimeBudgetMilliseconds ?? 0, remaining?.MaxExpandedNodes ?? 0)
         {
-            SelectedOriginalRank = selectedRank, FullRoutes = fullRoutes.AsReadOnly(),
+            SelectedOriginalRank = selectedRank, FullRoutes = fullRoutes.AsReadOnly(), IsCrossTurn = request.IsCrossTurn,
         };
         policy.Diagnostics.Info("[CombatSolver/MultiplayerPlanRefresh] MP_PLAN_REFRESH_WORKER "
             + System.Text.Json.JsonSerializer.Serialize(report));

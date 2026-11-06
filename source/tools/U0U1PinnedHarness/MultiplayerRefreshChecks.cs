@@ -137,6 +137,9 @@ internal static class MultiplayerRefreshChecks
                     var fullRoutes = MultiplayerFullRouteChecks.Run(live, names, damage, policy, fresh, outputDirectory);
                     checks += fullRoutes.Checks;
                     replays += fullRoutes.Replays;
+                    var crossTurnRoutes = MultiplayerCrossTurnRouteChecks.Run(live, names, damage, policy, fresh, outputDirectory);
+                    checks += crossTurnRoutes.Checks;
+                    replays += crossTurnRoutes.Replays;
                 }
                 Check(before == ContinuationStamp.CaptureLive(live).StateText,
                     "Worker recovery or failure paths mutated live/shared state.");
