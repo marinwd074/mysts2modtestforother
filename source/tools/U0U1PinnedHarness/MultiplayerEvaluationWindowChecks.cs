@@ -37,12 +37,14 @@ internal static class MultiplayerEvaluationWindowChecks
         string before = ContinuationStamp.CaptureLive(live).StateText;
         CombatBeamSolver solver = new(root, names, damage, policy);
         List<SimulationSnapshot> snapshots = [];
+        int nativePrefixReplays = 0;
         SearchNode Build(params PlanAction[] actions)
         {
             SearchNode? parent = null;
             for (int count = 0; count <= actions.Length; count++)
             {
                 var snapshot = solver.ReplayDiagnosticPrefix(actions.Take(count).ToArray());
+                nativePrefixReplays++;
                 snapshots.Add(snapshot);
                 parent = new(count == 0 ? null : actions[count - 1], count,
                     snapshot.PotionUseCount, snapshot.PotionStrategicCost, snapshot.Turn,
@@ -74,10 +76,35 @@ internal static class MultiplayerEvaluationWindowChecks
                 && mismatch.Rejected == 1 && mismatch.HpSaved == 0, "Final ordering still accepts a short potion route on false HP savings.");
             var sameWindow = solver.SelectDiagnosticCandidates([shortFree, shortPotion]);
             var withLongWindow = solver.SelectDiagnosticCandidates([longFree, shortFree, shortPotion]);
-            Check(ReferenceEquals(sameWindow.Selected, withLongWindow.Selected),
-                "An unrelated long baseline changed admission against the available matching baseline.");
+            Check(ReferenceEquals(sameWindow.Selected, shortPotion)
+                && ReferenceEquals(withLongWindow.Selected, longFree)
+                && sameWindow.Rejected == withLongWindow.Rejected,
+                "Completed coverage failed to replace the shallow suggestion or changed its potion admission.");
 
             RouteEvaluationWindow full = longFree.Snapshot.EvaluationWindow!.Value;
+            var completed = solver.CompleteDiagnosticEvaluationWindows([longFree, shortPotion]);
+            SearchNode extendedPotion = completed.Candidates.Single(node => !ReferenceEquals(node, longFree));
+            if (!ReferenceEquals(extendedPotion, shortPotion)) snapshots.Add(extendedPotion.Snapshot);
+            Check(!ReferenceEquals(extendedPotion, shortPotion) && completed.Expanded == 2 && completed.Transitions == 2
+                && RouteEvaluationWindow.CanCompare(extendedPotion.Snapshot.EvaluationWindow, full)
+                && shortPotion.Snapshot.HasSimulator && longFree.Snapshot.HasSimulator
+                && extendedPotion.Actions.Take(shortPotion.ActionCount).SequenceEqual(shortPotion.Actions),
+                "Tail completion failed to preserve the candidate prefix/ownership or charged the wrong work.");
+            SimulationSnapshot independent = solver.ReplayDiagnosticPrefix(extendedPotion.Actions);
+            nativePrefixReplays++;
+            snapshots.Add(independent);
+            Check(independent.StateKey == extendedPotion.StateKey
+                && independent.CumulativePlayerHpLost == extendedPotion.Snapshot.CumulativePlayerHpLost
+                && ReferenceEquals(solver.SelectDiagnosticCandidates(completed.Candidates).Selected, extendedPotion),
+                "Completed candidate disagrees with independent replay or loses its valid same-window improvement.");
+            SolverSearchProfile oneStep = SolverSearchProfile.Default with { MaxExpandedNodes = 1, SoftTimeBudgetMilliseconds = 20_000 };
+            var incomplete = new CombatBeamSolver(root, names, damage, policy, searchProfile: oneStep)
+                .CompleteDiagnosticEvaluationWindows([longFree, shortPotion]);
+            Check(incomplete.Expanded == 1 && incomplete.Transitions == 1
+                && ReferenceEquals(incomplete.Candidates[1], shortPotion)
+                && shortPotion.Snapshot.HasSimulator && longFree.Snapshot.HasSimulator
+                && ReferenceEquals(solver.SelectDiagnosticCandidates(incomplete.Candidates).Selected, longFree),
+                "Exhausted completion budget lost the original candidate or treated its missing tail as free.");
             RouteEvaluationWindow victory = shortFree.Snapshot.EvaluationWindow!.Value with { CompleteVictory = true };
             Check(RouteEvaluationWindow.CanCompare(victory, full)
                 && !RouteEvaluationWindow.CanCompare(victory, full with { AtPlayerDecisionPoint = false })
@@ -114,6 +141,7 @@ internal static class MultiplayerEvaluationWindowChecks
             Check(ContinuationStamp.CaptureLive(live).StateText == before, "Window evaluation mutated the native live fixture.");
             SimulationSnapshot single = new CombatBeamSolver(root, names, damage,
                 policy with { RoutePolicy = SearchRoutePolicy.SinglePlayerFullRoute }).ReplayDiagnosticPrefix([end]);
+            nativePrefixReplays++;
             snapshots.Add(single);
             Check(single.EvaluationWindow is { Resolved: true, TargetTurn: null }
                 && single.EvaluationWindow.Value.EvaluatedTurn == shortFree.Snapshot.Turn
@@ -144,9 +172,46 @@ internal static class MultiplayerEvaluationWindowChecks
                 && TheftEncounterStrategy.CompareRecovery(SolverTheftPolicy.LetEscape, 0, 10) == 0
                 && TheftEncounterStrategy.CompareRecovery(SolverTheftPolicy.PreserveResources, 0, 10) < 0,
                 "Recovery ordering no longer respects the requested resource policy.");
+            SolverInterimResult shallow = partial with
+            { RollingHorizonLossFirst = true, EvaluationWindow = shortFree.Snapshot.EvaluationWindow };
+            SolverInterimResult settled = shallow with
+            { EvaluationWindow = full, ProjectedBattleHpLost = 15, StrategicHpDeficit = 15 };
+            Check(SolverInterimResultOrdering.IsBetter(settled, shallow)
+                && SolverInterimResultOrdering.CanPromoteDisplayedResult(settled, shallow)
+                && CombatSearchCoordinator.IsBetterPotionPolicyResult(null, settled, shallow)
+                && !SolverInterimResultOrdering.IsBetter(shallow, settled)
+                && !CombatSearchCoordinator.IsBetterPotionPolicyResult(null, shallow, settled),
+                "A cheap incomplete tail replaced a surviving route with completed requested coverage.");
+            SolverSearchProfile singleProfile = new(4, 2_000, 8, 4, 4, 20_000);
+            SearchPolicySnapshot singlePolicy = policy with
+            {
+                RoutePolicy = SearchRoutePolicy.SinglePlayerFullRoute,
+                PotionPolicy = SolverPotionPolicy.Disabled, PotionStrategy = new(SolverPotionPolicy.Disabled, []),
+                FixedBudget = true, VerifyIncrementalSearch = true,
+            };
+            SolverResult singleRoute = new CombatBeamSolver(root, names, damage, singlePolicy,
+                searchProfile: singleProfile).Solve();
+            Check(singleRoute.EvaluationWindow is { TargetTurn: null, CompleteVictory: true }
+                && singleRoute.CombatEndedTurn > turn + 2 && singleRoute.ExpandedNodes <= singleProfile.MaxExpandedNodes,
+                "The full singleplayer search did not complete beyond the multiplayer three-turn horizon.");
+            CombatBeamSolver singleVerifier = new(root, names, damage, singlePolicy);
+            SimulationSnapshot singleReplay = singleVerifier.ReplayDiagnosticPrefix(singleRoute.BestNode.Actions);
+            nativePrefixReplays++;
+            snapshots.Add(singleReplay);
+            Check(singleReplay.AllEnemiesDead && !singleReplay.PlayerDead
+                && singleRoute.PredictedFinalState != null
+                && singleVerifier.CaptureDiagnosticContinuation(singleReplay) == singleRoute.PredictedFinalState
+                && singleReplay.CumulativePlayerHpLost == singleRoute.Snapshot.CumulativePlayerHpLost
+                && ContinuationStamp.CaptureLive(live).StateText == before,
+                "The full singleplayer result disagrees with independent native replay or changed the live fixture.");
             File.WriteAllText(Path.Combine(output, "multiplayer-window.json"), JsonSerializer.Serialize(new
             {
-                checks, NativePrefixReplays = snapshots.Count, MaterializedRouteReplays = 1, apparentSaving,
+                checks, NativePrefixReplays = nativePrefixReplays, MaterializedRouteReplays = 1, apparentSaving,
+                CompletionWork = new { completed.Expanded, completed.Transitions },
+                ExhaustedCompletionWork = new { incomplete.Expanded, incomplete.Transitions },
+                completedLoss = extendedPotion.Snapshot.CumulativePlayerHpLost,
+                SingleFullSearch = new { singleRoute.CombatEndedTurn, singleRoute.ExpandedNodes,
+                    singleRoute.Snapshot.CumulativePlayerHpLost },
                 ShortWindow = shortFree.Snapshot.EvaluationWindow, LongWindow = full,
                 shortLoss = shortFree.Snapshot.CumulativePlayerHpLost,
                 longLoss = longFree.Snapshot.CumulativePlayerHpLost,
@@ -154,7 +219,7 @@ internal static class MultiplayerEvaluationWindowChecks
                 matchingWindowPotionSelected = ReferenceEquals(sameWindow.Selected, shortPotion),
                 NoGameOrNetwork = true,
             }, new JsonSerializerOptions { WriteIndented = true }));
-            return $"MULTIPLAYER_WINDOW_PASS checks={checks} native_prefix_replays={snapshots.Count}";
+            return $"MULTIPLAYER_WINDOW_PASS checks={checks} native_prefix_replays={nativePrefixReplays}";
         }
         finally { foreach (var snapshot in snapshots) snapshot.ReleaseSimulator(); }
     }

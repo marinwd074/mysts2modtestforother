@@ -157,7 +157,8 @@ internal sealed partial class CombatBeamSolver(
         _continuationSeedProbe,
         EvaluateStandPat,
         PrepareStandPatProbes,
-        policy.UseUpstreamSearchOptimizations);
+        policy.UseUpstreamSearchOptimizations,
+        SearchEvaluationPolicy.UsesLocalEvaluationWindows(policy.RoutePolicy));
     private FinalPlanOrdering? _finalOrdering;
     private FinalPlanOrdering FinalOrdering => _finalOrdering ??= new FinalPlanOrdering(
         _potionPolicy,

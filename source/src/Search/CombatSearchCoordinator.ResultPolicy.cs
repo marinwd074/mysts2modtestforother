@@ -90,6 +90,9 @@ internal static partial class CombatSearchCoordinator
     {
         bool rollingHorizonLossFirst =
             candidate.RollingHorizonLossFirst && current.RollingHorizonLossFirst;
+        int coverage = SolverInterimResultOrdering.CompareCompletedCoverage(candidate, current);
+        if (coverage != 0)
+            return coverage;
         int outcomeComparison = SolverInterimResultOrdering.CompareOutcome(candidate, current, rollingHorizonLossFirst);
         if (outcomeComparison != 0)
             return outcomeComparison;
@@ -162,6 +165,13 @@ internal static partial class CombatSearchCoordinator
             && candidate.Snapshot.ProjectedPlayerHp > 0;
         bool currentSurvives = !current.Snapshot.PlayerDead
             && current.Snapshot.ProjectedPlayerHp > 0;
+        if (SearchEvaluationPolicy.UsesLocalEvaluationWindows(policy.RoutePolicy))
+        {
+            int coverage = RouteEvaluationWindow.CompletedCoverageRank(candidate.EvaluationWindow, candidateSurvives)
+                .CompareTo(RouteEvaluationWindow.CompletedCoverageRank(current.EvaluationWindow, currentSurvives));
+            if (coverage != 0)
+                return coverage;
+        }
         int outcomeComparison = SolverInterimResultOrdering.OutcomeRank(candidateWon, candidateSurvives,
             candidate.Snapshot.ProjectedDeathSaveUseCount, rollingHorizonLossFirst)
             .CompareTo(SolverInterimResultOrdering.OutcomeRank(currentWon, currentSurvives,

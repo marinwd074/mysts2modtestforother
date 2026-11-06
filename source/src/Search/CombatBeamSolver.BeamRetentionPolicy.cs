@@ -96,7 +96,8 @@ internal sealed partial class CombatBeamSolver
         bool _continuationSeedProbe,
         Func<SearchNode, StandPatEvaluation> _evaluateStandPat,
         Action<IEnumerable<SearchNode>>? _prepareStandPat = null,
-        bool _useUpstreamSearchOptimizations = true)
+        bool _useUpstreamSearchOptimizations = true,
+        bool _useEvaluationWindows = false)
     {
         private void ForEachRetentionIndex(
             int count,
@@ -1689,6 +1690,17 @@ internal sealed partial class CombatBeamSolver
             SimulationSnapshot rightSnapshot = right.Snapshot;
             bool leftWon = IsCompleteVictory(left);
             bool rightWon = IsCompleteVictory(right);
+            if (_useEvaluationWindows)
+            {
+                int coverage = RouteEvaluationWindow.CompletedCoverageRank(
+                        leftSnapshot.EvaluationWindow?.ForTurn(_startTurnNumber),
+                        !leftSnapshot.PlayerDead && leftSnapshot.ProjectedPlayerHp > 0)
+                    .CompareTo(RouteEvaluationWindow.CompletedCoverageRank(
+                        rightSnapshot.EvaluationWindow?.ForTurn(_startTurnNumber),
+                        !rightSnapshot.PlayerDead && rightSnapshot.ProjectedPlayerHp > 0));
+                if (coverage != 0)
+                    return coverage;
+            }
             int comparison = CompareMultiplayerObjective(left, right);
             if (comparison != 0)
                 return comparison;

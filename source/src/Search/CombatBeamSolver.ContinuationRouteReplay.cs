@@ -6,7 +6,8 @@ internal sealed partial class CombatBeamSolver
 {
     // Replay only the supplied local route. No Beam expansion and no old branch state.
     private SearchNode ReplayContinuationRoute(SearchNode rootNode,
-        IReadOnlyList<PlanAction> actions, Stopwatch stopwatch)
+        IReadOnlyList<PlanAction> actions, Stopwatch stopwatch,
+        RouteEvaluationWindow? targetWindow = null, bool chargeCompletionWork = false)
     {
         SearchNode node = rootNode;
         try
@@ -17,6 +18,9 @@ internal sealed partial class CombatBeamSolver
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (node.Snapshot.AllEnemiesDead && !node.Snapshot.PlayerDead)
+                    break;
+                if (targetWindow is { } target
+                    && RouteEvaluationWindow.CanCompare(node.Snapshot.EvaluationWindow?.ForTurn(_startTurnNumber), target))
                     break;
                 if (node.IsTerminal)
                 {
@@ -34,6 +38,15 @@ internal sealed partial class CombatBeamSolver
                     throw new ContinuationSeedRejectedException("route_action_shape");
                 if (action.Kind == PlanActionKind.PlayCard && !CanApplyFixedPrefixAction(node, action))
                     throw new ContinuationSeedRejectedException("route_action_unavailable");
+
+                // Optional evaluation completion spends the existing request's work budget.
+                // Normal recovery keeps its established route-replay accounting.
+                if (chargeCompletionWork)
+                {
+                    if (!HasExpandedNodeBudgetRemaining() || !TryConsumeExpandedNodeBudget())
+                        throw new ContinuationSeedRejectedException("route_node_budget");
+                    _run.Expanded++;
+                }
 
                 SimulationSnapshot snapshot = Replay([action], node.Snapshot, node.Turn,
                     node.ActionCount, allowExecutionCapture: false);

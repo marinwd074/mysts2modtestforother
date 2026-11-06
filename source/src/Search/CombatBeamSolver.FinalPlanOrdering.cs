@@ -555,7 +555,27 @@ internal sealed partial class CombatBeamSolver
                         && passesAmbergrisPolicy;
                 })
                 .ToList();
+            int potionEligibleCount = policyEligibleCandidates.Count(candidate => candidate.PotionCount > 0);
             bool useTeamObjective = useMultiplayerTeamObjective;
+            if (SearchEvaluationPolicy.UsesLocalEvaluationWindows(routePolicy))
+            {
+                RouteEvaluationWindow? completedWindow = policyEligibleCandidates
+                    .Where(candidate => !candidate.Snapshot.PlayerDead && candidate.Snapshot.ProjectedPlayerHp > 0)
+                    .Select(candidate => WindowOf(candidate.Snapshot))
+                    .FirstOrDefault(window => window is { CoversTarget: true });
+                // A settled requested horizon (or complete singleplayer victory) provides
+                // the comparison cohort. This is not an extra reward for deeper routes.
+                // Uncompleted candidates remain suggestions, not zero-cost future tails.
+                if (completedWindow is { } target)
+                {
+                    int before = policyEligibleCandidates.Count;
+                    policyEligibleCandidates = policyEligibleCandidates.Where(candidate =>
+                        RouteEvaluationWindow.CanCompare(WindowOf(candidate.Snapshot), target)).ToList();
+                    if (emitDiagnostics && before != policyEligibleCandidates.Count)
+                        diagnostics.Info($"[CombatSolver/Test] SEARCH_EVALUATION_COHORT " +
+                            $"completed={policyEligibleCandidates.Count} incomplete={before - policyEligibleCandidates.Count}");
+                }
+            }
             bool useAdaptiveLethalTempo =
                 useMultiplayerTeamObjective
                 && multiplayerCombatObjectiveStrategy
@@ -1324,7 +1344,7 @@ internal sealed partial class CombatBeamSolver
                 }
             }
             int potionBranchesRejected = policyCandidates.Count(candidate => candidate.PotionCount > 0)
-                - policyEligibleCandidates.Count(candidate => candidate.PotionCount > 0);
+                - potionEligibleCount;
             var (selectedBaseline, selectedCostsComparable) = ComparisonFor(selectedCandidate.Snapshot);
             int potionHpSaved = selectedCandidate.PotionCount == 0 || !selectedCostsComparable
                 ? 0

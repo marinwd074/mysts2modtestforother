@@ -24,6 +24,14 @@ internal readonly record struct RouteEvaluationWindow(
     internal static bool CanCompare(RouteEvaluationWindow? left, RouteEvaluationWindow? right)
         => left?.ComparisonKey is { } key && right?.ComparisonKey == key;
 
+    internal bool CoversTarget => ComparisonKey is { }
+        && (CompleteVictory || TargetTurn == EvaluatedTurn && AtPlayerDecisionPoint);
+
+    // A total eligibility key, not a pairwise depth preference. Missing/partial
+    // coverage cannot outrank a surviving route evaluated to the requested target.
+    internal static int CompletedCoverageRank(RouteEvaluationWindow? window, bool survives)
+        => survives && window is { CoversTarget: true } ? 0 : 1;
+
     internal RouteEvaluationWindow? ForTurn(int turn)
         => turn < StartTurn || turn > EvaluatedTurn ? null
             : this with { StartTurn = turn,

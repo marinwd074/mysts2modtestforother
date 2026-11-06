@@ -2685,68 +2685,84 @@ internal sealed partial class CombatBeamSolver
             ReleaseDroppedSnapshots(finalPool, reached);
             finalPool = reached;
         }
-        List<SearchNode> finalCandidates = Retention.RankFinal(finalPool);
-        ReleaseDroppedSnapshots(finalPool, finalCandidates);
-
-        ValidateHistoricalSimulatorsReleased(finalCandidates);
-        PublishProgress(_startTurnNumber + member.SearchedTurnLayers, member.SearchedTurnLayers, 0,
-            finalCandidates.Count, member.Completed.Count, "复核最终候选", force: true);
-        foreach (SearchNode candidate in finalCandidates)
-            EnsureCandidateOrigin(candidate);
-        List<(SearchNode Node, SimulationSnapshot Snapshot)> evaluated = finalCandidates
-            .Select(node => (Node: node, Snapshot: node.Snapshot))
-            .ToList();
-        bool onlyDeathRoutesFound = evaluated.All(candidate =>
-            candidate.Snapshot.PlayerDead || candidate.Snapshot.ProjectedPlayerHp <= 0);
-        _run.ReusedNodeSnapshots += evaluated.Count;
-        // Freeze the main-search stop reason before U3 spends its reserved reevaluation work.
-        // Whether the main search exhausted its allocation must not depend on how much of the
-        // separate U3 reserve the final candidate matrix later consumes.
-        bool nodeBudgetReached = !HasExpandedNodeBudgetRemaining();
-        bool scenarioReevaluation = !member.TimeBudgetReached
-            && policy.UseMultiplayerScenarioReevaluation
-            && policy.UseMultiplayerTeamObjective
-            && _useMultiplayerRouteSemantics;
-        string finalEvaluationContextId = SearchEfficiencyEvaluationContextId(
-            scenarioReevaluation,
-            member.TimeBudgetReached ? "final_time_budget" : "final");
-        FinalPlanSelection ordering = FinalOrdering.Select(
-            evaluated,
-            initialHp,
-            emitDiagnostics: true,
-            reevaluateScenarios: !member.TimeBudgetReached,
-            allowScenarioRerank: !member.TimeBudgetReached);
-
-        RecordCandidateEvaluated(ordering.Candidate.Node, finalEvaluationContextId);
-        RecordCandidateSelected(ordering.Candidate.Node, finalEvaluationContextId);
-        if (_run.Expanded > _totalExpandedNodeBudget)
+        try
         {
-            throw new InvalidOperationException(
-                $"U3 reevaluation exceeded the total expanded-work budget: " +
-                $"{_run.Expanded}/{_totalExpandedNodeBudget}.");
+            if (!member.AdoptionReached)
+            {
+                List<SearchNode> completedWindows = CompleteEvaluationWindows(finalPool, stopwatch);
+                ReleaseDroppedSnapshots(finalPool, completedWindows);
+                finalPool = completedWindows;
+            }
+            List<SearchNode> finalCandidates = Retention.RankFinal(finalPool);
+            ReleaseDroppedSnapshots(finalPool, finalCandidates);
+
+            ValidateHistoricalSimulatorsReleased(finalCandidates);
+            PublishProgress(_startTurnNumber + member.SearchedTurnLayers, member.SearchedTurnLayers, 0,
+                finalCandidates.Count, member.Completed.Count, "复核最终候选", force: true);
+            foreach (SearchNode candidate in finalCandidates)
+                EnsureCandidateOrigin(candidate);
+            List<(SearchNode Node, SimulationSnapshot Snapshot)> evaluated = finalCandidates
+                .Select(node => (Node: node, Snapshot: node.Snapshot))
+                .ToList();
+            bool onlyDeathRoutesFound = evaluated.All(candidate =>
+                candidate.Snapshot.PlayerDead || candidate.Snapshot.ProjectedPlayerHp <= 0);
+            _run.ReusedNodeSnapshots += evaluated.Count;
+            // Freeze the main-search stop reason before U3 spends its reserved reevaluation work.
+            // Whether the main search exhausted its allocation must not depend on how much of the
+            // separate U3 reserve the final candidate matrix later consumes.
+            bool nodeBudgetReached = !HasExpandedNodeBudgetRemaining();
+            bool scenarioReevaluation = !member.TimeBudgetReached
+                && policy.UseMultiplayerScenarioReevaluation
+                && policy.UseMultiplayerTeamObjective
+                && _useMultiplayerRouteSemantics;
+            string finalEvaluationContextId = SearchEfficiencyEvaluationContextId(
+                scenarioReevaluation,
+                member.TimeBudgetReached ? "final_time_budget" : "final");
+            FinalPlanSelection ordering = FinalOrdering.Select(
+                evaluated,
+                initialHp,
+                emitDiagnostics: true,
+                reevaluateScenarios: !member.TimeBudgetReached,
+                allowScenarioRerank: !member.TimeBudgetReached);
+
+            RecordCandidateEvaluated(ordering.Candidate.Node, finalEvaluationContextId);
+            RecordCandidateSelected(ordering.Candidate.Node, finalEvaluationContextId);
+            if (_run.Expanded > _totalExpandedNodeBudget)
+            {
+                throw new InvalidOperationException(
+                    $"U3 reevaluation exceeded the total expanded-work budget: " +
+                    $"{_run.Expanded}/{_totalExpandedNodeBudget}.");
+            }
+            SolverResult result = MaterializeSelectedRoute(
+                ordering,
+                onlyDeathRoutesFound,
+                member.CurrentTurnAdoptionReached || policy.CurrentTurnOnly
+                    ? SolverResultScope.CurrentTurnAdoption
+                    : SolverResultScope.SearchCompletion,
+                member.SearchedTurnLayers,
+                member.TimeBudgetReached,
+                nodeBudgetReached,
+                finalEvaluationContextId);
+            foreach (SearchNode candidate in finalCandidates)
+                candidate.Snapshot.ReleaseSimulator();
+            if (policy.OptimizationSession is { } optimization && optimization.Matches(root))
+                optimization.Observe(result, policy, ActEndingBossPolicy.StrategicHpDeficit(
+                    result.Snapshot.CumulativePlayerHpLost,
+                    Math.Max(0, root.InitialPlayerMaxHp - result.Snapshot.PlayerMaxHp),
+                    result.Snapshot.RecoveredPlayerHp + ActEndingBossPolicy.RankedPostCombatRelicHeal(
+                        root.PostCombatRelicHeal, result.Snapshot.AllEnemiesDead,
+                        result.Snapshot.PlayerHp, result.Snapshot.PlayerMaxHp),
+                    _strategicBossHpRelief, result.Snapshot.DeathSaveHpRestored) - result.Snapshot.StrategicHpCredit);
+            execution.Result = result;
+            yield break;
         }
-        SolverResult result = MaterializeSelectedRoute(
-            ordering,
-            onlyDeathRoutesFound,
-            member.CurrentTurnAdoptionReached || policy.CurrentTurnOnly
-                ? SolverResultScope.CurrentTurnAdoption
-                : SolverResultScope.SearchCompletion,
-            member.SearchedTurnLayers,
-            member.TimeBudgetReached,
-            nodeBudgetReached,
-            finalEvaluationContextId);
-        foreach (SearchNode candidate in finalCandidates)
-            candidate.Snapshot.ReleaseSimulator();
-        if (policy.OptimizationSession is { } optimization && optimization.Matches(root))
-            optimization.Observe(result, policy, ActEndingBossPolicy.StrategicHpDeficit(
-                result.Snapshot.CumulativePlayerHpLost,
-                Math.Max(0, root.InitialPlayerMaxHp - result.Snapshot.PlayerMaxHp),
-                result.Snapshot.RecoveredPlayerHp + ActEndingBossPolicy.RankedPostCombatRelicHeal(
-                    root.PostCombatRelicHeal, result.Snapshot.AllEnemiesDead,
-                    result.Snapshot.PlayerHp, result.Snapshot.PlayerMaxHp),
-                _strategicBossHpRelief, result.Snapshot.DeathSaveHpRestored) - result.Snapshot.StrategicHpCredit);
-        execution.Result = result;
-        yield break;
+        finally
+        {
+            // Completion may introduce snapshots outside the member's frontier/completed
+            // lists. Retire them even if final policy review or materialization fails.
+            foreach (SearchNode candidate in finalPool)
+                candidate.Snapshot.ReleaseSimulator();
+        }
     }
 
     private SearchNode? ApplyFixedPrefix(SearchNode seed)

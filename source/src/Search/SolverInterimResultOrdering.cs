@@ -13,6 +13,10 @@ internal static class SolverInterimResultOrdering
         => OutcomeRank(candidate.Won, candidate.Survives, candidate.DeathSaveUseCount, rawLossFirst)
             .CompareTo(OutcomeRank(current.Won, current.Survives, current.DeathSaveUseCount, rawLossFirst));
 
+    internal static int CompareCompletedCoverage(SolverInterimResult candidate, SolverInterimResult current)
+        => RouteEvaluationWindow.CompletedCoverageRank(candidate.EvaluationWindow, candidate.Survives)
+            .CompareTo(RouteEvaluationWindow.CompletedCoverageRank(current.EvaluationWindow, current.Survives));
+
     public static bool IsCompleteVictory(
         int actionCount,
         bool allEnemiesDead,
@@ -160,7 +164,10 @@ internal static class SolverInterimResultOrdering
     {
         bool rollingHorizonLossFirst =
             candidate.RollingHorizonLossFirst && current.RollingHorizonLossFirst;
-        int comparison = CompareOutcome(candidate, current, rollingHorizonLossFirst);
+        int comparison = CompareCompletedCoverage(candidate, current);
+        if (comparison != 0)
+            return comparison < 0;
+        comparison = CompareOutcome(candidate, current, rollingHorizonLossFirst);
         if (comparison != 0)
             return comparison < 0;
         comparison = TheftEncounterStrategy.CompareRecovery(candidate.TheftPolicy,

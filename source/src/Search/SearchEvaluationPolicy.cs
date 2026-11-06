@@ -24,6 +24,9 @@ internal static class SearchEvaluationPolicy
     internal static bool UsesRawLossFirst(SearchRoutePolicy policy)
         => policy == SearchRoutePolicy.MultiplayerSinglePlayerCore;
 
+    internal static bool UsesLocalEvaluationWindows(SearchRoutePolicy policy)
+        => policy is SearchRoutePolicy.SinglePlayerFullRoute or SearchRoutePolicy.MultiplayerSinglePlayerCore;
+
     internal static bool HasReachedTurnLayerLimit(SearchRoutePolicy policy, int searchedTurnLayers)
         => TurnLayerLimit(policy) is { } limit && searchedTurnLayers >= limit;
 

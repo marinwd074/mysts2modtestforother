@@ -55,6 +55,15 @@ internal sealed partial class CombatBeamSolver
     // The diagnostic caller owns the returned snapshot and releases it after freezing evidence.
     internal SimulationSnapshot ReplayDiagnosticPrefix(IReadOnlyList<PlanAction> actions) => Replay(actions);
 
+    internal (IReadOnlyList<SearchNode> Candidates, int Expanded, long Transitions)
+        CompleteDiagnosticEvaluationWindows(IReadOnlyList<SearchNode> candidates)
+    {
+        int expanded = _run.Expanded;
+        long transitions = _run.TransitionCount;
+        List<SearchNode> completed = CompleteEvaluationWindows(candidates, System.Diagnostics.Stopwatch.StartNew());
+        return (completed, _run.Expanded - expanded, _run.TransitionCount - transitions);
+    }
+
     internal (SearchNode Selected, int HpSaved, int Rejected) SelectDiagnosticCandidates(IReadOnlyList<SearchNode> candidates)
     {
         FinalPlanSelection selection = FinalOrdering.Select(
