@@ -9,7 +9,7 @@ internal sealed partial class CombatBeamSolver
     private const int MaximumEvaluationCompletionTemplates = 2;
 
     private RouteEvaluationWindow? FrontierEvaluationWindow(IEnumerable<SearchNode> candidates)
-        => candidates.Where(node => !node.Snapshot.PlayerDead && node.Snapshot.ProjectedPlayerHp > 0)
+        => candidates.Where(node => !node.Snapshot.PlayerDead && node.Snapshot.PlayerHp > 0)
             .Select(node => node.Snapshot.EvaluationWindow?.ForTurn(_startTurnNumber))
             .FirstOrDefault(window => window?.ComparisonKey != null);
 
@@ -24,13 +24,13 @@ internal sealed partial class CombatBeamSolver
         RouteEvaluationWindow? Window(SearchNode node)
             => node.Snapshot.EvaluationWindow?.ForTurn(_startTurnNumber);
         RouteEvaluationWindow? selectedWindow = candidates
-            .Where(node => !node.Snapshot.PlayerDead && node.Snapshot.ProjectedPlayerHp > 0)
+            .Where(node => !node.Snapshot.PlayerDead && node.Snapshot.PlayerHp > 0)
             .Select(Window).FirstOrDefault(window => window is { CoversTarget: true }) ?? comparisonWindow;
         if (selectedWindow is not { ComparisonKey: not null } target)
             return result;
         SearchNode[] templates = candidates
             .Where(node => RouteEvaluationWindow.CanCompare(Window(node), target)
-                && !node.Snapshot.PlayerDead && node.Snapshot.ProjectedPlayerHp > 0
+                && !node.Snapshot.PlayerDead && node.Snapshot.PlayerHp > 0
                 && node.ActionCount is > 0 and <= 128)
             .OrderByDescending(node => node.Score)
             .Take(MaximumEvaluationCompletionTemplates).ToArray();

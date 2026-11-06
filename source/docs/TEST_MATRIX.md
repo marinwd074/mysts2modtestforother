@@ -17,7 +17,7 @@
 | 请求生命周期观测 | `dotnet run --project tools/SearchRequestObservationChecks -c Release` | L1 默认运行；直接编译生产观测器，16 项纯时序/任务合同，覆盖延迟、取消前未启动、并行 CTS 收尾和单次封存；不运行 Controller/UI |
 | 多人候选刷新 | `dotnet run --project tools/U0U1PinnedHarness -c Release -- multiplayer-refresh --out <ignored-directory>` | 两个原生角色模型、受控 HP/回合变化；资源账本版本已通过 399 项检查/58 次独立重放，窗口改动本批未重跑；覆盖当前/备选重评、连续刷新、失败隔离、评价窗口、提前胜利、选择隔离、预算/取消账本、R1/DOP=1/4 与请求观测。资源口径新增 23 项/4 次，含原生版税路线两个续接点及新根重放、已兑现成长拒绝回归、累计受伤/回复分账、实际与预测保命消耗、第三方成长、重复推进和未知检查点；保命/回复部分为算术合同，历史药水为合成夹具，无原生 EndTurn/Controller/原生队友动作/网络/UI |
 | Release | `dotnet build CombatSolver.csproj -c Release` | 当前本机真实依赖下编译 |
-| 共享评价窗口定向 | `dotnet run --project tools/U0U1PinnedHarness -c Release -- multiplayer-window --out <ignored-directory>` | 固定双角色原生模型根；26 项检查、13 次独立前缀/完整路线重放、一条指定路线物化及一次单人策略全搜索。覆盖完整/部分前沿选择、输入顺序、短/长用药、阶段与移根、补齐末态/所有权及预算失败；跨窗口和缺失窗口不能通过低战损/高分替换。单人策略仍第 9 回合获胜，307 展开，战损 32，独立末态一致。终局吸收、免费药水和救场另有值合同。没有游戏、网络或队友闭环，不代表末态价值校准或普遍性能收益 |
+| 共享评价窗口定向 | `dotnet run --project tools/U0U1PinnedHarness -c Release -- multiplayer-window --out <ignored-directory>` | 固定双角色原生模型根；27 项检查、13 次独立前缀/完整路线重放、一条指定路线物化及一次单人策略全搜索。覆盖完整/部分前沿选择、输入顺序、短/长用药、阶段与移根、补齐末态/所有权及预算失败；跨窗口和缺失窗口不能通过低战损/高分替换。未出牌威胁与窗口内实际存活分开，负投影不能抹去已完成范围。单人策略仍第 9 回合获胜，307 展开，战损 32，独立末态一致。终局吸收、免费药水和救场另有值合同。没有游戏、网络或队友闭环，不代表普遍性能收益 |
 | 不启动游戏的组合验证 | `tools/run-offline-validation.ps1 -GameDir <安装目录>` | 外部版本校验、上述静态检查/Release、L1、portfolio 与 17 个 pinned 模式；逐步日志、DLL 摘要及跳过子项 |
 
 快速 Linux main push / PR 运行 Target、Architecture、Repository；定向 Windows 回归和手动 pinned 矩阵按工作流各自触发规则执行。CI 只能证明其实际执行的层级；没有日志/steps 的 runner 失败不能记作源码 FAIL。

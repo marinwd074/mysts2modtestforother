@@ -248,6 +248,9 @@ internal sealed record SolverInterimResult(
 {
     public SolverTheftPolicy? TheftPolicy { get; init; }
     public bool Survives { get; init; }
+    // Actual survival at the evaluated point; Survives may include an unplayed
+    // threat projection. Null preserves legacy scalar-only diagnostic callers.
+    public bool? SurvivesEvaluationWindow { get; init; }
     public int DeathSaveUseCount { get; init; }
     public int GrowthHpCredit { get; init; }
     public int GrowthRewardCount { get; init; }

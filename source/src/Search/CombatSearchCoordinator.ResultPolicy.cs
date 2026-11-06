@@ -26,6 +26,7 @@ internal static partial class CombatSearchCoordinator
             TheftPolicy = policy.TheftPolicy,
             GrowthRewardCount = result.Snapshot.StrategyGoalCount,
             Survives = !result.Snapshot.PlayerDead && result.Snapshot.ProjectedPlayerHp > 0,
+            SurvivesEvaluationWindow = !result.Snapshot.PlayerDead && result.Snapshot.PlayerHp > 0,
             DeathSaveUseCount = result.Snapshot.ProjectedDeathSaveUseCount,
             RollingHorizonLossFirst =
                 SearchEvaluationPolicy.UsesRawLossFirst(
@@ -176,8 +177,10 @@ internal static partial class CombatSearchCoordinator
             && current.Snapshot.ProjectedPlayerHp > 0;
         if (SearchEvaluationPolicy.UsesLocalEvaluationWindows(policy.RoutePolicy))
         {
-            int coverage = RouteEvaluationWindow.CompletedCoverageRank(candidate.EvaluationWindow, candidateSurvives)
-                .CompareTo(RouteEvaluationWindow.CompletedCoverageRank(current.EvaluationWindow, currentSurvives));
+            int coverage = RouteEvaluationWindow.CompletedCoverageRank(candidate.EvaluationWindow,
+                    !candidate.Snapshot.PlayerDead && candidate.Snapshot.PlayerHp > 0)
+                .CompareTo(RouteEvaluationWindow.CompletedCoverageRank(current.EvaluationWindow,
+                    !current.Snapshot.PlayerDead && current.Snapshot.PlayerHp > 0));
             if (coverage != 0)
                 return coverage;
             if (candidateSurvives == currentSurvives

@@ -241,6 +241,7 @@ internal sealed partial class CombatBeamSolver
             {
                 GrowthHpCredit = node.Snapshot.StrategyGoalHpCredit,
                 EvaluationWindow = node.Snapshot.EvaluationWindow?.ForTurn(_startTurnNumber),
+                SurvivesEvaluationWindow = !node.Snapshot.PlayerDead && node.Snapshot.PlayerHp > 0,
                 TheftPolicy = _theftPolicy,
                 GrowthRewardCount = node.Snapshot.StrategyGoalCount,
                 Survives = !node.Snapshot.PlayerDead && node.Snapshot.ProjectedPlayerHp > 0,

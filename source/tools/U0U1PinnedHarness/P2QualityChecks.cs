@@ -114,8 +114,9 @@ internal static class P2QualityChecks
             var defended = verifier.ReplayDiagnosticPrefix(defendActions);
             try
             {
-                if (defended.PlayerDead || defended.EvaluationWindow is not { CoversTarget: true })
-                    throw new InvalidOperationException("Defense fixture has no verified surviving witness.");
+                if (defended.PlayerDead || defended.EvaluationWindow is not { CoversTarget: true }
+                    || defended.CumulativePlayerHpLost != 0)
+                    throw new InvalidOperationException("Defense fixture has no verified zero-loss witness.");
                 defenseWitness = new { defended.PlayerDead, defended.CumulativePlayerHpLost,
                     defended.PlayerHp, defended.EvaluationWindow, Actions = defendActions };
             }
@@ -142,8 +143,9 @@ internal static class P2QualityChecks
                 || replay.CumulativePlayerHpLost != result.Snapshot.CumulativePlayerHpLost
                 || ContinuationStamp.CaptureLive(live).StateText != before)
                 throw new InvalidOperationException("Selected P2 route failed independent replay/root isolation.");
-            if (fixture == "defense-mp" && (replay.PlayerDead || replay.EvaluationWindow is not { CoversTarget: true }))
-                throw new InvalidOperationException("Search lost the independently verified defense route.");
+            if (fixture == "defense-mp" && (replay.PlayerDead || replay.EvaluationWindow is not { CoversTarget: true }
+                || replay.CumulativePlayerHpLost != 0))
+                throw new InvalidOperationException("Search lost the independently verified zero-loss defense route.");
             File.WriteAllText(Path.Combine(output, fixture + (prefixPath == null ? "" : "-tail") + ".json"), JsonSerializer.Serialize(new
             {
                 Fixture = fixture, DefenseWitness = defenseWitness, Prefix = prefixEvidence,
@@ -151,7 +153,7 @@ internal static class P2QualityChecks
                 Root = root.ContinuationStamp.StateText, Profile = profile, result.EvaluationWindow,
                 result.ExpandedNodes, Boundary = result.BoundaryReason.ToString(),
                 result.CombatEndedTurn, InitialDelayed = initialDelayed, replay.AllEnemiesDead, replay.PlayerDead,
-                replay.DeathSaveUseCount, replay.CumulativePlayerHpLost, replay.PlayerHp, replay.EnemyHp,
+                replay.DeathSaveUseCount, replay.CumulativePlayerHpLost, replay.PlayerHp, replay.ProjectedPlayerHp, replay.EnemyHp,
                 replay.DelayedDamageValue, replay.StrategicEffects, replay.LongTermResourceValue,
                 Actions = result.BestNode.Actions, FinalState = verifier.CaptureDiagnosticContinuation(replay).StateText,
             }, new JsonSerializerOptions { WriteIndented = true }));

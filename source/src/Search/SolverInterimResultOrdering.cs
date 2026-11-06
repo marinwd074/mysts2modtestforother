@@ -14,8 +14,10 @@ internal static class SolverInterimResultOrdering
             .CompareTo(OutcomeRank(current.Won, current.Survives, current.DeathSaveUseCount, rawLossFirst));
 
     internal static int CompareCompletedCoverage(SolverInterimResult candidate, SolverInterimResult current)
-        => RouteEvaluationWindow.CompletedCoverageRank(candidate.EvaluationWindow, candidate.Survives)
-            .CompareTo(RouteEvaluationWindow.CompletedCoverageRank(current.EvaluationWindow, current.Survives));
+        => RouteEvaluationWindow.CompletedCoverageRank(candidate.EvaluationWindow,
+                candidate.SurvivesEvaluationWindow ?? candidate.Survives)
+            .CompareTo(RouteEvaluationWindow.CompletedCoverageRank(current.EvaluationWindow,
+                current.SurvivesEvaluationWindow ?? current.Survives));
 
     public static bool IsCompleteVictory(
         int actionCount,

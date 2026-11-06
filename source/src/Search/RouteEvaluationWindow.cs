@@ -51,8 +51,9 @@ internal readonly record struct RouteEvaluationWindow(
     internal bool CoversTarget => ComparisonKey is { }
         && (CompleteVictory || TargetTurn == EvaluatedTurn && AtPlayerDecisionPoint);
 
-    // A total eligibility key, not a pairwise depth preference. Missing/partial
-    // coverage cannot outrank a surviving route evaluated to the requested target.
+    // Survival here means actual HP at the evaluated point, not the stand-pat
+    // projection of an unplayed enemy phase. Missing/partial coverage cannot
+    // outrank a living route evaluated to the requested target.
     internal static int CompletedCoverageRank(RouteEvaluationWindow? window, bool survives)
         => survives && window is { CoversTarget: true } ? 0 : 1;
 

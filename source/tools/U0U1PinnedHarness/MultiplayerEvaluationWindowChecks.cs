@@ -201,6 +201,12 @@ internal static class MultiplayerEvaluationWindowChecks
                 && !SolverInterimResultOrdering.IsBetter(shallow, settled)
                 && !CombatSearchCoordinator.IsBetterPotionPolicyResult(null, shallow, settled),
                 "A cheap incomplete tail replaced a surviving route with completed requested coverage.");
+            SolverInterimResult exposed = settled with { Survives = false, SurvivesEvaluationWindow = true };
+            Check(SolverInterimResultOrdering.IsBetter(exposed, shallow)
+                && CombatSearchCoordinator.IsBetterPotionPolicyResult(null, exposed, shallow)
+                && SolverInterimResultOrdering.CompareCompletedCoverage(
+                    exposed with { SurvivesEvaluationWindow = false }, shallow) == 0,
+                "Unplayed threat was treated as actual death at the evaluated window, or actual death certified coverage.");
             SolverInterimResult medium = settled with { EvaluationWindow = mediumWindow };
             SolverInterimResult cheapShallow = shallow with { Score = 1_000_000 };
             Check(!SolverInterimResultOrdering.IsBetter(cheapShallow, medium)

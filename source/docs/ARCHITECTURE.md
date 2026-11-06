@@ -4,6 +4,8 @@
 
 ## 当前精简分支的局部合同
 
+评价窗口的完成资格使用该末态的实际模拟 HP / `PlayerDead`，不使用 `ProjectedPlayerHp` 的未出牌威胁估计。Beam、最终范围选择、补齐模板、预览及 Coordinator 保持同一口径；`SolverInterimResult.SurvivesEvaluationWindow` 传递实际生存，原 `Survives` 继续用于已有威胁排序。负的站桩威胁投影不能抹去已经存活到达的窗口，也不能让已解析候选退回仅按 Beam 分数选择。未知窗口仍不能证明等成本。
+
 末态 `StrategicEffectContext` 的剩余可出牌回合与未来回合开始次数分开：共用 `RouteEvaluationWindow.AtPlayerDecisionPoint` 表示当前开始已经兑现，恶魔形态、创造性 AI、熔炉不再预支这次触发；当前力量继续独立估值。`StateEvaluation` 在获胜/死亡时跳过未来战斗能力估值，实际资源账本保持原口径。这是所有模式共用的估值校准，不改变搜索终点，单人仍预测到战斗结束。
 
 `StateEvaluation.hasFutureCombat` 还统一控制球、潜在启动、回放、保留牌、下回合资源及延迟/反应伤害的未来价值。获胜/死亡时均为零；实际状态字段和已兑现账本保持不变。有限预测窗口结束不是战斗结束，仍保留未兑现的启发式价值，不将其换算成实际 HP 信用。

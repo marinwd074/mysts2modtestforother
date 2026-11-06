@@ -562,7 +562,7 @@ internal sealed partial class CombatBeamSolver
             if (useEvaluationWindows)
             {
                 RouteEvaluationWindow?[] eligibleWindows = policyEligibleCandidates
-                    .Where(candidate => !candidate.Snapshot.PlayerDead && candidate.Snapshot.ProjectedPlayerHp > 0)
+                    .Where(candidate => !candidate.Snapshot.PlayerDead && candidate.Snapshot.PlayerHp > 0)
                     .Select(candidate => WindowOf(candidate.Snapshot))
                     .Where(window => window?.ComparisonKey != null).ToArray();
                 RouteEvaluationWindow? selectedWindow = eligibleWindows
@@ -588,7 +588,7 @@ internal sealed partial class CombatBeamSolver
                 }
                 else if (policyEligibleCandidates.Any(candidate => WindowOf(candidate.Snapshot) != null))
                 {
-                    // No resolved cost scope exists. Keep a provisional beam suggestion,
+                    // No living resolved cost scope exists. Keep a provisional beam suggestion,
                     // without interpreting cumulative HP/resource differences as quality.
                     policyEligibleCandidates = policyEligibleCandidates.OrderByDescending(candidate => candidate.Score)
                         .Take(1).ToList();
@@ -1470,9 +1470,9 @@ internal sealed partial class CombatBeamSolver
             RouteEvaluationWindow? leftWindow = leftSnapshot.EvaluationWindow?.ForTurn(startTurnNumber);
             RouteEvaluationWindow? rightWindow = rightSnapshot.EvaluationWindow?.ForTurn(startTurnNumber);
             int coverage = RouteEvaluationWindow.CompletedCoverageRank(leftWindow,
-                    !leftSnapshot.PlayerDead && leftSnapshot.ProjectedPlayerHp > 0)
+                    !leftSnapshot.PlayerDead && leftSnapshot.PlayerHp > 0)
                 .CompareTo(RouteEvaluationWindow.CompletedCoverageRank(rightWindow,
-                    !rightSnapshot.PlayerDead && rightSnapshot.ProjectedPlayerHp > 0));
+                    !rightSnapshot.PlayerDead && rightSnapshot.PlayerHp > 0));
             if (coverage != 0) return coverage;
             int survival = (!rightSnapshot.PlayerDead && rightSnapshot.ProjectedPlayerHp > 0)
                 .CompareTo(!leftSnapshot.PlayerDead && leftSnapshot.ProjectedPlayerHp > 0);

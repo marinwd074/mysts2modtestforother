@@ -1704,10 +1704,10 @@ internal sealed partial class CombatBeamSolver
             {
                 int coverage = RouteEvaluationWindow.CompletedCoverageRank(
                         leftSnapshot.EvaluationWindow?.ForTurn(_startTurnNumber),
-                        !leftSnapshot.PlayerDead && leftSnapshot.ProjectedPlayerHp > 0)
+                        !leftSnapshot.PlayerDead && leftSnapshot.PlayerHp > 0)
                     .CompareTo(RouteEvaluationWindow.CompletedCoverageRank(
                         rightSnapshot.EvaluationWindow?.ForTurn(_startTurnNumber),
-                        !rightSnapshot.PlayerDead && rightSnapshot.ProjectedPlayerHp > 0));
+                        !rightSnapshot.PlayerDead && rightSnapshot.PlayerHp > 0));
                 if (coverage != 0)
                     return coverage;
                 int survival = (!rightSnapshot.PlayerDead && rightSnapshot.ProjectedPlayerHp > 0)
