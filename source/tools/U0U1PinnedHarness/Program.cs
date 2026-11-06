@@ -41,6 +41,7 @@ internal static class Program
         bool modelIdCacheOnly = args.Length > 0 && args[0] == "model-id-cache";
         bool upstreamPortOnly = args.Length > 0 && args[0] == "upstream-port";
         bool upstreamSearchOnly = args.Length > 0 && args[0] == "upstream-search";
+        bool multiplayerRefreshOnly = args.Length > 0 && args[0] == "multiplayer-refresh";
         bool entropicCostOnly = args.Length > 0 && args[0] == "entropic-cost";
         bool cardChoiceIdentityOnly = args.Length > 0 && args[0] == "card-choice-identity";
         bool memoryDisplayOnly = args.Length > 0 && args[0] == "memory-display";
@@ -60,9 +61,11 @@ internal static class Program
         bool requestHydrationOnly = args.Length > 0 && args[0] is "request-hydration"
             or "request-hydration-benchmark-on" or "request-hydration-benchmark-off";
         bool requestHydrationBenchmark = requestHydrationOnly && args[0] != "request-hydration";
-        string outputDirectory = ParseOutput(entropicCostOnly || upstreamSearchOnly || upstreamPortOnly || memoryDisplayOnly || cardChoiceIdentityOnly || modelIdCacheOnly || darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
+        string outputDirectory = ParseOutput(multiplayerRefreshOnly || entropicCostOnly || upstreamSearchOnly || upstreamPortOnly || memoryDisplayOnly || cardChoiceIdentityOnly || modelIdCacheOnly || darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
             allowHydrationOptions: requestHydrationBenchmark);
         Directory.CreateDirectory(outputDirectory);
+        if (multiplayerRefreshOnly)
+            Environment.SetEnvironmentVariable(SolverSessionCapabilities.MultiplayerModeEnvironmentVariable, "advisor");
 
         try
         {
@@ -121,7 +124,7 @@ internal static class Program
                 ValidateRngRestore(outputDirectory);
                 return 0;
             }
-            if (!upstreamSearchOnly && !upstreamPortOnly && !cardChoiceIdentityOnly && !turnEnergyOnly && !rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly && !rootHistoryOnly && !strategicContextOnly && !strategicEnergyOnly && !projectedShuffleOnly)
+            if (!multiplayerRefreshOnly && !upstreamSearchOnly && !upstreamPortOnly && !cardChoiceIdentityOnly && !turnEnergyOnly && !rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly && !rootHistoryOnly && !strategicContextOnly && !strategicEnergyOnly && !projectedShuffleOnly)
             {
             ValidateDarkEmbracePredictionCoverage();
             ValidateViciousStrategicValue();
@@ -169,7 +172,7 @@ internal static class Program
                     ? "EXOSKELETONS_WEAK" : "FUZZY_WURM_CRAWLER_WEAK",
                 "U0U1PINNED1",
                 Ascension: 0,
-                ActIndexForTest: 0);
+                ActIndexForTest: 0, PlayerCount: multiplayerRefreshOnly ? 2 : 1);
             Task enter = OfflineCombat.EnterCombatRoomAsync(scenario);
             loop.RunUntilCompleted(enter, TimeSpan.FromSeconds(180), "U0/U1 enter combat");
             CombatState combat = OfflineCombat.WaitForPlayableCombat(loop);
@@ -221,6 +224,11 @@ internal static class Program
                 includeTurnSetup: false,
                 theftPolicy: null);
 
+            if (multiplayerRefreshOnly)
+            {
+                Console.WriteLine(MultiplayerRefreshChecks.Run(combat, names, damage, captured, profile, outputDirectory));
+                return 0;
+            }
             if (upstreamSearchOnly)
             {
                 Console.WriteLine(UpstreamSearchChecks.Run(combat, names, damage, captured, profile, outputDirectory));

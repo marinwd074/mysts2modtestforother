@@ -2,30 +2,11 @@ using System.Diagnostics;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Nodes;
-using CombatSolver.Engine.InCombat.Simulation;
 
 namespace CombatSolver;
 
-internal enum MultiplayerPlanRefreshDecision
-{
-    Continue,
-    Reselect,
-    FullRestart,
-}
-
 internal static partial class SolverController
 {
-    private readonly record struct BoundedReplayEvaluation(
-        MultiplayerReplayCandidate Candidate,
-        MultiplayerCombatObjectiveRank Objective,
-        double Score);
-
-    private const int BoundedRefreshCandidateLimit = 3;
-    private const int BoundedRefreshPrefixActionLimit = 2;
-    private const int BoundedRefreshBeamWidth = 24;
-    private const int BoundedRefreshExpandedNodeLimit = 192;
-    private const int BoundedRefreshTimeLimitMilliseconds = 60;
-
     private static MultiplayerPlanRefreshDecision TryBoundedMultiplayerPlanRefresh(
         NGame host,
         CombatState state,
@@ -71,146 +52,19 @@ internal static partial class SolverController
                 includeTurnSetup: false,
                 theftPolicy: theftPolicy);
             CombatRootSnapshot root = CombatRootSnapshot.Capture(state);
-            int initialEnemyMaximumHp = Math.Max(
-                1,
-                root.Enemies.Sum(enemy => Math.Max(0, enemy.MaxHp)));
-            CombatBeamSolver replaySolver = new(
-                root,
-                displayNames,
-                battleDamage,
-                searchPolicy);
-
-            List<BoundedReplayEvaluation> evaluations = [];
-            foreach (MultiplayerReplayCandidate candidate in
-                     source.MultiplayerReplayCandidates.Take(BoundedRefreshCandidateLimit))
-            {
-                if (candidate.Prefix.Count == 0
-                    || candidate.Prefix.Count > BoundedRefreshPrefixActionLimit
-                    || candidate.Prefix.Any(action =>
-                        action.Kind != PlanActionKind.PlayCard
-                        || action.EndsPlayerTurn
-                        || !action.IsExecutable
-                        || action.Turn != root.StartTurnNumber))
-                {
-                    continue;
-                }
-
-                SimulationSnapshot snapshot =
-                    replaySolver.ReplayDiagnosticPrefix(candidate.Prefix);
-                try
-                {
-                    bool completeVictory = SolverInterimResultOrdering.IsCompleteVictory(
-                        candidate.Prefix.Count,
-                        snapshot.AllEnemiesDead,
-                        snapshot.PlayerDead,
-                        snapshot.ProjectedPlayerHp);
-                    double enemyDurabilityRatio =
-                        MultiplayerCombatObjectivePolicy.ComputeEnemyDurabilityRatio(
-                            snapshot.EnemyDurabilityByCombatId,
-                            initialEnemyMaximumHp);
-                    MultiplayerCombatObjectiveRank objective =
-                        MultiplayerCombatObjectiveMath.BuildRank(
-                            searchPolicy.MultiplayerCombatObjectiveStrategy,
-                            completeVictory,
-                            snapshot.AllPlayersAlive,
-                            snapshot.TeamLossRatio,
-                            snapshot.WorstPlayerLossRatio,
-                            enemyDurabilityRatio,
-                            searchPolicy.MultiplayerEnemyDurabilityRatio,
-                            completeVictory ? snapshot.CombatEndedTurn : null,
-                            root.StartTurnNumber);
-                    evaluations.Add(new BoundedReplayEvaluation(
-                        candidate,
-                        objective,
-                        snapshot.Score));
-                }
-                finally
-                {
-                    snapshot.ReleaseSimulator();
-                }
-            }
-
-            int currentIndex = evaluations.FindIndex(
-                evaluation => evaluation.Candidate.OriginalRank == 0);
-            if (currentIndex < 0)
+            MultiplayerPlanRefreshResult evaluation = MultiplayerPlanRefresher.Refresh(
+                root, displayNames, battleDamage, searchPolicy, source.MultiplayerReplayCandidates);
+            if (evaluation.Decision == MultiplayerPlanRefreshDecision.FullRestart)
             {
                 DropRetainedPlanForFullRestart();
-                LogPlanRefresh(
-                    MultiplayerPlanRefreshDecision.FullRestart,
-                    worldVersion,
-                    source,
-                    refreshed: null,
-                    evaluations.Count,
-                    firstActionChanged: false,
-                    stopwatch.Elapsed,
-                    "current_prefix_unreplayable");
-                return MultiplayerPlanRefreshDecision.FullRestart;
+                LogPlanRefresh(evaluation.Decision, worldVersion, source, evaluation.Result,
+                    evaluation.ReplayedCandidates, evaluation.FirstActionChanged,
+                    stopwatch.Elapsed, evaluation.Reason);
+                return evaluation.Decision;
             }
-
-            BoundedReplayEvaluation selected = evaluations[currentIndex];
-            foreach (BoundedReplayEvaluation candidate in evaluations)
-            {
-                int comparison = searchPolicy.UseMultiplayerTeamObjective
-                    ? MultiplayerCombatObjectiveMath.Compare(candidate.Objective, selected.Objective)
-                    : selected.Score.CompareTo(candidate.Score);
-                if (comparison < 0
-                    || comparison == 0
-                    && candidate.Candidate.OriginalRank < selected.Candidate.OriginalRank)
-                {
-                    selected = candidate;
-                }
-            }
-
-            SolverSearchProfile boundedProfile = searchPolicy.Profile with
-            {
-                BeamWidth = Math.Min(
-                    searchPolicy.Profile.BeamWidth,
-                    BoundedRefreshBeamWidth),
-                MaxExpandedNodes = Math.Min(
-                    searchPolicy.Profile.MaxExpandedNodes,
-                    BoundedRefreshExpandedNodeLimit),
-                SoftTimeBudgetMilliseconds = Math.Min(
-                    searchPolicy.Profile.SoftTimeBudgetMilliseconds,
-                    BoundedRefreshTimeLimitMilliseconds),
-            };
-            CombatBeamSolver materializeSolver = new(
-                root,
-                displayNames,
-                battleDamage,
-                searchPolicy,
-                searchProfile: boundedProfile,
-                fixedPrefixActions: selected.Candidate.Prefix,
-                reserveScenarioReevaluationBudget: false);
-            SolverResult refreshed = materializeSolver.Solve();
-
-            bool prefixPreserved = refreshed.BestNode.Actions.Count >= selected.Candidate.Prefix.Count;
-            for (int index = 0; prefixPreserved && index < selected.Candidate.Prefix.Count; index++)
-            {
-                prefixPreserved = HasSameExecutionIdentity(
-                    refreshed.BestNode.Actions[index],
-                    selected.Candidate.Prefix[index]);
-            }
-            if (!prefixPreserved)
-            {
-                DropRetainedPlanForFullRestart();
-                LogPlanRefresh(
-                    MultiplayerPlanRefreshDecision.FullRestart,
-                    worldVersion,
-                    source,
-                    refreshed,
-                    evaluations.Count,
-                    firstActionChanged: false,
-                    stopwatch.Elapsed,
-                    "materialized_prefix_mismatch");
-                return MultiplayerPlanRefreshDecision.FullRestart;
-            }
-
-            MultiplayerPlanRefreshDecision decision =
-                selected.Candidate.OriginalRank == 0
-                    ? MultiplayerPlanRefreshDecision.Continue
-                    : MultiplayerPlanRefreshDecision.Reselect;
-            bool firstActionChanged = decision == MultiplayerPlanRefreshDecision.Reselect;
-
+            SolverResult refreshed = evaluation.Result
+                ?? throw new InvalidOperationException("A successful plan refresh must supply a result.");
+            MultiplayerPlanRefreshDecision decision = evaluation.Decision;
             _combat.State = state;
             _combat.LatestResult = refreshed;
             _combat.LatestStamp = currentStamp;
@@ -231,12 +85,10 @@ internal static partial class SolverController
                 worldVersion,
                 source,
                 refreshed,
-                evaluations.Count,
-                firstActionChanged,
+                evaluation.ReplayedCandidates,
+                evaluation.FirstActionChanged,
                 stopwatch.Elapsed,
-                decision == MultiplayerPlanRefreshDecision.Continue
-                    ? "current_prefix_rematerialized"
-                    : "retained_alternative_rematerialized");
+                evaluation.Reason);
             return decision;
         }
         catch (Exception ex)
@@ -257,25 +109,6 @@ internal static partial class SolverController
             return MultiplayerPlanRefreshDecision.FullRestart;
         }
     }
-
-    private static bool HasSameExecutionIdentity(
-        PlanAction actual,
-        PlanAction expected)
-        => actual.Kind == expected.Kind
-            && actual.Turn == expected.Turn
-            && string.Equals(actual.CardId, expected.CardId, StringComparison.Ordinal)
-            && actual.CardOccurrence == expected.CardOccurrence
-            && actual.TargetIndex == expected.TargetIndex
-            && actual.TargetCombatId == expected.TargetCombatId
-            && string.Equals(actual.CardStateKey, expected.CardStateKey, StringComparison.Ordinal)
-            && actual.CardStateOccurrence == expected.CardStateOccurrence
-            && actual.CardUpgradeLevel == expected.CardUpgradeLevel
-            && string.Equals(
-                actual.CardEnchantmentId,
-                expected.CardEnchantmentId,
-                StringComparison.Ordinal)
-            && Equals(actual.Choice, expected.Choice)
-            && Equals(actual.NestedChoices, expected.NestedChoices);
 
     private static void DropRetainedPlanForFullRestart()
     {

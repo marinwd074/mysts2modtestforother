@@ -4391,12 +4391,28 @@ foreach ($p0RuntimeRule in @(
 $p0RefreshPath = Join-Path $repositoryRoot 'src/Runtime/SolverController.MultiplayerPlanRefresh.cs'
 $p0RefreshText = [IO.File]::ReadAllText($p0RefreshPath)
 foreach ($p0ReplayRule in @(
-    'source.MultiplayerReplayCandidates.Take(BoundedRefreshCandidateLimit)',
-    'replaySolver.ReplayDiagnosticPrefix(candidate.Prefix)',
+    'MultiplayerPlanRefresher.Refresh(',
     'source.StartTurnNumber != LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber')) {
     if (-not $p0RefreshText.Contains($p0ReplayRule)) {
         $violations.Add("${p0RefreshPath}: P0 bounded replay/new-root guard drifted '$p0ReplayRule'")
     }
+}
+
+$refreshSearchPath = Join-Path $repositoryRoot 'src/Search/MultiplayerPlanRefresher.cs'
+$refreshSearchText = [IO.File]::ReadAllText($refreshSearchPath)
+foreach ($refreshSearchRule in @(
+    'candidates.Take(BoundedRefreshCandidateLimit)',
+    'replaySolver.ReplayDiagnosticPrefix(candidate.Prefix)',
+    'fixedPrefixActions: selected.Candidate.Prefix',
+    'snapshot.ReleaseSimulator();')) {
+    if (-not $refreshSearchText.Contains($refreshSearchRule)) {
+        $violations.Add("${refreshSearchPath}: bounded refresh calculation contract drifted '$refreshSearchRule'")
+    }
+}
+if ($p0RefreshText.Contains('new CombatBeamSolver(') -or
+    $p0RefreshText.Contains('CombatBeamSolver replaySolver') -or
+    $refreshSearchText -match 'LocalContext|SolverOverlay|RunManager|_combat\.') {
+    $violations.Add('Multiplayer refresh must keep frozen-root calculation in Search and live adoption in Runtime')
 }
 
 $p1ContinuationContractsPath = Join-Path $repositoryRoot 'src/Search/MultiplayerLocalCrossTurnContracts.cs'

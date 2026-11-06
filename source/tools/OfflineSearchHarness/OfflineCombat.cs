@@ -16,7 +16,8 @@ internal sealed record HarnessScenario(
     string EncounterId,
     string Seed,
     int Ascension,
-    int ActIndexForTest);
+    int ActIndexForTest,
+    int PlayerCount = 1);
 
 /// <summary>
 /// 用游戏自己的对象图建一场战斗并推进到玩家第一回合。步骤照
@@ -35,8 +36,14 @@ internal static class OfflineCombat
             throw new InvalidOperationException("已经有进行中的跑局。");
 
         UnlockState unlockState = SaveManager.Instance.GenerateUnlockStateFromProgress();
+        if (scenario.PlayerCount is < 1 or > 4)
+            throw new ArgumentOutOfRangeException(nameof(scenario.PlayerCount));
+        // Native model-only multiplayer fixture, following E0PinnedHarness. This
+        // intentionally uses fake multiplayer; it does not exercise ENet or Steam.
+        Player[] players = Enumerable.Range(1, scenario.PlayerCount)
+            .Select(id => Player.CreateForNewRun(character, unlockState, (ulong)id)).ToArray();
         RunState runState = RunState.CreateForNewRun(
-            [Player.CreateForNewRun(character, unlockState, 1uL)],
+            players,
             ModelDb.ActsByIndex is { } ? ActModel.GetDefaultList().Select(act => act.ToMutable()).ToList() : [],
             [],
             GameMode.Standard,
