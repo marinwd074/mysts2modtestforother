@@ -216,7 +216,11 @@ internal static partial class CombatSearchCoordinator
                     policy.Diagnostics.Info("[CombatSolver/Test] SEARCH_OPTIMIZATIONS "
                         + System.Text.Json.JsonSerializer.Serialize(optimizations.Capture()));
             }
-            finally { cache?.Release(); }
+            finally
+            {
+                try { cache?.Release(); }
+                finally { policy.RequestWorkObserver?.Invoke(totals.Snapshot()); }
+            }
         }
     }
 

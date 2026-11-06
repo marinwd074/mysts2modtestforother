@@ -22,9 +22,13 @@ internal static partial class SolverController
 {
 
     public static void RequestSearch(NGame host, CombatState state, SearchReason reason, bool deployWhenReady = false,
-        SolverResult? adoptedRouteReplay = null)
+        SolverResult? adoptedRouteReplay = null, SearchRequestObservation? observation = null)
     {
         AssertMainThread();
+        observation ??= new(reason.ToString(), Volatile.Read(ref _combatLifecycleGeneration),
+            static snapshot => Entry.Logger.Info("[CombatSolver/Test] SEARCH_REQUEST_TIMELINE "
+                + System.Text.Json.JsonSerializer.Serialize(snapshot)));
+        using IDisposable observationAttempt = observation.BeginAttempt();
         SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
         if (!capabilities.CanSearch)
         {
@@ -69,7 +73,7 @@ internal static partial class SolverController
                 state,
                 reason,
                 deployWhenReady,
-                rootCaptureBarrier);
+                rootCaptureBarrier, observation);
             return;
         }
         // A direct request can arrive after the barrier opened but before the deferred
@@ -123,7 +127,7 @@ internal static partial class SolverController
             : actionExecutor.FinishedExecutingActions();
         if (!nativeActionBarrier.IsCompleted)
         {
-            DeferSearchUntilRootCaptureBarrier(host, state, reason, deployWhenReady, nativeActionBarrier);
+            DeferSearchUntilRootCaptureBarrier(host, state, reason, deployWhenReady, nativeActionBarrier, observation);
             return;
         }
         nativeActionBarrier.GetAwaiter().GetResult();
@@ -284,6 +288,7 @@ internal static partial class SolverController
                 CancelSearch();
                 _combat.State = state;
                 _combat.LatestResult = reused;
+                ObserveAcceptedSearchResult(observation, reused!, "ContinuationReused");
                 _combat.LatestStamp = stamp;
                 _combat.LatestRouteInvalidationVersion = MultiplayerRouteChangeTracker.Version;
                 _combat.ContinuationSource = reused;
@@ -310,6 +315,7 @@ internal static partial class SolverController
                         reused!,
                         UnexpectedReplanCount > 0,
                         _combat.ReviewedWorldlinesTotal));
+                observation.Mark(SearchRequestStage.ApprovedRouteSubmitted);
                 string reuseValidation = livingEnemyHpDecreaseDrift
                     ? sharedShuffleRngDrift || sharedFinishedCardPlayDrift
                         ? "compatible_remote_enemy_hp_and_shared_state"
@@ -481,6 +487,7 @@ internal static partial class SolverController
                 deployWhenReady)
             {
                 ReplanCause = replanCause,
+                Observation = observation,
                 StartTurnNumber = searchTurn!.Value,
                 WorldVersion = capabilities.IsMultiplayer
                     ? MultiplayerWorldTracker.WorldVersion
@@ -493,6 +500,8 @@ internal static partial class SolverController
                     : null,
             };
             _search = search;
+            observation.TransferToAsync();
+            observation.Bind(search.Generation, search.StartTurnNumber, search.WorldVersion, search.RouteInvalidationVersion);
             CancellationToken token = search.Cancellation.Token;
             int generation = search.Generation;
             if (capabilities.Kind == SolverSessionKind.MultiplayerAdvisor)
@@ -582,10 +591,15 @@ internal static partial class SolverController
                     $"continuation_reject_reason={continuationRejectReason}");
             }
             search.MaxDegreeOfParallelism = searchPolicy.MaxDegreeOfParallelism;
+            searchPolicy = searchPolicy with
+            {
+                RequestWorkObserver = work => observation.ObserveWork(work.ExpandedNodes, work.TransitionCount),
+            };
             search.MemoryPressureSignal = searchPolicy.MemoryPressureSignal;
             setupStage = "combat_root_snapshot";
             long rootCaptureAllocatedAtStart = GC.GetTotalAllocatedBytes(precise: false);
             CombatRootSnapshot rootSnapshot;
+            observation.Mark(SearchRequestStage.RootCaptureStarted);
             try
             {
                 if (capabilities.Kind == SolverSessionKind.MultiplayerAdvisor)
@@ -596,6 +610,7 @@ internal static partial class SolverController
                         $"turn={search.StartTurnNumber}");
                 }
                 rootSnapshot = CombatRootSnapshot.Capture(state);
+                observation.BindRoot(rootSnapshot.ContinuationStamp.CombatIdentity.ToString());
             }
             catch (Exception ex) when (capabilities.Kind == SolverSessionKind.MultiplayerAdvisor)
             {
@@ -606,6 +621,7 @@ internal static partial class SolverController
             }
             finally
             {
+                observation.Mark(SearchRequestStage.RootCaptureFinished);
                 SearchGcPolicy.ReportCombatLifecycleAllocation(
                     Math.Max(
                         0,
@@ -679,8 +695,10 @@ internal static partial class SolverController
 
             setupStage = "worker_schedule";
             SolvedRouteCache routeCache = SolvedRouteCache.Capture(state, rootSnapshot, searchPolicy, battleDamage);
+            observation.Mark(SearchRequestStage.WorkerQueued);
             Task<SolverResult> solveTask = Task.Run(() =>
             {
+                observation.Mark(SearchRequestStage.WorkerStarted);
                 if (MultiplayerLocalCrossTurnContracts.CanUsePersistentRouteCache(searchPolicy.RoutePolicy)
                     && !searchPolicy.VerifyIncrementalSearch && !searchPolicy.MeasurePhasePerformance
                     && reason is SearchReason.AutoTurnStart or SearchReason.Deploy or SearchReason.FullAuto
@@ -743,6 +761,7 @@ internal static partial class SolverController
                 // ownership is needed only while a reusable unattended request is active.
                 solveTask.ContinueWith(task =>
                 {
+                    observation.WorkerFinished(task.Status.ToString());
                     SolverDispatcher.Post(() => CompleteSearch(host, search, task));
                 }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
                 search.CallbackScheduled = true;
@@ -752,6 +771,7 @@ internal static partial class SolverController
             IDisposable? unattendedActivity = UnattendedAsyncActivityTracker.BeginActivity();
             solveTask.ContinueWith(task =>
             {
+                observation.WorkerFinished(task.Status.ToString());
                 try
                 {
                     SolverDispatcher.Post(() =>
@@ -776,6 +796,7 @@ internal static partial class SolverController
         }
         catch (Exception ex)
         {
+            observation.SetDisposition("SetupFailed");
             _combat.BugReportIssues.RecordFailure(CombatBugReportIssueKind.SearchSetupFailure, ex);
             CombatBugReportExporter.RecordRuntimeException("search_setup", ex);
             CancelSearch();
@@ -813,6 +834,7 @@ internal static partial class SolverController
         finally
         {
             DisposeSearchCancellationOnce(search);
+            if (!search.CallbackScheduled) search.Observation?.Finish();
             Interlocked.Increment(ref _searchReferenceReleaseCompletedCountForTesting);
         }
     }
@@ -840,28 +862,46 @@ internal static partial class SolverController
         if (Interlocked.Exchange(ref search.CancellationDisposeState, 1) != 0)
             return;
         search.Cancellation.Dispose();
+        search.Observation?.Mark(SearchRequestStage.CancellationDisposed);
         Interlocked.Increment(ref _searchCtsDisposeCountForTesting);
     }
 
     private static void PublishSearchProgress(SolverSearchSession search, SolverProgress progress)
     {
+        search.Observation?.ObserveProgress(progress.CurrentTurnPreview != null || progress.SpeculativeRoutePreview != null,
+            progress.CompletedTurnLayers);
         if (ReferenceEquals(_search, search))
+        {
             search.Interaction.PublishProgress(progress);
+        }
     }
+
+    private static void ObserveAcceptedSearchResult(SearchRequestObservation? observation, SolverResult result,
+        string disposition = "Accepted")
+        => observation?.Accept(result.RouteIdentity, result.BestNode.Actions.Count == 0 ? 0
+            : result.BestNode.Actions.Max(action => action.Turn) - result.StartTurnNumber + 1, disposition);
 
     private static void CompleteSearch(
         NGame host,
         SolverSearchSession search,
         Task<SolverResult> task)
     {
+        search.Observation?.Mark(SearchRequestStage.CallbackStarted);
         try
         {
             CompleteSearchCore(host, search, task);
+        }
+        catch
+        {
+            search.Observation?.SetDisposition("CallbackFailed");
+            throw;
         }
         finally
         {
             search.CallbackCompletion.TrySetResult();
             DisposeSearchCancellationOnce(search);
+            search.Observation?.Mark(SearchRequestStage.CallbackFinished);
+            search.Observation?.Finish();
         }
     }
 
@@ -872,7 +912,10 @@ internal static partial class SolverController
     {
         AssertMainThread();
         if (!ReferenceEquals(_search, search))
+        {
+            search.Observation?.SetDisposition("Superseded");
             return;
+        }
         _search = null;
         Volatile.Write(ref search.Interaction.Progress, null);
         int generation = search.Generation;
@@ -885,6 +928,7 @@ internal static partial class SolverController
 
         if (task.IsCanceled)
         {
+            search.Observation?.SetDisposition("Canceled");
             _combat.PendingCompleteProjectionBaseline = null;
             _combat.PendingManualProjectionBaseline = null;
             SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Canceled);
@@ -893,11 +937,13 @@ internal static partial class SolverController
         }
         if (task.IsFaulted)
         {
+            search.Observation?.SetDisposition("WorkerFailed");
             _combat.PendingCompleteProjectionBaseline = null;
             _combat.PendingManualProjectionBaseline = null;
             Exception ex = task.Exception?.GetBaseException() ?? new InvalidOperationException("后台搜索失败但没有异常对象。");
             if (ex is SearchRecoveryBudgetExhaustedException)
             {
+                search.Observation?.SetDisposition("BudgetExhausted");
                 _combat.FullAutoEnabled = false;
                 _combat.MultiplayerSafeAutoEnabled = false;
                 _combat.MultiplayerSafeExecuteDeploymentRequested = false;
@@ -968,6 +1014,7 @@ internal static partial class SolverController
             localCoreStampMatches);
         if (!stillSearchable || completionStale)
         {
+            search.Observation?.SetDisposition("Stale");
             _combat.BugReportIssues.Record(
                 CombatBugReportIssueKind.SearchResultStale,
                 $"第 {LocalContext.GetMe(searchedState)?.PlayerCombatState?.TurnNumber ?? 0} 回合");
@@ -1056,6 +1103,7 @@ internal static partial class SolverController
 
         if (stopped)
         {
+            ObserveAcceptedSearchResult(search.Observation, result, "StoppedWithResult");
             result.ResultScope = SolverResultScope.RouteAdoption;
             search.Interaction.PreserveStoppedResult(result, currentStamp!);
             _combat.StoppedSearch = search.Interaction;
@@ -1066,6 +1114,7 @@ internal static partial class SolverController
                     UnexpectedReplanCount > 0,
                     _combat.ReviewedWorldlinesTotal));
             SolverOverlay.ShowSearchStopped(host);
+            search.Observation?.Mark(SearchRequestStage.ApprovedRouteSubmitted);
             SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Canceled);
             Entry.Logger.Info(
                 $"[CombatSolver/Test] SEARCH_STOPPED_RESULT_PRESERVED generation={generation} " +
@@ -1074,6 +1123,7 @@ internal static partial class SolverController
         }
 
         _combat.LatestResult = result;
+        ObserveAcceptedSearchResult(search.Observation, result);
         _combat.LatestStamp = currentStamp!;
         _combat.LatestRouteInvalidationVersion = currentRouteInvalidationVersion;
         RecordAcceptedPlanRefresh(result, generation);
@@ -1113,6 +1163,7 @@ internal static partial class SolverController
         SolverOverlay.ShowResult(
             host,
             routeAdopted ? MarkRouteAdopted(completedSnapshot) : completedSnapshot);
+        search.Observation?.Mark(SearchRequestStage.ApprovedRouteSubmitted);
         if (SolverSessionCapabilities.Capture(searchedState).Kind == SolverSessionKind.MultiplayerAdvisor)
         {
             Entry.Logger.Info(
@@ -1211,9 +1262,11 @@ internal static partial class SolverController
         CombatState state,
         SearchReason reason,
         bool deployWhenReady,
-        Task barrier)
+        Task barrier,
+        SearchRequestObservation observation)
     {
         CancelDeferredSearch();
+        observation.BeginDeferral();
         CancellationTokenSource cancellation = new();
         _deferredSearchCts = cancellation;
         int requestId = ++_deferredSearchId;
@@ -1230,7 +1283,7 @@ internal static partial class SolverController
             barrier,
             cancellation,
             requestId,
-            lifecycleGeneration);
+            lifecycleGeneration, observation);
         PendingDeferredSearchReleases.Add(operation);
         TaskHelper.RunSafely(operation);
     }
@@ -1243,9 +1296,13 @@ internal static partial class SolverController
         Task barrier,
         CancellationTokenSource cancellation,
         int requestId,
-        int lifecycleGeneration)
+        int lifecycleGeneration,
+        SearchRequestObservation observation)
     {
         CancellationToken token = cancellation.Token;
+        using CancellationTokenRegistration observationCancellation = token.Register(
+            () => observation.Cancel("deferred_request_canceled"));
+        bool resumed = false;
         try
         {
             await barrier.WaitAsync(token).ConfigureAwait(false);
@@ -1271,7 +1328,9 @@ internal static partial class SolverController
                     Entry.Logger.Info(
                         $"[CombatSolver/Test] SEARCH_ROOT_CAPTURE_RESUMED reason={reason} " +
                         $"lifecycle_epoch={lifecycleGeneration}");
-                    RequestSearch(host, state, reason, deployWhenReady);
+                    observation.EndDeferral();
+                    resumed = true;
+                    RequestSearch(host, state, reason, deployWhenReady, observation: observation);
                 }
                 finally
                 {
@@ -1290,6 +1349,11 @@ internal static partial class SolverController
         finally
         {
             cancellation.Dispose();
+            if (!resumed)
+            {
+                observation.SetDisposition(token.IsCancellationRequested ? "DeferredCanceled" : "DeferredStale");
+                observation.Finish();
+            }
         }
     }
 
@@ -1346,12 +1410,13 @@ internal static partial class SolverController
         return Task.WhenAll(releases);
     }
 
-    private static void CancelSearch()
+    private static void CancelSearch(string observationReason = "superseded_or_reset")
     {
         SolverSearchSession? search = _search;
         _search = null;
         if (search == null)
             return;
+        search.Observation?.Cancel(observationReason);
         search.Cancellation.Cancel();
         if (!search.CallbackScheduled)
             search.CallbackCompletion.TrySetResult();

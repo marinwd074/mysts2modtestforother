@@ -11,6 +11,7 @@ internal static class MultiplayerRecoveryBudgetChecks
     {
         int checks = 0, replays = 0;
         List<object> rows = [];
+        List<object> observationRows = [];
         SearchPolicySnapshot policy = captured with
         {
             VerifyIncrementalSearch = false, MeasurePhasePerformance = true,
@@ -31,12 +32,19 @@ internal static class MultiplayerRecoveryBudgetChecks
         }
 
         List<string> messages = [];
+        SearchRequestWorkSnapshot? observedWork = null;
+        int workCallbacks = 0;
         SearchPolicySnapshot Observe(SearchPolicySnapshot value, Action<string>? extra = null)
-            => value with { R0TransitionPolicyIdentity = CombatTransitionMemo.CapturePolicyIdentity(value),
+        {
+            observedWork = null;
+            workCallbacks = 0;
+            return value with { R0TransitionPolicyIdentity = CombatTransitionMemo.CapturePolicyIdentity(value),
+                RequestWorkObserver = work => { observedWork = work; workCallbacks++; },
                 Diagnostics = new SearchDiagnosticsSink(message =>
             {
                 messages.Add(message); extra?.Invoke(message);
             }, messages.Add) };
+        }
 
         SearchRecoveryBudgetSnapshot LastBudget()
         {
@@ -90,6 +98,9 @@ internal static class MultiplayerRecoveryBudgetChecks
             SearchRequestPhaseSnapshot phases = LastPhases();
             Console.WriteLine($"RecoveryBudget case={name} counter={budget.ExpandedNodes} ledger={phases.ExpandedNodes}");
             VerifyWork(budget, phases);
+            Check(workCallbacks == 1 && observedWork is { } work
+                && work.ExpandedNodes == phases.ExpandedNodes && work.TransitionCount == phases.LogicalTransitions,
+                "Completed/canceled/failed request did not deliver its entire ledger exactly once.");
             rows.Add(new { name, budget, phases,
                 quality = result == null ? null : Quality(result),
                 cleanup = messages.Where(message => message.Contains("R1_TRANSITION_HYDRATION_RELEASE", StringComparison.Ordinal)).ToArray() });
@@ -112,6 +123,25 @@ internal static class MultiplayerRecoveryBudgetChecks
             SolverResult control = CombatSearchCoordinator.Solve(root, names, damage, current,
                 CancellationToken.None, null);
             Verify(root, control);
+            SearchRequestObservationSnapshot? observation = null;
+            SearchRequestObservation timeline = new("native-fixture", 1, value => observation = value);
+            SolverResult instrumented = CombatSearchCoordinator.Solve(root, names, damage,
+                current with { RequestWorkObserver = work => timeline.ObserveWork(work.ExpandedNodes, work.TransitionCount) },
+                CancellationToken.None, progress => timeline.ObserveProgress(
+                    progress.CurrentTurnPreview != null || progress.SpeculativeRoutePreview != null, progress.CompletedTurnLayers));
+            timeline.SetDisposition("CoordinatorFixture");
+            timeline.Finish();
+            Check(Quality(control) == Quality(instrumented) && control.PredictedFinalState == instrumented.PredictedFinalState
+                && JsonSerializer.Serialize(control.BestNode.Actions) == JsonSerializer.Serialize(instrumented.BestNode.Actions)
+                && control.TotalExpandedNodes == instrumented.TotalExpandedNodes
+                && control.TotalTransitionCount == instrumented.TotalTransitionCount,
+                "Request observation changed the complete route, final state, quality, or logical work.");
+            Check(observation is { WorkObserved: true } && observation.ExpandedNodes == instrumented.TotalExpandedNodes
+                && observation.LogicalTransitions == instrumented.TotalTransitionCount,
+                "The native request observer lost work.");
+            Verify(root, instrumented);
+            observationRows.Add(new { dop, observation, same_route_quality_state_and_work = true,
+                control_work = new { control.TotalExpandedNodes, control.TotalTransitionCount } });
             foreach (bool withFailedRoute in new[] { false, true })
             {
                 messages.Clear();
@@ -226,6 +256,11 @@ internal static class MultiplayerRecoveryBudgetChecks
             status = "PASS", checks, independent_replays = replays,
             evidence = "native two-player model; fixed roots and controlled deadline/cancellation hooks; no Controller/network/UI",
             rows,
+        }, new JsonSerializerOptions { WriteIndented = true }));
+        File.WriteAllText(Path.Combine(output, "request-observation-ab.json"), JsonSerializer.Serialize(new
+        {
+            status = "PASS", evidence = "native Coordinator observation on/off; no Runtime Controller or UI timing",
+            rows = observationRows,
         }, new JsonSerializerOptions { WriteIndented = true }));
         return (checks, replays);
     }

@@ -60,6 +60,10 @@ Coordinator 优先从新根重放完整当前路线，复用既有末态/质量�
 
 `SearchRecoveryBudgetSnapshot` / `SEARCH_RECOVERY_BUDGET` 记录 Coordinator 的完成、耗尽、取消或失败，以及共享节点、墙钟、超额收尾和取消观察后到计算收尾点的时间；采样不含末尾诊断输出、请求缓存清理、根捕获、dispatcher 接纳和外层 worker / GC scope 退出，不能当作完整响应或排空时间。进度沿用同一请求的时间和节点累计值。R1 转移缓存由 `RunSearchPass` 的 `finally` 覆盖早退、异常和取消，清除封存模拟器引用；这不表示立即完成物理内存回收。
 
+`SearchRequestObservation` 属于 Runtime，只持有值、首个事件时间和固定大小的阶段集合。`RequestSearch` 入口建立一个编号和单调时钟，根屏障/原生动作等待恢复时继续使用同一观测；异步 session 拥有后续阶段。根捕获、worker 排队/开始/终止、预览产生/提交、已审核路线提交、结果接纳、取消、callback 和 CTS 释放分别记录。worker 终止在 Task 已完成的 continuation 内采样，包含搜索尾部及 GC scope 退出；与主线程 callback 等待分开。callback 与并行引用释放可能竞争 CTS，最终记录等待 worker、callback 和 CTS 的完成事件；重复收尾只输出一次。它不等待物理内存回收，也不证明像素已显示。
+
+`SEARCH_REQUEST_TIMELINE` 输出请求/战斗生命周期/搜索 generation、冻结世界及失效版本、根身份、选中路线身份/深度、进度报告的最大完成层数和阶段时间。`RequestWorkObserver` 只把 Coordinator 最终工作账本的值副本送回 Runtime，正常、异常和取消均调用一次，不参与排名或接纳。`UnacceptedRequestExpandedNodes` 表示没有正式接纳/提交路线的请求所做的工作，附带是否已提交预览；不把这些工作全部归为无用，也不把缓存结果历史节点当成本次工作。未运行 Coordinator 的缓存/直接续用保留 `WorkObserved=false`。观测不更改旧状态验证、授权、调度和清理所有权。
+
 `CombatBeamSolver.RetainedPrefixReplay` 复用普通前缀动作准入，逐动作新根重放；完整获胜截断旧尾部，未知预测边界或不可用动作返回明确拒绝。临时快照由 `RetainedPrefixReplay.Dispose` 释放，异常/拒绝路径由生产方法释放；不返回旧 SearchNode。`AuxiliaryWorkScope` 拥有无 Beam session 的辅助计算的通知隔离与一次性账本收尾：前缀批次标为 `PlanRefreshPrefix`，审计入口经 `PrepareAudit` 标为 `AuditPreparation`，失败/取消前的展开和转移也计入请求，嵌套辅助调用不重复记账。物化为独立成员。不可用备选独立拒绝，当前候选不能重放则保持 FullRestart。取消令牌贯穿各阶段，结果通过普通过期/身份接纳后才记录 `MP_PLAN_REFRESH_ACCEPT`。阶段指标不作为质量排序输入。
 
 `SolverSessionCapabilities` 是 Runtime 的会话能力合同：网络多人默认进入只读 `MultiplayerProbe`；显式 `advisor` 开启建议搜索，显式 `safe-execute` 开启本地安全执行，Lab 模式另核对实例 ownership 与 Probe evidence。已获准搜索的会话默认使用 local-single-core；只有 `UseMultiplayerPrediction` 开启时才进入实验团队预测。Safe Execute 的本地药水、计划内 Choice、安全 EndTurn 与独立 Safe Auto 已有实现；原生多人完整验证仍按具体场景区分。完整权限、动作限制与证据入口统一见 [多人能力与限制](multiplayer/LIMITATIONS.md)，不再沿用早期一动作 Smoke 的能力描述。

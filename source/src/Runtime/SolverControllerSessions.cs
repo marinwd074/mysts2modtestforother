@@ -165,6 +165,7 @@ internal sealed class SolverSearchSession(
     private readonly int[] _frameBuckets = new int[FrameBucketUpperBounds.Length];
 
     public int Generation { get; } = generation;
+    public SearchRequestObservation? Observation { get; init; }
     public int StartTurnNumber { get; init; }
     public ReplanCause ReplanCause { get; init; }
     public long WorldVersion { get; init; }

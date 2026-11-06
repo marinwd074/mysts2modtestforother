@@ -138,6 +138,8 @@ internal sealed record SearchPolicySnapshot(
     /// </summary>
     public BeamWidthPortfolioTelemetry? PortfolioTelemetry { get; init; }
     public SearchRequestWorkTotals? RequestWorkTotals { get; init; }
+    // Pure-value observation at Coordinator exit, including failed/canceled requests.
+    public Action<SearchRequestWorkSnapshot>? RequestWorkObserver { get; init; }
     public SearchRequestMemberKind RequestMemberKind { get; init; }
     // Suggestions from the prior turn; replay must evaluate them from the current root.
     public IReadOnlyList<PlanAction> ContinuationSeedActions { get; init; } = [];

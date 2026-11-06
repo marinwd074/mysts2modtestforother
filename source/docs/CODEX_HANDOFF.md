@@ -23,9 +23,11 @@
 
 同回合刷新和独立跨回合 route replay / R1 均使用 `RecoveryBudget`，恢复、失败后的主搜索和审计共用解析时间覆盖配置后的总时间与原子节点上限。R1 探测后只分配剩余 profile，不重新获得整份预算。耗尽时仅保留已证明合规的完整结果，没有合格结果则不追加搜索或部署。R1 转移缓存通过 `finally` 清除正常、异常、取消和截止早退时的引用。审计准备的辅助展开曾扣节点但未进账本，现经 `PrepareAudit` 独立记为 `AuditPreparation`；总诊断数增加可能只是补录，不能直接解释为新增搜索工作。
 
-`MP_PLAN_REFRESH_WORKER` 记录恢复与余量，`MP_PLAN_REFRESH_ACCEPT` 只在普通完成回调通过过期检查后产生。新增 `SEARCH_RECOVERY_BUDGET` 记录完成、耗尽、取消或失败及 Coordinator 内部的时间/工作；采样位于计算收尾点，不含末尾诊断输出、请求缓存清理、根捕获、dispatcher 接纳和外层 worker / GC scope 退出。它不是完整响应或排空时间。下一步先补齐 P0 全请求观测，再完成 P1c 完整备选路线重评；统一末态估值、选择性深入及独立承伤策略仍待实施。三回合、评分及并行默认未变。
+`MP_PLAN_REFRESH_WORKER` 记录恢复与余量，`MP_PLAN_REFRESH_ACCEPT` 只在普通完成回调通过过期检查后产生。`SEARCH_RECOVERY_BUDGET` 仍只测 Coordinator 内部计算收尾。新 `SEARCH_REQUEST_TIMELINE` 由 Runtime 从请求入口贯穿根屏障/原生动作等待、根捕获、worker 终止、预览产生/提交、正式路线提交、结果接纳和取消/CTS 收尾；等待恢复继续使用同一编号。worker 完成在 Task continuation 采样，包含 GC scope 退出；callback 与 CTS 两个并发收尾者均完成后只输出一次。观测器只保留值，不拥有 live 状态或执行授权，提交给 overlay 不等于已显示像素。
 
-`U0U1PinnedHarness multiplayer-refresh` 当前为 254 项检查/29 次独立重放：两个原生角色模型、四个受控 HP 根，含原同回合覆盖与新增跨回合 87 项/9 次。新增覆盖 DOP=1/4 的失败重放→R1→普通搜索、40 节点上限、超时无解/保留已证明胜利、取消/注入失败、已填充 R1 缓存引用清理及共享节点和账本守恒。固定输入普通对照与恢复结果质量相同，各自路线独立重放一致。当前 Release 0 警告/0 错误，完整离线入口 24 步（35 组 L1、82 项 portfolio、17 pinned）及 Windows/Bash 结构门禁通过；符号链接权限子项明确跳过。当前构建 SHA256 为 `35D70459620E3B2B44A33C40F72C319117E86C3DC2102F80F28DD3116FDBF2DD`；证据在 `.local/multiplayer-search-plan/cross-turn-budget/full/`、`with-policy-identity/`。没有启动游戏；Controller/网络/UI、原生队友动作闭环及普遍性能仍未验证。
+Coordinator 在包括失败/取消的最终清理中，通过可选纯值 `RequestWorkObserver` 回传完整账本一次。未正式接纳/提交路线的请求记录总工作及是否已提交预览，不宣称全部无用；缓存/直接续用不借用旧结果的历史展开量。`SearchRequestObservationChecks` 的 16 项生产观测器/Task 合同覆盖多次延迟、不同发布时点、启动前取消、CTS 清理竞争和重复封存。原生 Coordinator 的 DOP=1/4 观测开关对照保持完整动作、最终状态、质量和逻辑工作；未运行完整 Controller 或真实 UI。
+
+`U0U1PinnedHarness multiplayer-refresh` 当前为 275 项检查/31 次独立重放：保留两个原生角色模型、四个受控 HP 根、同/跨回合共享预算、超时/取消/失败及 R1 缓存引用清理，并新增上述观测开关及一次性工作回传检查。当前 Release 0 警告/0 错误，最终构建完整离线入口 24 步（36 组 L1、82 项 portfolio、17 pinned）通过；Windows/Bash 结构门禁通过，符号链接权限子项明确跳过。构建 SHA256 为 `2326D701C120BDC36AC3D0B79929168319C8DE741033C8DE74E2DA29CDFA28A7`；证据在 `.local/multiplayer-search-plan/request-observation/final-full/`、`final-native/`。下一步完成 P1c 完整备选路线重评，再进入统一末态估值、选择性深入及独立承伤策略；三回合、评分及并行默认未变。没有启动游戏；Controller/网络/UI 时序、原生队友动作闭环及普遍性能仍未验证。
 
 ## 上游适配
 

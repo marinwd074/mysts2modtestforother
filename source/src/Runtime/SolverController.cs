@@ -1499,7 +1499,7 @@ internal static partial class SolverController
     {
         CancelMultiplayerDebouncedSearch();
         CancelDeferredSearch();
-        CancelSearch();
+        CancelSearch("multiplayer_state_changed");
         SolverSessionCapabilitySet capabilities = SolverSessionCapabilities.Capture(state);
         MultiplayerSafeExecutionState? safeExecutionState = _deployment?.SafeExecutionSession?.State;
         SolverDeploymentSession? remoteAbortDeployment = null;
@@ -1778,6 +1778,10 @@ internal static partial class SolverController
             search.DeployWhenReady,
             _combat.ReviewedWorldlinesTotal,
             preview);
+        if (preview != null)
+            search.Observation?.Mark(SearchRequestStage.PreviewSubmitted);
+        if (preview != null && progress.RouteAdoptionSeed != null)
+            search.Observation?.Mark(SearchRequestStage.ApprovedRouteSubmitted);
         SolverOverlay.RefreshControls();
     }
 
