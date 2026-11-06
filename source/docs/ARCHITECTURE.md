@@ -56,9 +56,11 @@ Harmony 参数形状的条件编译位于回合补丁入口；这是当前兼容
 
 `MultiplayerPlanRefresher` 拥有冻结根上的保留前缀重放、候选评分和结果物化；不读取 live 状态、不发布 UI、不授予执行权限。`SolverController.MultiplayerPlanRefresh` 在普通搜索的原生动作/根捕获 barrier 后校验旧根与当前回合，深复制候选及选择集合到 `MultiplayerPlanRefreshRequest`。后台计算沿用 `SolverSearchSession`、GC scope、取消和完成回调；主线程不再同步调用刷新求解。保留候选不触发同回合“已有结果”去重，也不获得显式路线采用标记。
 
-Coordinator 优先从新根重放完整当前路线，复用既有末态/质量验收；未获解才在剩余恢复份额内评估最多三个、各两动作的前缀并物化。恢复份额上限 192 节点/60ms，完整重放与前缀阶段共用；原生转移及收尾仍可能超出软时间。`RecoveryBudget` 从解析时间覆盖配置后的当前请求建立，整个恢复、补搜、普通搜索与审计共用墙钟和原子节点上限；失败后的主搜索只获得剩余 profile。耗尽且无合格恢复结果时明确返回未获解，不另发搜索或发布不合格前缀。该预算迁移目前只用于生产 local-core 的同回合 `MultiplayerPlanRefresh` 请求，既有独立跨回合 R1/continuation 路径仍待统一。当前回合限定、回合准备以及实验 Team/Forecast/Scenario 策略绕过新恢复入口，沿用对应普通搜索；实验预测的分支工作不冒充已纳入本次预算。
+Coordinator 优先从新根重放完整当前路线，复用既有末态/质量验收；未获解才在剩余恢复份额内评估最多三个、各两动作的前缀并物化。同回合恢复份额上限 192 节点/60ms，完整重放与前缀阶段共用；原生转移及收尾仍可能超出软时间。`RecoveryBudget` 从解析时间覆盖配置后的当前请求建立，生产 local-core 的同回合刷新和独立跨回合 route replay / R1 均与后续主搜索、审计共用墙钟和原子节点上限。R1 保留原有至多 1/20 的探测份额，主搜索只获得绝对截止时间及剩余节点约束下的 profile，不再重置整份预算。耗尽且无合格恢复结果时明确返回未获解；R1 已独立证明的完整合规胜利可保留，不把不完整前缀发布为结果。当前回合限定、回合准备以及实验 Team/Forecast/Scenario 策略绕过这次预算迁移，实验预测的分支工作不冒充已纳入预算。
 
-`CombatBeamSolver.RetainedPrefixReplay` 复用普通前缀动作准入，逐动作新根重放；完整获胜截断旧尾部，未知预测边界或不可用动作返回明确拒绝。临时快照由 `RetainedPrefixReplay.Dispose` 释放，异常/拒绝路径由生产方法释放；不返回旧 SearchNode。`RetainedPrefixWorkScope` 拥有通知隔离与一次性账本收尾，失败/取消前的转移也计入请求；物化为独立账本成员。不可用备选独立拒绝，当前候选不能重放则保持 FullRestart。取消令牌贯穿各阶段，结果通过普通过期/身份接纳后才记录 `MP_PLAN_REFRESH_ACCEPT`。阶段指标不作为质量排序输入。
+`SearchRecoveryBudgetSnapshot` / `SEARCH_RECOVERY_BUDGET` 记录 Coordinator 的完成、耗尽、取消或失败，以及共享节点、墙钟、超额收尾和取消观察后到计算收尾点的时间；采样不含末尾诊断输出、请求缓存清理、根捕获、dispatcher 接纳和外层 worker / GC scope 退出，不能当作完整响应或排空时间。进度沿用同一请求的时间和节点累计值。R1 转移缓存由 `RunSearchPass` 的 `finally` 覆盖早退、异常和取消，清除封存模拟器引用；这不表示立即完成物理内存回收。
+
+`CombatBeamSolver.RetainedPrefixReplay` 复用普通前缀动作准入，逐动作新根重放；完整获胜截断旧尾部，未知预测边界或不可用动作返回明确拒绝。临时快照由 `RetainedPrefixReplay.Dispose` 释放，异常/拒绝路径由生产方法释放；不返回旧 SearchNode。`AuxiliaryWorkScope` 拥有无 Beam session 的辅助计算的通知隔离与一次性账本收尾：前缀批次标为 `PlanRefreshPrefix`，审计入口经 `PrepareAudit` 标为 `AuditPreparation`，失败/取消前的展开和转移也计入请求，嵌套辅助调用不重复记账。物化为独立成员。不可用备选独立拒绝，当前候选不能重放则保持 FullRestart。取消令牌贯穿各阶段，结果通过普通过期/身份接纳后才记录 `MP_PLAN_REFRESH_ACCEPT`。阶段指标不作为质量排序输入。
 
 `SolverSessionCapabilities` 是 Runtime 的会话能力合同：网络多人默认进入只读 `MultiplayerProbe`；显式 `advisor` 开启建议搜索，显式 `safe-execute` 开启本地安全执行，Lab 模式另核对实例 ownership 与 Probe evidence。已获准搜索的会话默认使用 local-single-core；只有 `UseMultiplayerPrediction` 开启时才进入实验团队预测。Safe Execute 的本地药水、计划内 Choice、安全 EndTurn 与独立 Safe Auto 已有实现；原生多人完整验证仍按具体场景区分。完整权限、动作限制与证据入口统一见 [多人能力与限制](multiplayer/LIMITATIONS.md)，不再沿用早期一动作 Smoke 的能力描述。
 
@@ -174,7 +176,7 @@ RitsuLib 0.6.0 自身拥有 BaseLib 目标类型的外部登记查询、按程�
 - `SearchPolicySnapshot.cs`：主线程捕获的不可变搜索设置、逐槽药水策略，以及第一/二幕与最终 Boss 各自的血量取舍；后台不读取 UI 或玩家设置。
 - `SearchDiagnosticsSink.cs`：搜索日志和可选纯值路径观察出口。观察默认关闭，先按状态键过滤，命中后才复制完整动作/选择路径与政策标签；另可显式筛选外层 Prune 池，记录完整输入、真实 RankBest 的原排名/必保/路由/选中索引、当时的战术估值标量及最终仲裁集合。RankBest 内部同步借用列表，立即转成值副本；不向注入方暴露节点、模拟器或闭包，不重算估值或选择器，也不参与候选裁决。注入方负责并发和输出容量。
 - `SearchFramePressureSignal.cs`：Runtime 向 worker 提供的帧压力信号；以最近 `31` 个非搜索帧中位数建立基线，压力阈值为 `max(33 ms, baseline × 1.5)`，无显示服务的 headless 请求旁路帧恢复等待。
-- `SearchRequestWorkTotals.cs`：一次请求内所有正常、失败和取消 solver 的工作区间均精确记账一次，包括取消前已发生的展开、转移、选牌、耗时、分配和 GC；Smart 有限药水层之间由 coordinator 主动执行的内存整理也单独计入耗时、分配和 GC，但不伪装成额外 solver。请求总值不是完整 coordinator 外层墙钟或进程峰值，也不承担结果质量排序。
+- `SearchRequestWorkTotals.cs`：一次请求内所有正常、失败和取消 solver，以及独立前缀/审计准备的工作区间均记账一次，包括取消前已发生的展开、转移、选牌、耗时、分配和 GC；Smart 有限药水层之间由 coordinator 主动执行的内存整理也单独计入耗时、分配和 GC，但不伪装成额外 solver。补录 `AuditPreparation` 后，总展开/转移量可能高于旧诊断，即使真实计算与路线不变。请求总值不是完整 coordinator 外层墙钟或进程峰值，也不承担结果质量排序。
 - `CombatSearchCoordinator.cs`：一次请求的搜索编排；Smart 先搜索无药基线，再根据可用药水、无药战损和药水价值门槛确定最多进入的“恰好 `N` 瓶”层。按瓶数递增搜索，同层药水共同竞争；第一层完整获胜且满足救命、节省生命或保全被盗资源条件时立即采用并停止增加药量。达到设置的可接受战损阈值也可提前结束请求，不保证遍历全部药水层或取得所有药量中的全局最优。进入下一梯度前回收上一层搜索图并重建 NoGC 区域；截止时保留已完成且符合政策的选择。跨 solver 只发布符合政策的严格改善完整路线，并透传当前 solver 已完成回合的候选。玩家可采用已显示路线或只执行当前回合。Disabled/RequireAtLeastOne 保持各自政策；实际运行的各层共享请求级时间余量并合并总指标。
 - `CombatBeamSolver.BlockPotionInsertion.cs`：Smart 无药主搜索选出完整胜利后，针对首个预计掉血至少 `PotionMinimumHpSaved` 的回合，把可用且未保护的格挡药插在结束回合或强制交回合动作之前。修改后的动作链必须由模拟器逐动作精确重放并重建逐回合标注及 continuation；只有实际省血达到门槛、仍获胜且不增加保命资源消耗时才替换结果。该路径不进入 Beam、转置或药水候选展开，成功后 Coordinator 直接结束请求。
 - `CombatPlan.cs`：Runtime 消费的计划、结果和续用数据。结果不得保留历史 Simulator 对象图。

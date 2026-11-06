@@ -4562,7 +4562,7 @@ foreach ($p2CoordinatorRule in @(
     'interimResultCallback?.Invoke(seedResult);',
     'r1RecoveryIncumbent = BuildPrimarySearchIncumbent(root, beamPolicy, seedResult);',
     'primaryIncumbent: refinement ? null : r1RecoveryIncumbent',
-    'primary_nodes_unchanged=',
+    'primary_nodes_remaining=',
     'SelectContinuationSeedIncumbent(',
     'P2_CONTINUATION_SEED_BUDGET')) {
     if (-not $p1CoordinatorText.Contains($p2CoordinatorRule)) {

@@ -290,7 +290,7 @@ internal static partial class CombatSearchCoordinator
                 cancellationToken,
                 progressCallback,
                 profile)
-            .BuildOpeningPowerActions();
+            .PrepareAudit(static builder => builder.BuildOpeningPowerActions());
         IReadOnlyList<PlanAction> openingPotions = policy.PotionPolicy == SolverPotionPolicy.Disabled
             || maximumSmartPotionUses == 0
             ? []
@@ -304,7 +304,7 @@ internal static partial class CombatSearchCoordinator
                     profile,
                     potionPolicyOverride: SolverPotionPolicy.RequireAtLeastOne,
                     maximumPotionUses: maximumSmartPotionUses)
-                .BuildOpeningPotionActions();
+                .PrepareAudit(static builder => builder.BuildOpeningPotionActions());
         IReadOnlyList<PlanAction> generatedResourcePotions = openingPotions.Count == 0
             ? []
             : new CombatBeamSolver(
@@ -317,7 +317,7 @@ internal static partial class CombatSearchCoordinator
                     profile,
                     potionPolicyOverride: SolverPotionPolicy.RequireAtLeastOne,
                     maximumPotionUses: maximumSmartPotionUses)
-                .SelectGeneratedResourcePotionActions(openingPotions);
+                .PrepareAudit(builder => builder.SelectGeneratedResourcePotionActions(openingPotions));
         IReadOnlyList<PlanAction> openingResources = new CombatBeamSolver(
                 root,
                 displayNames,
@@ -326,7 +326,7 @@ internal static partial class CombatSearchCoordinator
                 cancellationToken,
                 progressCallback,
                 profile)
-            .BuildOpeningResourceActions();
+            .PrepareAudit(static builder => builder.BuildOpeningResourceActions());
         List<(PlanAction Potion, PlanAction Power)> potionPowerPairs = [];
         foreach (PlanAction openingPotion in openingPotions)
         {
@@ -340,7 +340,7 @@ internal static partial class CombatSearchCoordinator
                     profile,
                     potionPolicyOverride: SolverPotionPolicy.RequireAtLeastOne,
                     maximumPotionUses: maximumSmartPotionUses)
-                .BuildPowerActionsAfterPrefix([openingPotion]);
+                .PrepareAudit(builder => builder.BuildPowerActionsAfterPrefix([openingPotion]));
             foreach (PlanAction power in powers)
             {
                 potionPowerPairs.Add((openingPotion, power));
@@ -402,7 +402,7 @@ internal static partial class CombatSearchCoordinator
                     cancellationToken,
                     progressCallback,
                     profile)
-                .BuildOpeningPowerOffensiveFollowUp(openingPower);
+                .PrepareAudit(builder => builder.BuildOpeningPowerOffensiveFollowUp(openingPower));
             if (offensiveFollowUp == null)
                 continue;
 
@@ -452,7 +452,7 @@ internal static partial class CombatSearchCoordinator
                     cancellationToken,
                     progressCallback,
                     profile)
-                .BuildOpeningDefensiveFollowUp([openingResource]);
+                .PrepareAudit(builder => builder.BuildOpeningDefensiveFollowUp([openingResource]));
             if (defensiveFollowUp == null)
                 continue;
 
@@ -602,7 +602,7 @@ internal static partial class CombatSearchCoordinator
                     profile,
                     potionPolicyOverride: SolverPotionPolicy.RequireAtLeastOne,
                     maximumPotionUses: maximumSmartPotionUses)
-                .BuildOpeningDefensiveFollowUp(jointPrefix);
+                .PrepareAudit(builder => builder.BuildOpeningDefensiveFollowUp(jointPrefix));
             if (defensiveFollowUp == null)
                 continue;
 
@@ -760,7 +760,7 @@ internal static partial class CombatSearchCoordinator
                         profile,
                         SolverPotionPolicy.RequireAtLeastOne,
                         maximumPotionUses: primary.PotionCount)
-                    .BuildPreferredPotionActionsAfterPrefix([openingPotion]);
+                    .PrepareAudit(builder => builder.BuildPreferredPotionActionsAfterPrefix([openingPotion]));
                 foreach (PlanAction secondPotion in secondPotions)
                 {
                     SolverResult pairPosterior = new CombatBeamSolver(
@@ -816,7 +816,7 @@ internal static partial class CombatSearchCoordinator
                             profile,
                             SolverPotionPolicy.RequireAtLeastOne,
                             maximumPotionUses: primary.PotionCount)
-                        .BuildOpeningDefensiveFollowUp(pairPrefix);
+                        .PrepareAudit(builder => builder.BuildOpeningDefensiveFollowUp(pairPrefix));
                     if (defensiveFollowUp == null)
                         continue;
 

@@ -21,9 +21,11 @@
 
 实施顺序见 [本地搜索计划](multiplayer/LOCAL_SEARCH_PLAN.md)，完整目标仍在进行中。同回合刷新已从主线程同步调用迁入既有 `SolverSearchSession` / Coordinator worker；根捕获和结果接纳仍由 Runtime 负责。候选在原生动作/捕获 barrier 后校验并深复制，消费时清除旧已发布结果，避免同回合去重或捕获失败使旧建议复活。后台优先完整重放当前路线并沿用质量验收，失败后在同一恢复份额内尝试最多三组两动作前缀。提前获胜截断尾部，不可用牌或过期原生选择独立拒绝；当前候选失效仍退回普通搜索。
 
-同回合请求的 `RecoveryBudget` 覆盖恢复、失败后的主搜索和审计，以解析后的时间覆盖配置及节点上限为总额；成员共用原子节点计数，普通搜索只分配剩余 profile。无合格结果且预算耗尽时不追加搜索或部署。前缀的异常/取消工作也进入唯一账本；`MP_PLAN_REFRESH_WORKER` 记录恢复与余量，`MP_PLAN_REFRESH_ACCEPT` 只在普通完成回调通过过期检查后产生。该预算尚未迁移到既有独立跨回合 route replay / R1 路径，这是下一步；完整备选路线重评、完整响应/取消观测、统一末态估值和选择性深入也未完成。三回合、评分及并行默认未变。
+同回合刷新和独立跨回合 route replay / R1 均使用 `RecoveryBudget`，恢复、失败后的主搜索和审计共用解析时间覆盖配置后的总时间与原子节点上限。R1 探测后只分配剩余 profile，不重新获得整份预算。耗尽时仅保留已证明合规的完整结果，没有合格结果则不追加搜索或部署。R1 转移缓存通过 `finally` 清除正常、异常、取消和截止早退时的引用。审计准备的辅助展开曾扣节点但未进账本，现经 `PrepareAudit` 独立记为 `AuditPreparation`；总诊断数增加可能只是补录，不能直接解释为新增搜索工作。
 
-`U0U1PinnedHarness multiplayer-refresh` 当前为 167 项检查/20 次独立重放：两个原生角色模型、四个受控 HP 根、真实后台线程、选择集合隔离、恢复失败后的同预算搜索、DOP=1/4 五节点上限、1ms 时间覆盖及恢复收尾取消。四个根完整路线重放均为 0 展开；普通搜索与原有前缀计算的固定输入动作/质量/工作未变。集成版完整离线入口 24 步（35 组 L1、82 项 portfolio、17 pinned）及 Windows/Bash 结构门禁通过；符号链接权限子项明确跳过。之后补充候选原生选择拒绝和入口所有权收尾，最终 Release 与 167 项专项复跑通过。证据在 `.local/multiplayer-search-plan/background-recovery/full/`、`final-policy/`。没有启动游戏；Controller/网络/UI、原生队友动作闭环及普遍性能仍未验证。
+`MP_PLAN_REFRESH_WORKER` 记录恢复与余量，`MP_PLAN_REFRESH_ACCEPT` 只在普通完成回调通过过期检查后产生。新增 `SEARCH_RECOVERY_BUDGET` 记录完成、耗尽、取消或失败及 Coordinator 内部的时间/工作；采样位于计算收尾点，不含末尾诊断输出、请求缓存清理、根捕获、dispatcher 接纳和外层 worker / GC scope 退出。它不是完整响应或排空时间。下一步先补齐 P0 全请求观测，再完成 P1c 完整备选路线重评；统一末态估值、选择性深入及独立承伤策略仍待实施。三回合、评分及并行默认未变。
+
+`U0U1PinnedHarness multiplayer-refresh` 当前为 254 项检查/29 次独立重放：两个原生角色模型、四个受控 HP 根，含原同回合覆盖与新增跨回合 87 项/9 次。新增覆盖 DOP=1/4 的失败重放→R1→普通搜索、40 节点上限、超时无解/保留已证明胜利、取消/注入失败、已填充 R1 缓存引用清理及共享节点和账本守恒。固定输入普通对照与恢复结果质量相同，各自路线独立重放一致。当前 Release 0 警告/0 错误，完整离线入口 24 步（35 组 L1、82 项 portfolio、17 pinned）及 Windows/Bash 结构门禁通过；符号链接权限子项明确跳过。当前构建 SHA256 为 `35D70459620E3B2B44A33C40F72C319117E86C3DC2102F80F28DD3116FDBF2DD`；证据在 `.local/multiplayer-search-plan/cross-turn-budget/full/`、`with-policy-identity/`。没有启动游戏；Controller/网络/UI、原生队友动作闭环及普遍性能仍未验证。
 
 ## 上游适配
 

@@ -131,6 +131,9 @@ internal static class MultiplayerRefreshChecks
                         "Worker request retained mutable source action collections.");
                     VerifyRecoveryFailurePaths(root, workerPolicy, request, fresh);
                     VerifyRequestIsolation(source);
+                    var recoveryChecks = MultiplayerRecoveryBudgetChecks.Run(live, names, damage, policy, fresh, outputDirectory);
+                    checks += recoveryChecks.Checks;
+                    replays += recoveryChecks.Replays;
                 }
                 Check(before == ContinuationStamp.CaptureLive(live).StateText,
                     "Worker recovery or failure paths mutated live/shared state.");

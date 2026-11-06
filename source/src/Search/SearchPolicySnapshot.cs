@@ -121,7 +121,7 @@ internal sealed record SearchPolicySnapshot(
     /// </summary>
     public SearchRequestWallClockBudget? P3SharedWallClockBudget { get; init; }
 
-    // Automatic multiplayer recovery and its fallback share one request ceiling.
+    // Local-core same-turn refresh, route replay, and R1 recovery share the request ceiling.
     // Created by the coordinator, never carried over from the old search.
     internal SearchRequestWallClockBudget? RecoveryBudget { get; init; }
     internal MultiplayerPlanRefreshRequest? MultiplayerPlanRefresh { get; init; }

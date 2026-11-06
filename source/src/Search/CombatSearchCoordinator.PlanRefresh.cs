@@ -57,8 +57,7 @@ internal static partial class CombatSearchCoordinator
             }
         }
         token.ThrowIfCancellationRequested();
-        SolverSearchProfile? remaining = ContinuationSeedIncumbentBudget.Remaining(policy.Profile,
-            budget.ElapsedMilliseconds, budget.ExpandedNodes);
+        SolverSearchProfile? remaining = budget.RemainingProfile(policy.Profile);
         MultiplayerPlanRefreshReport report = new(request.SourceRouteIdentity, decision, reason,
             wholeRoute, metrics, clock.ElapsedMilliseconds, totals.Snapshot().ExpandedNodes - nodesBefore,
             remaining?.SoftTimeBudgetMilliseconds ?? 0, remaining?.MaxExpandedNodes ?? 0);

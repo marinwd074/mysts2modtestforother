@@ -127,11 +127,11 @@ internal static partial class CombatSearchCoordinator
         CancellationToken cancellationToken,
         Action<SolverProgress>? progressCallback)
     {
-        if (policy.MultiplayerPlanRefresh != null
-            && (policy.RoutePolicy != SearchRoutePolicy.MultiplayerSinglePlayerCore
-                || policy.CurrentTurnOnly || policy.IncludeTurnSetup
-                || policy.UseMultiplayerTeamObjective || policy.UseMultiplayerTeammateForecast
-                || policy.UseMultiplayerScenarioReevaluation))
+        bool localRecoveryPolicy = policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
+            && !policy.CurrentTurnOnly && !policy.IncludeTurnSetup
+            && !policy.UseMultiplayerTeamObjective && !policy.UseMultiplayerTeammateForecast
+            && !policy.UseMultiplayerScenarioReevaluation;
+        if (policy.MultiplayerPlanRefresh != null && !localRecoveryPolicy)
         {
             // Forecast/scenario branches have separate work accounting. This path
             // is for the production local-core policy, not an experimental budget bypass.
@@ -146,7 +146,9 @@ internal static partial class CombatSearchCoordinator
                 ? new(learnFromSearch: true, measurePerformance: policy.MeasurePhasePerformance) : null;
         SearchRequestWorkTotals totals = new(measurePhases: policy.MeasurePhasePerformance);
         SearchOptimizationSession? optimizations = policy.UseUpstreamSearchOptimizations ? new(root) : null;
-        if (policy.MultiplayerPlanRefresh != null)
+        if (localRecoveryPolicy && (policy.MultiplayerPlanRefresh != null
+            || policy.ContinuationSeedActions.Count > 0
+            || policy.ContinuationRouteReplayActions.Count > 0 && !policy.VerifyIncrementalSearch))
         {
             SolverSearchProfile profile = policy.Profile with
             {
@@ -156,6 +158,9 @@ internal static partial class CombatSearchCoordinator
             policy = policy with { Profile = profile, BudgetOverrideMilliseconds = null,
                 RecoveryBudget = new(profile.SoftTimeBudgetMilliseconds, profile.MaxExpandedNodes) };
         }
+        using CancellationTokenRegistration recoveryCancellation = policy.RecoveryBudget is { } recoveryBudget
+            ? cancellationToken.Register(recoveryBudget.ObserveCancellation) : default;
+        string recoveryOutcome = "Faulted";
         try
         {
             SolverResult result = SolveRequest(root, displayNames, battleDamage,
@@ -174,12 +179,27 @@ internal static partial class CombatSearchCoordinator
             result.RequestPhaseMetrics = totals.CapturePhases();
             if (cache != null)
                 result.RequestTransitionHydration = cache.Capture();
+            recoveryOutcome = "Completed";
+            result.RecoveryBudgetMetrics = policy.RecoveryBudget?.Capture(recoveryOutcome);
             return result;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            recoveryOutcome = "Canceled";
+            throw;
+        }
+        catch (SearchRecoveryBudgetExhaustedException)
+        {
+            recoveryOutcome = "BudgetExhausted";
+            throw;
         }
         finally
         {
             try
             {
+                if (policy.RecoveryBudget is { } recovery)
+                    policy.Diagnostics.Info("[CombatSolver/Test] SEARCH_RECOVERY_BUDGET "
+                        + System.Text.Json.JsonSerializer.Serialize(recovery.Capture(recoveryOutcome)));
                 if (totals.CapturePhases() is { } phases)
                     policy.Diagnostics.Info("[CombatSolver/Test] SEARCH_REQUEST_PHASE "
                         + System.Text.Json.JsonSerializer.Serialize(phases));
@@ -229,8 +249,20 @@ internal static partial class CombatSearchCoordinator
         else if (TryReplayContinuationRoute(root, displayNames, battleDamage, policy,
                 cancellationToken) is { } replayedContinuation)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             PopulateRequestWorkTotals(replayedContinuation, requestWorkTotals);
             return replayedContinuation;
+        }
+        if (policy.RecoveryBudget is { } replayBudget
+            && policy.ContinuationRouteReplayActions.Count > 0)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            SolverSearchProfile? remaining = replayBudget.RemainingProfile(policy.Profile);
+            policy.Diagnostics.Info($"[CombatSolver/Test] MP_LOCAL_XTURN_REPLAY_BUDGET " +
+                $"elapsed_ms={replayBudget.ElapsedMilliseconds} expanded={replayBudget.ExpandedNodes} " +
+                $"remaining_ms={remaining?.SoftTimeBudgetMilliseconds ?? 0} remaining_nodes={remaining?.MaxExpandedNodes ?? 0}");
+            if (remaining == null) throw new SearchRecoveryBudgetExhaustedException();
+            policy = policy with { Profile = remaining };
         }
         policy = policy with
         {
@@ -885,9 +917,12 @@ internal static partial class CombatSearchCoordinator
                 lastElapsed = progress.ElapsedMilliseconds;
                 publishProgress(progress with
                 {
-                    ReviewedWorldlines = completedSearches + progress.ExpandedNodes,
-                    ElapsedMilliseconds = completedElapsed + progress.ElapsedMilliseconds,
-                    RequestBudgetMilliseconds = profile.SoftTimeBudgetMilliseconds,
+                    ReviewedWorldlines = policy.RecoveryBudget?.ExpandedNodes
+                        ?? completedSearches + progress.ExpandedNodes,
+                    ElapsedMilliseconds = policy.RecoveryBudget?.ElapsedMilliseconds
+                        ?? completedElapsed + progress.ElapsedMilliseconds,
+                    RequestBudgetMilliseconds = policy.RecoveryBudget?.BudgetMilliseconds
+                        ?? profile.SoftTimeBudgetMilliseconds,
                 });
             };
         }
@@ -1047,423 +1082,449 @@ internal static partial class CombatSearchCoordinator
                         RunBaseline)
                     : RunBaseline(activeProfile);
 
-            if (!continuationSeedConsumed
-                && continuationSeedActions.Count > 0
-                && ContinuationSeedIncumbentBudget.Probe(passProfile) is { } seedProfile)
+            try
             {
-                continuationSeedConsumed = true;
-                SearchRequestWorkTotals totals = policy.RequestWorkTotals
-                    ?? throw new InvalidOperationException(
-                        "P2 continuation-seed incumbent requires request work totals.");
-                SearchRequestWorkSnapshot beforeSeed = totals.Snapshot();
-                long seedStartedMs = passClock.ElapsedMilliseconds;
-                r1EvaluationShadowCache = new R1EvaluationShadowCache();
-                r1TransitionHydrationCache = new R1TransitionHydrationCache();
-                r1FrontierShadowCache = new R1FrontierShadowCache();
-                SearchPolicySnapshot seedPolicy = beamPolicy with
+                if (!continuationSeedConsumed
+                    && continuationSeedActions.Count > 0
+                    && ContinuationSeedIncumbentBudget.Probe(passProfile) is { } seedProfile)
                 {
-                    Interaction = null,
-                    NoveltySearch = null,
-                    UseNoveltyPortfolio = false,
-                    ContinuationSeedActions = continuationSeedActions,
-                    ContinuationEnumerationHintActions = [],
-                    R1EvaluationShadowCache = r1EvaluationShadowCache,
-                    R1TransitionHydrationCache = r1TransitionHydrationCache,
-                    R1FrontierShadowCache = r1FrontierShadowCache,
-                };
+                    continuationSeedConsumed = true;
+                    SearchRequestWorkTotals totals = policy.RequestWorkTotals
+                        ?? throw new InvalidOperationException(
+                            "P2 continuation-seed incumbent requires request work totals.");
+                    SearchRequestWorkSnapshot beforeSeed = totals.Snapshot();
+                    long seedStartedMs = passClock.ElapsedMilliseconds;
+                    r1EvaluationShadowCache = new R1EvaluationShadowCache();
+                    r1TransitionHydrationCache = new R1TransitionHydrationCache();
+                    r1FrontierShadowCache = new R1FrontierShadowCache();
+                    SearchPolicySnapshot seedPolicy = beamPolicy with
+                    {
+                        Interaction = null,
+                        NoveltySearch = null,
+                        UseNoveltyPortfolio = false,
+                        ContinuationSeedActions = continuationSeedActions,
+                        ContinuationEnumerationHintActions = [],
+                        R1EvaluationShadowCache = r1EvaluationShadowCache,
+                        R1TransitionHydrationCache = r1TransitionHydrationCache,
+                        R1FrontierShadowCache = r1FrontierShadowCache,
+                    };
+                    try
+                    {
+                        CombatBeamSolver seedSolver = new(
+                            root,
+                            displayNames,
+                            battleDamage,
+                            seedPolicy,
+                            cancellationToken,
+                            progressCallback: null,
+                            seedProfile,
+                            potionPolicyOverride: initialPotionPolicyOverride,
+                            reserveScenarioReevaluationBudget: false,
+                            continuationSeedProbe: true);
+                        SolverResult seedResult = RunResumableMemberToCompletion(
+                            seedSolver,
+                            cancellationToken,
+                            seedPolicy.Diagnostics);
+                        seedResult.SingleSessionSearch = true;
+                        PopulateSingleSessionTotals(seedResult);
+                        bool admissible = seedResult.ResultScope == SolverResultScope.SearchCompletion
+                            && IsCompleteVictory(seedResult);
+                        bool reusablePartial =
+                            seedResult.ResultScope == SolverResultScope.SearchCompletion
+                            && !seedResult.Snapshot.PlayerDead
+                            && seedResult.Snapshot.ProjectedPlayerHp > 0;
+                        if (reusablePartial)
+                        {
+                            r1ValidatedEnumerationHints =
+                                MultiplayerLocalCrossTurnContracts.CaptureR1ValidatedEnumerationHintActions(
+                                    seedResult.BestNode.Actions,
+                                    root.StartTurnNumber);
+                            if (r1ValidatedEnumerationHints.Count > 0)
+                            {
+                                beamPolicy = beamPolicy with
+                                {
+                                    ContinuationEnumerationHintActions = r1ValidatedEnumerationHints,
+                                };
+                            }
+                        }
+                        if (admissible)
+                        {
+                            continuationSeedIncumbent = seedResult;
+                            r1RecoveryIncumbent = BuildPrimarySearchIncumbent(root, beamPolicy, seedResult);
+                            interimResultCallback?.Invoke(seedResult);
+                        }
+                        policy.Diagnostics.Info(
+                            $"[CombatSolver/Test] P2_CONTINUATION_SEED_INCUMBENT " +
+                            $"status={(admissible ? "admissible" : "incomplete")} " +
+                            $"actions={continuationSeedActions.Count} " +
+                            $"expanded={seedResult.ExpandedNodes} transitions={seedResult.TransitionCount} " +
+                            $"elapsed_ms={seedResult.Elapsed.TotalMilliseconds:F1} " +
+                            $"published={admissible.ToString().ToLowerInvariant()} " +
+                            $"r1_bound={(r1RecoveryIncumbent.HasValue ? "established" : "none")}");
+                        policy.Diagnostics.Info(
+                            $"[CombatSolver/Test] R1_REROOT_RECOVERY " +
+                            $"status={(r1RecoveryIncumbent.HasValue
+                                ? "bound_established"
+                                : r1ValidatedEnumerationHints.Count > 0
+                                    ? "partial_hint"
+                                    : "replayed_only")} " +
+                            $"actions={continuationSeedActions.Count} " +
+                            $"validated_hint_actions={r1ValidatedEnumerationHints.Count} " +
+                            $"complete_victory={admissible.ToString().ToLowerInvariant()} " +
+                            $"request_budget_shared={(policy.RecoveryBudget != null).ToString().ToLowerInvariant()} action_legality_unchanged=true " +
+                            $"refinement_hint=false");
+                    }
+                    catch (ContinuationSeedRejectedException rejected)
+                    {
+                        policy.Diagnostics.Info(
+                            $"[CombatSolver/Test] P2_CONTINUATION_SEED_INCUMBENT " +
+                            $"status=rejected reason={rejected.Reason} " +
+                            $"actions={continuationSeedActions.Count} published=false");
+                        policy.Diagnostics.Info(
+                            $"[CombatSolver/Test] R1_REROOT_RECOVERY " +
+                            $"status=rejected reason={rejected.Reason} " +
+                            $"actions={continuationSeedActions.Count} request_budget_shared={(policy.RecoveryBudget != null).ToString().ToLowerInvariant()}");
+                    }
+
+                    r1EvaluationShadowCache.Freeze();
+                    r1TransitionHydrationCache.FreezeStores();
+                    r1FrontierShadowCache.FreezeStores();
+                    if (r1EvaluationShadowCache.EntryCount > 0
+                        || r1TransitionHydrationCache.EntryCount > 0
+                        || r1FrontierShadowCache.Capture().StoredSignatures > 0)
+                    {
+                        beamPolicy = beamPolicy with
+                        {
+                            R1EvaluationShadowCache =
+                                r1EvaluationShadowCache.EntryCount > 0
+                                    ? r1EvaluationShadowCache
+                                    : null,
+                            R1TransitionHydrationCache =
+                                r1TransitionHydrationCache.EntryCount > 0
+                                    ? r1TransitionHydrationCache
+                                    : null,
+                            R1FrontierShadowCache =
+                                r1FrontierShadowCache.Capture().StoredSignatures > 0
+                                    ? r1FrontierShadowCache
+                                    : null,
+                        };
+                    }
+
+                    SearchRequestWorkSnapshot afterSeed = totals.Snapshot();
+                    long seedElapsedMs = Math.Max(0, passClock.ElapsedMilliseconds - seedStartedMs);
+                    long seedExpanded = Math.Max(
+                        0, afterSeed.ExpandedNodes - beforeSeed.ExpandedNodes);
+                    SolverSearchProfile? remaining = policy.RecoveryBudget is { } sharedBudget
+                        ? sharedBudget.RemainingProfile(passProfile) : passProfile;
+                    if (remaining != null) activeProfile = remaining;
+                    activeClock = Stopwatch.StartNew();
+                    policy.Diagnostics.Info(
+                        $"[CombatSolver/Test] P2_CONTINUATION_SEED_BUDGET " +
+                        $"probe_nodes={seedExpanded}/{seedProfile.MaxExpandedNodes} " +
+                        $"probe_ms={seedElapsedMs}/{seedProfile.SoftTimeBudgetMilliseconds} " +
+                        $"primary_nodes_remaining={remaining?.MaxExpandedNodes ?? 0} " +
+                        $"primary_ms_remaining={remaining?.SoftTimeBudgetMilliseconds ?? 0} " +
+                        $"request_budget_shared={(policy.RecoveryBudget != null).ToString().ToLowerInvariant()} " +
+                        $"r1_bound={(r1RecoveryIncumbent.HasValue ? "established" : "none")} " +
+                        $"r1_hint_actions={r1ValidatedEnumerationHints.Count}");
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (remaining == null)
+                    {
+                        if (continuationSeedIncumbent != null)
+                            return continuationSeedIncumbent;
+                        throw new SearchRecoveryBudgetExhaustedException();
+                    }
+                }
+
+                void ReleaseR1TransitionHydration(string stage, bool emitTelemetry)
+                {
+                    if (r1TransitionHydrationCache == null)
+                        return;
+                    if (emitTelemetry)
+                    {
+                        R1TransitionHydrationSnapshot hydration =
+                            r1TransitionHydrationCache.Capture();
+                        policy.Diagnostics.Info(
+                            $"[CombatSolver/Test] R1_TRANSITION_HYDRATION_TAIL " +
+                            $"stage={stage} entries={hydration.Entries} " +
+                            $"validated_keys={hydration.ValidatedKeys} " +
+                            $"hydration_hits={hydration.HydrationHits} " +
+                            $"output_mismatches={hydration.OutputMismatches} " +
+                            $"rejected_keys={hydration.RejectedKeys} " +
+                            $"reuse_disabled={hydration.ReuseDisabled.ToString().ToLowerInvariant()}");
+                    }
+                    r1TransitionHydrationCache.Release();
+                    r1TransitionHydrationCache = null;
+                }
+
+                SolverResult SelectContinuationSeedIncumbent(SolverResult ordinary)
+                {
+                    if (continuationSeedIncumbent == null
+                        || ordinary.ResultScope != SolverResultScope.SearchCompletion
+                        || !IsBetterPotionPolicyResult(
+                            root,
+                            policy,
+                            continuationSeedIncumbent,
+                            ordinary))
+                    {
+                        return ordinary;
+                    }
+
+                    policy.Diagnostics.Info(
+                        $"[CombatSolver/Test] P2_CONTINUATION_SEED_SELECTED " +
+                        $"seed_hp_lost={continuationSeedIncumbent.ProjectedBattleHpLost} " +
+                        $"ordinary_hp_lost={ordinary.ProjectedBattleHpLost}");
+                    return continuationSeedIncumbent;
+                }
+
+                bool hasForcedBaseline = forcedSmartGradient;
+                SolverResult passResult;
                 try
                 {
-                    CombatBeamSolver seedSolver = new(
-                        root,
-                        displayNames,
-                        battleDamage,
-                        seedPolicy,
-                        cancellationToken,
-                        progressCallback: null,
-                        seedProfile,
-                        potionPolicyOverride: initialPotionPolicyOverride,
-                        reserveScenarioReevaluationBudget: false,
-                        continuationSeedProbe: true);
-                    SolverResult seedResult = RunResumableMemberToCompletion(
-                        seedSolver,
-                        cancellationToken,
-                        seedPolicy.Diagnostics);
-                    seedResult.SingleSessionSearch = true;
-                    PopulateSingleSessionTotals(seedResult);
-                    bool admissible = seedResult.ResultScope == SolverResultScope.SearchCompletion
-                        && IsCompleteVictory(seedResult);
-                    bool reusablePartial =
-                        seedResult.ResultScope == SolverResultScope.SearchCompletion
-                        && !seedResult.Snapshot.PlayerDead
-                        && seedResult.Snapshot.ProjectedPlayerHp > 0;
-                    if (reusablePartial)
-                    {
-                        r1ValidatedEnumerationHints =
-                            MultiplayerLocalCrossTurnContracts.CaptureR1ValidatedEnumerationHintActions(
-                                seedResult.BestNode.Actions,
-                                root.StartTurnNumber);
-                        if (r1ValidatedEnumerationHints.Count > 0)
-                        {
-                            beamPolicy = beamPolicy with
-                            {
-                                ContinuationEnumerationHintActions = r1ValidatedEnumerationHints,
-                            };
-                        }
-                    }
-                    if (admissible)
-                    {
-                        continuationSeedIncumbent = seedResult;
-                        r1RecoveryIncumbent = BuildPrimarySearchIncumbent(root, beamPolicy, seedResult);
-                        interimResultCallback?.Invoke(seedResult);
-                    }
-                    policy.Diagnostics.Info(
-                        $"[CombatSolver/Test] P2_CONTINUATION_SEED_INCUMBENT " +
-                        $"status={(admissible ? "admissible" : "incomplete")} " +
-                        $"actions={continuationSeedActions.Count} " +
-                        $"expanded={seedResult.ExpandedNodes} transitions={seedResult.TransitionCount} " +
-                        $"elapsed_ms={seedResult.Elapsed.TotalMilliseconds:F1} " +
-                        $"published={admissible.ToString().ToLowerInvariant()} " +
-                        $"r1_bound={(r1RecoveryIncumbent.HasValue ? "established" : "none")}");
-                    policy.Diagnostics.Info(
-                        $"[CombatSolver/Test] R1_REROOT_RECOVERY " +
-                        $"status={(r1RecoveryIncumbent.HasValue
-                            ? "bound_established"
-                            : r1ValidatedEnumerationHints.Count > 0
-                                ? "partial_hint"
-                                : "replayed_only")} " +
-                        $"actions={continuationSeedActions.Count} " +
-                        $"validated_hint_actions={r1ValidatedEnumerationHints.Count} " +
-                        $"complete_victory={admissible.ToString().ToLowerInvariant()} " +
-                        $"primary_budget_unchanged=true candidate_set_unchanged=true " +
-                        $"refinement_hint=false");
+                    passResult = RunPrimary();
                 }
-                catch (ContinuationSeedRejectedException rejected)
+                catch (PotionPolicyUnsatisfiedException) when (forcedSmartGradient)
                 {
-                    policy.Diagnostics.Info(
-                        $"[CombatSolver/Test] P2_CONTINUATION_SEED_INCUMBENT " +
-                        $"status=rejected reason={rejected.Reason} " +
-                        $"actions={continuationSeedActions.Count} published=false");
-                    policy.Diagnostics.Info(
-                        $"[CombatSolver/Test] R1_REROOT_RECOVERY " +
-                        $"status=rejected reason={rejected.Reason} " +
-                        $"actions={continuationSeedActions.Count} primary_budget_unchanged=true");
+                    // If mandatory potions alone cannot produce a usable route, restore ordinary
+                    // mixed Smart search so an optional potion may still rescue the fight.
+                    hasForcedBaseline = false;
+                    passPolicy = policy;
+                    beamPolicy = policy.NoveltySearch == null
+                        ? policy : policy with { NoveltySearch = null };
+                    passResult = RunPrimary();
                 }
-
-                r1EvaluationShadowCache.Freeze();
-                r1TransitionHydrationCache.FreezeStores();
-                r1FrontierShadowCache.FreezeStores();
-                if (r1EvaluationShadowCache.EntryCount > 0
-                    || r1TransitionHydrationCache.EntryCount > 0
-                    || r1FrontierShadowCache.Capture().StoredSignatures > 0)
+                if (r1EvaluationShadowCache != null)
                 {
-                    beamPolicy = beamPolicy with
-                    {
-                        R1EvaluationShadowCache =
-                            r1EvaluationShadowCache.EntryCount > 0
-                                ? r1EvaluationShadowCache
-                                : null,
-                        R1TransitionHydrationCache =
-                            r1TransitionHydrationCache.EntryCount > 0
-                                ? r1TransitionHydrationCache
-                                : null,
-                        R1FrontierShadowCache =
-                            r1FrontierShadowCache.Capture().StoredSignatures > 0
-                                ? r1FrontierShadowCache
-                                : null,
-                    };
+                    R1EvaluationShadowSnapshot r1Shadow = r1EvaluationShadowCache.Capture();
+                    policy.Diagnostics.Info(
+                        $"[CombatSolver/Test] R1_EVAL_SHADOW " +
+                        $"mode=exact_path_aware entry_limit={r1Shadow.EntryLimit} " +
+                        $"entries={r1Shadow.Entries} store_attempts={r1Shadow.StoreAttempts} " +
+                        $"duplicate_stores={r1Shadow.DuplicateStores} " +
+                        $"store_conflicts={r1Shadow.StoreConflicts} " +
+                        $"observations={r1Shadow.ValidationObservations} " +
+                        $"state_key_misses={r1Shadow.StateKeyMisses} " +
+                        $"full_key_misses={r1Shadow.FullKeyMisses} " +
+                        $"validated_hits={r1Shadow.ValidatedHits} " +
+                        $"output_mismatches={r1Shadow.OutputMismatches} " +
+                        $"beam_rank_stores={r1Shadow.BeamRankStores} " +
+                        $"beam_rank_first_validations={r1Shadow.BeamRankFirstValidations} " +
+                        $"beam_rank_validated={r1Shadow.BeamRankValidated} " +
+                        $"beam_rank_mismatches={r1Shadow.BeamRankMismatches} " +
+                        $"beam_rank_reuses={r1Shadow.BeamRankReuses} " +
+                        $"reuse_disabled={r1Shadow.ReuseDisabled.ToString().ToLowerInvariant()} " +
+                        $"capped={r1Shadow.Capped.ToString().ToLowerInvariant()} " +
+                        $"behavioral_reuse=beam_rank_after_first_validation");
                 }
-
-                SearchRequestWorkSnapshot afterSeed = totals.Snapshot();
-                long seedElapsedMs = Math.Max(0, passClock.ElapsedMilliseconds - seedStartedMs);
-                long seedExpanded = Math.Max(
-                    0, afterSeed.ExpandedNodes - beforeSeed.ExpandedNodes);
-                activeProfile = passProfile;
-                activeClock = Stopwatch.StartNew();
-                policy.Diagnostics.Info(
-                    $"[CombatSolver/Test] P2_CONTINUATION_SEED_BUDGET " +
-                    $"probe_nodes={seedExpanded}/{seedProfile.MaxExpandedNodes} " +
-                    $"probe_ms={seedElapsedMs}/{seedProfile.SoftTimeBudgetMilliseconds} " +
-                    $"primary_nodes_unchanged={activeProfile.MaxExpandedNodes} " +
-                    $"primary_ms_unchanged={activeProfile.SoftTimeBudgetMilliseconds} " +
-                    $"r1_bound={(r1RecoveryIncumbent.HasValue ? "established" : "none")} " +
-                    $"r1_hint_actions={r1ValidatedEnumerationHints.Count}");
-            }
-
-            void ReleaseR1TransitionHydration(string stage, bool emitTelemetry)
-            {
-                if (r1TransitionHydrationCache == null)
-                    return;
-                if (emitTelemetry)
+                if (r1TransitionHydrationCache != null)
                 {
                     R1TransitionHydrationSnapshot hydration =
                         r1TransitionHydrationCache.Capture();
                     policy.Diagnostics.Info(
-                        $"[CombatSolver/Test] R1_TRANSITION_HYDRATION_TAIL " +
-                        $"stage={stage} entries={hydration.Entries} " +
+                        $"[CombatSolver/Test] R1_TRANSITION_HYDRATION " +
+                        $"stage=baseline mode=exact_request_local entry_limit={hydration.EntryLimit} " +
+                        $"entries={hydration.Entries} stores={hydration.Stores} " +
+                        $"duplicate_stores={hydration.DuplicateStores} " +
+                        $"dropped_stores={hydration.DroppedStores} " +
+                        $"store_conflicts={hydration.StoreConflicts} " +
+                        $"first_validations={hydration.FirstValidations} " +
                         $"validated_keys={hydration.ValidatedKeys} " +
+                        $"index_misses={hydration.IndexMisses} " +
+                        $"collision_rejects={hydration.CollisionRejects} " +
                         $"hydration_hits={hydration.HydrationHits} " +
                         $"output_mismatches={hydration.OutputMismatches} " +
                         $"rejected_keys={hydration.RejectedKeys} " +
-                        $"reuse_disabled={hydration.ReuseDisabled.ToString().ToLowerInvariant()}");
-                }
-                r1TransitionHydrationCache.Release();
-                r1TransitionHydrationCache = null;
-            }
-
-            SolverResult SelectContinuationSeedIncumbent(SolverResult ordinary)
-            {
-                if (continuationSeedIncumbent == null
-                    || ordinary.ResultScope != SolverResultScope.SearchCompletion
-                    || !IsBetterPotionPolicyResult(
-                        root,
-                        policy,
-                        continuationSeedIncumbent,
-                        ordinary))
-                {
-                    return ordinary;
-                }
-
-                policy.Diagnostics.Info(
-                    $"[CombatSolver/Test] P2_CONTINUATION_SEED_SELECTED " +
-                    $"seed_hp_lost={continuationSeedIncumbent.ProjectedBattleHpLost} " +
-                    $"ordinary_hp_lost={ordinary.ProjectedBattleHpLost}");
-                return continuationSeedIncumbent;
-            }
-
-            bool hasForcedBaseline = forcedSmartGradient;
-            SolverResult passResult;
-            try
-            {
-                passResult = RunPrimary();
-            }
-            catch (PotionPolicyUnsatisfiedException) when (forcedSmartGradient)
-            {
-                // If mandatory potions alone cannot produce a usable route, restore ordinary
-                // mixed Smart search so an optional potion may still rescue the fight.
-                hasForcedBaseline = false;
-                passPolicy = policy;
-                beamPolicy = policy.NoveltySearch == null
-                    ? policy : policy with { NoveltySearch = null };
-                passResult = RunPrimary();
-            }
-            if (r1EvaluationShadowCache != null)
-            {
-                R1EvaluationShadowSnapshot r1Shadow = r1EvaluationShadowCache.Capture();
-                policy.Diagnostics.Info(
-                    $"[CombatSolver/Test] R1_EVAL_SHADOW " +
-                    $"mode=exact_path_aware entry_limit={r1Shadow.EntryLimit} " +
-                    $"entries={r1Shadow.Entries} store_attempts={r1Shadow.StoreAttempts} " +
-                    $"duplicate_stores={r1Shadow.DuplicateStores} " +
-                    $"store_conflicts={r1Shadow.StoreConflicts} " +
-                    $"observations={r1Shadow.ValidationObservations} " +
-                    $"state_key_misses={r1Shadow.StateKeyMisses} " +
-                    $"full_key_misses={r1Shadow.FullKeyMisses} " +
-                    $"validated_hits={r1Shadow.ValidatedHits} " +
-                    $"output_mismatches={r1Shadow.OutputMismatches} " +
-                    $"beam_rank_stores={r1Shadow.BeamRankStores} " +
-                    $"beam_rank_first_validations={r1Shadow.BeamRankFirstValidations} " +
-                    $"beam_rank_validated={r1Shadow.BeamRankValidated} " +
-                    $"beam_rank_mismatches={r1Shadow.BeamRankMismatches} " +
-                    $"beam_rank_reuses={r1Shadow.BeamRankReuses} " +
-                    $"reuse_disabled={r1Shadow.ReuseDisabled.ToString().ToLowerInvariant()} " +
-                    $"capped={r1Shadow.Capped.ToString().ToLowerInvariant()} " +
-                    $"behavioral_reuse=beam_rank_after_first_validation");
-            }
-            if (r1TransitionHydrationCache != null)
-            {
-                R1TransitionHydrationSnapshot hydration =
-                    r1TransitionHydrationCache.Capture();
-                policy.Diagnostics.Info(
-                    $"[CombatSolver/Test] R1_TRANSITION_HYDRATION " +
-                    $"stage=baseline mode=exact_request_local entry_limit={hydration.EntryLimit} " +
-                    $"entries={hydration.Entries} stores={hydration.Stores} " +
-                    $"duplicate_stores={hydration.DuplicateStores} " +
-                    $"dropped_stores={hydration.DroppedStores} " +
-                    $"store_conflicts={hydration.StoreConflicts} " +
-                    $"first_validations={hydration.FirstValidations} " +
-                    $"validated_keys={hydration.ValidatedKeys} " +
-                    $"index_misses={hydration.IndexMisses} " +
-                    $"collision_rejects={hydration.CollisionRejects} " +
-                    $"hydration_hits={hydration.HydrationHits} " +
-                    $"output_mismatches={hydration.OutputMismatches} " +
-                    $"rejected_keys={hydration.RejectedKeys} " +
-                    $"reuse_disabled={hydration.ReuseDisabled.ToString().ToLowerInvariant()} " +
-                    $"behavioral_reuse=exact_nonterminal_transition");
-                foreach (R1TransitionHydrationRejectSample rejected in hydration.RejectSamples)
-                {
-                    policy.Diagnostics.Info(
-                        $"[CombatSolver/Test] R1_HYDRATION_REJECTED_KEY " +
-                        $"action={rejected.ActionIdentity} reason={rejected.Reason}");
-                }
-                // D3.3C keeps validated exact hydration alive through request-tail audits.
-            }
-            if (r1FrontierShadowCache != null)
-            {
-                R1FrontierShadowSnapshot frontierShadow = r1FrontierShadowCache.Capture();
-                policy.Diagnostics.Info(
-                    $"[CombatSolver/Test] R1_FRONTIER_SHADOW " +
-                    $"mode=plain_exact_ordered signature_limit={frontierShadow.SignatureLimit} " +
-                    $"stored_signatures={frontierShadow.StoredSignatures} " +
-                    $"duplicate_stores={frontierShadow.DuplicateStores} " +
-                    $"dropped_stores={frontierShadow.DroppedStores} " +
-                    $"baseline_observations={frontierShadow.BaselineObservations} " +
-                    $"key_misses={frontierShadow.KeyMisses} " +
-                    $"turn_misses={frontierShadow.TurnMisses} " +
-                    $"action_count_misses={frontierShadow.ActionCountMisses} " +
-                    $"node_count_misses={frontierShadow.NodeCountMisses} " +
-                    $"validated_hits={frontierShadow.ValidatedHits} " +
-                    $"signature_mismatches={frontierShadow.SignatureMismatches} " +
-                    $"skipped_frontiers={frontierShadow.SkippedFrontiers} " +
-                    $"subset_observations={frontierShadow.SubsetObservations} " +
-                    $"probe_subset_hits={frontierShadow.ProbeSubsetHits} " +
-                    $"exact_set_hits={frontierShadow.ExactSetHits} " +
-                    $"partial_overlap_hits={frontierShadow.PartialOverlapHits} " +
-                    $"zero_overlap_hits={frontierShadow.ZeroOverlapHits} " +
-                    $"behavioral_reuse=false");
-                foreach (R1FrontierSubsetSample subset in frontierShadow.SubsetSamples)
-                {
-                    policy.Diagnostics.Info(
-                        $"[CombatSolver/Test] R1_FRONTIER_SUBSET " +
-                        $"turn={subset.Depth.Turn} action_count={subset.Depth.ActionCount} " +
-                        $"probe_nodes={subset.ProbeNodes} baseline_nodes={subset.BaselineNodes} " +
-                        $"intersection_nodes={subset.IntersectionNodes} " +
-                        $"probe_subset={subset.ProbeSubsetOfBaseline.ToString().ToLowerInvariant()} " +
-                        $"exact_set={subset.ExactSetMatch.ToString().ToLowerInvariant()}");
-                }
-                foreach (R1FrontierMissSample miss in frontierShadow.MissSamples)
-                {
-                    string missKind = miss.Kind switch
+                        $"reuse_disabled={hydration.ReuseDisabled.ToString().ToLowerInvariant()} " +
+                        $"behavioral_reuse=exact_nonterminal_transition");
+                    foreach (R1TransitionHydrationRejectSample rejected in hydration.RejectSamples)
                     {
-                        R1FrontierMissKind.Turn => "turn_miss",
-                        R1FrontierMissKind.ActionCount => "action_count_miss",
-                        R1FrontierMissKind.NodeCount => "node_count_miss",
-                        _ => "unknown",
-                    };
-                    policy.Diagnostics.Info(
-                        $"[CombatSolver/Test] R1_FRONTIER_MISS " +
-                        $"kind={missKind} " +
-                        $"baseline_turn={miss.Baseline.Turn} " +
-                        $"baseline_action_count={miss.Baseline.ActionCount} " +
-                        $"baseline_nodes={miss.Baseline.NodeCount} " +
-                        $"nearest_probe_turn={miss.NearestProbe.Turn} " +
-                        $"nearest_probe_action_count={miss.NearestProbe.ActionCount} " +
-                        $"nearest_probe_nodes={miss.NearestProbe.NodeCount} " +
-                        $"turn_delta={Math.Abs(miss.NearestProbe.Turn - miss.Baseline.Turn)} " +
-                        $"action_count_delta={Math.Abs(miss.NearestProbe.ActionCount - miss.Baseline.ActionCount)} " +
-                        $"node_count_delta={Math.Abs(miss.NearestProbe.NodeCount - miss.Baseline.NodeCount)}");
+                        policy.Diagnostics.Info(
+                            $"[CombatSolver/Test] R1_HYDRATION_REJECTED_KEY " +
+                            $"action={rejected.ActionIdentity} reason={rejected.Reason}");
+                    }
+                    // D3.3C keeps validated exact hydration alive through request-tail audits.
                 }
-            }
-            NoveltyPortfolioTelemetry? noveltyPass = passResult.NoveltyPortfolio;
-            ObserveSmartLayerMemory(
-                policy, memoryForecast, passAllocatedAtStart, passTransitionsAtStart,
-                passResult, activeProfile,
-                completedPotionCount: hasForcedBaseline
-                    ? policy.PotionStrategy.ForcedDirectiveCount
-                    : 0);
-            if (policy.MeasurePhasePerformance)
-                policy.Diagnostics.Info(SolverDiagnostics.DescribeSearchPhasePerformance(passResult));
-            passResult.SingleSessionSearch = true;
-            PopulateSingleSessionTotals(passResult);
-            if (!ReferenceEquals(passResult, publishedBaseline))
-                interimResultCallback?.Invoke(passResult);
-            if (ResolveTakeoverResult(passResult, policy.Interaction) is { } passTakeover)
-            {
-                takeoverResult = passTakeover;
-                ReleaseR1TransitionHydration("takeover", emitTelemetry: false);
-                return passResult;
-            }
-            if (passResult.DeterministicBlockPotionInserted)
-            {
-                passSettled = true;
-                ReleaseR1TransitionHydration("deterministic_block_potion", emitTelemetry: false);
-                return SelectContinuationSeedIncumbent(passResult);
-            }
-            if (!policy.PotionStrategy.HasForcedDirectives || hasForcedBaseline)
-            {
-                if (!hasForcedBaseline && HasReachedAcceptableBattleHpLoss(policy, passResult))
+                if (r1FrontierShadowCache != null)
+                {
+                    R1FrontierShadowSnapshot frontierShadow = r1FrontierShadowCache.Capture();
+                    policy.Diagnostics.Info(
+                        $"[CombatSolver/Test] R1_FRONTIER_SHADOW " +
+                        $"mode=plain_exact_ordered signature_limit={frontierShadow.SignatureLimit} " +
+                        $"stored_signatures={frontierShadow.StoredSignatures} " +
+                        $"duplicate_stores={frontierShadow.DuplicateStores} " +
+                        $"dropped_stores={frontierShadow.DroppedStores} " +
+                        $"baseline_observations={frontierShadow.BaselineObservations} " +
+                        $"key_misses={frontierShadow.KeyMisses} " +
+                        $"turn_misses={frontierShadow.TurnMisses} " +
+                        $"action_count_misses={frontierShadow.ActionCountMisses} " +
+                        $"node_count_misses={frontierShadow.NodeCountMisses} " +
+                        $"validated_hits={frontierShadow.ValidatedHits} " +
+                        $"signature_mismatches={frontierShadow.SignatureMismatches} " +
+                        $"skipped_frontiers={frontierShadow.SkippedFrontiers} " +
+                        $"subset_observations={frontierShadow.SubsetObservations} " +
+                        $"probe_subset_hits={frontierShadow.ProbeSubsetHits} " +
+                        $"exact_set_hits={frontierShadow.ExactSetHits} " +
+                        $"partial_overlap_hits={frontierShadow.PartialOverlapHits} " +
+                        $"zero_overlap_hits={frontierShadow.ZeroOverlapHits} " +
+                        $"behavioral_reuse=false");
+                    foreach (R1FrontierSubsetSample subset in frontierShadow.SubsetSamples)
+                    {
+                        policy.Diagnostics.Info(
+                            $"[CombatSolver/Test] R1_FRONTIER_SUBSET " +
+                            $"turn={subset.Depth.Turn} action_count={subset.Depth.ActionCount} " +
+                            $"probe_nodes={subset.ProbeNodes} baseline_nodes={subset.BaselineNodes} " +
+                            $"intersection_nodes={subset.IntersectionNodes} " +
+                            $"probe_subset={subset.ProbeSubsetOfBaseline.ToString().ToLowerInvariant()} " +
+                            $"exact_set={subset.ExactSetMatch.ToString().ToLowerInvariant()}");
+                    }
+                    foreach (R1FrontierMissSample miss in frontierShadow.MissSamples)
+                    {
+                        string missKind = miss.Kind switch
+                        {
+                            R1FrontierMissKind.Turn => "turn_miss",
+                            R1FrontierMissKind.ActionCount => "action_count_miss",
+                            R1FrontierMissKind.NodeCount => "node_count_miss",
+                            _ => "unknown",
+                        };
+                        policy.Diagnostics.Info(
+                            $"[CombatSolver/Test] R1_FRONTIER_MISS " +
+                            $"kind={missKind} " +
+                            $"baseline_turn={miss.Baseline.Turn} " +
+                            $"baseline_action_count={miss.Baseline.ActionCount} " +
+                            $"baseline_nodes={miss.Baseline.NodeCount} " +
+                            $"nearest_probe_turn={miss.NearestProbe.Turn} " +
+                            $"nearest_probe_action_count={miss.NearestProbe.ActionCount} " +
+                            $"nearest_probe_nodes={miss.NearestProbe.NodeCount} " +
+                            $"turn_delta={Math.Abs(miss.NearestProbe.Turn - miss.Baseline.Turn)} " +
+                            $"action_count_delta={Math.Abs(miss.NearestProbe.ActionCount - miss.Baseline.ActionCount)} " +
+                            $"node_count_delta={Math.Abs(miss.NearestProbe.NodeCount - miss.Baseline.NodeCount)}");
+                    }
+                }
+                NoveltyPortfolioTelemetry? noveltyPass = passResult.NoveltyPortfolio;
+                ObserveSmartLayerMemory(
+                    policy, memoryForecast, passAllocatedAtStart, passTransitionsAtStart,
+                    passResult, activeProfile,
+                    completedPotionCount: hasForcedBaseline
+                        ? policy.PotionStrategy.ForcedDirectiveCount
+                        : 0);
+                if (policy.MeasurePhasePerformance)
+                    policy.Diagnostics.Info(SolverDiagnostics.DescribeSearchPhasePerformance(passResult));
+                passResult.SingleSessionSearch = true;
+                PopulateSingleSessionTotals(passResult);
+                if (!ReferenceEquals(passResult, publishedBaseline))
+                    interimResultCallback?.Invoke(passResult);
+                if (ResolveTakeoverResult(passResult, policy.Interaction) is { } passTakeover)
+                {
+                    takeoverResult = passTakeover;
+                    ReleaseR1TransitionHydration("takeover", emitTelemetry: false);
+                    return passResult;
+                }
+                if (passResult.DeterministicBlockPotionInserted)
                 {
                     passSettled = true;
-                    ReleaseR1TransitionHydration("acceptable_loss", emitTelemetry: false);
+                    ReleaseR1TransitionHydration("deterministic_block_potion", emitTelemetry: false);
                     return SelectContinuationSeedIncumbent(passResult);
                 }
-                SolverSearchProfile supplementalProfile = activeProfile;
-                bool e4SmartPotionBudgetActive = false;
-                if (policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore)
+                if (!policy.PotionStrategy.HasForcedDirectives || hasForcedBaseline)
                 {
-                    E4SupplementalBudgetContext e4Context =
-                        e4BudgetContextProvider?.Invoke()
-                        ?? new E4SupplementalBudgetContext(
-                            activeClock.ElapsedMilliseconds,
-                            activeClock.ElapsedMilliseconds,
-                            HasApprovedForeground: false);
-                    long supplementalStartMs = e4Context.RequestElapsedMilliseconds;
-                    long qualityAnchorMs = e4Context.LastImprovementMilliseconds;
-                    bool hasApprovedForeground = e4Context.HasApprovedForeground;
-                    bool isPrimaryPass = ReferenceEquals(passClock, requestClock);
-                    int e4DeadlineMs = ComputeE4SupplementalDeadlineMilliseconds(
-                        policy.RoutePolicy,
-                        activeProfile.SoftTimeBudgetMilliseconds,
-                        supplementalStartMs,
-                        qualityAnchorMs,
-                        hasApprovedForeground,
-                        policy.PotionStrategy.HasForcedDirectives,
-                        isPrimaryPass);
-                    bool e4Active =
-                        e4DeadlineMs < activeProfile.SoftTimeBudgetMilliseconds;
-                    e4SmartPotionBudgetActive = e4Active;
-                    int e4ActiveDeadlineMs = e4Active
-                        ? ComputeE4ActiveClockDeadlineMilliseconds(
-                            activeProfile.SoftTimeBudgetMilliseconds,
-                            activeClock.ElapsedMilliseconds,
-                            supplementalStartMs,
-                            e4DeadlineMs)
-                        : activeProfile.SoftTimeBudgetMilliseconds;
-                    if (e4ActiveDeadlineMs < activeProfile.SoftTimeBudgetMilliseconds)
+                    if (!hasForcedBaseline && HasReachedAcceptableBattleHpLoss(policy, passResult))
                     {
-                        supplementalProfile = activeProfile with
-                        {
-                            SoftTimeBudgetMilliseconds = e4ActiveDeadlineMs,
-                        };
+                        passSettled = true;
+                        ReleaseR1TransitionHydration("acceptable_loss", emitTelemetry: false);
+                        return SelectContinuationSeedIncumbent(passResult);
                     }
-                    policy.Diagnostics.Info(
-                        $"[CombatSolver/Test] SEARCH_E4_SUPPLEMENTAL_BUDGET " +
-                        $"active={e4Active.ToString().ToLowerInvariant()} " +
-                        $"primary_pass={isPrimaryPass.ToString().ToLowerInvariant()} " +
-                        $"approved_foreground={hasApprovedForeground.ToString().ToLowerInvariant()} " +
-                        $"forced_potions={policy.PotionStrategy.HasForcedDirectives.ToString().ToLowerInvariant()} " +
-                        $"start_ms={supplementalStartMs} last_improvement_ms={qualityAnchorMs} " +
-                        $"active_clock_ms={activeClock.ElapsedMilliseconds} " +
-                        $"original_deadline_ms={activeProfile.SoftTimeBudgetMilliseconds} " +
-                        $"e4_request_deadline_ms={e4DeadlineMs} " +
-                        $"e4_active_deadline_ms={e4ActiveDeadlineMs}");
-                }
-
-                passResult = RunSupplementalAudits(
-                    root,
-                    displayNames,
-                    battleDamage,
-                    (policy.NoveltySearch == null
-                        ? policy
-                        : policy with { NoveltySearch = null }) with
+                    SolverSearchProfile supplementalProfile = activeProfile;
+                    bool e4SmartPotionBudgetActive = false;
+                    if (policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore)
                     {
-                        R1TransitionHydrationCache = r1TransitionHydrationCache,
-                    },
-                    cancellationToken,
-                    progressCallback,
-                    supplementalProfile,
-                    activeClock,
-                    passResult,
-                    memoryForecast,
-                    interimResultCallback,
-                    earlySmartPotionBaseline,
-                    earlySmartPotionScout,
-                    e4SmartPotionBudgetActive);
-                // The final potion audit may return another result object. Keep the
-                // primary-pass observations alongside the request's final outcome.
-                passResult.NoveltyPortfolio = noveltyPass;
+                        E4SupplementalBudgetContext e4Context =
+                            e4BudgetContextProvider?.Invoke()
+                            ?? new E4SupplementalBudgetContext(
+                                activeClock.ElapsedMilliseconds,
+                                activeClock.ElapsedMilliseconds,
+                                HasApprovedForeground: false);
+                        long supplementalStartMs = e4Context.RequestElapsedMilliseconds;
+                        long qualityAnchorMs = e4Context.LastImprovementMilliseconds;
+                        bool hasApprovedForeground = e4Context.HasApprovedForeground;
+                        bool isPrimaryPass = ReferenceEquals(passClock, requestClock);
+                        int e4DeadlineMs = ComputeE4SupplementalDeadlineMilliseconds(
+                            policy.RoutePolicy,
+                            activeProfile.SoftTimeBudgetMilliseconds,
+                            supplementalStartMs,
+                            qualityAnchorMs,
+                            hasApprovedForeground,
+                            policy.PotionStrategy.HasForcedDirectives,
+                            isPrimaryPass);
+                        bool e4Active =
+                            e4DeadlineMs < activeProfile.SoftTimeBudgetMilliseconds;
+                        e4SmartPotionBudgetActive = e4Active;
+                        int e4ActiveDeadlineMs = e4Active
+                            ? ComputeE4ActiveClockDeadlineMilliseconds(
+                                activeProfile.SoftTimeBudgetMilliseconds,
+                                activeClock.ElapsedMilliseconds,
+                                supplementalStartMs,
+                                e4DeadlineMs)
+                            : activeProfile.SoftTimeBudgetMilliseconds;
+                        if (e4ActiveDeadlineMs < activeProfile.SoftTimeBudgetMilliseconds)
+                        {
+                            supplementalProfile = activeProfile with
+                            {
+                                SoftTimeBudgetMilliseconds = e4ActiveDeadlineMs,
+                            };
+                        }
+                        policy.Diagnostics.Info(
+                            $"[CombatSolver/Test] SEARCH_E4_SUPPLEMENTAL_BUDGET " +
+                            $"active={e4Active.ToString().ToLowerInvariant()} " +
+                            $"primary_pass={isPrimaryPass.ToString().ToLowerInvariant()} " +
+                            $"approved_foreground={hasApprovedForeground.ToString().ToLowerInvariant()} " +
+                            $"forced_potions={policy.PotionStrategy.HasForcedDirectives.ToString().ToLowerInvariant()} " +
+                            $"start_ms={supplementalStartMs} last_improvement_ms={qualityAnchorMs} " +
+                            $"active_clock_ms={activeClock.ElapsedMilliseconds} " +
+                            $"original_deadline_ms={activeProfile.SoftTimeBudgetMilliseconds} " +
+                            $"e4_request_deadline_ms={e4DeadlineMs} " +
+                            $"e4_active_deadline_ms={e4ActiveDeadlineMs}");
+                    }
+
+                    passResult = RunSupplementalAudits(
+                        root,
+                        displayNames,
+                        battleDamage,
+                        (policy.NoveltySearch == null
+                            ? policy
+                            : policy with { NoveltySearch = null }) with
+                        {
+                            R1TransitionHydrationCache = r1TransitionHydrationCache,
+                        },
+                        cancellationToken,
+                        progressCallback,
+                        supplementalProfile,
+                        activeClock,
+                        passResult,
+                        memoryForecast,
+                        interimResultCallback,
+                        earlySmartPotionBaseline,
+                        earlySmartPotionScout,
+                        e4SmartPotionBudgetActive);
+                    // The final potion audit may return another result object. Keep the
+                    // primary-pass observations alongside the request's final outcome.
+                    passResult.NoveltyPortfolio = noveltyPass;
+                }
+                ReleaseR1TransitionHydration("request_tail", emitTelemetry: true);
+                return SelectContinuationSeedIncumbent(passResult);
             }
-            ReleaseR1TransitionHydration("request_tail", emitTelemetry: true);
-            return SelectContinuationSeedIncumbent(passResult);
+            finally
+            {
+                // A canceled/failed probe can exit before FreezeStores or the
+                // ordinary tail. Cached simulators still belong to this request.
+                if (r1TransitionHydrationCache != null)
+                {
+                    int entriesBeforeRelease = r1TransitionHydrationCache.EntryCount;
+                    r1TransitionHydrationCache.Release();
+                    policy.Diagnostics.Info("[CombatSolver/Test] R1_TRANSITION_HYDRATION_RELEASE "
+                        + $"stage=early_exit entries_before_release={entriesBeforeRelease} "
+                        + $"entries_after_release={r1TransitionHydrationCache.EntryCount}");
+                }
+            }
         }
 
         SolverResult result = RunSearchPass(profile, requestClock);

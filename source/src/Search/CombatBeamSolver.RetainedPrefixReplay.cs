@@ -16,17 +16,29 @@ internal sealed partial class CombatBeamSolver
 {
     // Prefix replay has no Beam execution session. Give the whole batch one ledger
     // owner, including transitions performed before a rejection or cancellation.
-    internal RetainedPrefixWorkScope MeasureRetainedPrefixBatch()
+    internal AuxiliaryWorkScope MeasureRetainedPrefixBatch()
+        => MeasureAuxiliaryWork(SearchRequestMemberKind.PlanRefreshPrefix);
+
+    internal T PrepareAudit<T>(Func<CombatBeamSolver, T> prepare)
     {
-        if (_executionSessionCreated)
-            throw new InvalidOperationException("Retained replay work must have one owner.");
-        _executionSessionCreated = true;
-        BeginSearchEfficiencyMember();
-        return new(this, policy.RequestWorkTotals, cancellationToken);
+        using AuxiliaryWorkScope work = MeasureAuxiliaryWork(SearchRequestMemberKind.AuditPreparation);
+        T result = prepare(this);
+        work.Complete();
+        return result;
     }
 
-    internal sealed class RetainedPrefixWorkScope(
-        CombatBeamSolver owner, SearchRequestWorkTotals? totals, CancellationToken token) : IDisposable
+    private AuxiliaryWorkScope MeasureAuxiliaryWork(SearchRequestMemberKind kind)
+    {
+        if (_executionSessionCreated)
+            throw new InvalidOperationException("Auxiliary replay work must have one owner.");
+        _executionSessionCreated = true;
+        BeginSearchEfficiencyMember(kind == SearchRequestMemberKind.AuditPreparation ? "audit_preparation" : "refresh_prefix");
+        return new(this, policy.RequestWorkTotals, cancellationToken, kind);
+    }
+
+    internal sealed class AuxiliaryWorkScope(
+        CombatBeamSolver owner, SearchRequestWorkTotals? totals, CancellationToken token,
+        SearchRequestMemberKind kind) : IDisposable
     {
         private readonly IDisposable _isolation = SimulationNotificationIsolation.Enter();
         private readonly long _started = Stopwatch.GetTimestamp();
@@ -34,6 +46,9 @@ internal sealed partial class CombatBeamSolver
         private readonly int _gen0 = GC.CollectionCount(0), _gen1 = GC.CollectionCount(1), _gen2 = GC.CollectionCount(2);
         private readonly TimeSpan _pause = GC.GetTotalPauseDuration();
         private bool _disposed;
+        private bool _completed;
+
+        internal void Complete() => _completed = true;
 
         public void Dispose()
         {
@@ -44,7 +59,8 @@ internal sealed partial class CombatBeamSolver
                 owner.CompleteExecutionLifecycle(totals,
                     Stopwatch.GetElapsedTime(_started), GC.GetAllocatedBytesForCurrentThread() - _allocated,
                     GC.CollectionCount(0) - _gen0, GC.CollectionCount(1) - _gen1, GC.CollectionCount(2) - _gen2,
-                    GC.GetTotalPauseDuration() - _pause, token.IsCancellationRequested ? "Canceled" : "Disposed");
+                    GC.GetTotalPauseDuration() - _pause,
+                    token.IsCancellationRequested ? "Canceled" : _completed ? "Completed" : "Disposed", kind);
             }
             finally { _isolation.Dispose(); }
         }

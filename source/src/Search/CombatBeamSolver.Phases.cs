@@ -111,7 +111,8 @@ internal sealed partial class CombatBeamSolver
         int gen1Collections,
         int gen2Collections,
         TimeSpan gcPauseDuration,
-        string outcome)
+        string outcome,
+        SearchRequestMemberKind? memberKind = null)
     {
         policy.Diagnostics.Info(
             $"[CombatSolver/Test] ROUTING_CHOICE_SUMMARIES scope=solver " +
@@ -144,8 +145,8 @@ internal sealed partial class CombatBeamSolver
                 _run.WorkPacer.MaxObservedGcPause);
             requestWorkTotals.Record(work, requestWorkTotals.MeasuresPhases
                 ? new SearchSolverPhaseContribution(
-                    (_continuationSeedProbe ? SearchRequestMemberKind.ContinuationSeed
-                        : policy.RequestMemberKind).ToString(),
+                    (memberKind ?? (_continuationSeedProbe ? SearchRequestMemberKind.ContinuationSeed
+                        : policy.RequestMemberKind)).ToString(),
                     _profile.BeamWidth, _minimumPotionUses, _maximumPotionUses,
                     outcome, work, _run.Performance.CapturePhases()) : null);
         }

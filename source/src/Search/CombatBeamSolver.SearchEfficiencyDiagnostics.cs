@@ -15,12 +15,12 @@ internal sealed partial class CombatBeamSolver
     private readonly ConditionalWeakTable<SearchNode, CandidateOriginBox> _searchEfficiencyOrigins = new();
     private int _searchEfficiencyMemberId;
 
-    private void BeginSearchEfficiencyMember()
+    private void BeginSearchEfficiencyMember(string? kindOverride = null)
     {
         BeamWidthPortfolioTelemetry? telemetry = policy.PortfolioTelemetry;
         if (telemetry == null)
             return;
-        string kind = policy.NoveltySearch != null
+        string kind = kindOverride ?? (policy.NoveltySearch != null
             ? "novelty"
             : _continuationSeedProbe
                 ? "continuation_seed_incumbent"
@@ -30,7 +30,7 @@ internal sealed partial class CombatBeamSolver
                         ? "potion_disabled"
                         : _minimumPotionUses > 0
                             ? "potion_required"
-                            : "beam";
+                            : "beam");
         _searchEfficiencyMemberId = telemetry.BeginSearchMember(
             kind,
             _profile.BeamWidth,
