@@ -1573,6 +1573,7 @@ $expectedBeamFiles = @(
     "CombatBeamSolver.R0TransitionMemo.cs",
     "CombatBeamSolver.R1TransitionHydration.cs",
     "CombatBeamSolver.RequestTransitionHydration.cs",
+    "CombatBeamSolver.RetainedPrefixReplay.cs",
     "CombatBeamSolver.ContinuationRouteReplay.cs",
     "CombatBeamSolver.Retention.cs",
     "CombatBeamSolver.RetentionJobs.cs",
@@ -4382,7 +4383,7 @@ $p0ControllerText = [IO.File]::ReadAllText($p0ControllerPath)
 foreach ($p0RuntimeRule in @(
     'refreshSource.MultiplayerReplayCandidates.Count > 0',
     'MultiplayerPlanRefreshContracts.IsReplayCompatible(',
-    'TryBoundedMultiplayerPlanRefresh(host, state, worldVersion);')) {
+    'TryBoundedMultiplayerPlanRefresh(host, state, worldVersion, token);')) {
     if (-not $p0ControllerText.Contains($p0RuntimeRule)) {
         $violations.Add("${p0ControllerPath}: P0 Runtime bounded-refresh entry drifted '$p0RuntimeRule'")
     }
@@ -4402,9 +4403,9 @@ $refreshSearchPath = Join-Path $repositoryRoot 'src/Search/MultiplayerPlanRefres
 $refreshSearchText = [IO.File]::ReadAllText($refreshSearchPath)
 foreach ($refreshSearchRule in @(
     'candidates.Take(BoundedRefreshCandidateLimit)',
-    'replaySolver.ReplayDiagnosticPrefix(candidate.Prefix)',
+    'replaySolver.ReplayRetainedPrefix(candidate.Prefix)',
     'fixedPrefixActions: selected.Candidate.Prefix',
-    'snapshot.ReleaseSimulator();')) {
+    'using (RetainedPrefixReplay replay =')) {
     if (-not $refreshSearchText.Contains($refreshSearchRule)) {
         $violations.Add("${refreshSearchPath}: bounded refresh calculation contract drifted '$refreshSearchRule'")
     }
@@ -4413,6 +4414,15 @@ if ($p0RefreshText.Contains('new CombatBeamSolver(') -or
     $p0RefreshText.Contains('CombatBeamSolver replaySolver') -or
     $refreshSearchText -match 'LocalContext|SolverOverlay|RunManager|_combat\.') {
     $violations.Add('Multiplayer refresh must keep frozen-root calculation in Search and live adoption in Runtime')
+}
+$prefixReplayPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.RetainedPrefixReplay.cs'
+$prefixReplayText = [IO.File]::ReadAllText($prefixReplayPath)
+foreach ($prefixRule in @('cancellationToken.ThrowIfCancellationRequested();',
+    'TryApplyPrefixAction(node, action)', 'if (!transferred) node.Snapshot.ReleaseSimulator();',
+    '"victory_truncated"', 'node.Snapshot.HasRisk')) {
+    if (-not $prefixReplayText.Contains($prefixRule)) {
+        $violations.Add("${prefixReplayPath}: retained-prefix ownership/admission drifted '$prefixRule'")
+    }
 }
 
 $p1ContinuationContractsPath = Join-Path $repositoryRoot 'src/Search/MultiplayerLocalCrossTurnContracts.cs'

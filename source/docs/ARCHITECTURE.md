@@ -56,6 +56,8 @@ Harmony 参数形状的条件编译位于回合补丁入口；这是当前兼容
 
 `MultiplayerPlanRefresher` 拥有冻结根上的保留前缀重放、候选评分和结果物化；不读取 live 状态、不发布 UI、不授予执行权限。`SolverController.MultiplayerPlanRefresh` 保留主线程根捕获、兼容性准入、结果接纳、异常退回和 UI。当前调用仍同步，提取职责本身不宣称解决主线程延迟。旧三候选/两动作与 192 节点/60ms 物化限制暂时保留；60ms 不是包含前缀重放和收尾的端到端承诺。
 
+`CombatBeamSolver.RetainedPrefixReplay` 复用普通前缀动作准入，逐动作新根重放；完整获胜截断旧尾部，未知预测边界或不可用动作返回明确拒绝。临时快照由 `RetainedPrefixReplay.Dispose` 释放，异常/拒绝路径由生产方法释放；不返回旧 SearchNode。刷新对不可用备选独立拒绝，当前候选不能重放则保持 FullRestart。取消令牌贯穿重放/物化并向外传播，Runtime 不将取消转成新搜索。阶段指标记录尝试/拒绝/截断、前缀转移数及互不重叠的耗时，不作为质量排序输入。
+
 `SolverSessionCapabilities` 是 Runtime 的会话能力合同：网络多人默认进入只读 `MultiplayerProbe`；显式 `advisor` 开启建议搜索，显式 `safe-execute` 开启本地安全执行，Lab 模式另核对实例 ownership 与 Probe evidence。已获准搜索的会话默认使用 local-single-core；只有 `UseMultiplayerPrediction` 开启时才进入实验团队预测。Safe Execute 的本地药水、计划内 Choice、安全 EndTurn 与独立 Safe Auto 已有实现；原生多人完整验证仍按具体场景区分。完整权限、动作限制与证据入口统一见 [多人能力与限制](multiplayer/LIMITATIONS.md)，不再沿用早期一动作 Smoke 的能力描述。
 
 `SolverPerspective` 明确 Knowledge 不等于 Authority，`MultiplayerRootCaptureContracts` 保持 local-player-only action root，只冻结本地可读状态并对未知语义 fail closed。`MultiplayerClientProbe` 在主线程观察本地战斗与队友可读状态；Probe 证据仅在 Lab 环境写入 JSONL schema v2（`runSeed`、`combatSegmentId`）和紧凑 fingerprint。`MultiplayerWorldTracker` 只维护观察 fingerprint、world version 和稳定确认窗口，不拥有网络、不修改 live state、不发送动作。它将状态交给独立实例 `MultiplayerWorldObservation`，生产入口传入 `Environment.TickCount64`；同一状态逻辑可由离线测试输入确定性时间和观察顺序。仍限主线程，实例隔离不代表网络同步或线程安全。

@@ -1710,7 +1710,7 @@ internal static partial class SolverController
             if (_combat.PendingMultiplayerPlanRefresh)
             {
                 MultiplayerPlanRefreshDecision refreshDecision =
-                    TryBoundedMultiplayerPlanRefresh(host, state, worldVersion);
+                    TryBoundedMultiplayerPlanRefresh(host, state, worldVersion, token);
                 if (refreshDecision != MultiplayerPlanRefreshDecision.FullRestart)
                 {
                     if (_combat.MultiplayerSafeAutoEnabled

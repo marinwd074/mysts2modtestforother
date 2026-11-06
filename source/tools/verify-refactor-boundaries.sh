@@ -621,6 +621,7 @@ expected_beam_files=(
     CombatBeamSolver.R0TransitionMemo.cs
     CombatBeamSolver.R1TransitionHydration.cs
     CombatBeamSolver.RequestTransitionHydration.cs
+    CombatBeamSolver.RetainedPrefixReplay.cs
     CombatBeamSolver.ContinuationRouteReplay.cs
     CombatBeamSolver.MultiplayerInterleaving.cs
     CombatBeamSolver.MultiplayerScenarioReevaluation.cs
@@ -1264,14 +1265,19 @@ refresh_search="$repository_root/src/Search/MultiplayerPlanRefresher.cs"
 require_fixed "$refresh_runtime" 'MultiplayerPlanRefresher.Refresh(' 'missing frozen-root refresh delegation:'
 require_fixed "$refresh_runtime" 'source.StartTurnNumber != LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber' 'missing live-turn admission:'
 require_fixed "$refresh_search" 'candidates.Take(BoundedRefreshCandidateLimit)' 'missing candidate work bound:'
-require_fixed "$refresh_search" 'replaySolver.ReplayDiagnosticPrefix(candidate.Prefix)' 'missing fresh-root prefix replay:'
+require_fixed "$refresh_search" 'replaySolver.ReplayRetainedPrefix(candidate.Prefix)' 'missing fresh-root prefix replay:'
 require_fixed "$refresh_search" 'fixedPrefixActions: selected.Candidate.Prefix' 'missing selected-prefix materialization:'
-require_fixed "$refresh_search" 'snapshot.ReleaseSimulator();' 'missing branch cleanup:'
+require_fixed "$refresh_search" 'using (RetainedPrefixReplay replay =' 'missing branch cleanup:'
 for token in 'new CombatBeamSolver(' 'CombatBeamSolver replaySolver'; do
     forbid_fixed "$refresh_runtime" "$token" 'refresh simulation belongs in Search:'
 done
 for token in 'LocalContext' 'SolverOverlay' 'RunManager' '_combat.'; do
     forbid_fixed "$refresh_search" "$token" 'live state is not owned by Search:'
+done
+prefix_replay="$repository_root/src/Search/CombatBeamSolver.RetainedPrefixReplay.cs"
+for token in 'cancellationToken.ThrowIfCancellationRequested();' 'TryApplyPrefixAction(node, action)' \
+    'if (!transferred) node.Snapshot.ReleaseSimulator();' '"victory_truncated"' 'node.Snapshot.HasRisk'; do
+    require_fixed "$prefix_replay" "$token" 'retained-prefix ownership/admission drifted:'
 done
 
 if ((${#violations[@]} > 0)); then

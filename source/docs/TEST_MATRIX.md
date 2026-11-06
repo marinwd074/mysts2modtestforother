@@ -11,6 +11,7 @@
 | Repository | `tools/verify-repository-hygiene.ps1` | Git 跟踪文件、Markdown 本地链接、项目版本日志与 LFS 边界 |
 | L1 contracts | `tools/run-contract-tests.ps1` | Search / Prediction / Multiplayer 纯合同 |
 | 多人事件交错 | `dotnet run --project tools/MultiplayerInterleavingChecks -c Release` | 直接编译生产观察状态和执行授权类；10,493 个确定性顺序，失败输出 `--replay <id>`，不依赖游戏 DLL |
+| 多人候选刷新 | `dotnet run --project tools/U0U1PinnedHarness -c Release -- multiplayer-refresh --out <ignored-directory>` | 两个原生角色模型、受控 HP 变化；94 项检查/12 次独立重放，包含提前斩杀截断、不可用备选隔离和取消拒绝；无 Controller/原生队友动作/网络/UI |
 | Release | `dotnet build CombatSolver.csproj -c Release` | 当前本机真实依赖下编译 |
 | 不启动游戏的组合验证 | `tools/run-offline-validation.ps1 -GameDir <安装目录>` | 外部版本校验、上述静态检查/Release、L1、portfolio 与 17 个 pinned 模式；逐步日志、DLL 摘要及跳过子项 |
 

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using CombatSolver.Engine.InCombat.Simulation;
 
 namespace CombatSolver;
@@ -14,7 +15,15 @@ internal sealed record MultiplayerPlanRefreshResult(
     SolverResult? Result,
     int ReplayedCandidates,
     bool FirstActionChanged,
-    string Reason);
+    string Reason)
+{
+    public MultiplayerPlanRefreshMetrics? Metrics { get; init; }
+}
+
+internal sealed record MultiplayerPlanRefreshMetrics(
+    int AttemptedCandidates, int RejectedCandidates, int TruncatedCandidates,
+    int PrefixTransitions, double PrefixMilliseconds, double MaterializationMilliseconds,
+    double TotalMilliseconds);
 
 /// <summary>
 /// Evaluates retained local prefixes against one frozen root. Owns no live state,
@@ -38,8 +47,13 @@ internal static class MultiplayerPlanRefresher
         SolverDisplayNames displayNames,
         BattleDamageSnapshot battleDamage,
         SearchPolicySnapshot searchPolicy,
-        IReadOnlyList<MultiplayerReplayCandidate> candidates)
+        IReadOnlyList<MultiplayerReplayCandidate> candidates,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        Stopwatch clock = Stopwatch.StartNew();
+        int attempted = 0, rejected = 0, truncated = 0, prefixTransitions = 0;
+        double prefixMilliseconds = 0, materializationMilliseconds = 0;
         int initialEnemyMaximumHp = Math.Max(
             1,
             root.Enemies.Sum(enemy => Math.Max(0, enemy.MaxHp)));
@@ -47,12 +61,15 @@ internal static class MultiplayerPlanRefresher
             root,
             displayNames,
             battleDamage,
-            searchPolicy);
+            searchPolicy,
+            cancellationToken);
 
         List<BoundedReplayEvaluation> evaluations = [];
         foreach (MultiplayerReplayCandidate candidate in
                  candidates.Take(BoundedRefreshCandidateLimit))
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            attempted++;
             if (candidate.Prefix.Count == 0
                 || candidate.Prefix.Count > BoundedRefreshPrefixActionLimit
                 || candidate.Prefix.Any(action =>
@@ -61,13 +78,19 @@ internal static class MultiplayerPlanRefresher
                     || !action.IsExecutable
                     || action.Turn != root.StartTurnNumber))
             {
+                rejected++;
                 continue;
             }
 
-            SimulationSnapshot snapshot =
-                replaySolver.ReplayDiagnosticPrefix(candidate.Prefix);
-            try
+            using (RetainedPrefixReplay replay = replaySolver.ReplayRetainedPrefix(candidate.Prefix))
             {
+                prefixTransitions += replay.Transitions;
+                if (replay.Snapshot is not { } snapshot)
+                {
+                    rejected++;
+                    continue;
+                }
+                if (replay.Actions.Count < candidate.Prefix.Count) truncated++;
                 bool completeVictory = SolverInterimResultOrdering.IsCompleteVictory(
                     candidate.Prefix.Count,
                     snapshot.AllEnemiesDead,
@@ -89,21 +112,18 @@ internal static class MultiplayerPlanRefresher
                         completeVictory ? snapshot.CombatEndedTurn : null,
                         root.StartTurnNumber);
                 evaluations.Add(new BoundedReplayEvaluation(
-                    candidate,
+                    candidate with { Prefix = replay.Actions },
                     objective,
                     snapshot.Score));
             }
-            finally
-            {
-                snapshot.ReleaseSimulator();
-            }
         }
+        prefixMilliseconds = clock.Elapsed.TotalMilliseconds;
 
         int currentIndex = evaluations.FindIndex(
             evaluation => evaluation.Candidate.OriginalRank == 0);
         if (currentIndex < 0)
-            return new(MultiplayerPlanRefreshDecision.FullRestart, null,
-                evaluations.Count, false, "current_prefix_unreplayable");
+            return Finish(new(MultiplayerPlanRefreshDecision.FullRestart, null,
+                evaluations.Count, false, "current_prefix_unreplayable"));
 
         BoundedReplayEvaluation selected = evaluations[currentIndex];
         foreach (BoundedReplayEvaluation candidate in evaluations)
@@ -136,10 +156,12 @@ internal static class MultiplayerPlanRefresher
             displayNames,
             battleDamage,
             searchPolicy,
+            cancellationToken,
             searchProfile: boundedProfile,
             fixedPrefixActions: selected.Candidate.Prefix,
             reserveScenarioReevaluationBudget: false);
         SolverResult refreshed = materializeSolver.Solve();
+        materializationMilliseconds = clock.Elapsed.TotalMilliseconds - prefixMilliseconds;
 
         bool prefixPreserved = refreshed.BestNode.Actions.Count >= selected.Candidate.Prefix.Count;
         for (int index = 0; prefixPreserved && index < selected.Candidate.Prefix.Count; index++)
@@ -149,8 +171,8 @@ internal static class MultiplayerPlanRefresher
                 selected.Candidate.Prefix[index]);
         }
         if (!prefixPreserved)
-            return new(MultiplayerPlanRefreshDecision.FullRestart, refreshed,
-                evaluations.Count, false, "materialized_prefix_mismatch");
+            return Finish(new(MultiplayerPlanRefreshDecision.FullRestart, refreshed,
+                evaluations.Count, false, "materialized_prefix_mismatch"));
 
         MultiplayerPlanRefreshDecision decision =
             selected.Candidate.OriginalRank == 0
@@ -158,10 +180,14 @@ internal static class MultiplayerPlanRefresher
                 : MultiplayerPlanRefreshDecision.Reselect;
         bool firstActionChanged = decision == MultiplayerPlanRefreshDecision.Reselect;
 
-        return new(decision, refreshed, evaluations.Count, firstActionChanged,
+        return Finish(new(decision, refreshed, evaluations.Count, firstActionChanged,
             decision == MultiplayerPlanRefreshDecision.Continue
                 ? "current_prefix_rematerialized"
-                : "retained_alternative_rematerialized");
+                : "retained_alternative_rematerialized"));
+
+        MultiplayerPlanRefreshResult Finish(MultiplayerPlanRefreshResult result)
+            => result with { Metrics = new(attempted, rejected, truncated, prefixTransitions,
+                prefixMilliseconds, materializationMilliseconds, clock.Elapsed.TotalMilliseconds) };
     }
 
     private static bool HasSameExecutionIdentity(

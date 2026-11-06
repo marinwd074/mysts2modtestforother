@@ -26,7 +26,6 @@ internal static class MultiplayerRefreshChecks
         }
 
         Check(live.Players.Count == 2, "Refresh fixture must contain two native player models.");
-        var local = LocalContext.GetMe(live)!;
         var enemy = live.Enemies.Single();
         int originalHp = enemy.CurrentHp;
         SolverSearchProfile profile = original with
@@ -84,26 +83,21 @@ internal static class MultiplayerRefreshChecks
                 Check(MultiplayerPlanRefreshContracts.IsReplayCompatible(previousStamp ?? before, before, out _),
                     "Living-enemy durability fixture was not admitted by the production guard.");
                 clock.Restart();
-                MultiplayerPlanRefreshResult refreshed;
-                try
-                {
-                    refreshed = MultiplayerPlanRefresher.Refresh(
-                        root, names, damage, policy, source.MultiplayerReplayCandidates);
-                }
-                catch (InvalidOperationException ex) when (hp == 6
-                    && ex.Message == "回放包含已锁定战斗终局之后的动作。")
-                {
-                    // Preserve the current Runtime fallback as baseline evidence. A teammate
-                    // damage edit can make the first card lethal and invalidate the second.
-                    refreshed = new(MultiplayerPlanRefreshDecision.FullRestart, null, 0,
-                        false, "legacy_prefix_continues_after_victory");
-                }
+                MultiplayerPlanRefreshResult refreshed = MultiplayerPlanRefresher.Refresh(
+                    root, names, damage, policy, source.MultiplayerReplayCandidates);
                 double refreshMs = clock.Elapsed.TotalMilliseconds;
-                Check(refreshed.ReplayedCandidates is >= 0 and <= 3, "Refresh lost its candidate work bound.");
-                Check(refreshed.Result != null || hp == 6
-                    && refreshed.Reason == "legacy_prefix_continues_after_victory",
+                Check(refreshed.ReplayedCandidates is > 0 and <= 3, "Refresh lost its candidate work bound.");
+                Check(refreshed.Result != null,
                     $"Known playable prefixes failed to refresh: {refreshed.Reason}");
-                if (refreshed.Result != null) Verify(root, refreshed.Result);
+                Verify(root, refreshed.Result!);
+                Check(refreshed.Metrics is { AttemptedCandidates: > 0, PrefixTransitions: > 0 }
+                    && refreshed.Metrics.PrefixMilliseconds + refreshed.Metrics.MaterializationMilliseconds
+                        <= refreshed.Metrics.TotalMilliseconds,
+                    "Refresh phase accounting is incomplete or overlaps.");
+                if (hp == 6)
+                    Check(refreshed.Metrics!.TruncatedCandidates > 0 && refreshed.Result!.Snapshot.AllEnemiesDead
+                        && refreshed.Result.BestNode.Actions.Count == 1,
+                        "New lethal must truncate the stale tail and return a one-card victory.");
                 Check(before == ContinuationStamp.CaptureLive(live).StateText,
                     "Search or refresh mutated live state, including teammate/shared state.");
 
@@ -114,12 +108,25 @@ internal static class MultiplayerRefreshChecks
                     first_approved_publication_ms = firstApprovedMs, completed_layers = completedLayers,
                     refresh_ms = refreshMs, refresh_decision = refreshed.Decision.ToString(),
                     refreshed.Reason, refreshed.ReplayedCandidates,
+                    refreshed.Metrics,
                     fresh = Describe(fresh), refresh = refreshed.Result == null ? null : Describe(refreshed.Result),
                 });
 
                 Check(MultiplayerPlanRefresher.Refresh(root, names, damage, policy, []).Decision
                     == MultiplayerPlanRefreshDecision.FullRestart, "Empty candidates must request full search.");
                 var current = fresh.MultiplayerReplayCandidates[0];
+                var unavailable = current with { OriginalRank = 99,
+                    Prefix = [current.Prefix[0] with { CardId = "NONEXISTENT_FIXTURE_CARD", CardStateKey = "nonexistent" }] };
+                MultiplayerPlanRefreshResult isolated = MultiplayerPlanRefresher.Refresh(root, names, damage,
+                    policy, [current, unavailable]);
+                Check(isolated.Decision == MultiplayerPlanRefreshDecision.Continue
+                    && isolated.Metrics?.RejectedCandidates == 1,
+                    "An unavailable alternative invalidated the playable current route.");
+                Verify(root, isolated.Result!);
+                Check(MultiplayerPlanRefresher.Refresh(root, names, damage, policy,
+                    [unavailable with { OriginalRank = 0 }, current with { OriginalRank = 1 }]).Decision
+                    == MultiplayerPlanRefreshDecision.FullRestart,
+                    "An unavailable current route was replaced without a quality admission.");
                 Check(MultiplayerPlanRefresher.Refresh(root, names, damage, policy,
                     [current with { OriginalRank = 1 }]).Decision == MultiplayerPlanRefreshDecision.FullRestart,
                     "A candidate set without the current route must fail closed.");
@@ -127,6 +134,12 @@ internal static class MultiplayerRefreshChecks
                     [current with { Prefix = current.Prefix.Select(action => action with { Turn = action.Turn + 1 }).ToArray() }])
                     .Decision == MultiplayerPlanRefreshDecision.FullRestart,
                     "Future-turn prefixes must not enter current-turn refresh.");
+                using CancellationTokenSource cancelled = new();
+                cancelled.Cancel();
+                bool cancelledRejected = false;
+                try { MultiplayerPlanRefresher.Refresh(root, names, damage, policy, [current], cancelled.Token); }
+                catch (OperationCanceledException) { cancelledRejected = true; }
+                Check(cancelledRejected, "Cancelled refresh returned a deployable result.");
                 previous = fresh;
                 previousStamp = before;
             }
@@ -139,7 +152,7 @@ internal static class MultiplayerRefreshChecks
             {
                 status = "PASS", checks, independent_replays = replays,
                 evidence = "native fake-multiplayer models; controlled HP edits; no transport, game process, or UI",
-                baseline = "existing three-turn local core and legacy three-candidate/two-card refresh",
+                baseline = "661fccf0: three-turn local core; refresh now validates each action and truncates victory",
                 refresh_budget = new { candidates = 3, prefix_actions = 2, nodes = 192, materialize_ms = 60 },
                 profile, dll_sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(dll))), rows,
             }, new JsonSerializerOptions { WriteIndented = true }));

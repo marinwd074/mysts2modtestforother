@@ -10,7 +10,8 @@ internal static partial class SolverController
     private static MultiplayerPlanRefreshDecision TryBoundedMultiplayerPlanRefresh(
         NGame host,
         CombatState state,
-        long worldVersion)
+        long worldVersion,
+        CancellationToken cancellationToken)
     {
         AssertMainThread();
         Stopwatch stopwatch = Stopwatch.StartNew();
@@ -53,7 +54,9 @@ internal static partial class SolverController
                 theftPolicy: theftPolicy);
             CombatRootSnapshot root = CombatRootSnapshot.Capture(state);
             MultiplayerPlanRefreshResult evaluation = MultiplayerPlanRefresher.Refresh(
-                root, displayNames, battleDamage, searchPolicy, source.MultiplayerReplayCandidates);
+                root, displayNames, battleDamage, searchPolicy, source.MultiplayerReplayCandidates, cancellationToken);
+            Entry.Logger.Info("[CombatSolver/MultiplayerPlanRefresh] MP_PLAN_REFRESH_PHASE "
+                + System.Text.Json.JsonSerializer.Serialize(evaluation.Metrics));
             if (evaluation.Decision == MultiplayerPlanRefreshDecision.FullRestart)
             {
                 DropRetainedPlanForFullRestart();
@@ -90,6 +93,10 @@ internal static partial class SolverController
                 stopwatch.Elapsed,
                 evaluation.Reason);
             return decision;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
