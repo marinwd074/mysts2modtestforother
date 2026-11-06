@@ -593,6 +593,17 @@ internal static class StrategicEffectModel
     public static StrategicEffectVector Damage(int value, int enemyHp)
         => new(Math.Min(Math.Max(0, enemyHp), Math.Max(0, value)), 0, 0, 0, 0);
 
+    // Enemy-bound effects cannot carry their excess value to another target.
+    // This remains a retention heuristic (Doom is progress, not guaranteed damage),
+    // not an HP-saving certificate or a substitute for the native end-turn replay.
+    internal static int EnemyBoundDelayedValue(int currentHp, int poison, int demise, int doom)
+    {
+        if (currentHp <= 0) return 0;
+        long cappedDoom = Math.Clamp(doom, 0, currentHp);
+        long doomProgress = cappedDoom * cappedDoom / currentHp;
+        return (int)Math.Min(currentHp, (long)Math.Max(0, poison) + Math.Max(0, demise) + doomProgress);
+    }
+
     public static StrategicEffectVector Prevention(int value, StrategicEffectContext context)
     {
         int cap = context.IncomingDamage == 0

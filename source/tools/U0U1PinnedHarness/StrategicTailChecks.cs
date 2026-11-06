@@ -94,6 +94,25 @@ internal static class StrategicTailChecks
         }
         Check(ContinuationStamp.CaptureLive(live).StateText == before, "Tail replay mutated the live fixture.");
 
+        Check(StrategicEffectModel.EnemyBoundDelayedValue(10, 100, 100, 100) == 10
+            && StrategicEffectModel.EnemyBoundDelayedValue(10, 2, 3, 5) == 7,
+            "Overlapping enemy-bound effects exceed target HP or lose non-saturated progress.");
+        Check(StrategicEffectModel.EnemyBoundDelayedValue(0, int.MaxValue, int.MaxValue, int.MaxValue) == 0
+            && StrategicEffectModel.EnemyBoundDelayedValue(int.MaxValue, int.MaxValue, int.MaxValue, int.MaxValue) == int.MaxValue
+            && StrategicEffectModel.EnemyBoundDelayedValue(10, -1, -1, -1) == 0,
+            "Delayed-value arithmetic overflows or credits absent effects/dead targets.");
+        ModelDb.Power<PoisonPower>().ToMutable(0).ApplyInternal(live.Enemies.Single(), 1_000, false);
+        var poisonedRoot = CombatRootSnapshot.Capture(live);
+        var poisoned = new CombatBeamSolver(poisonedRoot, names, damage,
+            policy with { RoutePolicy = SearchRoutePolicy.MultiplayerSinglePlayerCore }).ReplayDiagnosticPrefix([]);
+        replays++;
+        try
+        {
+            Check(poisoned.DelayedDamageValue == 500 && poisoned.StrategicHpCredit == 0,
+                "Native root capture did not cap delayed value or converted it into HP credit.");
+        }
+        finally { poisoned.ReleaseSimulator(); }
+
         foreach (PotionModel potion in player.PotionSlots.OfType<PotionModel>().ToArray())
             player.RemovePotionInternal(potion);
         Check(player.AddPotionInternal(ModelDb.Potion<FirePotion>().ToMutable(), 0, true).success,

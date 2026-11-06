@@ -480,8 +480,8 @@ internal sealed partial class CombatBeamSolver
         persistentBuffValue += soulCount;
         _run.Performance.End(SearchMetricPhase.SnapshotFutureResources, futureResourcesMeasurement);
         SearchMeasurement enemyControlMeasurement = _run.Performance.Begin();
-        // Where + Sum 两个闭包加一个装箱的 ForkableList 枚举器，换成按下标累加：
-        // 筛选条件、累加顺序与每项的整数运算完全不变。
+        // Bind the delayed heuristic to each surviving target before aggregating.
+        // Overkill on one enemy must not look like progress against the others.
         IReadOnlyList<Creature> knownEnemies = combat.KnownEnemies;
         int delayedDamageValue = 0;
         for (int enemyIndex = 0; enemyIndex < knownEnemies.Count; enemyIndex++)
@@ -493,12 +493,8 @@ internal sealed partial class CombatBeamSolver
             int demise = Math.Max(0, combat.GetAmount<DemisePower>(enemy));
             int doom = Math.Max(0, combat.GetAmount<DoomPower>(enemy));
             int currentHp = Math.Max(0, simulator.State.GetCreature(enemy).CurrentHp);
-            int cappedDoom = Math.Min(currentHp, doom);
-            int doomProgress = currentHp <= 0
-                ? 0
-                : (int)Math.Min(currentHp, (long)cappedDoom * cappedDoom / currentHp);
-            // Enumerable.Sum 对 int 是 checked 累加，这里照搬同样的溢出语义。
-            delayedDamageValue = checked(delayedDamageValue + poison + demise + doomProgress);
+            delayedDamageValue = checked(delayedDamageValue
+                + StrategicEffectModel.EnemyBoundDelayedValue(currentHp, poison, demise, doom));
         }
         int reactiveDamageValue = Math.Max(
             0,

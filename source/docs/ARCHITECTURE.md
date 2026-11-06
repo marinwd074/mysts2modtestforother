@@ -6,6 +6,8 @@
 
 末态 `StrategicEffectContext` 的剩余可出牌回合与未来回合开始次数分开：共用 `RouteEvaluationWindow.AtPlayerDecisionPoint` 表示当前开始已经兑现，恶魔形态、创造性 AI、熔炉不再预支这次触发；当前力量继续独立估值。`StateEvaluation` 在获胜/死亡时跳过未来战斗能力估值，实际资源账本保持原口径。这是所有模式共用的估值校准，不改变搜索终点，单人仍预测到战斗结束。
 
+敌人身上的毒、灾厄及末日进度统一经过 `StrategicEffectModel.EnemyBoundDelayedValue`：各目标的合计先限制在自身当前 HP，再汇总为 `DelayedDamageValue`；死亡/不在战斗中的目标跳过。使用宽整数计算叠加与平方，避免过量状态溢出。该值只影响保留、排序和探针优先级，不能代替原生回合模拟或成为实际 HP/药水收益证明；已知队友的未来主动伤害不计入其中。
+
 普通 Power 的 Target 保留原生 null；显式定向入口继续保存传入目标。临时力量复用上游施加入口，首次回调仍先于计数加入，封顶后按修正请求量触发数量回调。Weak/Vulnerable/Frail 的跳过首次持续时间扣减只由各自 Power 保存，影响状态指纹与 ContinuationStamp；其他能力的无效 Skip 元数据不参与该等价性判断。未新增战斗后端或状态存储副本。
 
 ## 1. 运行链

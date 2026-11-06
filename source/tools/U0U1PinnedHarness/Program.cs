@@ -59,14 +59,15 @@ internal static class Program
         bool projectedShuffleOnly = args.Length > 0 && args[0] == "projected-shuffle";
         bool strategicContextOnly = args.Length > 0 && args[0] == "strategic-context";
         bool strategicTailOnly = args.Length > 0 && args[0] == "strategic-tail";
+        bool p2QualityOnly = args.Length > 0 && args[0] == "p2-quality";
         bool rootHistoryOnly = args.Length > 0 && args[0] == "root-history";
         bool requestHydrationOnly = args.Length > 0 && args[0] is "request-hydration"
             or "request-hydration-benchmark-on" or "request-hydration-benchmark-off";
         bool requestHydrationBenchmark = requestHydrationOnly && args[0] != "request-hydration";
-        string outputDirectory = ParseOutput(multiplayerRefreshOnly || entropicCostOnly || upstreamSearchOnly || upstreamPortOnly || memoryDisplayOnly || cardChoiceIdentityOnly || modelIdCacheOnly || darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicTailOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
-            allowHydrationOptions: requestHydrationBenchmark);
+        string outputDirectory = ParseOutput(multiplayerRefreshOnly || entropicCostOnly || upstreamSearchOnly || upstreamPortOnly || memoryDisplayOnly || cardChoiceIdentityOnly || modelIdCacheOnly || darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicTailOnly || p2QualityOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
+            allowHydrationOptions: requestHydrationBenchmark || p2QualityOnly);
         Directory.CreateDirectory(outputDirectory);
-        if (multiplayerRefreshOnly)
+        if (multiplayerRefreshOnly || p2QualityOnly && args.Any(value => value.EndsWith("-mp", StringComparison.Ordinal)))
             Environment.SetEnvironmentVariable(SolverSessionCapabilities.MultiplayerModeEnvironmentVariable, "advisor");
 
         try
@@ -126,7 +127,7 @@ internal static class Program
                 ValidateRngRestore(outputDirectory);
                 return 0;
             }
-            if (!multiplayerRefreshOnly && !upstreamSearchOnly && !upstreamPortOnly && !cardChoiceIdentityOnly && !turnEnergyOnly && !rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly && !rootHistoryOnly && !strategicContextOnly && !strategicTailOnly && !strategicEnergyOnly && !projectedShuffleOnly)
+            if (!multiplayerRefreshOnly && !upstreamSearchOnly && !upstreamPortOnly && !cardChoiceIdentityOnly && !turnEnergyOnly && !rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly && !rootHistoryOnly && !strategicContextOnly && !strategicTailOnly && !p2QualityOnly && !strategicEnergyOnly && !projectedShuffleOnly)
             {
             ValidateDarkEmbracePredictionCoverage();
             ValidateViciousStrategicValue();
@@ -167,14 +168,16 @@ internal static class Program
             }
 
             int hydrationFixtureIndex = Array.IndexOf(args, "--fixture");
+            string p2Fixture = hydrationFixtureIndex >= 0 ? args[hydrationFixtureIndex + 1] : "setup-single";
             HarnessScenario scenario = new(
                 "IRONCLAD",
+                p2QualityOnly && p2Fixture == "delayed-mp" ? "EXOSKELETONS_WEAK" :
                 requestHydrationBenchmark && hydrationFixtureIndex >= 0
                     && args[hydrationFixtureIndex + 1] is "multi-hit" or "multi-hit-high-counter"
                     ? "EXOSKELETONS_WEAK" : "FUZZY_WURM_CRAWLER_WEAK",
                 "U0U1PINNED1",
                 Ascension: 0,
-                ActIndexForTest: 0, PlayerCount: multiplayerRefreshOnly ? 2 : 1);
+                ActIndexForTest: 0, PlayerCount: multiplayerRefreshOnly || p2QualityOnly && p2Fixture.EndsWith("-mp") ? 2 : 1);
             Task enter = OfflineCombat.EnterCombatRoomAsync(scenario);
             loop.RunUntilCompleted(enter, TimeSpan.FromSeconds(180), "U0/U1 enter combat");
             CombatState combat = OfflineCombat.WaitForPlayableCombat(loop);
@@ -229,6 +232,11 @@ internal static class Program
             if (strategicTailOnly)
             {
                 Console.WriteLine(StrategicTailChecks.Run(combat, names, damage, captured, outputDirectory));
+                return 0;
+            }
+            if (p2QualityOnly)
+            {
+                Console.WriteLine(P2QualityChecks.Run(combat, names, captured, p2Fixture, outputDirectory));
                 return 0;
             }
             if (multiplayerRefreshOnly)
