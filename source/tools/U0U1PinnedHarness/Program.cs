@@ -41,7 +41,8 @@ internal static class Program
         bool modelIdCacheOnly = args.Length > 0 && args[0] == "model-id-cache";
         bool upstreamPortOnly = args.Length > 0 && args[0] == "upstream-port";
         bool upstreamSearchOnly = args.Length > 0 && args[0] == "upstream-search";
-        bool multiplayerRefreshOnly = args.Length > 0 && args[0] == "multiplayer-refresh";
+        bool multiplayerWindowOnly = args.Length > 0 && args[0] == "multiplayer-window";
+        bool multiplayerRefreshOnly = multiplayerWindowOnly || args.Length > 0 && args[0] == "multiplayer-refresh";
         bool entropicCostOnly = args.Length > 0 && args[0] == "entropic-cost";
         bool cardChoiceIdentityOnly = args.Length > 0 && args[0] == "card-choice-identity";
         bool memoryDisplayOnly = args.Length > 0 && args[0] == "memory-display";
@@ -226,7 +227,9 @@ internal static class Program
 
             if (multiplayerRefreshOnly)
             {
-                Console.WriteLine(MultiplayerRefreshChecks.Run(combat, names, damage, captured, profile, outputDirectory));
+                Console.WriteLine(multiplayerWindowOnly
+                    ? MultiplayerEvaluationWindowChecks.Run(combat, names, damage, captured, outputDirectory)
+                    : MultiplayerRefreshChecks.Run(combat, names, damage, captured, profile, outputDirectory));
                 return 0;
             }
             if (upstreamSearchOnly)

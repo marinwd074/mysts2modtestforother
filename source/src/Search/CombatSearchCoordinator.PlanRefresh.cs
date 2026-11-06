@@ -153,7 +153,8 @@ internal static partial class CombatSearchCoordinator
         // Until P2 unifies tail values, do not compare a shorter surviving prefix with
         // a full horizon. A terminal victory needs no unplayed tail.
         if (!won && (request.EvaluationTurn != candidate.Snapshot.Turn
-            || current != null && current.Snapshot.Turn != candidate.Snapshot.Turn))
+            || !RouteEvaluationWindow.CanCompare(request.EvaluationWindow, candidate.EvaluationWindow)
+            || current != null && !RouteEvaluationWindow.CanCompare(current.EvaluationWindow, candidate.EvaluationWindow)))
         {
             reason = "evaluation_window_mismatch";
             return false;

@@ -1441,6 +1441,7 @@ internal sealed class SimulationSnapshot(
 
     public int LongTermResourceValue { get; } = longTermResourceValue;
     public int RealizedLongTermResourceValue { get; init; }
+    public RouteEvaluationWindow? EvaluationWindow { get; init; }
     public RelicCounterEvaluation RelicCounters { get; init; }
     public int StrategyGoalHpCredit => GrowthHpCredit + RelicCounters.HpCredit;
     public int StrategicHpCredit => StrategyGoalHpCredit + RelicCounters.HealingHpCredit;
@@ -1638,6 +1639,7 @@ internal sealed record SolverSnapshot(
     public int GrowthHpCredit { get; init; }
     public GrowthValues GrowthRewards { get; init; }
     public int RealizedLongTermResourceValue { get; init; }
+    public RouteEvaluationWindow? EvaluationWindow { get; init; }
 }
 
 internal sealed record MultiplayerContinuationExpectation(
@@ -1663,6 +1665,7 @@ internal sealed record CachedContinuation(
 
 internal sealed class SolverResult
 {
+    public RouteEvaluationWindow? EvaluationWindow => Snapshot.EvaluationWindow?.ForTurn(StartTurnNumber);
     public RouteResourceLedger? ResourceLedger { get; internal set; }
     public ContinuationStamp? PredictedFinalState { get; internal set; }
     public bool WasRestoredFromCache { get; internal set; }

@@ -878,6 +878,8 @@ internal static partial class CombatSearchCoordinator
         {
             DeathSaveUseCount = potionFree.Snapshot.ProjectedDeathSaveUseCount,
             BattleHpLost = potionFree.ProjectedBattleHpLost,
+            EvaluationWindow = potionFree.EvaluationWindow,
+            OutstandingStolenResource = potionFree.OutstandingStolenResource,
         };
         SolverResult audited = new CombatBeamSolver(
             root,
@@ -945,6 +947,8 @@ internal static partial class CombatSearchCoordinator
         {
             DeathSaveUseCount = provisionalPotionFree.Snapshot.ProjectedDeathSaveUseCount,
             BattleHpLost = provisionalPotionFree.ProjectedBattleHpLost,
+            EvaluationWindow = provisionalPotionFree.EvaluationWindow,
+            OutstandingStolenResource = provisionalPotionFree.OutstandingStolenResource,
         };
         SolverResult? scout = SolveOptionalPotionPosterior(
             new CombatBeamSolver(
@@ -1018,7 +1022,8 @@ internal static partial class CombatSearchCoordinator
         bool candidateWon = IsCompleteVictory(scout);
         int potionFreeDeficit = StrategicHpDeficit(root, policy, finalPotionFree);
         int candidateDeficit = StrategicHpDeficit(root, policy, scout);
-        int hpSaved = potionFreeWon
+        bool costsComparable = CanComparePotionCosts(policy, scout, finalPotionFree);
+        int hpSaved = !costsComparable ? 0 : potionFreeWon
             ? Math.Max(0, potionFreeDeficit - candidateDeficit)
             : candidateWon
                 ? Math.Max(0, scout.Snapshot.PlayerHp - finalPotionFree.Snapshot.PlayerHp)
@@ -1031,7 +1036,7 @@ internal static partial class CombatSearchCoordinator
             candidateWon,
             hpSaved,
             hpRequired,
-            protectsLoot);
+            protectsLoot, costsComparable);
         bool improvesSelection = acceptable
             && (policy.TheftPolicy != SolverTheftPolicy.PreserveResources
                 || IsBetterCompletedResult(root, policy, scout, finalPotionFree));
@@ -1161,6 +1166,8 @@ internal static partial class CombatSearchCoordinator
         {
             DeathSaveUseCount = potionFree.Snapshot.ProjectedDeathSaveUseCount,
             BattleHpLost = potionFree.ProjectedBattleHpLost,
+            EvaluationWindow = potionFree.EvaluationWindow,
+            OutstandingStolenResource = potionFree.OutstandingStolenResource,
         };
         List<SolverResult> searches = [potionFree];
         SolverResult selected = potionFree;
@@ -1362,7 +1369,8 @@ internal static partial class CombatSearchCoordinator
 
                 bool candidateWon = IsCompleteVictory(candidate);
                 int candidateDeficit = StrategicHpDeficit(root, policy, candidate);
-                int hpSaved = potionFreeWon
+                bool costsComparable = CanComparePotionCosts(policy, candidate, potionFree);
+                int hpSaved = !costsComparable ? 0 : potionFreeWon
                     ? Math.Max(0, potionFreeDeficit - candidateDeficit)
                     : candidateWon
                         ? Math.Max(0, candidate.Snapshot.PlayerHp - potionFree.Snapshot.PlayerHp)
@@ -1375,7 +1383,7 @@ internal static partial class CombatSearchCoordinator
                     candidateWon,
                     hpSaved,
                     hpRequired,
-                    protectsLoot);
+                    protectsLoot, costsComparable);
                 bool improvesSelection = acceptable
                     && (policy.TheftPolicy != SolverTheftPolicy.PreserveResources
                         || IsBetterCompletedResult(root, policy, candidate, selected));
@@ -1541,6 +1549,8 @@ internal static partial class CombatSearchCoordinator
         {
             DeathSaveUseCount = potionFree.Snapshot.ProjectedDeathSaveUseCount,
             BattleHpLost = potionFree.ProjectedBattleHpLost,
+            EvaluationWindow = potionFree.EvaluationWindow,
+            OutstandingStolenResource = potionFree.OutstandingStolenResource,
         };
         List<SolverResult> searches = [potionFree];
         SolverResult selected = potionFree;
@@ -1632,7 +1642,8 @@ internal static partial class CombatSearchCoordinator
 
             bool candidateWon = IsCompleteVictory(candidate);
             int candidateDeficit = StrategicHpDeficit(root, policy, candidate);
-            int hpSaved = potionFreeWon
+            bool costsComparable = CanComparePotionCosts(policy, candidate, potionFree);
+            int hpSaved = !costsComparable ? 0 : potionFreeWon
                 ? Math.Max(0, potionFreeDeficit - candidateDeficit)
                 : candidateWon
                     ? Math.Max(0, candidate.Snapshot.PlayerHp - potionFree.Snapshot.PlayerHp)
@@ -1645,7 +1656,7 @@ internal static partial class CombatSearchCoordinator
                 candidateWon,
                 hpSaved,
                 hpRequired,
-                protectsLoot);
+                protectsLoot, costsComparable);
             bool improvesSelection = acceptable && (policy.TheftPolicy != SolverTheftPolicy.PreserveResources
                 || IsBetterCompletedResult(root, policy, candidate, selected));
             if (improvesSelection)
@@ -1687,9 +1698,14 @@ internal static partial class CombatSearchCoordinator
         bool candidateWon,
         int hpSaved,
         int hpRequired,
-        bool protectsLoot)
+        bool protectsLoot,
+        bool costsComparable = true)
         => candidateWon
-            && (!potionFreeWon || hpSaved >= hpRequired || protectsLoot);
+            && (!potionFreeWon || hpRequired == 0 || costsComparable && (hpSaved >= hpRequired || protectsLoot));
+
+    private static bool CanComparePotionCosts(SearchPolicySnapshot policy, SolverResult candidate, SolverResult baseline)
+        => !MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(policy.RoutePolicy)
+            || RouteEvaluationWindow.CanCompare(candidate.EvaluationWindow, baseline.EvaluationWindow);
 
     private static void ObserveSmartLayerMemorySample(
         SearchPolicySnapshot policy,

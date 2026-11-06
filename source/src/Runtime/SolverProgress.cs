@@ -252,6 +252,7 @@ internal sealed record SolverInterimResult(
     public int GrowthHpCredit { get; init; }
     public int GrowthRewardCount { get; init; }
     public bool RollingHorizonLossFirst { get; init; }
+    public RouteEvaluationWindow? EvaluationWindow { get; init; }
 }
 
 internal sealed record SolverFrontierTurn(

@@ -685,6 +685,11 @@ internal sealed partial class CombatBeamSolver
             RelicCounters = relicCounters,
             GrowthRewards = growthRewards,
             RealizedLongTermResourceValue = realizedLongTermResourceValue,
+            EvaluationWindow = MultiplayerLocalCrossTurnContracts.PredictionTurnLayerLimit(policy.RoutePolicy) is { } layers
+                ? new(_startTurnNumber, checked(_startTurnNumber + layers), turn, (int)playerState.Phase,
+                    won, boundary == SearchBoundaryReason.None && !risk,
+                    playerState.Phase == MegaCrit.Sts2.Core.Combat.PlayerTurnPhase.Play)
+                : null,
             BrightestFlameMaxHpSpent = combat.BrightestFlameMaxHpSpent,
             UnrecoveredGold = combat.UnrecoveredLoot(simulator).Gold,
             UnrecoveredCards = combat.UnrecoveredLoot(simulator).Cards,

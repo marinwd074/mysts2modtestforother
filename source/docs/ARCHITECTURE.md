@@ -66,6 +66,8 @@ Coordinator 先从新根重放当前完整路线，再在同一份额内重放�
 
 有资源账本的续用按“实际战斗已受伤 + 剩余路线累计受伤”计算全战斗战损，不再用当前 HP 减最终 HP 代替累计受伤；后续回复单独保留。`RealizedLongTermResourceValue` 与含机会损失扣分的 `LongTermResourceValue` 分开，移根只扣去已兑现收益，不误删最终状态中的扣分。该账本解决根前/根后资源口径，不定义不同搜索深度的未来估值，也不放宽生存/药水/成长接纳条件。
 
+`RouteEvaluationWindow` 记录 local-core 的根/目标回合、实际玩家阶段及解析边界，不持有模拟器或授权。比较键只用于同请求的成本范围，不能作为状态等价键；完整胜利吸收剩余窗口，普通路径只有推进到目标回合的可出牌阶段才与它共享成本范围。续用重新计算新根的目标边界，未模拟的尾部不会因移根消失。最终用药审核按键保留无药水代表，Smart 审核及非终局备选恢复检查匹配窗口；免费药水和独立获胜救场不依赖虚构的 HP 节省。普通全局排序和预览优选尚未消费这一比较合同，补齐和末态价值仍待实施。
+
 `SearchRecoveryBudgetSnapshot` / `SEARCH_RECOVERY_BUDGET` 记录 Coordinator 的完成、耗尽、取消或失败，以及共享节点、墙钟、超额收尾和取消观察后到计算收尾点的时间；采样不含末尾诊断输出、请求缓存清理、根捕获、dispatcher 接纳和外层 worker / GC scope 退出，不能当作完整响应或排空时间。进度沿用同一请求的时间和节点累计值。R1 转移缓存由 `RunSearchPass` 的 `finally` 覆盖早退、异常和取消，清除封存模拟器引用；这不表示立即完成物理内存回收。
 
 `SearchRequestObservation` 属于 Runtime，只持有值、首个事件时间和固定大小的阶段集合。`RequestSearch` 入口建立一个编号和单调时钟，根屏障/原生动作等待恢复时继续使用同一观测；异步 session 拥有后续阶段。根捕获、worker 排队/开始/终止、预览产生/提交、已审核路线提交、结果接纳、取消、callback 和 CTS 释放分别记录。worker 终止在 Task 已完成的 continuation 内采样，包含搜索尾部及 GC scope 退出；与主线程 callback 等待分开。callback 与并行引用释放可能竞争 CTS，最终记录等待 worker、callback 和 CTS 的完成事件；重复收尾只输出一次。它不等待物理内存回收，也不证明像素已显示。

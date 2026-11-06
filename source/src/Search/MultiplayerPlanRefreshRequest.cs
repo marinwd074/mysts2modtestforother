@@ -8,6 +8,7 @@ internal sealed record MultiplayerPlanRefreshRequest(
     ContinuationRouteReplayBaseline? Baseline)
 {
     internal int? EvaluationTurn { get; init; }
+    internal RouteEvaluationWindow? EvaluationWindow { get; init; }
     internal bool SourceWasCompleteVictory { get; init; }
     internal bool IsCrossTurn { get; init; }
 
@@ -21,6 +22,7 @@ internal sealed record MultiplayerPlanRefreshRequest(
             currentTurn == source.StartTurnNumber ? CaptureBaseline(source) : CaptureBaseline(source)?.ForTurn(currentTurn))
         {
             EvaluationTurn = source.Snapshot.Turn,
+            EvaluationWindow = source.EvaluationWindow?.ForTurn(currentTurn),
             SourceWasCompleteVictory = source.Snapshot.AllEnemiesDead && !source.Snapshot.PlayerDead,
             IsCrossTurn = isCrossTurn,
         };

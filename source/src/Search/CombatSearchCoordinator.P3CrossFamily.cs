@@ -291,7 +291,8 @@ internal static partial class CombatSearchCoordinator
                 potionFreeDeficit);
             if (maximumOptionalPotionUses > 0)
             {
-                hpSaved = potionFreeWon
+                bool costsComparable = CanComparePotionCosts(policy, potionResult, beamResult);
+                hpSaved = !costsComparable ? 0 : potionFreeWon
                     ? Math.Max(0, potionFreeDeficit - candidateDeficit)
                     : candidateWon
                         ? Math.Max(0, potionResult.Snapshot.PlayerHp - beamResult.Snapshot.PlayerHp)
@@ -304,7 +305,7 @@ internal static partial class CombatSearchCoordinator
                     candidateWon,
                     hpSaved,
                     hpRequired,
-                    protectsLoot)
+                    protectsLoot, costsComparable)
                     && (policy.TheftPolicy != SolverTheftPolicy.PreserveResources
                         || IsBetterCompletedResult(root, policy, potionResult, beamResult));
                 if (scoutWouldQualify)

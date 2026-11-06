@@ -240,6 +240,7 @@ internal sealed partial class CombatBeamSolver
                 CombatEndedTurn: won ? node.Snapshot.CombatEndedTurn : null)
             {
                 GrowthHpCredit = node.Snapshot.StrategyGoalHpCredit,
+                EvaluationWindow = node.Snapshot.EvaluationWindow?.ForTurn(_startTurnNumber),
                 TheftPolicy = _theftPolicy,
                 GrowthRewardCount = node.Snapshot.StrategyGoalCount,
                 Survives = !node.Snapshot.PlayerDead && node.Snapshot.ProjectedPlayerHp > 0,
@@ -789,6 +790,7 @@ internal sealed partial class CombatBeamSolver
                 RelicCounters = finalSnapshot.RelicCounters,
                 GrowthRewards = finalSnapshot.GrowthRewards,
                 RealizedLongTermResourceValue = finalSnapshot.RealizedLongTermResourceValue,
+                EvaluationWindow = finalSnapshot.EvaluationWindow?.ForTurn(_startTurnNumber),
                 UnrecoveredGold = finalSnapshot.UnrecoveredGold,
                 UnrecoveredCards = finalSnapshot.UnrecoveredCards,
             };

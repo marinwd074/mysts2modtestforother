@@ -22,6 +22,7 @@ internal static partial class CombatSearchCoordinator
             Score: result.BestNode.Score)
         {
             GrowthHpCredit = result.Snapshot.StrategyGoalHpCredit,
+            EvaluationWindow = result.EvaluationWindow,
             TheftPolicy = policy.TheftPolicy,
             GrowthRewardCount = result.Snapshot.StrategyGoalCount,
             Survives = !result.Snapshot.PlayerDead && result.Snapshot.ProjectedPlayerHp > 0,

@@ -12,8 +12,9 @@
 | L1 contracts | `tools/run-contract-tests.ps1` | Search / Prediction / Multiplayer 纯合同 |
 | 多人事件交错 | `dotnet run --project tools/MultiplayerInterleavingChecks -c Release` | 直接编译生产观察状态和执行授权类；10,493 个确定性顺序，失败输出 `--replay <id>`，不依赖游戏 DLL |
 | 请求生命周期观测 | `dotnet run --project tools/SearchRequestObservationChecks -c Release` | L1 默认运行；直接编译生产观测器，16 项纯时序/任务合同，覆盖延迟、取消前未启动、并行 CTS 收尾和单次封存；不运行 Controller/UI |
-| 多人候选刷新 | `dotnet run --project tools/U0U1PinnedHarness -c Release -- multiplayer-refresh --out <ignored-directory>` | 两个原生角色模型、受控 HP/回合变化；399 项检查/58 次独立重放，覆盖当前/备选重评、连续刷新、失败隔离、评价窗口、提前胜利、选择隔离、预算/取消账本、R1/DOP=1/4 与请求观测。资源口径新增 23 项/4 次，含原生版税路线两个续接点及新根重放、已兑现成长拒绝回归、累计受伤/回复分账、实际与预测保命消耗、第三方成长、重复推进和未知检查点；保命/回复部分为算术合同，历史药水为合成夹具，无原生 EndTurn/Controller/原生队友动作/网络/UI |
+| 多人候选刷新 | `dotnet run --project tools/U0U1PinnedHarness -c Release -- multiplayer-refresh --out <ignored-directory>` | 两个原生角色模型、受控 HP/回合变化；资源账本版本已通过 399 项检查/58 次独立重放，窗口改动本批未重跑；覆盖当前/备选重评、连续刷新、失败隔离、评价窗口、提前胜利、选择隔离、预算/取消账本、R1/DOP=1/4 与请求观测。资源口径新增 23 项/4 次，含原生版税路线两个续接点及新根重放、已兑现成长拒绝回归、累计受伤/回复分账、实际与预测保命消耗、第三方成长、重复推进和未知检查点；保命/回复部分为算术合同，历史药水为合成夹具，无原生 EndTurn/Controller/原生队友动作/网络/UI |
 | Release | `dotnet build CombatSolver.csproj -c Release` | 当前本机真实依赖下编译 |
+| 多人评价窗口定向 | `dotnet run --project tools/U0U1PinnedHarness -c Release -- multiplayer-window --out <ignored-directory>` | 单个双角色原生模型夹具；13 项检查、9 次前缀重放及一条路线物化。覆盖短/长用药反例、匹配基线、输入顺序、窗口传递及正式恢复阶段拒绝；终局吸收、免费药水、救场与移根另以值合同检查。没有游戏、网络或队友动作闭环，不代表所有最终排序已统一 |
 | 不启动游戏的组合验证 | `tools/run-offline-validation.ps1 -GameDir <安装目录>` | 外部版本校验、上述静态检查/Release、L1、portfolio 与 17 个 pinned 模式；逐步日志、DLL 摘要及跳过子项 |
 
 快速 Linux main push / PR 运行 Target、Architecture、Repository；定向 Windows 回归和手动 pinned 矩阵按工作流各自触发规则执行。CI 只能证明其实际执行的层级；没有日志/steps 的 runner 失败不能记作源码 FAIL。

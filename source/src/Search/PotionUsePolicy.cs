@@ -126,7 +126,8 @@ internal static class PotionUsePolicy
         int potionFreeHpDeficit,
         bool anyRouteWon,
         bool potionRouteWon,
-        int potionRouteHpDeficit)
+        int potionRouteHpDeficit,
+        bool costsComparable = true)
         => policy switch
         {
             SolverPotionPolicy.Disabled => explicitPotionCount == 0,
@@ -134,11 +135,13 @@ internal static class PotionUsePolicy
                 && (!anyRouteWon || potionRouteWon)
                 && (explicitPotionCount == 1
                     || !potionFreeWon
-                    || HpSaved(potionFreeHpDeficit, potionRouteHpDeficit)
+                    || AdditionalRequiredUseStrategicHpCost(strategicHpCost) == 0
+                    || costsComparable && HpSaved(potionFreeHpDeficit, potionRouteHpDeficit)
                         >= AdditionalRequiredUseStrategicHpCost(strategicHpCost)),
             SolverPotionPolicy.Smart => explicitPotionCount == 0
                 || potionRouteWon && !potionFreeWon
-                || HpSaved(potionFreeHpDeficit, potionRouteHpDeficit)
+                || strategicHpCost == 0
+                || costsComparable && HpSaved(potionFreeHpDeficit, potionRouteHpDeficit)
                     >= SmartRequiredHpSaved(strategicHpCost),
             _ => throw new ArgumentOutOfRangeException(nameof(policy)),
         };
@@ -152,6 +155,8 @@ internal readonly record struct PotionFreePolicyBaseline(
 {
     public int DeathSaveUseCount { get; init; }
     public int? BattleHpLost { get; init; }
+    public RouteEvaluationWindow? EvaluationWindow { get; init; }
+    public int OutstandingStolenResource { get; init; } = int.MaxValue;
 }
 
 internal sealed class PotionPolicyUnsatisfiedException(string message) : InvalidOperationException(message);
