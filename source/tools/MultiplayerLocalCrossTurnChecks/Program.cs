@@ -369,19 +369,19 @@ Check(
     "Apply-current-turn may retain a validated default local-core future route only when a real cross-turn continuation exists.");
 
 Check(
-    MultiplayerLocalCrossTurnContracts.PredictionTurnLayerLimit(
+    SearchEvaluationPolicy.TurnLayerLimit(
         SearchRoutePolicy.MultiplayerSinglePlayerCore)
-        == MultiplayerLocalCrossTurnContracts.LocalCorePredictionTurnLayers
-    && MultiplayerLocalCrossTurnContracts.LocalCorePredictionTurnLayers == 3
-    && MultiplayerLocalCrossTurnContracts.HasReachedPredictionTurnLayerLimit(
+        == SearchEvaluationPolicy.RollingHorizonTurnLayers
+    && SearchEvaluationPolicy.RollingHorizonTurnLayers == 3
+    && SearchEvaluationPolicy.HasReachedTurnLayerLimit(
         SearchRoutePolicy.MultiplayerSinglePlayerCore,
         searchedTurnLayers: 3)
-    && !MultiplayerLocalCrossTurnContracts.HasReachedPredictionTurnLayerLimit(
+    && !SearchEvaluationPolicy.HasReachedTurnLayerLimit(
         SearchRoutePolicy.MultiplayerSinglePlayerCore,
         searchedTurnLayers: 2)
-    && MultiplayerLocalCrossTurnContracts.PredictionTurnLayerLimit(
+    && SearchEvaluationPolicy.TurnLayerLimit(
         SearchRoutePolicy.SinglePlayerFullRoute) == null
-    && MultiplayerLocalCrossTurnContracts.PredictionTurnLayerLimit(
+    && SearchEvaluationPolicy.TurnLayerLimit(
         SearchRoutePolicy.MultiplayerLocalCrossTurn) == null,
     "Default multiplayer local-core predicts the current turn plus exactly two future turns; singleplayer and team-prediction horizons are unchanged.");
 

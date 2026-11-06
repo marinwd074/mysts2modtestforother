@@ -246,7 +246,7 @@ internal sealed partial class CombatBeamSolver
                 Survives = !node.Snapshot.PlayerDead && node.Snapshot.ProjectedPlayerHp > 0,
                 DeathSaveUseCount = node.Snapshot.ProjectedDeathSaveUseCount,
                 RollingHorizonLossFirst =
-                    MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(
+                    SearchEvaluationPolicy.UsesRawLossFirst(
                         _routePolicy),
             };
         }
@@ -644,7 +644,7 @@ internal sealed partial class CombatBeamSolver
                          && candidateNodeBudgetReached)
                     boundary = SearchBoundaryReason.NodeLimit;
                 else if (boundary == SearchBoundaryReason.None
-                         && MultiplayerLocalCrossTurnContracts.HasReachedPredictionTurnLayerLimit(
+                         && SearchEvaluationPolicy.HasReachedTurnLayerLimit(
                              policy.RoutePolicy,
                              candidateSearchedTurnLayers))
                     boundary = SearchBoundaryReason.TurnLimit;
@@ -1793,7 +1793,7 @@ internal sealed partial class CombatBeamSolver
         }
 
         int? predictionTurnLayerLimit =
-            MultiplayerLocalCrossTurnContracts.PredictionTurnLayerLimit(policy.RoutePolicy);
+            SearchEvaluationPolicy.TurnLayerLimit(policy.RoutePolicy);
         int reservedTurnLayers = policy.CurrentTurnOnly
             ? 1
             : predictionTurnLayerLimit

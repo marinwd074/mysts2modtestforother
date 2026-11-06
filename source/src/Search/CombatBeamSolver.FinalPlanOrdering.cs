@@ -380,7 +380,7 @@ internal sealed partial class CombatBeamSolver
                             postCombatRelicHeal,
                             theftPolicy,
                             useMultiplayerRouteSemantics,
-                            MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(
+                            SearchEvaluationPolicy.UsesRawLossFirst(
                                 routePolicy)) >= 0)
                 {
                     continue;
@@ -414,7 +414,7 @@ internal sealed partial class CombatBeamSolver
                 potionFreeWon = auditedBaseline.Won;
                 potionFreeStrategicHpDeficit = auditedBaseline.HpDeficit;
                 potionFreeBattleHpLost = auditedBaseline.BattleHpLost
-                    ?? (MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(routePolicy)
+                    ?? (SearchEvaluationPolicy.UsesRawLossFirst(routePolicy)
                         ? throw new InvalidOperationException("Rolling-horizon potion baseline requires raw battle HP loss.")
                         : auditedBaseline.HpDeficit);
                 potionFreePlayerHp = auditedBaseline.PlayerHp;
@@ -449,7 +449,7 @@ internal sealed partial class CombatBeamSolver
                 }
             }
             bool useRollingHorizonLossFirst =
-                MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(
+                SearchEvaluationPolicy.UsesRawLossFirst(
                     routePolicy);
             PotionFreePolicyBaseline fallbackBaseline = new(potionFreeWon, potionFreeStrategicHpDeficit,
                 potionFreePlayerHp, potionFreeCombatEndedTurn)
@@ -562,13 +562,10 @@ internal sealed partial class CombatBeamSolver
                     == MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo;
             var selected = policyEligibleCandidates
                 .OrderBy(candidate => useRollingHorizonLossFirst
-                    && (candidate.Snapshot.PlayerDead
-                        || candidate.Snapshot.ProjectedPlayerHp <= 0)
-                        ? 1
-                        : 0)
-                .ThenBy(candidate => useRollingHorizonLossFirst
-                    ? candidate.Snapshot.ProjectedDeathSaveUseCount
-                    : 0)
+                    ? SolverInterimResultOrdering.OutcomeRank(candidate.CompleteVictory,
+                        !candidate.Snapshot.PlayerDead && candidate.Snapshot.ProjectedPlayerHp > 0,
+                        candidate.Snapshot.ProjectedDeathSaveUseCount, rawLossFirst: true)
+                    : default)
                 .ThenBy(candidate => useRollingHorizonLossFirst
                     ? candidate.HpDeficit
                     : 0)
@@ -608,12 +605,10 @@ internal sealed partial class CombatBeamSolver
                 // A live incomplete fallback is always preferable to a dead fallback. For
                 // complete victories this key is uniformly zero and cannot weaken the
                 // requested loss-then-duration ordering.
-                .ThenBy(candidate => !candidate.CompleteVictory
-                    && (candidate.Snapshot.PlayerDead
-                        || candidate.Snapshot.ProjectedPlayerHp <= 0)
-                        ? 1
-                        : 0)
-                .ThenBy(candidate => candidate.Snapshot.ProjectedDeathSaveUseCount)
+                .ThenBy(candidate => useRollingHorizonLossFirst ? default
+                    : SolverInterimResultOrdering.OutcomeRank(candidate.CompleteVictory,
+                        !candidate.Snapshot.PlayerDead && candidate.Snapshot.ProjectedPlayerHp > 0,
+                        candidate.Snapshot.ProjectedDeathSaveUseCount, rawLossFirst: true))
                 .ThenBy(candidate => theftPolicy == SolverTheftPolicy.PreserveResources
                     ? candidate.Features.OutstandingStolenResource : 0)
                 // Local HP/resource policy remains a secondary tie-break after the multiplayer
@@ -1434,27 +1429,16 @@ internal sealed partial class CombatBeamSolver
         // Potion spending is always a local-player resource decision. Multiplayer team
         // objectives may rank routes only after the single-player potion policy admits them;
         // teammate HP/loss never redefines the potion-free baseline.
-        int comparison = 0;
-        if (!useRollingHorizonLossFirst)
-        {
-            comparison = rightWon.CompareTo(leftWon);
-            if (comparison != 0)
-                return comparison;
-        }
-        if (useRollingHorizonLossFirst || !leftWon && !rightWon)
-        {
-            bool leftSurvives = !leftSnapshot.PlayerDead && leftSnapshot.ProjectedPlayerHp > 0;
-            bool rightSurvives = !rightSnapshot.PlayerDead && rightSnapshot.ProjectedPlayerHp > 0;
-            comparison = rightSurvives.CompareTo(leftSurvives);
-            if (comparison != 0)
-                return comparison;
-        }
-        comparison = leftSnapshot.ProjectedDeathSaveUseCount.CompareTo(
-            rightSnapshot.ProjectedDeathSaveUseCount);
+        int comparison = SolverInterimResultOrdering.OutcomeRank(leftWon,
+            !leftSnapshot.PlayerDead && leftSnapshot.ProjectedPlayerHp > 0,
+            leftSnapshot.ProjectedDeathSaveUseCount, useRollingHorizonLossFirst)
+            .CompareTo(SolverInterimResultOrdering.OutcomeRank(rightWon,
+                !rightSnapshot.PlayerDead && rightSnapshot.ProjectedPlayerHp > 0,
+                rightSnapshot.ProjectedDeathSaveUseCount, useRollingHorizonLossFirst));
         if (comparison != 0)
             return comparison;
         comparison = TheftEncounterStrategy.CompareRecovery(theftPolicy,
-            leftWon, leftSnapshot.OutstandingStolenResource, rightWon, rightSnapshot.OutstandingStolenResource);
+            leftSnapshot.OutstandingStolenResource, rightSnapshot.OutstandingStolenResource);
         if (comparison != 0)
             return comparison;
         if (useRollingHorizonLossFirst)

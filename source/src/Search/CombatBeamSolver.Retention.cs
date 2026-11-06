@@ -535,7 +535,7 @@ internal sealed partial class CombatBeamSolver
                 candidatePotionStrategicCost: PotionUsePolicy.SmartRequiredHpSaved(
                     node.PotionStrategicCost, _strategicBossHpRelief),
                 enforcePotionOpportunityCost: policy.UseUpstreamSearchOptimizations
-                    && !MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(policy.RoutePolicy));
+                    && !SearchEvaluationPolicy.UsesRawLossFirst(policy.RoutePolicy));
         }
 
         if (Nullable.Equals(tightened, _primaryIncumbent))

@@ -1692,30 +1692,17 @@ internal sealed partial class CombatBeamSolver
             int comparison = CompareMultiplayerObjective(left, right);
             if (comparison != 0)
                 return comparison;
-            if (!_useRollingHorizonLossFirst)
-            {
-                comparison = rightWon.CompareTo(leftWon);
-                if (comparison != 0)
-                    return comparison;
-            }
-            if (_useRollingHorizonLossFirst || !leftWon && !rightWon)
-            {
-                bool leftSurvives = !leftSnapshot.PlayerDead
-                    && leftSnapshot.ProjectedPlayerHp > 0;
-                bool rightSurvives = !rightSnapshot.PlayerDead
-                    && rightSnapshot.ProjectedPlayerHp > 0;
-                int survivalComparison = rightSurvives.CompareTo(leftSurvives);
-                if (survivalComparison != 0)
-                    return survivalComparison;
-            }
-
-            comparison = leftSnapshot.ProjectedDeathSaveUseCount.CompareTo(
-                rightSnapshot.ProjectedDeathSaveUseCount);
+            comparison = SolverInterimResultOrdering.OutcomeRank(leftWon,
+                !leftSnapshot.PlayerDead && leftSnapshot.ProjectedPlayerHp > 0,
+                leftSnapshot.ProjectedDeathSaveUseCount, _useRollingHorizonLossFirst)
+                .CompareTo(SolverInterimResultOrdering.OutcomeRank(rightWon,
+                    !rightSnapshot.PlayerDead && rightSnapshot.ProjectedPlayerHp > 0,
+                    rightSnapshot.ProjectedDeathSaveUseCount, _useRollingHorizonLossFirst));
             if (comparison != 0)
                 return comparison;
 
             int recoveryComparison = TheftEncounterStrategy.CompareRecovery(_theftPolicy,
-                leftWon, leftSnapshot.OutstandingStolenResource, rightWon, rightSnapshot.OutstandingStolenResource);
+                leftSnapshot.OutstandingStolenResource, rightSnapshot.OutstandingStolenResource);
             if (recoveryComparison != 0)
                 return recoveryComparison;
             if (_useRollingHorizonLossFirst)

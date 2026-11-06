@@ -6,7 +6,7 @@ internal sealed partial class CombatBeamSolver
 {
     private bool CanUseOptimizationBounds => policy.UseUpstreamSearchOptimizations
         && !_hasGrowthTargets && !policy.UseMultiplayerTeamObjective
-        && !MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(policy.RoutePolicy)
+        && !SearchEvaluationPolicy.UsesRawLossFirst(policy.RoutePolicy)
         && _theftPolicy != SolverTheftPolicy.PreserveResources && !_potionStrategy.HasForcedDirectives;
 
     private int OptimisticHpLowerBound(SimulationSnapshot snapshot)

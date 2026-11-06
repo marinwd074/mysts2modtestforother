@@ -1704,7 +1704,7 @@ internal static partial class CombatSearchCoordinator
             && (!potionFreeWon || hpRequired == 0 || costsComparable && (hpSaved >= hpRequired || protectsLoot));
 
     private static bool CanComparePotionCosts(SearchPolicySnapshot policy, SolverResult candidate, SolverResult baseline)
-        => !MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(policy.RoutePolicy)
+        => !SearchEvaluationPolicy.UsesRawLossFirst(policy.RoutePolicy)
             || RouteEvaluationWindow.CanCompare(candidate.EvaluationWindow, baseline.EvaluationWindow);
 
     private static void ObserveSmartLayerMemorySample(

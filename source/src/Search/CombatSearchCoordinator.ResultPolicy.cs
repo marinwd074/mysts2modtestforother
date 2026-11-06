@@ -28,7 +28,7 @@ internal static partial class CombatSearchCoordinator
             Survives = !result.Snapshot.PlayerDead && result.Snapshot.ProjectedPlayerHp > 0,
             DeathSaveUseCount = result.Snapshot.ProjectedDeathSaveUseCount,
             RollingHorizonLossFirst =
-                MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(
+                SearchEvaluationPolicy.UsesRawLossFirst(
                     policy.RoutePolicy),
         };
 
@@ -90,19 +90,11 @@ internal static partial class CombatSearchCoordinator
     {
         bool rollingHorizonLossFirst =
             candidate.RollingHorizonLossFirst && current.RollingHorizonLossFirst;
-        if (!rollingHorizonLossFirst)
-        {
-            int victoryComparison = current.Won.CompareTo(candidate.Won);
-            if (victoryComparison != 0)
-                return victoryComparison;
-        }
-        int survivalComparison = current.Survives.CompareTo(candidate.Survives);
-        if (survivalComparison != 0)
-            return survivalComparison;
-        if (candidate.DeathSaveUseCount != current.DeathSaveUseCount)
-            return candidate.DeathSaveUseCount.CompareTo(current.DeathSaveUseCount);
+        int outcomeComparison = SolverInterimResultOrdering.CompareOutcome(candidate, current, rollingHorizonLossFirst);
+        if (outcomeComparison != 0)
+            return outcomeComparison;
         int recovery = TheftEncounterStrategy.CompareRecovery(theftPolicy,
-            candidate.Won, candidate.OutstandingStolenResource, current.Won, current.OutstandingStolenResource);
+            candidate.OutstandingStolenResource, current.OutstandingStolenResource);
         if (recovery != 0)
             return recovery;
         // Opportunity cost participates before the single-player HP/turn tie-break.
@@ -131,11 +123,6 @@ internal static partial class CombatSearchCoordinator
             current.ProjectedBattleHpLost);
         if (primaryQuality != 0)
             return primaryQuality;
-        if (theftPolicy == SolverTheftPolicy.PreserveResources
-            && candidate.OutstandingStolenResource != current.OutstandingStolenResource)
-        {
-            return candidate.OutstandingStolenResource.CompareTo(current.OutstandingStolenResource);
-        }
         if (candidate.ProjectedBattlePotionCount != current.ProjectedBattlePotionCount)
         {
             return candidate.ProjectedBattlePotionCount.CompareTo(current.ProjectedBattlePotionCount);
@@ -169,28 +156,20 @@ internal static partial class CombatSearchCoordinator
         bool candidateWon = IsCompleteVictory(candidate);
         bool currentWon = IsCompleteVictory(current);
         bool rollingHorizonLossFirst =
-            MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(
+            SearchEvaluationPolicy.UsesRawLossFirst(
                 policy.RoutePolicy);
-        if (!rollingHorizonLossFirst)
-        {
-            int victoryComparison = currentWon.CompareTo(candidateWon);
-            if (victoryComparison != 0)
-                return victoryComparison;
-        }
         bool candidateSurvives = !candidate.Snapshot.PlayerDead
             && candidate.Snapshot.ProjectedPlayerHp > 0;
         bool currentSurvives = !current.Snapshot.PlayerDead
             && current.Snapshot.ProjectedPlayerHp > 0;
-        int survivalComparison = currentSurvives.CompareTo(candidateSurvives);
-        if (survivalComparison != 0)
-            return survivalComparison;
-        int deathSaveComparison = candidate.Snapshot.ProjectedDeathSaveUseCount.CompareTo(
-            current.Snapshot.ProjectedDeathSaveUseCount);
-        if (deathSaveComparison != 0)
-            return deathSaveComparison;
+        int outcomeComparison = SolverInterimResultOrdering.OutcomeRank(candidateWon, candidateSurvives,
+            candidate.Snapshot.ProjectedDeathSaveUseCount, rollingHorizonLossFirst)
+            .CompareTo(SolverInterimResultOrdering.OutcomeRank(currentWon, currentSurvives,
+                current.Snapshot.ProjectedDeathSaveUseCount, rollingHorizonLossFirst));
+        if (outcomeComparison != 0)
+            return outcomeComparison;
         int recovery = TheftEncounterStrategy.CompareRecovery(policy.TheftPolicy,
-            candidateWon, candidate.OutstandingStolenResource,
-            currentWon, current.OutstandingStolenResource);
+            candidate.OutstandingStolenResource, current.OutstandingStolenResource);
         if (recovery != 0)
             return recovery;
         return SolverInterimResultOrdering.ComparePrimaryQuality(
@@ -373,7 +352,7 @@ internal static partial class CombatSearchCoordinator
         if (!potionFreeWon || policy.TheftPolicy == SolverTheftPolicy.PreserveResources)
             return checked(allowedPotions.Length + generatedCapacity);
         bool legacyAdmission = !policy.UseUpstreamSearchOptimizations
-            || MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(policy.RoutePolicy);
+            || SearchEvaluationPolicy.UsesRawLossFirst(policy.RoutePolicy);
         long savingRoom = legacyAdmission ? Math.Max(0, potionFreeHpDeficit)
             : Math.Max(0L, (long)potionFreeHpDeficit - ProvableStrategicHpFloor(root, policy));
         int qualifiedGeneratedCapacity = checked(root.PotionSlotCount * (forcedBrews

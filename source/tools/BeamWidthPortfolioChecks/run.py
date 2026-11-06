@@ -35,6 +35,8 @@ search = root / 'src/Search'
     (search / 'NoveltyPortfolioBudget.cs').read_text(encoding='utf-8'), encoding='utf-8')
 (out / 'SolverInterimResultOrdering.cs').write_text(
     (search / 'SolverInterimResultOrdering.cs').read_text(encoding='utf-8'), encoding='utf-8')
+(out / 'RouteEvaluationWindow.cs').write_text(
+    (search / 'RouteEvaluationWindow.cs').read_text(encoding='utf-8'), encoding='utf-8')
 (out / 'Ordering.cs').write_text(
     'namespace CombatSolver;\n'
     + block(search / 'TheftEncounterStrategy.cs', 'internal enum SolverTheftPolicy') + '\n'

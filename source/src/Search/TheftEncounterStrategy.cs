@@ -14,10 +14,11 @@ internal enum SolverTheftPolicy
 internal static class TheftEncounterStrategy
 {
     public static int CompareRecovery(SolverTheftPolicy? policy,
-        bool candidateWon, int candidateOutstanding, bool currentWon, int currentOutstanding)
+        int candidateOutstanding, int currentOutstanding)
     {
-        int victory = currentWon.CompareTo(candidateWon);
-        return victory != 0 ? victory : policy == SolverTheftPolicy.PreserveResources
+        // Victory belongs to the search quality policy. Adding it here silently
+        // overrides rolling-horizon loss ordering, including when no theft is present.
+        return policy == SolverTheftPolicy.PreserveResources
             ? candidateOutstanding.CompareTo(currentOutstanding) : 0;
     }
 

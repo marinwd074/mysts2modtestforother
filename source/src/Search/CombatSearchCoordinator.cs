@@ -1538,7 +1538,7 @@ internal static partial class CombatSearchCoordinator
         if (passSettled || policy.FixedBudget || policy.RecoveryBudget != null)
             return result;
         if (result.BoundaryReason == SearchBoundaryReason.TurnLimit
-            && MultiplayerLocalCrossTurnContracts.HasReachedPredictionTurnLayerLimit(
+            && SearchEvaluationPolicy.HasReachedTurnLayerLimit(
                 policy.RoutePolicy,
                 result.SearchedTurns))
         {

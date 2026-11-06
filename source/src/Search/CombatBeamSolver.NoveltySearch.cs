@@ -64,7 +64,7 @@ internal sealed partial class CombatBeamSolver
         options.Validate();
         int maxTurns = Math.Min(
             options.MaxTurns,
-            MultiplayerLocalCrossTurnContracts.PredictionTurnLayerLimit(policy.RoutePolicy)
+            SearchEvaluationPolicy.TurnLayerLimit(policy.RoutePolicy)
                 ?? options.MaxTurns);
         var open = new BfwsBoundedOpen<(SearchNode Node, BfwsEscapeBudget? Escape)>(options.MaxOpen);
         var novelty = new BfwsPackedNovelty(options.Width, options.MaxNoveltyEntries);

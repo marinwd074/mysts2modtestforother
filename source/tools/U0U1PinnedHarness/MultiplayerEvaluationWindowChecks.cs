@@ -112,6 +112,38 @@ internal static class MultiplayerEvaluationWindowChecks
                 && !PotionUsePolicy.IsEligible(SolverPotionPolicy.Smart, 1, 8, false, 15, false, false, 0, false),
                 "A missing comparison charged a free generated potion or excused a paid potion.");
             Check(ContinuationStamp.CaptureLive(live).StateText == before, "Window evaluation mutated the native live fixture.");
+            SimulationSnapshot single = new CombatBeamSolver(root, names, damage,
+                policy with { RoutePolicy = SearchRoutePolicy.SinglePlayerFullRoute }).ReplayDiagnosticPrefix([end]);
+            snapshots.Add(single);
+            Check(single.EvaluationWindow is { Resolved: true, TargetTurn: null }
+                && single.EvaluationWindow.Value.EvaluatedTurn == shortFree.Snapshot.Turn
+                && !RouteEvaluationWindow.CanCompare(single.EvaluationWindow, shortFree.Snapshot.EvaluationWindow)
+                && single.EvaluationWindow.Value.ForTurn(turn + 1) is { TargetTurn: null } rebased
+                && rebased.StartTurn == turn + 1
+                && !SearchEvaluationPolicy.HasReachedTurnLayerLimit(SearchRoutePolicy.SinglePlayerFullRoute, int.MaxValue),
+                "Shared window capture changed the singleplayer horizon or conflated it with a finite projection.");
+            RouteEvaluationWindow singleWindow = single.EvaluationWindow!.Value;
+            Check(RouteEvaluationWindow.CanCompare(singleWindow with { CompleteVictory = true },
+                    singleWindow with { CompleteVictory = true, EvaluatedTurn = turn + 8 })
+                && !RouteEvaluationWindow.CanCompare(singleWindow with { CompleteVictory = true }, singleWindow)
+                && (singleWindow with { EvaluatedTurn = turn + 8 }).ComparisonKey != null,
+                "Singleplayer coverage was capped at three turns or a partial route became a complete battle.");
+            SolverInterimResult partial = new(false, 0, 0, 0, 0, 0, EnemyHp: 10, Score: 0)
+                { Survives = true, EvaluationWindow = full };
+            SolverInterimResult win = partial with { Won = true, ProjectedBattleHpLost = 2,
+                StrategicHpDeficit = 2, CombatEndedTurn = turn, EnemyHp = 0,
+                EvaluationWindow = full with { CompleteVictory = true } };
+            Check(SolverInterimResultOrdering.IsBetter(win, partial)
+                && CombatSearchCoordinator.IsBetterPotionPolicyResult(null, win, partial)
+                && !SolverInterimResultOrdering.IsBetter(win with { RollingHorizonLossFirst = true },
+                    partial with { RollingHorizonLossFirst = true })
+                && !CombatSearchCoordinator.IsBetterPotionPolicyResult(null,
+                    win with { RollingHorizonLossFirst = true }, partial with { RollingHorizonLossFirst = true }),
+                "Shared outcome ordering does not preserve singleplayer victory-first and rolling raw-loss-first priorities.");
+            Check(TheftEncounterStrategy.CompareRecovery(null, 0, 10) == 0
+                && TheftEncounterStrategy.CompareRecovery(SolverTheftPolicy.LetEscape, 0, 10) == 0
+                && TheftEncounterStrategy.CompareRecovery(SolverTheftPolicy.PreserveResources, 0, 10) < 0,
+                "Recovery ordering no longer respects the requested resource policy.");
             File.WriteAllText(Path.Combine(output, "multiplayer-window.json"), JsonSerializer.Serialize(new
             {
                 checks, NativePrefixReplays = snapshots.Count, MaterializedRouteReplays = 1, apparentSaving,

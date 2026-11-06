@@ -1,17 +1,5 @@
 namespace CombatSolver;
 
-internal enum SearchRoutePolicy
-{
-    SinglePlayerFullRoute,
-    MultiplayerCurrentTurnOnly,
-    // Multiplayer runtime boundary with the proven single-player search core.
-    // This keeps local-only deployment/continuation semantics without enabling
-    // teammate prediction, team objectives, robust scenario reranking, or other
-    // multiplayer-specific search behavior.
-    MultiplayerSinglePlayerCore,
-    MultiplayerLocalCrossTurn,
-}
-
 internal enum MultiplayerSearchResultScope
 {
     NotMultiplayer,
@@ -57,27 +45,6 @@ internal static class MultiplayerLocalCrossTurnContracts
     internal static bool HasLocalCrossTurnProjection(SearchRoutePolicy policy)
         => policy is SearchRoutePolicy.MultiplayerSinglePlayerCore
             or SearchRoutePolicy.MultiplayerLocalCrossTurn;
-
-    internal const int LocalCorePredictionTurnLayers = 3;
-
-    /// <summary>
-    /// Default multiplayer local-core optimizes the current turn with exactly two future
-    /// local turns of lookahead. Singleplayer and the experimental team-prediction route
-    /// retain their existing unbounded-by-policy search horizon.
-    /// </summary>
-    internal static int? PredictionTurnLayerLimit(SearchRoutePolicy policy)
-        => policy == SearchRoutePolicy.MultiplayerSinglePlayerCore
-            ? LocalCorePredictionTurnLayers
-            : null;
-
-    internal static bool UsesRollingHorizonLossFirstQuality(SearchRoutePolicy policy)
-        => policy == SearchRoutePolicy.MultiplayerSinglePlayerCore;
-
-    internal static bool HasReachedPredictionTurnLayerLimit(
-        SearchRoutePolicy policy,
-        int searchedTurnLayers)
-        => PredictionTurnLayerLimit(policy) is { } limit
-            && searchedTurnLayers >= limit;
 
     /// <summary>
     /// Phase D R1 recovery is allowed to replay a previous local route from the new live root.

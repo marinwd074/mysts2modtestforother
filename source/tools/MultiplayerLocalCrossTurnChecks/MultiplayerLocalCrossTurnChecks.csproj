@@ -12,6 +12,8 @@
     <Compile Include="../../src/Search/ContinuationSeedIncumbentBudget.cs" Link="ContinuationSeedIncumbentBudget.cs" />
     <Compile Include="../../src/Search/ActionSearchOrderingPolicy.cs" Link="ActionSearchOrderingPolicy.cs" />
     <Compile Include="../../src/Search/MultiplayerLocalCrossTurnContracts.cs" Link="MultiplayerLocalCrossTurnContracts.cs" />
+    <Compile Include="../../src/Search/SearchEvaluationPolicy.cs" Link="SearchEvaluationPolicy.cs" />
+    <Compile Include="../../src/Search/RouteEvaluationWindow.cs" Link="RouteEvaluationWindow.cs" />
     <Compile Include="../../src/Search/MultiplayerPlanRefreshContracts.cs" Link="MultiplayerPlanRefreshContracts.cs" />
     <Compile Include="../../src/Search/ShadowTeammateBehaviorModel.cs" Link="ShadowTeammateBehaviorModel.cs" />
     <Compile Include="../../src/Search/MultiplayerCombatObjectiveMath.cs" Link="MultiplayerCombatObjectiveMath.cs" />

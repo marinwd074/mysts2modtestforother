@@ -2,6 +2,17 @@ namespace CombatSolver;
 
 internal static class SolverInterimResultOrdering
 {
+    // Shared by Beam, previews, potion baselines and cross-member selection. The
+    // caller places this prefix before raw loss or after team ranking as required;
+    // multiplayer does not need a second implementation of survival/resource order.
+    internal static (int Victory, int Survival, int DeathSaves) OutcomeRank(
+        bool won, bool survives, int deathSaves, bool rawLossFirst)
+        => (rawLossFirst || won ? 0 : 1, survives ? 0 : 1, deathSaves);
+
+    internal static int CompareOutcome(SolverInterimResult candidate, SolverInterimResult current, bool rawLossFirst)
+        => OutcomeRank(candidate.Won, candidate.Survives, candidate.DeathSaveUseCount, rawLossFirst)
+            .CompareTo(OutcomeRank(current.Won, current.Survives, current.DeathSaveUseCount, rawLossFirst));
+
     public static bool IsCompleteVictory(
         int actionCount,
         bool allEnemiesDead,
@@ -149,60 +160,25 @@ internal static class SolverInterimResultOrdering
     {
         bool rollingHorizonLossFirst =
             candidate.RollingHorizonLossFirst && current.RollingHorizonLossFirst;
-        if (!rollingHorizonLossFirst)
-            return IsBetterStrategic(candidate, current);
-
-        int comparison = current.Survives.CompareTo(candidate.Survives);
+        int comparison = CompareOutcome(candidate, current, rollingHorizonLossFirst);
         if (comparison != 0)
             return comparison < 0;
-        if (candidate.DeathSaveUseCount != current.DeathSaveUseCount)
-            return candidate.DeathSaveUseCount < current.DeathSaveUseCount;
-        if (candidate.TheftPolicy == SolverTheftPolicy.PreserveResources
-            && candidate.OutstandingStolenResource != current.OutstandingStolenResource)
-            return candidate.OutstandingStolenResource < current.OutstandingStolenResource;
-        comparison = CompareRollingHorizonQuality(
-            candidate.Won,
-            candidate.ProjectedBattleHpLost,
-            candidate.CombatEndedTurn,
-            current.Won,
-            current.ProjectedBattleHpLost,
-            current.CombatEndedTurn);
+        comparison = TheftEncounterStrategy.CompareRecovery(candidate.TheftPolicy,
+            candidate.OutstandingStolenResource, current.OutstandingStolenResource);
         if (comparison != 0)
             return comparison < 0;
-        if (IsResourceTradeImprovement(candidate, current))
-            return true;
-        if (IsResourceTradeImprovement(current, candidate))
-            return false;
-        if (candidate.GrowthHpCredit != current.GrowthHpCredit)
-            return candidate.GrowthHpCredit > current.GrowthHpCredit;
-        if (candidate.GrowthRewardCount != current.GrowthRewardCount)
-            return candidate.GrowthRewardCount > current.GrowthRewardCount;
-        comparison = (candidate.CombatEndedTurn ?? int.MaxValue)
-            .CompareTo(current.CombatEndedTurn ?? int.MaxValue);
-        if (comparison != 0)
-            return comparison < 0;
-        if (candidate.ProjectedBattlePotionCount != current.ProjectedBattlePotionCount)
-            return candidate.ProjectedBattlePotionCount < current.ProjectedBattlePotionCount;
-        if (candidate.EnemyHp != current.EnemyHp)
-            return candidate.EnemyHp < current.EnemyHp;
-        return candidate.Score > current.Score;
-    }
-
-    private static bool IsBetterStrategic(
-        SolverInterimResult candidate,
-        SolverInterimResult current)
-    {
-        int comparison = current.Won.CompareTo(candidate.Won);
-        if (comparison != 0)
-            return comparison < 0;
-        comparison = current.Survives.CompareTo(candidate.Survives);
-        if (comparison != 0)
-            return comparison < 0;
-        if (candidate.DeathSaveUseCount != current.DeathSaveUseCount)
-            return candidate.DeathSaveUseCount < current.DeathSaveUseCount;
-        if (candidate.TheftPolicy == SolverTheftPolicy.PreserveResources
-            && candidate.OutstandingStolenResource != current.OutstandingStolenResource)
-            return candidate.OutstandingStolenResource < current.OutstandingStolenResource;
+        if (rollingHorizonLossFirst)
+        {
+            comparison = CompareRollingHorizonQuality(
+                candidate.Won,
+                candidate.ProjectedBattleHpLost,
+                candidate.CombatEndedTurn,
+                current.Won,
+                current.ProjectedBattleHpLost,
+                current.CombatEndedTurn);
+            if (comparison != 0)
+                return comparison < 0;
+        }
         if (IsResourceTradeImprovement(candidate, current))
             return true;
         if (IsResourceTradeImprovement(current, candidate))
