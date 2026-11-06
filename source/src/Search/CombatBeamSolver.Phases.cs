@@ -788,6 +788,7 @@ internal sealed partial class CombatBeamSolver
                 GrowthHpCredit = finalSnapshot.GrowthHpCredit,
                 RelicCounters = finalSnapshot.RelicCounters,
                 GrowthRewards = finalSnapshot.GrowthRewards,
+                RealizedLongTermResourceValue = finalSnapshot.RealizedLongTermResourceValue,
                 UnrecoveredGold = finalSnapshot.UnrecoveredGold,
                 UnrecoveredCards = finalSnapshot.UnrecoveredCards,
             };
@@ -801,6 +802,7 @@ internal sealed partial class CombatBeamSolver
             SolverResult result = new()
             {
                 PredictedFinalState = predictedFinalState,
+                ResourceLedger = RouteResourceLedger.Capture(best, _startTurnNumber),
                 ResultScope = resultScope,
                 SearchEfficiencyOrigin = TryGetCandidateOrigin(best),
                 SearchEfficiencyEvaluationContextId = evaluationContextId,

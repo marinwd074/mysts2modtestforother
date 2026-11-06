@@ -684,6 +684,7 @@ internal sealed partial class CombatBeamSolver
             GrowthHpCredit = growthHpCredit,
             RelicCounters = relicCounters,
             GrowthRewards = growthRewards,
+            RealizedLongTermResourceValue = realizedLongTermResourceValue,
             BrightestFlameMaxHpSpent = combat.BrightestFlameMaxHpSpent,
             UnrecoveredGold = combat.UnrecoveredLoot(simulator).Gold,
             UnrecoveredCards = combat.UnrecoveredLoot(simulator).Cards,

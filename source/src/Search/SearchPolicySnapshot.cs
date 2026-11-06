@@ -3,7 +3,20 @@ namespace CombatSolver;
 internal sealed record ContinuationRouteReplayBaseline(
     ContinuationStamp FinalState, int ProjectedBattleHpLost,
     int DeathSaveUses, GrowthValues GrowthRewards, RelicCounterEvaluation RelicCounters,
-    bool ExplicitRouteAdoption = false);
+    bool ExplicitRouteAdoption = false)
+{
+    public RouteResourceLedger? ResourceLedger { get; init; }
+
+    internal ContinuationRouteReplayBaseline? ForTurn(int turn)
+    {
+        if (ResourceLedger == null || !ResourceLedger.TryAdvance(turn, out var past, out var remaining)
+            || DeathSaveUses < past.DeathSaves
+            || !RouteResourceTotals.TrySubtractGrowth(GrowthRewards, past.Growth, out var futureGrowth))
+            return null;
+        return this with { DeathSaveUses = DeathSaveUses - past.DeathSaves,
+            GrowthRewards = futureGrowth, ResourceLedger = remaining };
+    }
+}
 
 internal sealed record SearchPolicySnapshot(
     SolverSearchProfile Profile,

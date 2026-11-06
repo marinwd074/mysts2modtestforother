@@ -16,6 +16,7 @@ internal sealed partial class CombatBeamSolver
             ContinuationRouteReplayBaseline? baseline = finalState != null
                 ? new(finalState, battleDamage.HpLostSoFar + snapshot.CumulativePlayerHpLost,
                     snapshot.ProjectedDeathSaveUseCount, snapshot.GrowthRewards, snapshot.RelicCounters)
+                    { ResourceLedger = candidate.ResourceLedger }
                 : null;
             return new MultiplayerReplayCandidate(candidate.OriginalRank,
                 MultiplayerPlanRefreshRequest.CopyActions(candidate.Prefix))
@@ -1333,7 +1334,8 @@ internal sealed partial class CombatBeamSolver
                     IReadOnlyList<PlanAction> route = actions.Count is > 0 and <= 128
                         && actions.All(action => action.ShadowForecast == null && !action.IsForecastOnlyObservation)
                         ? actions.ToArray() : [];
-                    replayCandidates.Add(new(index, prefix.ToArray(), route, selected[index].Snapshot));
+                    replayCandidates.Add(new(index, prefix.ToArray(), route, selected[index].Snapshot,
+                        RouteResourceLedger.Capture(selected[index].Node, startTurnNumber)));
                 }
             }
 

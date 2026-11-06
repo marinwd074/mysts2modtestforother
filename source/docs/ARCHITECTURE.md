@@ -62,6 +62,10 @@ Coordinator 先从新根重放当前完整路线，再在同一份额内重放�
 
 `TryCreateContinuation` 在原精确状态/多人身份检查通过后复制完整备选，只保留当前及后续回合的动作并重建当前前缀。独立跨回合失效重放仍经过原 `DescribeR1SeedAdmissionMismatch` 和 `ShouldReplayContinuationRoute`，在该门内通过 `CaptureContinuation` 捕获同一种纯值请求；未放宽 Targets RNG、世界版本或身份边界。`IsCrossTurn` 选择原恢复份额并进入诊断，不授予采用权限。直接续用后的同回合捕获也裁掉 `BestNode` 中保留的历史动作。战损基线仍是全战斗绝对上限；新根重放只计算剩余动作，不重计已过去的药水成本。成长/保命/遗物仍沿用严格验收，没有将未知差额当作等价。
 
+`RouteResourceLedger` 在最终物化及最多三条备选的路径上读取已有回合节点，只保存已兑现的累计值，不重放旧分支，也不持有模拟器。它分别记录累计受伤、回复、实际保命消耗及其回复量、已兑现局外价值、愤怒复制、成长次数和成长 HP 抵扣。精确续用将 `SolverSnapshot` 与账本一起移到当前回合；新根重评将当前及备选基线的成长/保命要求移到同一剩余窗口。预测中的保命消耗只减去已经发生的部分，遗物最终计数不做历史相减。缺少检查点或不满足累计关系时拒绝精确续用/撤回对应旧基线，不把差额钳成零。逐次推进与直接推进采用同一口径。
+
+有资源账本的续用按“实际战斗已受伤 + 剩余路线累计受伤”计算全战斗战损，不再用当前 HP 减最终 HP 代替累计受伤；后续回复单独保留。`RealizedLongTermResourceValue` 与含机会损失扣分的 `LongTermResourceValue` 分开，移根只扣去已兑现收益，不误删最终状态中的扣分。该账本解决根前/根后资源口径，不定义不同搜索深度的未来估值，也不放宽生存/药水/成长接纳条件。
+
 `SearchRecoveryBudgetSnapshot` / `SEARCH_RECOVERY_BUDGET` 记录 Coordinator 的完成、耗尽、取消或失败，以及共享节点、墙钟、超额收尾和取消观察后到计算收尾点的时间；采样不含末尾诊断输出、请求缓存清理、根捕获、dispatcher 接纳和外层 worker / GC scope 退出，不能当作完整响应或排空时间。进度沿用同一请求的时间和节点累计值。R1 转移缓存由 `RunSearchPass` 的 `finally` 覆盖早退、异常和取消，清除封存模拟器引用；这不表示立即完成物理内存回收。
 
 `SearchRequestObservation` 属于 Runtime，只持有值、首个事件时间和固定大小的阶段集合。`RequestSearch` 入口建立一个编号和单调时钟，根屏障/原生动作等待恢复时继续使用同一观测；异步 session 拥有后续阶段。根捕获、worker 排队/开始/终止、预览产生/提交、已审核路线提交、结果接纳、取消、callback 和 CTS 释放分别记录。worker 终止在 Task 已完成的 continuation 内采样，包含搜索尾部及 GC scope 退出；与主线程 callback 等待分开。callback 与并行引用释放可能竞争 CTS，最终记录等待 worker、callback 和 CTS 的完成事件；重复收尾只输出一次。它不等待物理内存回收，也不证明像素已显示。

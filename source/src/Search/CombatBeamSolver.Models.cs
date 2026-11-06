@@ -454,7 +454,7 @@ internal sealed partial class CombatBeamSolver
 
     // Temporary selection data, flattened before a SolverResult leaves its execution session.
     private sealed record RetainedReplayCandidate(int OriginalRank, IReadOnlyList<PlanAction> Prefix,
-        IReadOnlyList<PlanAction> Route, SimulationSnapshot Snapshot);
+        IReadOnlyList<PlanAction> Route, SimulationSnapshot Snapshot, RouteResourceLedger ResourceLedger);
 
     private sealed record PendingTurnOutcome(
         SearchNode Node,

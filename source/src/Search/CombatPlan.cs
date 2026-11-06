@@ -1440,6 +1440,7 @@ internal sealed class SimulationSnapshot(
     public double WorstPlayerLossRatio { get => _worstPlayerLossRatio; init => _worstPlayerLossRatio = value; }
 
     public int LongTermResourceValue { get; } = longTermResourceValue;
+    public int RealizedLongTermResourceValue { get; init; }
     public RelicCounterEvaluation RelicCounters { get; init; }
     public int StrategyGoalHpCredit => GrowthHpCredit + RelicCounters.HpCredit;
     public int StrategicHpCredit => StrategyGoalHpCredit + RelicCounters.HealingHpCredit;
@@ -1636,6 +1637,7 @@ internal sealed record SolverSnapshot(
     public int StrategyGoalCount => GrowthRewards.Total + RelicCounters.SatisfiedPriority;
     public int GrowthHpCredit { get; init; }
     public GrowthValues GrowthRewards { get; init; }
+    public int RealizedLongTermResourceValue { get; init; }
 }
 
 internal sealed record MultiplayerContinuationExpectation(
@@ -1661,6 +1663,7 @@ internal sealed record CachedContinuation(
 
 internal sealed class SolverResult
 {
+    public RouteResourceLedger? ResourceLedger { get; internal set; }
     public ContinuationStamp? PredictedFinalState { get; internal set; }
     public bool WasRestoredFromCache { get; internal set; }
     public SolverResultScope ResultScope { get; internal set; } = SolverResultScope.SearchCompletion;
@@ -1958,7 +1961,19 @@ internal sealed class SolverResult
             .Where(turn => turn >= cached.StartTurnNumber)
             .DefaultIfEmpty(cached.StartTurnNumber)
             .Max() - cached.StartTurnNumber + 1);
-        int totalRemainingLoss = Math.Max(0, currentHp - Snapshot.PlayerHp);
+        SolverSnapshot remainingSnapshot = Snapshot;
+        RouteResourceLedger? remainingResources = ResourceLedger;
+        if (ResourceLedger != null && !ResourceLedger.TryRebase(Snapshot, currentTurn,
+                out remainingSnapshot, out remainingResources))
+        {
+            rejectionReason = "resource_checkpoint_missing_or_inconsistent";
+            continuation = null;
+            return false;
+        }
+        // Gross damage and recovery are separate. Net HP difference would erase
+        // damage already healed within the remaining route.
+        int totalRemainingLoss = ResourceLedger != null ? remainingSnapshot.CumulativePlayerHpLost
+            : Math.Max(0, currentHp - Snapshot.PlayerHp);
         int remainingPotionCount = PotionCountByTurn
             .Where(item => item.Key >= cached.StartTurnNumber)
             .Sum(item => item.Value);
@@ -1989,7 +2004,8 @@ internal sealed class SolverResult
             TurnSetupChoices = TurnSetupChoices,
             TurnSetupPlayState = TurnSetupPlayState,
             BestNode = BestNode,
-            Snapshot = Snapshot,
+            Snapshot = remainingSnapshot,
+            ResourceLedger = remainingResources,
             Forecast = slicedForecast,
             ExpandedNodes = 0,
             DominatedActionsPruned = 0,

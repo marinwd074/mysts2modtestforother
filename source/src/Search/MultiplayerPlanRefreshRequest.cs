@@ -18,7 +18,7 @@ internal sealed record MultiplayerPlanRefreshRequest(
         => new(source.RouteIdentity,
             CaptureRemainingCandidates(source.MultiplayerReplayCandidates, currentTurn),
             CaptureRemainingRoute(source.BestNode.Actions, currentTurn),
-            CaptureBaseline(source))
+            currentTurn == source.StartTurnNumber ? CaptureBaseline(source) : CaptureBaseline(source)?.ForTurn(currentTurn))
         {
             EvaluationTurn = source.Snapshot.Turn,
             SourceWasCompleteVictory = source.Snapshot.AllEnemiesDead && !source.Snapshot.PlayerDead,
@@ -49,12 +49,15 @@ internal sealed record MultiplayerPlanRefreshRequest(
             .Select(candidate =>
             {
                 IReadOnlyList<PlanAction> route = CaptureRemainingRoute(candidate.Route, currentTurn);
+                ContinuationRouteReplayBaseline? baseline = candidate.Baseline;
+                if (baseline?.ResourceLedger != null || candidate.Route.Any(action => action.Turn < currentTurn))
+                    baseline = baseline?.ForTurn(currentTurn);
                 return candidate with
                 {
                     Route = route,
                     Prefix = route.Count > 0 ? CapturePrefix(route, currentTurn)
                         : CopyActions(candidate.Prefix.Where(action => action.Turn == currentTurn).ToArray()),
-                    Baseline = candidate.Baseline is { } baseline ? baseline with { ExplicitRouteAdoption = false } : null,
+                    Baseline = baseline is { } captured ? captured with { ExplicitRouteAdoption = false } : null,
                 };
             }).ToArray());
 
@@ -65,7 +68,7 @@ internal sealed record MultiplayerPlanRefreshRequest(
     internal static ContinuationRouteReplayBaseline? CaptureBaseline(SolverResult source)
         => source.PredictedFinalState is { } finalState
             ? new(finalState, source.ProjectedBattleHpLost, source.Snapshot.ProjectedDeathSaveUseCount,
-                source.Snapshot.GrowthRewards, source.Snapshot.RelicCounters) : null;
+                source.Snapshot.GrowthRewards, source.Snapshot.RelicCounters) { ResourceLedger = source.ResourceLedger } : null;
 
     internal static MultiplayerReplayCandidate CaptureCandidate(int rank, SolverResult source)
         => new(rank, CapturePrefix(source.BestNode.Actions, source.StartTurnNumber))
