@@ -8,7 +8,13 @@ internal sealed partial class CombatBeamSolver
     private const int MaximumEvaluationCompletionCandidates = 3;
     private const int MaximumEvaluationCompletionTemplates = 2;
 
-    private List<SearchNode> CompleteEvaluationWindows(IReadOnlyList<SearchNode> candidates, Stopwatch stopwatch)
+    private RouteEvaluationWindow? FrontierEvaluationWindow(IEnumerable<SearchNode> candidates)
+        => candidates.Where(node => !node.Snapshot.PlayerDead && node.Snapshot.ProjectedPlayerHp > 0)
+            .Select(node => node.Snapshot.EvaluationWindow?.ForTurn(_startTurnNumber))
+            .FirstOrDefault(window => window?.ComparisonKey != null);
+
+    private List<SearchNode> CompleteEvaluationWindows(IReadOnlyList<SearchNode> candidates, Stopwatch stopwatch,
+        RouteEvaluationWindow? comparisonWindow = null)
     {
         List<SearchNode> result = [.. candidates];
         if (!SearchEvaluationPolicy.UsesLocalEvaluationWindows(_routePolicy)
@@ -17,22 +23,27 @@ internal sealed partial class CombatBeamSolver
 
         RouteEvaluationWindow? Window(SearchNode node)
             => node.Snapshot.EvaluationWindow?.ForTurn(_startTurnNumber);
+        RouteEvaluationWindow? selectedWindow = candidates
+            .Where(node => !node.Snapshot.PlayerDead && node.Snapshot.ProjectedPlayerHp > 0)
+            .Select(Window).FirstOrDefault(window => window is { CoversTarget: true }) ?? comparisonWindow;
+        if (selectedWindow is not { ComparisonKey: not null } target)
+            return result;
         SearchNode[] templates = candidates
-            .Where(node => Window(node) is { CoversTarget: true }
+            .Where(node => RouteEvaluationWindow.CanCompare(Window(node), target)
                 && !node.Snapshot.PlayerDead && node.Snapshot.ProjectedPlayerHp > 0
                 && node.ActionCount is > 0 and <= 128)
             .OrderByDescending(node => node.Score)
             .Take(MaximumEvaluationCompletionTemplates).ToArray();
         if (templates.Length == 0)
             return result;
-        RouteEvaluationWindow target = Window(templates[0])!.Value;
 
         // Scores schedule a bounded amount of work; they do not certify cross-window
         // quality. Only a settled turn-start snapshot can borrow another route's tail.
         SearchNode[] pending = candidates.Where(node => !node.IsTerminal
                 && node.Snapshot.HasSimulator && Window(node) is { Resolved: true, AtPlayerDecisionPoint: true } window
                 && window.StartTurn == target.StartTurn && window.TargetTurn == target.TargetTurn
-                && !window.CoversTarget
+                && !RouteEvaluationWindow.CanCompare(window, target)
+                && (target.CoversTarget || window.EvaluatedTurn < target.EvaluatedTurn)
                 && node.Action is { } action && (action.Kind == PlanActionKind.EndTurn || action.EndsPlayerTurn))
             .OrderByDescending(node => node.Score)
             .Take(MaximumEvaluationCompletionCandidates).ToArray();

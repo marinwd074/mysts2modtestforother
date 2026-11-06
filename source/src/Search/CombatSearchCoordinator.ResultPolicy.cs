@@ -39,7 +39,9 @@ internal static partial class CombatSearchCoordinator
         SolverResult candidate,
         SolverResult current)
     {
-        int primaryQuality = CompareCompletedResultPrimaryQuality(root, policy, candidate, current);
+        int? primaryQuality = CompareCompletedResultPrimaryQuality(root, policy, candidate, current);
+        if (primaryQuality == null)
+            return false;
         if (primaryQuality != 0)
             return primaryQuality < 0;
         if (candidate.PotionCount != current.PotionCount)
@@ -59,10 +61,12 @@ internal static partial class CombatSearchCoordinator
     {
         SolverInterimResult candidateInterim = BuildInterimResult(root, policy, candidate);
         SolverInterimResult currentInterim = BuildInterimResult(root, policy, current);
-        int quality = ComparePotionPolicyQuality(
+        int? quality = ComparePotionPolicyQuality(
             policy.TheftPolicy,
             candidateInterim,
             currentInterim);
+        if (quality == null)
+            return false;
         if (quality != 0)
             return quality < 0;
         if (PreferPlayableCurrentTurnRoute(root, policy, candidate, current))
@@ -77,13 +81,15 @@ internal static partial class CombatSearchCoordinator
         SolverInterimResult candidate,
         SolverInterimResult current)
     {
-        int quality = ComparePotionPolicyQuality(theftPolicy, candidate, current);
+        int? quality = ComparePotionPolicyQuality(theftPolicy, candidate, current);
+        if (quality == null)
+            return false;
         if (quality != 0)
             return quality < 0;
         return candidate.Score > current.Score;
     }
 
-    private static int ComparePotionPolicyQuality(
+    private static int? ComparePotionPolicyQuality(
         SolverTheftPolicy? theftPolicy,
         SolverInterimResult candidate,
         SolverInterimResult current)
@@ -93,6 +99,9 @@ internal static partial class CombatSearchCoordinator
         int coverage = SolverInterimResultOrdering.CompareCompletedCoverage(candidate, current);
         if (coverage != 0)
             return coverage;
+        if (candidate.Survives == current.Survives
+            && !RouteEvaluationWindow.CanCompareQuality(candidate.EvaluationWindow, current.EvaluationWindow))
+            return null;
         int outcomeComparison = SolverInterimResultOrdering.CompareOutcome(candidate, current, rollingHorizonLossFirst);
         if (outcomeComparison != 0)
             return outcomeComparison;
@@ -150,7 +159,7 @@ internal static partial class CombatSearchCoordinator
             action.Turn == result.StartTurnNumber
             && action.Kind == PlanActionKind.PlayCard);
 
-    private static int CompareCompletedResultPrimaryQuality(
+    private static int? CompareCompletedResultPrimaryQuality(
         CombatRootSnapshot root,
         SearchPolicySnapshot policy,
         SolverResult candidate,
@@ -171,6 +180,9 @@ internal static partial class CombatSearchCoordinator
                 .CompareTo(RouteEvaluationWindow.CompletedCoverageRank(current.EvaluationWindow, currentSurvives));
             if (coverage != 0)
                 return coverage;
+            if (candidateSurvives == currentSurvives
+                && !RouteEvaluationWindow.CanCompareQuality(candidate.EvaluationWindow, current.EvaluationWindow))
+                return null;
         }
         int outcomeComparison = SolverInterimResultOrdering.OutcomeRank(candidateWon, candidateSurvives,
             candidate.Snapshot.ProjectedDeathSaveUseCount, rollingHorizonLossFirst)

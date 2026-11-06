@@ -132,7 +132,17 @@ internal sealed partial class CombatBeamSolver
             int RetainedAttackGrowth,
             bool TriggeredLastTurn,
             bool CanTriggerThisTurn);
-        public List<SearchNode> RankFinal(IEnumerable<SearchNode> nodes)
+        private RouteEvaluationWindow? _comparisonWindow;
+
+        public List<SearchNode> RankFinal(IEnumerable<SearchNode> nodes, RouteEvaluationWindow? comparisonWindow = null)
+        {
+            RouteEvaluationWindow? previous = _comparisonWindow;
+            _comparisonWindow = comparisonWindow;
+            try { return RankFinalCore(nodes); }
+            finally { _comparisonWindow = previous; }
+        }
+
+        private List<SearchNode> RankFinalCore(IEnumerable<SearchNode> nodes)
         {
             List<SearchNode> candidates = nodes.Distinct((IEqualityComparer<SearchNode>)ReferenceEqualityComparer.Instance).ToList();
             List<SearchNode> ranked = RankBest(
@@ -161,7 +171,7 @@ internal sealed partial class CombatBeamSolver
                             _postCombatRelicHeal,
                             _theftPolicy,
                             _useMultiplayerRouteSemantics,
-                            _useRollingHorizonLossFirst) < 0))
+                            _useRollingHorizonLossFirst, _startTurnNumber) < 0))
                 {
                     potionFreeBaseline = candidate;
                 }
@@ -1700,6 +1710,17 @@ internal sealed partial class CombatBeamSolver
                         !rightSnapshot.PlayerDead && rightSnapshot.ProjectedPlayerHp > 0));
                 if (coverage != 0)
                     return coverage;
+                int survival = (!rightSnapshot.PlayerDead && rightSnapshot.ProjectedPlayerHp > 0)
+                    .CompareTo(!leftSnapshot.PlayerDead && leftSnapshot.ProjectedPlayerHp > 0);
+                if (survival != 0)
+                    return survival;
+                RouteEvaluationWindow? leftWindow = leftSnapshot.EvaluationWindow?.ForTurn(_startTurnNumber);
+                RouteEvaluationWindow? rightWindow = rightSnapshot.EvaluationWindow?.ForTurn(_startTurnNumber);
+                int scope = RouteEvaluationWindow.CompareScopes(leftWindow, rightWindow, _comparisonWindow);
+                if (scope != 0)
+                    return scope;
+                if (!RouteEvaluationWindow.CanCompare(leftWindow, rightWindow))
+                    return right.Score.CompareTo(left.Score);
             }
             int comparison = CompareMultiplayerObjective(left, right);
             if (comparison != 0)

@@ -24,6 +24,30 @@ internal readonly record struct RouteEvaluationWindow(
     internal static bool CanCompare(RouteEvaluationWindow? left, RouteEvaluationWindow? right)
         => left?.ComparisonKey is { } key && right?.ComparisonKey == key;
 
+    // Scalar-only callers predate window metadata. Once either side carries coverage,
+    // missing or unresolved coverage on the other side cannot prove equal cost scope.
+    internal static bool CanCompareQuality(RouteEvaluationWindow? left, RouteEvaluationWindow? right)
+        => left == null && right == null || CanCompare(left, right);
+
+    // Group scopes before ordering quality. The preferred scope is supplied by the
+    // committed search frontier; the remaining order is deterministic, not a quality rank.
+    internal static int CompareScopes(RouteEvaluationWindow? left, RouteEvaluationWindow? right,
+        RouteEvaluationWindow? preferred = null)
+    {
+        CostWindow? leftKey = left?.ComparisonKey;
+        CostWindow? rightKey = right?.ComparisonKey;
+        if (leftKey == rightKey) return 0;
+        if (preferred?.ComparisonKey is { } target)
+        {
+            int preference = (leftKey == target ? 0 : 1).CompareTo(rightKey == target ? 0 : 1);
+            if (preference != 0) return preference;
+        }
+        if (leftKey is not { } l) return 1;
+        if (rightKey is not { } r) return -1;
+        return (l.StartTurn, l.TargetTurn ?? int.MaxValue, l.Turn, l.Phase)
+            .CompareTo((r.StartTurn, r.TargetTurn ?? int.MaxValue, r.Turn, r.Phase));
+    }
+
     internal bool CoversTarget => ComparisonKey is { }
         && (CompleteVictory || TargetTurn == EvaluatedTurn && AtPlayerDecisionPoint);
 

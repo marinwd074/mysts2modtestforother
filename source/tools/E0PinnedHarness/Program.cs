@@ -38,11 +38,11 @@ internal static class Program
             P3FinalQualitySnapshot current = JsonSerializer.Deserialize<P3FinalQualitySnapshot>(
                 File.ReadAllText(p3CompareCurrent))
                 ?? throw new InvalidOperationException("Could not deserialize P3 current quality.");
-            int comparison = CombatSearchCoordinator.CompareP3FinalQualitySnapshotsForTesting(
+            int? comparison = CombatSearchCoordinator.CompareP3FinalQualitySnapshotsForTesting(
                 candidate,
                 current);
-            Console.WriteLine($"P3_QUALITY_COMPARE comparison={comparison}");
-            return comparison > 0 ? 1 : 0;
+            Console.WriteLine($"P3_QUALITY_COMPARE comparison={comparison?.ToString() ?? "incomparable"}");
+            return comparison == null ? 2 : comparison > 0 ? 1 : 0;
         }
 
         bool publishProgress = args.Contains(
@@ -947,7 +947,7 @@ internal static class Program
             return first.HasValue ? telemetry.ToRequestMilliseconds(first.Value) : null;
         }
 
-        int comparison = CombatSearchCoordinator.CompareP3FinalQualityForTesting(
+        int? comparison = CombatSearchCoordinator.CompareP3FinalQualityForTesting(
             root,
             baselinePolicy,
             cross,
@@ -1008,13 +1008,15 @@ internal static class Program
                 new JsonSerializerOptions { WriteIndented = true }));
 
         Console.WriteLine(
-            $"P3_CROSS_AB order={(reverseOrder ? "BA" : "AB")} comparison={comparison} " +
+            $"P3_CROSS_AB order={(reverseOrder ? "BA" : "AB")} comparison={comparison?.ToString() ?? "incomparable"} " +
             $"baseline_hp={baseline.ProjectedBattleHpLost} cross_hp={cross.ProjectedBattleHpLost} " +
             $"baseline_published_ms={baselinePublishedMs:F3} cross_published_ms={crossPublishedMs:F3} " +
             $"baseline_potion_first_ms={baselinePotionWorkMs?.ToString("F3") ?? "-"} " +
             $"cross_potion_first_ms={crossPotionWorkMs?.ToString("F3") ?? "-"} " +
             $"baseline_nodes={baseline.TotalExpandedNodes} cross_nodes={cross.TotalExpandedNodes}");
 
+        if (comparison == null)
+            throw new InvalidOperationException("P3 cross-family A/B has no comparable evaluation window.");
         if (comparison > 0)
             throw new InvalidOperationException("P3 cross-family A/B regressed formal final quality.");
         if (cross.TotalExpandedNodes > crossPolicy.Profile.MaxExpandedNodes)

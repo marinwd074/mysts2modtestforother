@@ -209,7 +209,8 @@ internal sealed partial class CombatBeamSolver
             int initialHp,
             bool emitDiagnostics,
             bool reevaluateScenarios = false,
-            bool allowScenarioRerank = true)
+            bool allowScenarioRerank = true,
+            RouteEvaluationWindow? comparisonWindow = null)
         {
             var policyCandidates = evaluated
                 .Select(candidate =>
@@ -381,7 +382,7 @@ internal sealed partial class CombatBeamSolver
                             theftPolicy,
                             useMultiplayerRouteSemantics,
                             SearchEvaluationPolicy.UsesRawLossFirst(
-                                routePolicy)) >= 0)
+                                routePolicy), startTurnNumber) >= 0)
                 {
                     continue;
                 }
@@ -451,6 +452,7 @@ internal sealed partial class CombatBeamSolver
             bool useRollingHorizonLossFirst =
                 SearchEvaluationPolicy.UsesRawLossFirst(
                     routePolicy);
+            bool useEvaluationWindows = SearchEvaluationPolicy.UsesLocalEvaluationWindows(routePolicy);
             PotionFreePolicyBaseline fallbackBaseline = new(potionFreeWon, potionFreeStrategicHpDeficit,
                 potionFreePlayerHp, potionFreeCombatEndedTurn)
             {
@@ -465,7 +467,7 @@ internal sealed partial class CombatBeamSolver
             RouteEvaluationWindow? WindowOf(SimulationSnapshot snapshot)
                 => snapshot.EvaluationWindow?.ForTurn(startTurnNumber);
             Dictionary<RouteEvaluationWindow.CostWindow, int> windowBaselines = [];
-            if (useRollingHorizonLossFirst)
+            if (useEvaluationWindows)
             {
                 for (int index = 0; index < policyCandidates.Count; index++)
                 {
@@ -476,13 +478,13 @@ internal sealed partial class CombatBeamSolver
                     if (!windowBaselines.TryGetValue(key, out int previous)
                         || ComparePotionFreePolicyBaselines(item.Node, policyCandidates[previous].Node,
                             initialHp, initialPlayerMaxHp, bossHpRelief, postCombatRelicHeal, theftPolicy,
-                            useMultiplayerRouteSemantics, useRollingHorizonLossFirst) < 0)
+                            useMultiplayerRouteSemantics, useRollingHorizonLossFirst, startTurnNumber) < 0)
                         windowBaselines[key] = index;
                 }
             }
             (PotionFreePolicyBaseline Baseline, bool Comparable) ComparisonFor(SimulationSnapshot snapshot)
             {
-                if (!useRollingHorizonLossFirst) return (fallbackBaseline, true);
+                if (!useEvaluationWindows) return (fallbackBaseline, true);
                 if (potionFreePolicyBaseline is { } audited
                     && RouteEvaluationWindow.CanCompare(WindowOf(snapshot), audited.EvaluationWindow))
                     return (audited, true);
@@ -557,23 +559,39 @@ internal sealed partial class CombatBeamSolver
                 .ToList();
             int potionEligibleCount = policyEligibleCandidates.Count(candidate => candidate.PotionCount > 0);
             bool useTeamObjective = useMultiplayerTeamObjective;
-            if (SearchEvaluationPolicy.UsesLocalEvaluationWindows(routePolicy))
+            if (useEvaluationWindows)
             {
-                RouteEvaluationWindow? completedWindow = policyEligibleCandidates
+                RouteEvaluationWindow?[] eligibleWindows = policyEligibleCandidates
                     .Where(candidate => !candidate.Snapshot.PlayerDead && candidate.Snapshot.ProjectedPlayerHp > 0)
                     .Select(candidate => WindowOf(candidate.Snapshot))
+                    .Where(window => window?.ComparisonKey != null).ToArray();
+                RouteEvaluationWindow? selectedWindow = eligibleWindows
                     .FirstOrDefault(window => window is { CoversTarget: true });
-                // A settled requested horizon (or complete singleplayer victory) provides
-                // the comparison cohort. This is not an extra reward for deeper routes.
-                // Uncompleted candidates remain suggestions, not zero-cost future tails.
-                if (completedWindow is { } target)
+                if (selectedWindow == null && comparisonWindow != null
+                    && eligibleWindows.Any(window => RouteEvaluationWindow.CanCompare(window, comparisonWindow)))
+                    selectedWindow = comparisonWindow;
+                // If the committed frontier has no eligible representative, choose a
+                // provisional scope before quality ranking, never by cross-scope HP loss.
+                selectedWindow ??= eligibleWindows.OrderBy(window => window!.Value.EvaluatedTurn)
+                    .ThenBy(window => window!.Value.PlayerPhase).FirstOrDefault();
+                // Completed coverage takes priority. Otherwise the committed frontier
+                // selects the provisional cohort; cost ranking only occurs inside it.
+                if (selectedWindow is { } target)
                 {
                     int before = policyEligibleCandidates.Count;
                     policyEligibleCandidates = policyEligibleCandidates.Where(candidate =>
                         RouteEvaluationWindow.CanCompare(WindowOf(candidate.Snapshot), target)).ToList();
                     if (emitDiagnostics && before != policyEligibleCandidates.Count)
                         diagnostics.Info($"[CombatSolver/Test] SEARCH_EVALUATION_COHORT " +
-                            $"completed={policyEligibleCandidates.Count} incomplete={before - policyEligibleCandidates.Count}");
+                            $"target_complete={target.CoversTarget} evaluated_turn={target.EvaluatedTurn} " +
+                            $"comparable={policyEligibleCandidates.Count} outside_scope={before - policyEligibleCandidates.Count}");
+                }
+                else if (policyEligibleCandidates.Any(candidate => WindowOf(candidate.Snapshot) != null))
+                {
+                    // No resolved cost scope exists. Keep a provisional beam suggestion,
+                    // without interpreting cumulative HP/resource differences as quality.
+                    policyEligibleCandidates = policyEligibleCandidates.OrderByDescending(candidate => candidate.Score)
+                        .Take(1).ToList();
                 }
             }
             bool useAdaptiveLethalTempo =
@@ -1432,7 +1450,8 @@ internal sealed partial class CombatBeamSolver
         PostCombatRelicHealProfile postCombatRelicHeal,
         SolverTheftPolicy? theftPolicy,
         bool useMultiplayerRouteSemantics,
-        bool useRollingHorizonLossFirst)
+        bool useRollingHorizonLossFirst,
+        int startTurnNumber)
     {
         SimulationSnapshot leftSnapshot = left.Snapshot;
         SimulationSnapshot rightSnapshot = right.Snapshot;
@@ -1446,6 +1465,23 @@ internal sealed partial class CombatBeamSolver
             rightSnapshot.AllEnemiesDead,
             rightSnapshot.PlayerDead,
             rightSnapshot.ProjectedPlayerHp);
+        if (useRollingHorizonLossFirst || !useMultiplayerRouteSemantics)
+        {
+            RouteEvaluationWindow? leftWindow = leftSnapshot.EvaluationWindow?.ForTurn(startTurnNumber);
+            RouteEvaluationWindow? rightWindow = rightSnapshot.EvaluationWindow?.ForTurn(startTurnNumber);
+            int coverage = RouteEvaluationWindow.CompletedCoverageRank(leftWindow,
+                    !leftSnapshot.PlayerDead && leftSnapshot.ProjectedPlayerHp > 0)
+                .CompareTo(RouteEvaluationWindow.CompletedCoverageRank(rightWindow,
+                    !rightSnapshot.PlayerDead && rightSnapshot.ProjectedPlayerHp > 0));
+            if (coverage != 0) return coverage;
+            int survival = (!rightSnapshot.PlayerDead && rightSnapshot.ProjectedPlayerHp > 0)
+                .CompareTo(!leftSnapshot.PlayerDead && leftSnapshot.ProjectedPlayerHp > 0);
+            if (survival != 0) return survival;
+            int scope = RouteEvaluationWindow.CompareScopes(leftWindow, rightWindow);
+            if (scope != 0) return scope;
+            if (!RouteEvaluationWindow.CanCompare(leftWindow, rightWindow))
+                return right.Score.CompareTo(left.Score);
+        }
         // Potion spending is always a local-player resource decision. Multiplayer team
         // objectives may rank routes only after the single-player potion policy admits them;
         // teammate HP/loss never redefines the potion-free baseline.

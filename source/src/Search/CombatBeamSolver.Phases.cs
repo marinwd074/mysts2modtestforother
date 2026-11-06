@@ -1184,9 +1184,11 @@ internal sealed partial class CombatBeamSolver
                 .Select(node => (node, node.RetentionRank))
                 .ToArray();
             List<SearchNode> candidates;
+            RouteEvaluationWindow? comparisonWindow = FrontierEvaluationWindow(member.Frontier)
+                ?? FrontierEvaluationWindow(retained);
             try
             {
-                candidates = Retention.RankFinal(viable);
+                candidates = Retention.RankFinal(viable, comparisonWindow);
             }
             finally
             {
@@ -1207,7 +1209,8 @@ internal sealed partial class CombatBeamSolver
                 ordering = FinalOrdering.Select(
                     evaluated,
                     root.InitialPlayerHp,
-                    emitDiagnostics: false);
+                    emitDiagnostics: false,
+                    comparisonWindow: comparisonWindow);
             }
             catch (PotionPolicyUnsatisfiedException)
             {
@@ -2687,13 +2690,15 @@ internal sealed partial class CombatBeamSolver
         }
         try
         {
+            RouteEvaluationWindow? comparisonWindow = FrontierEvaluationWindow(member.Frontier)
+                ?? FrontierEvaluationWindow(finalPool);
             if (!member.AdoptionReached)
             {
-                List<SearchNode> completedWindows = CompleteEvaluationWindows(finalPool, stopwatch);
+                List<SearchNode> completedWindows = CompleteEvaluationWindows(finalPool, stopwatch, comparisonWindow);
                 ReleaseDroppedSnapshots(finalPool, completedWindows);
                 finalPool = completedWindows;
             }
-            List<SearchNode> finalCandidates = Retention.RankFinal(finalPool);
+            List<SearchNode> finalCandidates = Retention.RankFinal(finalPool, comparisonWindow);
             ReleaseDroppedSnapshots(finalPool, finalCandidates);
 
             ValidateHistoricalSimulatorsReleased(finalCandidates);
@@ -2723,7 +2728,8 @@ internal sealed partial class CombatBeamSolver
                 initialHp,
                 emitDiagnostics: true,
                 reevaluateScenarios: !member.TimeBudgetReached,
-                allowScenarioRerank: !member.TimeBudgetReached);
+                allowScenarioRerank: !member.TimeBudgetReached,
+                comparisonWindow: comparisonWindow);
 
             RecordCandidateEvaluated(ordering.Candidate.Node, finalEvaluationContextId);
             RecordCandidateSelected(ordering.Candidate.Node, finalEvaluationContextId);

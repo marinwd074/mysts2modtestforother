@@ -56,18 +56,20 @@ internal sealed partial class CombatBeamSolver
     internal SimulationSnapshot ReplayDiagnosticPrefix(IReadOnlyList<PlanAction> actions) => Replay(actions);
 
     internal (IReadOnlyList<SearchNode> Candidates, int Expanded, long Transitions)
-        CompleteDiagnosticEvaluationWindows(IReadOnlyList<SearchNode> candidates)
+        CompleteDiagnosticEvaluationWindows(IReadOnlyList<SearchNode> candidates, RouteEvaluationWindow? comparisonWindow = null)
     {
         int expanded = _run.Expanded;
         long transitions = _run.TransitionCount;
-        List<SearchNode> completed = CompleteEvaluationWindows(candidates, System.Diagnostics.Stopwatch.StartNew());
+        List<SearchNode> completed = CompleteEvaluationWindows(candidates, System.Diagnostics.Stopwatch.StartNew(), comparisonWindow);
         return (completed, _run.Expanded - expanded, _run.TransitionCount - transitions);
     }
 
-    internal (SearchNode Selected, int HpSaved, int Rejected) SelectDiagnosticCandidates(IReadOnlyList<SearchNode> candidates)
+    internal (SearchNode Selected, int HpSaved, int Rejected) SelectDiagnosticCandidates(IReadOnlyList<SearchNode> candidates,
+        RouteEvaluationWindow? comparisonWindow = null)
     {
         FinalPlanSelection selection = FinalOrdering.Select(
-            candidates.Select(node => (node, node.Snapshot)).ToArray(), root.InitialPlayerHp, emitDiagnostics: false);
+            candidates.Select(node => (node, node.Snapshot)).ToArray(), root.InitialPlayerHp,
+            emitDiagnostics: false, comparisonWindow: comparisonWindow);
         return (selection.Candidate.Node, selection.PotionHpSaved, selection.PotionBranchesRejected);
     }
 

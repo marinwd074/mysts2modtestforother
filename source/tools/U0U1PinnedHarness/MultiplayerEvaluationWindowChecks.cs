@@ -105,6 +105,25 @@ internal static class MultiplayerEvaluationWindowChecks
                 && shortPotion.Snapshot.HasSimulator && longFree.Snapshot.HasSimulator
                 && ReferenceEquals(solver.SelectDiagnosticCandidates(incomplete.Candidates).Selected, longFree),
                 "Exhausted completion budget lost the original candidate or treated its missing tail as free.");
+            SearchNode mediumFree = longFree.Parent!;
+            RouteEvaluationWindow mediumWindow = mediumFree.Snapshot.EvaluationWindow!.Value;
+            var partialScope = solver.SelectDiagnosticCandidates([mediumFree, shortFree, shortPotion], mediumWindow);
+            var reversedPartialScope = solver.SelectDiagnosticCandidates([shortPotion, shortFree, mediumFree], mediumWindow);
+            Check(!mediumWindow.CoversTarget && ReferenceEquals(partialScope.Selected, mediumFree)
+                && ReferenceEquals(reversedPartialScope.Selected, mediumFree),
+                "A shorter fallback changed the committed partial comparison scope or depended on input ordering.");
+            var alignedPartial = solver.CompleteDiagnosticEvaluationWindows([mediumFree, shortPotion], mediumWindow);
+            SearchNode mediumPotion = alignedPartial.Candidates[1];
+            if (!ReferenceEquals(mediumPotion, shortPotion)) snapshots.Add(mediumPotion.Snapshot);
+            SimulationSnapshot partialReplay = solver.ReplayDiagnosticPrefix(mediumPotion.Actions);
+            nativePrefixReplays++;
+            snapshots.Add(partialReplay);
+            Check(alignedPartial.Expanded == 1 && alignedPartial.Transitions == 1
+                && !mediumPotion.Snapshot.EvaluationWindow!.Value.CoversTarget
+                && RouteEvaluationWindow.CanCompare(mediumPotion.Snapshot.EvaluationWindow, mediumWindow)
+                && partialReplay.StateKey == mediumPotion.StateKey
+                && ReferenceEquals(solver.SelectDiagnosticCandidates(alignedPartial.Candidates, mediumWindow).Selected, mediumPotion),
+                "Completion to a partial frontier failed, fabricated full coverage or lost a same-scope improvement.");
             RouteEvaluationWindow victory = shortFree.Snapshot.EvaluationWindow!.Value with { CompleteVictory = true };
             Check(RouteEvaluationWindow.CanCompare(victory, full)
                 && !RouteEvaluationWindow.CanCompare(victory, full with { AtPlayerDecisionPoint = false })
@@ -182,6 +201,15 @@ internal static class MultiplayerEvaluationWindowChecks
                 && !SolverInterimResultOrdering.IsBetter(shallow, settled)
                 && !CombatSearchCoordinator.IsBetterPotionPolicyResult(null, shallow, settled),
                 "A cheap incomplete tail replaced a surviving route with completed requested coverage.");
+            SolverInterimResult medium = settled with { EvaluationWindow = mediumWindow };
+            SolverInterimResult cheapShallow = shallow with { Score = 1_000_000 };
+            Check(!SolverInterimResultOrdering.IsBetter(cheapShallow, medium)
+                && !SolverInterimResultOrdering.IsBetter(medium, cheapShallow)
+                && !CombatSearchCoordinator.IsBetterPotionPolicyResult(null, cheapShallow, medium)
+                && !CombatSearchCoordinator.IsBetterPotionPolicyResult(null, medium, cheapShallow)
+                && !CombatSearchCoordinator.IsBetterPotionPolicyResult(null,
+                    cheapShallow with { EvaluationWindow = null }, medium),
+                "Incomparable partial/missing windows were treated as better, equal-cost or a score tie-break.");
             SolverSearchProfile singleProfile = new(4, 2_000, 8, 4, 4, 20_000);
             SearchPolicySnapshot singlePolicy = policy with
             {
@@ -210,6 +238,8 @@ internal static class MultiplayerEvaluationWindowChecks
                 CompletionWork = new { completed.Expanded, completed.Transitions },
                 ExhaustedCompletionWork = new { incomplete.Expanded, incomplete.Transitions },
                 completedLoss = extendedPotion.Snapshot.CumulativePlayerHpLost,
+                PartialCompletion = new { alignedPartial.Expanded, alignedPartial.Transitions,
+                    Loss = mediumPotion.Snapshot.CumulativePlayerHpLost, Window = mediumPotion.Snapshot.EvaluationWindow },
                 SingleFullSearch = new { singleRoute.CombatEndedTurn, singleRoute.ExpandedNodes,
                     singleRoute.Snapshot.CumulativePlayerHpLost },
                 ShortWindow = shortFree.Snapshot.EvaluationWindow, LongWindow = full,

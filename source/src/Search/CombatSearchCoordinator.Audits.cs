@@ -1007,14 +1007,16 @@ internal static partial class CombatSearchCoordinator
         // The early member used the provisional no-potion incumbent. Reuse it only
         // when the later no-potion result is at least as strong; otherwise rerun the
         // ordinary Smart audit rather than assuming the early search stayed complete.
-        if (CompareCompletedResultPrimaryQuality(
+        int? baselineQuality = CompareCompletedResultPrimaryQuality(
                 root,
                 policy,
                 finalPotionFree,
-                provisionalPotionFree) > 0)
+                provisionalPotionFree);
+        if (baselineQuality == null || baselineQuality > 0)
         {
             policy.Diagnostics.Info(
-                "[CombatSolver/Test] E3_CROSS_FAMILY_REUSE reused=false reason=baseline_regressed");
+                $"[CombatSolver/Test] E3_CROSS_FAMILY_REUSE reused=false " +
+                $"reason={(baselineQuality == null ? "baseline_window_mismatch" : "baseline_regressed")}");
             return false;
         }
 
@@ -1704,7 +1706,7 @@ internal static partial class CombatSearchCoordinator
             && (!potionFreeWon || hpRequired == 0 || costsComparable && (hpSaved >= hpRequired || protectsLoot));
 
     private static bool CanComparePotionCosts(SearchPolicySnapshot policy, SolverResult candidate, SolverResult baseline)
-        => !SearchEvaluationPolicy.UsesRawLossFirst(policy.RoutePolicy)
+        => !SearchEvaluationPolicy.UsesLocalEvaluationWindows(policy.RoutePolicy)
             || RouteEvaluationWindow.CanCompare(candidate.EvaluationWindow, baseline.EvaluationWindow);
 
     private static void ObserveSmartLayerMemorySample(

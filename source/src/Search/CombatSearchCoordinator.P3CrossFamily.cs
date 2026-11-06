@@ -18,11 +18,11 @@ internal static partial class CombatSearchCoordinator
                 root.PlayerCount),
             HasCurrentTurnCardAction(result));
 
-    internal static int CompareP3FinalQualitySnapshotsForTesting(
+    internal static int? CompareP3FinalQualitySnapshotsForTesting(
         P3FinalQualitySnapshot candidate,
         P3FinalQualitySnapshot current)
     {
-        int quality = ComparePotionPolicyQuality(
+        int? quality = ComparePotionPolicyQuality(
             candidate.Interim.TheftPolicy,
             candidate.Interim,
             current.Interim);
@@ -46,7 +46,7 @@ internal static partial class CombatSearchCoordinator
         return current.Interim.Score.CompareTo(candidate.Interim.Score);
     }
 
-    internal static int CompareP3FinalQualityForTesting(
+    internal static int? CompareP3FinalQualityForTesting(
         CombatRootSnapshot root,
         SearchPolicySnapshot policy,
         SolverResult candidate,

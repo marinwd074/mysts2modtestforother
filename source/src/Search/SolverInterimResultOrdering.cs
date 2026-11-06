@@ -167,6 +167,9 @@ internal static class SolverInterimResultOrdering
         int comparison = CompareCompletedCoverage(candidate, current);
         if (comparison != 0)
             return comparison < 0;
+        if (candidate.Survives == current.Survives
+            && !RouteEvaluationWindow.CanCompareQuality(candidate.EvaluationWindow, current.EvaluationWindow))
+            return false;
         comparison = CompareOutcome(candidate, current, rollingHorizonLossFirst);
         if (comparison != 0)
             return comparison < 0;
