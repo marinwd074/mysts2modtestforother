@@ -91,7 +91,6 @@ internal sealed partial class CombatBeamSolver
         SolverPotionPolicy _potionPolicy,
         PotionStrategySnapshot _potionStrategy,
         bool _enforcePotionDirectives,
-        bool _renewablePotionShapedRock,
         SearchRunContext _run,
         R1EvaluationShadowCache? _r1EvaluationShadowCache,
         bool _continuationSeedProbe,

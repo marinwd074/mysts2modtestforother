@@ -152,7 +152,6 @@ internal sealed partial class CombatBeamSolver(
         _potionPolicy,
         _potionStrategy,
         _enforcePotionDirectives,
-        root.HasRenewablePotionShapedRock,
         _run,
         policy.R1EvaluationShadowCache,
         _continuationSeedProbe,
@@ -164,7 +163,6 @@ internal sealed partial class CombatBeamSolver(
         _potionPolicy,
         _potionStrategy,
         _enforcePotionDirectives,
-        root.HasRenewablePotionShapedRock,
         _theftPolicy,
         _strategicBossHpRelief,
         root.PostCombatRelicHeal,
@@ -188,7 +186,6 @@ internal sealed partial class CombatBeamSolver(
         policy.UseMultiplayerScenarioReevaluation
             ? ReevaluateCurrentDecisionsAcrossScenarios
             : null,
-        _run.PotionStrategicCosts,
         policy.UseUpstreamSearchOptimizations);
 
     private bool CanConsiderCardAction(PredictedCard card)
@@ -201,12 +198,13 @@ internal sealed partial class CombatBeamSolver(
             routePolicy,
             card.Preview.MultiplayerConstraint == CardMultiplayerConstraint.MultiplayerOnly);
 
-    private bool AllowsPotionUse(int slot, string potionId)
+    private bool AllowsPotionUse(SimulatedCombatState combat, int slot, string potionId)
         => _potionStrategy.AllowsExplicitUse(
             slot,
             potionId,
             _potionPolicy,
-            _forceAllPotionsDisabled);
+            _forceAllPotionsDisabled,
+            combat.PotionOriginAtSlot(_player, slot));
 
     private static int ExplicitPotionUseCount(SearchNode node)
         => PotionUsePolicy.ExplicitUseCount(

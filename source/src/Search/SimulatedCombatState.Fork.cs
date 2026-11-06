@@ -78,6 +78,7 @@ internal sealed partial class SimulatedCombatState
             _lastNormalizedVitalSparkAmount = _lastNormalizedVitalSparkAmount,
             _skillsPlayedThisTurn = _skillsPlayedThisTurn?.Fork(),
             _potionSlots = _potionSlots?.Fork(),
+            _potionOrigins = _potionOrigins?.Fork(),
             _potionUses = _potionUses?.Fork(),
             _outstandingStolenGold = _outstandingStolenGold,
             _outstandingStolenCards = _outstandingStolenCards,

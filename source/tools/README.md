@@ -31,7 +31,7 @@ Windows / PowerShell 7.4+、.NET 9 和 Python 环境下，可以直接使用匹�
 pwsh -NoProfile -File source/tools/run-offline-validation.ps1 -GameDir 'D:\SteamLibrary\steamapps\common\Slay the Spire 2'
 ```
 
-入口 [run-offline-validation.ps1](run-offline-validation.ps1) 先拒绝错误游戏版本，再运行三项静态门禁、Release、L1 合同、portfolio 合同及 16 个 pinned 模式。后者在独立 .NET 进程加载原生 DLL，以测试替代层绕过 Godot 服务；不会启动实际游戏、登录 Steam 或部署 Mod。快照基础设施合同使用复制并改名的 `cmd.exe` 夹具，不是游戏进程。
+入口 [run-offline-validation.ps1](run-offline-validation.ps1) 先拒绝错误游戏版本，再运行三项静态门禁、Release、L1 合同、portfolio 合同及 17 个 pinned 模式。后者在独立 .NET 进程加载原生 DLL，以测试替代层绕过 Godot 服务；不会启动实际游戏、登录 Steam 或部署 Mod。快照基础设施合同使用复制并改名的 `cmd.exe` 夹具，不是游戏进程。
 
 日志与含 DLL SHA-256 的 `summary.json` 写入仓库 `.local/` 的新目录；`-OutputDirectory` 可指定其下尚不存在的目录，`-Modes` 可选择本入口允许的定向模式。摘要保留权限不足等跳过子项。缺少 Python、依赖或任一步骤失败会报告失败；旧输出不被覆盖。
 

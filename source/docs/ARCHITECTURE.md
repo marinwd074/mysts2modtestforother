@@ -8,6 +8,8 @@
 
 ## 1. 运行链
 
+药水成本属于预测分支：`SimulatedCombatState.Potions` 用 COW 来源表区分冻结根库存、普通获得、混沌生成，并将来源与实际消费成本写入值记录。库存键包含来源，已主动消耗的根瓶身份也参与状态键，避免不同强制指令状态合并。`PotionStrategySnapshot` 只对根库存身份匹配指令；`SimulationSnapshot` 缓存显式成本、最后显式来源和付费龙涎香数，排序不读取释放后的模拟器。结果只保留带回合的只读消费记录；保留路线费用按当前起始回合截取，新请求的现有库存重新成为根库存。来源不进入游戏存档或原生状态文本。
+
 ### 单一搜索预算与兼容边界
 
 遗物计数策略由 `RelicCounterCatalog` 声明已核对的跨战斗计数，Runtime 过滤总/单项开关与当前持有对象，冻结到 `SearchPolicySnapshot.RelicTargets`。`SimulatedCombatState.RelicCounters` 只投影既有分支状态，`RelicCounterPolicy` 生成范围达标掩码和一次性 HP 额度。快照的 `StrategicHpCredit` 汇总成长与计数额度，终局/中间排序、用药审计及保路共享；真实战损早停仍须同时满足成长、药水、偷窃和已启用的遗物目标。`SolverRelicStrategyPanel` 拥有 UI 输入，Overlay 只接线，Controller 使续用失效并按原自动计算偏好重算。设置导出、归档恢复与磁盘路线键携带同一策略，旧包默认关闭。见 [完整计数清单](relic-counters.md)。

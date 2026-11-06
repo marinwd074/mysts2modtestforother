@@ -41,6 +41,7 @@ internal static class Program
         bool modelIdCacheOnly = args.Length > 0 && args[0] == "model-id-cache";
         bool upstreamPortOnly = args.Length > 0 && args[0] == "upstream-port";
         bool upstreamSearchOnly = args.Length > 0 && args[0] == "upstream-search";
+        bool entropicCostOnly = args.Length > 0 && args[0] == "entropic-cost";
         bool cardChoiceIdentityOnly = args.Length > 0 && args[0] == "card-choice-identity";
         bool memoryDisplayOnly = args.Length > 0 && args[0] == "memory-display";
         bool darkEmbracePactOnly = args.Length > 0 && args[0] == "dark-embrace-pact";
@@ -59,7 +60,7 @@ internal static class Program
         bool requestHydrationOnly = args.Length > 0 && args[0] is "request-hydration"
             or "request-hydration-benchmark-on" or "request-hydration-benchmark-off";
         bool requestHydrationBenchmark = requestHydrationOnly && args[0] != "request-hydration";
-        string outputDirectory = ParseOutput(upstreamSearchOnly || upstreamPortOnly || memoryDisplayOnly || cardChoiceIdentityOnly || modelIdCacheOnly || darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
+        string outputDirectory = ParseOutput(entropicCostOnly || upstreamSearchOnly || upstreamPortOnly || memoryDisplayOnly || cardChoiceIdentityOnly || modelIdCacheOnly || darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
             allowHydrationOptions: requestHydrationBenchmark);
         Directory.CreateDirectory(outputDirectory);
 
@@ -225,6 +226,11 @@ internal static class Program
                 Console.WriteLine(UpstreamSearchChecks.Run(combat, names, damage, captured, profile, outputDirectory));
                 return 0;
             }
+            if (entropicCostOnly)
+            {
+                Console.WriteLine(EntropicCostChecks.Run(combat, names, damage, captured, profile, outputDirectory));
+                return 0;
+            }
 
             if (rollingReviewOnly)
             {
@@ -329,6 +335,7 @@ internal static class Program
         }
         catch (Exception error)
         {
+            if (entropicCostOnly) Console.Error.WriteLine(error);
             Console.Error.WriteLine(
                 $"U0U1PinnedHarness FAIL: {error.GetType().Name}: {error.Message}");
             Console.Error.WriteLine(error.StackTrace);

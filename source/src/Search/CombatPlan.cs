@@ -1507,6 +1507,8 @@ internal sealed class SimulationSnapshot(
     // Captured from the branch's use ledger; ranking must not reconstruct paid
     // costs from potion IDs or accidentally include automatic death prevention.
     public int ExplicitPotionStrategicCost { get; init; }
+    public PotionOrigin LastExplicitPotionOrigin { get; init; }
+    public int PaidAmbergrisUseCount { get; init; }
     public int AutomaticPotionUseCount { get; } = automaticPotionUseCount;
     public bool CanStillTriggerPocketwatch => PocketwatchCardThreshold >= 0
         && PocketwatchCardsPlayedThisTurn <= PocketwatchCardThreshold;
@@ -1861,6 +1863,7 @@ internal sealed class SolverResult
     public required IReadOnlyDictionary<int, int> EnergyLeftByTurn { get; init; }
     public required IReadOnlyDictionary<int, int> PotionCountByTurn { get; init; }
     public required IReadOnlyDictionary<int, int> PotionStrategicCostByTurn { get; init; }
+    public IReadOnlyList<PredictedPotionUse> PotionUses { get; init; } = [];
     public required IReadOnlyDictionary<int, IReadOnlyList<string>> KillsAfterAction { get; init; }
     public required int? CombatEndedTurn { get; init; }
     public required int? DeathTurn { get; init; }
@@ -2051,6 +2054,7 @@ internal sealed class SolverResult
             EnergyLeftByTurn = EnergyLeftByTurn,
             PotionCountByTurn = PotionCountByTurn,
             PotionStrategicCostByTurn = PotionStrategicCostByTurn,
+            PotionUses = PotionUses,
             KillsAfterAction = KillsAfterAction,
             CombatEndedTurn = CombatEndedTurn,
             DeathTurn = DeathTurn,

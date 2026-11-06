@@ -7,15 +7,10 @@ using CombatSolver.Engine.InCombat.Simulation;
 
 namespace CombatSolver;
 
-internal readonly record struct PredictedPotionUse(
-    int Slot,
-    string PotionId,
-    int StrategicHpCost,
-    bool Automatic);
-
 internal sealed partial class SimulatedCombatState
 {
     private ForkableDictionary<(Player Player, int Slot), PotionModel?>? _potionSlots;
+    private ForkableDictionary<(Player Player, int Slot), PotionOrigin>? _potionOrigins;
     private ForkableList<PredictedPotionUse>? _potionUses;
 
     internal IReadOnlyList<PredictedPotionUse> PotionUses
@@ -34,6 +29,11 @@ internal sealed partial class SimulatedCombatState
     public bool IsPotionAvailable(Player player, int slot)
         => GetPotionAtSlot(player, slot) != null;
 
+    internal PotionOrigin PotionOriginAtSlot(Player player, int slot)
+        => GetPotionAtSlot(player, slot) != null
+            && _potionOrigins?.TryGetValue((player, slot), out PotionOrigin origin) == true
+                ? origin : PotionOrigin.RootInventory;
+
     public bool HasOpenPotionSlot(Player player)
     {
         for (int slot = 0; slot < PotionSlotCount(player); slot++)
@@ -51,14 +51,17 @@ internal sealed partial class SimulatedCombatState
     {
         PotionModel potion = GetPotionAtSlot(player, slot)
             ?? throw new InvalidOperationException($"药水槽位 {slot} 已不可用。");
+        PotionOrigin origin = PotionOriginAtSlot(player, slot);
         (_potionSlots ??= [])[(player, slot)] = null;
+        if (_potionOrigins?.ContainsKey((player, slot)) == true)
+            _potionOrigins[(player, slot)] = PotionOrigin.RootInventory;
         bool renewablePotionShapedRock = potion is PotionShapedRock
             && RelicsOf(player).OfType<PetrifiedToad>().Any(static relic => !relic.IsMelted);
         (_potionUses ??= []).Add(new PredictedPotionUse(
             slot,
             potion.Id.Entry,
-            PotionUsePolicy.StrategicHpCost(potion, renewablePotionShapedRock),
-            automatic));
+            origin == PotionOrigin.EntropicBrew ? 0 : PotionUsePolicy.StrategicHpCost(potion, renewablePotionShapedRock),
+            automatic, origin));
         InvalidateBaseHookListeners();
     }
 
@@ -95,6 +98,9 @@ internal sealed partial class SimulatedCombatState
     }
 
     public bool TryProcurePotion(Player player, PotionModel canonical)
+        => TryProcurePotion(player, canonical, freeFromEntropic: false);
+
+    internal bool TryProcurePotion(Player player, PotionModel canonical, bool freeFromEntropic)
     {
         PotionModel potion = PredictionUtils.CloneModelForSimulation(canonical);
         potion.Owner = player;
@@ -108,6 +114,8 @@ internal sealed partial class SimulatedCombatState
             if (GetPotionAtSlot(player, slot) != null)
                 continue;
             (_potionSlots ??= [])[(player, slot)] = potion;
+            (_potionOrigins ??= [])[(player, slot)] = freeFromEntropic
+                ? PotionOrigin.EntropicBrew : PotionOrigin.Procured;
             InvalidateBaseHookListeners();
             TriggerRelicsAfterPotionProcured(player);
             return true;
@@ -123,10 +131,18 @@ internal sealed partial class SimulatedCombatState
         if (_rootCapturedPlayers.Count == 1)
         {
             AppendPlayerPotionFingerprint(ref fingerprint, _rootCapturedPlayers[0]);
-            return;
         }
-        foreach (Player player in _rootCapturedPlayers.OrderBy(player => player.NetId))
-            AppendPlayerPotionFingerprint(ref fingerprint, player);
+        else
+            foreach (Player player in _rootCapturedPlayers.OrderBy(player => player.NetId))
+                AppendPlayerPotionFingerprint(ref fingerprint, player);
+        // Root directives can distinguish otherwise identical empty inventories.
+        // Local explicit uses are the only authorized actions; automatic peer
+        // consumption cannot fulfill a local root directive.
+        foreach (PredictedPotionUse use in PotionUses.Where(use => !use.Automatic
+                     && use.Origin == PotionOrigin.RootInventory).OrderBy(use => use.Slot))
+        {
+            fingerprint.Add('u'); fingerprint.Add(use.Slot); fingerprint.Add(use.PotionId);
+        }
     }
 
     private void AppendPlayerPotionFingerprint(ref StateFingerprintBuilder fingerprint, Player player)
@@ -135,6 +151,9 @@ internal sealed partial class SimulatedCombatState
         int slotCount = PotionSlotCount(player);
         fingerprint.Add(slotCount);
         for (int slot = 0; slot < slotCount; slot++)
+        {
             fingerprint.Add(GetPotionAtSlot(player, slot)?.Id.Entry ?? "-");
+            fingerprint.Add((int)PotionOriginAtSlot(player, slot));
+        }
     }
 }

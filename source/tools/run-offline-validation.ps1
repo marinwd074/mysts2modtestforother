@@ -7,11 +7,11 @@ param(
     [ValidateSet('choice-rng', 'completion-scope', 'continuation-audit', 'model-id-cache',
         'card-choice-identity', 'upstream-port', 'upstream-search', 'dark-embrace-pact',
         'rolling-review', 'continuation-replay', 'pendulum-draw', 'turn-based-energy',
-        'rng-restore', 'projected-shuffle', 'root-history', 'request-hydration')]
+        'rng-restore', 'projected-shuffle', 'root-history', 'request-hydration', 'entropic-cost')]
     [string[]]$Modes = @('choice-rng', 'completion-scope', 'continuation-audit', 'model-id-cache',
         'card-choice-identity', 'upstream-port', 'upstream-search', 'dark-embrace-pact',
         'rolling-review', 'continuation-replay', 'pendulum-draw', 'turn-based-energy',
-        'rng-restore', 'projected-shuffle', 'root-history', 'request-hydration')
+        'rng-restore', 'projected-shuffle', 'root-history', 'request-hydration', 'entropic-cost')
 )
 
 # Runs .NET contracts and the in-process pinned harness. No game launcher, Steam,

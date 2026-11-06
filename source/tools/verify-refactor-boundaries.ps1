@@ -2556,7 +2556,8 @@ if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/Comb
 if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.cs') -SimpleMatch 'PotionStrategy = policy.PotionStrategy.ForForcedBaseline()' -Quiet)) {
     $violations.Add('Mixed Smart potion search must establish a forced-only baseline')
 }
-if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.ResultPolicy.cs') -SimpleMatch 'result.PotionStrategicCostByTurn.Values.Sum() - forced.ForcedStrategicHpCost' -Quiet)) {
+if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.ResultPolicy.cs') -SimpleMatch '.Sum(turn => turn.Value) - forced.ForcedStrategicHpCost' -Quiet) -or
+    -not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.ResultPolicy.cs') -SimpleMatch 'turn.Key >= result.StartTurnNumber' -Quiet)) {
     $violations.Add('Smart potion opportunity cost must exclude forced potion cost')
 }
 if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.ResultPolicy.cs') -SimpleMatch '!= SolverPotionDirective.Force' -Quiet)) {

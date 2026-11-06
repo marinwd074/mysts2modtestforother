@@ -10,7 +10,6 @@ internal sealed partial class CombatBeamSolver
         SolverPotionPolicy potionPolicy,
         PotionStrategySnapshot potionStrategy,
         bool enforcePotionDirectives,
-        bool renewablePotionShapedRock,
         SolverTheftPolicy? theftPolicy,
         BossHpRelief bossHpRelief,
         PostCombatRelicHealProfile postCombatRelicHeal,
@@ -31,10 +30,8 @@ internal sealed partial class CombatBeamSolver
         bool enableMultiplayerScenarioReevaluation,
         Func<IReadOnlyList<SearchNode>, IReadOnlyList<MultiplayerScenarioDecisionEvaluation>>?
             scenarioReevaluator,
-        PotionStrategicCostLookup? potionStrategicCosts = null,
         bool useUpstreamSearchOptimizations = true)
     {
-        private readonly PotionStrategicCostLookup _potionStrategicCosts = potionStrategicCosts ?? new();
         /// <summary>
         /// The HP a potion must save to be worth spending, scaled by how much HP is worth in this fight. When HP
         /// buys nothing, no amount of saved HP justifies a potion and only the win/lose escape in
@@ -201,14 +198,9 @@ internal sealed partial class CombatBeamSolver
                     int explicitPotionCount = PotionUsePolicy.ExplicitUseCount(
                         potionCount,
                         candidate.Snapshot.AutomaticPotionUseCount);
-                    int ambergrisCount = candidate.Node.Actions.Count(action =>
-                        action.Kind == PlanActionKind.UsePotion
-                        && string.Equals(action.PotionId, "AMBERGRIS", StringComparison.Ordinal));
+                    int ambergrisCount = candidate.Snapshot.PaidAmbergrisUseCount;
                     ForcedPotionUseEvaluation forced = enforcePotionDirectives
-                        ? potionStrategy.EvaluateForcedUses(
-                            candidate.Node.Actions,
-                            renewablePotionShapedRock,
-                            _potionStrategicCosts)
+                        ? potionStrategy.EvaluateForcedUses(candidate.Node)
                         : new ForcedPotionUseEvaluation(true, 0, 0, 0);
                     int explicitPotionStrategicCost = candidate.Snapshot.ExplicitPotionStrategicCost;
                     int optionalPotionCount = Math.Max(

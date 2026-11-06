@@ -8,5 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../src/Search/PotionStrategySnapshot.cs" Link="PotionStrategySnapshot.cs" />
+    <Compile Include="../../src/Search/PredictedPotionUse.cs" Link="PredictedPotionUse.cs" />
   </ItemGroup>
 </Project>

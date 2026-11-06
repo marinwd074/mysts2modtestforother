@@ -225,7 +225,7 @@ internal static partial class CombatSearchCoordinator
             && TheftEncounterStrategy.RecoverySatisfied(policy.TheftPolicy, result.OutstandingStolenResource)
             && result.Snapshot.ProjectedDeathSaveUseCount == 0
             && result.PotionCount == policy.MinimumRequiredPotionUses(result.BattlePotionsUsedSoFar)
-            && policy.PotionStrategy.EvaluateForcedUses(result.BestNode.Actions, renewablePotionShapedRock: false).AllForcedUsesSatisfied
+            && policy.PotionStrategy.EvaluateForcedUses(result.PotionUses).AllForcedUsesSatisfied
             && HasReachedAcceptableBattleHpLoss(
             IsCompleteVictory(result),
             result.ProjectedBattleHpLost,
@@ -291,15 +291,13 @@ internal static partial class CombatSearchCoordinator
         SearchPolicySnapshot policy,
         SolverResult result)
     {
-        ForcedPotionUseEvaluation forced = policy.PotionStrategy.EvaluateForcedUses(
-            result.BestNode.Actions,
-            root.HasRenewablePotionShapedRock);
-        int ambergrisCount = result.BestNode.Actions.Count(action =>
-            action.Kind == PlanActionKind.UsePotion
-            && string.Equals(action.PotionId, "AMBERGRIS", StringComparison.Ordinal))
+        var remainingUses = result.PotionUses.Where(use => use.Turn >= result.StartTurnNumber);
+        ForcedPotionUseEvaluation forced = policy.PotionStrategy.EvaluateForcedUses(remainingUses);
+        int ambergrisCount = remainingUses.Count(use => use.IsPaidAmbergris)
             - forced.ForcedAmbergrisCount;
         int strategicHpCost = PotionUsePolicy.EffectiveStrategicHpCost(
-            Math.Max(0, result.PotionStrategicCostByTurn.Values.Sum() - forced.ForcedStrategicHpCost),
+            Math.Max(0, result.PotionStrategicCostByTurn.Where(turn => turn.Key >= result.StartTurnNumber)
+                .Sum(turn => turn.Value) - forced.ForcedStrategicHpCost),
             ambergrisCount,
             root.InitialPlayerMaxHp);
         return PotionUsePolicy.SmartRequiredHpSaved(
@@ -365,21 +363,34 @@ internal static partial class CombatSearchCoordinator
                 && policy.PotionStrategy.Resolve(potion.Slot, potion.PotionId)
                     != SolverPotionDirective.Force)
             .ToArray();
+        // These are action-count seats within the existing request budget, not
+        // additional paid bottles. Root Force bottles already belong to baseline.
+        int forcedBrews = root.SearchablePotions.Count(potion => potion.PotionId == "ENTROPIC_BREW"
+            && policy.PotionStrategy.Resolve(potion.Slot, potion.PotionId) == SolverPotionDirective.Force);
+        int generatedCapacity = checked(root.PotionSlotCount * (forcedBrews
+            + allowedPotions.Count(potion => potion.PotionId == "ENTROPIC_BREW")));
         if (!potionFreeWon || policy.TheftPolicy == SolverTheftPolicy.PreserveResources)
-            return allowedPotions.Length;
-        if (!policy.UseUpstreamSearchOptimizations
-            || MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(policy.RoutePolicy))
+            return checked(allowedPotions.Length + generatedCapacity);
+        bool legacyAdmission = !policy.UseUpstreamSearchOptimizations
+            || MultiplayerLocalCrossTurnContracts.UsesRollingHorizonLossFirstQuality(policy.RoutePolicy);
+        long savingRoom = legacyAdmission ? Math.Max(0, potionFreeHpDeficit)
+            : Math.Max(0L, (long)potionFreeHpDeficit - ProvableStrategicHpFloor(root, policy));
+        int qualifiedGeneratedCapacity = checked(root.PotionSlotCount * (forcedBrews
+            + allowedPotions.Count(potion => potion.PotionId == "ENTROPIC_BREW"
+                && PotionUsePolicy.SmartRequiredHpSaved(potion.StrategicHpCost,
+                    StrategicBossHpRelief(root, policy)) <= savingRoom)));
+        if (legacyAdmission)
         {
             int paidPotionHpRequired = PotionUsePolicy.SmartRequiredHpSaved(
                 SolverWeights.PotionMinimumHpSaved, StrategicBossHpRelief(root, policy));
             int paidPotionCapacity = paidPotionHpRequired >= int.MaxValue / 4
                 ? 0 : Math.Max(0, potionFreeHpDeficit) / paidPotionHpRequired;
-            return Math.Min(allowedPotions.Length,
-                allowedPotions.Count(potion => potion.StrategicHpCost == 0) + paidPotionCapacity);
+            return checked(Math.Min(allowedPotions.Length,
+                allowedPotions.Count(potion => potion.StrategicHpCost == 0) + paidPotionCapacity)
+                + qualifiedGeneratedCapacity);
         }
         // Sum the cheapest actual eligible slots. Potential recovery of the root's
         // missing HP remains available; unknown healing is never assumed absent.
-        long savingRoom = Math.Max(0L, (long)potionFreeHpDeficit - ProvableStrategicHpFloor(root, policy));
         long minimumCost = 0;
         int maximum = 0, count = 0;
         foreach (var potion in allowedPotions.OrderBy(potion => potion.StrategicHpCost))
@@ -390,7 +401,7 @@ internal static partial class CombatSearchCoordinator
                 StrategicBossHpRelief(root, policy));
             if (required <= savingRoom) maximum = count;
         }
-        return maximum;
+        return checked(maximum + qualifiedGeneratedCapacity);
     }
 
     private static BossHpRelief StrategicBossHpRelief(

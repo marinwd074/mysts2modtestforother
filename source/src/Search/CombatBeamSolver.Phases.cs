@@ -129,13 +129,6 @@ internal sealed partial class CombatBeamSolver
             $"[CombatSolver/Test] HOOK_LAYOUT_CACHE scope=root_cumulative " +
             $"hits={hookLayouts.Hits} misses={hookLayouts.Misses} " +
             $"collisions={hookLayouts.Collisions} bypasses={hookLayouts.Bypasses}");
-        if (_run.PotionStrategicCosts.Misses > 0)
-        {
-            policy.Diagnostics.Info(
-                $"[CombatSolver/Test] POTION_POLICY_LOOKUP " +
-                $"hits={_run.PotionStrategicCosts.Hits} misses={_run.PotionStrategicCosts.Misses} " +
-                $"entries={_run.PotionStrategicCosts.Count}");
-        }
         if (requestWorkTotals != null)
         {
             SearchSolverWorkContribution work = new(
@@ -222,9 +215,7 @@ internal sealed partial class CombatBeamSolver
         SolverInterimResult SummarizeCandidate(SearchNode node, bool won)
         {
 
-            int ambergrisCount = node.Actions.Count(action =>
-                action.Kind == PlanActionKind.UsePotion
-                && string.Equals(action.PotionId, "AMBERGRIS", StringComparison.Ordinal));
+            int ambergrisCount = node.Snapshot.PaidAmbergrisUseCount;
             return new SolverInterimResult(
                 Won: won,
                 OutstandingStolenResource: node.Snapshot.OutstandingStolenResource,
@@ -370,9 +361,7 @@ internal sealed partial class CombatBeamSolver
         bool IsEligibleCompleteVictory(SearchNode node)
             => ExplicitPotionUseCount(node) >= requiredPotionUses
                 && (!_enforcePotionDirectives
-                    || _potionStrategy.EvaluateForcedUses(
-                            node.Actions,
-                            root.HasRenewablePotionShapedRock)
+                    || _potionStrategy.EvaluateForcedUses(node)
                         .AllForcedUsesSatisfied)
                 && SolverInterimResultOrdering.IsCompleteVictory(
                     node.ActionCount,
@@ -420,9 +409,7 @@ internal sealed partial class CombatBeamSolver
             if (boundary == null
                 || ExplicitPotionUseCount(boundary) < _minimumPotionUses
                 || _enforcePotionDirectives
-                    && !_potionStrategy.EvaluateForcedUses(
-                            boundary.Actions,
-                            root.HasRenewablePotionShapedRock)
+                    && !_potionStrategy.EvaluateForcedUses(boundary)
                         .AllForcedUsesSatisfied
                 || !IsCurrentTurnCandidate(
                     boundary.ActionCount,
@@ -868,6 +855,8 @@ internal sealed partial class CombatBeamSolver
                 TurnSetupChoices = best.GetTurnSetupChoices().Select(WithDisplayNames).ToArray(),
                 TurnSetupPlayState = best.GetTurnSetupPlayState(),
                 BestNode = selectedPlan,
+                PotionUses = PotionStrategySnapshot.CaptureUses(best,
+                    ((SimulatedCombatState)finalSnapshot.Simulator.State.CombatState).PotionUses),
                 MultiplayerReplayCandidates = blockPotionInsertion == null
                     ? ordering.ReplayCandidates
                     : [],

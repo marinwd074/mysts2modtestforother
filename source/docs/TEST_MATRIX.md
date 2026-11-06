@@ -12,7 +12,7 @@
 | L1 contracts | `tools/run-contract-tests.ps1` | Search / Prediction / Multiplayer 纯合同 |
 | 多人事件交错 | `dotnet run --project tools/MultiplayerInterleavingChecks -c Release` | 直接编译生产观察状态和执行授权类；10,493 个确定性顺序，失败输出 `--replay <id>`，不依赖游戏 DLL |
 | Release | `dotnet build CombatSolver.csproj -c Release` | 当前本机真实依赖下编译 |
-| 不启动游戏的组合验证 | `tools/run-offline-validation.ps1 -GameDir <安装目录>` | 外部版本校验、上述静态检查/Release、L1、portfolio 与 16 个 pinned 模式；逐步日志、DLL 摘要及跳过子项 |
+| 不启动游戏的组合验证 | `tools/run-offline-validation.ps1 -GameDir <安装目录>` | 外部版本校验、上述静态检查/Release、L1、portfolio 与 17 个 pinned 模式；逐步日志、DLL 摘要及跳过子项 |
 
 快速 Linux main push / PR 运行 Target、Architecture、Repository；定向 Windows 回归和手动 pinned 矩阵按工作流各自触发规则执行。CI 只能证明其实际执行的层级；没有日志/steps 的 runner 失败不能记作源码 FAIL。
 
@@ -21,6 +21,10 @@
 多人交错合同直接测试主线程纯状态边界，未覆盖完整 Controller 或传输层。2026-11-05 的隔离副本变异检查分别去掉过期版本保护、将 debounce 缩短为 199ms、放行重复观察和放行取消后 AcceptAction；四个副本均触发可重放断言失败。完整 35 组 L1、Release 与 `upstream-search` 17 请求/17 重放通过；符号链接权限子项仍明确跳过。
 
 `upstream-search` 同时核对显式药水成本快照：空记录、普通主动消耗、自动消耗、高价主动+自动混合、同一槽位连续消耗，以及 Fork 后父 ledger/快照隔离。自动消耗由测试直接输入 ledger，不是原生救命药水时序证据。成本快照优化前后 17 请求的完整动作、质量、工作量及优化计数相同；JSON 对照只排除 elapsed，末态在各构建内部独立重放验证。
+
+`U0U1PinnedHarness entropic-cost --out <ignored-directory>` 核对 pinned 原生 `PotionFactory` 序列与生成来源，覆盖普通补槽重置、自动消耗、连锁混沌、龙涎香、Fork/状态键、Smart 准入、完整搜索及独立重放。跨回合通过真实模型重放和生产 `BuildRouteAnnotations` / `CaptureUses` 生成账本，再对合成结果调用生产续接合同，核对过去回合成本不再扣除；并不冒充实际 UI 续接。`PotionStrategyChecks` 的 24 项覆盖同槽同 ID 再生不能替代原始强制瓶、自动消费不能完成显式指令，以及全禁用和仅强制策略。两个入口均不启动游戏。
+
+混沌专项 41 项检查通过，包含完整 Coordinator 的强制基线/Smart 分层与独立重放；例中原始混沌成本 9，生成火焰药水成本 0。龙涎香不在 pinned 0.107.1 原生模型库，溢价规则只由纯策略合同覆盖，不能报告为原生效果 PASS。2026-11-05 组合入口 24 步、35 组 L1、82 项 portfolio、17 个 pinned 模式通过（符号链接权限子项仍跳过）；在组合验证后又复跑包含 Coordinator 的 41 项专项。与先前构建比较，16 个非混沌常规请求质量值相同，部分等质路线/工作量变化；第 17 个共享见证请求工作量相同，所有选中末态在各构建内部独立重放，不把此结果称为普遍提速。
 
 `U0U1PinnedHarness rng-restore` 对照旧 RNG 还原的计数器、状态、后续随机值及父状态隔离；完整请求对照复用 `request-hydration-benchmark-off`，高计数器压力夹具为 `multi-hit-high-counter`。不替代实机搜索或退出取证验证。
 

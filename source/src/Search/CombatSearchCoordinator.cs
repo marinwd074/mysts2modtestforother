@@ -1734,8 +1734,7 @@ internal static partial class CombatSearchCoordinator
                 && result.Snapshot.ProjectedPlayerHp > 0
                 && result.PotionCount == 0
                 && policy.MinimumRequiredPotionUses(result.BattlePotionsUsedSoFar) == 0
-                && policy.PotionStrategy.EvaluateForcedUses(result.BestNode.Actions,
-                    renewablePotionShapedRock: false).AllForcedUsesSatisfied
+                && policy.PotionStrategy.EvaluateForcedUses(result.PotionUses).AllForcedUsesSatisfied
                 && result.BoundaryReason is SearchBoundaryReason.None or SearchBoundaryReason.TurnLimit
                 && policy.ContinuationRouteReplayBaseline is { } baseline
                 && result.PredictedFinalState is { } finalState
@@ -1753,8 +1752,7 @@ internal static partial class CombatSearchCoordinator
                 && result.Snapshot.RelicCounters == adopted.RelicCounters
                 && result.PotionCount == 0
                 && policy.MinimumRequiredPotionUses(result.BattlePotionsUsedSoFar) == 0
-                && policy.PotionStrategy.EvaluateForcedUses(result.BestNode.Actions,
-                    renewablePotionShapedRock: false).AllForcedUsesSatisfied
+                && policy.PotionStrategy.EvaluateForcedUses(result.PotionUses).AllForcedUsesSatisfied
                 && TheftEncounterStrategy.RecoverySatisfied(policy.TheftPolicy, result.OutstandingStolenResource);
             bool accepted = policy.ContinuationRouteReplayBaseline?.ExplicitRouteAdoption == true
                 ? equivalentPartial || explicitVictory

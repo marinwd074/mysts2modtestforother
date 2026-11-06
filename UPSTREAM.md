@@ -27,11 +27,22 @@ capture `ExplicitPotionStrategicCost` in the existing branch-ledger aggregation 
 in beam final-policy qualification and final route ordering. This removes repeated ID-price lookups and one
 action-list sum per candidate without retaining the simulator or changing request budgets.
 Automatic consumption stays in total cost but is excluded from explicit cost.
-This is only the reusable cost aggregation, **not** the full Entropic Brew provenance port below:
-generated-potion pricing, forced-slot matching, Smart layer admission and retained-route policy remain unchanged.
-Pinned checks cover empty/manual/automatic/mixed/reused-slot ledgers and Fork isolation.
-The before/after 17-request evidence has identical complete routes, quality, work and optimization metrics
-(excluding elapsed time); each build independently replays all 17 final states. No general speedup is claimed.
+That first cost-snapshot change was validated against 17 unchanged requests before the provenance adaptation below.
+
+The follow-up completes Entropic Brew accounting for the pinned branch:
+
+- Track root inventory, ordinary procurement and Brew generation in branch-owned COW state; include origin in inventory/cycle keys and consumed root identities in the combat key. Generated consumption, including automatic use and a generated Brew, costs zero; ordinary refill resets origin.
+- Root slot directives apply only to the original bottle. Evaluate forced cost from actual uses/value snapshots, never by repricing the latest same-ID refill. The forced-only baseline still excludes optional generated uses, preserving the gradient scheduler contract.
+- Generated Ambergris has no paid opportunity premium. Beam qualification, final ordering, coordinator comparison, per-turn reports and retained continuations use the same recorded costs. Results retain a read-only value ledger with turns, not simulators.
+- Admit generated-use layers from eligible root Brews (including forced Brews), within the existing shared work budgets. Do not apply the root-price-times-use-count Smart bound to a Brew root. This is bounded search admission, not an exhaustive guarantee for every chain of generated Brews.
+- Origins are relative to the frozen request root. A retained plan keeps its generated costs; a newly captured root treats bottles already present as inventory. No live game/save provenance is introduced.
+
+`entropic-cost` checks the pinned native factory sequence, origin/Fork/key isolation, ordinary refill,
+automatic consumption, generated Brew/Ambergris, admission, full search/materialization and independent replay.
+Cross-turn costs use native-model replay plus production annotations and a synthetic retained-result contract;
+the production route-adoption gate still rejects potion routes. These checks do not establish UI/Host-Client timing.
+Ambergris is absent from the pinned 0.107.1 catalog: its opportunity-premium behavior is verified only
+by the pure policy contract, not by a fabricated native model.
 
 ## Current integration (2026-11-02)
 
@@ -116,7 +127,7 @@ the corresponding `project-v` tag and version log identify its local implementat
 The remaining changes are retained as references with these boundaries:
 
 - The large request/frontier/budget/plan-horizon refactor is not substituted for the fork's rolling-horizon pipeline. Its drained-work accounting is useful design evidence, but adapters must preserve local-core multiplayer capture, caller cancellation, route authority and shared ordering. Request hydration remains default-off.
-- [Entropic Brew accounting](https://github.com/Torch1230/CombatSolver/commit/6e62cd1b375ac02e45e2d0f4cbb301cc18b69431) is a useful follow-up: generated potions should not be charged again as pre-existing inventory. Importing only the free flag would leave final ordering, forced-slot directives, per-turn cost reporting and retained-route accounting inconsistent. This port does not change those policies; the complete cost-provenance boundary needs a separate adaptation.
+- [Entropic Brew accounting](https://github.com/Torch1230/CombatSolver/commit/6e62cd1b375ac02e45e2d0f4cbb301cc18b69431) was subsequently adapted in the 2026-11-05 follow-up above, with explicit origin and forced-slot/continuation contracts.
 - Runtime-type mirror registration (PR 139) adds an adapter surface the fork does not currently expose. Keep the existing exact registration/freeze and unsupported-hook boundary until a concrete pinned mod adapter requires it.
 - Newer Swift/Abundance behavior, `AssemblyInfo` APIs, game/Ritsu upgrades and automatic runtime-GC configuration are version-bound. Keep the pinned implementations and frozen game body. New upstream telemetry, private uploads and online services remain excluded.
 - Existing local fixes and optimizations, including path-dependent R0 score reconstruction, root-history capture, intrinsic card-value caching and nearest-equal combination pruning, are preserved rather than replaced by upstream equivalents.

@@ -26,7 +26,7 @@ internal readonly record struct ForcedPotionUseEvaluation(
     int ForcedStrategicHpCost,
     int ForcedAmbergrisCount);
 
-internal sealed class PotionStrategySnapshot
+internal sealed partial class PotionStrategySnapshot
 {
     private readonly Dictionary<(int Slot, string PotionId), SolverPotionDirective> _directives;
     private readonly bool _onlyForcedUses;
@@ -76,10 +76,15 @@ internal sealed class PotionStrategySnapshot
         int slot,
         string potionId,
         SolverPotionPolicy effectivePolicy,
-        bool forceAllDisabled)
+        bool forceAllDisabled,
+        PotionOrigin origin = PotionOrigin.RootInventory)
     {
         if (forceAllDisabled)
             return false;
+        // Slot directives describe the bottles present at root capture. A refill
+        // must not inherit a spent bottle's Force/Disabled identity.
+        if (origin != PotionOrigin.RootInventory)
+            return !_onlyForcedUses && effectivePolicy != SolverPotionPolicy.Disabled;
         if (_onlyForcedUses)
         {
             return _directives.TryGetValue((slot, potionId), out SolverPotionDirective forced)
@@ -91,9 +96,7 @@ internal sealed class PotionStrategySnapshot
     }
 
     public ForcedPotionUseEvaluation EvaluateForcedUses(
-        IReadOnlyList<PlanAction> actions,
-        bool renewablePotionShapedRock,
-        PotionStrategicCostLookup? strategicCosts = null)
+        IEnumerable<PredictedPotionUse> uses)
     {
         PotionSlotDirective[] forced = Directives
             .Where(directive => directive.Directive == SolverPotionDirective.Force)
@@ -103,17 +106,18 @@ internal sealed class PotionStrategySnapshot
         int ambergrisCount = 0;
         foreach (PotionSlotDirective directive in forced)
         {
-            bool used = actions.Any(action =>
-                action.Kind == PlanActionKind.UsePotion
-                && action.PotionSlot == directive.Slot
-                && string.Equals(action.PotionId, directive.PotionId, StringComparison.Ordinal));
-            if (!used)
+            PredictedPotionUse? used = null;
+            foreach (PredictedPotionUse candidate in uses)
+            {
+                if (!candidate.Automatic && candidate.Origin == PotionOrigin.RootInventory
+                    && candidate.Slot == directive.Slot && candidate.PotionId == directive.PotionId)
+                { used = candidate; break; }
+            }
+            if (used is not { } matched)
                 continue;
             count++;
-            strategicCost += strategicCosts != null
-                ? strategicCosts.Get(directive.PotionId, renewablePotionShapedRock)
-                : PotionUsePolicy.StrategicHpCost(directive.PotionId, renewablePotionShapedRock);
-            if (string.Equals(directive.PotionId, "AMBERGRIS", StringComparison.Ordinal))
+            strategicCost = checked(strategicCost + matched.StrategicHpCost);
+            if (matched.IsPaidAmbergris)
                 ambergrisCount++;
         }
         return new ForcedPotionUseEvaluation(

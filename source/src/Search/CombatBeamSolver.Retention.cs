@@ -503,9 +503,7 @@ internal sealed partial class CombatBeamSolver
                 || node.Snapshot.ProjectedDeathSaveUseCount > 0
                 || explicitPotionUses != _minimumPotionUses
                 || _enforcePotionDirectives
-                    && !_potionStrategy.EvaluateForcedUses(
-                            node.Actions,
-                            root.HasRenewablePotionShapedRock)
+                    && !_potionStrategy.EvaluateForcedUses(node)
                         .AllForcedUsesSatisfied)
             {
                 continue;

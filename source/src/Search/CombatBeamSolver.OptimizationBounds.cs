@@ -35,6 +35,9 @@ internal sealed partial class CombatBeamSolver
         bool zeroUseClosed = _forceAllPotionsDisabled || _potionPolicy == SolverPotionPolicy.Disabled
             || _maximumPotionUses == 0;
         int? ceiling = policy.PotionPolicy == SolverPotionPolicy.Smart
+            // A Brew can supply zero-cost uses. The per-use root-price lower
+            // bound is not a proof for this request, even before it is consumed.
+            && !root.SearchablePotions.Any(potion => potion.PotionId == "ENTROPIC_BREW")
             && _maximumPotionUses == _minimumPotionUses
             && root.HasPinnedHealingCertificate && root.MinimumSearchablePotionStrategicCost is { } cost
                 ? SmartEligibilityCeiling(_potionFreePolicyBaseline, _minimumPotionUses, cost, _strategicBossHpRelief)

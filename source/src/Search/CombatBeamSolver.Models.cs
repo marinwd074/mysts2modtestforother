@@ -116,7 +116,6 @@ internal sealed partial class CombatBeamSolver
         public long StandPatProbeAllocatedHighWater;
         public long StandPatBatchAllocatedBytes;
 
-        public readonly PotionStrategicCostLookup PotionStrategicCosts = new();
         public Dictionary<(StateFingerprint State, int RoundIndex), ThreatProjection> ThreatProjectionCache = [];
         public Dictionary<PredictionRiskSignature, CoverageSummary> CoverageCache = [];
         // This ledger is search semantics rather than a rebuildable cache. In particular, a

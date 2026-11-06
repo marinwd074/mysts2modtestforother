@@ -574,6 +574,8 @@ internal sealed partial class CombatBeamSolver
         int potionUseCount = potionUses.Count;
         int potionStrategicCost = 0;
         int explicitPotionStrategicCost = 0;
+        PotionOrigin lastExplicitPotionOrigin = PotionOrigin.RootInventory;
+        int paidAmbergrisUseCount = 0;
         int automaticPotionUseCount = 0;
         for (int potionIndex = 0; potionIndex < potionUses.Count; potionIndex++)
         {
@@ -582,7 +584,11 @@ internal sealed partial class CombatBeamSolver
             if (use.Automatic)
                 automaticPotionUseCount++;
             else
+            {
                 explicitPotionStrategicCost = checked(explicitPotionStrategicCost + use.StrategicHpCost);
+                lastExplicitPotionOrigin = use.Origin;
+                if (use.IsPaidAmbergris) paidAmbergrisUseCount++;
+            }
         }
         SearchMeasurement reachableHandMeasurement = _run.Performance.Begin();
         (int reachableHandValue, int zeroCostPlayableCount, int playableAttackCount) =
@@ -673,6 +679,8 @@ internal sealed partial class CombatBeamSolver
         {
             StateEvaluationScore = stateEvaluationScore,
             ExplicitPotionStrategicCost = explicitPotionStrategicCost,
+            LastExplicitPotionOrigin = lastExplicitPotionOrigin,
+            PaidAmbergrisUseCount = paidAmbergrisUseCount,
             GrowthHpCredit = growthHpCredit,
             RelicCounters = relicCounters,
             GrowthRewards = growthRewards,
@@ -782,6 +790,7 @@ internal sealed partial class CombatBeamSolver
             PotionModel? potion = combat.GetPotionAtSlot(_player, slot);
             key.Add(potion?.Id.Entry ?? "-");
             key.Add(potion != null && combat.IsPotionAvailable(_player, slot));
+            key.Add((int)combat.PotionOriginAtSlot(_player, slot));
         }
         return key.Finish();
     }

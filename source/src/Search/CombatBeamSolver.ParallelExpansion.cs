@@ -909,7 +909,7 @@ internal sealed partial class CombatBeamSolver
             if (potion == null
                 || !simulatedCombat.IsPotionAvailable(_player, potionSlot)
                 || !PotionOnUseSupport.CanSearch(potion)
-                || !AllowsPotionUse(potionSlot, potion.Id.Entry)
+                || !AllowsPotionUse(simulatedCombat, potionSlot, potion.Id.Entry)
                 || PotionUsePolicy.RequiresOpeningUse(potion)
                     && node.HasNonPotionAction)
             {
