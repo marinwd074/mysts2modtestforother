@@ -15,6 +15,8 @@
 
 本地代码层验证入口为 `tools/run-offline-validation.ps1 -GameDir <匹配的游戏安装目录>`：使用外部 0.107.1 DLL，不启动实际游戏，不要求另复制 game-body 二进制。入口包含静态门禁、Release、L1/portfolio 合同和 16 个 pinned 模式，并输出构建摘要与未覆盖边界。Coordinator 的补充审计与质量排序已分别归入 `Audits` / `ResultPolicy` partial，方法内容与预算不变。该入口的 PASS 不关闭下文 current-build Host/Client / UI 未验证项，权限不足导致的测试子项跳过会保留在摘要中。
 
+多人纯代码验证新增 `MultiplayerInterleavingChecks`（L1 默认运行）：在确定性时间下遍历 10,493 个因果顺序，覆盖最多三个远端观察更新与稳定读/确认交错、重复观察、取消后回调、回合/路线/世界身份和一次性 EndTurn。直接链接生产观察与授权实现；失败用 `--replay <id>` 重放。生产观察器仍为主线程入口，200ms 窗口不变。该测试没有启动游戏、网络或完整 Controller，不替代真实 ENet 和原生动作归因。上游 archive/multiplayer 的 ENet 脚本要求 0.111.0，当前只作为后续适配参考。
+
 ## 上游适配
 
 2026-11-02 对比到 `5c773caaec742bc55588bc9ee21c361326a732f0`（上游 0.50.1 / 游戏 0.111.0），选择性适配卡牌 COW 身份、牌堆移动失效、星费清理、批量变换/选牌顺序、空手触发作用域、终局监听器捕获、格挡溢出、手牌上限身份、动态变量访问桥和根集合稳定性。保留 pinned 0.107.1、本地玩家边界及全 RNG 诊断；未整仓合并。已同步 origin/main 的候选身份修复，并修正相关旧夹具、加入错误版本拒绝和动作列表隔离断言。

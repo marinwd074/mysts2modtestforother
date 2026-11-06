@@ -12,6 +12,7 @@
 | 本地构建 | [build-local-stack.ps1](build-local-stack.ps1) / [Linux](build-local-stack.sh) | Release 与工具构建；不自动启动游戏 |
 | 项目版本 | [new-project-version.ps1](new-project-version.ps1) | `-Check` 校验；`-Kind Minor/Major` 记录功能更新 |
 | 已编排的 L1 合同 | [run-contract-tests.ps1](run-contract-tests.ps1) | 纯合同与证据验证器，不替代 native/Host/Client |
+| 多人时序探索 | [MultiplayerInterleavingChecks/Program.cs](MultiplayerInterleavingChecks/Program.cs) | 已接入 L1；确定性时间、因果交错、失败顺序重放，不启动游戏或网络 |
 | 本地完整门禁 | [run-ci-gates.ps1](run-ci-gates.ps1) | 三项快速检查、L1 合同与 diff 检查 |
 
 快速检查示例：

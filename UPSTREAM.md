@@ -6,6 +6,21 @@ This repository is derived from **Torch1230/CombatSolver** and retains its MIT a
 
 Upstream may target a newer game version. Therefore upstream updates are reviewed and ported selectively rather than merged wholesale.
 
+## Follow-up review (2026-11-05)
+
+GitHub still reports `5c773caaec742bc55588bc9ee21c361326a732f0` as the mainline head.
+The upstream [archived multiplayer ENet runner](https://github.com/Torch1230/CombatSolver/blob/14b36a28/tools/run-multiplayer-p0-enet.ps1)
+is a useful transport-test reference: it launches separate peers and checks each peer's result,
+but pins game 0.111.0 and launches actual headless game instances. It has not been imported or run here.
+
+For the no-game layer, borrow the controlled-event-order and reproducible-failure approach described in
+[Microsoft Coyote](https://github.com/microsoft/coyote/blob/926a8da7e36b150755ea4884be900f8bd8552d5d/docs/get-started/using-coyote.md).
+`MultiplayerInterleavingChecks` directly compiles the fork's production observer/session/policy contracts;
+it does not add Coyote, rewrite game binaries, or claim to simulate the full controller/transport.
+The instance observer accepts monotonic time; the production facade retains the 200-ms debounce and main-thread ownership.
+Schedules cover duplicate observations, stale read/confirm races, cancellation, turn/route/world identities,
+at-most-once completion/EndTurn and independent observer/local authority boundaries. Failure output includes a replay ID.
+
 ## Current integration (2026-11-02)
 
 Compared upstream `53c26b26c50bec027de8f7d2c76deb223cd6971d` through
