@@ -4362,7 +4362,7 @@ $p0PhasesPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Phases.cs
 $p0PhasesText = [IO.File]::ReadAllText($p0PhasesPath)
 foreach ($p0MaterializationRule in @(
     'MultiplayerReplayCandidates = blockPotionInsertion == null',
-    '? ordering.ReplayCandidates',
+    '? CaptureReplayCandidates(ordering, finalSnapshot, predictedFinalState)',
     ': [],')) {
     if (-not $p0PhasesText.Contains($p0MaterializationRule)) {
         $violations.Add("${p0PhasesPath}: P0 replay candidates are not preserved through final result materialization '$p0MaterializationRule'")

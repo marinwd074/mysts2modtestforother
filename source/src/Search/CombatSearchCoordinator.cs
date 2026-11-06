@@ -1851,7 +1851,13 @@ internal static partial class CombatSearchCoordinator
     internal static SolverResult? TryReplayContinuationRoute(
         CombatRootSnapshot root, SolverDisplayNames displayNames, BattleDamageSnapshot battleDamage,
         SearchPolicySnapshot policy, CancellationToken cancellationToken)
+        => TryReplayContinuationRoute(root, displayNames, battleDamage, policy, cancellationToken, out _);
+
+    private static SolverResult? TryReplayContinuationRoute(
+        CombatRootSnapshot root, SolverDisplayNames displayNames, BattleDamageSnapshot battleDamage,
+        SearchPolicySnapshot policy, CancellationToken cancellationToken, out string reason)
     {
+        reason = "replay_not_admitted";
         if (policy.ContinuationRouteReplayActions.Count == 0
             || policy.RoutePolicy != SearchRoutePolicy.MultiplayerSinglePlayerCore
             || policy.IncludeTurnSetup || policy.CurrentTurnOnly || policy.VerifyIncrementalSearch)
@@ -1867,6 +1873,7 @@ internal static partial class CombatSearchCoordinator
                 searchProfile: replayProfile,
                 continuationRouteReplayActions: policy.ContinuationRouteReplayActions).Solve();
             bool accepted = IsAcceptableContinuationRouteResult(policy, result, out string quality);
+            reason = accepted ? quality : "quality_rejected";
             if (accepted && policy.ContinuationRouteReplayBaseline?.ExplicitRouteAdoption == true)
                 result.ResultScope = SolverResultScope.RouteAdoption;
             policy.Diagnostics.Info(
@@ -1879,21 +1886,25 @@ internal static partial class CombatSearchCoordinator
         }
         catch (ContinuationSeedRejectedException ex)
         {
+            reason = ex.Reason;
             policy.Diagnostics.Info($"[CombatSolver/Test] MP_LOCAL_XTURN_ROUTE_REPLAY status=rejected reason={ex.Reason}");
             return null;
         }
         catch (PredictionUnsupportedException ex)
         {
+            reason = ex.GetType().Name;
             policy.Diagnostics.Info($"[CombatSolver/Test] MP_LOCAL_XTURN_ROUTE_REPLAY status=rejected reason={ex.GetType().Name}");
             return null;
         }
         catch (NativeChoicePlanMismatchException ex)
         {
+            reason = ex.GetType().Name;
             policy.Diagnostics.Info($"[CombatSolver/Test] MP_LOCAL_XTURN_ROUTE_REPLAY status=rejected reason={ex.GetType().Name}");
             return null;
         }
         catch (InvalidPlannedChoiceBranchException ex)
         {
+            reason = ex.GetType().Name;
             policy.Diagnostics.Info($"[CombatSolver/Test] MP_LOCAL_XTURN_ROUTE_REPLAY status=rejected reason={ex.GetType().Name}");
             return null;
         }

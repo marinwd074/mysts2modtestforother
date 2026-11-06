@@ -56,7 +56,9 @@ Harmony 参数形状的条件编译位于回合补丁入口；这是当前兼容
 
 `MultiplayerPlanRefresher` 拥有冻结根上的保留前缀重放、候选评分和结果物化；不读取 live 状态、不发布 UI、不授予执行权限。`SolverController.MultiplayerPlanRefresh` 在普通搜索的原生动作/根捕获 barrier 后校验旧根与当前回合，深复制候选及选择集合到 `MultiplayerPlanRefreshRequest`。后台计算沿用 `SolverSearchSession`、GC scope、取消和完成回调；主线程不再同步调用刷新求解。保留候选不触发同回合“已有结果”去重，也不获得显式路线采用标记。
 
-Coordinator 优先从新根重放完整当前路线，复用既有末态/质量验收；未获解才在剩余恢复份额内评估最多三个、各两动作的前缀并物化。同回合恢复份额上限 192 节点/60ms，完整重放与前缀阶段共用；原生转移及收尾仍可能超出软时间。`RecoveryBudget` 从解析时间覆盖配置后的当前请求建立，生产 local-core 的同回合刷新和独立跨回合 route replay / R1 均与后续主搜索、审计共用墙钟和原子节点上限。R1 保留原有至多 1/20 的探测份额，主搜索只获得绝对截止时间及剩余节点约束下的 profile，不再重置整份预算。耗尽且无合格恢复结果时明确返回未获解；R1 已独立证明的完整合规胜利可保留，不把不完整前缀发布为结果。当前回合限定、回合准备以及实验 Team/Forecast/Scenario 策略绕过这次预算迁移，实验预测的分支工作不冒充已纳入预算。
+Coordinator 先从新根重放当前完整路线，再在同一份额内重放最多两条完整备选，按既有新根质量规则选择；当前路线仍合法也可被更优备选替换，某条失败不取消其他候选。未获合格完整路线才进入原有三组两动作前缀的物化回退。同回合恢复份额仍为 192 节点/60ms，当前、备选、前缀和物化共用；原生转移及收尾可能超出软时间。`RecoveryBudget` 覆盖本次恢复、失败后的主搜索和审计。独立跨回合 route replay / R1 也共用请求总预算，但跨回合完整备选的传递尚未接入。R1 保留至多 1/20 的探测份额，后续搜索只获得剩余 profile；无合格结果且预算耗尽时不再开始普通搜索。当前回合限定、回合准备以及实验 Team/Forecast/Scenario 策略沿用各自入口，不冒充已纳入本次恢复。
+
+最终排序的 `RetainedReplayCandidate` 仅在 Beam session 内短暂借用快照，物化结果时转换成纯值 `MultiplayerReplayCandidate`：最多三条、每条至多 128 动作，深复制 Choice 集合，不携带旧分数或执行权。当前路线复用已捕获的最终 stamp；备选只有在其快照仍存在时才保存对应末态基线，不为保存建议额外重放已释放分支。缺少自身基线时只能按当前路线基线或既有完整胜利标准重新证明。部分路线必须通过已有末态等价验收，且与当前评价回合一致；备选不能增加原路线战损/保命消耗、改变成长/遗物验收值或用未获胜路线替换已证明胜利。每条备选的新模拟结果经这些检查后才参与排序，且不向共享胜利见证注册未获准的路线。选中结果继续携带此次已证明的备选，以支持同回合再次刷新；`FullRoutes` 逐条记录拒绝/接纳原因，`SelectedOriginalRank` 记录最终选择。
 
 `SearchRecoveryBudgetSnapshot` / `SEARCH_RECOVERY_BUDGET` 记录 Coordinator 的完成、耗尽、取消或失败，以及共享节点、墙钟、超额收尾和取消观察后到计算收尾点的时间；采样不含末尾诊断输出、请求缓存清理、根捕获、dispatcher 接纳和外层 worker / GC scope 退出，不能当作完整响应或排空时间。进度沿用同一请求的时间和节点累计值。R1 转移缓存由 `RunSearchPass` 的 `finally` 覆盖早退、异常和取消，清除封存模拟器引用；这不表示立即完成物理内存回收。
 
@@ -64,7 +66,7 @@ Coordinator 优先从新根重放完整当前路线，复用既有末态/质量�
 
 `SEARCH_REQUEST_TIMELINE` 输出请求/战斗生命周期/搜索 generation、冻结世界及失效版本、根身份、选中路线身份/深度、进度报告的最大完成层数和阶段时间。`RequestWorkObserver` 只把 Coordinator 最终工作账本的值副本送回 Runtime，正常、异常和取消均调用一次，不参与排名或接纳。`UnacceptedRequestExpandedNodes` 表示没有正式接纳/提交路线的请求所做的工作，附带是否已提交预览；不把这些工作全部归为无用，也不把缓存结果历史节点当成本次工作。未运行 Coordinator 的缓存/直接续用保留 `WorkObserved=false`。观测不更改旧状态验证、授权、调度和清理所有权。
 
-`CombatBeamSolver.RetainedPrefixReplay` 复用普通前缀动作准入，逐动作新根重放；完整获胜截断旧尾部，未知预测边界或不可用动作返回明确拒绝。临时快照由 `RetainedPrefixReplay.Dispose` 释放，异常/拒绝路径由生产方法释放；不返回旧 SearchNode。`AuxiliaryWorkScope` 拥有无 Beam session 的辅助计算的通知隔离与一次性账本收尾：前缀批次标为 `PlanRefreshPrefix`，审计入口经 `PrepareAudit` 标为 `AuditPreparation`，失败/取消前的展开和转移也计入请求，嵌套辅助调用不重复记账。物化为独立成员。不可用备选独立拒绝，当前候选不能重放则保持 FullRestart。取消令牌贯穿各阶段，结果通过普通过期/身份接纳后才记录 `MP_PLAN_REFRESH_ACCEPT`。阶段指标不作为质量排序输入。
+`CombatBeamSolver.RetainedPrefixReplay` 复用普通前缀动作准入，逐动作新根重放；完整获胜截断旧尾部，未知预测边界或不可用动作返回明确拒绝。临时快照由 `RetainedPrefixReplay.Dispose` 释放，异常/拒绝路径由生产方法释放；不返回旧 SearchNode。`AuxiliaryWorkScope` 拥有无 Beam session 的辅助计算的通知隔离与一次性账本收尾：前缀批次标为 `PlanRefreshPrefix`，审计入口经 `PrepareAudit` 标为 `AuditPreparation`，失败/取消前的展开和转移也计入请求，嵌套辅助调用不重复记账。物化为独立成员。前缀回退仍要求当前前缀有效，不凭备选前缀的即时分获得完整路线权限；完整备选的独立质量验收由外层 Coordinator 负责。取消令牌贯穿各阶段，结果通过普通过期/身份接纳后才记录 `MP_PLAN_REFRESH_ACCEPT`。阶段指标不作为质量排序输入。
 
 `SolverSessionCapabilities` 是 Runtime 的会话能力合同：网络多人默认进入只读 `MultiplayerProbe`；显式 `advisor` 开启建议搜索，显式 `safe-execute` 开启本地安全执行，Lab 模式另核对实例 ownership 与 Probe evidence。已获准搜索的会话默认使用 local-single-core；只有 `UseMultiplayerPrediction` 开启时才进入实验团队预测。Safe Execute 的本地药水、计划内 Choice、安全 EndTurn 与独立 Safe Auto 已有实现；原生多人完整验证仍按具体场景区分。完整权限、动作限制与证据入口统一见 [多人能力与限制](multiplayer/LIMITATIONS.md)，不再沿用早期一动作 Smoke 的能力描述。
 

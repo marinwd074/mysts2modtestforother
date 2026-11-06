@@ -134,6 +134,9 @@ internal static class MultiplayerRefreshChecks
                     var recoveryChecks = MultiplayerRecoveryBudgetChecks.Run(live, names, damage, policy, fresh, outputDirectory);
                     checks += recoveryChecks.Checks;
                     replays += recoveryChecks.Replays;
+                    var fullRoutes = MultiplayerFullRouteChecks.Run(live, names, damage, policy, fresh, outputDirectory);
+                    checks += fullRoutes.Checks;
+                    replays += fullRoutes.Replays;
                 }
                 Check(before == ContinuationStamp.CaptureLive(live).StateText,
                     "Worker recovery or failure paths mutated live/shared state.");
@@ -331,7 +334,11 @@ internal static class MultiplayerRefreshChecks
                 { Choice = choice, NestedChoices = nested, TurnStartChoices = turnStart }];
             try
             {
-                source.MultiplayerReplayCandidates = [new(0, actions)];
+                source.MultiplayerReplayCandidates = [new(0, actions)
+                {
+                    Route = actions,
+                    Baseline = MultiplayerPlanRefreshRequest.CaptureBaseline(source)! with { ExplicitRouteAdoption = true },
+                }];
                 MultiplayerPlanRefreshRequest copy = MultiplayerPlanRefreshRequest.Capture(source);
                 cards.Clear(); nested.Clear(); turnStart.Clear(); actions.Clear();
                 PlanAction retained = copy.Candidates[0].Prefix[0];
@@ -339,6 +346,10 @@ internal static class MultiplayerRefreshChecks
                     && retained.NestedChoices[0].Cards.Count == 1 && retained.TurnStartChoices?.Count == 1
                     && retained.TurnStartChoices[0].Cards.Count == 1,
                     "Retained request borrowed caller-owned nested choice collections.");
+                Check(copy.Candidates[0].Route.Count == 1 && copy.Candidates[0].Route[0].Choice!.Cards.Count == 1
+                    && copy.Candidates[0].Route[0].NestedChoices![0].Cards.Count == 1
+                    && copy.Candidates[0].Baseline?.ExplicitRouteAdoption == false,
+                    "Full retained route borrowed mutable choices or explicit adoption authority.");
             }
             finally { source.MultiplayerReplayCandidates = originalCandidates; }
 

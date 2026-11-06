@@ -794,13 +794,13 @@ internal sealed partial class CombatBeamSolver
             ValidateOrderedMutationAdmissionLedger(_run);
             ShadowReplaySamplingSnapshot? shadowSampling =
                 policy.ShadowReplaySamplingBudget?.Capture();
+            ContinuationStamp? predictedFinalState = policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
+                || policy.VerifyIncrementalSearch
+                    ? ContinuationStamp.CapturePredicted(_player, finalSnapshot.Simulator,
+                        finalSnapshot.Turn, _forecast, _startTurnNumber) : null;
             SolverResult result = new()
             {
-                PredictedFinalState = policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
-                    || policy.VerifyIncrementalSearch
-                    ? ContinuationStamp.CapturePredicted(_player, finalSnapshot.Simulator,
-                        finalSnapshot.Turn, _forecast, _startTurnNumber)
-                    : null,
+                PredictedFinalState = predictedFinalState,
                 ResultScope = resultScope,
                 SearchEfficiencyOrigin = TryGetCandidateOrigin(best),
                 SearchEfficiencyEvaluationContextId = evaluationContextId,
@@ -859,7 +859,7 @@ internal sealed partial class CombatBeamSolver
                 PotionUses = PotionStrategySnapshot.CaptureUses(best,
                     ((SimulatedCombatState)finalSnapshot.Simulator.State.CombatState).PotionUses),
                 MultiplayerReplayCandidates = blockPotionInsertion == null
-                    ? ordering.ReplayCandidates
+                    ? CaptureReplayCandidates(ordering, finalSnapshot, predictedFinalState)
                     : [],
                 Snapshot = selectedSnapshot,
                 Forecast = _forecast,

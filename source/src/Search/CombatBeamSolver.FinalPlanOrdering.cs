@@ -2,6 +2,28 @@ namespace CombatSolver;
 
 internal sealed partial class CombatBeamSolver
 {
+    private IReadOnlyList<MultiplayerReplayCandidate> CaptureReplayCandidates(
+        FinalPlanSelection selection, SimulationSnapshot selectedSnapshot, ContinuationStamp? selectedFinalState)
+        => Array.AsReadOnly(selection.ReplayCandidates.Select(candidate =>
+        {
+            SimulationSnapshot snapshot = candidate.OriginalRank == 0 ? selectedSnapshot : candidate.Snapshot;
+            // Never reconstruct an old branch just to retain a suggestion. Released
+            // snapshots have no equivalence proof; replay may still prove a complete win.
+            ContinuationStamp? finalState = candidate.OriginalRank == 0 ? selectedFinalState
+                : candidate.Route.Count > 0 && snapshot.HasSimulator
+                    ? ContinuationStamp.CapturePredicted(_player, snapshot.Simulator, snapshot.Turn, _forecast, _startTurnNumber)
+                    : null;
+            ContinuationRouteReplayBaseline? baseline = finalState != null
+                ? new(finalState, battleDamage.HpLostSoFar + snapshot.CumulativePlayerHpLost,
+                    snapshot.ProjectedDeathSaveUseCount, snapshot.GrowthRewards, snapshot.RelicCounters)
+                : null;
+            return new MultiplayerReplayCandidate(candidate.OriginalRank,
+                MultiplayerPlanRefreshRequest.CopyActions(candidate.Prefix))
+            {
+                Route = MultiplayerPlanRefreshRequest.CopyActions(candidate.Route), Baseline = baseline,
+            };
+        }).ToArray());
+
     // Probability-weighted aggregation remains disabled until teammate behavior priors are
     // empirically calibrated. Robust scenario reranking is controlled by the per-search policy.
     private const bool EnableMultiplayerChanceAggregation = false;
@@ -1279,7 +1301,7 @@ internal sealed partial class CombatBeamSolver
                 potionHpRequired = PotionUsePolicy.AdditionalRequiredUseStrategicHpCost(
                     potionHpRequired);
             }
-            List<MultiplayerReplayCandidate> replayCandidates = [];
+            List<RetainedReplayCandidate> replayCandidates = [];
             if (MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnProjection(routePolicy))
             {
                 HashSet<string> retainedFirstActions = [];
@@ -1307,7 +1329,11 @@ internal sealed partial class CombatBeamSolver
                     string firstAction = CombatBeamSolver.PolicyActionToken(prefix[0]);
                     if (!retainedFirstActions.Add(firstAction))
                         continue;
-                    replayCandidates.Add(new MultiplayerReplayCandidate(index, prefix.ToArray()));
+                    IReadOnlyList<PlanAction> actions = selected[index].Node.Actions;
+                    IReadOnlyList<PlanAction> route = actions.Count is > 0 and <= 128
+                        && actions.All(action => action.ShadowForecast == null && !action.IsForecastOnlyObservation)
+                        ? actions.ToArray() : [];
+                    replayCandidates.Add(new(index, prefix.ToArray(), route, selected[index].Snapshot));
                 }
             }
 

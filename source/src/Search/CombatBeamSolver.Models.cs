@@ -450,7 +450,11 @@ internal sealed partial class CombatBeamSolver
         int PotionBranchesRejected,
         int PotionHpSaved,
         int PotionHpRequired,
-        IReadOnlyList<MultiplayerReplayCandidate> ReplayCandidates);
+        IReadOnlyList<RetainedReplayCandidate> ReplayCandidates);
+
+    // Temporary selection data, flattened before a SolverResult leaves its execution session.
+    private sealed record RetainedReplayCandidate(int OriginalRank, IReadOnlyList<PlanAction> Prefix,
+        IReadOnlyList<PlanAction> Route, SimulationSnapshot Snapshot);
 
     private sealed record PendingTurnOutcome(
         SearchNode Node,

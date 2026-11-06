@@ -1584,12 +1584,16 @@ internal sealed record SelectedSearchPlan(
     double Score);
 
 /// <summary>
-/// Small immutable local prefixes retained from the already-ranked final pool. They never own a
-/// simulator and are only replayed from a newly captured multiplayer root.
+/// Bounded local route suggestions retained from the ranked pool. Only values leave the solver;
+/// every route and its quality must be re-established on a newly captured multiplayer root.
 /// </summary>
 internal sealed record MultiplayerReplayCandidate(
     int OriginalRank,
-    IReadOnlyList<PlanAction> Prefix);
+    IReadOnlyList<PlanAction> Prefix)
+{
+    public IReadOnlyList<PlanAction> Route { get; init; } = [];
+    public ContinuationRouteReplayBaseline? Baseline { get; init; }
+}
 
 /// <summary>最终路线的只读标量摘要；不持有 CombatPredictionSimulator。</summary>
 internal sealed record SolverSnapshot(
