@@ -7,6 +7,7 @@
 | 层 | 入口 | 证明范围 |
 |---|---|---|
 | Target | `tools/verify-target-version.ps1` | 0.107.1 / RitsuLib / compatibility symbol |
+| 持续能力尾部定向 | `dotnet run --project tools/U0U1PinnedHarness -c Release -- strategic-tail --out <ignored-directory>` | 15 项检查、7 次原生模型重放；恶魔形态当前力量与未来成长分开、单人/多人相同估值、终局零未来能力收益及根隔离。创造性 AI/熔炉仅为估值公式合同；未覆盖原生生成/锻造、完整搜索质量或性能 A/B |
 | Architecture | `tools/verify-refactor-boundaries.ps1` | 依赖和职责边界 |
 | Repository | `tools/verify-repository-hygiene.ps1` | Git 跟踪文件、Markdown 本地链接、项目版本日志与 LFS 边界 |
 | L1 contracts | `tools/run-contract-tests.ps1` | Search / Prediction / Multiplayer 纯合同 |

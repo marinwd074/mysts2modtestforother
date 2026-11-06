@@ -103,6 +103,11 @@ internal readonly record struct StrategicEffectContext(
     public int FirstAttackDamage { get; init; }
     public int RecurringEnergyGain { get; init; }
     public int VulnerableApplications { get; init; }
+    // RemainingTurns includes the current playable turn. Its start effects have
+    // already changed this snapshot; only later starts can add new growth/cards.
+    public bool CurrentTurnStartResolved { get; init; }
+    public int FutureTurnStarts => Math.Max(0,
+        RemainingTurns - (CurrentTurnStartResolved ? 1 : 0));
 
     internal StrategicEffectContext WithExhaustDrawTiming(IReadOnlyList<PowerModel> powers,
         IReadOnlyList<PredictedCard> hand, Creature owner, CombatPredictionState? predictionState = null)
@@ -553,7 +558,7 @@ internal static class StrategicEffectModel
             DexterityPower => Prevention(amount * context.BlockSkillPlays, context),
             DemonFormPower when context.AttackPlays > 0 => Damage(
                 amount * Math.Max(1, context.AttackPlays / Math.Max(1, context.RemainingTurns))
-                    * context.RemainingTurns * (context.RemainingTurns + 1) / 2,
+                    * context.FutureTurnStarts * (context.FutureTurnStarts + 1) / 2,
                 enemyHp),
             DemonFormPower => StrategicEffectVector.Zero,
             CuriousPower => Resource(
@@ -561,7 +566,7 @@ internal static class StrategicEffectModel
             CorruptionPower => Resource(context.SkillEnergySpend * energyUnit),
             OrbitPower or AutomationPower => Resource(context.RecurringEnergyGain * energyUnit),
             CreativeAiPower => CardAccess(
-                amount * context.RemainingTurns * cardAccessUnit),
+                amount * context.FutureTurnStarts * cardAccessUnit),
             IterationPower => CardAccess(
                 amount * context.StatusDrawTriggers * cardAccessUnit),
             MasterPlannerPower => CardAccess(context.SkillPlays * cardAccessUnit),
@@ -578,7 +583,7 @@ internal static class StrategicEffectModel
             PrepTimePower when context.Act3BossInteractions => Damage(
                 amount * Math.Min(context.RemainingTurns, context.AttackPlays), enemyHp),
             FocusPower => Scaling(amount * context.RemainingTurns * 2),
-            FurnacePower => Scaling(amount * context.RemainingTurns * 2),
+            FurnacePower => Scaling(amount * context.FutureTurnStarts * 2),
             ThunderPower => Damage(amount * context.RemainingTurns, enemyHp),
             LightningRodPower => Scaling(amount * context.RemainingTurns),
             _ => Scaling(amount),

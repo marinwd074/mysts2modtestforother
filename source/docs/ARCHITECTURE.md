@@ -4,6 +4,8 @@
 
 ## 当前精简分支的局部合同
 
+末态 `StrategicEffectContext` 的剩余可出牌回合与未来回合开始次数分开：共用 `RouteEvaluationWindow.AtPlayerDecisionPoint` 表示当前开始已经兑现，恶魔形态、创造性 AI、熔炉不再预支这次触发；当前力量继续独立估值。`StateEvaluation` 在获胜/死亡时跳过未来战斗能力估值，实际资源账本保持原口径。这是所有模式共用的估值校准，不改变搜索终点，单人仍预测到战斗结束。
+
 普通 Power 的 Target 保留原生 null；显式定向入口继续保存传入目标。临时力量复用上游施加入口，首次回调仍先于计数加入，封顶后按修正请求量触发数量回调。Weak/Vulnerable/Frail 的跳过首次持续时间扣减只由各自 Power 保存，影响状态指纹与 ContinuationStamp；其他能力的无效 Skip 元数据不参与该等价性判断。未新增战斗后端或状态存储副本。
 
 ## 1. 运行链

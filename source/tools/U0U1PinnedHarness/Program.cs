@@ -58,11 +58,12 @@ internal static class Program
         bool strategicEnergyOnly = args.Length > 0 && args[0] == "strategic-energy";
         bool projectedShuffleOnly = args.Length > 0 && args[0] == "projected-shuffle";
         bool strategicContextOnly = args.Length > 0 && args[0] == "strategic-context";
+        bool strategicTailOnly = args.Length > 0 && args[0] == "strategic-tail";
         bool rootHistoryOnly = args.Length > 0 && args[0] == "root-history";
         bool requestHydrationOnly = args.Length > 0 && args[0] is "request-hydration"
             or "request-hydration-benchmark-on" or "request-hydration-benchmark-off";
         bool requestHydrationBenchmark = requestHydrationOnly && args[0] != "request-hydration";
-        string outputDirectory = ParseOutput(multiplayerRefreshOnly || entropicCostOnly || upstreamSearchOnly || upstreamPortOnly || memoryDisplayOnly || cardChoiceIdentityOnly || modelIdCacheOnly || darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
+        string outputDirectory = ParseOutput(multiplayerRefreshOnly || entropicCostOnly || upstreamSearchOnly || upstreamPortOnly || memoryDisplayOnly || cardChoiceIdentityOnly || modelIdCacheOnly || darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicTailOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
             allowHydrationOptions: requestHydrationBenchmark);
         Directory.CreateDirectory(outputDirectory);
         if (multiplayerRefreshOnly)
@@ -125,7 +126,7 @@ internal static class Program
                 ValidateRngRestore(outputDirectory);
                 return 0;
             }
-            if (!multiplayerRefreshOnly && !upstreamSearchOnly && !upstreamPortOnly && !cardChoiceIdentityOnly && !turnEnergyOnly && !rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly && !rootHistoryOnly && !strategicContextOnly && !strategicEnergyOnly && !projectedShuffleOnly)
+            if (!multiplayerRefreshOnly && !upstreamSearchOnly && !upstreamPortOnly && !cardChoiceIdentityOnly && !turnEnergyOnly && !rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly && !rootHistoryOnly && !strategicContextOnly && !strategicTailOnly && !strategicEnergyOnly && !projectedShuffleOnly)
             {
             ValidateDarkEmbracePredictionCoverage();
             ValidateViciousStrategicValue();
@@ -225,6 +226,11 @@ internal static class Program
                 includeTurnSetup: false,
                 theftPolicy: null);
 
+            if (strategicTailOnly)
+            {
+                Console.WriteLine(StrategicTailChecks.Run(combat, names, damage, captured, outputDirectory));
+                return 0;
+            }
             if (multiplayerRefreshOnly)
             {
                 Console.WriteLine(multiplayerWindowOnly

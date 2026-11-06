@@ -113,6 +113,10 @@ internal sealed partial class CombatBeamSolver
             boundary = SearchBoundaryReason.UnsupportedEffect;
 
         SimPlayerCombatState playerState = simulator.State.GetPlayerCombatState(_player);
+        RouteEvaluationWindow evaluationWindow = SearchEvaluationPolicy.CaptureWindow(policy.RoutePolicy,
+            _startTurnNumber, turn, (int)playerState.Phase, won,
+            boundary == SearchBoundaryReason.None && !risk,
+            playerState.Phase == PlayerTurnPhase.Play);
         _run.Performance.End(SearchMetricPhase.SnapshotEnemyState, enemyStateMeasurement);
         SearchMeasurement fingerprintMeasurement = _run.Performance.Begin();
         StateFingerprint key = BuildStateKey(
@@ -288,7 +292,10 @@ internal sealed partial class CombatBeamSolver
         for (int powerIndex = 0; powerIndex < effectivePowers.Count; powerIndex++)
         {
             PowerModel power = effectivePowers[powerIndex];
-            contributes[powerIndex] = StrategicEffectMirrors.Contributes(power, _player.Creature);
+            // A terminal battle has no future combat-power payoff. Actual growth,
+            // healing and resource costs are accounted for separately above.
+            contributes[powerIndex] = !won && !dead
+                && StrategicEffectMirrors.Contributes(power, _player.Creature);
             if (!contributes[powerIndex])
                 continue;
             needsFirstAttackDamage |= power is LethalityPower;
@@ -326,6 +333,7 @@ internal sealed partial class CombatBeamSolver
                     liveCards, enemyHp, focus.TotalThreat, focus.IncomingHitCount, strategicRequirements, skillsExhaust,
                     simulator) with
                 {
+                    CurrentTurnStartResolved = evaluationWindow.AtPlayerDecisionPoint,
                     Act3BossInteractions = policy.Act3BossStrategy,
                     FirstAttackDamage = policy.Act3BossStrategy && needsFirstAttackDamage
                         ? CaptureFirstAttackDamage(simulator, combat, playerState, liveCards) : 0,
@@ -685,10 +693,7 @@ internal sealed partial class CombatBeamSolver
             RelicCounters = relicCounters,
             GrowthRewards = growthRewards,
             RealizedLongTermResourceValue = realizedLongTermResourceValue,
-            EvaluationWindow = SearchEvaluationPolicy.CaptureWindow(policy.RoutePolicy,
-                _startTurnNumber, turn, (int)playerState.Phase, won,
-                boundary == SearchBoundaryReason.None && !risk,
-                playerState.Phase == PlayerTurnPhase.Play),
+            EvaluationWindow = evaluationWindow,
             BrightestFlameMaxHpSpent = combat.BrightestFlameMaxHpSpent,
             UnrecoveredGold = combat.UnrecoveredLoot(simulator).Gold,
             UnrecoveredCards = combat.UnrecoveredLoot(simulator).Cards,
