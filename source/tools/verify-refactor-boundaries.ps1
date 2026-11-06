@@ -4383,7 +4383,7 @@ $p0ControllerText = [IO.File]::ReadAllText($p0ControllerPath)
 foreach ($p0RuntimeRule in @(
     'refreshSource.MultiplayerReplayCandidates.Count > 0',
     'MultiplayerPlanRefreshContracts.IsReplayCompatible(',
-    'TryBoundedMultiplayerPlanRefresh(host, state, worldVersion, token);')) {
+    'RequestSearch(host, state, SearchReason.AutoTurnStart);')) {
     if (-not $p0ControllerText.Contains($p0RuntimeRule)) {
         $violations.Add("${p0ControllerPath}: P0 Runtime bounded-refresh entry drifted '$p0RuntimeRule'")
     }
@@ -4392,7 +4392,7 @@ foreach ($p0RuntimeRule in @(
 $p0RefreshPath = Join-Path $repositoryRoot 'src/Runtime/SolverController.MultiplayerPlanRefresh.cs'
 $p0RefreshText = [IO.File]::ReadAllText($p0RefreshPath)
 foreach ($p0ReplayRule in @(
-    'MultiplayerPlanRefresher.Refresh(',
+    'MultiplayerPlanRefreshRequest.Capture(source)',
     'source.StartTurnNumber != LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber')) {
     if (-not $p0RefreshText.Contains($p0ReplayRule)) {
         $violations.Add("${p0RefreshPath}: P0 bounded replay/new-root guard drifted '$p0ReplayRule'")
@@ -4412,8 +4412,18 @@ foreach ($refreshSearchRule in @(
 }
 if ($p0RefreshText.Contains('new CombatBeamSolver(') -or
     $p0RefreshText.Contains('CombatBeamSolver replaySolver') -or
+    $p0RefreshText.Contains('MultiplayerPlanRefresher.Refresh(') -or
+    $p0ControllerText.Contains('TryBoundedMultiplayerPlanRefresh(') -or
     $refreshSearchText -match 'LocalContext|SolverOverlay|RunManager|_combat\.') {
     $violations.Add('Multiplayer refresh must keep frozen-root calculation in Search and live adoption in Runtime')
+}
+$refreshCoordinatorPath = Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.PlanRefresh.cs'
+$refreshCoordinatorText = [IO.File]::ReadAllText($refreshCoordinatorPath)
+foreach ($rule in @('MultiplayerPlanRefresher.Refresh(', 'ContinuationSeedIncumbentBudget.Remaining(',
+    'IsAcceptableContinuationRouteResult(', 'ExplicitRouteAdoption = false')) {
+    if (-not $refreshCoordinatorText.Contains($rule)) {
+        $violations.Add("${refreshCoordinatorPath}: recovery request contract drifted '$rule'")
+    }
 }
 $prefixReplayPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.RetainedPrefixReplay.cs'
 $prefixReplayText = [IO.File]::ReadAllText($prefixReplayPath)

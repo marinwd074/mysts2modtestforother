@@ -15,6 +15,7 @@ internal readonly record struct SearchSolverWorkContribution(
 internal enum SearchRequestMemberKind
 {
     Unclassified, Baseline, BeamRefinement, SmartPotion, ContinuationSeed, RouteReplay, Novelty,
+    PlanRefreshPrefix, PlanRefreshMaterialization,
 }
 
 internal sealed record SearchSolverPhaseContribution(

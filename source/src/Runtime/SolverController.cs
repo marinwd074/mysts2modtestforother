@@ -1707,21 +1707,6 @@ internal static partial class SolverController
             Entry.Logger.Info(
                 $"[CombatSolver/MultiplayerAdvisor] SEARCH_DEBOUNCED_START " +
                 $"route_version={routeVersion} world_version={worldVersion} request_id={requestId}");
-            if (_combat.PendingMultiplayerPlanRefresh)
-            {
-                MultiplayerPlanRefreshDecision refreshDecision =
-                    TryBoundedMultiplayerPlanRefresh(host, state, worldVersion, token);
-                if (refreshDecision != MultiplayerPlanRefreshDecision.FullRestart)
-                {
-                    if (_combat.MultiplayerSafeAutoEnabled
-                        && _combat.LatestResult is { } refreshedResult
-                        && _deployment == null)
-                    {
-                        StartDeployment(host, state, refreshedResult);
-                    }
-                    return;
-                }
-            }
             RequestSearch(host, state, SearchReason.AutoTurnStart);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested || combatToken.IsCancellationRequested)

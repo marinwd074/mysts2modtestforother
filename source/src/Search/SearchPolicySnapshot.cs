@@ -121,6 +121,11 @@ internal sealed record SearchPolicySnapshot(
     /// </summary>
     public SearchRequestWallClockBudget? P3SharedWallClockBudget { get; init; }
 
+    // Automatic multiplayer recovery and its fallback share one request ceiling.
+    // Created by the coordinator, never carried over from the old search.
+    internal SearchRequestWallClockBudget? RecoveryBudget { get; init; }
+    internal MultiplayerPlanRefreshRequest? MultiplayerPlanRefresh { get; init; }
+
     /// <summary>
     /// 组合成员宽度。首项由 <see cref="BeamWidthPortfolio.ProductionMembers" /> 强制成基线宽度；
     /// 为空时用默认的 [基线, 次段 基线, 基线×2/3, 基线×3/2, 基础分 基线]，显式给出时只有宽度成员。

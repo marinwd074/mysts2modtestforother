@@ -127,6 +127,17 @@ internal static partial class CombatSearchCoordinator
         CancellationToken cancellationToken,
         Action<SolverProgress>? progressCallback)
     {
+        if (policy.MultiplayerPlanRefresh != null
+            && (policy.RoutePolicy != SearchRoutePolicy.MultiplayerSinglePlayerCore
+                || policy.CurrentTurnOnly || policy.IncludeTurnSetup
+                || policy.UseMultiplayerTeamObjective || policy.UseMultiplayerTeammateForecast
+                || policy.UseMultiplayerScenarioReevaluation))
+        {
+            // Forecast/scenario branches have separate work accounting. This path
+            // is for the production local-core policy, not an experimental budget bypass.
+            policy.Diagnostics.Info("[CombatSolver/MultiplayerPlanRefresh] MP_PLAN_REFRESH_BYPASS reason=unsupported_policy");
+            policy = policy with { MultiplayerPlanRefresh = null };
+        }
         R1TransitionHydrationCache? cache = policy.UseRequestTransitionHydration
             && policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
             && !policy.VerifyIncrementalSearch && !policy.IncludeTurnSetup && !policy.CurrentTurnOnly
@@ -135,11 +146,22 @@ internal static partial class CombatSearchCoordinator
                 ? new(learnFromSearch: true, measurePerformance: policy.MeasurePhasePerformance) : null;
         SearchRequestWorkTotals totals = new(measurePhases: policy.MeasurePhasePerformance);
         SearchOptimizationSession? optimizations = policy.UseUpstreamSearchOptimizations ? new(root) : null;
+        if (policy.MultiplayerPlanRefresh != null)
+        {
+            SolverSearchProfile profile = policy.Profile with
+            {
+                SoftTimeBudgetMilliseconds = policy.BudgetOverrideMilliseconds
+                    ?? policy.Profile.SoftTimeBudgetMilliseconds,
+            };
+            policy = policy with { Profile = profile, BudgetOverrideMilliseconds = null,
+                RecoveryBudget = new(profile.SoftTimeBudgetMilliseconds, profile.MaxExpandedNodes) };
+        }
         try
         {
             SolverResult result = SolveRequest(root, displayNames, battleDamage,
                 policy with { RequestTransitionHydrationCache = cache, RequestWorkTotals = totals,
-                    OptimizationSession = optimizations }, cancellationToken, progressCallback);
+                    OptimizationSession = optimizations }, cancellationToken, progressCallback,
+                out MultiplayerPlanRefreshReport? refreshReport);
             if (result.ResultScope == SolverResultScope.SearchCompletion
                 && optimizations?.PotionFreeWitness is { } witness
                 && IsBetterPotionPolicyResult(root, policy, witness, result))
@@ -148,6 +170,7 @@ internal static partial class CombatSearchCoordinator
                 PopulateRequestWorkTotals(result, totals.Snapshot());
             }
             result.OptimizationMetrics = optimizations?.Capture();
+            result.PlanRefresh = refreshReport;
             result.RequestPhaseMetrics = totals.CapturePhases();
             if (cache != null)
                 result.RequestTransitionHydration = cache.Capture();
@@ -180,8 +203,9 @@ internal static partial class CombatSearchCoordinator
     private static SolverResult SolveRequest(
         CombatRootSnapshot root, SolverDisplayNames displayNames, BattleDamageSnapshot battleDamage,
         SearchPolicySnapshot policy, CancellationToken cancellationToken,
-        Action<SolverProgress>? progressCallback)
+        Action<SolverProgress>? progressCallback, out MultiplayerPlanRefreshReport? refreshReport)
     {
+        refreshReport = null;
         SearchRequestWorkTotals requestWorkTotals = policy.RequestWorkTotals
             ?? new(measurePhases: policy.MeasurePhasePerformance);
         BeamWidthPortfolioTelemetry portfolioTelemetry = new();
@@ -190,7 +214,19 @@ internal static partial class CombatSearchCoordinator
             RequestWorkTotals = requestWorkTotals,
             PortfolioTelemetry = portfolioTelemetry,
         };
-        if (TryReplayContinuationRoute(root, displayNames, battleDamage, policy,
+        if (policy.MultiplayerPlanRefresh != null)
+        {
+            var recovery = TryRefreshPlan(root, displayNames, battleDamage, policy, cancellationToken);
+            refreshReport = recovery.Report;
+            policy = recovery.Policy;
+            if (recovery.Result is { } restored)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                PopulateRequestWorkTotals(restored, requestWorkTotals);
+                return restored;
+            }
+        }
+        else if (TryReplayContinuationRoute(root, displayNames, battleDamage, policy,
                 cancellationToken) is { } replayedContinuation)
         {
             PopulateRequestWorkTotals(replayedContinuation, requestWorkTotals);
@@ -1434,7 +1470,7 @@ internal static partial class CombatSearchCoordinator
         if (takeoverResult != null)
             return takeoverResult;
         // 打到可接受战损就收手那一条和改动之前一样直接返回，连 SEARCH_SESSION 都不打。
-        if (passSettled || policy.FixedBudget)
+        if (passSettled || policy.FixedBudget || policy.RecoveryBudget != null)
             return result;
         if (result.BoundaryReason == SearchBoundaryReason.TurnLimit
             && MultiplayerLocalCrossTurnContracts.HasReachedPredictionTurnLayerLimit(
@@ -1712,6 +1748,41 @@ internal static partial class CombatSearchCoordinator
             && result.Snapshot.PlayerMaxHp >= root.InitialPlayerMaxHp
             && result.Snapshot.PlayerHp >= result.Snapshot.PlayerMaxHp;
 
+    internal static bool IsAcceptableContinuationRouteResult(
+        SearchPolicySnapshot policy, SolverResult result, out string quality)
+    {
+        bool equivalentPartial = !result.Snapshot.AllEnemiesDead && !result.Snapshot.PlayerDead
+            && result.Snapshot.ProjectedPlayerHp > 0
+            && result.PotionCount == 0
+            && policy.MinimumRequiredPotionUses(result.BattlePotionsUsedSoFar) == 0
+            && policy.PotionStrategy.EvaluateForcedUses(result.PotionUses).AllForcedUsesSatisfied
+            && result.BoundaryReason is SearchBoundaryReason.None or SearchBoundaryReason.TurnLimit
+            && policy.ContinuationRouteReplayBaseline is { } baseline
+            && result.PredictedFinalState is { } finalState
+            && result.ProjectedBattleHpLost <= baseline.ProjectedBattleHpLost
+            && result.Snapshot.ProjectedDeathSaveUseCount == baseline.DeathSaveUses
+            && result.Snapshot.GrowthRewards == baseline.GrowthRewards
+            && result.Snapshot.RelicCounters == baseline.RelicCounters
+            && MultiplayerLocalCrossTurnContracts.IsReplayedRouteFinalStateCompatible(
+                baseline.FinalState.StateText, finalState.StateText);
+        bool explicitVictory = policy.ContinuationRouteReplayBaseline is { ExplicitRouteAdoption: true } adopted
+            && IsCompleteVictory(result)
+            && result.ProjectedBattleHpLost <= adopted.ProjectedBattleHpLost
+            && result.Snapshot.ProjectedDeathSaveUseCount == adopted.DeathSaveUses
+            && result.Snapshot.GrowthRewards == adopted.GrowthRewards
+            && result.Snapshot.RelicCounters == adopted.RelicCounters
+            && result.PotionCount == 0
+            && policy.MinimumRequiredPotionUses(result.BattlePotionsUsedSoFar) == 0
+            && policy.PotionStrategy.EvaluateForcedUses(result.PotionUses).AllForcedUsesSatisfied
+            && TheftEncounterStrategy.RecoverySatisfied(policy.TheftPolicy, result.OutstandingStolenResource);
+        bool accepted = policy.ContinuationRouteReplayBaseline?.ExplicitRouteAdoption == true
+            ? equivalentPartial || explicitVictory
+            : equivalentPartial || HasReachedAcceptableBattleHpLoss(policy, result);
+        quality = equivalentPartial ? "equivalent_partial" : explicitVictory ? "explicit_adoption_victory"
+            : accepted ? "acceptable_victory" : "not_proven";
+        return accepted;
+    }
+
     internal static SolverResult? TryReplayContinuationRoute(
         CombatRootSnapshot root, SolverDisplayNames displayNames, BattleDamageSnapshot battleDamage,
         SearchPolicySnapshot policy, CancellationToken cancellationToken)
@@ -1730,40 +1801,14 @@ internal static partial class CombatSearchCoordinator
                 policy with { VerifyIncrementalSearch = false, RequestMemberKind = SearchRequestMemberKind.RouteReplay }, cancellationToken,
                 searchProfile: replayProfile,
                 continuationRouteReplayActions: policy.ContinuationRouteReplayActions).Solve();
-            bool equivalentPartial = !result.Snapshot.AllEnemiesDead && !result.Snapshot.PlayerDead
-                && result.Snapshot.ProjectedPlayerHp > 0
-                && result.PotionCount == 0
-                && policy.MinimumRequiredPotionUses(result.BattlePotionsUsedSoFar) == 0
-                && policy.PotionStrategy.EvaluateForcedUses(result.PotionUses).AllForcedUsesSatisfied
-                && result.BoundaryReason is SearchBoundaryReason.None or SearchBoundaryReason.TurnLimit
-                && policy.ContinuationRouteReplayBaseline is { } baseline
-                && result.PredictedFinalState is { } finalState
-                && result.ProjectedBattleHpLost <= baseline.ProjectedBattleHpLost
-                && result.Snapshot.ProjectedDeathSaveUseCount == baseline.DeathSaveUses
-                && result.Snapshot.GrowthRewards == baseline.GrowthRewards
-                && result.Snapshot.RelicCounters == baseline.RelicCounters
-                && MultiplayerLocalCrossTurnContracts.IsReplayedRouteFinalStateCompatible(
-                    baseline.FinalState.StateText, finalState.StateText);
-            bool explicitVictory = policy.ContinuationRouteReplayBaseline is { ExplicitRouteAdoption: true } adopted
-                && IsCompleteVictory(result)
-                && result.ProjectedBattleHpLost <= adopted.ProjectedBattleHpLost
-                && result.Snapshot.ProjectedDeathSaveUseCount == adopted.DeathSaveUses
-                && result.Snapshot.GrowthRewards == adopted.GrowthRewards
-                && result.Snapshot.RelicCounters == adopted.RelicCounters
-                && result.PotionCount == 0
-                && policy.MinimumRequiredPotionUses(result.BattlePotionsUsedSoFar) == 0
-                && policy.PotionStrategy.EvaluateForcedUses(result.PotionUses).AllForcedUsesSatisfied
-                && TheftEncounterStrategy.RecoverySatisfied(policy.TheftPolicy, result.OutstandingStolenResource);
-            bool accepted = policy.ContinuationRouteReplayBaseline?.ExplicitRouteAdoption == true
-                ? equivalentPartial || explicitVictory
-                : equivalentPartial || HasReachedAcceptableBattleHpLoss(policy, result);
+            bool accepted = IsAcceptableContinuationRouteResult(policy, result, out string quality);
             if (accepted && policy.ContinuationRouteReplayBaseline?.ExplicitRouteAdoption == true)
                 result.ResultScope = SolverResultScope.RouteAdoption;
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] MP_LOCAL_XTURN_ROUTE_REPLAY status={(accepted ? "accepted" : "quality_rejected")} " +
                 $"fresh_root=true expanded={result.ExpandedNodes} actions={result.BestNode.ActionCount} " +
                 $"hp_loss={result.ProjectedBattleHpLost} elapsed_ms={result.Elapsed.TotalMilliseconds:F1} " +
-                $"quality={(equivalentPartial ? "equivalent_partial" : explicitVictory ? "explicit_adoption_victory" : accepted ? "acceptable_victory" : "not_proven")} " +
+                $"quality={quality} " +
                 $"full_search_skipped={accepted.ToString().ToLowerInvariant()}");
             return accepted ? result : null;
         }

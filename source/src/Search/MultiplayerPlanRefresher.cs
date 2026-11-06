@@ -61,14 +61,19 @@ internal static class MultiplayerPlanRefresher
             root,
             displayNames,
             battleDamage,
-            searchPolicy,
+            searchPolicy with { RequestMemberKind = SearchRequestMemberKind.PlanRefreshPrefix },
             cancellationToken);
 
         List<BoundedReplayEvaluation> evaluations = [];
+        using (replaySolver.MeasureRetainedPrefixBatch())
         foreach (MultiplayerReplayCandidate candidate in
                  candidates.Take(BoundedRefreshCandidateLimit))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (searchPolicy.RecoveryBudget?.IsExpired == true
+                || searchPolicy.RecoveryBudget != null
+                    && clock.ElapsedMilliseconds >= searchPolicy.Profile.SoftTimeBudgetMilliseconds)
+                break;
             attempted++;
             if (candidate.Prefix.Count == 0
                 || candidate.Prefix.Count > BoundedRefreshPrefixActionLimit
@@ -139,6 +144,12 @@ internal static class MultiplayerPlanRefresher
             }
         }
 
+        if (searchPolicy.RecoveryBudget is { } shared
+            && (shared.IsExpired || !shared.HasExpandedNodeBudgetRemaining
+                || clock.ElapsedMilliseconds >= searchPolicy.Profile.SoftTimeBudgetMilliseconds))
+            return Finish(new(MultiplayerPlanRefreshDecision.FullRestart, null,
+                evaluations.Count, false, "refresh_budget_exhausted"));
+
         SolverSearchProfile boundedProfile = searchPolicy.Profile with
         {
             BeamWidth = Math.Min(
@@ -151,11 +162,17 @@ internal static class MultiplayerPlanRefresher
                 searchPolicy.Profile.SoftTimeBudgetMilliseconds,
                 BoundedRefreshTimeLimitMilliseconds),
         };
+        if (searchPolicy.RecoveryBudget != null)
+            boundedProfile = boundedProfile with
+            {
+                SoftTimeBudgetMilliseconds = Math.Max(1,
+                    boundedProfile.SoftTimeBudgetMilliseconds - (int)clock.ElapsedMilliseconds),
+            };
         CombatBeamSolver materializeSolver = new(
             root,
             displayNames,
             battleDamage,
-            searchPolicy,
+            searchPolicy with { RequestMemberKind = SearchRequestMemberKind.PlanRefreshMaterialization },
             cancellationToken,
             searchProfile: boundedProfile,
             fixedPrefixActions: selected.Candidate.Prefix,

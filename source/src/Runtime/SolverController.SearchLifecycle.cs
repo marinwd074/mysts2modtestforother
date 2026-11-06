@@ -41,6 +41,7 @@ internal static partial class SolverController
         // request owns this turn; a late automatic callback must keep its active plan.
         if (reason == SearchReason.AutoTurnStart
             && (ReferenceEquals(_combat.State, state)
+                    && !_combat.PendingMultiplayerPlanRefresh
                     && (_combat.LatestResult?.StartTurnNumber == searchTurn || _combat.LastSolverDeployedTurn == searchTurn)
                 || _search is { } active && ReferenceEquals(active.State, state) && active.StartTurnNumber == searchTurn
                 || _deployment is { } deploying && ReferenceEquals(deploying.State, state) && deploying.StartTurnNumber == searchTurn))
@@ -157,6 +158,10 @@ internal static partial class SolverController
             BattleDamageSnapshot battleDamage = BattleDamageTracker.Observe(state);
             setupStage = "live_stamp";
             LiveCombatStamp stamp = LiveCombatStamp.Capture(state);
+            MultiplayerPlanRefreshRequest? planRefresh = capabilities.IsMultiplayer
+                && reason == SearchReason.AutoTurnStart
+                    ? CapturePendingMultiplayerPlanRefresh(state, stamp) : null;
+            _combat.PendingMultiplayerPlanRefresh = false;
             if (reason != SearchReason.AutoTurnStart
                 && _combat.LatestResult is { } previousResult
                 && _combat.LatestStamp is { } previousStamp
@@ -539,6 +544,7 @@ internal static partial class SolverController
                 {
                     ContinuationRouteReplayActions = continuationReplayActions,
                     ContinuationRouteReplayBaseline = continuationReplayBaseline,
+                    MultiplayerPlanRefresh = planRefresh,
                 };
             if (continuationSeedActions.Count > 0
                 && searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
@@ -890,6 +896,17 @@ internal static partial class SolverController
             _combat.PendingCompleteProjectionBaseline = null;
             _combat.PendingManualProjectionBaseline = null;
             Exception ex = task.Exception?.GetBaseException() ?? new InvalidOperationException("后台搜索失败但没有异常对象。");
+            if (ex is SearchRecoveryBudgetExhaustedException)
+            {
+                _combat.FullAutoEnabled = false;
+                _combat.MultiplayerSafeAutoEnabled = false;
+                _combat.MultiplayerSafeExecuteDeploymentRequested = false;
+                SolverOverlay.Show(host, "[b]战斗路线求解器[/b]\n本次计算预算已用完，尚无可采用的路线。");
+                SolverOverlay.RefreshControls();
+                SearchCompletionNotifier.Notify(SearchCompletionNotificationKind.Failed);
+                Entry.Logger.Info($"[CombatSolver/Test] SEARCH_RECOVERY_BUDGET_EXHAUSTED generation={generation}");
+                return;
+            }
             _combat.BugReportIssues.RecordFailure(CombatBugReportIssueKind.SearchFailure, ex);
             CombatBugReportExporter.RecordRuntimeException("search", ex);
             LastSearchFailureForTesting = ex;
@@ -1059,6 +1076,7 @@ internal static partial class SolverController
         _combat.LatestResult = result;
         _combat.LatestStamp = currentStamp!;
         _combat.LatestRouteInvalidationVersion = currentRouteInvalidationVersion;
+        RecordAcceptedPlanRefresh(result, generation);
         bool retainCurrentTurnRoute = currentTurnAdopted
             && MultiplayerLocalCrossTurnContracts.HasLocalCrossTurnContinuation(
                 result.MultiplayerScope,

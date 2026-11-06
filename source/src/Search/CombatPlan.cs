@@ -1800,6 +1800,7 @@ internal sealed class SolverResult
 
     public R1TransitionHydrationSnapshot? RequestTransitionHydration { get; set; }
     public SearchRequestPhaseSnapshot? RequestPhaseMetrics { get; set; }
+    public MultiplayerPlanRefreshReport? PlanRefresh { get; internal set; }
     public SearchOptimizationMetrics? OptimizationMetrics { get; set; }
     public int ShadowReplayObservations { get; init; }
     public int ShadowReplayStores { get; init; }

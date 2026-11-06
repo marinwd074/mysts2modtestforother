@@ -5,6 +5,7 @@ using CombatSolver;
 using CombatSolver.Engine.InCombat.Simulation;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
+using MegaCrit.Sts2.Core.Entities.Cards;
 
 namespace U0U1PinnedHarness;
 
@@ -101,6 +102,39 @@ internal static class MultiplayerRefreshChecks
                 Check(before == ContinuationStamp.CaptureLive(live).StateText,
                     "Search or refresh mutated live state, including teammate/shared state.");
 
+                MultiplayerPlanRefreshRequest request = MultiplayerPlanRefreshRequest.Capture(source);
+                SearchPolicySnapshot workerPolicy = policy with
+                {
+                    VerifyIncrementalSearch = false, StopAtAcceptableBattleHpLoss = true,
+                    MeasurePhasePerformance = true, MultiplayerPlanRefresh = request,
+                };
+                int captureThread = Environment.CurrentManagedThreadId, workerThread = captureThread;
+                SolverResult recovered = Task.Run(() =>
+                {
+                    workerThread = Environment.CurrentManagedThreadId;
+                    return CombatSearchCoordinator.Solve(root, names, damage, workerPolicy,
+                        CancellationToken.None, null);
+                }).GetAwaiter().GetResult();
+                Check(workerThread != captureThread, "Recovery fixture did not use a background worker.");
+                Check(recovered.PlanRefresh != null && recovered.ResultScope == SolverResultScope.SearchCompletion,
+                    "Automatic recovery lost its report or manufactured route-adoption intent.");
+                Check(recovered.TotalExpandedNodes <= profile.MaxExpandedNodes,
+                    "Recovery and fallback exceeded the request node budget.");
+                Verify(root, recovered);
+                VerifyLedger(recovered.RequestPhaseMetrics!, recovered.TotalExpandedNodes, recovered.TotalTransitionCount);
+                if (hp == originalHp)
+                {
+                    Check(recovered.PlanRefresh!.WholeRouteReplayed && recovered.TotalExpandedNodes == 0,
+                        "An unchanged valid whole route was not restored without expansion.");
+                    Check(!ReferenceEquals(request.Route, source.BestNode.Actions)
+                        && !ReferenceEquals(request.Candidates[0].Prefix, source.MultiplayerReplayCandidates[0].Prefix),
+                        "Worker request retained mutable source action collections.");
+                    VerifyRecoveryFailurePaths(root, workerPolicy, request, fresh);
+                    VerifyRequestIsolation(source);
+                }
+                Check(before == ContinuationStamp.CaptureLive(live).StateText,
+                    "Worker recovery or failure paths mutated live/shared state.");
+
                 rows.Add(new
                 {
                     enemy_hp = hp, players = root.PlayerCount, capture_ms = captureMs,
@@ -110,6 +144,8 @@ internal static class MultiplayerRefreshChecks
                     refreshed.Reason, refreshed.ReplayedCandidates,
                     refreshed.Metrics,
                     fresh = Describe(fresh), refresh = refreshed.Result == null ? null : Describe(refreshed.Result),
+                    worker = Describe(recovered), recovered.PlanRefresh,
+                    request_work = recovered.RequestPhaseMetrics,
                 });
 
                 Check(MultiplayerPlanRefresher.Refresh(root, names, damage, policy, []).Decision
@@ -157,6 +193,167 @@ internal static class MultiplayerRefreshChecks
                 profile, dll_sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(dll))), rows,
             }, new JsonSerializerOptions { WriteIndented = true }));
         return $"MultiplayerRefresh PASS ({checks} checks, {replays} independent native-model replays)";
+
+        void VerifyLedger(SearchRequestPhaseSnapshot phases, long expanded, long transitions)
+        {
+            Check(phases != null && phases.RecordedSolverCount == phases.Members.Count,
+                "Recovery member ledger is incomplete.");
+            Check(phases!.Members.Sum(member => (long)member.Work.ExpandedNodes) == expanded
+                && phases.Members.Sum(member => (long)member.Work.TransitionCount) == transitions
+                && phases.ExpandedNodes == expanded && phases.LogicalTransitions == transitions,
+                "Recovery work was omitted or counted twice.");
+        }
+
+        void VerifyRecoveryFailurePaths(CombatRootSnapshot root, SearchPolicySnapshot workerPolicy,
+            MultiplayerPlanRefreshRequest request, SolverResult expected)
+        {
+            PlanAction invalid = request.Route[0] with { CardId = "NONEXISTENT_FIXTURE_CARD", CardStateKey = "nonexistent" };
+            MultiplayerPlanRefreshRequest broken = request with { Route = [invalid], Candidates = [] };
+            SolverResult fallback = CombatSearchCoordinator.Solve(root, names, damage,
+                workerPolicy with { MultiplayerPlanRefresh = broken }, CancellationToken.None, null);
+            Check(fallback.PlanRefresh?.Decision == MultiplayerPlanRefreshDecision.FullRestart,
+                "An invalid retained route did not fall back within the request.");
+            Verify(root, fallback);
+            VerifyLedger(fallback.RequestPhaseMetrics!, fallback.TotalExpandedNodes, fallback.TotalTransitionCount);
+
+            SolverResult currentOnly = CombatSearchCoordinator.Solve(root, names, damage, workerPolicy with
+            {
+                CurrentTurnOnly = true, MultiplayerPlanRefresh = broken,
+            }, CancellationToken.None, null);
+            Check(currentOnly.PlanRefresh == null,
+                "An incompatible policy entered automatic cross-turn plan recovery.");
+            Verify(root, currentOnly);
+
+            SolverResult afterRepair = CombatSearchCoordinator.Solve(root, names, damage, workerPolicy with
+            {
+                StopAtAcceptableBattleHpLoss = false,
+                MultiplayerPlanRefresh = request with { Route = [], Baseline = null },
+            }, CancellationToken.None, null);
+            Check(afterRepair.PlanRefresh is { Decision: MultiplayerPlanRefreshDecision.FullRestart,
+                    RecoveryExpandedNodes: > 0 }
+                && afterRepair.PlanRefresh.RemainingExpandedNodes
+                    == profile.MaxExpandedNodes - afterRepair.PlanRefresh.RecoveryExpandedNodes
+                && afterRepair.RequestPhaseMetrics!.Members.Any(member => member.Kind == nameof(SearchRequestMemberKind.Baseline)
+                    && member.Work.ExpandedNodes > 0)
+                && afterRepair.TotalExpandedNodes <= profile.MaxExpandedNodes,
+                "Repair work and subsequent baseline did not consume one node allowance.");
+            Check(afterRepair.PredictedFinalState == expected.PredictedFinalState
+                && afterRepair.ProjectedBattleHpLost == expected.ProjectedBattleHpLost,
+                "The fixed-input fallback lost the baseline route quality.");
+            Verify(root, afterRepair);
+            VerifyLedger(afterRepair.RequestPhaseMetrics!, afterRepair.TotalExpandedNodes, afterRepair.TotalTransitionCount);
+
+            SearchRequestPhaseSnapshot? observed = null;
+            void Observe(string message)
+            {
+                const string marker = "SEARCH_REQUEST_PHASE ";
+                int index = message.IndexOf(marker, StringComparison.Ordinal);
+                if (index >= 0) observed = JsonSerializer.Deserialize<SearchRequestPhaseSnapshot>(message[(index + marker.Length)..]);
+            }
+            foreach (int dop in new[] { 1, 4 })
+            {
+                observed = null;
+                bool exhausted = false;
+                try
+                {
+                    CombatSearchCoordinator.Solve(root, names, damage, workerPolicy with
+                    {
+                        Profile = profile with { MaxExpandedNodes = 5 }, MaxDegreeOfParallelism = dop,
+                        StopAtAcceptableBattleHpLoss = false,
+                        MultiplayerPlanRefresh = request with { Route = [], Baseline = null },
+                        Diagnostics = new SearchDiagnosticsSink(Observe, Observe),
+                    }, CancellationToken.None, null);
+                }
+                catch (SearchRecoveryBudgetExhaustedException) { exhausted = true; }
+                Check(exhausted, "An unproven recovery obtained a second node budget or escaped as a result.");
+                Check(observed is { ExpandedNodes: 5 }
+                    && observed.Members.Any(member => member.Kind == nameof(SearchRequestMemberKind.PlanRefreshPrefix))
+                    && observed.Members.Any(member => member.Kind == nameof(SearchRequestMemberKind.PlanRefreshMaterialization))
+                    && !observed.Members.Any(member => member.Kind == nameof(SearchRequestMemberKind.Baseline)),
+                    "Failed recovery work was lost, exceeded the cap, or started a new full baseline.");
+                VerifyLedger(observed!, observed!.ExpandedNodes, observed.LogicalTransitions);
+            }
+
+            observed = null;
+            bool timedOut = false;
+            void DelayFailedReplay(string message)
+            {
+                // A deterministic pause in a failed member's cleanup exceeds the 1ms
+                // request budget; no game thread or live action is involved.
+                if (message.Contains("ROUTING_CHOICE_SUMMARIES scope=solver", StringComparison.Ordinal))
+                    Thread.Sleep(5);
+                Observe(message);
+            }
+            try
+            {
+                CombatSearchCoordinator.Solve(root, names, damage, workerPolicy with
+                {
+                    BudgetOverrideMilliseconds = 1, MultiplayerPlanRefresh = broken,
+                    Diagnostics = new SearchDiagnosticsSink(DelayFailedReplay, Observe),
+                }, CancellationToken.None, null);
+            }
+            catch (SearchRecoveryBudgetExhaustedException) { timedOut = true; }
+            Check(timedOut && observed is { ExpandedNodes: 0 },
+                "Expired recovery ignored the configured override and started a fresh time budget.");
+
+            observed = null;
+            using CancellationTokenSource cancellation = new();
+            bool rejected = false;
+            void CancelAfterReplay(string message)
+            {
+                if (message.Contains("ROUTING_CHOICE_SUMMARIES scope=solver", StringComparison.Ordinal))
+                    cancellation.Cancel();
+                Observe(message);
+            }
+            try
+            {
+                CombatSearchCoordinator.Solve(root, names, damage, workerPolicy with
+                {
+                    Diagnostics = new SearchDiagnosticsSink(CancelAfterReplay, Observe),
+                }, cancellation.Token, null);
+            }
+            catch (OperationCanceledException) { rejected = true; }
+            Check(rejected && observed is { RecordedSolverCount: > 0 },
+                "Cancellation during recovery returned a result or lost the finished member's work.");
+            VerifyLedger(observed!, observed!.ExpandedNodes, observed.LogicalTransitions);
+        }
+
+        void VerifyRequestIsolation(SolverResult source)
+        {
+            var originalCandidates = source.MultiplayerReplayCandidates;
+            List<PlanCardToken> cards = [new("STRIKE_IRONCLAD", 0, "fixture", 0, 0, "fixture")];
+            PlanCardChoice choice = new(PlanChoiceEffect.Discard, PileType.Hand, cards);
+            List<PlanCardChoice> nested = [choice], turnStart = [choice];
+            List<PlanAction> actions = [originalCandidates[0].Prefix[0] with
+                { Choice = choice, NestedChoices = nested, TurnStartChoices = turnStart }];
+            try
+            {
+                source.MultiplayerReplayCandidates = [new(0, actions)];
+                MultiplayerPlanRefreshRequest copy = MultiplayerPlanRefreshRequest.Capture(source);
+                cards.Clear(); nested.Clear(); turnStart.Clear(); actions.Clear();
+                PlanAction retained = copy.Candidates[0].Prefix[0];
+                Check(retained.Choice?.Cards.Count == 1 && retained.NestedChoices?.Count == 1
+                    && retained.NestedChoices[0].Cards.Count == 1 && retained.TurnStartChoices?.Count == 1
+                    && retained.TurnStartChoices[0].Cards.Count == 1,
+                    "Retained request borrowed caller-owned nested choice collections.");
+            }
+            finally { source.MultiplayerReplayCandidates = originalCandidates; }
+
+            var current = originalCandidates[0];
+            var invalidChoice = current with { OriginalRank = 1,
+                Prefix = [current.Prefix[0] with { Choice = new(PlanChoiceEffect.Discard,
+                    PileType.Hand, [new("NONEXISTENT_FIXTURE_CARD", 0, "missing", 0, 0, "missing")]) }] };
+            MultiplayerPlanRefreshResult isolated = MultiplayerPlanRefresher.Refresh(
+                CombatRootSnapshot.Capture(live), names, damage, policy, [current, invalidChoice]);
+            Check(isolated.Decision == MultiplayerPlanRefreshDecision.Continue
+                && isolated.Metrics?.RejectedCandidates == 1,
+                "A stale native choice in an alternative prevented recovery of the current candidate.");
+            Verify(CombatRootSnapshot.Capture(live), isolated.Result!);
+            Check(MultiplayerPlanRefresher.Refresh(CombatRootSnapshot.Capture(live), names, damage, policy,
+                [invalidChoice with { OriginalRank = 0 }, current with { OriginalRank = 1 }]).Decision
+                    == MultiplayerPlanRefreshDecision.FullRestart,
+                "A stale choice in the current route authorized an alternative without quality review.");
+        }
 
         void Verify(CombatRootSnapshot root, SolverResult result)
         {

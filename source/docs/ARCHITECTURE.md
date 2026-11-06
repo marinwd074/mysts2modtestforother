@@ -52,11 +52,13 @@ Harmony 参数形状的条件编译位于回合补丁入口；这是当前兼容
 
 搜索 worker 接收 `CombatRootSnapshot`、`SearchPolicySnapshot`、诊断 sink、帧压力信号和取消令牌。它不读取全局设置、控制器、UI 或无人测试状态。
 
-`CombatSearchCoordinator` 主文件拥有请求、主搜索、portfolio 与工作账本；`CombatSearchCoordinator.Audits.cs` 归集补充成长/药水审计、Smart 梯度及审计内存边界；`CombatSearchCoordinator.ResultPolicy.cs` 归集结果比较、机会成本与质量下界。三者仍是同一个静态 partial 类型，不新增状态所有者、调用层或搜索预算。
+`CombatSearchCoordinator` 主文件拥有请求、主搜索、portfolio 与工作账本；`CombatSearchCoordinator.Audits.cs` 归集补充成长/药水审计、Smart 梯度及审计内存边界；`CombatSearchCoordinator.ResultPolicy.cs` 归集结果比较、机会成本与质量下界；`CombatSearchCoordinator.PlanRefresh.cs` 在同一请求内编排多人同回合恢复和失败后的剩余预算。四者仍是同一个静态 partial 类型。
 
-`MultiplayerPlanRefresher` 拥有冻结根上的保留前缀重放、候选评分和结果物化；不读取 live 状态、不发布 UI、不授予执行权限。`SolverController.MultiplayerPlanRefresh` 保留主线程根捕获、兼容性准入、结果接纳、异常退回和 UI。当前调用仍同步，提取职责本身不宣称解决主线程延迟。旧三候选/两动作与 192 节点/60ms 物化限制暂时保留；60ms 不是包含前缀重放和收尾的端到端承诺。
+`MultiplayerPlanRefresher` 拥有冻结根上的保留前缀重放、候选评分和结果物化；不读取 live 状态、不发布 UI、不授予执行权限。`SolverController.MultiplayerPlanRefresh` 在普通搜索的原生动作/根捕获 barrier 后校验旧根与当前回合，深复制候选及选择集合到 `MultiplayerPlanRefreshRequest`。后台计算沿用 `SolverSearchSession`、GC scope、取消和完成回调；主线程不再同步调用刷新求解。保留候选不触发同回合“已有结果”去重，也不获得显式路线采用标记。
 
-`CombatBeamSolver.RetainedPrefixReplay` 复用普通前缀动作准入，逐动作新根重放；完整获胜截断旧尾部，未知预测边界或不可用动作返回明确拒绝。临时快照由 `RetainedPrefixReplay.Dispose` 释放，异常/拒绝路径由生产方法释放；不返回旧 SearchNode。刷新对不可用备选独立拒绝，当前候选不能重放则保持 FullRestart。取消令牌贯穿重放/物化并向外传播，Runtime 不将取消转成新搜索。阶段指标记录尝试/拒绝/截断、前缀转移数及互不重叠的耗时，不作为质量排序输入。
+Coordinator 优先从新根重放完整当前路线，复用既有末态/质量验收；未获解才在剩余恢复份额内评估最多三个、各两动作的前缀并物化。恢复份额上限 192 节点/60ms，完整重放与前缀阶段共用；原生转移及收尾仍可能超出软时间。`RecoveryBudget` 从解析时间覆盖配置后的当前请求建立，整个恢复、补搜、普通搜索与审计共用墙钟和原子节点上限；失败后的主搜索只获得剩余 profile。耗尽且无合格恢复结果时明确返回未获解，不另发搜索或发布不合格前缀。该预算迁移目前只用于生产 local-core 的同回合 `MultiplayerPlanRefresh` 请求，既有独立跨回合 R1/continuation 路径仍待统一。当前回合限定、回合准备以及实验 Team/Forecast/Scenario 策略绕过新恢复入口，沿用对应普通搜索；实验预测的分支工作不冒充已纳入本次预算。
+
+`CombatBeamSolver.RetainedPrefixReplay` 复用普通前缀动作准入，逐动作新根重放；完整获胜截断旧尾部，未知预测边界或不可用动作返回明确拒绝。临时快照由 `RetainedPrefixReplay.Dispose` 释放，异常/拒绝路径由生产方法释放；不返回旧 SearchNode。`RetainedPrefixWorkScope` 拥有通知隔离与一次性账本收尾，失败/取消前的转移也计入请求；物化为独立账本成员。不可用备选独立拒绝，当前候选不能重放则保持 FullRestart。取消令牌贯穿各阶段，结果通过普通过期/身份接纳后才记录 `MP_PLAN_REFRESH_ACCEPT`。阶段指标不作为质量排序输入。
 
 `SolverSessionCapabilities` 是 Runtime 的会话能力合同：网络多人默认进入只读 `MultiplayerProbe`；显式 `advisor` 开启建议搜索，显式 `safe-execute` 开启本地安全执行，Lab 模式另核对实例 ownership 与 Probe evidence。已获准搜索的会话默认使用 local-single-core；只有 `UseMultiplayerPrediction` 开启时才进入实验团队预测。Safe Execute 的本地药水、计划内 Choice、安全 EndTurn 与独立 Safe Auto 已有实现；原生多人完整验证仍按具体场景区分。完整权限、动作限制与证据入口统一见 [多人能力与限制](multiplayer/LIMITATIONS.md)，不再沿用早期一动作 Smoke 的能力描述。
 

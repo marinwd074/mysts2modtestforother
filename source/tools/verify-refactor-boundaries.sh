@@ -1262,14 +1262,19 @@ done
 # Multiplayer refresh computes on a frozen root; Runtime owns live adoption and UI.
 refresh_runtime="$repository_root/src/Runtime/SolverController.MultiplayerPlanRefresh.cs"
 refresh_search="$repository_root/src/Search/MultiplayerPlanRefresher.cs"
-require_fixed "$refresh_runtime" 'MultiplayerPlanRefresher.Refresh(' 'missing frozen-root refresh delegation:'
+require_fixed "$refresh_runtime" 'MultiplayerPlanRefreshRequest.Capture(source)' 'missing value-only refresh capture:'
 require_fixed "$refresh_runtime" 'source.StartTurnNumber != LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber' 'missing live-turn admission:'
 require_fixed "$refresh_search" 'candidates.Take(BoundedRefreshCandidateLimit)' 'missing candidate work bound:'
 require_fixed "$refresh_search" 'replaySolver.ReplayRetainedPrefix(candidate.Prefix)' 'missing fresh-root prefix replay:'
 require_fixed "$refresh_search" 'fixedPrefixActions: selected.Candidate.Prefix' 'missing selected-prefix materialization:'
 require_fixed "$refresh_search" 'using (RetainedPrefixReplay replay =' 'missing branch cleanup:'
-for token in 'new CombatBeamSolver(' 'CombatBeamSolver replaySolver'; do
+for token in 'new CombatBeamSolver(' 'CombatBeamSolver replaySolver' 'MultiplayerPlanRefresher.Refresh('; do
     forbid_fixed "$refresh_runtime" "$token" 'refresh simulation belongs in Search:'
+done
+refresh_coordinator="$repository_root/src/Search/CombatSearchCoordinator.PlanRefresh.cs"
+for token in 'MultiplayerPlanRefresher.Refresh(' 'ContinuationSeedIncumbentBudget.Remaining(' \
+    'IsAcceptableContinuationRouteResult(' 'ExplicitRouteAdoption = false'; do
+    require_fixed "$refresh_coordinator" "$token" 'missing recovery request contract:'
 done
 for token in 'LocalContext' 'SolverOverlay' 'RunManager' '_combat.'; do
     forbid_fixed "$refresh_search" "$token" 'live state is not owned by Search:'

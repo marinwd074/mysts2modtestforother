@@ -1,155 +1,54 @@
-using System.Diagnostics;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
-using MegaCrit.Sts2.Core.Nodes;
 
 namespace CombatSolver;
 
 internal static partial class SolverController
 {
-    private static MultiplayerPlanRefreshDecision TryBoundedMultiplayerPlanRefresh(
-        NGame host,
-        CombatState state,
-        long worldVersion,
-        CancellationToken cancellationToken)
+    // Called only after RequestSearch's native-action and root-capture barriers.
+    // The retained result is a suggestion; normal search completion owns adoption.
+    private static MultiplayerPlanRefreshRequest? CapturePendingMultiplayerPlanRefresh(
+        CombatState state, LiveCombatStamp currentStamp)
     {
         AssertMainThread();
-        Stopwatch stopwatch = Stopwatch.StartNew();
+        if (!_combat.PendingMultiplayerPlanRefresh)
+            return null;
         _combat.PendingMultiplayerPlanRefresh = false;
-
         SolverResult? source = _combat.LatestResult;
-        LiveCombatStamp currentStamp = LiveCombatStamp.Capture(state);
-        if (source == null
-            || _combat.LatestStamp is not { } previousStamp
-            || !MultiplayerPlanRefreshContracts.IsReplayCompatible(
-                previousStamp.StateText,
-                currentStamp.StateText,
-                out _)
-            || source.StartTurnNumber != LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber
-            || source.MultiplayerReplayCandidates.Count == 0)
-        {
-            DropRetainedPlanForFullRestart();
-            LogPlanRefresh(
-                MultiplayerPlanRefreshDecision.FullRestart,
-                worldVersion,
-                source,
-                refreshed: null,
-                replayedCandidates: 0,
-                firstActionChanged: false,
-                stopwatch.Elapsed,
-                "root_or_candidate_mismatch");
-            return MultiplayerPlanRefreshDecision.FullRestart;
-        }
-
-        try
-        {
-            BattleDamageSnapshot battleDamage = BattleDamageTracker.Observe(state);
-            SolverDisplayNames displayNames = SolverDisplayNames.Capture(state);
-            SolverSettingsSnapshot settings = SolverSettings.Capture();
-            SolverTheftPolicy? theftPolicy = ResolveTheftPolicy(state);
-            SearchPolicySnapshot searchPolicy = CaptureSearchPolicy(
-                settings,
-                state,
-                includeTurnSetup: false,
-                theftPolicy: theftPolicy);
-            CombatRootSnapshot root = CombatRootSnapshot.Capture(state);
-            MultiplayerPlanRefreshResult evaluation = MultiplayerPlanRefresher.Refresh(
-                root, displayNames, battleDamage, searchPolicy, source.MultiplayerReplayCandidates, cancellationToken);
-            Entry.Logger.Info("[CombatSolver/MultiplayerPlanRefresh] MP_PLAN_REFRESH_PHASE "
-                + System.Text.Json.JsonSerializer.Serialize(evaluation.Metrics));
-            if (evaluation.Decision == MultiplayerPlanRefreshDecision.FullRestart)
-            {
-                DropRetainedPlanForFullRestart();
-                LogPlanRefresh(evaluation.Decision, worldVersion, source, evaluation.Result,
-                    evaluation.ReplayedCandidates, evaluation.FirstActionChanged,
-                    stopwatch.Elapsed, evaluation.Reason);
-                return evaluation.Decision;
-            }
-            SolverResult refreshed = evaluation.Result
-                ?? throw new InvalidOperationException("A successful plan refresh must supply a result.");
-            MultiplayerPlanRefreshDecision decision = evaluation.Decision;
-            _combat.State = state;
-            _combat.LatestResult = refreshed;
-            _combat.LatestStamp = currentStamp;
-            _combat.LatestRouteInvalidationVersion = MultiplayerRouteChangeTracker.InvalidationVersion;
-            _combat.ContinuationSource = refreshed;
-            _combat.AwaitingMultiplayerContinuation = false;
-            _combat.LastPlanRefreshDecisionTimestampMilliseconds =
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            BattleDamageTracker.RegisterPlan(state, refreshed);
-            SolverOverlay.ShowResult(
-                host,
-                SolverOverlaySnapshot.CaptureWithReviewedWorldlines(
-                    refreshed,
-                    UnexpectedReplanCount > 0,
-                    _combat.ReviewedWorldlinesTotal));
-            LogPlanRefresh(
-                decision,
-                worldVersion,
-                source,
-                refreshed,
-                evaluation.ReplayedCandidates,
-                evaluation.FirstActionChanged,
-                stopwatch.Elapsed,
-                evaluation.Reason);
-            return decision;
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            Entry.Logger.Warn(
-                $"[CombatSolver/MultiplayerPlanRefresh] MP_PLAN_REFRESH_REPLAY_FAILED " +
-                $"world_version={worldVersion} exception={ex.GetType().Name} message={ex.Message}");
-            DropRetainedPlanForFullRestart();
-            LogPlanRefresh(
-                MultiplayerPlanRefreshDecision.FullRestart,
-                worldVersion,
-                source,
-                refreshed: null,
-                replayedCandidates: 0,
-                firstActionChanged: false,
-                stopwatch.Elapsed,
-                "replay_or_materialize_exception");
-            return MultiplayerPlanRefreshDecision.FullRestart;
-        }
-    }
-
-    private static void DropRetainedPlanForFullRestart()
-    {
-        _combat.PendingMultiplayerPlanRefresh = false;
-        _combat.LastPlanRefreshDecisionTimestampMilliseconds = null;
+        LiveCombatStamp? previousStamp = _combat.LatestStamp;
+        // Consume the suggestion before any capture can fail. Otherwise a setup
+        // failure would leave an old same-turn result looking already published.
         _combat.LatestResult = null;
         _combat.LatestStamp = null;
         _combat.ContinuationSource = null;
-        InvalidateRenderedRouteAdoptionSeed();
-        SolverOverlay.RefreshControls();
+        _combat.LastPlanRefreshDecisionTimestampMilliseconds = null;
+        if (source == null
+            || previousStamp == null
+            || !MultiplayerPlanRefreshContracts.IsReplayCompatible(
+                previousStamp.StateText, currentStamp.StateText, out _)
+            || source.StartTurnNumber != LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber
+            || source.MultiplayerReplayCandidates.Count == 0)
+        {
+            Entry.Logger.Info("[CombatSolver/MultiplayerPlanRefresh] MP_PLAN_REFRESH_CAPTURE rejected=root_or_candidate_mismatch");
+            return null;
+        }
+        MultiplayerPlanRefreshRequest request = MultiplayerPlanRefreshRequest.Capture(source);
+        Entry.Logger.Info(
+            $"[CombatSolver/MultiplayerPlanRefresh] MP_PLAN_REFRESH_CAPTURE source_route_identity={request.SourceRouteIdentity} " +
+            $"candidates={request.Candidates.Count} route_actions={request.Route.Count} worker_pending=true");
+        return request;
     }
 
-    private static void LogPlanRefresh(
-        MultiplayerPlanRefreshDecision decision,
-        long worldVersion,
-        SolverResult? source,
-        SolverResult? refreshed,
-        int replayedCandidates,
-        bool firstActionChanged,
-        TimeSpan elapsed,
-        string reason)
+    private static void RecordAcceptedPlanRefresh(SolverResult result, int generation)
     {
+        if (result.PlanRefresh is not { } report)
+            return;
+        _combat.LastPlanRefreshDecisionTimestampMilliseconds =
+            report.Decision == MultiplayerPlanRefreshDecision.FullRestart
+                ? null : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         Entry.Logger.Info(
-            $"[CombatSolver/MultiplayerPlanRefresh] MP_PLAN_REFRESH " +
-            $"decision={decision.ToString().ToLowerInvariant()} " +
-            $"full_restart={(decision == MultiplayerPlanRefreshDecision.FullRestart).ToString().ToLowerInvariant()} " +
-            $"prefix_replay={(replayedCandidates > 0).ToString().ToLowerInvariant()} " +
-            $"first_action_changed={firstActionChanged.ToString().ToLowerInvariant()} " +
-            $"candidate_count={source?.MultiplayerReplayCandidates.Count ?? 0} " +
-            $"replayed_candidates={replayedCandidates} world_version={worldVersion} " +
-            $"source_route_identity={source?.RouteIdentity ?? "-"} " +
-            $"refreshed_route_identity={refreshed?.RouteIdentity ?? "-"} " +
-            $"bounded_expanded_nodes={refreshed?.ExpandedNodes.ToString() ?? "-"} " +
-            $"bounded_boundary={refreshed?.BoundaryReason.ToString() ?? "-"} " +
-            $"replay_latency_ms={elapsed.TotalMilliseconds:F2} reason={reason}");
+            $"[CombatSolver/MultiplayerPlanRefresh] MP_PLAN_REFRESH_ACCEPT generation={generation} " +
+            $"decision={report.Decision} source_route_identity={report.SourceRouteIdentity} " +
+            $"refreshed_route_identity={result.RouteIdentity} reason={report.Reason}");
     }
 }
