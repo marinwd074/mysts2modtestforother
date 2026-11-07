@@ -292,6 +292,10 @@ internal static partial class CombatSearchCoordinator
             ContinuationRouteReplayBaseline = null,
         };
         SearchInteractionState? interaction = policy.Interaction;
+        bool publishSoloVictory = progressCallback != null
+            && policy.RoutePolicy == SearchRoutePolicy.SinglePlayerFullRoute
+            && root.PlayerCount == 1 && !policy.IncludeTurnSetup && !policy.CurrentTurnOnly;
+        SolverResult? approvedSoloVictory = null;
         SolverResult? currentCompleteAdoptableResult = null;
         SolverInterimResult? currentDisplayedResult = null;
         SolverProgress? lastProgress = null;
@@ -347,9 +351,26 @@ internal static partial class CombatSearchCoordinator
                 return;
             }
 
-            bool promoted = TryPromoteDisplayedResult(summary);
-            if (!promoted && summary != currentDisplayedResult)
+            bool replayVerifiedSoloVictory = publishSoloVictory
+                && result.ResultScope == SolverResultScope.SearchCompletion
+                && result.BoundaryReason == SearchBoundaryReason.None
+                && !result.Snapshot.HasRisk;
+            if (replayVerifiedSoloVictory)
+            {
+                // Compare completed, replay-checked members with each other. A provisional
+                // route's tie-break score must not hold back the first usable victory.
+                if (approvedSoloVictory != null
+                    && !IsBetterPotionPolicyResult(root, policy, result, approvedSoloVictory))
+                {
+                    return;
+                }
+                approvedSoloVictory = result;
+                currentDisplayedResult = summary;
+            }
+            else if (!TryPromoteDisplayedResult(summary))
+            {
                 return;
+            }
             currentCompleteAdoptableResult = result;
             portfolioTelemetry.RecordCandidatePublished(
                 result.SearchEfficiencyOrigin,
@@ -384,6 +405,11 @@ internal static partial class CombatSearchCoordinator
                     SpeculativeRoutePreview = speculativeRoutePreview,
                     RouteAdoptionSeed = currentRouteAdoptionSeed,
                     CurrentTurnAdoptionSeed = currentTurnAdoptionSeed,
+                    IsReplayVerifiedSoloVictory = replayVerifiedSoloVictory,
+                    OfficialPublishedOrigin = replayVerifiedSoloVictory
+                        ? result.SearchEfficiencyOrigin : lastProgress.OfficialPublishedOrigin,
+                    OfficialPublishedEvaluationContextId = replayVerifiedSoloVictory
+                        ? result.SearchEfficiencyEvaluationContextId : lastProgress.OfficialPublishedEvaluationContextId,
                 };
                 progressCallback(lastProgress);
             }

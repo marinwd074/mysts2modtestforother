@@ -565,6 +565,42 @@ internal static class Program
                 && executableDisplay.SpeculativeRoutePreview?.CandidateVersion == 7
                 && ReferenceEquals(executableDisplay.RouteAdoptionSeed, matchingSeed),
             "E1 did not expose execution only after a matching materialized route became available.");
+
+        SolverSpeculativeRoutePreview verifiedPreview = approvedPreview with
+        {
+            CandidateVersion = 10,
+            CombatEnded = true,
+        };
+        SolverRouteAdoptionSeed verifiedSeed = new(10, [approvedAction], static () => null!);
+        SolverProgress verified = approved with
+        {
+            SpeculativeRoutePreview = verifiedPreview,
+            RouteAdoptionSeed = verifiedSeed,
+            IsReplayVerifiedSoloVictory = true,
+        };
+        interaction.PublishProgress(verified);
+        interaction.PublishProgress(approved with
+        {
+            SpeculativeRoutePreview = unapprovedPreview with { CandidateVersion = 11 },
+        });
+        Require(
+            ReferenceEquals(interaction.ApprovedForegroundProgress, verified)
+                && interaction.TryCreateDisplayProgress(
+                    now + 3 * SolverWeights.ProgressUiIntervalMilliseconds + 30,
+                    out SolverProgress verifiedDisplay)
+                && verifiedDisplay.SpeculativeRoutePreview == verifiedPreview
+                && ReferenceEquals(verifiedDisplay.RouteAdoptionSeed, verifiedSeed),
+            "A later member's unmaterialized preview hid the replay-verified solo route or its seed.");
+
+        SolverRouteAdoptionSeed improvedSeed = new(12, [approvedAction], static () => null!);
+        SolverProgress improved = verified with
+        {
+            SpeculativeRoutePreview = verifiedPreview with { CandidateVersion = 12 },
+            RouteAdoptionSeed = improvedSeed,
+        };
+        interaction.PublishProgress(improved);
+        Require(ReferenceEquals(interaction.ApprovedForegroundProgress, improved),
+            "A newly verified solo route could not replace the previous verified route.");
     }
 
     private static void ValidateRenderedCurrentTurnTakeoverContract()

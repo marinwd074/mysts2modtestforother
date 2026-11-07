@@ -67,7 +67,8 @@ internal sealed class SearchInteractionState
         {
             SolverProgress? current = Volatile.Read(ref _approvedForegroundProgress);
             int currentVersion = current?.ApprovedForegroundCandidateVersion ?? -1;
-            if (currentVersion >= candidateVersion)
+            if (currentVersion >= candidateVersion
+                || current?.IsReplayVerifiedSoloVictory == true && !progress.IsReplayVerifiedSoloVictory)
                 return;
             if (ReferenceEquals(
                     Interlocked.CompareExchange(
@@ -98,16 +99,15 @@ internal sealed class SearchInteractionState
                 CurrentBestResult = approved.CurrentBestResult,
                 CurrentTurnPreview = approved.CurrentTurnPreview,
                 SpeculativeRoutePreview = approved.SpeculativeRoutePreview,
-                RouteAdoptionSeed = RouteSeedMatchesApprovedPreview(
-                    liveProgress.RouteAdoptionSeed,
-                    approved.SpeculativeRoutePreview)
-                        ? liveProgress.RouteAdoptionSeed
-                        : null,
-                CurrentTurnAdoptionSeed = CurrentTurnSeedMatchesApprovedPreview(
-                    liveProgress.CurrentTurnAdoptionSeed,
-                    approved.CurrentTurnPreview)
-                        ? liveProgress.CurrentTurnAdoptionSeed
-                        : null,
+                RouteAdoptionSeed = approved.IsReplayVerifiedSoloVictory
+                    ? approved.RouteAdoptionSeed
+                    : RouteSeedMatchesApprovedPreview(liveProgress.RouteAdoptionSeed, approved.SpeculativeRoutePreview)
+                        ? liveProgress.RouteAdoptionSeed : null,
+                CurrentTurnAdoptionSeed = approved.IsReplayVerifiedSoloVictory
+                    ? approved.CurrentTurnAdoptionSeed
+                    : CurrentTurnSeedMatchesApprovedPreview(liveProgress.CurrentTurnAdoptionSeed, approved.CurrentTurnPreview)
+                        ? liveProgress.CurrentTurnAdoptionSeed : null,
+                IsReplayVerifiedSoloVictory = approved.IsReplayVerifiedSoloVictory,
                 OfficialPublishedOrigin = approved.OfficialPublishedOrigin,
                 OfficialPublishedEvaluationContextId =
                     approved.OfficialPublishedEvaluationContextId,
@@ -390,6 +390,9 @@ internal sealed record SolverProgress(
     // The current preview passed the solo policy audit at a committed search boundary.
     // Final replay and execution authorization have their own existing contracts.
     public bool IsAuditedSoloVictory { get; init; }
+
+    // A completed solo member has replayed the full route and owns these adoption seeds.
+    public bool IsReplayVerifiedSoloVictory { get; init; }
 
     // Set only when a member has finished the full production final ordering (including
     // scenario rerank and deterministic block-potion insertion) but is still flattening
