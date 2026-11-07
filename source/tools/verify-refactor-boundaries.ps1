@@ -1536,6 +1536,9 @@ $expectedBeamFiles = @(
     "CombatBeamSolver.AdmittedExpansion.cs",
     "CombatBeamSolver.EndTurnChoiceReplay.cs",
     "CombatBeamSolver.EndTurnExpansion.cs",
+    "CombatBeamSolver.EvaluationCompletion.cs",
+    "CombatBeamSolver.SelectiveDeepening.cs",
+    "CombatBeamSolver.WinTempo.cs",
     "CombatBeamSolver.RoundTransition.cs",
     'CombatBeamSolver.SearchEfficiencyDiagnostics.cs',
     "CombatBeamSolver.CardChoiceContinuation.cs",
@@ -1801,7 +1804,7 @@ $beamStructureChecks = @(
     @{ File = "CombatBeamSolver.ParallelExpansion.cs"; Text = "private void CommitExpansionBatch(" },
     @{ File = "CombatBeamSolver.Phases.cs"; Text = "public SolverResult Solve()" },
     @{ File = "CombatBeamSolver.Expansion.cs"; Text = "private IEnumerable<SearchNode> Expand(SearchNode node)" },
-    @{ File = "CombatBeamSolver.BeamRetentionPolicy.cs"; Text = "public List<SearchNode> RankFinal(IEnumerable<SearchNode> nodes)" },
+    @{ File = "CombatBeamSolver.BeamRetentionPolicy.cs"; Text = "public List<SearchNode> RankFinal(IEnumerable<SearchNode> nodes, RouteEvaluationWindow? comparisonWindow = null)" },
     @{ File = "CombatBeamSolver.FinalPlanOrdering.cs"; Text = "private sealed class FinalPlanOrdering(" },
     @{ File = "CombatBeamSolver.FinalPlanOrdering.cs"; Text = "public FinalPlanSelection Select(" },
     @{ File = "CombatBeamSolver.Terminal.cs"; Text = "private List<SearchNode> AnnotateTurnOutcomes(List<SearchNode> ended)" },
@@ -4449,12 +4452,14 @@ if (-not $p1ContinuationContractsText.Contains('internal static bool LocalCoreSe
 if (-not $p1ContinuationContractsText.Contains('ShouldRunEarlySmartPotionScout(')) {
     $violations.Add("${p1ContinuationContractsPath}: local-core single Smart-potion-audit gate is missing")
 }
+$searchEvaluationPolicyPath = Join-Path $searchRoot 'SearchEvaluationPolicy.cs'
+$searchEvaluationPolicyText = [IO.File]::ReadAllText($searchEvaluationPolicyPath)
 foreach ($localCoreHorizonRule in @(
-    'internal const int LocalCorePredictionTurnLayers = 3;',
-    'PredictionTurnLayerLimit(',
-    'HasReachedPredictionTurnLayerLimit(')) {
-    if (-not $p1ContinuationContractsText.Contains($localCoreHorizonRule)) {
-        $violations.Add("${p1ContinuationContractsPath}: three-turn local-core horizon drifted '$localCoreHorizonRule'")
+    'internal const int RollingHorizonTurnLayers = 3;',
+    '=> policy == SearchRoutePolicy.MultiplayerSinglePlayerCore ? RollingHorizonTurnLayers : null;',
+    '=> TurnLayerLimit(policy) is { } limit && searchedTurnLayers >= limit;')) {
+    if (-not $searchEvaluationPolicyText.Contains($localCoreHorizonRule)) {
+        $violations.Add("${searchEvaluationPolicyPath}: shared horizon drifted '$localCoreHorizonRule'")
     }
 }
 if (-not $p1ContinuationContractsText.Contains('IsLocalCoreContinuationStateCompatible(')) {
@@ -4517,7 +4522,7 @@ $localCoreNoveltyText = [IO.File]::ReadAllText($localCoreNoveltyPath)
 $beamNoveltyPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.NoveltySearch.cs'
 $beamNoveltyText = [IO.File]::ReadAllText($beamNoveltyPath)
 foreach ($localCoreNoveltyHorizonRule in @(
-    'PredictionTurnLayerLimit(policy.RoutePolicy)',
+    'SearchEvaluationPolicy.TurnLayerLimit(policy.RoutePolicy)',
     'parent.Turn >= _startTurnNumber + maxTurns')) {
     if (-not $beamNoveltyText.Contains($localCoreNoveltyHorizonRule)) {
         $violations.Add("${beamNoveltyPath}: Novelty must share the three-turn local-core horizon '$localCoreNoveltyHorizonRule'")
@@ -4596,9 +4601,9 @@ if (-not $p1PhasesText.Contains('SearchNode? candidate = member.CurrentBestNode'
     $violations.Add("${p1PhasesPath}: current-turn preview must follow the globally promoted Beam route before fallback candidates")
 }
 foreach ($localCoreHorizonPhaseRule in @(
-    'PredictionTurnLayerLimit(policy.RoutePolicy)',
+    'SearchEvaluationPolicy.TurnLayerLimit(policy.RoutePolicy)',
     'MP_LOCAL_CORE_PREDICTION_HORIZON',
-    'HasReachedPredictionTurnLayerLimit(')) {
+    'SearchEvaluationPolicy.HasReachedTurnLayerLimit(')) {
     if (-not $p1PhasesText.Contains($localCoreHorizonPhaseRule)) {
         $violations.Add("${p1PhasesPath}: three-turn Beam horizon drifted '$localCoreHorizonPhaseRule'")
     }

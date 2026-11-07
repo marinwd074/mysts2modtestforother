@@ -45,6 +45,7 @@ internal static class Program
         bool nativeActionsOnly = args.Length > 0 && args[0] == "native-actions";
         bool nativeRedecisionOnly = args.Length > 0 && args[0] == "native-redecision";
         bool winTempoOnly = args.Length > 0 && args[0] == "win-tempo";
+        bool holdout = (nativeRedecisionOnly || winTempoOnly) && args.Contains("--holdout");
         bool multiplayerRefreshOnly = multiplayerWindowOnly || nativeActionsOnly || nativeRedecisionOnly || winTempoOnly
             || args.Length > 0 && args[0] == "multiplayer-refresh";
         bool entropicCostOnly = args.Length > 0 && args[0] == "entropic-cost";
@@ -70,7 +71,8 @@ internal static class Program
         bool requestHydrationBenchmark = requestHydrationOnly && args[0] != "request-hydration";
         string outputDirectory = ParseOutput(multiplayerRefreshOnly || entropicCostOnly || upstreamSearchOnly || upstreamPortOnly || memoryDisplayOnly || cardChoiceIdentityOnly || modelIdCacheOnly || darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicTailOnly || p2QualityOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
             allowHydrationOptions: requestHydrationBenchmark || p2QualityOnly, allowRoutePrefix: p2QualityOnly,
-            allowSelective: p2QualityOnly || nativeRedecisionOnly, allowWinTempo: winTempoOnly);
+            allowSelective: p2QualityOnly || nativeRedecisionOnly, allowWinTempo: winTempoOnly,
+            allowHoldout: nativeRedecisionOnly || winTempoOnly);
         Directory.CreateDirectory(outputDirectory);
         if (multiplayerRefreshOnly || p2QualityOnly && args.Any(value => value.EndsWith("-mp", StringComparison.Ordinal)))
             Environment.SetEnvironmentVariable(SolverSessionCapabilities.MultiplayerModeEnvironmentVariable, "advisor");
@@ -178,7 +180,7 @@ internal static class Program
             string p2Fixture = hydrationFixtureIndex >= 0 ? args[hydrationFixtureIndex + 1] : "setup-single";
             HarnessScenario scenario = new(
                 "IRONCLAD",
-                p2QualityOnly && p2Fixture == "delayed-mp" ? "EXOSKELETONS_WEAK" :
+                nativeRedecisionOnly && holdout || p2QualityOnly && p2Fixture == "delayed-mp" ? "EXOSKELETONS_WEAK" :
                 requestHydrationBenchmark && hydrationFixtureIndex >= 0
                     && args[hydrationFixtureIndex + 1] is "multi-hit" or "multi-hit-high-counter"
                     ? "EXOSKELETONS_WEAK" : "FUZZY_WURM_CRAWLER_WEAK",
@@ -244,13 +246,14 @@ internal static class Program
 
             if (nativeRedecisionOnly)
             {
-                Console.WriteLine(NativeRedecisionChecks.Run(combat, loop, names, captured, args.Contains("--selective"), outputDirectory));
+                Console.WriteLine(NativeRedecisionChecks.Run(combat, loop, names, captured,
+                    args.Contains("--selective"), outputDirectory, holdout));
                 return 0;
             }
             if (winTempoOnly)
             {
                 Console.WriteLine(WinTempoChecks.Run(combat, loop, names, captured,
-                    args.Contains("--tempo"), args.Contains("--over-cap"), outputDirectory));
+                    args.Contains("--tempo"), args.Contains("--over-cap"), outputDirectory, holdout));
                 return 0;
             }
 
@@ -4412,7 +4415,7 @@ internal static class Program
         };
 
     private static string ParseOutput(string[] args, bool allowHydrationOptions = false, bool allowRoutePrefix = false,
-        bool allowSelective = false, bool allowWinTempo = false)
+        bool allowSelective = false, bool allowWinTempo = false, bool allowHoldout = false)
     {
         string output = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
@@ -4424,6 +4427,8 @@ internal static class Program
             if (allowSelective && args[index] == "--selective")
                 continue;
             if (allowWinTempo && args[index] is "--tempo" or "--over-cap")
+                continue;
+            if (allowHoldout && args[index] == "--holdout")
                 continue;
             if (allowHydrationOptions && args[index] is "--fixture" or "--iterations" or "--dop"
                 || allowRoutePrefix && args[index] == "--prefix")

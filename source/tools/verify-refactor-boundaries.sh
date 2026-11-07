@@ -589,6 +589,9 @@ expected_beam_files=(
     CombatBeamSolver.AdmittedExpansion.cs
     CombatBeamSolver.EndTurnChoiceReplay.cs
     CombatBeamSolver.EndTurnExpansion.cs
+    CombatBeamSolver.EvaluationCompletion.cs
+    CombatBeamSolver.SelectiveDeepening.cs
+    CombatBeamSolver.WinTempo.cs
     CombatBeamSolver.RoundTransition.cs
     CombatBeamSolver.CardChoiceContinuation.cs
     CombatBeamSolver.PotionChoiceContinuation.cs
@@ -757,7 +760,7 @@ CombatBeamSolver.Retention.cs	end.ReleaseSimulator();
 CombatBeamSolver.ParallelExpansion.cs	private void CommitExpansionBatch(
 CombatBeamSolver.Phases.cs	public SolverResult Solve()
 CombatBeamSolver.Expansion.cs	private IEnumerable<SearchNode> Expand(SearchNode node)
-CombatBeamSolver.BeamRetentionPolicy.cs	public List<SearchNode> RankFinal(IEnumerable<SearchNode> nodes)
+CombatBeamSolver.BeamRetentionPolicy.cs	public List<SearchNode> RankFinal(IEnumerable<SearchNode> nodes, RouteEvaluationWindow? comparisonWindow = null)
 CombatBeamSolver.FinalPlanOrdering.cs	private sealed class FinalPlanOrdering(
 CombatBeamSolver.FinalPlanOrdering.cs	public FinalPlanSelection Select(
 CombatBeamSolver.Terminal.cs	private List<SearchNode> AnnotateTurnOutcomes(List<SearchNode> ended)
@@ -829,6 +832,13 @@ forbid_fixed "$beam_entry_path" 'public SolverResult Solve()' 'Solve returned to
 beam_retention_facade_path="$search_root/CombatBeamSolver.Retention.cs"
 forbid_fixed "$beam_retention_facade_path" 'private List<SearchNode> RankBest(' 'RankBest returned outside BeamRetentionPolicy:'
 beam_phases_path="$search_root/CombatBeamSolver.Phases.cs"
+search_evaluation_policy_path="$search_root/SearchEvaluationPolicy.cs"
+require_fixed "$search_evaluation_policy_path" 'internal const int RollingHorizonTurnLayers = 3;' 'local-core horizon length drifted:'
+require_fixed "$search_evaluation_policy_path" '=> policy == SearchRoutePolicy.MultiplayerSinglePlayerCore ? RollingHorizonTurnLayers : null;' 'local-core and singleplayer horizon split drifted:'
+require_fixed "$search_evaluation_policy_path" '=> TurnLayerLimit(policy) is { } limit && searchedTurnLayers >= limit;' 'shared horizon stop check drifted:'
+require_fixed "$beam_phases_path" 'SearchEvaluationPolicy.TurnLayerLimit(policy.RoutePolicy)' 'Beam must use the shared horizon:'
+require_fixed "$beam_phases_path" 'SearchEvaluationPolicy.HasReachedTurnLayerLimit(' 'Beam result must use the shared horizon:'
+require_fixed "$search_root/CombatBeamSolver.NoveltySearch.cs" 'SearchEvaluationPolicy.TurnLayerLimit(policy.RoutePolicy)' 'Novelty must use the shared horizon:'
 require_fixed \
     "$beam_phases_path" \
     'TightenPrimarySearchIncumbentAtTurnLayer(' \

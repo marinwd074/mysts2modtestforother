@@ -13,12 +13,14 @@ namespace U0U1PinnedHarness;
 internal static class WinTempoChecks
 {
     internal static string Run(CombatState live, MainLoopContext loop, SolverDisplayNames names,
-        SearchPolicySnapshot captured, bool enabled, bool overCap, string outputDirectory)
+        SearchPolicySnapshot captured, bool enabled, bool overCap, string outputDirectory, bool holdout = false)
     {
         Player local = LocalContext.GetMe(live)!;
         Player teammate = live.Players.Single(player => player != local);
         var player = local.PlayerCombatState!;
         var enemy = live.Enemies.Single();
+        if (holdout)
+            foreach (var relic in local.Relics.ToArray()) local.RemoveRelicInternal(relic, silent: true);
         enemy.SetMaxHpInternal(12);
         enemy.SetCurrentHpInternal(12);
         foreach (var pile in new[] { player.Hand, player.DrawPile, player.DiscardPile, player.ExhaustPile })
@@ -122,10 +124,12 @@ internal static class WinTempoChecks
         }
         CombatReplayOutcomeSnapshot actual = nativeOutcome.Capture(live, ended: !CombatManager.Instance.IsInProgress);
         if (CombatManager.Instance.IsInProgress || !enemy.IsDead || local.Creature.IsDead
-            || actual.HpLost != expectedLoss || live.RoundNumber != expectedTurn || local.Creature.MaxHp != root.InitialPlayerMaxHp)
+            || actual.HpLost != expectedLoss || live.RoundNumber != expectedTurn || local.Creature.MaxHp != root.InitialPlayerMaxHp
+            || holdout && (actual.HpHealed != 0 || actual.InitialHp - actual.FinalHp != expectedLoss))
             throw new InvalidOperationException($"Native win disagreed: round={live.RoundNumber}, loss={actual.HpLost}.");
 
         string mode = overCap ? "over-cap" : enabled ? "on" : "off";
+        if (holdout) mode = "holdout-" + mode;
         File.WriteAllText(Path.Combine(outputDirectory, $"win-tempo-{mode}.json"), JsonSerializer.Serialize(new
         {
             Mode = mode, Root = root.ContinuationStamp.StateText, Profile = profile,
