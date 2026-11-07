@@ -280,6 +280,9 @@ internal sealed partial class CombatBeamSolver
     /// commutative merely because coarse combat summaries happen to match.
     /// </summary>
     private StateFingerprint ExactTranspositionKey(SearchNode node)
+        => node.HasInlineTeammateForecast ? ForecastTranspositionKey(node) : node.StateKey;
+
+    private static StateFingerprint ForecastTranspositionKey(SearchNode node)
     {
         List<ShadowTeammateActionCandidate>? forecastActions = null;
         HashSet<string>? turnEndedPlayers = null;

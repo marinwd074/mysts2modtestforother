@@ -1261,6 +1261,11 @@ internal sealed record SearchNode(
         Parent?.HasNonPotionAction == true
         || Action is { Kind: not PlanActionKind.UsePotion };
 
+    // Action and Parent describe the fixed path of an admitted node.
+    internal bool HasInlineTeammateForecast { get; } =
+        Parent?.HasInlineTeammateForecast == true
+        || Action is { Kind: PlanActionKind.TeammateForecast, ShadowForecast: not null };
+
     internal bool HasMaterializedActions => _actions != null;
 
     public int RetentionRank { get; set; } = int.MaxValue;
