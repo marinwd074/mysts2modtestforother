@@ -1409,6 +1409,9 @@ internal static partial class SolverController
             {
                 if (multiplayerRouteChanged)
                 {
+                    if (ReferenceEquals(_combat.State, current))
+                        _combat.MultiplayerSearchChurn.RecordInvalidation(
+                            LocalContext.GetMe(current)?.PlayerCombatState?.TurnNumber ?? 0);
                     if (capabilities.Kind == SolverSessionKind.MultiplayerAdvisor)
                     {
                         Entry.Logger.Info(
@@ -1517,20 +1520,30 @@ internal static partial class SolverController
             _combat.ContinuationSource?.Continuations.Count ?? 0,
             _combat.ContinuationSource?.MultiplayerScope ?? MultiplayerSearchResultScope.CurrentTurnOnly);
         int currentTurn = LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber ?? 0;
-        LiveCombatStamp currentStamp = LiveCombatStamp.Capture(state);
         SolverResult? refreshSource = _combat.LatestResult;
         string refreshCompatibilityReason = "source_or_stamp_missing";
-        bool replayCompatible = _combat.LatestStamp is { } previousStamp
-            && MultiplayerPlanRefreshContracts.IsReplayCompatible(
-                previousStamp.StateText,
-                currentStamp.StateText,
-                out refreshCompatibilityReason);
-        bool canAttemptBoundedPlanRefresh =
-            !preserveExpectedSafeDeployment
+        bool canAttemptBoundedPlanRefresh = false;
+        if (!preserveExpectedSafeDeployment
             && refreshSource != null
             && refreshSource.StartTurnNumber == currentTurn
             && refreshSource.MultiplayerReplayCandidates.Count > 0
-            && replayCompatible;
+            && _combat.LatestStamp is { } previousStamp)
+        {
+            if (_combat.PendingMultiplayerPlanRefresh)
+            {
+                // This is the same retained suggestion. The settled root will
+                // be checked again before the worker receives any replay actions.
+                canAttemptBoundedPlanRefresh = true;
+                refreshCompatibilityReason = "pending_recheck_after_barrier";
+            }
+            else
+            {
+                canAttemptBoundedPlanRefresh = MultiplayerPlanRefreshContracts.IsReplayCompatible(
+                    previousStamp.StateText,
+                    LiveCombatStamp.Capture(state).StateText,
+                    out refreshCompatibilityReason);
+            }
+        }
         _combat.PendingMultiplayerPlanRefresh = canAttemptBoundedPlanRefresh;
         if (!canAttemptBoundedPlanRefresh)
             _combat.LastPlanRefreshDecisionTimestampMilliseconds = null;

@@ -1822,38 +1822,51 @@ internal static partial class CombatSearchCoordinator
 
     internal static bool IsAcceptableContinuationRouteResult(
         SearchPolicySnapshot policy, SolverResult result, out string quality)
+        => IsAcceptableContinuationReplay(policy, new(
+            IsCompleteVictory(result), !result.Snapshot.AllEnemiesDead && !result.Snapshot.PlayerDead
+                && result.Snapshot.ProjectedPlayerHp > 0,
+            result.BoundaryReason, result.ProjectedBattleHpLost, result.PotionCount,
+            result.BattlePotionsUsedSoFar, result.PotionUses, result.Snapshot.ProjectedDeathSaveUseCount,
+            result.Snapshot.GrowthRewards, result.Snapshot.RelicCounters, result.OutstandingStolenResource),
+            () => result.PredictedFinalState, out quality);
+
+    internal readonly record struct ContinuationReplayQuality(
+        bool CompleteVictory, bool SurvivingPartial, SearchBoundaryReason Boundary,
+        int BattleHpLost, int PotionCount, int BattlePotionsUsed,
+        IReadOnlyList<PredictedPotionUse> PotionUses, int DeathSaveUses,
+        GrowthValues Growth, RelicCounterEvaluation Relics, int OutstandingStolenResource);
+
+    internal static bool IsAcceptableContinuationReplay(SearchPolicySnapshot policy,
+        ContinuationReplayQuality replay, Func<ContinuationStamp?> captureFinalState, out string quality)
     {
-        bool equivalentPartial = !result.Snapshot.AllEnemiesDead && !result.Snapshot.PlayerDead
-            && result.Snapshot.ProjectedPlayerHp > 0
-            && result.PotionCount == 0
-            && policy.MinimumRequiredPotionUses(result.BattlePotionsUsedSoFar) == 0
-            && policy.PotionStrategy.EvaluateForcedUses(result.PotionUses).AllForcedUsesSatisfied
-            && result.BoundaryReason is SearchBoundaryReason.None or SearchBoundaryReason.TurnLimit
+        int requiredPotions = policy.MinimumRequiredPotionUses(replay.BattlePotionsUsed);
+        bool forcedSatisfied = policy.PotionStrategy.EvaluateForcedUses(replay.PotionUses).AllForcedUsesSatisfied;
+        bool potionFree = replay.PotionCount == 0 && requiredPotions == 0 && forcedSatisfied;
+        bool equivalentPartial = replay.SurvivingPartial && potionFree
+            && replay.Boundary is SearchBoundaryReason.None or SearchBoundaryReason.TurnLimit
             && policy.ContinuationRouteReplayBaseline is { } baseline
-            && result.PredictedFinalState is { } finalState
-            && result.ProjectedBattleHpLost <= baseline.ProjectedBattleHpLost
-            && result.Snapshot.ProjectedDeathSaveUseCount == baseline.DeathSaveUses
-            && result.Snapshot.GrowthRewards == baseline.GrowthRewards
-            && result.Snapshot.RelicCounters == baseline.RelicCounters
+            && ReplayPreservesBaseline(replay, baseline)
+            && captureFinalState() is { } finalState
             && MultiplayerLocalCrossTurnContracts.IsReplayedRouteFinalStateCompatible(
                 baseline.FinalState.StateText, finalState.StateText);
         bool explicitVictory = policy.ContinuationRouteReplayBaseline is { ExplicitRouteAdoption: true } adopted
-            && IsCompleteVictory(result)
-            && result.ProjectedBattleHpLost <= adopted.ProjectedBattleHpLost
-            && result.Snapshot.ProjectedDeathSaveUseCount == adopted.DeathSaveUses
-            && result.Snapshot.GrowthRewards == adopted.GrowthRewards
-            && result.Snapshot.RelicCounters == adopted.RelicCounters
-            && result.PotionCount == 0
-            && policy.MinimumRequiredPotionUses(result.BattlePotionsUsedSoFar) == 0
-            && policy.PotionStrategy.EvaluateForcedUses(result.PotionUses).AllForcedUsesSatisfied
-            && TheftEncounterStrategy.RecoverySatisfied(policy.TheftPolicy, result.OutstandingStolenResource);
+            && replay.CompleteVictory && potionFree && ReplayPreservesBaseline(replay, adopted)
+            && TheftEncounterStrategy.RecoverySatisfied(policy.TheftPolicy, replay.OutstandingStolenResource);
+        bool acceptableVictory = replay.CompleteVictory && replay.BattleHpLost <= policy.AcceptableBattleHpLoss
+            && replay.DeathSaveUses == 0 && replay.PotionCount == requiredPotions && forcedSatisfied
+            && policy.GrowthTargetSatisfied(replay.Growth) && policy.RelicTargetsSatisfied(replay.Relics)
+            && TheftEncounterStrategy.RecoverySatisfied(policy.TheftPolicy, replay.OutstandingStolenResource);
         bool accepted = policy.ContinuationRouteReplayBaseline?.ExplicitRouteAdoption == true
             ? equivalentPartial || explicitVictory
-            : equivalentPartial || HasReachedAcceptableBattleHpLoss(policy, result);
+            : equivalentPartial || acceptableVictory;
         quality = equivalentPartial ? "equivalent_partial" : explicitVictory ? "explicit_adoption_victory"
             : accepted ? "acceptable_victory" : "not_proven";
         return accepted;
     }
+
+    private static bool ReplayPreservesBaseline(ContinuationReplayQuality replay, ContinuationRouteReplayBaseline baseline)
+        => replay.BattleHpLost <= baseline.ProjectedBattleHpLost && replay.DeathSaveUses == baseline.DeathSaveUses
+            && replay.Growth == baseline.GrowthRewards && replay.Relics == baseline.RelicCounters;
 
     internal static SolverResult? TryReplayContinuationRoute(
         CombatRootSnapshot root, SolverDisplayNames displayNames, BattleDamageSnapshot battleDamage,
@@ -1878,7 +1891,8 @@ internal static partial class CombatSearchCoordinator
             SolverResult result = new CombatBeamSolver(root, displayNames, battleDamage,
                 policy with { VerifyIncrementalSearch = false, RequestMemberKind = SearchRequestMemberKind.RouteReplay }, cancellationToken,
                 searchProfile: replayProfile,
-                continuationRouteReplayActions: policy.ContinuationRouteReplayActions).Solve();
+                continuationRouteReplayActions: policy.ContinuationRouteReplayActions,
+                qualifyContinuationReplayBeforeMaterialization: true).Solve();
             bool accepted = IsAcceptableContinuationRouteResult(policy, result, out string quality);
             reason = accepted ? quality : "quality_rejected";
             if (accepted && policy.ContinuationRouteReplayBaseline?.ExplicitRouteAdoption == true)
@@ -1894,7 +1908,8 @@ internal static partial class CombatSearchCoordinator
         catch (ContinuationSeedRejectedException ex)
         {
             reason = ex.Reason;
-            policy.Diagnostics.Info($"[CombatSolver/Test] MP_LOCAL_XTURN_ROUTE_REPLAY status=rejected reason={ex.Reason}");
+            string status = ex.Reason == "quality_rejected" ? "quality_rejected" : "rejected";
+            policy.Diagnostics.Info($"[CombatSolver/Test] MP_LOCAL_XTURN_ROUTE_REPLAY status={status} reason={ex.Reason} materialized=false");
             return null;
         }
         catch (PredictionUnsupportedException ex)

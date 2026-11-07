@@ -544,7 +544,8 @@ internal sealed partial class CombatBeamSolver
             bool candidateTimeBudgetReached,
             bool candidateNodeBudgetReached,
             string evaluationContextId,
-            IReadOnlyList<PlanAction>? routeAdoptionActions = null)
+            IReadOnlyList<PlanAction>? routeAdoptionActions = null,
+            ContinuationStamp? replayAdmissionStamp = null)
         {
             long e0MaterializationStarted = Stopwatch.GetTimestamp();
             long e0FinalReplayTicks = 0;
@@ -800,7 +801,7 @@ internal sealed partial class CombatBeamSolver
                 policy.ShadowReplaySamplingBudget?.Capture();
             ContinuationStamp? predictedFinalState = policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
                 || policy.VerifyIncrementalSearch
-                    ? ContinuationStamp.CapturePredicted(_player, finalSnapshot.Simulator,
+                    ? replayAdmissionStamp ?? ContinuationStamp.CapturePredicted(_player, finalSnapshot.Simulator,
                         finalSnapshot.Turn, _forecast, _startTurnNumber) : null;
             SolverResult result = new()
             {
@@ -1509,17 +1510,19 @@ internal sealed partial class CombatBeamSolver
             && _localCoreRefinementSeedLayers == null)
         {
             SearchNode replayed = member.Fallback;
-            FinalPlanSelection replayOrdering = FinalOrdering.Select(
-                [(replayed, replayed.Snapshot)], initialHp,
-                emitDiagnostics: true, reevaluateScenarios: false, allowScenarioRerank: false);
             try
             {
+                ContinuationStamp? admissionStamp = _qualifyContinuationReplayBeforeMaterialization
+                    && !_forceAllPotionsDisabled ? QualifyContinuationReplay(replayed) : null;
+                FinalPlanSelection replayOrdering = FinalOrdering.Select(
+                    [(replayed, replayed.Snapshot)], initialHp,
+                    emitDiagnostics: true, reevaluateScenarios: false, allowScenarioRerank: false);
                 execution.Result = MaterializeSelectedRoute(replayOrdering,
                     replayed.Snapshot.PlayerDead || replayed.Snapshot.ProjectedPlayerHp <= 0,
                     SolverResultScope.SearchCompletion,
                     Math.Max(0, replayed.Turn - _startTurnNumber),
                     candidateTimeBudgetReached: false, candidateNodeBudgetReached: false,
-                    evaluationContextId: "fresh_root_route_replay");
+                    evaluationContextId: "fresh_root_route_replay", replayAdmissionStamp: admissionStamp);
             }
             finally { replayed.Snapshot.ReleaseSimulator(); }
             yield break;

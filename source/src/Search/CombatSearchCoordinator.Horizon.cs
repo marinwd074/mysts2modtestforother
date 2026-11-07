@@ -18,6 +18,11 @@ internal static partial class CombatSearchCoordinator
     private static SolverResult RefineLocalHorizon(CombatRootSnapshot root, SolverDisplayNames names,
         BattleDamageSnapshot damage, SearchPolicySnapshot policy, SolverResult selected, CancellationToken token)
     {
+        if (policy.DeferLocalMultiplayerSpeculation)
+        {
+            policy.Diagnostics.Info("[CombatSolver/Test] SEARCH_HORIZON_REFINEMENT stopped=observed_churn");
+            return selected;
+        }
         SearchRequestWallClockBudget budget = policy.RecoveryBudget!;
         int layers = policy.LocalCoreTurnLayers!.Value;
         int maximumLayers = policy.LocalCoreAdaptiveTurnLimit!.Value;

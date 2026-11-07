@@ -27,6 +27,21 @@ foreach (string[] events in Interleave(new[] {
     Run($"execution disturbance={disturbance}", events, () => CheckExecution(events));
 
 Run("independent observers and local authority", new[] { "observe", "reset-one", "remote-card", "remote-potion" }, CheckIsolation);
+Run("optional search under route churn", new[] { "isolated", "burst", "adjacent-turn", "quiet" }, () =>
+{
+    var churn = new MultiplayerSearchChurn();
+    churn.RecordInvalidation(1);
+    Require(!churn.ShouldDeferOptionalWork(1), "An isolated invalidation keeps optional work eligible.");
+    churn.RecordInvalidation(1);
+    Require(churn.ShouldDeferOptionalWork(1) && churn.ShouldDeferOptionalWork(2),
+        "A burst defers optional work into the following turn.");
+    churn.RecordInvalidation(2);
+    churn.RecordInvalidation(1);
+    Require(churn.ShouldDeferOptionalWork(3) && !churn.ShouldDeferOptionalWork(4),
+        "Consecutive invalidated turns defer work, then one quiet turn clears it.");
+    churn.RecordInvalidation(4);
+    Require(!churn.ShouldDeferOptionalWork(4), "A separated event does not resurrect older churn.");
+});
 if (executed == 0)
     throw new ArgumentOutOfRangeException(nameof(replay), $"Schedule must be 1..{scheduleId}.");
 if (replay == null)

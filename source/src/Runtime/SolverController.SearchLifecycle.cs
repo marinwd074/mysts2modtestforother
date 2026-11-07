@@ -547,6 +547,8 @@ internal static partial class SolverController
                     ContinuationRouteReplayActions = continuationReplayActions,
                     ContinuationRouteReplayBaseline = continuationReplayBaseline,
                     MultiplayerPlanRefresh = planRefresh,
+                    DeferLocalMultiplayerSpeculation = reason != SearchReason.Manual
+                        && _combat.MultiplayerSearchChurn.ShouldDeferOptionalWork(search.StartTurnNumber),
                 };
             if (continuationSeedActions.Count > 0
                 && searchPolicy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
@@ -1046,6 +1048,7 @@ internal static partial class SolverController
                 && (search.DeployWhenReady || AutomaticCalculationEnabled || routeAdoptionRequested))
             {
                 _combat.ContinuationSource = null;
+                _combat.MultiplayerSearchChurn.RecordInvalidation(search.StartTurnNumber);
                 Entry.Logger.Info(
                     $"[CombatSolver/Test] SEARCH_RNG_REPLAN generation={generation} " +
                     $"deploy_when_ready={search.DeployWhenReady.ToString().ToLowerInvariant()}");

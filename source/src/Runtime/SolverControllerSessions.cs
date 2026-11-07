@@ -148,6 +148,7 @@ internal sealed class SolverCombatSession
     public long? LastSafeEndTurnWorldVersion { get; set; }
     public bool AwaitingMultiplayerContinuation { get; set; }
     public bool PendingMultiplayerPlanRefresh { get; set; }
+    public MultiplayerSearchChurn MultiplayerSearchChurn { get; } = new();
     public long? LastPlanRefreshDecisionTimestampMilliseconds { get; set; }
     public long LatestRouteInvalidationVersion { get; set; }
     public CombatBugReportIssueLedger BugReportIssues { get; } = new();

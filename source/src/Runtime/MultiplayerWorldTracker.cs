@@ -28,6 +28,35 @@ internal static class MultiplayerWorldTracker
 }
 
 /// <summary>
+/// Main-thread, per-combat history for deferring optional work. This does not
+/// participate in route validity, version confirmation, or the debounce clock.
+/// </summary>
+internal sealed class MultiplayerSearchChurn
+{
+    private int _lastTurn;
+    private int _previousTurn;
+    private bool _repeatedThisTurn;
+
+    internal void RecordInvalidation(int turn)
+    {
+        if (turn <= 0 || turn < _lastTurn)
+            return;
+        if (turn == _lastTurn)
+        {
+            _repeatedThisTurn = true;
+            return;
+        }
+        _previousTurn = _lastTurn;
+        _lastTurn = turn;
+        _repeatedThisTurn = false;
+    }
+
+    internal bool ShouldDeferOptionalWork(int turn)
+        => _lastTurn > 0 && turn >= _lastTurn && turn - _lastTurn <= 1
+            && (_repeatedThisTurn || _previousTurn > 0 && _lastTurn - _previousTurn == 1);
+}
+
+/// <summary>
 /// One main-thread observer's state. The caller supplies monotonic milliseconds so
 /// production and deterministic event-schedule tests use the same transition logic.
 /// Instances neither synchronize peers nor grant execution authority.

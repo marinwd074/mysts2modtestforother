@@ -132,10 +132,11 @@ The active search/runtime contract is:
 - `SinglePlayerFullRoute` keeps the original card-search behavior.
 
 The internal `UseReviewedLocalMultiplayerCards` experiment admits unenchanted
-Gang Up on the local-core path. It reads resolved powered hits from the frozen
-root and emits an advisory-only action. The pinned offline native fixture observed
-5 damage before a teammate attack and 10 after it, matching the native hit.
-Safe Execute rejects the advisory route before deployment. The production
+Gang Up and Flanking on the local-core path. Gang Up reads resolved hits from the
+frozen root, with 5→10 damage matching the native hit. Flanking's predicted
+post-action state matches native, and the next observed teammate Strike deals
+12 instead of 6 damage in the pinned offline fixture. Both emit advisory-only
+actions. Safe Execute rejects the advisory route before deployment. The production
 MultiplayerOnly policy above and real Host/Client validation requirements still apply.
 
 ### Non-exclusive multiplayer semantics already cross-checked

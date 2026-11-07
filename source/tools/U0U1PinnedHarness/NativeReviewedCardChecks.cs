@@ -52,8 +52,10 @@ internal static class NativeReviewedCardChecks
         }
 
         int baseDamage = DamageFromObservedRoot();
+        int enemyHpBeforeTeammate = enemy.CurrentHp;
         NativeActionChecks.Execute(loop, new PlayCardAction(teammateAttack, enemy));
         int observedEnemyHp = enemy.CurrentHp;
+        int baseTeammateDamage = enemyHpBeforeTeammate - observedEnemyHp;
         int boostedDamage = DamageFromObservedRoot();
         if (boostedDamage <= baseDamage || enemy.CurrentHp <= boostedDamage)
             throw new InvalidOperationException("Observed teammate attack did not boost the reviewed card as expected.");
@@ -74,11 +76,43 @@ internal static class NativeReviewedCardChecks
         int actualDamage = observedEnemyHp - enemy.CurrentHp;
         if (!CombatManager.Instance.IsInProgress || actualDamage != boostedDamage)
             throw new InvalidOperationException("The native card outcome disagrees with the observed-root prediction.");
+
+        CardModel flanking = live.CreateCard(ModelDb.Card<Flanking>(), player);
+        player.PlayerCombatState.Hand.AddInternal(flanking, -1);
+        CombatRootSnapshot flankingRoot = CombatRootSnapshot.Capture(live);
+        CombatBeamSolver flankingVerifier = new(flankingRoot, names, BattleDamageTracker.Observe(live), policy, searchProfile: profile);
+        PlanAction flankingAction = new(PlanActionKind.PlayCard, flankingRoot.StartTurnNumber,
+            flanking.Id.Entry, TargetIndex: 0, TargetCombatId: enemy.CombatId) { AdviceOnly = true };
+        SimulationSnapshot flankingPreview = flankingVerifier.ReplayDiagnosticPrefix([flankingAction]);
+        ContinuationStamp predictedFlanking;
+        try
+        {
+            predictedFlanking = flankingVerifier.CaptureDiagnosticContinuation(flankingPreview);
+            if (flankingPreview.HasRisk || ContinuationStamp.CaptureLive(live) != flankingRoot.ContinuationStamp
+                || MultiplayerSafeLocalActionClassifier.ClassifyStructural(flankingAction).IsSafe)
+                throw new InvalidOperationException("Flanking prediction changed the live root or gained execution authority.");
+        }
+        finally { flankingPreview.ReleaseSimulator(); }
+
+        NativeActionChecks.Execute(loop, new PlayCardAction(flanking, enemy));
+        ContinuationStamp actualFlanking = ContinuationStamp.CaptureLive(live);
+        if (predictedFlanking != actualFlanking)
+            throw new InvalidOperationException("Flanking post-action state differs from native: "
+                + predictedFlanking.DescribeFirstDifference(actualFlanking));
+        CardModel secondAttack = live.CreateCard(ModelDb.Card<StrikeIronclad>(), teammate);
+        teammate.PlayerCombatState.Hand.AddInternal(secondAttack, -1);
+        int hpBeforeFlankedHit = enemy.CurrentHp;
+        NativeActionChecks.Execute(loop, new PlayCardAction(secondAttack, enemy));
+        int flankedDamage = hpBeforeFlankedHit - enemy.CurrentHp;
+        if (baseTeammateDamage <= 0 || flankedDamage != 2 * baseTeammateDamage)
+            throw new InvalidOperationException("The native attack did not receive the expected observed Flanking effect.");
+
         File.WriteAllText(Path.Combine(output, "native-reviewed-card.json"), JsonSerializer.Serialize(new
         {
             Card = gangUp.Id.Entry, BaseDamage = baseDamage, BoostedDamage = boostedDamage, NativeDamage = actualDamage,
             result.CombatEndedTurn, result.TotalExpandedNodes, Suggestion = suggestion,
+            Flanking = new { PostActionMatches = true, BaseTeammateDamage = baseTeammateDamage, FlankedDamage = flankedDamage },
         }, new JsonSerializerOptions { WriteIndented = true }));
-        return $"NativeReviewedCard PASS card={gangUp.Id.Entry} base_damage={baseDamage} observed_damage={boostedDamage}";
+        return $"NativeReviewedCard PASS gang_up={baseDamage}->{boostedDamage} flanking={baseTeammateDamage}->{flankedDamage}";
     }
 }

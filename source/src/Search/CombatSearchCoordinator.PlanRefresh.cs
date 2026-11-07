@@ -96,7 +96,9 @@ internal static partial class CombatSearchCoordinator
             reason = "recovery_probe_exhausted";
             // Cross-turn failure continues through the existing R1/current search path.
             // The two-action same-turn materialization is not a second recovery allowance.
-            if (!request.IsCrossTurn && ContinuationSeedIncumbentBudget.Remaining(probeProfile, clock.ElapsedMilliseconds,
+            if (!request.IsCrossTurn && policy.DeferLocalMultiplayerSpeculation)
+                reason = "prefix_probe_deferred_after_churn";
+            else if (!request.IsCrossTurn && ContinuationSeedIncumbentBudget.Remaining(probeProfile, clock.ElapsedMilliseconds,
                     totals.Snapshot().ExpandedNodes - nodesBefore) is { } prefixProfile
                 && !budget.IsExpired && budget.HasExpandedNodeBudgetRemaining)
             {

@@ -55,18 +55,16 @@ internal static class NativeRedecisionChecks
             IgnoreLongTermRewards = true, RelicTargets = [], Interaction = null,
             PotionPolicy = SolverPotionPolicy.Disabled, PotionStrategy = new(SolverPotionPolicy.Disabled, []),
             MeasurePhasePerformance = true,
-            Diagnostics = new SearchDiagnosticsSink(message =>
-            {
-                if (message.StartsWith("[CombatSolver/Test] SEARCH_DEEPENING ", StringComparison.Ordinal))
-                    deepening.Add(message);
-            }, _ => { }),
         };
         MultiplayerWorldObservation observation = new();
+        MultiplayerSearchChurn churn = new();
         long now = 0;
         List<object> turns = [];
         long staleNodes = 0, recoveredNodes = 0;
         int rejectedVersions = 0, teammatePlays = 0, killedTargets = 0, staleTargetRoutes = 0, coalescedUpdates = 0;
         int deepRoutes = 0, verifiedCheckpoints = 0;
+        int deferredRequests = 0, deferredRefreshProbes = 0, rejectedWithoutMaterialization = 0;
+        List<string> recoveryDiagnostics = [];
         using CombatReplayOutcome nativeOutcome = new(combat);
         object? cancelled = holdout ? CheckCancellation() : null;
         for (int step = 0; step < 12 && CombatManager.Instance.IsInProgress; step++)
@@ -103,6 +101,7 @@ internal static class NativeRedecisionChecks
                     || observation.IsStable(previousVersion, now) || observation.TryConfirmStable(previousVersion, now)
                     || observation.TryReadStable(now, out _))
                     throw new InvalidOperationException("Native teammate action did not invalidate the earlier observation.");
+                churn.RecordInvalidation(turn);
                 now += 1;
             }
             bool changed = teammateTargets.Count > 0;
@@ -158,6 +157,8 @@ internal static class NativeRedecisionChecks
             throw new InvalidOperationException($"Native redecision incomplete: won={won} updates={rejectedVersions} deepening={deepening.Count}.");
         if (holdout && (killedTargets == 0 || staleTargetRoutes == 0 || coalescedUpdates == 0))
             throw new InvalidOperationException($"Holdout did not cover a stale target and coalesced update: killed={killedTargets} stale={staleTargetRoutes} coalesced={coalescedUpdates}.");
+        if (holdout && (deferredRequests == 0 || deferredRefreshProbes == 0 || rejectedWithoutMaterialization == 0))
+            throw new InvalidOperationException("Holdout did not exercise deferred work and replay rejection.");
         CombatReplayOutcomeSnapshot actual = nativeOutcome.Capture(combat, ended: won);
         int loss = actual.HpLost;
         string filename = selective ? "native-redecision-selective.json" : "native-redecision-fixed.json";
@@ -174,6 +175,8 @@ internal static class NativeRedecisionChecks
             Rounds = turns.Count, ShuffleCounter = combat.RunState.Rng.Shuffle.Counter, Turns = turns,
             Deepening = deepening, Cancellation = cancelled,
             AdaptiveTurnLimit = adaptiveTurnLimit, DeepRoutes = deepRoutes, VerifiedCheckpoints = verifiedCheckpoints,
+            DeferredRequests = deferredRequests, DeferredRefreshProbes = deferredRefreshProbes,
+            RejectedWithoutMaterialization = rejectedWithoutMaterialization, RecoveryDiagnostics = recoveryDiagnostics,
         }, new JsonSerializerOptions { WriteIndented = true }));
         return $"NativeRedecision PASS selective={selective} rounds={turns.Count} loss={loss} updates={rejectedVersions} stale_nodes={staleNodes} refresh_nodes={recoveredNodes}";
 
@@ -226,7 +229,22 @@ internal static class NativeRedecisionChecks
             CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
             double capturedMs = watch.Elapsed.TotalMilliseconds;
             BattleDamageSnapshot damage = BattleDamageTracker.Observe(combat);
-            SearchPolicySnapshot request = policy with { MultiplayerPlanRefresh = refresh };
+            bool defer = churn.ShouldDeferOptionalWork(root.StartTurnNumber);
+            if (defer) deferredRequests++;
+            SearchPolicySnapshot request = policy with
+            {
+                MultiplayerPlanRefresh = refresh,
+                DeferLocalMultiplayerSpeculation = defer,
+                Diagnostics = new SearchDiagnosticsSink(message =>
+                {
+                    if (message.StartsWith("[CombatSolver/Test] SEARCH_DEEPENING ", StringComparison.Ordinal))
+                        deepening.Add(message);
+                    if (message.Contains("stopped=observed_churn", StringComparison.Ordinal))
+                        recoveryDiagnostics.Add(message);
+                    if (message.Contains("status=quality_rejected reason=quality_rejected materialized=false", StringComparison.Ordinal))
+                        rejectedWithoutMaterialization++;
+                }, _ => { }),
+            };
             double? previewMs = null, approvedMs = null;
             SolverResult result = Task.Run(() => CombatSearchCoordinator.Solve(root, names, damage, request,
                 CancellationToken.None, progress =>
@@ -235,6 +253,8 @@ internal static class NativeRedecisionChecks
                     if (progress.OfficialPublishedOrigin != null) approvedMs ??= watch.Elapsed.TotalMilliseconds;
                 })).GetAwaiter().GetResult();
             double completedMs = watch.Elapsed.TotalMilliseconds;
+            if (result.PlanRefresh?.Reason == "prefix_probe_deferred_after_churn")
+                deferredRefreshProbes++;
             if (result.TotalExpandedNodes > profile.MaxExpandedNodes || result.Snapshot.HasRisk
                 || result.BestNode.Actions.Any(action => action.IsForecastOnlyObservation || action.ShadowForecast != null)
                 || result.ResultScope != SolverResultScope.SearchCompletion)

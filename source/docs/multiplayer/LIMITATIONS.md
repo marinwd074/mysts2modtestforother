@@ -46,4 +46,4 @@
 - Carry Ranking R2 decisive flip 仍为可选补充证据，不能以无决定性差异的场景记为 PASS。
 - 编译、合同、pinned replay、validator self-test 与真实 Host/Client 是不同证据层；本文件的能力核对不新增实机 PASS。
 
-操作前使用 [RUNBOOK](RUNBOOK.md)，结果按 [当前交接](../CODEX_HANDOFF.md) 与 [测试矩阵](../TEST_MATRIX.md) 的证据边界解释。
+连续队友行动相关的当前验收用例见 [实机验收记录](LIVE_ACCEPTANCE.md)。操作前使用 [RUNBOOK](RUNBOOK.md)，结果按 [当前交接](../CODEX_HANDOFF.md) 与 [测试矩阵](../TEST_MATRIX.md) 的证据边界解释。

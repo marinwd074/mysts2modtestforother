@@ -49,7 +49,8 @@ internal sealed partial class CombatBeamSolver(
     bool continuationSeedProbe = false,
     IReadOnlyList<PlanAction>? continuationRouteReplayActions = null,
     bool continueRouteSearchForTesting = false,
-    int? localCoreRefinementSeedLayers = null)
+    int? localCoreRefinementSeedLayers = null,
+    bool qualifyContinuationReplayBeforeMaterialization = false)
 {
     private readonly int _totalExpandedNodeBudget =
         (searchProfile ?? SolverSearchProfile.Default).MaxExpandedNodes;
@@ -119,6 +120,7 @@ internal sealed partial class CombatBeamSolver(
     private readonly IReadOnlyList<PlanAction>? _continuationRouteReplayActions = continuationRouteReplayActions;
     private readonly bool _continueRouteSearchForTesting = continueRouteSearchForTesting;
     private readonly int? _localCoreRefinementSeedLayers = localCoreRefinementSeedLayers;
+    private readonly bool _qualifyContinuationReplayBeforeMaterialization = qualifyContinuationReplayBeforeMaterialization;
     private readonly string? _progressPhaseOverride = DescribePotionProgressPhase(
         displayNames,
         potionPolicyOverride,
@@ -217,8 +219,7 @@ internal sealed partial class CombatBeamSolver(
 
     private static bool IsReviewedLocalMultiplayerCard(SearchRoutePolicy routePolicy, PredictedCard card, bool enabled)
         => enabled && routePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
-            // Gang Up uses resolved attack history already captured in the detached root.
-            && card.Preview is GangUp && card.Preview.Enchantment == null;
+            && card.Preview is GangUp or Flanking && card.Preview.Enchantment == null;
 
     private bool AllowsPotionUse(SimulatedCombatState combat, int slot, string potionId)
         => _potionStrategy.AllowsExplicitUse(

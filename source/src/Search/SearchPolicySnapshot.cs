@@ -45,6 +45,8 @@ internal sealed record SearchPolicySnapshot(
     // Frozen for the request. Null targets battle completion for local-core experiments.
     internal int? LocalCoreTurnLayers { get; init; } = SearchEvaluationPolicy.RollingHorizonTurnLayers;
     internal int? LocalCoreAdaptiveTurnLimit { get; init; }
+    // Frozen scheduling preference after observed local-core route invalidations.
+    internal bool DeferLocalMultiplayerSpeculation { get; init; }
     // P4 offline experiment. Applies after normal selection and policy admission.
     internal bool UseBoundedWinTempo { get; init; }
     internal bool UseLocalCorePublicThreat { get; init; }

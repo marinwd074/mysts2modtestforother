@@ -4,6 +4,30 @@ namespace CombatSolver;
 
 internal sealed partial class CombatBeamSolver
 {
+    // Only the recovery caller uses this gate. Diagnostic replay and ordinary
+    // search still materialize normally. Approval always uses the same policy as
+    // the finished result and does not grant execution authority.
+    private ContinuationStamp? QualifyContinuationReplay(SearchNode node)
+    {
+        SimulationSnapshot snapshot = node.Snapshot;
+        IReadOnlyList<PredictedPotionUse> potionUses = policy.PotionStrategy.HasForcedDirectives
+            ? PotionStrategySnapshot.CaptureUses(node, ((SimulatedCombatState)snapshot.Simulator.State.CombatState).PotionUses)
+            : [];
+        var quality = new CombatSearchCoordinator.ContinuationReplayQuality(
+            SolverInterimResultOrdering.IsCompleteVictory(node.ActionCount, snapshot.AllEnemiesDead,
+                snapshot.PlayerDead, snapshot.ProjectedPlayerHp),
+            !snapshot.AllEnemiesDead && !snapshot.PlayerDead && snapshot.ProjectedPlayerHp > 0,
+            snapshot.BoundaryReason, battleDamage.HpLostSoFar + snapshot.CumulativePlayerHpLost,
+            node.PotionCount, battleDamage.PotionsUsedSoFar, potionUses, snapshot.ProjectedDeathSaveUseCount,
+            snapshot.GrowthRewards, snapshot.RelicCounters, snapshot.OutstandingStolenResource);
+        ContinuationStamp? stamp = null;
+        if (!CombatSearchCoordinator.IsAcceptableContinuationReplay(policy, quality,
+            () => stamp = ContinuationStamp.CapturePredicted(_player, snapshot.Simulator,
+                snapshot.Turn, _forecast, _startTurnNumber), out _))
+            throw new ContinuationSeedRejectedException("quality_rejected");
+        return stamp;
+    }
+
     // Replay only the supplied local route. No Beam expansion and no old branch state.
     private SearchNode ReplayContinuationRoute(SearchNode rootNode,
         IReadOnlyList<PlanAction> actions, Stopwatch stopwatch,
