@@ -53,7 +53,8 @@ internal sealed partial class CombatBeamSolver
         bool enableMultiplayerScenarioReevaluation,
         Func<IReadOnlyList<SearchNode>, IReadOnlyList<MultiplayerScenarioDecisionEvaluation>>?
             scenarioReevaluator,
-        bool useUpstreamSearchOptimizations = true)
+        bool useUpstreamSearchOptimizations,
+        bool preferSmartAuditVictory)
     {
         /// <summary>
         /// The HP a potion must save to be worth spending, scaled by how much HP is worth in this fight. When HP
@@ -594,6 +595,25 @@ internal sealed partial class CombatBeamSolver
                     policyEligibleCandidates = policyEligibleCandidates.OrderByDescending(candidate => candidate.Score)
                         .Take(1).ToList();
                 }
+            }
+            if (preferSmartAuditVictory && potionFreePolicyBaseline is { Won: true } smartBaseline
+                && policyEligibleCandidates.Count > 1)
+            {
+                // This exact-use member was generated under RequireAtLeastOne. Give
+                // its audited winners priority before the ordinary raw-loss ranking.
+                var smartVictories = policyEligibleCandidates.Where(candidate =>
+                    PotionUsePolicy.CanAcceptSmartAuditVictory(
+                        potionFreeWon: true,
+                        candidate.CompleteVictory,
+                        PotionUsePolicy.HpSaved(smartBaseline.HpDeficit, candidate.StrategicHpDeficit),
+                        ScalePotionCost(PotionUsePolicy.EffectiveStrategicHpCost(
+                            candidate.Snapshot.PotionStrategicCost, candidate.AmbergrisCount, initialPlayerMaxHp)),
+                        theftPolicy == SolverTheftPolicy.PreserveResources
+                            && candidate.Features.OutstandingStolenResource < smartBaseline.OutstandingStolenResource,
+                        !useEvaluationWindows || RouteEvaluationWindow.CanCompare(
+                            WindowOf(candidate.Snapshot), smartBaseline.EvaluationWindow))).ToList();
+                if (smartVictories.Count != 0)
+                    policyEligibleCandidates = smartVictories;
             }
             bool useAdaptiveLethalTempo =
                 useMultiplayerTeamObjective

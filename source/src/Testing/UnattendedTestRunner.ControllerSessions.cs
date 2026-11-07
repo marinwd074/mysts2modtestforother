@@ -1353,13 +1353,13 @@ internal sealed partial class UnattendedTestRunner
         };
         if (SolverInterimResultOrdering.IsBetter(underpaidPotionTrade, noPotionTrade)
             || !SolverInterimResultOrdering.IsBetter(qualifiedPotionTrade, noPotionTrade)
-            || CombatSearchCoordinator.IsSmartPotionGradientCandidateAcceptable(
+            || PotionUsePolicy.CanAcceptSmartAuditVictory(
                 potionFreeWon: true,
                 candidateWon: true,
                 hpSaved: 8,
                 hpRequired: 9,
                 protectsLoot: false)
-            || !CombatSearchCoordinator.IsSmartPotionGradientCandidateAcceptable(
+            || !PotionUsePolicy.CanAcceptSmartAuditVictory(
                 potionFreeWon: true,
                 candidateWon: true,
                 hpSaved: 9,

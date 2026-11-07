@@ -4,6 +4,7 @@ using CombatSolver;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.Models.Potions;
 
 namespace U0U1PinnedHarness;
@@ -151,8 +152,8 @@ internal static class MultiplayerEvaluationWindowChecks
             Check((bool)recovery.Invoke(null, unchanged)! && !(bool)recovery.Invoke(null, wrongPhase)!
                 && (string?)wrongPhase[3] == "evaluation_window_mismatch",
                 "Recovery confused equal turn numbers with equal settled phases.");
-            Check(CombatSearchCoordinator.IsSmartPotionGradientCandidateAcceptable(false, true, 0, 8, false, false)
-                && !CombatSearchCoordinator.IsSmartPotionGradientCandidateAcceptable(true, true, 20, 8, false, false),
+            Check(PotionUsePolicy.CanAcceptSmartAuditVictory(false, true, 0, 8, false, false)
+                && !PotionUsePolicy.CanAcceptSmartAuditVictory(true, true, 20, 8, false, false),
                 "Window gating removed a proven win rescue or admitted unproven cost savings.");
             Check(PotionUsePolicy.IsEligible(SolverPotionPolicy.Smart, 1, 0, false, 15, false, false, 0, false)
                 && !PotionUsePolicy.IsEligible(SolverPotionPolicy.Smart, 1, 8, false, 15, false, false, 0, false),
@@ -238,6 +239,55 @@ internal static class MultiplayerEvaluationWindowChecks
                 && singleReplay.CumulativePlayerHpLost == singleRoute.Snapshot.CumulativePlayerHpLost
                 && ContinuationStamp.CaptureLive(live).StateText == before,
                 "The full singleplayer result disagrees with independent native replay or changed the live fixture.");
+
+            // Compare two real terminal replays against a controlled audited deficit.
+            var enemy = live.Enemies.Single();
+            enemy.SetCurrentHpInternal(6);
+            foreach (var relic in player.Relics.ToArray()) player.RemoveRelicInternal(relic, silent: true);
+            player.PlayerCombatState!.Hand.AddInternal(live.CreateCard(ModelDb.Card<Hemokinesis>(), player), -1);
+            Check(player.AddPotionInternal(ModelDb.Potion<SwiftPotion>().ToMutable(), 1, true).success,
+                "Swift Potion fixture failed.");
+            var auditRoot = CombatRootSnapshot.Capture(live);
+            string auditBefore = ContinuationStamp.CaptureLive(live).StateText;
+            solver = new(auditRoot, names, damage, policy);
+            PlanAction strike = new(PlanActionKind.PlayCard, turn, "STRIKE_IRONCLAD", TargetIndex: 0,
+                TargetCombatId: enemy.CombatId);
+            SearchNode expensive = Build(new(PlanActionKind.UsePotion, turn, PotionSlot: 1, PotionId: "SWIFT_POTION"), strike);
+            SearchNode affordable = Build(new(PlanActionKind.UsePotion, turn, PotionSlot: 0, PotionId: "BLOCK_POTION"),
+                strike with { CardId = "HEMOKINESIS" });
+            int auditDeficit = affordable.Snapshot.CumulativePlayerHpLost + affordable.PotionStrategicCost;
+            Check(expensive.Snapshot.CombatEndedTurn == turn && affordable.Snapshot.CombatEndedTurn == turn
+                && expensive.Snapshot.CumulativePlayerHpLost == 0 && affordable.Snapshot.CumulativePlayerHpLost == 2
+                && expensive.PotionStrategicCost > auditDeficit,
+                "Expected a cheaper legal win and a lower-damage but unaffordable win.");
+            PotionFreePolicyBaseline audited = new(true, auditDeficit, auditRoot.InitialPlayerHp - auditDeficit, turn)
+            {
+                BattleHpLost = damage.HpLostSoFar + auditDeficit,
+                EvaluationWindow = affordable.Snapshot.EvaluationWindow,
+            };
+            CombatBeamSolver exactSmart = new(auditRoot, names, damage, policy,
+                potionPolicyOverride: SolverPotionPolicy.RequireAtLeastOne, potionFreePolicyBaseline: audited,
+                minimumPotionUses: 1, maximumPotionUses: 1);
+            var exact = exactSmart.SelectDiagnosticCandidates([expensive, affordable]);
+            Console.WriteLine($"SMART_LAYER_SELECTION potion={exact.Selected.Actions.First().PotionId} "
+                + $"loss={exact.Selected.Snapshot.CumulativePlayerHpLost} baseline={auditDeficit}");
+            Check(ReferenceEquals(exact.Selected, affordable)
+                && ReferenceEquals(exactSmart.SelectDiagnosticCandidates([affordable, expensive]).Selected, affordable),
+                "An unaffordable win hid the eligible Smart win.");
+            CombatBeamSolver required = new(auditRoot, names, damage,
+                policy with { PotionPolicy = SolverPotionPolicy.RequireAtLeastOne },
+                potionPolicyOverride: SolverPotionPolicy.RequireAtLeastOne, potionFreePolicyBaseline: audited,
+                minimumPotionUses: 1, maximumPotionUses: 1);
+            Check(ReferenceEquals(required.SelectDiagnosticCandidates([expensive, affordable]).Selected, expensive),
+                "A required-potion request was ranked as an optional Smart audit.");
+            CombatBeamSolver mismatchedAudit = new(auditRoot, names, damage, policy,
+                potionPolicyOverride: SolverPotionPolicy.RequireAtLeastOne,
+                potionFreePolicyBaseline: audited with { EvaluationWindow = null },
+                minimumPotionUses: 1, maximumPotionUses: 1);
+            Check(ReferenceEquals(mismatchedAudit.SelectDiagnosticCandidates([expensive, affordable]).Selected, expensive),
+                "A missing audit window changed the rank based on unproven savings.");
+            Check(ContinuationStamp.CaptureLive(live).StateText == auditBefore, "Layer selection mutated the live fixture.");
+
             File.WriteAllText(Path.Combine(output, "multiplayer-window.json"), JsonSerializer.Serialize(new
             {
                 checks, NativePrefixReplays = nativePrefixReplays, MaterializedRouteReplays = 1, apparentSaving,
@@ -253,6 +303,9 @@ internal static class MultiplayerEvaluationWindowChecks
                 longLoss = longFree.Snapshot.CumulativePlayerHpLost,
                 potionLoss = shortPotion.Snapshot.CumulativePlayerHpLost,
                 matchingWindowPotionSelected = ReferenceEquals(sameWindow.Selected, shortPotion),
+                SmartLayerSelection = new { auditDeficit, affordable.PotionStrategicCost,
+                    SelectedPotion = exact.Selected.Actions.First().PotionId,
+                    exact.Selected.Snapshot.CumulativePlayerHpLost },
                 NoGameOrNetwork = true,
             }, new JsonSerializerOptions { WriteIndented = true }));
             return $"MULTIPLAYER_WINDOW_PASS checks={checks} native_prefix_replays={nativePrefixReplays}";

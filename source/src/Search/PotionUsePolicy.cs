@@ -92,6 +92,16 @@ internal static class PotionUsePolicy
             strategicHpCost,
             bossHpRelief);
 
+    internal static bool CanAcceptSmartAuditVictory(
+        bool potionFreeWon,
+        bool candidateWon,
+        int hpSaved,
+        int hpRequired,
+        bool protectsLoot,
+        bool costsComparable = true)
+        => candidateWon
+            && (!potionFreeWon || hpRequired == 0 || costsComparable && (hpSaved >= hpRequired || protectsLoot));
+
     public static int AmbergrisRequiredHpSaved(int maximumHp)
         => (int)Math.Ceiling(maximumHp * AmbergrisMinimumHpSavedFraction);
 

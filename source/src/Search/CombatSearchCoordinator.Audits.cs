@@ -1031,7 +1031,7 @@ internal static partial class CombatSearchCoordinator
         int hpRequired = SmartPotionHpRequired(root, policy, scout);
         bool protectsLoot = policy.TheftPolicy == SolverTheftPolicy.PreserveResources
             && scout.OutstandingStolenResource < finalPotionFree.OutstandingStolenResource;
-        bool acceptable = IsSmartPotionGradientCandidateAcceptable(
+        bool acceptable = PotionUsePolicy.CanAcceptSmartAuditVictory(
             potionFreeWon,
             candidateWon,
             hpSaved,
@@ -1376,7 +1376,7 @@ internal static partial class CombatSearchCoordinator
                 int hpRequired = SmartPotionHpRequired(root, policy, candidate);
                 bool protectsLoot = policy.TheftPolicy == SolverTheftPolicy.PreserveResources
                     && candidate.OutstandingStolenResource < potionFree.OutstandingStolenResource;
-                bool acceptable = IsSmartPotionGradientCandidateAcceptable(
+                bool acceptable = PotionUsePolicy.CanAcceptSmartAuditVictory(
                     potionFreeWon,
                     candidateWon,
                     hpSaved,
@@ -1660,7 +1660,7 @@ internal static partial class CombatSearchCoordinator
             int hpRequired = SmartPotionHpRequired(root, policy, candidate);
             bool protectsLoot = policy.TheftPolicy == SolverTheftPolicy.PreserveResources
                 && candidate.OutstandingStolenResource < potionFree.OutstandingStolenResource;
-            bool acceptable = IsSmartPotionGradientCandidateAcceptable(
+            bool acceptable = PotionUsePolicy.CanAcceptSmartAuditVictory(
                 potionFreeWon,
                 candidateWon,
                 hpSaved,
@@ -1701,16 +1701,6 @@ internal static partial class CombatSearchCoordinator
             $"selected_potions={selected.PotionCount}");
         return selected;
     }
-
-    internal static bool IsSmartPotionGradientCandidateAcceptable(
-        bool potionFreeWon,
-        bool candidateWon,
-        int hpSaved,
-        int hpRequired,
-        bool protectsLoot,
-        bool costsComparable = true)
-        => candidateWon
-            && (!potionFreeWon || hpRequired == 0 || costsComparable && (hpSaved >= hpRequired || protectsLoot));
 
     private static bool CanComparePotionCosts(SearchPolicySnapshot policy, SolverResult candidate, SolverResult baseline)
         => !SearchEvaluationPolicy.UsesLocalEvaluationWindows(policy.RoutePolicy)

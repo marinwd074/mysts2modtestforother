@@ -300,7 +300,7 @@ internal static partial class CombatSearchCoordinator
                 hpRequired = SmartPotionHpRequired(root, policy, potionResult);
                 bool protectsLoot = policy.TheftPolicy == SolverTheftPolicy.PreserveResources
                     && potionResult.OutstandingStolenResource < beamResult.OutstandingStolenResource;
-                scoutWouldQualify = IsSmartPotionGradientCandidateAcceptable(
+                scoutWouldQualify = PotionUsePolicy.CanAcceptSmartAuditVictory(
                     potionFreeWon,
                     candidateWon,
                     hpSaved,

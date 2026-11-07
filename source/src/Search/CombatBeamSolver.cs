@@ -189,7 +189,11 @@ internal sealed partial class CombatBeamSolver(
         policy.UseMultiplayerScenarioReevaluation
             ? ReevaluateCurrentDecisionsAcrossScenarios
             : null,
-        policy.UseUpstreamSearchOptimizations);
+        policy.UseUpstreamSearchOptimizations,
+        preferSmartAuditVictory: policy.PotionPolicy == SolverPotionPolicy.Smart
+            && _potionPolicy == SolverPotionPolicy.RequireAtLeastOne
+            && _minimumPotionUses > 0 && _maximumPotionUses == _minimumPotionUses
+            && !_potionStrategy.HasForcedDirectives);
 
     private bool CanConsiderCardAction(PredictedCard card)
         => CanConsiderCardAction(_routePolicy, card);
