@@ -1,12 +1,13 @@
 # CombatSolver 文档导航
 
-当前工作树把**当前任务**与**已完成实现说明**分开：未来工作只进 handoff；旧计划文件只解释现有代码。
+当前工作树把**当前任务**与**已完成实现说明**分开：未来工作从 handoff 进入，详细方案作为其明确指定的设计附件；旧计划文件只解释现有代码。
 
 ## 默认入口
 
 | 目的 | 文件 |
 |---|---|
 | 当前状态 / 未完成风险 / 下一任务 | [CODEX_HANDOFF.md](CODEX_HANDOFF.md) |
+| 当前单人优化设计附件（待实施） | [SOLO_SEARCH_OPTIMIZATION_PLAN.md](SOLO_SEARCH_OPTIMIZATION_PLAN.md) |
 | 架构、职责、状态所有权 | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | 当前验证入口 | [TEST_MATRIX.md](TEST_MATRIX.md) |
 | 项目版本与功能更新 | [PROJECT_VERSION](../PROJECT_VERSION) · [PROJECT_VERSION_HISTORY.md](PROJECT_VERSION_HISTORY.md) |
@@ -37,7 +38,7 @@
 
 ## 维护规则
 
-- `CODEX_HANDOFF.md` 可以写“还要做什么”；实现档案不写下一阶段任务。
+- `CODEX_HANDOFF.md` 维护当前任务和实施状态，可链接当前任务的详细设计附件；实现档案不写下一阶段任务。
 - 实现档案统一回答四件事：**做了什么、有什么用、代码在哪里、调用链怎么走**。
 - 阶段名 P/U/A–H 只作为 Git 历史索引，不再代表自动执行顺序。
 - 未进入生产的旧设想只记录“未实现/未启用”这一事实，不保留施工步骤。
