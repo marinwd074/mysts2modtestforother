@@ -5,6 +5,7 @@ using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Potions;
+using MegaCrit.Sts2.Core.Models.Relics;
 using MegaCrit.Sts2.Core.Factories;
 
 namespace U0U1PinnedHarness;
@@ -167,6 +168,7 @@ internal static class EntropicCostChecks
             "Coordinator's final route did not independently replay"); }
         finally { coordinatedReplay.ReleaseSimulator(); }
         Check(liveBefore == ContinuationStamp.CaptureLive(live).StateText, "Search changed live fixture");
+        CheckSmartPotionSelection(live, names, damage, policy);
         File.WriteAllText(Path.Combine(output, "entropic-cost.json"), JsonSerializer.Serialize(new {
             status = "PASS", checks = _checks, advances, expected, result.PotionUses, result.PotionStrategicCostByTurn,
             result.ExpandedNodes, result.TotalTransitionCount, result.BoundaryReason,
@@ -175,6 +177,62 @@ internal static class EntropicCostChecks
             evidence = "pinned-offline; native UI and Host/Client unverified"
         }, new JsonSerializerOptions { WriteIndented = true }));
         return $"ENTROPIC_COST_PASS checks={_checks} native-generation/ledger/fork/keys/chains/Smart/materialization/continuation/replay";
+    }
+
+    private static void CheckSmartPotionSelection(CombatState live, SolverDisplayNames names,
+        BattleDamageSnapshot damage, SearchPolicySnapshot policy)
+    {
+        var player = LocalContext.GetMe(live)!;
+        foreach (PotionModel potion in player.PotionSlots.OfType<PotionModel>().ToArray())
+            player.RemovePotionInternal(potion);
+        player.AddRelicInternal(ModelDb.Relic<PetrifiedToad>().ToMutable(), silent: true);
+        player.AddRelicInternal(ModelDb.Relic<HappyFlower>().ToMutable(), silent: true);
+        Check(player.AddPotionInternal(ModelDb.Potion<PotionShapedRock>().ToMutable(), 0, true).success,
+            "Could not install the renewable potion fixture");
+        live.Enemies.Single().SetCurrentHpInternal(6);
+        CombatRootSnapshot root = CombatRootSnapshot.Capture(live);
+        Check(root.SearchablePotions.Single().StrategicHpCost == 0, "The renewable potion must have zero cost");
+        string liveBefore = ContinuationStamp.CaptureLive(live).StateText;
+        foreach (bool scheduled in new[] { false, true })
+        {
+            List<string> diagnostics = [];
+            SearchPolicySnapshot smart = policy with
+            {
+                PotionStrategy = new(SolverPotionPolicy.Smart, []),
+                StopAtAcceptableBattleHpLoss = false,
+                UseE3FixedPortfolioScheduling = scheduled,
+                UseE3AdaptivePortfolioScheduling = false,
+                RelicTargets = [new(RelicCounterId.HappyFlower, 1, 1, 0, 3)],
+                Diagnostics = new SearchDiagnosticsSink(message =>
+                {
+                    if (message.Contains("SMART_POTION_GRADIENT layer=1 ")) diagnostics.Add(message);
+                }, _ => { }),
+            };
+            bool publishedPotionPreview = false;
+            SolverResult result = CombatSearchCoordinator.Solve(root, names, damage, smart, default, progress =>
+            {
+                publishedPotionPreview |= progress.CurrentTurnPreview?.Actions.Any(action => action.Kind == PlanActionKind.UsePotion) == true
+                    || progress.SpeculativeRoutePreview?.Turns.Any(turn =>
+                        turn.Actions.Any(action => action.Kind == PlanActionKind.UsePotion)) == true;
+            });
+            Console.WriteLine($"SMART_POTION_QUALITY scheduled={scheduled} won={result.Snapshot.AllEnemiesDead} "
+                + $"turn={result.CombatEndedTurn} loss={result.ProjectedBattleHpLost} potions={result.ExplicitPotionCount}");
+            string? optionalVictory = diagnostics.FirstOrDefault(message => message.Contains("won=True")
+                && message.Contains("required=0") && message.Contains("acceptable=True"));
+            Check(optionalVictory != null,
+                "The fixture did not evaluate an eligible, zero-cost potion victory");
+            Check(result.Snapshot.AllEnemiesDead && result.CombatEndedTurn == root.StartTurnNumber + 1
+                && result.ProjectedBattleHpLost == 0 && result.ExplicitPotionCount == 0,
+                "An eligible potion victory displaced the better potion-free victory");
+            Check(optionalVictory!.Contains("selected=False"), "The audit promoted a weaker optional-potion victory");
+            Check(!publishedPotionPreview, "A weaker optional-potion route was published before Smart selection");
+            var verifier = new CombatBeamSolver(root, names, damage, smart);
+            SimulationSnapshot replay = verifier.ReplayDiagnosticPrefix(result.BestNode.Actions);
+            try { Check(verifier.CaptureDiagnosticContinuation(replay) == result.PredictedFinalState,
+                "The selected potion-free victory did not replay"); }
+            finally { replay.ReleaseSimulator(); }
+        }
+        Check(liveBefore == ContinuationStamp.CaptureLive(live).StateText, "Smart selection changed live combat");
     }
 
     private static void CheckCrossTurnAccounting(CombatRootSnapshot root, SolverDisplayNames names,

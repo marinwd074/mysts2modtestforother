@@ -170,6 +170,8 @@ internal static partial class CombatSearchCoordinator
                     "early_smart_scout_reuse",
                     beforeReuse,
                     () => reusedScout!);
+                if (ReferenceEquals(selected, reusedScout))
+                    interimResultCallback?.Invoke(selected);
             }
             else
             {
@@ -921,10 +923,8 @@ internal static partial class CombatSearchCoordinator
         BattleDamageSnapshot battleDamage,
         SearchPolicySnapshot policy,
         CancellationToken cancellationToken,
-        Action<SolverProgress>? progressCallback,
         SolverSearchProfile profile,
-        SolverResult provisionalPotionFree,
-        Action<SolverResult>? interimResultCallback)
+        SolverResult provisionalPotionFree)
     {
         if (policy.PotionPolicy != SolverPotionPolicy.Smart
             || policy.PotionStrategy.HasForcedDirectives
@@ -957,7 +957,7 @@ internal static partial class CombatSearchCoordinator
                 battleDamage,
                 policy.MeasurePhasePerformance ? policy with { RequestMemberKind = SearchRequestMemberKind.SmartPotion } : policy,
                 cancellationToken,
-                progressCallback,
+                progressCallback: null,
                 profile,
                 SolverPotionPolicy.RequireAtLeastOne,
                 baseline,
@@ -979,8 +979,6 @@ internal static partial class CombatSearchCoordinator
             $"boundary={scout.BoundaryReason} won={IsCompleteVictory(scout)} " +
             $"potions={scout.ExplicitPotionCount} expanded={scout.ExpandedNodes} " +
             $"transitions={scout.TransitionCount} elapsed_ms={scout.Elapsed.TotalMilliseconds:F1}");
-        if (IsCompleteVictory(scout))
-            interimResultCallback?.Invoke(scout);
         return scout;
     }
 
@@ -1040,8 +1038,7 @@ internal static partial class CombatSearchCoordinator
             hpRequired,
             protectsLoot, costsComparable);
         bool improvesSelection = acceptable
-            && (policy.TheftPolicy != SolverTheftPolicy.PreserveResources
-                || IsBetterCompletedResult(root, policy, scout, finalPotionFree));
+            && IsBetterPotionPolicyResult(root, policy, scout, finalPotionFree);
         if (!improvesSelection)
         {
             policy.Diagnostics.Info(
@@ -1367,7 +1364,6 @@ internal static partial class CombatSearchCoordinator
                 SolverResult candidate = completed[potionCount];
                 completed.Remove(potionCount);
                 searches.Add(candidate);
-                interimResultCallback?.Invoke(candidate);
 
                 bool candidateWon = IsCompleteVictory(candidate);
                 int candidateDeficit = StrategicHpDeficit(root, policy, candidate);
@@ -1387,14 +1383,14 @@ internal static partial class CombatSearchCoordinator
                     hpRequired,
                     protectsLoot, costsComparable);
                 bool improvesSelection = acceptable
-                    && (policy.TheftPolicy != SolverTheftPolicy.PreserveResources
-                        || IsBetterCompletedResult(root, policy, candidate, selected));
+                    && IsBetterPotionPolicyResult(root, policy, candidate, selected);
                 if (improvesSelection)
                 {
                     candidate.PotionHpSaved = hpSaved;
                     candidate.PotionHpRequired = hpRequired;
                     selected = candidate;
                     acceptablePotionLayerFound = true;
+                    interimResultCallback?.Invoke(candidate);
                 }
                 policy.Diagnostics.Info(
                     $"[CombatSolver/Test] SMART_POTION_GRADIENT layer={potionCount} " +
@@ -1408,7 +1404,7 @@ internal static partial class CombatSearchCoordinator
                     $"incumbent_pruned={candidate.PrimaryIncumbentBranchesPruned} " +
                     $"incumbent_updates={candidate.PrimaryIncumbentUpdates} scheduler={scheduler}");
 
-                if (acceptable
+                if (improvesSelection
                     && TheftEncounterStrategy.RecoverySatisfied(
                         policy.TheftPolicy,
                         selected.OutstandingStolenResource))
@@ -1558,6 +1554,18 @@ internal static partial class CombatSearchCoordinator
         SolverResult selected = potionFree;
         bool deadlineExpired = false;
         bool acceptablePotionLayerFound = false;
+        // The layer's route remains provisional until the Smart comparison against
+        // the no-optional-potion result. Forward work counters during the audit.
+        Action<SolverProgress>? auditProgress = progressCallback == null ? null : progress => progressCallback(progress with
+        {
+            CurrentBestResult = null,
+            CurrentTurnPreview = null,
+            SpeculativeRoutePreview = null,
+            RouteAdoptionSeed = null,
+            CurrentTurnAdoptionSeed = null,
+            OfficialPublishedOrigin = null,
+            OfficialPublishedEvaluationContextId = null,
+        });
         for (int optionalPotionCount = 1;
              optionalPotionCount <= maximumOptionalPotionUses;
              optionalPotionCount++)
@@ -1604,7 +1612,7 @@ internal static partial class CombatSearchCoordinator
                     battleDamage,
                     policy.MeasurePhasePerformance ? policy with { RequestMemberKind = SearchRequestMemberKind.SmartPotion } : policy,
                     searchCancellationToken,
-                    progressCallback,
+                    auditProgress,
                     profile,
                     SolverPotionPolicy.RequireAtLeastOne,
                     baseline,
@@ -1640,7 +1648,6 @@ internal static partial class CombatSearchCoordinator
             candidate.SingleSessionSearch = true;
             PopulateSingleSessionTotals(candidate);
             searches.Add(candidate);
-            interimResultCallback?.Invoke(candidate);
 
             bool candidateWon = IsCompleteVictory(candidate);
             int candidateDeficit = StrategicHpDeficit(root, policy, candidate);
@@ -1659,14 +1666,14 @@ internal static partial class CombatSearchCoordinator
                 hpSaved,
                 hpRequired,
                 protectsLoot, costsComparable);
-            bool improvesSelection = acceptable && (policy.TheftPolicy != SolverTheftPolicy.PreserveResources
-                || IsBetterCompletedResult(root, policy, candidate, selected));
+            bool improvesSelection = acceptable && IsBetterPotionPolicyResult(root, policy, candidate, selected);
             if (improvesSelection)
             {
                 candidate.PotionHpSaved = hpSaved;
                 candidate.PotionHpRequired = hpRequired;
                 selected = candidate;
                 acceptablePotionLayerFound = true;
+                interimResultCallback?.Invoke(candidate);
             }
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] SMART_POTION_GRADIENT layer={potionCount} " +
@@ -1681,7 +1688,7 @@ internal static partial class CombatSearchCoordinator
                 $"incumbent_turn={primaryIncumbent?.CombatEndedTurn.ToString() ?? "-"} " +
                 $"incumbent_pruned={candidate.PrimaryIncumbentBranchesPruned} " +
                 $"incumbent_updates={candidate.PrimaryIncumbentUpdates}");
-            if (acceptable && TheftEncounterStrategy.RecoverySatisfied(policy.TheftPolicy, selected.OutstandingStolenResource))
+            if (improvesSelection && TheftEncounterStrategy.RecoverySatisfied(policy.TheftPolicy, selected.OutstandingStolenResource))
                 break;
         }
 

@@ -1068,10 +1068,8 @@ internal static partial class CombatSearchCoordinator
                     battleDamage,
                     beamPolicy,
                     cancellationToken,
-                    progressCallback,
                     scoutProfile,
-                    provisionalPotionFree,
-                    interimResultCallback);
+                    provisionalPotionFree);
                 return earlySmartPotionScout;
             }
             SolverResult RunPrimary()

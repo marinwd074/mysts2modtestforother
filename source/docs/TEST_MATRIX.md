@@ -34,6 +34,8 @@
 
 `U0U1PinnedHarness entropic-cost --out <ignored-directory>` 核对 pinned 原生 `PotionFactory` 序列与生成来源，覆盖普通补槽重置、自动消耗、连锁混沌、龙涎香、Fork/状态键、Smart 准入、完整搜索及独立重放。跨回合通过真实模型重放和生产 `BuildRouteAnnotations` / `CaptureUses` 生成账本，再对合成结果调用生产续接合同，核对过去回合成本不再扣除；并不冒充实际 UI 续接。`PotionStrategyChecks` 的 24 项覆盖同槽同 ID 再生不能替代原始强制瓶、自动消费不能完成显式指令，以及全禁用和仅强制策略。两个入口均不启动游戏。
 
+`entropic-cost` 同时用带遗物目标的零战损夹具核对 Smart 选路。合规的零价药水胜利与原路线同回合结束时，串行及分层调度都保留无药水结果，并独立重放。未通过质量比较的药水路线也不会进入预览回调。
+
 混沌专项 41 项检查通过，包含完整 Coordinator 的强制基线/Smart 分层与独立重放；例中原始混沌成本 9，生成火焰药水成本 0。龙涎香不在 pinned 0.107.1 原生模型库，溢价规则只由纯策略合同覆盖，不能报告为原生效果 PASS。2026-11-05 组合入口 24 步、35 组 L1、82 项 portfolio、17 个 pinned 模式通过（符号链接权限子项仍跳过）；在组合验证后又复跑包含 Coordinator 的 41 项专项。与先前构建比较，16 个非混沌常规请求质量值相同，部分等质路线/工作量变化；第 17 个共享见证请求工作量相同，所有选中末态在各构建内部独立重放，不把此结果称为普遍提速。
 
 `U0U1PinnedHarness rng-restore` 对照旧 RNG 还原的计数器、状态、后续随机值及父状态隔离；完整请求对照复用 `request-hydration-benchmark-off`，高计数器压力夹具为 `multi-hit-high-counter`。不替代实机搜索或退出取证验证。

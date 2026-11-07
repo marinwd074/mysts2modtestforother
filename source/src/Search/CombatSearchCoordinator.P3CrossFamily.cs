@@ -306,8 +306,7 @@ internal static partial class CombatSearchCoordinator
                     hpSaved,
                     hpRequired,
                     protectsLoot, costsComparable)
-                    && (policy.TheftPolicy != SolverTheftPolicy.PreserveResources
-                        || IsBetterCompletedResult(root, policy, potionResult, beamResult));
+                    && IsBetterPotionPolicyResult(root, policy, potionResult, beamResult);
                 if (scoutWouldQualify)
                 {
                     potionResult.PotionHpSaved = hpSaved;
