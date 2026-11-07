@@ -13,6 +13,14 @@ using MegaCrit.Sts2.Core.Models.Singleton;
 
 namespace CombatSolver;
 
+internal enum HealingBoundStatus
+{
+    Certified,
+    UncertifiedRoot,
+    RiskOrReleased,
+    UnclassifiedBranch,
+}
+
 // Adapted from upstream StrategicHpRecoveryBound. The newer game's certificate is
 // deliberately not reused: this closed vocabulary belongs to the pinned native DLL.
 internal static class PinnedHealingBound
@@ -39,8 +47,7 @@ internal static class PinnedHealingBound
             CardModel card => SafeCard(card.GetType()) && card.Enchantment == null && card.Affliction == null,
             PowerModel power => SafePower(power.GetType()),
             PotionModel potion => SafePotion(potion.GetType()),
-            RelicModel relic => relic.GetType() == typeof(BurningBlood) || relic.GetType() == typeof(BlackBlood)
-                || relic.GetType() == typeof(RingOfTheSnake) || relic.GetType() == typeof(BoundPhylactery),
+            RelicModel relic => SafeRelic(relic.GetType()),
             MonsterModel monster => monster.GetType() == typeof(FuzzyWurmCrawler) || monster.GetType() == typeof(Nibbit),
             // These native listeners only update badge statistics.
             _ => source.GetType() == typeof(MultiplayerScalingModel)
@@ -68,9 +75,7 @@ internal static class PinnedHealingBound
         if (simulator.State.GetPlayerCombatState(player).AllCards.Any(card =>
                 card.Preview.Enchantment != null || card.Preview.Affliction != null
                 || !SafeCard(card.Preview.GetType()))
-            || combat.RelicsOf(player).Any(relic => !relic.IsMelted
-                && relic.GetType() != typeof(BurningBlood) && relic.GetType() != typeof(BlackBlood)
-                && relic.GetType() != typeof(RingOfTheSnake) && relic.GetType() != typeof(BoundPhylactery))
+            || combat.RelicsOf(player).Any(relic => !relic.IsMelted && !SafeRelic(relic.GetType()))
             || combat.EffectivePowers().Any(power => !SafePower(power.GetType())))
             return false;
         for (int slot = 0; slot < ((ICombatPredictionPlayerLimits)combat).GetPotionSlotCount(player); slot++)
@@ -94,22 +99,36 @@ internal static class PinnedHealingBound
     private static bool SafePotion(Type type)
         => type == typeof(FirePotion) || type == typeof(BlockPotion) || type == typeof(EnergyPotion);
 
-    internal static int RemainingHealing(CombatRootSnapshot root, SimulationSnapshot snapshot)
+    private static bool SafeRelic(Type type)
+        => type == typeof(BurningBlood) || type == typeof(BlackBlood)
+            || type == typeof(MeatOnTheBone) || type == typeof(RingOfTheSnake) || type == typeof(BoundPhylactery);
+
+    internal static int? RemainingRankedHealing(CombatRootSnapshot root, SimulationSnapshot snapshot,
+        out HealingBoundStatus status)
     {
-        if (!root.HasPinnedHealingCertificate || snapshot.HasRisk || !snapshot.HasSimulator)
-            return int.MaxValue;
+        if (!root.HasPinnedHealingCertificate)
+        {
+            status = HealingBoundStatus.UncertifiedRoot;
+            return null;
+        }
+        if (snapshot.HasRisk || !snapshot.HasSimulator)
+        {
+            status = HealingBoundStatus.RiskOrReleased;
+            return null;
+        }
         var simulator = (CombatPredictionSimulator)snapshot.Simulator;
         if (!SupportsBranch(simulator, root.PlayerIdentity))
-            return int.MaxValue;
+        {
+            status = HealingBoundStatus.UnclassifiedBranch;
+            return null;
+        }
         // No admitted source can heal in combat or acquire a new healing source.
-        return PostCombatHealingUpperBound(root);
+        status = HealingBoundStatus.Certified;
+        return RankedPostCombatHealingUpperBound(root);
     }
 
-    internal static int PostCombatHealingUpperBound(CombatRootSnapshot root)
-    {
-        // Overcount conditional post-combat healing: a lower bound must stay optimistic.
-        return (int)Math.Min(int.MaxValue,
-            (long)Math.Max(0, root.PostCombatRelicHeal.UnconditionalHeal)
-                + Math.Max(0, root.PostCombatRelicHeal.WoundedHeal));
-    }
+    // This proof is for strategic HP with resource goals disabled. Ranking credits only
+    // monotone relic healing in that objective. Actual threshold healing is still reported.
+    internal static int RankedPostCombatHealingUpperBound(CombatRootSnapshot root)
+        => Math.Max(0, root.PostCombatRelicHeal.UnconditionalHeal);
 }

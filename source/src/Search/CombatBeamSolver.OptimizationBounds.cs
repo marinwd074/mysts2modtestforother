@@ -1,5 +1,3 @@
-using CombatSolver.Engine.InCombat.Simulation;
-
 namespace CombatSolver;
 
 internal sealed partial class CombatBeamSolver
@@ -8,15 +6,6 @@ internal sealed partial class CombatBeamSolver
         && !_hasGrowthTargets && !policy.UseMultiplayerTeamObjective
         && !SearchEvaluationPolicy.UsesRawLossFirst(policy.RoutePolicy)
         && _theftPolicy != SolverTheftPolicy.PreserveResources && !_potionStrategy.HasForcedDirectives;
-
-    private int OptimisticHpLowerBound(SimulationSnapshot snapshot)
-    {
-        int healing = PinnedHealingBound.RemainingHealing(root, snapshot);
-        int headroom = Math.Max(0, snapshot.PlayerMaxHp - snapshot.PlayerHp);
-        return ActEndingBossPolicy.StrategicHpDeficit(snapshot.CumulativePlayerHpLost, 0,
-            snapshot.RecoveredPlayerHp + Math.Min(headroom, healing), _strategicBossHpRelief,
-            snapshot.DeathSaveHpRestored);
-    }
 
     internal static int? SmartEligibilityCeiling(PotionFreePolicyBaseline? baseline,
         int exactUses, int minimumPotionCost, BossHpRelief relief)
@@ -28,7 +17,7 @@ internal sealed partial class CombatBeamSolver
     private List<SearchNode> ApplyUpstreamOptimizationBounds(List<SearchNode> retained)
     {
         if (!CanUseOptimizationBounds) return retained;
-        SearchOptimizationSession? session = policy.OptimizationSession is { } candidate && candidate.Matches(root)
+        SearchOptimizationSession? session = policy.OptimizationSession is { } candidate && candidate.Matches(root, policy)
             ? candidate : null;
         // A zero-use witness only bounds members whose future explicit use is closed.
         bool zeroUseClosed = _forceAllPotionsDisabled || _potionPolicy == SolverPotionPolicy.Disabled
@@ -52,7 +41,9 @@ internal sealed partial class CombatBeamSolver
             bool prune = false;
             if (!node.IsTerminal && !node.Snapshot.HasRisk)
             {
-                int lower = OptimisticHpLowerBound(node.Snapshot);
+                int? healing = PinnedHealingBound.RemainingRankedHealing(root, node.Snapshot, out var status);
+                session?.RecordHealingBound(status);
+                int lower = StrategicHpLowerBound(node.Snapshot, _strategicBossHpRelief, healing);
                 // Strict comparisons preserve equal-HP growth, turn and potion opportunities.
                 if (shared is { } witnessed && lower > witnessed.StrategicHpDeficit
                     && ExplicitPotionUseCount(node) == 0)
@@ -60,12 +51,13 @@ internal sealed partial class CombatBeamSolver
                     prune = true;
                     if (session != null) Interlocked.Increment(ref session.SharedBranchesPruned);
                 }
-                if (!prune && local is { } incumbent && lower > incumbent.StrategicHpDeficit)
+                if (!prune && healing.HasValue && local is { } incumbent && lower > incumbent.StrategicHpDeficit)
                 {
                     prune = true;
                     if (session != null) Interlocked.Increment(ref session.CertifiedBranchesPruned);
                 }
-                if (!prune && ceiling is { } smart && lower > smart)
+                // The ceiling also depends on the closed potion supply, not just the HP formula.
+                if (!prune && healing.HasValue && ceiling is { } smart && lower > smart)
                 {
                     prune = true;
                     if (session != null) Interlocked.Increment(ref session.SmartBranchesPruned);

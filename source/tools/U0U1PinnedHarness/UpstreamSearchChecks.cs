@@ -13,6 +13,7 @@ using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Badges;
 using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.Models.Potions;
+using MegaCrit.Sts2.Core.Models.Relics;
 using MegaCrit.Sts2.Core.Platform;
 using MegaCrit.Sts2.Core.Platform.Null;
 
@@ -28,7 +29,8 @@ internal static class UpstreamSearchChecks
     }
 
     internal static string Run(CombatState live, SolverDisplayNames names, BattleDamageSnapshot damage,
-        SearchPolicySnapshot captured, SolverSearchProfile original, string outputDirectory)
+        SearchPolicySnapshot captured, SolverSearchProfile original, string outputDirectory,
+        bool conditionalRelicOnly = false)
     {
         var player = LocalContext.GetMe(live)!;
         _ = CombatRootSnapshot.Capture(live); // Finish canonical DynamicVar warm-up before removing localization bypasses.
@@ -62,6 +64,18 @@ internal static class UpstreamSearchChecks
             $"The pinned starter fixture was not certified (native MVID {typeof(CardModel).Module.ModuleVersionId}).");
         Harmony foreign = new("CombatSolver.Harness.ForeignHealingCertificate");
         MethodInfo badgeHook = AccessTools.Method(typeof(CccComboModel), nameof(CccComboModel.AfterCardPlayed));
+        if (conditionalRelicOnly)
+        {
+            foreach (RelicModel relic in player.Relics.ToArray())
+                player.RemoveRelicInternal(relic, silent: true);
+            live.Enemies.Single().SetMaxHpInternal(100);
+            live.Enemies.Single().SetCurrentHpInternal(100);
+            object comparison = CheckConditionalRelicHealing(live, names, damage, plain, profile, foreign, badgeHook);
+            object oracle = CheckSmallHealingOracle(live, names, damage, plain, profile);
+            File.WriteAllText(Path.Combine(outputDirectory, "healing-bound.json"),
+                JsonSerializer.Serialize(new { comparison, oracle }, new JsonSerializerOptions { WriteIndented = true }));
+            return "HealingBound PASS (same-root certificate A/B, complete route replays and exhaustive small combat)";
+        }
         try
         {
             foreign.Patch(badgeHook, prefix: new HarmonyMethod(typeof(UpstreamSearchChecks), nameof(ForeignBadgePrefix)));
@@ -79,9 +93,11 @@ internal static class UpstreamSearchChecks
             sim.State.GetPlayerCombatState(player).Hand.Add(PredictedCard.Create(CanonicalModels.Card<Feed>(), player)));
         try
         {
-            Check(PinnedHealingBound.RemainingHealing(firstRoot, ordinary) == firstRoot.PostCombatRelicHeal.UnconditionalHeal,
+            Check(PinnedHealingBound.RemainingRankedHealing(firstRoot, ordinary, out var ordinaryStatus)
+                    == firstRoot.PostCombatRelicHeal.UnconditionalHeal && ordinaryStatus == HealingBoundStatus.Certified,
                 "Closed native loadout did not use the finite post-combat healing allowance.");
-            Check(PinnedHealingBound.RemainingHealing(firstRoot, unknown) == int.MaxValue,
+            Check(PinnedHealingBound.RemainingRankedHealing(firstRoot, unknown, out var unknownStatus) == null
+                    && unknownStatus == HealingBoundStatus.UnclassifiedBranch,
                 "A newly introduced unclassified healing/growth source was treated as certified.");
         }
         finally { ordinary.ReleaseSimulator(); unknown.ReleaseSimulator(); }
@@ -204,17 +220,18 @@ internal static class UpstreamSearchChecks
             }
             if (fixture == "native-closed" && reference!.Snapshot.AllEnemiesDead)
             {
-                SearchOptimizationSession session = new(root);
+                SearchOptimizationSession session = new(root, policy);
                 session.Observe(reference, policy, Quality(root, policy, reference).StrategicHpDeficit);
-                Check(session.Witnesses == 1 && session.Matches(root)
-                    && !session.Matches(CombatRootSnapshot.Capture(live)),
+                Check(session.Witnesses == 1 && session.Matches(root, policy)
+                    && !session.Matches(CombatRootSnapshot.Capture(live), policy)
+                    && !session.Matches(root, policy with { CurrentTurnOnly = true }),
                     "A finalized witness was lost or shared with a fresh root.");
                 session.Observe(reference, policy with { RelicTargets = [new(RelicCounterId.HappyFlower, 1, 1, 0, 3)] }, 0);
                 Check(session.Witnesses == 1, "Resource-goal policy leaked into the HP-only shared bucket.");
             }
             if (fixture == "native-closed-hard")
             {
-                SearchOptimizationSession reuse = new(root);
+                SearchOptimizationSession reuse = new(root, policy);
                 reuse.Observe(reference!, policy, Quality(root, policy, reference!).StrategicHpDeficit);
                 Check(reuse.PotionFreeBound != null, "Complete same-root witness was not retained.");
                 SolverResult result = new CombatBeamSolver(root, names, damage,
@@ -233,12 +250,149 @@ internal static class UpstreamSearchChecks
                     result.TotalTransitionCount, metrics = reuse.Capture() });
                 Console.WriteLine($"SHARED_WITNESS_PASS pruned={reuse.SharedBranchesPruned} "
                     + $"expanded={result.ExpandedNodes} transitions={result.TotalTransitionCount}");
+                rows.Add(CheckConditionalRelicHealing(live, names, damage, policy, profile, foreign, badgeHook));
+                requests += 2;
+                replays += 2;
             }
         }
         File.WriteAllText(Path.Combine(outputDirectory, "upstream-search.json"), JsonSerializer.Serialize(
             new { requests, replays, evidence = "pinned-offline", nativeMvid = PinnedHealingBound.AuditedNativeMvid,
                 rows }, new JsonSerializerOptions { WriteIndented = true }));
         return $"UpstreamSearch PASS requests={requests} independent_replays={replays}; native/UI/Host-Client unverified";
+    }
+
+    private static object CheckConditionalRelicHealing(CombatState live, SolverDisplayNames names,
+        BattleDamageSnapshot damage, SearchPolicySnapshot policy, SolverSearchProfile profile,
+        Harmony foreign, MethodInfo badgeHook)
+    {
+        var player = LocalContext.GetMe(live)!;
+        RelicModel meat = ModelDb.Relic<MeatOnTheBone>().ToMutable();
+        player.AddRelicInternal(meat, silent: true);
+        try
+        {
+            CombatRootSnapshot certified = CombatRootSnapshot.Capture(live);
+            Check(certified.HasPinnedHealingCertificate
+                && certified.PostCombatRelicHeal.HealFor(1, certified.InitialPlayerMaxHp) > 0
+                && PinnedHealingBound.RankedPostCombatHealingUpperBound(certified) == 0,
+                "Threshold relic healing was either excluded from the closed domain or credited to ranked HP.");
+            CombatRootSnapshot unproven;
+            foreign.Patch(badgeHook, prefix: new HarmonyMethod(typeof(UpstreamSearchChecks), nameof(ForeignBadgePrefix)));
+            try { unproven = CombatRootSnapshot.Capture(live); }
+            finally { foreign.Unpatch(badgeHook, HarmonyPatchType.All, foreign.Id); }
+            Check(!unproven.HasPinnedHealingCertificate && certified.ContinuationStamp == unproven.ContinuationStamp,
+                "No-op patch did not isolate certificate availability on an identical fixture.");
+
+            var measured = policy with { VerifyIncrementalSearch = false, CaptureFinalStateForDiagnostics = true,
+                MeasurePhasePerformance = true };
+            SolverResult SearchAndReplay(CombatRootSnapshot root)
+            {
+                SolverResult result = CombatSearchCoordinator.Solve(root, names, damage, measured, default, null);
+                CombatBeamSolver replay = new(root, names, damage, measured, searchProfile: profile);
+                SimulationSnapshot snapshot = replay.ReplayDiagnosticPrefix(result.BestNode.Actions);
+                try
+                {
+                    Check(snapshot.TerminalStamp is { Outcome: CombatTerminalOutcome.Victory }
+                        && replay.CaptureDiagnosticContinuation(snapshot) == result.PredictedFinalState
+                        && snapshot.CumulativePlayerHpLost == result.ProjectedBattleHpLost,
+                        "Conditional relic fixture did not replay to the selected complete victory.");
+                }
+                finally { snapshot.ReleaseSimulator(); }
+                return result;
+            }
+            SolverResult baseline = SearchAndReplay(unproven);
+            SolverResult optimized = SearchAndReplay(certified);
+            Check(optimized.TotalExpandedNodes < baseline.TotalExpandedNodes
+                && optimized.ProjectedBattleHpLost == baseline.ProjectedBattleHpLost
+                && optimized.CombatEndedTurn == baseline.CombatEndedTurn
+                && optimized.OptimizationMetrics?.HealingBounds?.Certified > 0
+                && baseline.OptimizationMetrics?.HealingBounds?.UncertifiedRoot > 0
+                && ContinuationStamp.CaptureLive(live) == certified.ContinuationStamp,
+                "The new certificate failed to reduce work while preserving the matched victory quality.");
+            return new { fixture = "conditional-post-combat-relic", certified.PostCombatRelicHeal,
+                baseline.TotalExpandedNodes, baseline.TotalTransitionCount,
+                certifiedExpanded = optimized.TotalExpandedNodes, certifiedTransitions = optimized.TotalTransitionCount,
+                optimized.ProjectedBattleHpLost, optimized.CombatEndedTurn,
+                sameRoute = JsonSerializer.Serialize(baseline.BestNode.Actions)
+                    == JsonSerializer.Serialize(optimized.BestNode.Actions),
+                sameFinalState = baseline.PredictedFinalState == optimized.PredictedFinalState,
+                optimized.OptimizationMetrics };
+        }
+        finally { player.RemoveRelicInternal(meat, silent: true); }
+    }
+
+    private static object CheckSmallHealingOracle(CombatState live, SolverDisplayNames names,
+        BattleDamageSnapshot damage, SearchPolicySnapshot policy, SolverSearchProfile profile)
+    {
+        var player = LocalContext.GetMe(live)!;
+        var enemy = live.Enemies.Single();
+        var piles = player.PlayerCombatState!;
+        foreach (var pile in new[] { piles.Hand, piles.DrawPile, piles.DiscardPile, piles.ExhaustPile })
+            pile.Clear(silent: true);
+        piles.Hand.AddInternal(live.CreateCard(CanonicalModels.Card<StrikeIronclad>(), player), -1);
+        piles.Hand.AddInternal(live.CreateCard(CanonicalModels.Card<Bloodletting>(), player), -1);
+        player.Creature.SetCurrentHpInternal(4);
+        enemy.SetCurrentHpInternal(6);
+        player.AddRelicInternal(ModelDb.Relic<MeatOnTheBone>().ToMutable(), silent: true);
+        CombatRootSnapshot root = CombatRootSnapshot.Capture(live);
+        Check(root.HasPinnedHealingCertificate && root.SearchablePotions.Count == 0,
+            "Oracle requires a closed two-card combat with no potions.");
+        CombatBeamSolver replay = new(root, names, damage, policy, searchProfile: profile);
+        int turn = root.StartTurnNumber;
+        PlanAction strike = new(PlanActionKind.PlayCard, turn, "STRIKE_IRONCLAD", TargetCombatId: enemy.CombatId);
+        PlanAction bloodletting = new(PlanActionKind.PlayCard, turn, "BLOODLETTING");
+        PlanAction end = new(PlanActionKind.EndTurn, turn);
+        int victories = 0, defeats = 0, certifiedCuts = 0, equalBranches = 0;
+        int? Visit(PlanAction[] actions)
+        {
+            SimulationSnapshot snapshot = replay.ReplayDiagnosticPrefix(actions);
+            try
+            {
+                Check(!snapshot.HasRisk, "Oracle encountered an unmodeled effect.");
+                if (snapshot.TerminalStamp is { Outcome: CombatTerminalOutcome.Victory })
+                {
+                    victories++;
+                    return snapshot.CumulativePlayerHpLost;
+                }
+                if (snapshot.TerminalStamp is { Outcome: CombatTerminalOutcome.Defeat })
+                {
+                    defeats++;
+                    return null;
+                }
+                Check(snapshot.Turn == turn && snapshot.Energy >= 1 && snapshot.BoundaryReason == SearchBoundaryReason.None,
+                    "Oracle escaped the fully enumerated play phase.");
+                int? allowance = PinnedHealingBound.RemainingRankedHealing(root, snapshot, out var status);
+                Check(allowance == 0 && status == HealingBoundStatus.Certified, "Oracle lost its closed recovery proof.");
+                int lower = CombatBeamSolver.StrategicHpLowerBound(snapshot, BossHpRelief.None, allowance);
+                int? best = Visit([.. actions, end]);
+                foreach (PredictedCard card in snapshot.Simulator.State.GetPlayerCombatState(player).Hand.Cards)
+                {
+                    PlanAction action = card.Preview switch
+                    {
+                        StrikeIronclad => strike,
+                        Bloodletting => bloodletting,
+                        _ => throw new InvalidOperationException("Unexpected legal action in closed healing oracle."),
+                    };
+                    if (Visit([.. actions, action]) is { } childBest && (best == null || childBest < best))
+                        best = childBest;
+                }
+                Check(best == null || lower <= best, "Certified lower bound excluded a better terminal descendant.");
+                // The one-Strike route witnesses zero strategic HP deficit. Both outcomes
+                // are enumerated even when the proposed cut could already exclude a branch.
+                if (lower > 0)
+                {
+                    certifiedCuts++;
+                    Check(best == null || best > 0, "Strict bound cut a route that could match the witness.");
+                }
+                if (lower == 0)
+                    equalBranches++;
+                return best;
+            }
+            finally { snapshot.ReleaseSimulator(); }
+        }
+        Check(Visit([]) == 0 && victories == 2 && defeats == 2 && certifiedCuts == 1 && equalBranches == 1
+            && ContinuationStamp.CaptureLive(live) == root.ContinuationStamp,
+            "Oracle must exhaust both action orders and verify one strict cut plus the equality case.");
+        return new { victories, defeats, certifiedCuts, equalBranches };
     }
 
     private static void CheckPotionCostSnapshots(CombatRootSnapshot root, SolverDisplayNames names,

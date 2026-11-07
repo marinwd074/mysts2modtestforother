@@ -389,13 +389,19 @@ internal sealed partial class CombatBeamSolver
     /// Post-combat relic healing needs no term of its own here. It can never exceed the HP the route ends up
     /// missing, and that headroom is already credited in full, so this stays a valid lower bound.
     /// </remarks>
-    private static int StrategicHpLowerBound(SimulationSnapshot snapshot, BossHpRelief bossHpRelief)
-        => ActEndingBossPolicy.StrategicHpDeficit(
+    internal static int StrategicHpLowerBound(SimulationSnapshot snapshot, BossHpRelief bossHpRelief,
+        int? certifiedHealingUpperBound = null)
+    {
+        int headroom = Math.Max(0, snapshot.PlayerMaxHp - snapshot.PlayerHp);
+        int optimisticHealing = certifiedHealingUpperBound is { } certified
+            ? Math.Min(headroom, certified) : headroom;
+        return ActEndingBossPolicy.StrategicHpDeficit(
             snapshot.CumulativePlayerHpLost,
             maxHpDeficit: 0,
-            snapshot.RecoveredPlayerHp + Math.Max(0, snapshot.PlayerMaxHp - snapshot.PlayerHp),
+            snapshot.RecoveredPlayerHp + optimisticHealing,
             bossHpRelief,
             snapshot.DeathSaveHpRestored);
+    }
 
     internal static bool ShouldPruneByPrimaryIncumbent(
         int strategicHpLowerBound,
@@ -502,7 +508,7 @@ internal sealed partial class CombatBeamSolver
                 node.Snapshot.AllEnemiesDead,
                 node.Snapshot.PlayerDead,
                 node.Snapshot.ProjectedPlayerHp);
-            if (!completeVictory
+            if (!completeVictory || node.Snapshot.HasRisk
                 || node.Snapshot.ProjectedDeathSaveUseCount > 0
                 || explicitPotionUses != _minimumPotionUses
                 || EnforcePotionDirectives

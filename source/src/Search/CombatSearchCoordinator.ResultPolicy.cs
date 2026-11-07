@@ -271,7 +271,7 @@ internal static partial class CombatSearchCoordinator
         SolverResult result)
         => !policy.EffectiveHasGrowthTargets
             && policy.RelicTargets.Count == 0
-            && result.Snapshot.ProjectedDeathSaveUseCount == 0
+            && !result.Snapshot.HasRisk && result.Snapshot.ProjectedDeathSaveUseCount == 0
             && TheftEncounterStrategy.RecoverySatisfied(policy.TheftPolicy, result.OutstandingStolenResource)
             && HasReachedProvablePrimaryQualityLowerBound(
             IsCompleteVictory(result),
@@ -306,7 +306,7 @@ internal static partial class CombatSearchCoordinator
         if (SearchEvaluationPolicy.UsesRawLossFirst(policy.RoutePolicy)
             || policy.EffectiveHasGrowthTargets
             || policy.RelicTargets.Count > 0
-            || result.Snapshot.ProjectedDeathSaveUseCount > 0
+            || result.Snapshot.HasRisk || result.Snapshot.ProjectedDeathSaveUseCount > 0
             || !IsCompleteVictory(result)
             || result.CombatEndedTurn is not { } combatEndedTurn)
             return null;
@@ -406,7 +406,7 @@ internal static partial class CombatSearchCoordinator
         // On a closed root, damage taken later cannot create net healing. At most
         // the certified post-combat heal can recover HP already missing at capture.
         int recoveryUpperBound = useCertifiedRecoveryBound
-            ? PinnedHealingBound.PostCombatHealingUpperBound(root)
+            ? PinnedHealingBound.RankedPostCombatHealingUpperBound(root)
             : int.MaxValue;
         long savingRoom = legacyAdmission ? Math.Max(0, potionFreeHpDeficit)
             : Math.Max(0L, (long)potionFreeHpDeficit - ProvableStrategicHpFloor(root, relief, recoveryUpperBound));

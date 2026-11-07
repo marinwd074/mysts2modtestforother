@@ -40,7 +40,7 @@ internal static class Program
     {
         bool modelIdCacheOnly = args.Length > 0 && args[0] == "model-id-cache";
         bool upstreamPortOnly = args.Length > 0 && args[0] == "upstream-port";
-        bool upstreamSearchOnly = args.Length > 0 && args[0] == "upstream-search";
+        bool upstreamSearchOnly = args.Length > 0 && args[0] is "upstream-search" or "healing-bound";
         bool multiplayerWindowOnly = args.Length > 0 && args[0] == "multiplayer-window";
         bool nativeReviewedCardOnly = args.Length > 0 && args[0] == "native-reviewed-card";
         bool nativeActionsOnly = nativeReviewedCardOnly || args.Length > 0 && args[0] == "native-actions";
@@ -291,7 +291,8 @@ internal static class Program
             }
             if (upstreamSearchOnly)
             {
-                Console.WriteLine(UpstreamSearchChecks.Run(combat, names, damage, captured, profile, outputDirectory));
+                Console.WriteLine(UpstreamSearchChecks.Run(combat, names, damage, captured, profile, outputDirectory,
+                    conditionalRelicOnly: args[0] == "healing-bound"));
                 return 0;
             }
             if (entropicCostOnly)

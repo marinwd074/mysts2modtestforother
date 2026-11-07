@@ -148,7 +148,7 @@ internal static partial class CombatSearchCoordinator
         SearchSnapshotOwnership? snapshotOwnership = policy.MeasurePhasePerformance && root.PlayerCount == 1
             && policy.RoutePolicy == SearchRoutePolicy.SinglePlayerFullRoute ? new() : null;
         SearchOptimizationSession? optimizations = policy.UseUpstreamSearchOptimizations
-            ? new(root, measureFirstWitness: snapshotOwnership != null) : null;
+            ? new(root, policy, measureBounds: snapshotOwnership != null) : null;
         bool adaptiveHorizon = localRecoveryPolicy && CanRefineLocalHorizon(root, policy);
         if (localRecoveryPolicy && (policy.MultiplayerPlanRefresh != null
             || policy.ContinuationSeedActions.Count > 0

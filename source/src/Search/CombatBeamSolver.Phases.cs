@@ -2796,7 +2796,7 @@ internal sealed partial class CombatBeamSolver
                 finalEvaluationContextId);
             foreach (SearchNode candidate in finalCandidates)
                 candidate.Snapshot.ReleaseSimulator();
-            if (policy.OptimizationSession is { } optimization && optimization.Matches(root))
+            if (policy.OptimizationSession is { } optimization && optimization.Matches(root, policy))
                 optimization.Observe(result, policy, ActEndingBossPolicy.StrategicHpDeficit(
                     result.Snapshot.CumulativePlayerHpLost,
                     Math.Max(0, root.InitialPlayerMaxHp - result.Snapshot.PlayerMaxHp),
