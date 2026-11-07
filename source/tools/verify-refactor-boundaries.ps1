@@ -3782,6 +3782,20 @@ else {
         $violations.Add("${corePowerSupportPath}: BeforeFlush must execute before Well-Laid Plans BeforeFlushLate, not inside FlushPlayerHandAtTurnEnd")
     }
 }
+$playerTurnEndPath = Join-Path $repositoryRoot 'src/Prediction/PlayerTurnEndLifecycle.cs'
+$playerTurnEndText = [IO.File]::ReadAllText($playerTurnEndPath)
+$beforeFlushIndex = $playerTurnEndText.IndexOf('EnchantmentLifecycleSupport.BeforeFlush(simulator, player)')
+$beforeFlushLateIndex = $playerTurnEndText.IndexOf('EndTurnPowerSupport.TriggerBeforeFlushLate(simulator, combat, player)')
+if ($beforeFlushIndex -lt 0 -or $beforeFlushLateIndex -le $beforeFlushIndex) {
+    $violations.Add("${playerTurnEndPath}: BeforeFlush must execute before Well-Laid Plans BeforeFlushLate")
+}
+$liveRiskPath = Join-Path $repositoryRoot 'src/Runtime/LiveEndTurnRiskEvaluator.cs'
+$liveRiskText = [IO.File]::ReadAllText($liveRiskPath)
+$liveBeforeFlushIndex = $liveRiskText.IndexOf('PlayerTurnEndLifecycle.RunBeforeHandFlush(simulator, combat, player)')
+$liveFlushIndex = $liveRiskText.IndexOf('CorePowerSupport.FlushPlayerHandAtTurnEnd(simulator, combat, player)')
+if ($liveBeforeFlushIndex -lt 0 -or $liveFlushIndex -le $liveBeforeFlushIndex) {
+    $violations.Add("${liveRiskPath}: risk review must run the shared BeforeFlush phase before FlushPlayerHand")
+}
 $expansionPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.Expansion.cs'
 $expansionText = [IO.File]::ReadAllText($expansionPath)
 $advanceRoundStart = $expansionText.IndexOf('private SearchBoundaryReason AdvanceRound(')
@@ -3791,12 +3805,9 @@ if ($advanceRoundStart -lt 0 -or $advanceRoundEnd -le $advanceRoundStart) {
 }
 else {
     $advanceRoundBlock = $expansionText.Substring($advanceRoundStart, $advanceRoundEnd - $advanceRoundStart)
-    $beforeFlushIndex = $advanceRoundBlock.IndexOf('EnchantmentLifecycleSupport.BeforeFlush(simulator, _player)')
-    $beforeFlushLateIndex = $advanceRoundBlock.IndexOf('EndTurnPowerSupport.TriggerBeforeFlushLate(simulator, simulatedCombat, _player)')
+    $beforeFlushIndex = $advanceRoundBlock.IndexOf('PlayerTurnEndLifecycle.RunBeforeHandFlush(simulator, simulatedCombat, _player)')
     $flushIndex = $advanceRoundBlock.IndexOf('CorePowerSupport.FlushPlayerHandAtTurnEnd(simulator, simulatedCombat, _player)')
-    if ($beforeFlushIndex -lt 0 -or
-        $beforeFlushLateIndex -le $beforeFlushIndex -or
-        $flushIndex -le $beforeFlushLateIndex) {
+    if ($beforeFlushIndex -lt 0 -or $flushIndex -le $beforeFlushIndex) {
         $violations.Add("${expansionPath}: 0.107.1 end-turn order must be BeforeFlush -> Well-Laid Plans BeforeFlushLate -> FlushPlayerHand")
     }
 }

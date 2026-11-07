@@ -95,6 +95,9 @@ internal static class LiveEndTurnRiskEvaluator
         {
             return BuildProjection(hpBefore, simulatedPlayer, []);
         }
+        if (!simulator.IsInProgress || !PlayerTurnEndLifecycle.RunBeforeHandFlush(simulator, combat, player))
+            return BuildProjection(hpBefore, simulatedPlayer, []);
+
         CorePowerSupport.FlushPlayerHandAtTurnEnd(simulator, combat, player);
         if (!PlayerTurnEndLifecycle.RunPhaseTwo(
                 simulator,

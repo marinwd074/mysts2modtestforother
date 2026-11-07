@@ -8,6 +8,18 @@ namespace CombatSolver;
 
 internal static class PlayerTurnEndLifecycle
 {
+    public static bool RunBeforeHandFlush(
+        CombatPredictionSimulator simulator,
+        SimulatedCombatState combat,
+        Player player)
+    {
+        // Native 0.107.1 runs ordinary BeforeFlush listeners before the late
+        // Well-Laid Plans retain choice. Both run before the hand is flushed.
+        EnchantmentLifecycleSupport.BeforeFlush(simulator, player);
+        return !combat.HasPendingChoice
+            && EndTurnPowerSupport.TriggerBeforeFlushLate(simulator, combat, player);
+    }
+
     public static bool RunPhaseTwo(
         CombatPredictionSimulator simulator,
         SimulatedCombatState combat,
@@ -109,13 +121,8 @@ internal static class PlayerTurnEndLifecycle
 
         for (int index = 0; index < players.Count; index++)
         {
-            Player player = players[index];
-            EnchantmentLifecycleSupport.BeforeFlush(simulator, player);
-            if (combat.HasPendingChoice
-                || !EndTurnPowerSupport.TriggerBeforeFlushLate(simulator, combat, player))
-            {
+            if (!RunBeforeHandFlush(simulator, combat, players[index]))
                 return false;
-            }
         }
 
         int shuffleEventsBefore = simulator.ShuffleEventCount;
