@@ -33,6 +33,7 @@ internal sealed class SearchOptimizationSession(CombatRootSnapshot root, SearchP
     private readonly long? _startedAt = measureBounds ? Stopwatch.GetTimestamp() : null;
     private readonly long[]? _healingBounds = measureBounds ? new long[Enum.GetValues<HealingBoundStatus>().Length] : null;
     private double? _firstPotionFreeWitnessMs;
+    private bool _auditedSoloVictoryPublished;
     private PrimarySearchIncumbent? _potionFreeBound;
     private SolverResult? _potionFreeWitness;
     internal long SharedBranchesPruned;
@@ -53,6 +54,10 @@ internal sealed class SearchOptimizationSession(CombatRootSnapshot root, SearchP
 
     internal bool Matches(CombatRootSnapshot candidate, SearchPolicySnapshot candidatePolicy)
         => ReferenceEquals(root, candidate) && _objective == Objective.Capture(candidate, candidatePolicy);
+
+    // Called at a committed work boundary on the coordinator thread.
+    internal bool CanPublishAuditedSoloVictory => !_auditedSoloVictoryPublished;
+    internal void MarkAuditedSoloVictoryPublished() => _auditedSoloVictoryPublished = true;
 
     internal void RecordHealingBound(HealingBoundStatus status)
     {

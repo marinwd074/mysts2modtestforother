@@ -387,6 +387,10 @@ internal sealed record SolverProgress(
 {
     public SolverRouteAdoptionSeed? CurrentTurnAdoptionSeed { get; init; }
 
+    // The current preview passed the solo policy audit at a committed search boundary.
+    // Final replay and execution authorization have their own existing contracts.
+    public bool IsAuditedSoloVictory { get; init; }
+
     // Set only when a member has finished the full production final ordering (including
     // scenario rerank and deterministic block-potion insertion) but is still flattening
     // replay/annotation data. The coordinator records Published only if this route actually

@@ -80,6 +80,7 @@ internal sealed record SearchPolicySnapshot(
     public bool UseMultiplayerTeammateForecast { get; init; } = true;
     public bool UseMultiplayerScenarioReevaluation { get; init; } = true;
     public bool UseNoveltyPortfolio { get; init; }
+    internal bool UseSoloAuditedVictoryCheckpoint { get; init; } = true;
     public NoveltySearchOptions? NoveltySearch { get; init; }
     public NoveltyPortfolioBudget NoveltyBudget { get; init; } = NoveltyPortfolioBudget.Default;
     public bool Act3BossStrategy { get; init; }

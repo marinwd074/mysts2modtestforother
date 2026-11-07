@@ -495,6 +495,11 @@ internal static partial class CombatSearchCoordinator
                     acceptsRouteUpdate ? progress.OfficialPublishedOrigin : null;
                 string? approvedForegroundContextId =
                     acceptsRouteUpdate ? progress.OfficialPublishedEvaluationContextId : null;
+                bool auditedSoloVictory = acceptsRouteUpdate && progress.IsAuditedSoloVictory;
+                if (auditedSoloVictory)
+                    policy.Diagnostics.Info($"[CombatSolver/Test] SOLO_AUDITED_VICTORY elapsed_ms={progress.ElapsedMilliseconds} "
+                        + $"turn={evaluatedCandidate?.CombatEndedTurn} loss={evaluatedCandidate?.ProjectedBattleHpLost} "
+                        + $"expanded={progress.ExpandedNodes}");
                 progressCallback(progress with
                 {
                     CurrentBestResult = currentDisplayedResult,
@@ -504,6 +509,7 @@ internal static partial class CombatSearchCoordinator
                     CurrentTurnAdoptionSeed = currentTurnAdoptionSeed,
                     OfficialPublishedOrigin = approvedForegroundOrigin,
                     OfficialPublishedEvaluationContextId = approvedForegroundContextId,
+                    IsAuditedSoloVictory = auditedSoloVictory,
                 });
             };
 

@@ -68,7 +68,8 @@ internal static class Program
         bool p2QualityOnly = args.Length > 0 && args[0] == "p2-quality";
         bool rootHistoryOnly = args.Length > 0 && args[0] == "root-history";
         bool requestHydrationOnly = args.Length > 0 && args[0] is "request-hydration"
-            or "request-hydration-benchmark-on" or "request-hydration-benchmark-off" or "solo-performance";
+            or "request-hydration-benchmark-on" or "request-hydration-benchmark-off" or "solo-performance"
+            or "solo-scheduling-on" or "solo-scheduling-off";
         bool requestHydrationBenchmark = requestHydrationOnly && args[0] != "request-hydration";
         string outputDirectory = ParseOutput(multiplayerRefreshOnly || entropicCostOnly || upstreamSearchOnly || upstreamPortOnly || memoryDisplayOnly || cardChoiceIdentityOnly || modelIdCacheOnly || darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicTailOnly || p2QualityOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
             allowHydrationOptions: requestHydrationBenchmark || p2QualityOnly, allowRoutePrefix: p2QualityOnly,
@@ -323,7 +324,7 @@ internal static class Program
                     : args[0] == "request-hydration-benchmark-on";
                 ValidateRequestTransitionHydration(combat, names, damage, captured, profile, outputDirectory,
                     benchmarkCacheEnabled, args);
-                Console.WriteLine(args[0] == "solo-performance" ? "Solo performance samples recorded"
+                Console.WriteLine(args[0].StartsWith("solo-", StringComparison.Ordinal) ? "Solo performance samples recorded"
                     : benchmarkCacheEnabled.HasValue ? "RequestHydration benchmark completed"
                     : "RequestHydration PASS (cold replay, first validation, isolation, capacity, audits and lifecycle)");
                 return 0;
@@ -3708,7 +3709,9 @@ internal static class Program
             Require(player.AddPotionInternal(ModelDb.AllPotions.Single(p => p.Id.Entry == "FIRE_POTION")
                 .ToMutable(), slot, silent: false).success, "Could not add hydration benchmark potion.");
         CombatRootSnapshot root = CombatRootSnapshot.Capture(combat);
-        SolverSearchProfile profile = originalProfile with { BeamWidth = 8, MaxExpandedNodes = 600 };
+        bool scheduleComparison = benchmarkArgs?[0] is "solo-scheduling-on" or "solo-scheduling-off";
+        bool victoryCheckpoint = benchmarkArgs?[0] == "solo-scheduling-on";
+        SolverSearchProfile profile = originalProfile with { BeamWidth = 8, MaxExpandedNodes = scheduleComparison ? 1_200 : 600 };
         List<string> diagnostics = [];
         SearchPolicySnapshot coordinated = RequestHydrationPolicy(captured, profile) with
         {
@@ -3721,10 +3724,11 @@ internal static class Program
             return index < 0 ? fallback : benchmarkArgs![index + 1];
         }
         string fixture = Option("--fixture", "shared-audit");
-        bool solo = benchmarkArgs?[0] == "solo-performance";
+        bool solo = scheduleComparison || benchmarkArgs?[0] == "solo-performance";
         if (solo)
             coordinated = coordinated with { RoutePolicy = SearchRoutePolicy.SinglePlayerFullRoute,
-                CaptureFinalStateForDiagnostics = true };
+                CaptureFinalStateForDiagnostics = true,
+                UseNoveltyPortfolio = scheduleComparison, UseSoloAuditedVictoryCheckpoint = victoryCheckpoint };
         int iterations = int.Parse(Option("--iterations", "1"));
         int dop = int.Parse(Option("--dop", "1"));
         Require(iterations is > 0 and <= 100 && dop is > 0 and <= 16, "Invalid benchmark size or DOP.");
@@ -3818,13 +3822,43 @@ internal static class Program
             TimeSpan pauseBefore = GC.GetTotalPauseDuration();
             int[] gcBefore = Enumerable.Range(0, 3).Select(GC.CollectionCount).ToArray();
             var wall = System.Diagnostics.Stopwatch.StartNew();
+            SolverProgress? firstAuditedVictory = null;
+            double? firstAuditedVictoryMs = null, firstResolvedPreviewMs = null;
+            void ObserveSoloProgress(SolverProgress progress)
+            {
+                if (progress.CurrentBestResult is not { Won: true }
+                    || progress.SpeculativeRoutePreview is not { CombatEnded: true, HasRisk: false })
+                    return;
+                firstResolvedPreviewMs ??= wall.Elapsed.TotalMilliseconds;
+                if (firstAuditedVictory == null && (progress.IsAuditedSoloVictory || progress.HasApprovedForegroundRoute))
+                {
+                    firstAuditedVictory = progress;
+                    firstAuditedVictoryMs = wall.Elapsed.TotalMilliseconds;
+                }
+            }
             SolverResult measured = CombatSearchCoordinator.Solve(root, names, damage,
-                coordinated with { UseRequestTransitionHydration = enabledFlag }, default, null);
+                coordinated with { UseRequestTransitionHydration = enabledFlag }, default,
+                scheduleComparison ? ObserveSoloProgress : null);
             wall.Stop();
             long allocatedBytes = GC.GetTotalAllocatedBytes(precise: true) - allocatedBefore;
             double gcPauseMs = (GC.GetTotalPauseDuration() - pauseBefore).TotalMilliseconds;
             int[] gcCollections = Enumerable.Range(0, 3).Select(g => GC.CollectionCount(g) - gcBefore[g]).ToArray();
             memory?.Dispose();
+            if (firstAuditedVictory is { IsAuditedSoloVictory: true, SpeculativeRoutePreview: { } preview })
+            {
+                Require(firstAuditedVictory.RouteAdoptionSeed == null && firstAuditedVictory.CurrentTurnAdoptionSeed == null,
+                    "The solo review checkpoint carried an execution seed.");
+                CombatBeamSolver verifier = new(root, names, damage, coordinated, searchProfile: profile);
+                SimulationSnapshot audited = verifier.ReplayDiagnosticPrefix(preview.Turns.SelectMany(turn => turn.Actions).ToArray());
+                try
+                {
+                    Require(audited.TerminalStamp is { Outcome: CombatTerminalOutcome.Victory }
+                        && !audited.HasRisk && audited.CombatEndedTurn == firstAuditedVictory.CurrentBestResult?.CombatEndedTurn
+                        && audited.CumulativePlayerHpLost + damage.HpLostSoFar == preview.ProjectedBattleHpLost,
+                        "The audited checkpoint did not independently replay to the reported victory.");
+                }
+                finally { audited.ReleaseSimulator(); }
+            }
             string fullRoute = JsonSerializer.Serialize(measured.BestNode.Actions, Json);
             Require(fullRoute == referenceRoute
                 && measured.PredictedFinalState == reference.PredictedFinalState
@@ -3851,20 +3885,52 @@ internal static class Program
                 measured.TotalExpandedNodes, measured.TotalTransitionCount, measured.ProjectedBattleHpLost,
                 measured.BoundaryReason, measured.CombatEndedTurn,
                 measured.OptimizationMetrics, measured.EvaluationWindow,
+                quality = scheduleComparison ? CombatSearchCoordinator.CaptureP3FinalQualityForTesting(root, coordinated, measured) : null,
+                measured.NoveltyPortfolio,
                 route = measured.BestNode.Actions.Select(ActionToken).ToArray(),
                 fullRoute,
                 finalState = measured.PredictedFinalState?.StateText, measured.RequestTransitionHydration,
                 measured.RequestPhaseMetrics,
                 skippedPlayCardSimulations = measured.RequestTransitionHydration?.HydrationHits ?? 0,
+                firstAuditedVictoryMs, firstResolvedPreviewMs,
+                usedEarlyAudit = firstAuditedVictory?.IsAuditedSoloVictory == true,
                 phaseDiagnostics = measure ? diagnostics.Skip(diagnosticsStart)
                     .Where(static line => line.Contains(" SEARCH_PHASE ")
                         || line.Contains(" SEARCH_SNAPSHOT_OWNERSHIP ")).ToArray() : null,
             });
         }
+        double? canceledCheckpointDrainMs = null;
+        if (victoryCheckpoint && measure)
+        {
+            using CancellationTokenSource source = new();
+            long? canceledAt = null;
+            int diagnosticStart = diagnostics.Count;
+            try
+            {
+                CombatSearchCoordinator.Solve(root, names, damage, coordinated, source.Token, progress =>
+                {
+                    if (progress.IsAuditedSoloVictory && canceledAt == null)
+                    {
+                        canceledAt = System.Diagnostics.Stopwatch.GetTimestamp();
+                        source.Cancel();
+                    }
+                });
+                throw new InvalidOperationException("The solo checkpoint cancellation did not stop the search.");
+            }
+            catch (OperationCanceledException) when (source.IsCancellationRequested && canceledAt != null)
+            {
+                canceledCheckpointDrainMs = System.Diagnostics.Stopwatch.GetElapsedTime(canceledAt.Value).TotalMilliseconds;
+            }
+            Require(diagnostics.Skip(diagnosticStart).Any(line => line.Contains(" SEARCH_SNAPSHOT_OWNERSHIP ")
+                    && line.Contains("outcome=Canceled") && line.Contains(" active=0 ")),
+                "Cancellation after a solo audit checkpoint retained simulator references.");
+        }
         File.WriteAllText(Path.Combine(outputDirectory, solo ? "solo-performance.json" : "request-hydration-benchmark.json"),
             JsonSerializer.Serialize(new
             {
                 evidenceLevel = "pinned-headless", enabled = enabledFlag, fixture, dop, measure,
+                scheduleComparison, victoryCheckpoint,
+                canceledCheckpointDrainMs,
                 coordinated.RoutePolicy, coordinated.Profile, coordinated.PotionPolicy,
                 tieredCompilation = Environment.GetEnvironmentVariable("DOTNET_TieredCompilation"),
                 runtime = Environment.Version.ToString(), processorCount = Environment.ProcessorCount,

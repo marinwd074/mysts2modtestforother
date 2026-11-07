@@ -361,6 +361,16 @@ internal sealed partial class CombatBeamSolver
         int requiredPotionUses = Math.Max(_minimumPotionUses,
             _potionPolicy == SolverPotionPolicy.RequireAtLeastOne ? 1 : 0);
         int earlyStopPotionUses = policy.MinimumRequiredPotionUses(battleDamage.PotionsUsedSoFar);
+        SearchOptimizationSession? soloAudit = policy.UseSoloAuditedVictoryCheckpoint
+            && policy.UseNoveltyPortfolio && policy.NoveltySearch != null
+            && progressCallback != null && policy.RoutePolicy == SearchRoutePolicy.SinglePlayerFullRoute
+            && root.PlayerCount == 1 && !_includeTurnSetup && !policy.CurrentTurnOnly
+            && !policy.UseMultiplayerTeamObjective && !policy.UseMultiplayerScenarioReevaluation
+            && _potionPolicy == SolverPotionPolicy.Disabled && requiredPotionUses == 0
+            && !_potionStrategy.HasForcedDirectives
+            && policy.OptimizationSession is { } auditSession && auditSession.Matches(root, policy)
+                ? auditSession : null;
+        bool attemptedImmediateSoloAudit = false;
         bool IsEligibleCompleteVictory(SearchNode node)
             => ExplicitPotionUseCount(node) >= requiredPotionUses
                 && (!EnforcePotionDirectives
@@ -380,6 +390,20 @@ internal sealed partial class CombatBeamSolver
                 && node.Snapshot.ProjectedDeathSaveUseCount == 0
                 && ExplicitPotionUseCount(node) <= earlyStopPotionUses
                 && battleDamage.HpLostSoFar + node.Snapshot.CumulativePlayerHpLost <= _acceptableBattleHpLoss;
+
+        bool CanAuditSoloVictory(SearchNode node)
+            => soloAudit?.CanPublishAuditedSoloVictory == true
+                && _interaction?.CurrentTakeoverRequest == null
+                && node.Snapshot.HasSimulator && !node.Snapshot.HasRisk
+                && node.BoundaryReason == SearchBoundaryReason.None
+                && node.Snapshot.TerminalStamp is { Outcome: CombatTerminalOutcome.Victory }
+                && node.PotionCount == 0 && node.Snapshot.ProjectedDeathSaveUseCount == 0
+                && !policy.MemoryPressureSignal.IsSystemLimitReached
+                && IsEligibleCompleteVictory(node)
+                && (!policy.EffectiveHasGrowthTargets
+                    || policy.GrowthOpportunityTargets.IsSatisfiedBy(node.Snapshot.GrowthRewards))
+                && policy.RelicTargetsSatisfied(node.Snapshot.RelicCounters)
+                && TheftEncounterStrategy.RecoverySatisfied(_theftPolicy, node.Snapshot.OutstandingStolenResource);
 
         void ConsiderCompleteVictory(SearchNode node)
         {
@@ -1291,6 +1315,17 @@ internal sealed partial class CombatBeamSolver
                         evaluationContextId));
             }
             member.LastRoutePreviewAt = System.Environment.TickCount64;
+            if (CanAuditSoloVictory(ordering.Candidate.Node) && speculativeRoutePreview.CombatEnded)
+            {
+                // FinalOrdering has audited the complete route. Let the foreground consume
+                // its value snapshot while the member continues, leaving replay to the normal
+                // materialization and adoption paths.
+                soloAudit!.MarkAuditedSoloVictoryPublished();
+                SearchNode victory = ordering.Candidate.Node;
+                PublishProgress(victory.Turn, member.SearchedTurnLayers, member.PlayDepth,
+                    viable.Count, retained.Count, "完整胜利路线已复核", force: true,
+                    auditedSoloVictory: SummarizeCandidate(victory, won: true));
+            }
         }
 
         void PublishProgress(
@@ -1302,7 +1337,8 @@ internal sealed partial class CombatBeamSolver
             string phase,
             bool force = false,
             CandidateOrigin? officialPublishedOrigin = null,
-            string? officialPublishedEvaluationContextId = null)
+            string? officialPublishedEvaluationContextId = null,
+            SolverInterimResult? auditedSoloVictory = null)
         {
             long elapsedMs = EffectiveSearchElapsedMilliseconds(stopwatch);
             if (!force && elapsedMs - lastProgressMs < 100)
@@ -1329,12 +1365,13 @@ internal sealed partial class CombatBeamSolver
                 elapsedMs,
                 _progressPhaseOverride
                 ?? $"搜索·{phase}",
-                member.CurrentBestResult,
+                auditedSoloVictory ?? member.CurrentBestResult,
                 member.CurrentTurnPreview,
                 member.SpeculativeRoutePreview,
-                member.RouteAdoptionSeed)
+                auditedSoloVictory == null ? member.RouteAdoptionSeed : null)
             {
-                CurrentTurnAdoptionSeed = member.CurrentTurnAdoptionSeed,
+                CurrentTurnAdoptionSeed = auditedSoloVictory == null ? member.CurrentTurnAdoptionSeed : null,
+                IsAuditedSoloVictory = auditedSoloVictory != null,
                 OfficialPublishedOrigin = officialPublishedOrigin,
                 OfficialPublishedEvaluationContextId =
                     officialPublishedEvaluationContextId,
@@ -1872,10 +1909,13 @@ internal sealed partial class CombatBeamSolver
             {
                 ObserveParentAllocation(Math.Max(0,
                     policy.MemoryPressureSignal.AllocatedBytes - noveltyParentAllocatedAtStart));
-                if (progressCallback != null && EffectiveSearchElapsedMilliseconds(stopwatch) - lastProgressMs >= 100)
+                bool auditNow = !attemptedImmediateSoloAudit && member.CurrentBestNode is { } best
+                    && CanAuditSoloVictory(best);
+                if (auditNow || progressCallback != null && EffectiveSearchElapsedMilliseconds(stopwatch) - lastProgressMs >= 100)
                 {
+                    attemptedImmediateSoloAudit |= auditNow;
                     RefreshCurrentTurnPreview();
-                    PublishRoutePreview(member.Completed);
+                    PublishRoutePreview(member.Completed, force: auditNow);
                 }
                 PublishProgress(node.Turn, Math.Max(0, node.Turn - _startTurnNumber),
                     node.ActionCount, openCount, completedCount, "探索不同路线");
