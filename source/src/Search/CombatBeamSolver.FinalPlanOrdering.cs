@@ -74,7 +74,7 @@ internal sealed partial class CombatBeamSolver
                 PlanAction? action = current.Action;
                 if (action != null && action.Turn == rootTurn)
                 {
-                    bool endsPlayerTurn = action.Kind == PlanActionKind.EndTurn;
+                    bool endsPlayerTurn = action.Kind == PlanActionKind.EndTurn || action.EndsPlayerTurn;
                     return MultiplayerCarryRankingContracts.IsCurrentThreatWindowAction(
                             rootTurn,
                             action.Turn,
@@ -289,8 +289,8 @@ internal sealed partial class CombatBeamSolver
                             ? PotionUsePolicy.AdditionalRequiredUseStrategicHpCost(
                                 optionalPotionStrategicCost)
                             : 0);
-                    SearchNode carryObservationNode =
-                        CarryObservationNode(candidate.Node, startTurnNumber);
+                    SearchNode carryObservationNode = carryRankingContext.Enabled
+                        ? CarryObservationNode(candidate.Node, startTurnNumber) : candidate.Node;
                     SimulationSnapshot carryObservationSnapshot = carryObservationNode.Snapshot;
                     MultiplayerCarryEvaluation carryEvaluation = EvaluateCarry(
                         carryRankingContext,
@@ -617,7 +617,7 @@ internal sealed partial class CombatBeamSolver
                 useMultiplayerTeamObjective
                 && multiplayerCombatObjectiveStrategy
                     == MultiplayerCombatObjectiveStrategy.AdaptiveLethalTempo;
-            var selected = policyEligibleCandidates
+            var ranked = policyEligibleCandidates
                 .OrderBy(candidate => useRollingHorizonLossFirst
                     ? SolverInterimResultOrdering.OutcomeRank(candidate.CompleteVictory,
                         !candidate.Snapshot.PlayerDead && candidate.Snapshot.ProjectedPlayerHp > 0,
@@ -689,7 +689,10 @@ internal sealed partial class CombatBeamSolver
                         : candidate.Features.AngerCopiesGenerated)
                 .ThenBy(candidate => CombatBeamSolver.PolicyBoundaryRank(candidate.Features.BoundaryReason))
                 .ThenBy(candidate => candidate.OptionalPotionCount)
-                .ThenBy(candidate => candidate.StrategicSold)
+                .ThenBy(candidate => candidate.StrategicSold);
+            if (carryRankingContext.UseAdvertisedThreat)
+                ranked = ranked.ThenByDescending(candidate => candidate.CarryEvaluation.PublicThreat);
+            var selected = ranked
                 .ThenBy(candidate => candidate.Features.EnemyHp)
                 // Completed routes otherwise forget setup whose value naturally collapses at
                 // terminal victory. Prefer useful earlier setup only after all harder quality keys.
@@ -702,7 +705,8 @@ internal sealed partial class CombatBeamSolver
                         : 0)
                 // Carry is a final multiplayer tie-break after local safety, resource,
                 // potion, and enemy-health ordering. It cannot outrank hard local quality.
-                .ThenByDescending(candidate => candidate.CarryEvaluation.CarryPreference)
+                .ThenByDescending(candidate => carryRankingContext.UseAdvertisedThreat
+                    ? 0 : candidate.CarryEvaluation.CarryPreference)
                 .ThenByDescending(candidate => candidate.Score)
                 // A local-cross-turn route is deployed one turn at a time. When all
                 // preceding quality keys tie, keep an actual current-turn card action
@@ -1381,7 +1385,7 @@ internal sealed partial class CombatBeamSolver
                 .First();
             bool selectedWouldAlreadyWinWithoutCarry =
                 ReferenceEquals(selectedCandidate.Node, carryFreeWinner.Node);
-            bool carryDecisive = MultiplayerCarryRankingContracts.IsDecisiveTieBreak(
+            bool carryDecisive = !carryRankingContext.UseAdvertisedThreat && MultiplayerCarryRankingContracts.IsDecisiveTieBreak(
                 selectedCandidate.CarryCompatibility,
                 selectedCandidate.CarryEvaluation.CarryPreference,
                 carryFreeWinner.CarryCompatibility,
@@ -1400,6 +1404,8 @@ internal sealed partial class CombatBeamSolver
                         $"remoteRiskAfter={carry.RemoteRiskAfter} " +
                         $"threatsRemoved={carry.ThreatsRemoved} " +
                         $"unknownRiskCount={carry.UnknownRiskCount} " +
+                        $"advertisedDownsPrevented={carry.PublicThreat.DownsPrevented} " +
+                        $"advertisedHpLossPrevented={carry.PublicThreat.HpLossPrevented} " +
                         $"carryPreference={carry.CarryPreference} " +
                         $"carryPreferenceReason={carry.Reason} " +
                         "carryWindow=current_turn_pre_end " +
@@ -1482,7 +1488,8 @@ internal sealed partial class CombatBeamSolver
                     selectedCandidate.FutureSold,
                     selectedCandidate.BattleSold,
                     selectedCandidate.PotionCount,
-                    selectedCandidate.Score),
+                    selectedCandidate.Score,
+                    carryRankingContext.UseAdvertisedThreat ? selectedCandidate.CarryEvaluation.PublicThreat : null),
                 potionBranchesRejected,
                 potionHpSaved,
                 potionHpRequired,

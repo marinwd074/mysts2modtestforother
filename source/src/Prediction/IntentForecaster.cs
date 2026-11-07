@@ -137,7 +137,7 @@ internal static class IntentForecaster
         return hits;
     }
 
-    private static bool IsKnownStableAttack(MonsterModel monster, string moveId)
+    internal static bool IsKnownStableAttack(MonsterModel monster, string moveId)
         => (monster.GetType().Name, moveId) is
             ("PhantasmalGardener", "BITE_MOVE" or "LASH_MOVE" or "FLAIL_MOVE") or
             ("FuzzyWurmCrawler", "FIRST_ACID_GOOP" or "ACID_GOOP") or

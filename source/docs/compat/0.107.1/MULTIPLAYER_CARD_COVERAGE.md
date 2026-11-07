@@ -131,9 +131,12 @@ The active search/runtime contract is:
   action reaches deployment unexpectedly;
 - `SinglePlayerFullRoute` keeps the original card-search behavior.
 
-There is therefore no current Stage A / Stage B promotion list. The old
-cross-player execution staging is historical and should be recovered from Git
-history only if needed.
+The internal `UseReviewedLocalMultiplayerCards` experiment admits unenchanted
+Gang Up on the local-core path. It reads resolved powered hits from the frozen
+root and emits an advisory-only action. The pinned offline native fixture observed
+5 damage before a teammate attack and 10 after it, matching the native hit.
+Safe Execute rejects the advisory route before deployment. The production
+MultiplayerOnly policy above and real Host/Client validation requirements still apply.
 
 ### Non-exclusive multiplayer semantics already cross-checked
 

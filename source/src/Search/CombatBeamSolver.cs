@@ -192,6 +192,7 @@ internal sealed partial class CombatBeamSolver(
         _initialEnemyMaximumHp,
         _startTurnNumber,
         policy.UseMultiplayerTeamObjective
+            || _routePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore && policy.UseLocalCorePublicThreat
             ? root.CarryRankingContext
             : MultiplayerCarryRankingContext.Disabled,
         battleDamage,
@@ -203,14 +204,21 @@ internal sealed partial class CombatBeamSolver(
         preferSmartAuditVictory: _isSmartPotionAudit);
 
     private bool CanConsiderCardAction(PredictedCard card)
-        => CanConsiderCardAction(_routePolicy, card);
+        => CanConsiderCardAction(_routePolicy, card, policy.UseReviewedLocalMultiplayerCards);
 
     private static bool CanConsiderCardAction(
         SearchRoutePolicy routePolicy,
-        PredictedCard card)
+        PredictedCard card,
+        bool allowReviewedCards = false)
         => !MultiplayerLocalCrossTurnContracts.ShouldExcludeMultiplayerOnlyCard(
             routePolicy,
-            card.Preview.MultiplayerConstraint == CardMultiplayerConstraint.MultiplayerOnly);
+            card.Preview.MultiplayerConstraint == CardMultiplayerConstraint.MultiplayerOnly)
+            || IsReviewedLocalMultiplayerCard(routePolicy, card, allowReviewedCards);
+
+    private static bool IsReviewedLocalMultiplayerCard(SearchRoutePolicy routePolicy, PredictedCard card, bool enabled)
+        => enabled && routePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
+            // Gang Up uses resolved attack history already captured in the detached root.
+            && card.Preview is GangUp && card.Preview.Enchantment == null;
 
     private bool AllowsPotionUse(SimulatedCombatState combat, int slot, string potionId)
         => _potionStrategy.AllowsExplicitUse(

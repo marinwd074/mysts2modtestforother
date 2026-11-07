@@ -35,20 +35,21 @@ internal static class MultiplayerCarryRankingContextCapture
 
     internal static MultiplayerCarryRankingContext Capture(
         CombatState state,
-        long worldVersion)
+        long worldVersion,
+        bool useAdvertisedThreat = false)
     {
         if (!NGame.IsMainThread())
             throw new InvalidOperationException(
                 "Multiplayer carry ranking context must be captured on the main thread.");
 
         Player? localPlayer = LocalContext.GetMe(state);
-        MultiplayerCarryRemotePlayerPublicState[] remotePlayers = state.Players
+        Player[] remotes = state.Players
             .Where(player => localPlayer == null || player.NetId != localPlayer.NetId)
             .OrderBy(player => player.NetId)
-            .Select(CaptureRemotePlayer)
             .ToArray();
+        MultiplayerCarryRemotePlayerPublicState[] remotePlayers = remotes.Select(CaptureRemotePlayer).ToArray();
         MultiplayerCarryEnemyPublicState[] enemies = state.Enemies
-            .Select(CaptureEnemy)
+            .Select(enemy => CaptureEnemy(enemy, useAdvertisedThreat ? remotes : []))
             .ToArray();
         bool? scalingHooks = state.MultiplayerScalingModel?.ShouldReceiveCombatHooks;
         string cardConstraint = state.RunState.CardMultiplayerConstraint.ToString();
@@ -59,7 +60,8 @@ internal static class MultiplayerCarryRankingContextCapture
             remotePlayers,
             enemies,
             scalingHooks,
-            cardConstraint);
+            cardConstraint,
+            useAdvertisedThreat);
     }
 
     private static MultiplayerCarryRemotePlayerPublicState CaptureRemotePlayer(Player player)
@@ -76,7 +78,7 @@ internal static class MultiplayerCarryRankingContextCapture
             PublicPowers(player.Creature.Powers));
     }
 
-    private static MultiplayerCarryEnemyPublicState CaptureEnemy(Creature enemy)
+    private static MultiplayerCarryEnemyPublicState CaptureEnemy(Creature enemy, IReadOnlyList<Player> remotes)
     {
         MonsterModel? monster = enemy.Monster;
         bool isBaseGameMonster = monster != null
@@ -95,7 +97,31 @@ internal static class MultiplayerCarryRankingContextCapture
             enemy.Block,
             monster?.NextMove?.Id.ToString() ?? string.Empty,
             PublicPowers(enemy.Powers),
-            threatTarget);
+            threatTarget,
+            monster != null && threatTarget == MultiplayerCarryThreatTarget.AllPlayers && remotes.Count > 0
+                ? CaptureAdvertisedDamage(monster, remotes) : null);
+    }
+
+    private static IReadOnlyList<MultiplayerAdvertisedDamage> CaptureAdvertisedDamage(MonsterModel monster,
+        IReadOnlyList<Player> remotes)
+    {
+        if (monster.NextMove is not { } move)
+            return [];
+        AttackIntent[] attacks = move.Intents.OfType<AttackIntent>().ToArray();
+        if (attacks.Any(attack => attack.GetType().Assembly != typeof(AttackIntent).Assembly
+            || (attack.DamageCalc?.Target != null && !IntentForecaster.IsKnownStableAttack(monster, move.Id))))
+            return [];
+        List<MultiplayerAdvertisedDamage> result = [];
+        foreach (Player remote in remotes)
+        {
+            if (remote.Creature.IsDead)
+                continue;
+            long total = attacks.Sum(attack =>
+                (long)Math.Max(0, attack.GetSingleDamage([remote.Creature], monster.Creature)) * Math.Max(1, attack.Repeats));
+            if (total > 0)
+                result.Add(new(remote.NetId.ToString(), (int)Math.Min(int.MaxValue, total)));
+        }
+        return result;
     }
 
     private static MultiplayerCarryPowerPublicState[] PublicPowers(

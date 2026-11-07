@@ -134,6 +134,23 @@ Check(
             hasAttackIntent: true) == MultiplayerCarryThreatTarget.Unknown,
     "Only a proven base-game attack intent becomes an all-player public threat; non-attacks and third-party monsters stay Unknown.");
 
+var threatContext = MultiplayerCarryRankingContext.Create(
+    enabled: true, worldVersion: 10, remotePlayers: [LowHpTeammate()],
+    enemies:
+    [
+        new(7, "HEAVY", 10, 10, 0, "ATTACK",
+            threatTarget: MultiplayerCarryThreatTarget.AllPlayers, advertisedDamage: [new("1001", 15)]),
+        new(8, "LIGHT", 10, 10, 0, "ATTACK",
+            threatTarget: MultiplayerCarryThreatTarget.AllPlayers, advertisedDamage: [new("1001", 3)]),
+        new(9, "UNKNOWN", 10, 10, 0, "ATTACK",
+            threatTarget: MultiplayerCarryThreatTarget.Unknown, advertisedDamage: [new("1001", 100)]),
+    ], multiplayerScalingHooks: true, cardMultiplayerConstraint: "Shared", useAdvertisedThreat: true);
+LocalPublicThreatRank RankRemoval(uint id) => MultiplayerCarryRankingEvaluator.Evaluate(
+    threatContext, MultiplayerCarryCandidateObservation.Create(false, [new(id, 0)])).PublicThreat;
+Check(RankRemoval(7) == new LocalPublicThreatRank(1, 9)
+    && RankRemoval(8) == default && RankRemoval(9) == default,
+    "Removing the heavy advertised hit protects a teammate. Light and unknown attacks cannot claim that protection.");
+
 MultiplayerCarryCompatibilityKey compatibility = new(
     CompleteVictory: false,
     DeadFallbackRank: 0,

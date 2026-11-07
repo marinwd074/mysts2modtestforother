@@ -42,7 +42,8 @@ internal static class Program
         bool upstreamPortOnly = args.Length > 0 && args[0] == "upstream-port";
         bool upstreamSearchOnly = args.Length > 0 && args[0] == "upstream-search";
         bool multiplayerWindowOnly = args.Length > 0 && args[0] == "multiplayer-window";
-        bool nativeActionsOnly = args.Length > 0 && args[0] == "native-actions";
+        bool nativeReviewedCardOnly = args.Length > 0 && args[0] == "native-reviewed-card";
+        bool nativeActionsOnly = nativeReviewedCardOnly || args.Length > 0 && args[0] == "native-actions";
         bool nativeRedecisionOnly = args.Length > 0 && args[0] == "native-redecision";
         bool winTempoOnly = args.Length > 0 && args[0] == "win-tempo";
         bool holdout = (nativeRedecisionOnly || winTempoOnly) && args.Contains("--holdout");
@@ -195,7 +196,9 @@ internal static class Program
 
             if (nativeActionsOnly)
             {
-                Console.WriteLine(NativeActionChecks.Run(combat, loop, outputDirectory));
+                Console.WriteLine(nativeReviewedCardOnly
+                    ? NativeReviewedCardChecks.Run(combat, loop, outputDirectory)
+                    : NativeActionChecks.Run(combat, loop, outputDirectory));
                 return 0;
             }
 
@@ -257,7 +260,8 @@ internal static class Program
             if (winTempoOnly)
             {
                 Console.WriteLine(WinTempoChecks.Run(combat, loop, names, captured,
-                    args.Contains("--tempo"), args.Contains("--over-cap"), outputDirectory, holdout));
+                    args.Contains("--tempo"), args.Contains("--over-cap"), outputDirectory, holdout,
+                    heldPotion: args.Contains("--held-potion")));
                 return 0;
             }
 
@@ -4437,7 +4441,7 @@ internal static class Program
                 continue;
             if (allowTurnLayers && args[index] == "--adaptive-pressure")
                 continue;
-            if (allowWinTempo && args[index] is "--tempo" or "--over-cap")
+            if (allowWinTempo && args[index] is "--tempo" or "--over-cap" or "--held-potion")
                 continue;
             if (allowHoldout && args[index] == "--holdout")
                 continue;

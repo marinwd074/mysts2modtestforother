@@ -535,7 +535,10 @@ internal sealed partial class CombatBeamSolver
                     ReplayCount: Math.Max(0, card.Preview.GetEnchantedReplayCount()),
                     CardStateKey: cardStateKey,
                     CardStateOccurrence: cardStateOccurrence,
-                        CardEnchantmentId: card.Preview.Enchantment?.Id.Entry ?? "", CardUpgradeLevel: card.Preview.CurrentUpgradeLevel);
+                        CardEnchantmentId: card.Preview.Enchantment?.Id.Entry ?? "", CardUpgradeLevel: card.Preview.CurrentUpgradeLevel)
+                {
+                    AdviceOnly = IsReviewedLocalMultiplayerCard(_routePolicy, card, policy.UseReviewedLocalMultiplayerCards),
+                };
                 actions.Add(new PreparedCardAction(
                     planAction,
                     card.Preview.Type,

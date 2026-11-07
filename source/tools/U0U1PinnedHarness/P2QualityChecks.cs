@@ -18,8 +18,9 @@ internal static class P2QualityChecks
         bool selectiveDeepening = false, bool detailed = false, string? turnLayers = null,
         int? adaptiveTurnLimit = null, bool adaptivePressure = false)
     {
-        if (fixture is not ("setup-single" or "setup-mp" or "retained-mp" or "delayed-mp" or "defense-mp"))
+        if (fixture is not ("setup-single" or "setup-mp" or "retained-mp" or "delayed-mp" or "defense-mp" or "public-threat-mp"))
             throw new ArgumentException("Unknown P2 quality fixture: " + fixture);
+        bool publicThreat = fixture == "public-threat-mp";
         var player = LocalContext.GetMe(live)!;
         var piles = player.PlayerCombatState!;
         foreach (var pile in new[] { piles.Hand, piles.DrawPile, piles.DiscardPile, piles.ExhaustPile })
@@ -47,6 +48,11 @@ internal static class P2QualityChecks
             live.Enemies.Single().SetCurrentHpInternal(100);
         }
         if (fixture == "defense-mp") player.Creature.SetCurrentHpInternal(6);
+        if (publicThreat)
+        {
+            live.Enemies.Single().SetCurrentHpInternal(6);
+            live.Players.Single(remote => remote != player).Creature.SetCurrentHpInternal(1);
+        }
         if (fixture == "delayed-mp")
         {
             if (live.Enemies.Count < 2) throw new InvalidOperationException("Delayed fixture requires separate targets.");
@@ -81,6 +87,7 @@ internal static class P2QualityChecks
             UseSelectiveDeepening = selectiveDeepening,
             LocalCoreTurnLayers = localCoreTurnLayers,
             LocalCoreAdaptiveTurnLimit = adaptiveTurnLimit,
+            UseLocalCorePublicThreat = publicThreat,
             MemoryPressureSignal = adaptivePressure ? memorySignal : captured.MemoryPressureSignal,
             DetailedDiagnostics = detailed,
             MeasurePhasePerformance = detailed,
@@ -97,7 +104,7 @@ internal static class P2QualityChecks
                         memorySignal.UseDefaultGcFallback(systemHeadroomConstrained: true);
                 }
             }, _ => { }) };
-        CombatRootSnapshot root = CombatRootSnapshot.Capture(live);
+        CombatRootSnapshot root = CombatRootSnapshot.Capture(live, captureLocalPublicThreat: publicThreat);
         var damage = BattleDamageTracker.Observe(live);
         string before = ContinuationStamp.CaptureLive(live).StateText;
         object? prefixEvidence = null;
@@ -152,7 +159,7 @@ internal static class P2QualityChecks
             }
             finally { defended.ReleaseSimulator(); }
         }
-        bool coordinator = turnLayers != null || adaptiveTurnLimit != null;
+        bool coordinator = turnLayers != null || adaptiveTurnLimit != null || publicThreat;
         if (coordinator && prefix != null)
             throw new ArgumentException("Choose a horizon comparison or a prefix replay.");
         SolverResult result = coordinator
@@ -184,6 +191,9 @@ internal static class P2QualityChecks
                 throw new InvalidOperationException("Singleplayer lost its full-battle prediction.");
         }
         bool expectDeepening = selectiveDeepening && policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore;
+        if (publicThreat && (result.PublicThreat != new LocalPublicThreatRank(1, 1)
+            || result.CombatEndedTurn != root.StartTurnNumber || !result.Snapshot.AllEnemiesDead))
+            throw new InvalidOperationException("Native capture and local-core ranking did not preserve the current-turn protection proof.");
         if ((deepening.Count > 0) != expectDeepening)
             throw new InvalidOperationException("Selective deepening activation did not match the fixed fixture's policy.");
         if (result.BoundaryReason == SearchBoundaryReason.TimeLimit || result.ExpandedNodes > profile.MaxExpandedNodes)
@@ -219,7 +229,7 @@ internal static class P2QualityChecks
                 Root = root.ContinuationStamp.StateText, Profile = profile, result.EvaluationWindow,
                 result.ExpandedNodes, result.TransitionCount, SelectiveDeepening = selectiveDeepening, Deepening = deepening,
                 result.SearchedTurns, Memory = memory,
-                result.TotalExpandedNodes, result.TotalTransitionCount, Refinement = refinement,
+                result.TotalExpandedNodes, result.TotalTransitionCount, Refinement = refinement, result.PublicThreat,
                 Boundary = result.BoundaryReason.ToString(),
                 result.CombatEndedTurn, InitialDelayed = initialDelayed, replay.AllEnemiesDead, replay.PlayerDead,
                 replay.DeathSaveUseCount, replay.CumulativePlayerHpLost, replay.PlayerHp, replay.ProjectedPlayerHp, replay.EnemyHp,

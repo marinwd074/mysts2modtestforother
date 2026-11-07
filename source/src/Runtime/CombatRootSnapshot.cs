@@ -171,7 +171,7 @@ internal sealed class CombatRootSnapshot
         HasPinnedHealingCertificate = PinnedHealingBound.CanCertify(rootSimulator, playerIdentity);
     }
 
-    public static CombatRootSnapshot Capture(CombatState state)
+    public static CombatRootSnapshot Capture(CombatState state, bool captureLocalPublicThreat = false)
     {
         if (!NGame.IsMainThread())
             throw new InvalidOperationException("Combat root snapshot must be captured on the main thread.");
@@ -195,9 +195,11 @@ internal sealed class CombatRootSnapshot
                 : [player]
             : null;
         MultiplayerCarryRankingContext carryRankingContext = useMultiplayerPrediction
+            || multiplayerSearch && captureLocalPublicThreat
             ? MultiplayerCarryRankingContextCapture.Capture(
                 state,
-                MultiplayerWorldTracker.WorldVersion)
+                MultiplayerWorldTracker.WorldVersion,
+                useAdvertisedThreat: captureLocalPublicThreat && !useMultiplayerPrediction)
             : multiplayerSearch
                 ? MultiplayerCarryRankingContextCapture.CaptureContinuationBoundary(
                     state,

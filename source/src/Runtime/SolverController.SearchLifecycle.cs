@@ -602,7 +602,7 @@ internal static partial class SolverController
                         $"generation={generation} world_version={search.WorldVersion} " +
                         $"turn={search.StartTurnNumber}");
                 }
-                rootSnapshot = CombatRootSnapshot.Capture(state);
+                rootSnapshot = CombatRootSnapshot.Capture(state, searchPolicy.UseLocalCorePublicThreat);
                 observation.BindRoot(rootSnapshot.ContinuationStamp.CombatIdentity.ToString());
             }
             catch (Exception ex) when (capabilities.Kind == SolverSessionKind.MultiplayerAdvisor)

@@ -67,6 +67,7 @@ internal sealed class CombatTransitionMemo
             policy.Profile,
             policy.RoutePolicy,
             TurnLayerLimit = SearchEvaluationPolicy.TurnLayerLimit(policy.RoutePolicy, policy.LocalCoreTurnLayers),
+            policy.UseReviewedLocalMultiplayerCards,
             policy.CurrentTurnOnly,
             policy.UseMultiplayerTeamObjective,
             policy.MultiplayerCombatObjectiveStrategy,

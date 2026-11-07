@@ -24,7 +24,8 @@ internal sealed class SolvedRouteCache(string path)
         SearchPolicySnapshot policy,
         BattleDamageSnapshot damage)
     {
-        if (!MultiplayerLocalCrossTurnContracts.CanUsePersistentRouteCache(policy.RoutePolicy))
+        if (policy.UseLocalCorePublicThreat || policy.UseReviewedLocalMultiplayerCards
+            || !MultiplayerLocalCrossTurnContracts.CanUsePersistentRouteCache(policy.RoutePolicy))
             return Disabled;
         PacketWriter writer = new() { WarnOnGrow = false };
         bool localMultiplayerCore =

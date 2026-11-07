@@ -14,10 +14,8 @@ internal sealed partial class CombatBeamSolver
             && !policy.UseMultiplayerTeamObjective && !policy.UseMultiplayerTeammateForecast
             && !policy.UseMultiplayerScenarioReevaluation
             && !policy.UseBeamWidthPortfolio && !policy.UseNoveltyPortfolio && policy.NoveltySearch == null
-            && _potionPolicy == SolverPotionPolicy.Disabled && root.SearchablePotionCount == 0
-            && _minimumPotionUses == 0 && _potionStrategy.Directives.Count == 0
-            && !policy.EffectiveHasGrowthTargets && policy.RelicTargets.Count == 0
-            && _theftPolicy != SolverTheftPolicy.PreserveResources;
+            && _potionPolicy == SolverPotionPolicy.Disabled && _minimumPotionUses == 0
+            && _potionStrategy.Directives.All(directive => directive.Directive != SolverPotionDirective.Force);
 
     private static bool IsEarlierWinWithinCost(SimulationSnapshot candidate, SimulationSnapshot baseline,
         int startTurn, int earlierThan)

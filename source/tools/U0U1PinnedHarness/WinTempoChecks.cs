@@ -6,6 +6,7 @@ using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.GameActions;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Potions;
 using OfflineSearchHarness;
 
 namespace U0U1PinnedHarness;
@@ -13,7 +14,8 @@ namespace U0U1PinnedHarness;
 internal static class WinTempoChecks
 {
     internal static string Run(CombatState live, MainLoopContext loop, SolverDisplayNames names,
-        SearchPolicySnapshot captured, bool enabled, bool overCap, string outputDirectory, bool holdout = false)
+        SearchPolicySnapshot captured, bool enabled, bool overCap, string outputDirectory,
+        bool holdout = false, bool heldPotion = false)
     {
         Player local = LocalContext.GetMe(live)!;
         Player teammate = live.Players.Single(player => player != local);
@@ -37,6 +39,9 @@ internal static class WinTempoChecks
             player.DrawPile.AddInternal(Create(id), -1);
         foreach (PotionModel potion in local.PotionSlots.OfType<PotionModel>().ToArray())
             local.RemovePotionInternal(potion);
+        PotionModel? protectedPotion = heldPotion ? ModelDb.Potion<FirePotion>().ToMutable() : null;
+        if (protectedPotion != null && !local.AddPotionInternal(protectedPotion, 0, silent: true).success)
+            throw new InvalidOperationException("Could not equip the potion for the bounded tempo fixture.");
 
         SolverSearchProfile profile = new(8, 1200, 8, 4, 4, 20_000);
         List<string> trades = [];
@@ -57,6 +62,8 @@ internal static class WinTempoChecks
             }, _ => { }),
         };
         CombatRootSnapshot root = CombatRootSnapshot.Capture(live);
+        if (heldPotion && root.SearchablePotionCount == 0)
+            throw new InvalidOperationException("The fixture requires a searchable potion in the disabled inventory.");
         BattleDamageSnapshot damage = BattleDamageTracker.Observe(live);
         CombatBeamSolver verifier = new(root, names, damage, policy, searchProfile: profile);
         var witness = verifier.ReplayDiagnosticPrefix([new(PlanActionKind.PlayCard, root.StartTurnNumber,
@@ -125,11 +132,13 @@ internal static class WinTempoChecks
         CombatReplayOutcomeSnapshot actual = nativeOutcome.Capture(live, ended: !CombatManager.Instance.IsInProgress);
         if (CombatManager.Instance.IsInProgress || !enemy.IsDead || local.Creature.IsDead
             || actual.HpLost != expectedLoss || live.RoundNumber != expectedTurn || local.Creature.MaxHp != root.InitialPlayerMaxHp
+            || protectedPotion != null && !ReferenceEquals(local.PotionSlots[0], protectedPotion)
             || holdout && (actual.HpHealed != 0 || actual.InitialHp - actual.FinalHp != expectedLoss))
             throw new InvalidOperationException($"Native win disagreed: round={live.RoundNumber}, loss={actual.HpLost}.");
 
         string mode = overCap ? "over-cap" : enabled ? "on" : "off";
         if (holdout) mode = "holdout-" + mode;
+        if (heldPotion) mode += "-held-potion";
         File.WriteAllText(Path.Combine(outputDirectory, $"win-tempo-{mode}.json"), JsonSerializer.Serialize(new
         {
             Mode = mode, Root = root.ContinuationStamp.StateText, Profile = profile,

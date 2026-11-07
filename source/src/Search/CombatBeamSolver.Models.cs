@@ -443,7 +443,8 @@ internal sealed partial class CombatBeamSolver
         int FutureSold,
         int BattleSold,
         int PotionCount,
-        double Score);
+        double Score,
+        LocalPublicThreatRank? PublicThreat = null);
 
     private sealed record FinalPlanSelection(
         FinalPlanCandidate Candidate,

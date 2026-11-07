@@ -73,6 +73,8 @@ internal sealed class MultiplayerCarryRemotePlayerPublicState
     public IReadOnlyList<MultiplayerCarryPowerPublicState> Powers { get; }
 }
 
+internal readonly record struct MultiplayerAdvertisedDamage(string NetId, int Damage);
+
 internal sealed class MultiplayerCarryEnemyPublicState
 {
     public MultiplayerCarryEnemyPublicState(
@@ -83,7 +85,8 @@ internal sealed class MultiplayerCarryEnemyPublicState
         int block,
         string nextMoveId,
         IEnumerable<MultiplayerCarryPowerPublicState>? powers = null,
-        MultiplayerCarryThreatTarget threatTarget = MultiplayerCarryThreatTarget.Unknown)
+        MultiplayerCarryThreatTarget threatTarget = MultiplayerCarryThreatTarget.Unknown,
+        IEnumerable<MultiplayerAdvertisedDamage>? advertisedDamage = null)
     {
         CombatId = combatId;
         MonsterId = monsterId ?? string.Empty;
@@ -93,6 +96,7 @@ internal sealed class MultiplayerCarryEnemyPublicState
         NextMoveId = nextMoveId ?? string.Empty;
         Powers = Array.AsReadOnly((powers ?? []).ToArray());
         ThreatTarget = threatTarget;
+        AdvertisedDamage = advertisedDamage == null ? [] : Array.AsReadOnly(advertisedDamage.ToArray());
     }
 
     public uint CombatId { get; }
@@ -103,6 +107,7 @@ internal sealed class MultiplayerCarryEnemyPublicState
     public string NextMoveId { get; }
     public IReadOnlyList<MultiplayerCarryPowerPublicState> Powers { get; }
     public MultiplayerCarryThreatTarget ThreatTarget { get; }
+    public IReadOnlyList<MultiplayerAdvertisedDamage> AdvertisedDamage { get; }
 }
 
 /// <summary>
@@ -117,7 +122,8 @@ internal sealed class MultiplayerCarryRankingContext
         IEnumerable<MultiplayerCarryRemotePlayerPublicState> remotePlayers,
         IEnumerable<MultiplayerCarryEnemyPublicState> enemies,
         bool? multiplayerScalingHooks,
-        string cardMultiplayerConstraint)
+        string cardMultiplayerConstraint,
+        bool useAdvertisedThreat)
     {
         Enabled = enabled;
         WorldVersion = worldVersion;
@@ -125,6 +131,7 @@ internal sealed class MultiplayerCarryRankingContext
         Enemies = Array.AsReadOnly(enemies.ToArray());
         MultiplayerScalingHooks = multiplayerScalingHooks;
         CardMultiplayerConstraint = cardMultiplayerConstraint ?? string.Empty;
+        UseAdvertisedThreat = useAdvertisedThreat;
     }
 
     public bool Enabled { get; }
@@ -133,6 +140,7 @@ internal sealed class MultiplayerCarryRankingContext
     public IReadOnlyList<MultiplayerCarryEnemyPublicState> Enemies { get; }
     public bool? MultiplayerScalingHooks { get; }
     public string CardMultiplayerConstraint { get; }
+    public bool UseAdvertisedThreat { get; }
 
     public static MultiplayerCarryRankingContext Disabled { get; } =
         Create(
@@ -149,14 +157,16 @@ internal sealed class MultiplayerCarryRankingContext
         IEnumerable<MultiplayerCarryRemotePlayerPublicState> remotePlayers,
         IEnumerable<MultiplayerCarryEnemyPublicState> enemies,
         bool? multiplayerScalingHooks,
-        string cardMultiplayerConstraint)
+        string cardMultiplayerConstraint,
+        bool useAdvertisedThreat = false)
         => new(
             enabled,
             worldVersion,
             remotePlayers,
             enemies,
             multiplayerScalingHooks,
-            cardMultiplayerConstraint);
+            cardMultiplayerConstraint,
+            useAdvertisedThreat);
 }
 
 internal sealed class MultiplayerCarryEnemyOutcome
@@ -204,8 +214,19 @@ internal readonly record struct MultiplayerCarryEvaluation(
     int CarryPreference,
     string Reason)
 {
+    public LocalPublicThreatRank PublicThreat { get; init; }
     public static MultiplayerCarryEvaluation Disabled(string reason = "disabled")
         => new(false, 0, 0, 0, 0, 0, reason);
+}
+
+internal readonly record struct LocalPublicThreatRank(int DownsPrevented, long HpLossPrevented)
+    : IComparable<LocalPublicThreatRank>
+{
+    public int CompareTo(LocalPublicThreatRank other)
+    {
+        int downs = DownsPrevented.CompareTo(other.DownsPrevented);
+        return downs != 0 ? downs : HpLossPrevented.CompareTo(other.HpLossPrevented);
+    }
 }
 
 internal readonly record struct MultiplayerCarryCompatibilityKey(
@@ -306,7 +327,45 @@ internal static class MultiplayerCarryRankingEvaluator
             ThreatsRemoved: threatsRemoved,
             UnknownRiskCount: unknownRiskCount,
             CarryPreference: carryPreference,
-            Reason: reason);
+            Reason: reason)
+        {
+            PublicThreat = context.UseAdvertisedThreat ? EvaluatePublicThreat(context, candidate) : default,
+        };
+    }
+
+    private static LocalPublicThreatRank EvaluatePublicThreat(MultiplayerCarryRankingContext context,
+        MultiplayerCarryCandidateObservation candidate)
+    {
+        int downsPrevented = 0;
+        long hpLossPrevented = 0;
+        foreach (MultiplayerCarryRemotePlayerPublicState player in context.RemotePlayers)
+        {
+            if (player.CurrentHp <= 0)
+                continue;
+            long before = 0;
+            long after = 0;
+            foreach (MultiplayerCarryEnemyPublicState enemy in context.Enemies)
+            {
+                if (!IsActivePublicThreat(enemy) || enemy.ThreatTarget is not
+                    (MultiplayerCarryThreatTarget.RemotePlayer or MultiplayerCarryThreatTarget.AllPlayers))
+                    continue;
+                foreach (MultiplayerAdvertisedDamage attack in enemy.AdvertisedDamage)
+                {
+                    if (attack.NetId != player.NetId || attack.Damage <= 0)
+                        continue;
+                    before += attack.Damage;
+                    if (!candidate.AllEnemiesDead && DurabilityAfter(candidate, enemy.CombatId) > 0)
+                        after += attack.Damage;
+                }
+            }
+            int block = Math.Max(0, player.Block);
+            long beforeLoss = Math.Clamp(before - block, 0, player.CurrentHp);
+            long afterLoss = Math.Clamp(after - block, 0, player.CurrentHp);
+            if (beforeLoss == player.CurrentHp && afterLoss < player.CurrentHp)
+                downsPrevented++;
+            hpLossPrevented += beforeLoss - afterLoss;
+        }
+        return new(downsPrevented, hpLossPrevented);
     }
 
     private static int RemoteHealthRisk(MultiplayerCarryRemotePlayerPublicState player)

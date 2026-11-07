@@ -82,7 +82,8 @@ internal static class MultiplayerSafeLocalActionClassifier
     }
 
     internal static SafeLocalActionDecision ClassifyStructural(PlanAction action)
-        => MultiplayerSafeExecutePolicy.ClassifyStructural(
+        => action.AdviceOnly ? new(false, "advice_only_card")
+        : MultiplayerSafeExecutePolicy.ClassifyStructural(
             new(
                 KindToken: action.Kind.ToString().ToLowerInvariant(),
                 IsPlayCard: action.Kind == PlanActionKind.PlayCard,

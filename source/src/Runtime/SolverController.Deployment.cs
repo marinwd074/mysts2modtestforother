@@ -80,6 +80,13 @@ internal static partial class SolverController
             Entry.Logger.Info("[CombatSolver/MultiplayerProbe] DEPLOY_START_REJECT reason=session_capability");
             return;
         }
+        if (capabilities.IsMultiplayer && result.BestNode.Actions.Any(action =>
+            action.Turn == result.StartTurnNumber && action.AdviceOnly))
+        {
+            _combat.MultiplayerSafeExecuteDeploymentRequested = false;
+            StopMultiplayerSafeAutoAtUnsupportedBoundary(new(false, "advice_only_card"), result.StartTurnNumber);
+            return;
+        }
         bool hasCurrentTurnPlan = result.BestNode.Actions.Any(action =>
             MultiplayerLocalCrossTurnContracts.IsCurrentTurnAction(action.Turn, result.StartTurnNumber)
             && (action.IsExecutable || action.Kind == PlanActionKind.EndTurn));

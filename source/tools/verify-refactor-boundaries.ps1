@@ -1408,7 +1408,7 @@ $rootSnapshotChecks = @(
     },
     @{
         Path = Join-Path $repositoryRoot "src\Runtime\SolverController.SearchLifecycle.cs"
-        Text = "CombatRootSnapshot.Capture(state)"
+        Text = "CombatRootSnapshot.Capture(state, searchPolicy.UseLocalCorePublicThreat)"
     },
     @{
         Path = Join-Path $repositoryRoot "src\Runtime\PlayerTurnSetupPatches.cs"

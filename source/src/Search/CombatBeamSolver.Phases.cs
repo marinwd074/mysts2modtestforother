@@ -861,6 +861,7 @@ internal sealed partial class CombatBeamSolver
                 TurnSetupChoices = best.GetTurnSetupChoices().Select(WithDisplayNames).ToArray(),
                 TurnSetupPlayState = best.GetTurnSetupPlayState(),
                 BestNode = selectedPlan,
+                PublicThreat = blockPotionInsertion == null ? selectedCandidate.PublicThreat : null,
                 PotionUses = PotionStrategySnapshot.CaptureUses(best,
                     ((SimulatedCombatState)finalSnapshot.Simulator.State.CombatState).PotionUses),
                 MultiplayerReplayCandidates = blockPotionInsertion == null

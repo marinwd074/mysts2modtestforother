@@ -47,6 +47,8 @@ internal sealed record SearchPolicySnapshot(
     internal int? LocalCoreAdaptiveTurnLimit { get; init; }
     // P4 offline experiment. Applies after normal selection and policy admission.
     internal bool UseBoundedWinTempo { get; init; }
+    internal bool UseLocalCorePublicThreat { get; init; }
+    internal bool UseReviewedLocalMultiplayerCards { get; init; }
     internal SearchOptimizationSession? OptimizationSession { get; init; }
     /// <summary>
     /// Explicitly names the route horizon. Keep this separate from the legacy

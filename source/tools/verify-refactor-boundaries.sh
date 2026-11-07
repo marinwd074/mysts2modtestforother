@@ -546,7 +546,7 @@ while IFS=$'\t' read -r relative_path text; do
     require_fixed "$repository_root/$relative_path" "$text" 'missing root snapshot boundary'
 done <<'EOF'
 src/Runtime/CombatRootSnapshot.cs	Combat root snapshot must be captured on the main thread.
-src/Runtime/SolverController.SearchLifecycle.cs	CombatRootSnapshot.Capture(state)
+src/Runtime/SolverController.SearchLifecycle.cs	CombatRootSnapshot.Capture(state, searchPolicy.UseLocalCorePublicThreat)
 src/Runtime/PlayerTurnSetupPatches.cs	CombatRootSnapshot.Capture(combat)
 src/Search/CombatSearchCoordinator.cs	CombatRootSnapshot root
 src/Search/RootCombatHistorySnapshot.cs	history.CardPlaysStarted.ToArray()

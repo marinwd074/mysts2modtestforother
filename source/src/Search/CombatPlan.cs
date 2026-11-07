@@ -3,6 +3,7 @@ using MegaCrit.Sts2.Core.Models;
 using CombatSolver.Engine.InCombat.Simulation;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Text.Json.Serialization;
 
 namespace CombatSolver;
 
@@ -192,7 +193,9 @@ internal sealed record PlanAction(
     ShadowForecastPlan? ShadowForecast = null,
     IReadOnlyList<PlanAutoPlayedCard>? AutoPlayedCards = null)
 {
-    public bool IsExecutable => Kind is PlanActionKind.PlayCard or PlanActionKind.UsePotion;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool AdviceOnly { get; init; }
+    public bool IsExecutable => !AdviceOnly && Kind is (PlanActionKind.PlayCard or PlanActionKind.UsePotion);
     public bool IsForecastOnlyObservation => Kind == PlanActionKind.TeammateForecast;
     public string ActionTitle => Kind == PlanActionKind.UsePotion ? PotionTitle : CardTitle;
 
@@ -1676,6 +1679,7 @@ internal sealed record CachedContinuation(
 
 internal sealed class SolverResult
 {
+    internal LocalPublicThreatRank? PublicThreat { get; init; }
     public RouteEvaluationWindow? EvaluationWindow => Snapshot.EvaluationWindow?.ForTurn(StartTurnNumber);
     public RouteResourceLedger? ResourceLedger { get; internal set; }
     public ContinuationStamp? PredictedFinalState { get; internal set; }

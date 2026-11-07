@@ -47,6 +47,9 @@ internal static partial class CombatSearchCoordinator
             return primaryQuality < 0;
         if (candidate.PotionCount != current.PotionCount)
             return candidate.PotionCount < current.PotionCount;
+        int threat = ComparePublicThreat(policy, candidate, current);
+        if (threat != 0)
+            return threat > 0;
         if (PreferPlayableCurrentTurnRoute(root, policy, candidate, current))
             return true;
         if (PreferPlayableCurrentTurnRoute(root, policy, current, candidate))
@@ -70,11 +73,31 @@ internal static partial class CombatSearchCoordinator
             return false;
         if (quality != 0)
             return quality < 0;
+        int threat = ComparePublicThreat(policy, candidate, current);
+        if (threat != 0)
+            return threat > 0;
         if (PreferPlayableCurrentTurnRoute(root, policy, candidate, current))
             return true;
         if (PreferPlayableCurrentTurnRoute(root, policy, current, candidate))
             return false;
         return candidate.BestNode.Score > current.BestNode.Score;
+    }
+
+    private static int ComparePublicThreat(SearchPolicySnapshot policy, SolverResult candidate, SolverResult current)
+    {
+        if (!policy.UseLocalCorePublicThreat || candidate.PublicThreat is not { } threat
+            || current.PublicThreat is not { } previous
+            || candidate.Snapshot.HasRisk || current.Snapshot.HasRisk
+            || !RouteEvaluationWindow.CanCompare(candidate.EvaluationWindow, current.EvaluationWindow)
+            || candidate.Snapshot.PlayerMaxHp != current.Snapshot.PlayerMaxHp
+            || candidate.Snapshot.PlayerHp != current.Snapshot.PlayerHp
+            || candidate.Snapshot.GrowthRewards != current.Snapshot.GrowthRewards
+            || candidate.Snapshot.RelicCounters != current.Snapshot.RelicCounters
+            || candidate.Snapshot.RealizedLongTermResourceValue != current.Snapshot.RealizedLongTermResourceValue
+            || candidate.Snapshot.LongTermResourceValue != current.Snapshot.LongTermResourceValue
+            || candidate.OutstandingStolenResource != current.OutstandingStolenResource)
+            return 0;
+        return threat.CompareTo(previous);
     }
 
     internal static bool IsBetterPotionPolicyResult(
