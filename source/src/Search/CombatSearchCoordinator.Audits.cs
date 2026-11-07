@@ -1351,7 +1351,52 @@ internal static partial class CombatSearchCoordinator
             return null;
         }
 
-        SolverResult? CommitCompletedInOrder()
+        bool ReviewCompletedLayer(int potionCount, SolverResult candidate)
+        {
+            searches.Add(candidate);
+
+            bool candidateWon = IsCompleteVictory(candidate);
+            int candidateDeficit = StrategicHpDeficit(root, policy, candidate);
+            bool costsComparable = CanComparePotionCosts(policy, candidate, potionFree);
+            int hpSaved = !costsComparable ? 0 : potionFreeWon
+                ? Math.Max(0, potionFreeDeficit - candidateDeficit)
+                : candidateWon
+                    ? Math.Max(0, candidate.Snapshot.PlayerHp - potionFree.Snapshot.PlayerHp)
+                    : 0;
+            int hpRequired = SmartPotionHpRequired(root, policy, candidate);
+            bool protectsLoot = policy.TheftPolicy == SolverTheftPolicy.PreserveResources
+                && candidate.OutstandingStolenResource < potionFree.OutstandingStolenResource;
+            bool acceptable = PotionUsePolicy.CanAcceptSmartAuditVictory(
+                potionFreeWon,
+                candidateWon,
+                hpSaved,
+                hpRequired,
+                protectsLoot, costsComparable);
+            bool improvesSelection = acceptable
+                && IsBetterPotionPolicyResult(root, policy, candidate, selected);
+            if (improvesSelection)
+            {
+                candidate.PotionHpSaved = hpSaved;
+                candidate.PotionHpRequired = hpRequired;
+                selected = candidate;
+                acceptablePotionLayerFound = true;
+                interimResultCallback?.Invoke(candidate);
+            }
+            policy.Diagnostics.Info(
+                $"[CombatSolver/Test] SMART_POTION_GRADIENT layer={potionCount} " +
+                $"won={candidateWon} hp_deficit={candidateDeficit} saved={hpSaved} " +
+                $"required={hpRequired} protects_loot={protectsLoot} acceptable={acceptable} " +
+                $"selected={improvesSelection} expanded={candidate.ExpandedNodes} " +
+                $"transitions={candidate.TransitionCount} choice_branches={candidate.ChoiceBranchesEvaluated} " +
+                $"elapsed_ms={candidate.Elapsed.TotalMilliseconds:F1} allocated_bytes={candidate.WorkerAllocatedBytes} " +
+                $"incumbent_deficit={primaryIncumbent?.StrategicHpDeficit.ToString() ?? "-"} " +
+                $"incumbent_turn={primaryIncumbent?.CombatEndedTurn.ToString() ?? "-"} " +
+                $"incumbent_pruned={candidate.PrimaryIncumbentBranchesPruned} " +
+                $"incumbent_updates={candidate.PrimaryIncumbentUpdates} scheduler={scheduler}");
+            return improvesSelection;
+        }
+
+        bool CommitCompletedInOrder()
         {
             while (nextPotionCountToCommit <= lastPotionCount
                 && (completed.ContainsKey(nextPotionCountToCommit)
@@ -1363,64 +1408,13 @@ internal static partial class CombatSearchCoordinator
 
                 SolverResult candidate = completed[potionCount];
                 completed.Remove(potionCount);
-                searches.Add(candidate);
-
-                bool candidateWon = IsCompleteVictory(candidate);
-                int candidateDeficit = StrategicHpDeficit(root, policy, candidate);
-                bool costsComparable = CanComparePotionCosts(policy, candidate, potionFree);
-                int hpSaved = !costsComparable ? 0 : potionFreeWon
-                    ? Math.Max(0, potionFreeDeficit - candidateDeficit)
-                    : candidateWon
-                        ? Math.Max(0, candidate.Snapshot.PlayerHp - potionFree.Snapshot.PlayerHp)
-                        : 0;
-                int hpRequired = SmartPotionHpRequired(root, policy, candidate);
-                bool protectsLoot = policy.TheftPolicy == SolverTheftPolicy.PreserveResources
-                    && candidate.OutstandingStolenResource < potionFree.OutstandingStolenResource;
-                bool acceptable = PotionUsePolicy.CanAcceptSmartAuditVictory(
-                    potionFreeWon,
-                    candidateWon,
-                    hpSaved,
-                    hpRequired,
-                    protectsLoot, costsComparable);
-                bool improvesSelection = acceptable
-                    && IsBetterPotionPolicyResult(root, policy, candidate, selected);
-                if (improvesSelection)
-                {
-                    candidate.PotionHpSaved = hpSaved;
-                    candidate.PotionHpRequired = hpRequired;
-                    selected = candidate;
-                    acceptablePotionLayerFound = true;
-                    interimResultCallback?.Invoke(candidate);
-                }
-                policy.Diagnostics.Info(
-                    $"[CombatSolver/Test] SMART_POTION_GRADIENT layer={potionCount} " +
-                    $"won={candidateWon} hp_deficit={candidateDeficit} saved={hpSaved} " +
-                    $"required={hpRequired} protects_loot={protectsLoot} acceptable={acceptable} " +
-                    $"selected={improvesSelection} expanded={candidate.ExpandedNodes} " +
-                    $"transitions={candidate.TransitionCount} choice_branches={candidate.ChoiceBranchesEvaluated} " +
-                    $"elapsed_ms={candidate.Elapsed.TotalMilliseconds:F1} allocated_bytes={candidate.WorkerAllocatedBytes} " +
-                    $"incumbent_deficit={primaryIncumbent?.StrategicHpDeficit.ToString() ?? "-"} " +
-                    $"incumbent_turn={primaryIncumbent?.CombatEndedTurn.ToString() ?? "-"} " +
-                    $"incumbent_pruned={candidate.PrimaryIncumbentBranchesPruned} " +
-                    $"incumbent_updates={candidate.PrimaryIncumbentUpdates} scheduler={scheduler}");
-
-                if (improvesSelection
+                if (ReviewCompletedLayer(potionCount, candidate)
                     && TheftEncounterStrategy.RecoverySatisfied(
                         policy.TheftPolicy,
                         selected.OutstandingStolenResource))
-                {
-                    foreach (CombatBeamSolver.SearchMemberExecutionSession activeSession in active.Values)
-                        activeSession.Dispose();
-                    active.Clear();
-                    MergeAuditTotals(selected, [.. searches]);
-                    policy.Diagnostics.Info(
-                        $"[CombatSolver/Test] SMART_POTION_GRADIENT result " +
-                        $"stop=threshold_met maximum={lastPotionCount} " +
-                        $"selected_potions={selected.PotionCount} scheduler={scheduler}");
-                    return selected;
-                }
+                    return true;
             }
-            return null;
+            return false;
         }
 
         FillResidentSet();
@@ -1446,8 +1440,8 @@ internal static partial class CombatSearchCoordinator
 
                 if (deadlineExpired)
                     break;
-                if (CommitCompletedInOrder() is { } settled)
-                    return settled;
+                if (CommitCompletedInOrder())
+                    break;
 
                 if (adaptive && active.Count > 0)
                 {
@@ -1478,8 +1472,8 @@ internal static partial class CombatSearchCoordinator
                             return takeover;
                         if (deadlineExpired)
                             break;
-                        if (CommitCompletedInOrder() is { } settledAfterBonus)
-                            return settledAfterBonus;
+                        if (CommitCompletedInOrder())
+                            break;
                     }
                 }
 
@@ -1494,9 +1488,10 @@ internal static partial class CombatSearchCoordinator
         }
 
         callerCancellationToken.ThrowIfCancellationRequested();
-        // Deadline stops new work; completed layers still pass the original ordered admission.
-        if (CommitCompletedInOrder() is { } settledAtDeadline)
-            return settledAtDeadline;
+        // Once stepping stops, unfinished lower layers cannot block already
+        // materialized higher layers. Review them without opening another slice.
+        foreach (var (potionCount, candidate) in completed.OrderBy(layer => layer.Key))
+            ReviewCompletedLayer(potionCount, candidate);
         MergeAuditTotals(selected, [.. searches]);
         policy.Diagnostics.Info(
             $"[CombatSolver/Test] SMART_POTION_GRADIENT result " +

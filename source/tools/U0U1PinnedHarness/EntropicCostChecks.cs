@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CombatSolver;
+using CombatSolver.Engine.Common;
 using CombatSolver.Engine.InCombat.Simulation;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
@@ -179,14 +180,89 @@ internal static class EntropicCostChecks
         Check(liveBefore == ContinuationStamp.CaptureLive(live).StateText, "Search changed live fixture");
         CheckForcedBrewSelection(live, names, damage, coordinatedPolicy, profile);
         CheckSmartPotionSelection(live, names, damage, policy);
+        SolverResult crossLayer = CheckCompletedSmartLayers(live, names, damage, coordinatedPolicy, profile);
         File.WriteAllText(Path.Combine(output, "entropic-cost.json"), JsonSerializer.Serialize(new {
             status = "PASS", checks = _checks, advances, expected, result.PotionUses, result.PotionStrategicCostByTurn,
             result.ExpandedNodes, result.TotalTransitionCount, result.BoundaryReason,
             coordinator = new { coordinated.ExpandedNodes, coordinated.TotalTransitionCount, coordinated.PotionUses },
+            crossLayer = new { crossLayer.CombatEndedTurn, crossLayer.ProjectedBattleHpLost, crossLayer.PotionUses,
+                crossLayer.TotalExpandedNodes, crossLayer.TotalTransitionCount },
             route = result.BestNode.Actions, ambergrisEvidence = "policy contract only; absent from pinned native catalog",
             evidence = "pinned-offline; native UI and Host/Client unverified"
         }, new JsonSerializerOptions { WriteIndented = true }));
         return $"ENTROPIC_COST_PASS checks={_checks} native-generation/ledger/fork/keys/chains/Smart/materialization/continuation/replay";
+    }
+
+    private static SolverResult CheckCompletedSmartLayers(CombatState live, SolverDisplayNames names,
+        BattleDamageSnapshot damage, SearchPolicySnapshot policy, SolverSearchProfile profile)
+    {
+        var player = LocalContext.GetMe(live)!;
+        foreach (PotionModel potion in player.PotionSlots.OfType<PotionModel>().ToArray())
+            player.RemovePotionInternal(potion);
+        foreach (var relic in player.Relics.ToArray()) player.RemoveRelicInternal(relic, silent: true);
+        Check(player.AddPotionInternal(ModelDb.Potion<EntropicBrew>().ToMutable(), 0, true).success
+            && player.AddPotionInternal(ModelDb.Potion<FirePotion>().ToMutable(), 1, true).success,
+            "Could not install the cross-layer Brew fixture");
+        var rng = live.RunState.Rng.CombatPotionGeneration;
+        bool foundPair = false;
+        for (int attempt = 0; attempt < 16_384; attempt++)
+        {
+            var oracle = rng.Clone();
+            if (PotionFactory.CreateRandomPotionOutOfCombat(player, oracle) is FirePotion
+                && PotionFactory.CreateRandomPotionOutOfCombat(player, oracle) is FirePotion)
+            {
+                foundPair = true;
+                break;
+            }
+            rng.NextInt(100);
+        }
+        Check(foundPair, "Could not find two Fire Potions in the native generation sequence");
+        live.Enemies.Single().SetCurrentHpInternal(42);
+        var state = player.PlayerCombatState!;
+        foreach (var pile in new[] { state.Hand, state.DrawPile, state.DiscardPile, state.ExhaustPile })
+            pile.Clear(silent: true);
+        state.Hand.AddInternal(live.CreateCard(ModelDb.Card<StrikeIronclad>(), player), -1);
+        state.Hand.AddInternal(live.CreateCard(ModelDb.Card<DefendIronclad>(), player), -1);
+        for (int card = 0; card < 5; card++)
+            state.DrawPile.AddInternal(live.CreateCard(ModelDb.Card<StrikeIronclad>(), player), -1);
+        var root = CombatRootSnapshot.Capture(live);
+        string before = ContinuationStamp.CaptureLive(live).StateText;
+        List<string> scheduling = [];
+        SearchPolicySnapshot scheduled = policy with
+        {
+            UseE3FixedPortfolioScheduling = true,
+            UseE3AdaptivePortfolioScheduling = false,
+            Diagnostics = new SearchDiagnosticsSink(message =>
+            {
+                if (message.Contains("SMART_POTION_GRADIENT layer=")
+                    || message.Contains("E3_PORTFOLIO_SLICE kind=smart_potion")) scheduling.Add(message);
+            }, _ => { }),
+        };
+        SolverResult result = CombatSearchCoordinator.Solve(root, names, damage, scheduled, default, null);
+        foreach (string message in scheduling) Console.WriteLine(message);
+        Console.WriteLine($"SMART_CROSS_LAYER turn={result.CombatEndedTurn} loss={result.ProjectedBattleHpLost} "
+            + $"uses={result.ExplicitPotionCount} expanded={result.TotalExpandedNodes} transitions={result.TotalTransitionCount}");
+        int higherCompleted = scheduling.FindIndex(message => message.Contains("potion_count=3 status=Completed"));
+        int lowerAccepted = scheduling.FindIndex(message => message.Contains("SMART_POTION_GRADIENT layer=2 ")
+            && message.Contains("selected=True"));
+        Check(higherCompleted >= 0 && lowerAccepted > higherCompleted,
+            "The higher layer must be finished before the first qualifying lower layer is accepted");
+        Check(result.BoundaryReason != SearchBoundaryReason.TimeLimit
+            && result.CombatEndedTurn == root.StartTurnNumber && result.ProjectedBattleHpLost == 0
+            && result.PotionHpRequired == 0 && result.PotionUses.Count == 3
+            && scheduled.PotionStrategy.EvaluateForcedUses(result.PotionUses).AllForcedUsesSatisfied
+            && result.PotionUses.Count(use => use is { Origin: PotionOrigin.EntropicBrew, StrategicHpCost: 0 }) == 2,
+            "The already completed victory using two free bottles was dropped");
+        var verifier = new CombatBeamSolver(root, names, damage, scheduled, searchProfile: profile);
+        SimulationSnapshot replay = verifier.ReplayDiagnosticPrefix(result.BestNode.Actions);
+        try
+        {
+            Check(verifier.CaptureDiagnosticContinuation(replay) == result.PredictedFinalState
+                && ContinuationStamp.CaptureLive(live).StateText == before,
+                "The cross-layer winner failed replay or changed live combat");
+        }
+        finally { replay.ReleaseSimulator(); }
+        return result;
     }
 
     private static void CheckForcedBrewSelection(CombatState live, SolverDisplayNames names,
