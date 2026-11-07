@@ -15,7 +15,7 @@ internal sealed partial class CombatBeamSolver
             return frontier;
 
         int width = _profile.BeamWidth;
-        int limit = Math.Max(4, width - width / (completedLayers == 1 ? 4 : 2));
+        int limit = Math.Max(5, width - width / (completedLayers == 1 ? 4 : 2));
         List<SearchNode> selected = Retention.SelectForDeepening(frontier, limit);
         policy.Diagnostics.Info($"[CombatSolver/Test] SEARCH_DEEPENING " +
             $"next_layer={completedLayers + 1} candidates={frontier.Count} selected={selected.Count} " +
@@ -36,8 +36,8 @@ internal sealed partial class CombatBeamSolver
     private sealed partial class BeamRetentionPolicy
     {
         // A scheduling heuristic, never state equivalence or a dominance proof.
-        // Preserve the ordinary quality leader plus setup, target-bound delay and
-        // defense representatives before spending other slots on distinct openings.
+        // Preserve the ordinary quality leader plus offense, setup, target-bound
+        // delay and defense before spending other slots on distinct openings.
         internal List<SearchNode> SelectForDeepening(IReadOnlyList<SearchNode> candidates, int limit)
         {
             if (candidates.Count <= limit) return [.. candidates];
@@ -51,6 +51,9 @@ internal sealed partial class CombatBeamSolver
                     selected.Add(node);
             }
             Add(ranked[0]);
+            Add(ranked.OrderBy(node => node.Snapshot.AliveEnemyCount)
+                .ThenBy(node => node.Snapshot.EnemyHp)
+                .ThenBy(node => node.Snapshot.EnemyBlock).First());
             // Compare setup already in place at the same realized cost. Otherwise
             // one extra trigger can displace the same engine established safely a
             // turn later, before either can show its benefit in the last layer.

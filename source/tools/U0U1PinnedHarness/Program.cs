@@ -42,7 +42,10 @@ internal static class Program
         bool upstreamPortOnly = args.Length > 0 && args[0] == "upstream-port";
         bool upstreamSearchOnly = args.Length > 0 && args[0] == "upstream-search";
         bool multiplayerWindowOnly = args.Length > 0 && args[0] == "multiplayer-window";
-        bool multiplayerRefreshOnly = multiplayerWindowOnly || args.Length > 0 && args[0] == "multiplayer-refresh";
+        bool nativeActionsOnly = args.Length > 0 && args[0] == "native-actions";
+        bool nativeRedecisionOnly = args.Length > 0 && args[0] == "native-redecision";
+        bool multiplayerRefreshOnly = multiplayerWindowOnly || nativeActionsOnly || nativeRedecisionOnly
+            || args.Length > 0 && args[0] == "multiplayer-refresh";
         bool entropicCostOnly = args.Length > 0 && args[0] == "entropic-cost";
         bool cardChoiceIdentityOnly = args.Length > 0 && args[0] == "card-choice-identity";
         bool memoryDisplayOnly = args.Length > 0 && args[0] == "memory-display";
@@ -65,7 +68,8 @@ internal static class Program
             or "request-hydration-benchmark-on" or "request-hydration-benchmark-off";
         bool requestHydrationBenchmark = requestHydrationOnly && args[0] != "request-hydration";
         string outputDirectory = ParseOutput(multiplayerRefreshOnly || entropicCostOnly || upstreamSearchOnly || upstreamPortOnly || memoryDisplayOnly || cardChoiceIdentityOnly || modelIdCacheOnly || darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicTailOnly || p2QualityOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
-            allowHydrationOptions: requestHydrationBenchmark || p2QualityOnly, allowRoutePrefix: p2QualityOnly);
+            allowHydrationOptions: requestHydrationBenchmark || p2QualityOnly, allowRoutePrefix: p2QualityOnly,
+            allowSelective: p2QualityOnly || nativeRedecisionOnly);
         Directory.CreateDirectory(outputDirectory);
         if (multiplayerRefreshOnly || p2QualityOnly && args.Any(value => value.EndsWith("-mp", StringComparison.Ordinal)))
             Environment.SetEnvironmentVariable(SolverSessionCapabilities.MultiplayerModeEnvironmentVariable, "advisor");
@@ -99,6 +103,8 @@ internal static class Program
             GameBootstrap.ApplyGodotBypasses();
             GameBootstrap.SkipGodotNodeStaticConstructors();
             Console.WriteLine(GameBootstrap.InitializeStaticState());
+            if (nativeActionsOnly || nativeRedecisionOnly)
+                NativeActionChecks.InstallOfflineBridges();
             if (memoryDisplayOnly)
             {
                 Require(SolverMemoryUsageBar.ExerciseFormattingForTesting(),
@@ -183,6 +189,12 @@ internal static class Program
             CombatState combat = OfflineCombat.WaitForPlayableCombat(loop);
             Console.WriteLine(OfflineCombat.DescribeRoot(combat));
 
+            if (nativeActionsOnly)
+            {
+                Console.WriteLine(NativeActionChecks.Run(combat, loop, outputDirectory));
+                return 0;
+            }
+
             if (strategicEnergyOnly)
             {
                 ValidateStrategicEnergy(combat, outputDirectory);
@@ -228,6 +240,12 @@ internal static class Program
                 combat,
                 includeTurnSetup: false,
                 theftPolicy: null);
+
+            if (nativeRedecisionOnly)
+            {
+                Console.WriteLine(NativeRedecisionChecks.Run(combat, loop, names, captured, args.Contains("--selective"), outputDirectory));
+                return 0;
+            }
 
             if (strategicTailOnly)
             {
@@ -4386,7 +4404,8 @@ internal static class Program
             R1TransitionHydrationCache = null, RequestTransitionHydrationCache = null,
         };
 
-    private static string ParseOutput(string[] args, bool allowHydrationOptions = false, bool allowRoutePrefix = false)
+    private static string ParseOutput(string[] args, bool allowHydrationOptions = false, bool allowRoutePrefix = false,
+        bool allowSelective = false)
     {
         string output = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
@@ -4395,7 +4414,7 @@ internal static class Program
         {
             if (allowHydrationOptions && args[index] == "--measure")
                 continue;
-            if (allowRoutePrefix && args[index] == "--selective")
+            if (allowSelective && args[index] == "--selective")
                 continue;
             if (allowHydrationOptions && args[index] is "--fixture" or "--iterations" or "--dop"
                 || allowRoutePrefix && args[index] == "--prefix")
