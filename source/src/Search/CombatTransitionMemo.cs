@@ -66,6 +66,7 @@ internal sealed class CombatTransitionMemo
             Game = typeof(CombatState).Module.ModuleVersionId,
             policy.Profile,
             policy.RoutePolicy,
+            TurnLayerLimit = SearchEvaluationPolicy.TurnLayerLimit(policy.RoutePolicy, policy.LocalCoreTurnLayers),
             policy.CurrentTurnOnly,
             policy.UseMultiplayerTeamObjective,
             policy.MultiplayerCombatObjectiveStrategy,

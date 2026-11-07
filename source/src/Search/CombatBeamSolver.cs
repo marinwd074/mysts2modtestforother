@@ -79,6 +79,8 @@ internal sealed partial class CombatBeamSolver(
         policy.FramePressureSignal);
     private readonly bool _includeTurnSetup = policy.IncludeTurnSetup;
     private readonly SearchRoutePolicy _routePolicy = policy.RoutePolicy;
+    private readonly int? _predictionTurnLayerLimit =
+        SearchEvaluationPolicy.TurnLayerLimit(policy.RoutePolicy, policy.LocalCoreTurnLayers);
     private readonly bool _useMultiplayerRouteSemantics =
         MultiplayerLocalCrossTurnContracts.HasActiveMultiplayerRouteSemantics(
             policy.RoutePolicy,

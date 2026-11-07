@@ -15,7 +15,7 @@ internal static class P2QualityChecks
 {
     internal static string Run(CombatState live, SolverDisplayNames names,
         SearchPolicySnapshot captured, string fixture, string output, string? prefixPath = null,
-        bool selectiveDeepening = false, bool detailed = false)
+        bool selectiveDeepening = false, bool detailed = false, string? turnLayers = null)
     {
         if (fixture is not ("setup-single" or "setup-mp" or "retained-mp" or "delayed-mp" or "defense-mp"))
             throw new ArgumentException("Unknown P2 quality fixture: " + fixture);
@@ -60,6 +60,13 @@ internal static class P2QualityChecks
         }
         SolverSearchProfile profile = new(8, 1_200, 8, 4, 4, 20_000);
         List<string> deepening = [];
+        List<string> memory = [];
+        int? localCoreTurnLayers = turnLayers switch
+        {
+            null => SearchEvaluationPolicy.RollingHorizonTurnLayers,
+            "battle" => null,
+            _ => int.Parse(turnLayers, System.Globalization.CultureInfo.InvariantCulture),
+        };
         var policy = captured with { Profile = profile, CurrentTurnOnly = false, IncludeTurnSetup = false,
             RoutePolicy = fixture.EndsWith("-single") ? SearchRoutePolicy.SinglePlayerFullRoute
                 : SearchRoutePolicy.MultiplayerSinglePlayerCore,
@@ -69,11 +76,15 @@ internal static class P2QualityChecks
             UseMultiplayerScenarioReevaluation = false, IgnoreLongTermRewards = true, RelicTargets = [],
             PotionPolicy = SolverPotionPolicy.Disabled, PotionStrategy = new(SolverPotionPolicy.Disabled, []),
             UseSelectiveDeepening = selectiveDeepening,
+            LocalCoreTurnLayers = localCoreTurnLayers,
             DetailedDiagnostics = detailed,
+            MeasurePhasePerformance = detailed,
             Interaction = null, Diagnostics = new SearchDiagnosticsSink(message =>
             {
                 if (message.StartsWith("[CombatSolver/Test] SEARCH_DEEPENING", StringComparison.Ordinal))
                     deepening.Add(message);
+                if (message.StartsWith("[CombatSolver/Test] SEARCH_LAYER_MEMORY", StringComparison.Ordinal))
+                    memory.Add(message);
             }, _ => { }) };
         CombatRootSnapshot root = CombatRootSnapshot.Capture(live);
         var damage = BattleDamageTracker.Observe(live);
@@ -130,8 +141,23 @@ internal static class P2QualityChecks
             }
             finally { defended.ReleaseSimulator(); }
         }
-        SolverResult result = new CombatBeamSolver(root, names, damage, policy, searchProfile: profile,
-            continuationRouteReplayActions: prefix, continueRouteSearchForTesting: prefix != null).Solve();
+        if (turnLayers != null && prefix != null)
+            throw new ArgumentException("Choose a horizon comparison or a prefix replay.");
+        SolverResult result = turnLayers != null
+            ? CombatSearchCoordinator.Solve(root, names, damage, policy, CancellationToken.None, null)
+            : new CombatBeamSolver(root, names, damage, policy, searchProfile: profile,
+                continuationRouteReplayActions: prefix, continueRouteSearchForTesting: prefix != null).Solve();
+        if (turnLayers != null)
+        {
+            int? limit = SearchEvaluationPolicy.TurnLayerLimit(policy.RoutePolicy, localCoreTurnLayers);
+            int? target = limit is int layers ? root.StartTurnNumber + layers : null;
+            if (result.EvaluationWindow is not { } window || window.TargetTurn != target
+                || result.BestNode.Actions.Any(action => action.Turn >= target))
+                throw new InvalidOperationException("Selected route did not honor its requested evaluation horizon.");
+            if (fixture == "setup-single" && (!result.Snapshot.AllEnemiesDead
+                || result.CombatEndedTurn <= root.StartTurnNumber + 2))
+                throw new InvalidOperationException("Singleplayer lost its full-battle prediction.");
+        }
         bool expectDeepening = selectiveDeepening && policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore;
         if ((deepening.Count > 0) != expectDeepening)
             throw new InvalidOperationException("Selective deepening activation did not match the fixed fixture's policy.");
@@ -157,13 +183,15 @@ internal static class P2QualityChecks
             if (fixture == "defense-mp" && (replay.PlayerDead || replay.EvaluationWindow is not { CoversTarget: true }
                 || replay.CumulativePlayerHpLost != 0))
                 throw new InvalidOperationException("Search lost the independently verified zero-loss defense route.");
-            string outputName = fixture + (selectiveDeepening ? "-selective" : "") + (prefixPath == null ? "" : "-tail");
+            string outputName = fixture + (selectiveDeepening ? "-selective" : "") + (prefixPath == null ? "" : "-tail")
+                + (turnLayers == null ? "" : "-horizon-" + (localCoreTurnLayers?.ToString() ?? "battle"));
             File.WriteAllText(Path.Combine(output, outputName + ".json"), JsonSerializer.Serialize(new
             {
                 Fixture = fixture, DefenseWitness = defenseWitness, Prefix = prefixEvidence,
                 DllSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(typeof(CombatBeamSolver).Assembly.Location))),
                 Root = root.ContinuationStamp.StateText, Profile = profile, result.EvaluationWindow,
                 result.ExpandedNodes, result.TransitionCount, SelectiveDeepening = selectiveDeepening, Deepening = deepening,
+                result.SearchedTurns, Memory = memory,
                 Boundary = result.BoundaryReason.ToString(),
                 result.CombatEndedTurn, InitialDelayed = initialDelayed, replay.AllEnemiesDead, replay.PlayerDead,
                 replay.DeathSaveUseCount, replay.CumulativePlayerHpLost, replay.PlayerHp, replay.ProjectedPlayerHp, replay.EnemyHp,

@@ -42,6 +42,8 @@ internal sealed record SearchPolicySnapshot(
     // P3 internal experiment; shares the ordinary engine, horizon and request budget.
     // Keep opt-in until fixed-root and teammate redecision evidence justify enabling it.
     internal bool UseSelectiveDeepening { get; init; }
+    // Frozen for the request. Null targets battle completion for local-core experiments.
+    internal int? LocalCoreTurnLayers { get; init; } = SearchEvaluationPolicy.RollingHorizonTurnLayers;
     // P4 offline experiment. Applies after normal selection and policy admission.
     internal bool UseBoundedWinTempo { get; init; }
     internal SearchOptimizationSession? OptimizationSession { get; init; }

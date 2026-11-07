@@ -71,7 +71,7 @@ internal static class Program
         bool requestHydrationBenchmark = requestHydrationOnly && args[0] != "request-hydration";
         string outputDirectory = ParseOutput(multiplayerRefreshOnly || entropicCostOnly || upstreamSearchOnly || upstreamPortOnly || memoryDisplayOnly || cardChoiceIdentityOnly || modelIdCacheOnly || darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicTailOnly || p2QualityOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
             allowHydrationOptions: requestHydrationBenchmark || p2QualityOnly, allowRoutePrefix: p2QualityOnly,
-            allowSelective: p2QualityOnly || nativeRedecisionOnly, allowWinTempo: winTempoOnly,
+            allowSelective: p2QualityOnly || nativeRedecisionOnly, allowWinTempo: winTempoOnly, allowTurnLayers: p2QualityOnly,
             allowHoldout: nativeRedecisionOnly || winTempoOnly);
         Directory.CreateDirectory(outputDirectory);
         if (multiplayerRefreshOnly || p2QualityOnly && args.Any(value => value.EndsWith("-mp", StringComparison.Ordinal)))
@@ -265,9 +265,11 @@ internal static class Program
             if (p2QualityOnly)
             {
                 int prefixIndex = Array.IndexOf(args, "--prefix");
+                int horizonIndex = Array.IndexOf(args, "--turn-layers");
                 Console.WriteLine(P2QualityChecks.Run(combat, names, captured, p2Fixture, outputDirectory,
                     prefixIndex >= 0 ? args[prefixIndex + 1] : null,
-                    selectiveDeepening: args.Contains("--selective"), detailed: args.Contains("--measure")));
+                    selectiveDeepening: args.Contains("--selective"), detailed: args.Contains("--measure"),
+                    turnLayers: horizonIndex >= 0 ? args[horizonIndex + 1] : null));
                 return 0;
             }
             if (multiplayerRefreshOnly)
@@ -4415,7 +4417,8 @@ internal static class Program
         };
 
     private static string ParseOutput(string[] args, bool allowHydrationOptions = false, bool allowRoutePrefix = false,
-        bool allowSelective = false, bool allowWinTempo = false, bool allowHoldout = false)
+        bool allowSelective = false, bool allowWinTempo = false, bool allowHoldout = false,
+        bool allowTurnLayers = false)
     {
         string output = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
@@ -4431,7 +4434,8 @@ internal static class Program
             if (allowHoldout && args[index] == "--holdout")
                 continue;
             if (allowHydrationOptions && args[index] is "--fixture" or "--iterations" or "--dop"
-                || allowRoutePrefix && args[index] == "--prefix")
+                || allowRoutePrefix && args[index] == "--prefix"
+                || allowTurnLayers && args[index] == "--turn-layers")
             {
                 if (++index >= args.Length)
                     throw new ArgumentException("Missing diagnostic option value.");

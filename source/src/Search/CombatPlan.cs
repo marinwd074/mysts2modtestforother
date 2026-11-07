@@ -1258,7 +1258,7 @@ internal sealed record SearchNode(
         Parent?.HasNonPotionAction == true
         || Action is { Kind: not PlanActionKind.UsePotion };
 
-    internal bool HasMaterializedActionsForTesting => _actions != null;
+    internal bool HasMaterializedActions => _actions != null;
 
     public int RetentionRank { get; set; } = int.MaxValue;
     public int LongTermResourceRetentionRank { get; set; } = int.MaxValue;

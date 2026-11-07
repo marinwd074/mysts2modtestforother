@@ -4458,8 +4458,8 @@ $searchEvaluationPolicyPath = Join-Path $searchRoot 'SearchEvaluationPolicy.cs'
 $searchEvaluationPolicyText = [IO.File]::ReadAllText($searchEvaluationPolicyPath)
 foreach ($localCoreHorizonRule in @(
     'internal const int RollingHorizonTurnLayers = 3;',
-    '=> policy == SearchRoutePolicy.MultiplayerSinglePlayerCore ? RollingHorizonTurnLayers : null;',
-    '=> TurnLayerLimit(policy) is { } limit && searchedTurnLayers >= limit;')) {
+    'if (policy != SearchRoutePolicy.MultiplayerSinglePlayerCore)',
+    '=> TurnLayerLimit(policy, localCoreTurnLayers) is { } limit && searchedTurnLayers >= limit;')) {
     if (-not $searchEvaluationPolicyText.Contains($localCoreHorizonRule)) {
         $violations.Add("${searchEvaluationPolicyPath}: shared horizon drifted '$localCoreHorizonRule'")
     }
@@ -4524,10 +4524,10 @@ $localCoreNoveltyText = [IO.File]::ReadAllText($localCoreNoveltyPath)
 $beamNoveltyPath = Join-Path $repositoryRoot 'src/Search/CombatBeamSolver.NoveltySearch.cs'
 $beamNoveltyText = [IO.File]::ReadAllText($beamNoveltyPath)
 foreach ($localCoreNoveltyHorizonRule in @(
-    'SearchEvaluationPolicy.TurnLayerLimit(policy.RoutePolicy)',
+    '_predictionTurnLayerLimit ?? options.MaxTurns',
     'parent.Turn >= _startTurnNumber + maxTurns')) {
     if (-not $beamNoveltyText.Contains($localCoreNoveltyHorizonRule)) {
-        $violations.Add("${beamNoveltyPath}: Novelty must share the three-turn local-core horizon '$localCoreNoveltyHorizonRule'")
+        $violations.Add("${beamNoveltyPath}: Novelty must share the local-core horizon '$localCoreNoveltyHorizonRule'")
     }
 }
 $p1CoordinatorPath = Join-Path $repositoryRoot 'src/Search/CombatSearchCoordinator.cs'
@@ -4603,11 +4603,11 @@ if (-not $p1PhasesText.Contains('SearchNode? candidate = member.CurrentBestNode'
     $violations.Add("${p1PhasesPath}: current-turn preview must follow the globally promoted Beam route before fallback candidates")
 }
 foreach ($localCoreHorizonPhaseRule in @(
-    'SearchEvaluationPolicy.TurnLayerLimit(policy.RoutePolicy)',
+    'int? predictionTurnLayerLimit = _predictionTurnLayerLimit;',
     'MP_LOCAL_CORE_PREDICTION_HORIZON',
     'SearchEvaluationPolicy.HasReachedTurnLayerLimit(')) {
     if (-not $p1PhasesText.Contains($localCoreHorizonPhaseRule)) {
-        $violations.Add("${p1PhasesPath}: three-turn Beam horizon drifted '$localCoreHorizonPhaseRule'")
+        $violations.Add("${p1PhasesPath}: Beam horizon drifted '$localCoreHorizonPhaseRule'")
     }
 }
 foreach ($p2SearchRule in @(

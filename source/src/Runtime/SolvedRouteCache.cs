@@ -53,6 +53,7 @@ internal sealed class SolvedRouteCache(string path)
         {
             Schema = 2,
             Scope = policy.RoutePolicy,
+            TurnLayerLimit = SearchEvaluationPolicy.TurnLayerLimit(policy.RoutePolicy, policy.LocalCoreTurnLayers),
             Solver = typeof(SolvedRouteCache).Module.ModuleVersionId,
             Game = typeof(CombatState).Module.ModuleVersionId,
             Mods = ModManager.Mods.Select(mod => new

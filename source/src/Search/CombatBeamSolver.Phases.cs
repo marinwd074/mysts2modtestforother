@@ -647,7 +647,7 @@ internal sealed partial class CombatBeamSolver
                 else if (boundary == SearchBoundaryReason.None
                          && SearchEvaluationPolicy.HasReachedTurnLayerLimit(
                              policy.RoutePolicy,
-                             candidateSearchedTurnLayers))
+                             candidateSearchedTurnLayers, policy.LocalCoreTurnLayers))
                     boundary = SearchBoundaryReason.TurnLimit;
                 else if (boundary == SearchBoundaryReason.None
                          && policy.VerifyIncrementalSearch
@@ -1801,8 +1801,7 @@ internal sealed partial class CombatBeamSolver
             }
         }
 
-        int? predictionTurnLayerLimit =
-            SearchEvaluationPolicy.TurnLayerLimit(policy.RoutePolicy);
+        int? predictionTurnLayerLimit = _predictionTurnLayerLimit;
         int reservedTurnLayers = policy.CurrentTurnOnly
             ? 1
             : predictionTurnLayerLimit
@@ -2511,6 +2510,17 @@ internal sealed partial class CombatBeamSolver
             RefreshCurrentTurnPreview();
             PublishRoutePreview(retainedAfterRound, force: true);
             member.SearchedTurnLayers++;
+            if (policy.MeasurePhasePerformance)
+            {
+                using Process process = Process.GetCurrentProcess();
+                policy.Diagnostics.Info($"[CombatSolver/Test] SEARCH_LAYER_MEMORY " +
+                    $"layer={member.SearchedTurnLayers} frontier={member.Frontier.Count} completed={member.Completed.Count} " +
+                    $"retained_simulators={retainedAfterRound.Count(node => node.Snapshot.HasSimulator)} " +
+                    $"materialized_routes={retainedAfterRound.Count(node => node.HasMaterializedActions)} " +
+                    $"hydration_entries={policy.RequestTransitionHydrationCache?.EntryCount ?? 0} " +
+                    $"managed_estimate={GC.GetTotalMemory(false)} private={process.PrivateMemorySize64} " +
+                    $"working_set={process.WorkingSet64}");
+            }
             if (_detailedDiagnostics)
             {
                 policy.Diagnostics.Info(

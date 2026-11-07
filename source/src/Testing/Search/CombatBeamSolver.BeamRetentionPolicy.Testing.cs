@@ -288,7 +288,7 @@ internal sealed partial class CombatBeamSolver
         static void Verify(SearchNode node)
         {
             string actual = BeamRetentionPolicy.PotionUseLineageKey(node);
-            if (node.HasMaterializedActionsForTesting)
+            if (node.HasMaterializedActions)
                 throw new InvalidOperationException("药水分组不应物化完整动作链。");
             string expected = string.Join(',', node.Actions
                 .Where(action => action.Kind == PlanActionKind.UsePotion)
@@ -314,7 +314,7 @@ internal sealed partial class CombatBeamSolver
         SearchNode shared = Append(Root(), PlanActionKind.UsePotion, "ROOT");
         Verify(Append(shared, PlanActionKind.UsePotion, "LEFT"));
         Verify(Append(shared, PlanActionKind.UsePotion, "RIGHT"));
-        if (shared.HasMaterializedActionsForTesting)
+        if (shared.HasMaterializedActions)
             throw new InvalidOperationException("药水分组不应物化共享父链。");
         try
         {

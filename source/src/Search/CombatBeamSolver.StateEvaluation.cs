@@ -116,7 +116,7 @@ internal sealed partial class CombatBeamSolver
             boundary = SearchBoundaryReason.UnsupportedEffect;
 
         SimPlayerCombatState playerState = simulator.State.GetPlayerCombatState(_player);
-        RouteEvaluationWindow evaluationWindow = SearchEvaluationPolicy.CaptureWindow(policy.RoutePolicy,
+        RouteEvaluationWindow evaluationWindow = SearchEvaluationPolicy.CaptureWindow(_predictionTurnLayerLimit,
             _startTurnNumber, turn, (int)playerState.Phase, won,
             boundary == SearchBoundaryReason.None && !risk,
             playerState.Phase == PlayerTurnPhase.Play);

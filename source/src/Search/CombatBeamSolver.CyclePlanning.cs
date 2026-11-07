@@ -1037,11 +1037,11 @@ internal sealed partial class CombatBeamSolver
             || secondPotion.HasNonPotionAction
             || !firstCard.HasNonPotionAction
             || !laterPotion.HasNonPotionAction
-            || unpublished.HasMaterializedActionsForTesting
-            || firstPotion.HasMaterializedActionsForTesting
-            || secondPotion.HasMaterializedActionsForTesting
-            || firstCard.HasMaterializedActionsForTesting
-            || laterPotion.HasMaterializedActionsForTesting)
+            || unpublished.HasMaterializedActions
+            || firstPotion.HasMaterializedActions
+            || secondPotion.HasMaterializedActions
+            || firstCard.HasMaterializedActions
+            || laterPotion.HasMaterializedActions)
         {
             throw new InvalidOperationException(
                 "开场药水路线标量没有随首个非药水动作单调传播，或意外物化了完整动作链。");

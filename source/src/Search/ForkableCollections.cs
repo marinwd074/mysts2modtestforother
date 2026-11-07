@@ -164,7 +164,11 @@ internal sealed class ForkableDictionary<TKey, TValue> : IReadOnlyDictionary<TKe
     {
         if (_storage.Values.Count == 0)
             return;
-        EnsureWritable();
+        if (_storage.Shared)
+        {
+            _storage = new Storage(new Dictionary<TKey, TValue>(_storage.Values.Comparer));
+            return;
+        }
         _storage.Values.Clear();
     }
 
@@ -267,7 +271,11 @@ internal sealed class ForkableSet<T> : ISet<T>, IReadOnlySet<T>
     {
         if (_storage.Values.Count == 0)
             return;
-        EnsureWritable();
+        if (_storage.Shared)
+        {
+            _storage = new Storage(new HashSet<T>(_storage.Values.Comparer));
+            return;
+        }
         _storage.Values.Clear();
     }
 

@@ -148,6 +148,7 @@ internal static partial class CombatSearchCoordinator
         SearchOptimizationSession? optimizations = policy.UseUpstreamSearchOptimizations ? new(root) : null;
         if (localRecoveryPolicy && (policy.MultiplayerPlanRefresh != null
             || policy.ContinuationSeedActions.Count > 0
+            || policy.LocalCoreTurnLayers != SearchEvaluationPolicy.RollingHorizonTurnLayers
             || policy.ContinuationRouteReplayActions.Count > 0 && !policy.VerifyIncrementalSearch))
         {
             SolverSearchProfile profile = policy.Profile with
@@ -1538,7 +1539,7 @@ internal static partial class CombatSearchCoordinator
         if (result.BoundaryReason == SearchBoundaryReason.TurnLimit
             && SearchEvaluationPolicy.HasReachedTurnLayerLimit(
                 policy.RoutePolicy,
-                result.SearchedTurns))
+                result.SearchedTurns, policy.LocalCoreTurnLayers))
         {
             policy.Diagnostics.Info(
                 $"[CombatSolver/Multiplayer] MP_LOCAL_CORE_HORIZON_COMPLETE " +

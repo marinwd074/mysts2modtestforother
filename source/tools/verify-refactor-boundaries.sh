@@ -834,11 +834,11 @@ forbid_fixed "$beam_retention_facade_path" 'private List<SearchNode> RankBest(' 
 beam_phases_path="$search_root/CombatBeamSolver.Phases.cs"
 search_evaluation_policy_path="$search_root/SearchEvaluationPolicy.cs"
 require_fixed "$search_evaluation_policy_path" 'internal const int RollingHorizonTurnLayers = 3;' 'local-core horizon length drifted:'
-require_fixed "$search_evaluation_policy_path" '=> policy == SearchRoutePolicy.MultiplayerSinglePlayerCore ? RollingHorizonTurnLayers : null;' 'local-core and singleplayer horizon split drifted:'
-require_fixed "$search_evaluation_policy_path" '=> TurnLayerLimit(policy) is { } limit && searchedTurnLayers >= limit;' 'shared horizon stop check drifted:'
-require_fixed "$beam_phases_path" 'SearchEvaluationPolicy.TurnLayerLimit(policy.RoutePolicy)' 'Beam must use the shared horizon:'
+require_fixed "$search_evaluation_policy_path" 'if (policy != SearchRoutePolicy.MultiplayerSinglePlayerCore)' 'local-core and singleplayer horizon split drifted:'
+require_fixed "$search_evaluation_policy_path" '=> TurnLayerLimit(policy, localCoreTurnLayers) is { } limit && searchedTurnLayers >= limit;' 'shared horizon stop check drifted:'
+require_fixed "$beam_phases_path" 'int? predictionTurnLayerLimit = _predictionTurnLayerLimit;' 'Beam must use the shared horizon:'
 require_fixed "$beam_phases_path" 'SearchEvaluationPolicy.HasReachedTurnLayerLimit(' 'Beam result must use the shared horizon:'
-require_fixed "$search_root/CombatBeamSolver.NoveltySearch.cs" 'SearchEvaluationPolicy.TurnLayerLimit(policy.RoutePolicy)' 'Novelty must use the shared horizon:'
+require_fixed "$search_root/CombatBeamSolver.NoveltySearch.cs" '_predictionTurnLayerLimit ?? options.MaxTurns' 'Novelty must use the shared horizon:'
 require_fixed \
     "$beam_phases_path" \
     'TightenPrimarySearchIncumbentAtTurnLayer(' \

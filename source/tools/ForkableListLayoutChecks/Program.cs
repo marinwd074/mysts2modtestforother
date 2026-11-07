@@ -3,6 +3,7 @@ using System.Text.Json;
 using CombatSolver;
 
 CheckSemantics();
+CheckSharedClear();
 var source = Enumerable.Range(0, 16).ToArray();
 var shared = new ForkableList<int>(source);
 var rows = new Dictionary<string, long[]>();
@@ -76,4 +77,26 @@ static void CheckSemantics()
 }
 static void Assert(bool value, string name)
 { if (!value) throw new InvalidOperationException(name); }
+
+static void CheckSharedClear()
+{
+    var dictionary = new ForkableDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+    dictionary.Add("Root", 1);
+    var fork = dictionary.Fork();
+    fork.Clear();
+    fork.Add("Child", 2);
+    Assert(dictionary.TryGetValue("ROOT", out int value) && value == 1
+        && !dictionary.ContainsKey("Child") && !fork.ContainsKey("Root") && fork["CHILD"] == 2,
+        "shared dictionary clear preserves branch isolation and comparison");
+
+    var set = new ForkableSet<string>(StringComparer.OrdinalIgnoreCase);
+    set.Add("Root");
+    var setFork = set.Fork();
+    setFork.Clear();
+    setFork.Add("Child");
+    Assert(set.Contains("ROOT") && !set.Contains("Child")
+        && !setFork.Contains("Root") && setFork.Contains("CHILD"),
+        "shared set clear preserves branch isolation and comparison");
+}
+
 static class Keep { public static object? Value; }
