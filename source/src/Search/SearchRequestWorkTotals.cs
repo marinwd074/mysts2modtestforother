@@ -16,7 +16,7 @@ internal enum SearchRequestMemberKind
 {
     Unclassified, Baseline, BeamRefinement, SmartPotion, ContinuationSeed, RouteReplay, Novelty,
     PlanRefreshPrefix, PlanRefreshMaterialization,
-    AuditPreparation,
+    AuditPreparation, HorizonRefinement,
 }
 
 internal sealed record SearchSolverPhaseContribution(

@@ -104,6 +104,12 @@ internal static class MultiplayerCrossTurnRouteChecks
                 && request.Candidates.All(candidate => candidate.Route.All(action => action.Turn >= turn))
                 && request.Baseline!.ProjectedBattleHpLost == fresh.ProjectedBattleHpLost,
                 "Cross-turn capture changed the absolute quality ceiling or retained elapsed actions.");
+            // This fixture prepends synthetic history to a result first evaluated at
+            // turn two. Use the verified turn-two window for the recovery trials.
+            // Capture cannot reconstruct an evaluation window at the synthetic root.
+            Check(request.EvaluationWindow == null && fresh.EvaluationWindow is { CoversTarget: true },
+                "Synthetic history must not manufacture an earlier evaluation window.");
+            request = request with { EvaluationWindow = fresh.EvaluationWindow };
             MultiplayerPlanRefreshRequest afterReuse = MultiplayerPlanRefreshRequest.Capture(reused);
             Check(!afterReuse.IsCrossTurn && afterReuse.Route.All(action => action.Turn >= turn)
                 && afterReuse.Candidates.Count == 3, "Same-turn refresh after exact reuse resurrected historical actions.");

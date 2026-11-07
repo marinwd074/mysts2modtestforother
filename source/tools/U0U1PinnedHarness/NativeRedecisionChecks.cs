@@ -17,7 +17,8 @@ namespace U0U1PinnedHarness;
 internal static class NativeRedecisionChecks
 {
     internal static string Run(CombatState combat, MainLoopContext loop, SolverDisplayNames names,
-        SearchPolicySnapshot captured, bool selective, string outputDirectory, bool holdout = false)
+        SearchPolicySnapshot captured, bool selective, string outputDirectory, bool holdout = false,
+        int? adaptiveTurnLimit = null)
     {
         Player local = LocalContext.GetMe(combat)!;
         Player teammate = combat.Players.Single(player => player != local);
@@ -46,6 +47,7 @@ internal static class NativeRedecisionChecks
         SearchPolicySnapshot policy = captured with
         {
             Profile = profile, RoutePolicy = SearchRoutePolicy.MultiplayerSinglePlayerCore,
+            LocalCoreAdaptiveTurnLimit = adaptiveTurnLimit,
             CurrentTurnOnly = false, IncludeTurnSetup = false, FixedBudget = true, MaxDegreeOfParallelism = 1,
             UseSelectiveDeepening = selective, UseNoveltyPortfolio = false, NoveltySearch = null,
             UseBeamWidthPortfolio = false, UseMultiplayerTeamObjective = false, UseMultiplayerTeammateForecast = false,
@@ -64,6 +66,7 @@ internal static class NativeRedecisionChecks
         List<object> turns = [];
         long staleNodes = 0, recoveredNodes = 0;
         int rejectedVersions = 0, teammatePlays = 0, killedTargets = 0, staleTargetRoutes = 0, coalescedUpdates = 0;
+        int deepRoutes = 0, verifiedCheckpoints = 0;
         using CombatReplayOutcome nativeOutcome = new(combat);
         object? cancelled = holdout ? CheckCancellation() : null;
         for (int step = 0; step < 12 && CombatManager.Instance.IsInProgress; step++)
@@ -159,6 +162,7 @@ internal static class NativeRedecisionChecks
         int loss = actual.HpLost;
         string filename = selective ? "native-redecision-selective.json" : "native-redecision-fixed.json";
         if (holdout) filename = "holdout-" + filename;
+        if (adaptiveTurnLimit != null) filename = $"adaptive-{adaptiveTurnLimit}-" + filename;
         File.WriteAllText(Path.Combine(outputDirectory, filename), JsonSerializer.Serialize(new
         {
             Selective = selective, Holdout = holdout, Root = initialState, Profile = profile,
@@ -169,6 +173,7 @@ internal static class NativeRedecisionChecks
             CoalescedUpdates = coalescedUpdates, StaleNodes = staleNodes, RecoveryNodes = recoveredNodes,
             Rounds = turns.Count, ShuffleCounter = combat.RunState.Rng.Shuffle.Counter, Turns = turns,
             Deepening = deepening, Cancellation = cancelled,
+            AdaptiveTurnLimit = adaptiveTurnLimit, DeepRoutes = deepRoutes, VerifiedCheckpoints = verifiedCheckpoints,
         }, new JsonSerializerOptions { WriteIndented = true }));
         return $"NativeRedecision PASS selective={selective} rounds={turns.Count} loss={loss} updates={rejectedVersions} stale_nodes={staleNodes} refresh_nodes={recoveredNodes}";
 
@@ -244,6 +249,22 @@ internal static class NativeRedecisionChecks
                     throw new InvalidOperationException("Native redecision replay or root isolation failed.");
             }
             finally { replay.ReleaseSimulator(); }
+            if (result.EvaluationWindow?.TargetTurn > root.StartTurnNumber + SearchEvaluationPolicy.RollingHorizonTurnLayers)
+            {
+                deepRoutes++;
+                foreach (CachedContinuation checkpoint in result.Continuations)
+                {
+                    var prefix = verifier.ReplayDiagnosticPrefix(result.BestNode.Actions
+                        .TakeWhile(action => action.Turn < checkpoint.StartTurnNumber).ToArray());
+                    try
+                    {
+                        if (verifier.CaptureDiagnosticContinuation(prefix) != checkpoint.ExpectedState)
+                            throw new InvalidOperationException("Deep route retained a mismatched continuation checkpoint.");
+                        verifiedCheckpoints++;
+                    }
+                    finally { prefix.ReleaseSimulator(); }
+                }
+            }
             return (result, new { CapturedMs = capturedMs, PreviewMs = previewMs, ApprovedMs = approvedMs, CompletedMs = completedMs,
                 result.TotalExpandedNodes, result.TotalTransitionCount, result.EvaluationWindow, result.ProjectedBattleHpLost,
                 FirstAction = result.BestNode.Actions.FirstOrDefault(), result.RequestPhaseMetrics });

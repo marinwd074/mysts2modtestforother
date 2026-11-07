@@ -1467,9 +1467,8 @@ internal sealed partial class CombatBeamSolver
                     if (!retainedFirstActions.Add(firstAction))
                         continue;
                     IReadOnlyList<PlanAction> actions = selected[index].Node.Actions;
-                    IReadOnlyList<PlanAction> route = actions.Count is > 0 and <= 128
-                        && actions.All(action => action.ShadowForecast == null && !action.IsForecastOnlyObservation)
-                        ? actions.ToArray() : [];
+                    IReadOnlyList<PlanAction> route = MultiplayerPlanRefreshRequest.CanRetainRoute(actions)
+                        ? actions : [];
                     replayCandidates.Add(new(index, prefix.ToArray(), route, selected[index].Snapshot,
                         RouteResourceLedger.Capture(selected[index].Node, startTurnNumber)));
                 }

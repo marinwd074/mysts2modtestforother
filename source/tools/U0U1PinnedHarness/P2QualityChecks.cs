@@ -15,7 +15,8 @@ internal static class P2QualityChecks
 {
     internal static string Run(CombatState live, SolverDisplayNames names,
         SearchPolicySnapshot captured, string fixture, string output, string? prefixPath = null,
-        bool selectiveDeepening = false, bool detailed = false, string? turnLayers = null)
+        bool selectiveDeepening = false, bool detailed = false, string? turnLayers = null,
+        int? adaptiveTurnLimit = null, bool adaptivePressure = false)
     {
         if (fixture is not ("setup-single" or "setup-mp" or "retained-mp" or "delayed-mp" or "defense-mp"))
             throw new ArgumentException("Unknown P2 quality fixture: " + fixture);
@@ -61,6 +62,8 @@ internal static class P2QualityChecks
         SolverSearchProfile profile = new(8, 1_200, 8, 4, 4, 20_000);
         List<string> deepening = [];
         List<string> memory = [];
+        List<string> refinement = [];
+        SearchMemoryPressureSignal memorySignal = new();
         int? localCoreTurnLayers = turnLayers switch
         {
             null => SearchEvaluationPolicy.RollingHorizonTurnLayers,
@@ -77,6 +80,8 @@ internal static class P2QualityChecks
             PotionPolicy = SolverPotionPolicy.Disabled, PotionStrategy = new(SolverPotionPolicy.Disabled, []),
             UseSelectiveDeepening = selectiveDeepening,
             LocalCoreTurnLayers = localCoreTurnLayers,
+            LocalCoreAdaptiveTurnLimit = adaptiveTurnLimit,
+            MemoryPressureSignal = adaptivePressure ? memorySignal : captured.MemoryPressureSignal,
             DetailedDiagnostics = detailed,
             MeasurePhasePerformance = detailed,
             Interaction = null, Diagnostics = new SearchDiagnosticsSink(message =>
@@ -85,6 +90,12 @@ internal static class P2QualityChecks
                     deepening.Add(message);
                 if (message.StartsWith("[CombatSolver/Test] SEARCH_LAYER_MEMORY", StringComparison.Ordinal))
                     memory.Add(message);
+                if (message.StartsWith("[CombatSolver/Test] SEARCH_HORIZON_REFINEMENT", StringComparison.Ordinal))
+                {
+                    refinement.Add(message);
+                    if (adaptivePressure && message.Contains("checkpoint_layers=", StringComparison.Ordinal))
+                        memorySignal.UseDefaultGcFallback(systemHeadroomConstrained: true);
+                }
             }, _ => { }) };
         CombatRootSnapshot root = CombatRootSnapshot.Capture(live);
         var damage = BattleDamageTracker.Observe(live);
@@ -141,19 +152,33 @@ internal static class P2QualityChecks
             }
             finally { defended.ReleaseSimulator(); }
         }
-        if (turnLayers != null && prefix != null)
+        bool coordinator = turnLayers != null || adaptiveTurnLimit != null;
+        if (coordinator && prefix != null)
             throw new ArgumentException("Choose a horizon comparison or a prefix replay.");
-        SolverResult result = turnLayers != null
+        SolverResult result = coordinator
             ? CombatSearchCoordinator.Solve(root, names, damage, policy, CancellationToken.None, null)
             : new CombatBeamSolver(root, names, damage, policy, searchProfile: profile,
                 continuationRouteReplayActions: prefix, continueRouteSearchForTesting: prefix != null).Solve();
-        if (turnLayers != null)
+        if (coordinator)
         {
             int? limit = SearchEvaluationPolicy.TurnLayerLimit(policy.RoutePolicy, localCoreTurnLayers);
             int? target = limit is int layers ? root.StartTurnNumber + layers : null;
-            if (result.EvaluationWindow is not { } window || window.TargetTurn != target
-                || result.BestNode.Actions.Any(action => action.Turn >= target))
+            if (result.EvaluationWindow is not { } window
+                || (target is int minimum && adaptiveTurnLimit is int max
+                    ? window.TargetTurn is not int actual || actual < minimum || actual > root.StartTurnNumber + max
+                    : window.TargetTurn != target)
+                || result.BestNode.Actions.Any(action => action.Turn >= window.TargetTurn))
                 throw new InvalidOperationException("Selected route did not honor its requested evaluation horizon.");
+            if (adaptivePressure && (window.TargetTurn != target
+                || !refinement.Any(message => message.Contains("stopped=pressure_or_budget", StringComparison.Ordinal))))
+                throw new InvalidOperationException("Pressure at the completed base window did not preserve the baseline.");
+            if (!adaptivePressure && adaptiveTurnLimit is > 3 && fixture == "setup-mp"
+                && (window.TargetTurn <= target || !window.CoversTarget || !result.Snapshot.AllEnemiesDead
+                    || !refinement.Any(message => message.Contains("committed_layers=", StringComparison.Ordinal))
+                    || result.RecoveryBudgetMetrics?.ExpandedNodes != result.TotalExpandedNodes
+                    || result.TotalExpandedNodes > profile.MaxExpandedNodes))
+                throw new InvalidOperationException("Adaptive horizon failed to commit and account for a verified extension: "
+                    + string.Join(" | ", refinement));
             if (fixture == "setup-single" && (!result.Snapshot.AllEnemiesDead
                 || result.CombatEndedTurn <= root.StartTurnNumber + 2))
                 throw new InvalidOperationException("Singleplayer lost its full-battle prediction.");
@@ -184,7 +209,9 @@ internal static class P2QualityChecks
                 || replay.CumulativePlayerHpLost != 0))
                 throw new InvalidOperationException("Search lost the independently verified zero-loss defense route.");
             string outputName = fixture + (selectiveDeepening ? "-selective" : "") + (prefixPath == null ? "" : "-tail")
-                + (turnLayers == null ? "" : "-horizon-" + (localCoreTurnLayers?.ToString() ?? "battle"));
+                + (turnLayers == null ? "" : "-horizon-" + (localCoreTurnLayers?.ToString() ?? "battle"))
+                + (adaptiveTurnLimit == null ? "" : $"-adaptive-{adaptiveTurnLimit}")
+                + (adaptivePressure ? "-pressure" : "");
             File.WriteAllText(Path.Combine(output, outputName + ".json"), JsonSerializer.Serialize(new
             {
                 Fixture = fixture, DefenseWitness = defenseWitness, Prefix = prefixEvidence,
@@ -192,6 +219,7 @@ internal static class P2QualityChecks
                 Root = root.ContinuationStamp.StateText, Profile = profile, result.EvaluationWindow,
                 result.ExpandedNodes, result.TransitionCount, SelectiveDeepening = selectiveDeepening, Deepening = deepening,
                 result.SearchedTurns, Memory = memory,
+                result.TotalExpandedNodes, result.TotalTransitionCount, Refinement = refinement,
                 Boundary = result.BoundaryReason.ToString(),
                 result.CombatEndedTurn, InitialDelayed = initialDelayed, replay.AllEnemiesDead, replay.PlayerDead,
                 replay.DeathSaveUseCount, replay.CumulativePlayerHpLost, replay.PlayerHp, replay.ProjectedPlayerHp, replay.EnemyHp,

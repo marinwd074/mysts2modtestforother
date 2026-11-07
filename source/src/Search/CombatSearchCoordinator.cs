@@ -146,8 +146,10 @@ internal static partial class CombatSearchCoordinator
                 ? new(learnFromSearch: true, measurePerformance: policy.MeasurePhasePerformance) : null;
         SearchRequestWorkTotals totals = new(measurePhases: policy.MeasurePhasePerformance);
         SearchOptimizationSession? optimizations = policy.UseUpstreamSearchOptimizations ? new(root) : null;
+        bool adaptiveHorizon = localRecoveryPolicy && CanRefineLocalHorizon(root, policy);
         if (localRecoveryPolicy && (policy.MultiplayerPlanRefresh != null
             || policy.ContinuationSeedActions.Count > 0
+            || adaptiveHorizon
             || policy.LocalCoreTurnLayers != SearchEvaluationPolicy.RollingHorizonTurnLayers
             || policy.ContinuationRouteReplayActions.Count > 0 && !policy.VerifyIncrementalSearch))
         {
@@ -173,6 +175,12 @@ internal static partial class CombatSearchCoordinator
                 && IsBetterPotionPolicyResult(root, policy, witness, result))
             {
                 result = witness;
+                PopulateRequestWorkTotals(result, totals.Snapshot());
+            }
+            if (adaptiveHorizon)
+            {
+                result = RefineLocalHorizon(root, displayNames, battleDamage, policy with { RequestWorkTotals = totals },
+                    result, cancellationToken);
                 PopulateRequestWorkTotals(result, totals.Snapshot());
             }
             result.OptimizationMetrics = optimizations?.Capture();

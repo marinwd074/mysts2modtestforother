@@ -181,6 +181,34 @@ internal static class MultiplayerFullRouteChecks
                 && lethal.PlanRefresh!.Decision == MultiplayerPlanRefreshDecision.Reselect,
                 "An alternative did not truncate its stale tail after native victory: "
                     + JsonSerializer.Serialize(lethal.PlanRefresh));
+            var longCandidate = request.Candidates.First(candidate =>
+                candidate.Route[0].CardId is "BASH" or "STRIKE_IRONCLAD");
+            var longRoute = longCandidate.Route.Concat(Enumerable.Repeat(invalid, 129)).Take(129).ToArray();
+            IReadOnlyList<PlanAction> retainedLong = MultiplayerPlanRefreshRequest.CaptureRemainingRoute(
+                longRoute, root.StartTurnNumber);
+            Check(retainedLong.Count == 129, "The capture dropped a route past the old action limit.");
+            var longRequest = broken with
+            {
+                Candidates = [longCandidate with { OriginalRank = 1, Route = retainedLong }],
+            };
+            SolverResult longVictory = Run("long-alternative-early-victory", lethalRoot, longRequest);
+            Check(longVictory is { BestNode.ActionCount: 1, TotalExpandedNodes: 1 }
+                && longVictory.PlanRefresh is { WholeRouteReplayed: true, SelectedOriginalRank: 1 },
+                "Long recovery did not charge the one executed step and truncate the rest.");
+            SearchRequestWorkSnapshot? longWork = null;
+            bool longExhausted = false;
+            try
+            {
+                _ = CombatSearchCoordinator.Solve(root, names, damage, policy with
+                {
+                    Profile = policy.Profile with { MaxExpandedNodes = 1 },
+                    MultiplayerPlanRefresh = longRequest,
+                    RequestWorkObserver = work => longWork = work,
+                }, CancellationToken.None, null);
+            }
+            catch (SearchRecoveryBudgetExhaustedException) { longExhausted = true; }
+            Check(longExhausted && longWork is { ExpandedNodes: 1, TransitionCount: > 0 },
+                "An incomplete long route escaped its request node budget or lost its recorded work.");
             SolverResult stoppingDisabled = Run("disabled-hp-shortcut", lethalRoot, broken with
             {
                 Candidates = [request.Candidates[0] with { OriginalRank = 1 }],

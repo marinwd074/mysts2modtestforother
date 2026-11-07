@@ -1462,11 +1462,30 @@ internal sealed partial class CombatBeamSolver
             if (_continueRouteSearchForTesting && (_continuationRouteReplayActions == null
                 || policy.RoutePolicy != SearchRoutePolicy.SinglePlayerFullRoute))
                 throw new InvalidOperationException("Diagnostic continuation requires a route and a full-battle search target.");
+            if (_localCoreRefinementSeedLayers is int seedLayers
+                && (_continuationRouteReplayActions == null || _includeTurnSetup
+                    || _routePolicy != SearchRoutePolicy.MultiplayerSinglePlayerCore
+                    || policy.RecoveryBudget == null || seedLayers < 1
+                    || _predictionTurnLayerLimit is not int targetLayers || targetLayers <= seedLayers))
+                throw new InvalidOperationException("Horizon refinement requires a later local-core window and a shared request budget.");
             SearchNode? compatibleRoot = _continuationRouteReplayActions is { } replayActions
-                ? ReplayContinuationRoute(root, replayActions, stopwatch, chargeCompletionWork: _continueRouteSearchForTesting)
+                ? ReplayContinuationRoute(root, replayActions, stopwatch,
+                    chargeCompletionWork: _continueRouteSearchForTesting || _localCoreRefinementSeedLayers != null)
                 : ApplyFixedPrefix(root);
             if (compatibleRoot == null)
                 continue;
+            if (_localCoreRefinementSeedLayers is int completedSeedLayers)
+            {
+                if (compatibleRoot.Snapshot.EvaluationWindow is not { Resolved: true } checkpoint
+                    || (!checkpoint.CompleteVictory && (!checkpoint.AtPlayerDecisionPoint
+                        || compatibleRoot.Turn != checked(_startTurnNumber + completedSeedLayers)))
+                    || compatibleRoot.Snapshot.PlayerDead)
+                {
+                    compatibleRoot.Snapshot.ReleaseSimulator();
+                    throw new ContinuationSeedRejectedException("refinement_seed_boundary");
+                }
+                member.SearchedTurnLayers = completedSeedLayers;
+            }
             RegisterInitialFrontierNode(compatibleRoot);
         }
 
@@ -1485,7 +1504,8 @@ internal sealed partial class CombatBeamSolver
         member.PotionBoundaryFallbackScore = double.NegativeInfinity;
         // Diagnostics can evaluate the unmodelled tail using this same search. Normal
         // route adoption still materializes only the reviewed replay and never extends it.
-        if (_continuationRouteReplayActions != null && !_continueRouteSearchForTesting)
+        if (_continuationRouteReplayActions != null && !_continueRouteSearchForTesting
+            && _localCoreRefinementSeedLayers == null)
         {
             SearchNode replayed = member.Fallback;
             FinalPlanSelection replayOrdering = FinalOrdering.Select(

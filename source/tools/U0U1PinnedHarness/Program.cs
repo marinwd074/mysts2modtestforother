@@ -71,7 +71,8 @@ internal static class Program
         bool requestHydrationBenchmark = requestHydrationOnly && args[0] != "request-hydration";
         string outputDirectory = ParseOutput(multiplayerRefreshOnly || entropicCostOnly || upstreamSearchOnly || upstreamPortOnly || memoryDisplayOnly || cardChoiceIdentityOnly || modelIdCacheOnly || darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicTailOnly || p2QualityOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
             allowHydrationOptions: requestHydrationBenchmark || p2QualityOnly, allowRoutePrefix: p2QualityOnly,
-            allowSelective: p2QualityOnly || nativeRedecisionOnly, allowWinTempo: winTempoOnly, allowTurnLayers: p2QualityOnly,
+            allowSelective: p2QualityOnly || nativeRedecisionOnly, allowWinTempo: winTempoOnly,
+            allowTurnLayers: p2QualityOnly || nativeRedecisionOnly,
             allowHoldout: nativeRedecisionOnly || winTempoOnly);
         Directory.CreateDirectory(outputDirectory);
         if (multiplayerRefreshOnly || p2QualityOnly && args.Any(value => value.EndsWith("-mp", StringComparison.Ordinal)))
@@ -244,10 +245,13 @@ internal static class Program
                 includeTurnSetup: false,
                 theftPolicy: null);
 
+            int adaptiveIndex = Array.IndexOf(args, "--adaptive-turn-layers");
+            int? adaptiveTurnLimit = adaptiveIndex >= 0
+                ? int.Parse(args[adaptiveIndex + 1], System.Globalization.CultureInfo.InvariantCulture) : null;
             if (nativeRedecisionOnly)
             {
                 Console.WriteLine(NativeRedecisionChecks.Run(combat, loop, names, captured,
-                    args.Contains("--selective"), outputDirectory, holdout));
+                    args.Contains("--selective"), outputDirectory, holdout, adaptiveTurnLimit));
                 return 0;
             }
             if (winTempoOnly)
@@ -269,7 +273,9 @@ internal static class Program
                 Console.WriteLine(P2QualityChecks.Run(combat, names, captured, p2Fixture, outputDirectory,
                     prefixIndex >= 0 ? args[prefixIndex + 1] : null,
                     selectiveDeepening: args.Contains("--selective"), detailed: args.Contains("--measure"),
-                    turnLayers: horizonIndex >= 0 ? args[horizonIndex + 1] : null));
+                    turnLayers: horizonIndex >= 0 ? args[horizonIndex + 1] : null,
+                    adaptiveTurnLimit: adaptiveTurnLimit,
+                    adaptivePressure: args.Contains("--adaptive-pressure")));
                 return 0;
             }
             if (multiplayerRefreshOnly)
@@ -4429,13 +4435,15 @@ internal static class Program
                 continue;
             if (allowSelective && args[index] == "--selective")
                 continue;
+            if (allowTurnLayers && args[index] == "--adaptive-pressure")
+                continue;
             if (allowWinTempo && args[index] is "--tempo" or "--over-cap")
                 continue;
             if (allowHoldout && args[index] == "--holdout")
                 continue;
             if (allowHydrationOptions && args[index] is "--fixture" or "--iterations" or "--dop"
                 || allowRoutePrefix && args[index] == "--prefix"
-                || allowTurnLayers && args[index] == "--turn-layers")
+                || allowTurnLayers && args[index] is "--turn-layers" or "--adaptive-turn-layers")
             {
                 if (++index >= args.Length)
                     throw new ArgumentException("Missing diagnostic option value.");

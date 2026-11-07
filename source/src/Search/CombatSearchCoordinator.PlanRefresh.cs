@@ -23,7 +23,12 @@ internal static partial class CombatSearchCoordinator
         SearchPolicySnapshot replayPolicy = policy with
         {
             Profile = probeProfile, Interaction = null,
+            LocalCoreTurnLayers = ReplayHorizonLayers(policy, root.StartTurnNumber, request.EvaluationWindow),
             ContinuationRouteReplayActions = request.Route,
+            ChargeLocalRouteReplayActions =
+                request.Route.Count > MultiplayerPlanRefreshRequest.UnchargedReplayActionLimit
+                || request.Candidates.Any(candidate => candidate.Route.Count >
+                    MultiplayerPlanRefreshRequest.UnchargedReplayActionLimit),
             // Automatic repair cannot manufacture explicit route-adoption intent.
             ContinuationRouteReplayBaseline = request.Baseline is { } baseline
                 ? baseline with { ExplicitRouteAdoption = false } : null,
@@ -129,6 +134,19 @@ internal static partial class CombatSearchCoordinator
             ContinuationRouteReplayActions = [],
             ContinuationRouteReplayBaseline = null,
         }, report);
+    }
+
+    private static int? ReplayHorizonLayers(SearchPolicySnapshot policy, int startTurn, RouteEvaluationWindow? window)
+    {
+        if (policy.LocalCoreTurnLayers is int ordinary && policy.LocalCoreAdaptiveTurnLimit is int maximum
+            && window is { Resolved: true } previous && previous.StartTurn == startTurn
+            && previous.TargetTurn is int target)
+        {
+            long layers = (long)target - startTurn;
+            if (layers > ordinary && layers <= maximum)
+                return (int)layers;
+        }
+        return policy.LocalCoreTurnLayers;
     }
 
     private static bool CanAcceptRecoveredAlternative(MultiplayerPlanRefreshRequest request,

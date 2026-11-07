@@ -12,7 +12,12 @@ internal sealed partial class CombatBeamSolver
         SearchNode node = rootNode;
         try
         {
-            if (_includeTurnSetup || actions.Count is 0 or > 128)
+            bool budgetedLocalReplay = policy.ChargeLocalRouteReplayActions
+                && _routePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
+                && policy.RecoveryBudget != null;
+            int actionLimit = budgetedLocalReplay ? MultiplayerPlanRefreshRequest.MaximumRetainedRouteActions
+                : MultiplayerPlanRefreshRequest.UnchargedReplayActionLimit;
+            if (_includeTurnSetup || actions.Count == 0 || actions.Count > actionLimit)
                 throw new ContinuationSeedRejectedException("route_shape");
             foreach (PlanAction action in actions)
             {
@@ -34,14 +39,15 @@ internal sealed partial class CombatBeamSolver
                 if (EffectiveSearchElapsedMilliseconds(stopwatch) >= _profile.SoftTimeBudgetMilliseconds)
                     throw new ContinuationSeedRejectedException("route_time_budget");
                 if (action.Turn != node.Turn || action.ShadowForecast != null
+                    || action.IsForecastOnlyObservation
                     || action.Kind is not (PlanActionKind.PlayCard or PlanActionKind.EndTurn))
                     throw new ContinuationSeedRejectedException("route_action_shape");
                 if (action.Kind == PlanActionKind.PlayCard && !CanApplyFixedPrefixAction(node, action))
                     throw new ContinuationSeedRejectedException("route_action_unavailable");
 
                 // Optional evaluation completion spends the existing request's work budget.
-                // Normal recovery keeps its established route-replay accounting.
-                if (chargeCompletionWork)
+                // Long-route recovery charges every step across all competing routes.
+                if (chargeCompletionWork || budgetedLocalReplay)
                 {
                     if (!HasExpandedNodeBudgetRemaining() || !TryConsumeExpandedNodeBudget())
                         throw new ContinuationSeedRejectedException("route_node_budget");
@@ -66,6 +72,8 @@ internal sealed partial class CombatBeamSolver
                     if (annotated.Count != 1)
                         throw new ContinuationSeedRejectedException("route_no_progress");
                     node = annotated[0];
+                    if (budgetedLocalReplay)
+                        CaptureContinuation(node);
                 }
             }
             return node;

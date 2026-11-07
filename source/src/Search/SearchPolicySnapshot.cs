@@ -44,6 +44,7 @@ internal sealed record SearchPolicySnapshot(
     internal bool UseSelectiveDeepening { get; init; }
     // Frozen for the request. Null targets battle completion for local-core experiments.
     internal int? LocalCoreTurnLayers { get; init; } = SearchEvaluationPolicy.RollingHorizonTurnLayers;
+    internal int? LocalCoreAdaptiveTurnLimit { get; init; }
     // P4 offline experiment. Applies after normal selection and policy admission.
     internal bool UseBoundedWinTempo { get; init; }
     internal SearchOptimizationSession? OptimizationSession { get; init; }
@@ -145,6 +146,8 @@ internal sealed record SearchPolicySnapshot(
     // Created by the coordinator, never carried over from the old search.
     internal SearchRequestWallClockBudget? RecoveryBudget { get; init; }
     internal MultiplayerPlanRefreshRequest? MultiplayerPlanRefresh { get; init; }
+    // Recovery enables this for the whole candidate group if it contains a long route.
+    internal bool ChargeLocalRouteReplayActions { get; init; }
 
     /// <summary>
     /// 组合成员宽度。首项由 <see cref="BeamWidthPortfolio.ProductionMembers" /> 强制成基线宽度；

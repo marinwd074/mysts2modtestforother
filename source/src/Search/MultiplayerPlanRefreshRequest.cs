@@ -7,6 +7,10 @@ internal sealed record MultiplayerPlanRefreshRequest(
     IReadOnlyList<PlanAction> Route,
     ContinuationRouteReplayBaseline? Baseline)
 {
+    internal const int UnchargedReplayActionLimit = 128;
+    // Bound the extra pure-value route storage independently of simulator lifetimes.
+    internal const int MaximumRetainedRouteActions = 512;
+
     internal int? EvaluationTurn { get; init; }
     internal RouteEvaluationWindow? EvaluationWindow { get; init; }
     internal bool SourceWasCompleteVictory { get; init; }
@@ -40,8 +44,17 @@ internal sealed record MultiplayerPlanRefreshRequest(
     }
 
     internal static IReadOnlyList<PlanAction> CaptureRemainingRoute(IReadOnlyList<PlanAction> actions, int currentTurn)
-        => actions.Any(action => action.ShadowForecast != null || action.IsForecastOnlyObservation)
-            ? [] : CopyActions(actions.Where(action => action.Turn >= currentTurn).ToArray());
+    {
+        if (actions.Any(action => action.ShadowForecast != null || action.IsForecastOnlyObservation))
+            return [];
+        PlanAction[] remaining = actions.Where(action => action.Turn >= currentTurn)
+            .Take(MaximumRetainedRouteActions + 1).ToArray();
+        return remaining.Length <= MaximumRetainedRouteActions ? CopyActions(remaining) : [];
+    }
+
+    internal static bool CanRetainRoute(IReadOnlyList<PlanAction> actions)
+        => actions.Count is > 0 and <= MaximumRetainedRouteActions
+            && actions.All(action => action.ShadowForecast == null && !action.IsForecastOnlyObservation);
 
     internal static IReadOnlyList<MultiplayerReplayCandidate> CaptureRemainingCandidates(
         IReadOnlyList<MultiplayerReplayCandidate> candidates, int currentTurn)
@@ -75,7 +88,8 @@ internal sealed record MultiplayerPlanRefreshRequest(
     internal static MultiplayerReplayCandidate CaptureCandidate(int rank, SolverResult source)
         => new(rank, CapturePrefix(source.BestNode.Actions, source.StartTurnNumber))
         {
-            Route = CopyActions(source.BestNode.Actions), Baseline = CaptureBaseline(source),
+            Route = CaptureRemainingRoute(source.BestNode.Actions, source.StartTurnNumber),
+            Baseline = CaptureBaseline(source),
         };
 
     internal static IReadOnlyList<PlanAction> CopyActions(IReadOnlyList<PlanAction> actions)
