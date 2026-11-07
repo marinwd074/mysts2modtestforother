@@ -205,16 +205,16 @@ internal static class MultiplayerClientProbe
         if (!worldChanged)
             return false;
 
-        StateFingerprint enemyHpFingerprint = EnemyHpFingerprint(state);
+        MultiplayerEnemyRouteStamp enemyRouteStamp = CaptureEnemyRouteStamp(state);
         bool inLethalRecalculationWindow =
             MultiplayerCombatObjectivePolicy.IsInLethalRecalculationWindow(state.Enemies);
         bool enemyHpRouteChanged;
         if (returnEnemyHpRouteChange)
         {
-            // Near lethal, a remote HP drop can create an immediate local kill that the
-            // existing route never considered. This quality boundary is not optional.
-            enemyHpRouteChanged = MultiplayerRouteChangeTracker.ObserveEnemyHp(
-                enemyHpFingerprint,
+            // Removing a target can invalidate its planned actions even with other
+            // enemies at full HP. HP-only changes retain the near-lethal gate.
+            enemyHpRouteChanged = MultiplayerRouteChangeTracker.ObserveEnemies(
+                enemyRouteStamp,
                 inLethalRecalculationWindow,
                 reason);
         }
@@ -222,7 +222,7 @@ internal static class MultiplayerClientProbe
         {
             // Local Safe Execute actions must advance the full world version, but their
             // expected HP effects become the new route baseline instead of invalidating it.
-            MultiplayerRouteChangeTracker.SynchronizeEnemyHp(enemyHpFingerprint);
+            MultiplayerRouteChangeTracker.SynchronizeEnemies(enemyRouteStamp);
             enemyHpRouteChanged = false;
         }
 
@@ -272,13 +272,18 @@ internal static class MultiplayerClientProbe
         return returnEnemyHpRouteChange ? enemyHpRouteChanged : worldChanged;
     }
 
-    private static StateFingerprint EnemyHpFingerprint(CombatState state)
+    private static MultiplayerEnemyRouteStamp CaptureEnemyRouteStamp(CombatState state)
     {
-        StateFingerprintBuilder fingerprint = new();
-        fingerprint.Add(state.Enemies.Count);
+        StateFingerprintBuilder hp = new();
+        StateFingerprintBuilder livingRoster = new();
+        hp.Add(state.Enemies.Count);
         foreach (Creature enemy in state.Enemies)
-            fingerprint.Add(enemy.CurrentHp);
-        return fingerprint.Finish();
+        {
+            hp.Add(enemy.CurrentHp);
+            if (enemy.IsAlive)
+                livingRoster.Add(enemy.CombatId ?? uint.MaxValue);
+        }
+        return new(hp.Finish(), livingRoster.Finish());
     }
 
     private static MultiplayerProbeSnapshot CaptureSnapshot(
@@ -395,6 +400,7 @@ internal static class MultiplayerClientProbe
         {
             fingerprint.Add(enemy.CombatId?.ToString());
             fingerprint.Add(enemy.Monster?.Id.Entry);
+            fingerprint.Add(enemy.IsAlive);
             fingerprint.Add(enemy.CurrentHp);
             fingerprint.Add(enemy.MaxHp);
             fingerprint.Add(enemy.Block);

@@ -140,17 +140,18 @@ internal sealed class MultiplayerWorldObservation
 }
 
 
+internal readonly record struct MultiplayerEnemyRouteStamp(StateFingerprint Hp, StateFingerprint LivingRoster);
+
 /// <summary>
-/// Search invalidation signal for multiplayer. Unlike <see cref="MultiplayerWorldTracker"/>,
-/// this deliberately ignores every live-state mutation except enemy current HP. Turn boundaries
-/// may signal scheduling without invalidating an existing route.
+/// Search invalidation signal for multiplayer. Enemy roster changes always matter;
+/// HP-only changes invalidate near lethal. Turn boundaries can schedule without invalidating.
 /// </summary>
 internal static class MultiplayerRouteChangeTracker
 {
     internal const int DefaultDebounceMilliseconds =
         MultiplayerWorldTracker.DefaultDebounceMilliseconds;
 
-    private static StateFingerprint? _lastEnemyHpFingerprint;
+    private static MultiplayerEnemyRouteStamp? _lastEnemies;
     private static string _lastReason = "reset";
     private static long _version;
     private static long _invalidationVersion;
@@ -163,7 +164,7 @@ internal static class MultiplayerRouteChangeTracker
 
     internal static void Reset()
     {
-        _lastEnemyHpFingerprint = null;
+        _lastEnemies = null;
         _lastReason = "reset";
         _version = 0;
         _invalidationVersion = 0;
@@ -171,22 +172,25 @@ internal static class MultiplayerRouteChangeTracker
         _dirty = false;
     }
 
-    internal static bool ObserveEnemyHp(
-        StateFingerprint fingerprint,
-        bool allowInvalidation,
+    internal static bool ObserveEnemies(
+        MultiplayerEnemyRouteStamp current,
+        bool allowHpInvalidation,
         string reason)
     {
-        if (_lastEnemyHpFingerprint is { } previous && previous == fingerprint)
+        MultiplayerEnemyRouteStamp? previous = _lastEnemies;
+        if (previous == current)
             return false;
 
-        _lastEnemyHpFingerprint = fingerprint;
-        if (allowInvalidation)
-            SignalInvalidation(reason);
-        return allowInvalidation;
+        _lastEnemies = current;
+        bool rosterChanged = previous is { } old && old.LivingRoster != current.LivingRoster;
+        if (!rosterChanged && !allowHpInvalidation)
+            return false;
+        SignalInvalidation(rosterChanged ? "enemy_roster_changed" : reason);
+        return true;
     }
 
-    internal static void SynchronizeEnemyHp(StateFingerprint fingerprint)
-        => _lastEnemyHpFingerprint = fingerprint;
+    internal static void SynchronizeEnemies(MultiplayerEnemyRouteStamp current)
+        => _lastEnemies = current;
 
     internal static void SignalSchedulingBoundary(string reason)
         => SignalScheduling(reason);

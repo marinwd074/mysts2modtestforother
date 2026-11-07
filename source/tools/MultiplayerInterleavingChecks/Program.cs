@@ -27,6 +27,31 @@ foreach (string[] events in Interleave(new[] {
     Run($"execution disturbance={disturbance}", events, () => CheckExecution(events));
 
 Run("independent observers and local authority", new[] { "observe", "reset-one", "remote-card", "remote-potion" }, CheckIsolation);
+Run("living enemy roster invalidates outside lethal", new[] { "initial", "hp-only", "death", "duplicate", "local-action" }, () =>
+{
+    MultiplayerRouteChangeTracker.Reset();
+    MultiplayerEnemyRouteStamp initial = new(new(287, 1), new(1, 4));
+    MultiplayerEnemyRouteStamp hurt = initial with { Hp = new(217, 1) };
+    Require(!MultiplayerRouteChangeTracker.ObserveEnemies(initial, false, "initial")
+        && !MultiplayerRouteChangeTracker.ObserveEnemies(hurt, false, "hp-only"),
+        "High-HP damage alone must preserve the existing scheduling rule.");
+    MultiplayerEnemyRouteStamp removed = hurt with { LivingRoster = new(2, 3) };
+    Require(MultiplayerRouteChangeTracker.ObserveEnemies(removed, false, "remote-kill")
+        && MultiplayerRouteChangeTracker.InvalidationVersion == 1
+        && MultiplayerRouteChangeTracker.LastReason == "enemy_roster_changed",
+        "A target removal must invalidate even outside the lethal window and with the same HP fingerprint.");
+    Require(!MultiplayerRouteChangeTracker.ObserveEnemies(removed, true, "duplicate"),
+        "A repeated settled roster must not invalidate again.");
+    MultiplayerEnemyRouteStamp localAction = removed with { LivingRoster = new(3, 2) };
+    MultiplayerRouteChangeTracker.SynchronizeEnemies(localAction);
+    Require(!MultiplayerRouteChangeTracker.ObserveEnemies(localAction, true, "settled-local-action")
+        && MultiplayerRouteChangeTracker.InvalidationVersion == 1,
+        "A synchronized local kill must not invalidate a second time.");
+    Require(MultiplayerRouteChangeTracker.ObserveEnemies(localAction with { Hp = new(40, 1) }, true, "low-hp")
+        && MultiplayerRouteChangeTracker.InvalidationVersion == 2,
+        "Near-lethal HP-only invalidation must still work.");
+    MultiplayerRouteChangeTracker.Reset();
+});
 Run("optional search under route churn", new[] { "isolated", "burst", "adjacent-turn", "quiet" }, () =>
 {
     var churn = new MultiplayerSearchChurn();
