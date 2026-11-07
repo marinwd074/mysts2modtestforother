@@ -5,7 +5,8 @@ namespace CombatSolver;
 
 internal enum SearchRequestStage
 {
-    RootCaptureStarted, RootCaptureFinished, WorkerQueued, WorkerStarted, WorkerFinished,
+    RootCaptureStarted, RootCaptureFinished, SearchingOverlayStarted, SearchingOverlayFinished,
+    WorkerQueued, WorkerStarted, WorkerFinished,
     PreviewProduced, PreviewSubmitted, ApprovedRouteSubmitted, ResultAccepted,
     CancellationRequested, CallbackStarted, CallbackFinished, CancellationDisposed,
 }

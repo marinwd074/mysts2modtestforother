@@ -66,10 +66,10 @@ internal static class NativeReviewedCardChecks
             policy, CancellationToken.None, null);
         PlanAction suggestion = result.BestNode.Actions.Single();
         if (suggestion.CardId != gangUp.Id.Entry || !suggestion.AdviceOnly || suggestion.IsExecutable
-            || MultiplayerSafeLocalActionClassifier.ClassifyStructural(suggestion).IsSafe
             || !result.Snapshot.AllEnemiesDead || result.Snapshot.HasRisk
             || ContinuationStamp.CaptureLive(live) != lethalRoot.ContinuationStamp)
             throw new InvalidOperationException("Reviewed card did not produce an isolated, advisory-only lethal.");
+        VerifyDeploymentRejects(suggestion);
         // Execute directly as the native oracle. Safe Execute must stop at this suggestion.
         enemy.SetCurrentHpInternal(observedEnemyHp);
         NativeActionChecks.Execute(loop, new PlayCardAction(gangUp, enemy));
@@ -88,12 +88,12 @@ internal static class NativeReviewedCardChecks
         try
         {
             predictedFlanking = flankingVerifier.CaptureDiagnosticContinuation(flankingPreview);
-            if (flankingPreview.HasRisk || ContinuationStamp.CaptureLive(live) != flankingRoot.ContinuationStamp
-                || MultiplayerSafeLocalActionClassifier.ClassifyStructural(flankingAction).IsSafe)
-                throw new InvalidOperationException("Flanking prediction changed the live root or gained execution authority.");
+            if (flankingPreview.HasRisk || ContinuationStamp.CaptureLive(live) != flankingRoot.ContinuationStamp)
+                throw new InvalidOperationException("Flanking prediction was unsupported or changed the live root.");
         }
         finally { flankingPreview.ReleaseSimulator(); }
 
+        VerifyDeploymentRejects(flankingAction);
         NativeActionChecks.Execute(loop, new PlayCardAction(flanking, enemy));
         ContinuationStamp actualFlanking = ContinuationStamp.CaptureLive(live);
         if (predictedFlanking != actualFlanking)
@@ -110,9 +110,17 @@ internal static class NativeReviewedCardChecks
         File.WriteAllText(Path.Combine(output, "native-reviewed-card.json"), JsonSerializer.Serialize(new
         {
             Card = gangUp.Id.Entry, BaseDamage = baseDamage, BoostedDamage = boostedDamage, NativeDamage = actualDamage,
-            result.CombatEndedTurn, result.TotalExpandedNodes, Suggestion = suggestion,
+            result.CombatEndedTurn, result.TotalExpandedNodes, Suggestion = suggestion, DeploymentStop = "advice_only_card",
             Flanking = new { PostActionMatches = true, BaseTeammateDamage = baseTeammateDamage, FlankedDamage = flankedDamage },
         }, new JsonSerializerOptions { WriteIndented = true }));
         return $"NativeReviewedCard PASS gang_up={baseDamage}->{boostedDamage} flanking={baseTeammateDamage}->{flankedDamage}";
+
+        void VerifyDeploymentRejects(PlanAction action)
+        {
+            IReadOnlyList<PlanAction> prefix = MultiplayerSafeLocalActionClassifier.TakeBoundedDeploymentSlice(
+                live, [action], out SafeLocalActionDecision stop);
+            if (prefix.Count != 0 || stop.IsSafe || stop.Reason != "advice_only_card")
+                throw new InvalidOperationException($"{action.CardId} entered the multiplayer deployment slice.");
+        }
     }
 }

@@ -24,12 +24,16 @@ internal static partial class SolverController
         _combat.LastPlanRefreshDecisionTimestampMilliseconds = null;
         if (source == null
             || previousStamp == null
-            || !MultiplayerPlanRefreshContracts.IsReplayCompatible(
-                previousStamp.StateText, currentStamp.StateText, out _)
             || source.StartTurnNumber != LocalContext.GetMe(state)?.PlayerCombatState?.TurnNumber
             || source.MultiplayerReplayCandidates.Count == 0)
         {
-            Entry.Logger.Info("[CombatSolver/MultiplayerPlanRefresh] MP_PLAN_REFRESH_CAPTURE rejected=root_or_candidate_mismatch");
+            Entry.Logger.Info("[CombatSolver/MultiplayerPlanRefresh] MP_PLAN_REFRESH_CAPTURE rejected=root_or_candidate_mismatch reason=source_stamp_turn_or_candidates");
+            return null;
+        }
+        if (!MultiplayerPlanRefreshContracts.IsReplayCompatible(
+                previousStamp.StateText, currentStamp.StateText, out string reason, includeFieldValues: false))
+        {
+            Entry.Logger.Info($"[CombatSolver/MultiplayerPlanRefresh] MP_PLAN_REFRESH_CAPTURE rejected=root_or_candidate_mismatch reason={reason}");
             return null;
         }
         MultiplayerPlanRefreshRequest request = MultiplayerPlanRefreshRequest.Capture(source);

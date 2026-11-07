@@ -1541,7 +1541,7 @@ internal static partial class SolverController
                 canAttemptBoundedPlanRefresh = MultiplayerPlanRefreshContracts.IsReplayCompatible(
                     previousStamp.StateText,
                     LiveCombatStamp.Capture(state).StateText,
-                    out refreshCompatibilityReason);
+                    out refreshCompatibilityReason, includeFieldValues: false);
             }
         }
         _combat.PendingMultiplayerPlanRefresh = canAttemptBoundedPlanRefresh;

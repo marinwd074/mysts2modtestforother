@@ -26,10 +26,12 @@ using (accepted.BeginAttempt())
     accepted.TransferToAsync(); accepted.Bind(9, 2, 50, 8); accepted.BindRoot("combat-fixture");
     At(accepted, 20, SearchRequestStage.RootCaptureStarted);
     At(accepted, 25, SearchRequestStage.RootCaptureFinished);
-    At(accepted, 25, SearchRequestStage.WorkerQueued);
+    At(accepted, 26, SearchRequestStage.SearchingOverlayStarted);
+    At(accepted, 31, SearchRequestStage.SearchingOverlayFinished);
+    At(accepted, 32, SearchRequestStage.WorkerQueued);
 }
-At(accepted, 27, SearchRequestStage.WorkerStarted);
-now = 30; accepted.ObserveProgress(true, 1);
+At(accepted, 34, SearchRequestStage.WorkerStarted);
+now = 34; accepted.ObserveProgress(true, 1);
 At(accepted, 35, SearchRequestStage.PreviewSubmitted);
 At(accepted, 40, SearchRequestStage.ApprovedRouteSubmitted);
 now = 45; accepted.ObserveProgress(true, 3); accepted.ObserveWork(121, 222);
@@ -43,9 +45,11 @@ Check(rows.Count == 1, "Completion was emitted more than once.");
 var a = rows.Single();
 Check(a.Deferrals == 2 && a.DeferredMilliseconds == 20 && a.ElapsedMilliseconds == 80,
     "Deferral restarted the clock or was counted twice.");
-Check(a.QueueMilliseconds == 2 && a.WorkerMilliseconds == 23 && a.DispatchMilliseconds == 20,
+Check(a.QueueMilliseconds == 2 && a.WorkerMilliseconds == 16 && a.DispatchMilliseconds == 20,
     "Queue, worker, and dispatcher timings overlap or use different origins.");
-Check(a.Stages["PreviewProduced"] == 30 && a.Stages["PreviewSubmitted"] == 35
+Check(a.Stages["SearchingOverlayStarted"] == 26 && a.Stages["SearchingOverlayFinished"] == 31
+    && a.Stages["WorkerQueued"] == 32, "Overlay setup time was not separated from queue time.");
+Check(a.Stages["PreviewProduced"] == 34 && a.Stages["PreviewSubmitted"] == 35
     && a.Stages["ApprovedRouteSubmitted"] == 40 && a.Stages["ResultAccepted"] == 72,
     "Preview creation was confused with publication or final acceptance.");
 Check(a.SearchGeneration == 9 && a.Turn == 2 && a.WorldVersion == 50 && a.RouteInvalidationVersion == 8

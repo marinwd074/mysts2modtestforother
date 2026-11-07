@@ -10,7 +10,8 @@ internal static class MultiplayerPlanRefreshContracts
     internal static bool IsReplayCompatible(
         string previousStateText,
         string currentStateText,
-        out string reason)
+        out string reason,
+        bool includeFieldValues = true)
     {
         if (string.Equals(previousStateText, currentStateText, StringComparison.Ordinal))
         {
@@ -43,7 +44,8 @@ internal static class MultiplayerPlanRefreshContracts
                     actualField[..actualSeparator],
                     StringComparison.Ordinal))
             {
-                reason = $"field_identity_changed:{expectedField}->{actualField}";
+                reason = includeFieldValues
+                    ? $"field_identity_changed:{expectedField}->{actualField}" : "field_identity_changed";
                 return false;
             }
 
@@ -53,7 +55,8 @@ internal static class MultiplayerPlanRefreshContracts
                     expectedField[(expectedSeparator + 1)..],
                     actualField[(actualSeparator + 1)..]))
             {
-                reason = $"strong_field_change:{fieldName}:{expectedField}->{actualField}";
+                reason = includeFieldValues
+                    ? $"strong_field_change:{fieldName}:{expectedField}->{actualField}" : $"strong_field_change:{fieldName}";
                 return false;
             }
             sawSoftEnemyDelta = true;

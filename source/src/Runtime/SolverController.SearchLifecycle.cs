@@ -665,11 +665,13 @@ internal static partial class SolverController
 
             Player player = LocalContext.GetMe(state)!;
             int turn = player.PlayerCombatState!.TurnNumber;
+            observation.Mark(SearchRequestStage.SearchingOverlayStarted);
             SolverOverlay.ShowSearching(
                 host,
                 turn,
                 deployWhenReady,
                 _combat.ReviewedWorldlinesTotal);
+            observation.Mark(SearchRequestStage.SearchingOverlayFinished);
             Entry.Logger.Info(
                 $"[CombatSolver/Test] SEARCH_REQUEST generation={generation} reason={reason} " +
                 $"cause={CauseToken(replanCause)} previous_boundary={previousBoundary?.ToString() ?? "-"} " +

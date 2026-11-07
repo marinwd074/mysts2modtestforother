@@ -13,6 +13,8 @@ journal.Write("info", "process boot");
 journal.BeginCombat("first", "遭遇一", "seed");
 Action<string> oldWorker = journal.Bind("info");
 journal.Write("info", "before upload");
+journal.Write("info", "[CombatSolver/Test] SEARCH_REQUEST_TIMELINE request-one");
+journal.Write("info", "[CombatSolver/Test] UI_COLD_CREATE build_ms=10 attach_ms=5 initial_layout_ms=2");
 Task<CombatLogArchive> frozen = journal.CaptureAsync();
 journal.Write("error", "after upload");
 journal.EndCombat("victory");
@@ -27,6 +29,10 @@ Check(second.History.Length == 1 && second.History[0].Errors == 1 && second.Hist
 string secondText = Encoding.UTF8.GetString(second.Events.JsonLines);
 Check(secondText.Contains("second battle") && !secondText.Contains("before upload") && !secondText.Contains("old callback"), "combat isolation failed");
 Check(second.Events.Error == null && second.Process.EventCount >= 4, "journal write failed");
+string processText = Encoding.UTF8.GetString(second.Process.JsonLines);
+Check(processText.Contains("SEARCH_REQUEST_TIMELINE request-one") && processText.Contains("UI_COLD_CREATE build_ms=10")
+    && !processText.Contains("before upload") && !secondText.Contains("SEARCH_REQUEST_TIMELINE"),
+    "cold setup or canceled-request evidence did not survive combat rotation in the process journal");
 Console.WriteLine("PASS frozen upload, historical summary, worker ownership and process isolation");
 
 journal.BeginCombat("third", "new run", "other-seed");

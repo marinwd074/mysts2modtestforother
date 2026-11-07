@@ -31,6 +31,7 @@ internal sealed partial class UnattendedTestRunner
         if (dismissedHints.ShowNoveltyPortfolioHint || dismissedHints.ShowSpeedXWarning)
             throw new InvalidOperationException("引导横幅的不再提示选择没有持久化。");
         SolverOverlay.ShowManualCalculationReady(NGame.Instance!, false);
+        SolverOverlay.ExerciseSettingsOpenForTesting();
         if (!SolverOverlay.ExercisePerformancePresetPersistenceForTesting())
             throw new InvalidOperationException("0.24.3 性能迁移或预设/内存独立持久化失败。");
         if (!SolverOverlay.ExercisePerformanceHintForTesting())
@@ -282,6 +283,7 @@ internal sealed partial class UnattendedTestRunner
         }
         if (!SolverOverlay.MessageWrappingEnabledForTesting)
             throw new InvalidOperationException("求解器消息区域没有启用自动换行。");
+        SolverOverlay.ExerciseSettingsOpenForTesting();
         if (!SolverOverlay.UploadProgressConfiguredForTesting)
             throw new InvalidOperationException("在线问题包上传没有配置可视化进度条和单实例按钮初始状态。");
         if (!SolverOverlay.SearchCompletionNotificationSettingsConfiguredForTesting)
@@ -419,6 +421,7 @@ internal sealed partial class UnattendedTestRunner
             SolverOverlay.ApplyConfiguredTheme();
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            SolverOverlay.ExerciseSettingsOpenForTesting();
             if (SolverOverlay.ActiveThemeForTesting != alternateTheme
                 || Math.Abs(SolverOverlay.OverlayOpacityForTesting - 0.65f) > 0.001f
                 || !SolverOverlay.VisualSettingsConfiguredForTesting)
@@ -432,6 +435,7 @@ internal sealed partial class UnattendedTestRunner
             SolverOverlay.ApplyConfiguredTheme();
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            SolverOverlay.ExerciseSettingsOpenForTesting();
         }
         SolverSettingsData notificationDefaults = new();
         if (SolverSettings.ResolvePerformancePreset(notificationDefaults)

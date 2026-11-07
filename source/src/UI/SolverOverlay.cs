@@ -2,6 +2,7 @@ using Godot;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Localization.Fonts;
 using MegaCrit.Sts2.Core.Nodes;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 namespace CombatSolver;
 
@@ -1470,7 +1471,7 @@ internal static partial class SolverOverlay
         _growthStrategyVisible = wasGrowthStrategyVisible;
         _relicStrategyVisible = wasRelicStrategyVisible;
         if (wasSettingsVisible)
-            _settingsPanel?.Reload();
+            CreateSettingsPanelIfNeeded();
         SetCollapsed(wasSettingsVisible ? false : wasCollapsed);
         if (!wasSettingsVisible && !wasCollapsed && wereDetailsVisible && _lastSnapshot != null)
             SetDetailsVisible(true);
@@ -1492,6 +1493,7 @@ internal static partial class SolverOverlay
 
     private static void Create(Node host)
     {
+        long started = Stopwatch.GetTimestamp();
         if (_inputBridge == null || !GodotObject.IsInstanceValid(_inputBridge))
         {
             _inputBridge = new SolverOverlayInputBridge { Name = "CombatSolverOverlayInput" };
@@ -1563,13 +1565,7 @@ internal static partial class SolverOverlay
         primaryColumn.AddChild(lowerStack);
         _mainStack = lowerStack;
 
-        _settingsPanel = new SolverSettingsPanel
-        {
-            Visible = false,
-            SizeFlagsVertical = Control.SizeFlags.ExpandFill,
-        };
-        _settingsPanel.ResetPositionRequested += ResetOverlayPosition;
-        primaryColumn.AddChild(_settingsPanel);
+        _settingsPanel = null;
 
         _potionStrategyPanel = new SolverPotionStrategyPanel();
         _growthStrategyPanel = new SolverGrowthStrategyPanel();
@@ -1707,7 +1703,9 @@ internal static partial class SolverOverlay
         layer.AddChild(_rightResizeHandle);
         layer.AddChild(_bottomResizeHandle);
         layer.AddChild(_cornerResizeHandle);
+        long attaching = Stopwatch.GetTimestamp();
         host.AddChild(layer);
+        long attached = Stopwatch.GetTimestamp();
         _layer = layer;
         _panel = panel;
         ApplyOverlayOpacity();
@@ -1731,6 +1729,10 @@ internal static partial class SolverOverlay
         _potionStrategyVisible = false;
         _growthStrategyVisible = false;
         SetCollapsed(false);
+        Entry.Logger.Info(
+            $"[CombatSolver/Test] UI_COLD_CREATE build_ms={Stopwatch.GetElapsedTime(started, attaching).TotalMilliseconds:F1} " +
+            $"attach_ms={Stopwatch.GetElapsedTime(attaching, attached).TotalMilliseconds:F1} " +
+            $"initial_layout_ms={Stopwatch.GetElapsedTime(attached).TotalMilliseconds:F1}");
         _relicStrategyVisible = false;
         Entry.Logger.Info("[CombatSolver/Test] UI_CREATE responsive=true content_fit_height=true minimum_size_reflow=true draggable=true drag_coordinates=viewport drag_relayout=release_only resizable=right+bottom+corner resize_grip=three_diagonal_lines size_persisted=true route_scroll_expand=true max_width=viewport max_height=viewport route_row_height=44 route_viewport_height=148 visible_unwrapped_route_rows=3 cached_route_rows=16 all_searched_turns=true route_scroll=true persistent_status_card=true compact_title=true compact_footer=true collapsed_action_buttons=true footer_pause_toggles=false settings_pause_toggles=true footer_top_margin=8 details_in_status_row=true battle_hp_in_route_heading=true sold_hp_summary=false three_column_routes=true semantic_action_pills=true full_target_names=true whole_pill_kill_highlight=true text_outline_px=2 wrapped_summary=true summary_bold_metric=true flat_collapse=true plain_details_button=true full_auto_positive_toggle=true no_middle_dot=true status_badge=true plain_action_buttons=true always_show_energy=true plain_route_heading=true settings_button=true settings_persisted=true settings_tabs=general+performance+feedback performance_advanced=collapsed notification_policy=three_state performance_presets=low+medium+high+very_high+custom kill_pill=green_with_target_names status_badge=content_width deployment_speed_settings=true search_status=fixed_columns_seconds only_death_marker=true relic_action_labels=true position_persisted=true theft_policy_buttons=contextual stop_search_button=true");
         Entry.Logger.Info("[CombatSolver/Test] UI_FEEDBACK_BANNER position=full_width manual_improvement=green unexpected_replan=red export_prompt=full_bug_report");
@@ -2120,6 +2122,39 @@ internal static partial class SolverOverlay
         Entry.Logger.Info($"[CombatSolver/Test] UI_ACTION action=collapse collapsed={_collapsed}");
     }
 
+    private static void CreateSettingsPanelIfNeeded()
+    {
+        if (_settingsPanel != null)
+            return;
+
+        long started = Stopwatch.GetTimestamp();
+        var panel = new SolverSettingsPanel
+        {
+            Visible = false,
+            SizeFlagsVertical = Control.SizeFlags.ExpandFill,
+        };
+        panel.ResetPositionRequested += ResetOverlayPosition;
+        Node column = _mainStack!.GetParent();
+        column.AddChild(panel);
+        column.MoveChild(panel, _mainStack.GetIndex());
+        _settingsPanel = panel;
+        Entry.Logger.Info($"[CombatSolver/Test] UI_SETTINGS_CREATE elapsed_ms={Stopwatch.GetElapsedTime(started).TotalMilliseconds:F1}");
+    }
+
+    internal static void ExerciseSettingsOpenForTesting()
+    {
+        bool alreadyVisible = _settingsVisible;
+        bool wasCollapsed = _collapsed;
+        if (!alreadyVisible)
+            ToggleSettings();
+        if (_settingsPanel?.Visible != true)
+            throw new InvalidOperationException("The settings panel was not created and shown on demand.");
+        if (!alreadyVisible)
+            ToggleSettings();
+        if (wasCollapsed)
+            SetCollapsed(true);
+    }
+
     private static void ToggleSettings()
     {
         _relicStrategyVisible = false;
@@ -2133,7 +2168,12 @@ internal static partial class SolverOverlay
         if (_settingsVisible)
             _growthStrategyVisible = false;
         if (_settingsVisible)
-            _settingsPanel?.Reload();
+        {
+            if (_settingsPanel == null)
+                CreateSettingsPanelIfNeeded();
+            else
+                _settingsPanel.Reload();
+        }
         ApplyContentVisibility();
         SetPerformanceHintVisible(
             !_settingsVisible
