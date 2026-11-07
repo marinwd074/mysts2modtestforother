@@ -800,7 +800,7 @@ internal sealed partial class CombatBeamSolver
             ShadowReplaySamplingSnapshot? shadowSampling =
                 policy.ShadowReplaySamplingBudget?.Capture();
             ContinuationStamp? predictedFinalState = policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore
-                || policy.VerifyIncrementalSearch
+                || policy.VerifyIncrementalSearch || policy.CaptureFinalStateForDiagnostics
                     ? replayAdmissionStamp ?? ContinuationStamp.CapturePredicted(_player, finalSnapshot.Simulator,
                         finalSnapshot.Turn, _forecast, _startTurnNumber) : null;
             SolverResult result = new()
@@ -3073,6 +3073,7 @@ internal sealed partial class CombatBeamSolver
         Completed,
         Canceled,
         Faulted,
+        PolicyUnsatisfied,
         Disposed,
     }
 
@@ -3316,6 +3317,12 @@ internal sealed partial class CombatBeamSolver
                     _state.CommittedParentsInCurrentStep,
                     _state.TotalCommittedParents);
             }
+            catch (PotionPolicyUnsatisfiedException)
+            {
+                _state.Phase = SearchMemberExecutionPhase.PolicyUnsatisfied;
+                DisposeCore(releaseLiveSimulators: true);
+                throw;
+            }
             catch
             {
                 _state.Phase = SearchMemberExecutionPhase.Faulted;
@@ -3391,7 +3398,8 @@ internal sealed partial class CombatBeamSolver
         {
             if (_state.Phase is not SearchMemberExecutionPhase.Completed
                 and not SearchMemberExecutionPhase.Canceled
-                and not SearchMemberExecutionPhase.Faulted)
+                and not SearchMemberExecutionPhase.Faulted
+                and not SearchMemberExecutionPhase.PolicyUnsatisfied)
             {
                 _state.Phase = SearchMemberExecutionPhase.Disposed;
             }

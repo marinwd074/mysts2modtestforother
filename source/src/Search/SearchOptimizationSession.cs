@@ -1,13 +1,17 @@
+using System.Diagnostics;
+
 namespace CombatSolver;
 
 internal sealed record SearchOptimizationMetrics(int Witnesses, long SharedBranchesPruned,
-    long CertifiedBranchesPruned, long SmartBranchesPruned);
+    long CertifiedBranchesPruned, long SmartBranchesPruned, double? FirstPotionFreeWitnessMs);
 
 // One request, one exact root. Only finalized, policy-eligible victories become
 // cross-member witnesses; speculative frontiers never become shared incumbents.
-internal sealed class SearchOptimizationSession(CombatRootSnapshot root)
+internal sealed class SearchOptimizationSession(CombatRootSnapshot root, bool measureFirstWitness = false)
 {
     private readonly object _gate = new();
+    private readonly long? _startedAt = measureFirstWitness ? Stopwatch.GetTimestamp() : null;
+    private double? _firstPotionFreeWitnessMs;
     private PrimarySearchIncumbent? _potionFreeBound;
     private SolverResult? _potionFreeWitness;
     internal long SharedBranchesPruned;
@@ -15,8 +19,12 @@ internal sealed class SearchOptimizationSession(CombatRootSnapshot root)
     internal long SmartBranchesPruned;
     internal int Witnesses;
     internal SearchOptimizationMetrics Capture()
-        => new(Witnesses, Interlocked.Read(ref SharedBranchesPruned),
-            Interlocked.Read(ref CertifiedBranchesPruned), Interlocked.Read(ref SmartBranchesPruned));
+    {
+        lock (_gate)
+            return new(Witnesses, Interlocked.Read(ref SharedBranchesPruned),
+                Interlocked.Read(ref CertifiedBranchesPruned), Interlocked.Read(ref SmartBranchesPruned),
+                _firstPotionFreeWitnessMs);
+    }
 
     internal bool Matches(CombatRootSnapshot candidate) => ReferenceEquals(root, candidate);
 
@@ -47,6 +55,8 @@ internal sealed class SearchOptimizationSession(CombatRootSnapshot root)
             _potionFreeBound = new(deficit, turn);
             _potionFreeWitness = result;
             Witnesses++;
+            if (_startedAt is { } startedAt)
+                _firstPotionFreeWitnessMs ??= Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds;
         }
     }
 }

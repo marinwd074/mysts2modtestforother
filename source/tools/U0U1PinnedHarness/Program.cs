@@ -68,7 +68,7 @@ internal static class Program
         bool p2QualityOnly = args.Length > 0 && args[0] == "p2-quality";
         bool rootHistoryOnly = args.Length > 0 && args[0] == "root-history";
         bool requestHydrationOnly = args.Length > 0 && args[0] is "request-hydration"
-            or "request-hydration-benchmark-on" or "request-hydration-benchmark-off";
+            or "request-hydration-benchmark-on" or "request-hydration-benchmark-off" or "solo-performance";
         bool requestHydrationBenchmark = requestHydrationOnly && args[0] != "request-hydration";
         string outputDirectory = ParseOutput(multiplayerRefreshOnly || entropicCostOnly || upstreamSearchOnly || upstreamPortOnly || memoryDisplayOnly || cardChoiceIdentityOnly || modelIdCacheOnly || darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicTailOnly || p2QualityOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
             allowHydrationOptions: requestHydrationBenchmark || p2QualityOnly, allowRoutePrefix: p2QualityOnly,
@@ -322,7 +322,8 @@ internal static class Program
                     : args[0] == "request-hydration-benchmark-on";
                 ValidateRequestTransitionHydration(combat, names, damage, captured, profile, outputDirectory,
                     benchmarkCacheEnabled, args);
-                Console.WriteLine(benchmarkCacheEnabled.HasValue ? "RequestHydration benchmark completed"
+                Console.WriteLine(args[0] == "solo-performance" ? "Solo performance samples recorded"
+                    : benchmarkCacheEnabled.HasValue ? "RequestHydration benchmark completed"
                     : "RequestHydration PASS (cold replay, first validation, isolation, capacity, audits and lifecycle)");
                 return 0;
             }
@@ -756,13 +757,14 @@ internal static class Program
                     && MultiplayerRouteChangeTracker.InvalidationVersion == 0,
                 "Scheduling-only multiplayer boundary invalidated the current route.");
 
-            MultiplayerRouteChangeTracker.ObserveEnemyHp(
-                new StateFingerprint(1, 1),
-                allowInvalidation: false,
+            StateFingerprint livingRoster = new(1, 1);
+            MultiplayerRouteChangeTracker.ObserveEnemies(
+                new MultiplayerEnemyRouteStamp(new StateFingerprint(1, 1), livingRoster),
+                allowHpInvalidation: false,
                 "pinned_enemy_baseline");
-            bool invalidated = MultiplayerRouteChangeTracker.ObserveEnemyHp(
-                new StateFingerprint(2, 2),
-                allowInvalidation: true,
+            bool invalidated = MultiplayerRouteChangeTracker.ObserveEnemies(
+                new MultiplayerEnemyRouteStamp(new StateFingerprint(2, 2), livingRoster),
+                allowHpInvalidation: true,
                 "pinned_enemy_hp_invalidation");
             Require(
                 invalidated
@@ -3457,7 +3459,7 @@ internal static class Program
             "Lab phase measurement escaped its session, ownership or opt-in gate.");
         if (benchmarkCacheEnabled is { } enabledFlag)
         {
-            BenchmarkRequestTransitionHydration(combat, names, damage, captured, originalProfile,
+            BenchmarkSearchRequest(combat, names, damage, captured, originalProfile,
                 outputDirectory, enabledFlag, benchmarkArgs);
             return;
         }
@@ -3638,8 +3640,10 @@ internal static class Program
             && canceledPhases.ExpandedNodes == 0 && canceledPhases.LogicalTransitions == 0,
             "Canceled member phases were duplicated, lost or did work.");
         SearchRequestWorkTotals partialTotals = new(measurePhases: true);
+        SearchSnapshotOwnership partialOwnership = new();
         CombatBeamSolver partialSolver = new(root, names, damage,
-            plain with { RequestWorkTotals = partialTotals, MeasurePhasePerformance = true, MaxDegreeOfParallelism = 4 },
+            plain with { RequestWorkTotals = partialTotals, MeasurePhasePerformance = true, MaxDegreeOfParallelism = 4,
+                SnapshotOwnership = partialOwnership },
             searchProfile: profile);
         using (CancellationTokenSource partialCancel = new())
         using (CombatBeamSolver.SearchMemberExecutionSession session = partialSolver.CreateExecutionSession())
@@ -3650,6 +3654,9 @@ internal static class Program
             Require(session.Step(new SearchWorkAllowance(1), partialCancel.Token).Status == SearchStepStatus.Canceled,
                 "Parallel member did not cancel after yielding.");
         }
+        var (partialCreated, partialActive, partialPeak) = partialOwnership.Capture();
+        Require(partialCreated > 0 && partialPeak > 0 && partialActive == 0,
+            "Canceled parallel member left a snapshot-owned simulator reference outstanding.");
         SearchRequestPhaseSnapshot partialPhases = partialTotals.CapturePhases()!;
         Require(partialPhases.RecordedSolverCount == 1 && partialPhases.Members.Count == 1
             && partialPhases.Members[0].Outcome == "Canceled"
@@ -3687,7 +3694,7 @@ internal static class Program
         Console.WriteLine($"PASS request hydration: {JsonSerializer.Serialize(enabled.RequestTransitionHydration)}");
     }
 
-    private static void BenchmarkRequestTransitionHydration(
+    private static void BenchmarkSearchRequest(
         CombatState combat, SolverDisplayNames names, BattleDamageSnapshot damage,
         SearchPolicySnapshot captured, SolverSearchProfile originalProfile, string outputDirectory,
         bool enabledFlag, string[]? benchmarkArgs)
@@ -3713,6 +3720,10 @@ internal static class Program
             return index < 0 ? fallback : benchmarkArgs![index + 1];
         }
         string fixture = Option("--fixture", "shared-audit");
+        bool solo = benchmarkArgs?[0] == "solo-performance";
+        if (solo)
+            coordinated = coordinated with { RoutePolicy = SearchRoutePolicy.SinglePlayerFullRoute,
+                CaptureFinalStateForDiagnostics = true };
         int iterations = int.Parse(Option("--iterations", "1"));
         int dop = int.Parse(Option("--dop", "1"));
         Require(iterations is > 0 and <= 100 && dop is > 0 and <= 16, "Invalid benchmark size or DOP.");
@@ -3765,37 +3776,54 @@ internal static class Program
         SolverResult reference = CombatSearchCoordinator.Solve(root, names, damage,
             coordinated with { UseRequestTransitionHydration = false, MeasurePhasePerformance = false }, default, null);
         string referenceRoute = JsonSerializer.Serialize(reference.BestNode.Actions, Json);
-        if (measure && fixture == "strategic-repeat")
+        if (solo || measure && fixture == "strategic-repeat")
         {
             CombatBeamSolver replay = new(root, names, damage, coordinated, searchProfile: profile);
             SimulationSnapshot snapshot = replay.ReplayDiagnosticPrefix(reference.BestNode.Actions);
             try
             {
-                Require(replay.CaptureDiagnosticContinuation(snapshot) == reference.PredictedFinalState
+                ContinuationStamp replayedState = replay.CaptureDiagnosticContinuation(snapshot);
+                bool sameState = replayedState == reference.PredictedFinalState;
+                if (!sameState)
+                {
+                    File.WriteAllText(Path.Combine(outputDirectory, "predicted-final-state.txt"),
+                        reference.PredictedFinalState?.StateText ?? "");
+                    File.WriteAllText(Path.Combine(outputDirectory, "replayed-final-state.txt"), replayedState.StateText);
+                }
+                Require(sameState
                     && snapshot.CombatEndedTurn == reference.CombatEndedTurn
                     && snapshot.CumulativePlayerHpLost == reference.ProjectedBattleHpLost
-                    && snapshot.TerminalStamp is { Outcome: CombatTerminalOutcome.Victory },
-                    "Strategic selected route did not replay to its predicted victory/state/loss.");
+                    && (solo || snapshot.TerminalStamp is { Outcome: CombatTerminalOutcome.Victory }),
+                    $"Selected route replay mismatch: state={sameState}, "
+                    + $"turn={reference.CombatEndedTurn}/{snapshot.CombatEndedTurn}, "
+                    + $"loss={reference.ProjectedBattleHpLost}/{snapshot.CumulativePlayerHpLost}.");
                 Require(ContinuationStamp.CaptureLive(combat) == root.ContinuationStamp,
                     "Strategic selected route replay changed live combat.");
-                Console.WriteLine($"StrategicRouteReplay PASS (victoryTurn={snapshot.CombatEndedTurn}, hpLoss={snapshot.CumulativePlayerHpLost})");
+                Console.WriteLine($"SelectedRouteReplay PASS (victoryTurn={snapshot.CombatEndedTurn}, hpLoss={snapshot.CumulativePlayerHpLost})");
             }
             finally { snapshot.ReleaseSimulator(); }
         }
-        CombatSearchCoordinator.Solve(root, names, damage,
-            coordinated with { UseRequestTransitionHydration = true }, default, null);
+        if (!solo)
+            CombatSearchCoordinator.Solve(root, names, damage,
+                coordinated with { UseRequestTransitionHydration = true }, default, null);
         List<object> samples = [];
         for (int iteration = 0; iteration < iterations; iteration++)
         {
             int diagnosticsStart = diagnostics.Count;
+            const int memorySampleIntervalMs = 10;
+            using MemorySampler? memory = solo && measure
+                ? new(TimeSpan.FromMilliseconds(memorySampleIntervalMs)) : null;
             long allocatedBefore = GC.GetTotalAllocatedBytes(precise: true);
+            TimeSpan pauseBefore = GC.GetTotalPauseDuration();
             int[] gcBefore = Enumerable.Range(0, 3).Select(GC.CollectionCount).ToArray();
             var wall = System.Diagnostics.Stopwatch.StartNew();
             SolverResult measured = CombatSearchCoordinator.Solve(root, names, damage,
                 coordinated with { UseRequestTransitionHydration = enabledFlag }, default, null);
             wall.Stop();
             long allocatedBytes = GC.GetTotalAllocatedBytes(precise: true) - allocatedBefore;
+            double gcPauseMs = (GC.GetTotalPauseDuration() - pauseBefore).TotalMilliseconds;
             int[] gcCollections = Enumerable.Range(0, 3).Select(g => GC.CollectionCount(g) - gcBefore[g]).ToArray();
+            memory?.Dispose();
             string fullRoute = JsonSerializer.Serialize(measured.BestNode.Actions, Json);
             Require(fullRoute == referenceRoute
                 && measured.PredictedFinalState == reference.PredictedFinalState
@@ -3813,30 +3841,36 @@ internal static class Program
                 + $"endTurn={reference.CombatEndedTurn}/{measured.CombatEndedTurn}.");
             Require(ContinuationStamp.CaptureLive(combat) == root.ContinuationStamp,
                 "Benchmark changed live combat.");
-            ValidateRequestPhaseMetrics(measured, measure);
+            ValidateRequestPhaseMetrics(measured, measure, allowPolicyUnsatisfied: solo);
             samples.Add(new
             {
-                iteration, elapsedMs = wall.Elapsed.TotalMilliseconds, allocatedBytes, gcCollections,
+                iteration, elapsedMs = wall.Elapsed.TotalMilliseconds, allocatedBytes, gcCollections, gcPauseMs,
+                memory = memory == null ? null : new { intervalMs = memorySampleIntervalMs, memory.Samples,
+                    memory.PeakManagedLiveBytes, memory.PeakWorkingSetBytes },
                 measured.TotalExpandedNodes, measured.TotalTransitionCount, measured.ProjectedBattleHpLost,
                 measured.BoundaryReason, measured.CombatEndedTurn,
+                measured.OptimizationMetrics, measured.EvaluationWindow,
                 route = measured.BestNode.Actions.Select(ActionToken).ToArray(),
                 fullRoute,
                 finalState = measured.PredictedFinalState?.StateText, measured.RequestTransitionHydration,
                 measured.RequestPhaseMetrics,
                 skippedPlayCardSimulations = measured.RequestTransitionHydration?.HydrationHits ?? 0,
                 phaseDiagnostics = measure ? diagnostics.Skip(diagnosticsStart)
-                    .Where(static line => line.Contains(" SEARCH_PHASE ")).ToArray() : null,
+                    .Where(static line => line.Contains(" SEARCH_PHASE ")
+                        || line.Contains(" SEARCH_SNAPSHOT_OWNERSHIP ")).ToArray() : null,
             });
         }
-        File.WriteAllText(Path.Combine(outputDirectory, "request-hydration-benchmark.json"),
+        File.WriteAllText(Path.Combine(outputDirectory, solo ? "solo-performance.json" : "request-hydration-benchmark.json"),
             JsonSerializer.Serialize(new
             {
                 evidenceLevel = "pinned-headless", enabled = enabledFlag, fixture, dop, measure,
+                coordinated.RoutePolicy, coordinated.Profile, coordinated.PotionPolicy,
                 tieredCompilation = Environment.GetEnvironmentVariable("DOTNET_TieredCompilation"),
                 runtime = Environment.Version.ToString(), processorCount = Environment.ProcessorCount,
                 combatSolverSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
                     File.ReadAllBytes(typeof(CombatRootSnapshot).Assembly.Location))),
-                warmup = "one off and one on request", rootState = root.ContinuationStamp.StateText,
+                warmup = solo ? "one ordinary request, plus independent replay" : "one off and one on request",
+                rootState = root.ContinuationStamp.StateText,
                 root = OfflineCombat.DescribeRoot(combat), samples,
             }, Json));
     }
@@ -4360,7 +4394,8 @@ internal static class Program
         Console.WriteLine("RootHistory PASS (mixed native counts, predicted events, foreign/non-player fallback, Fork isolation and new roots)");
     }
 
-    private static void ValidateRequestPhaseMetrics(SolverResult result, bool measured)
+    private static void ValidateRequestPhaseMetrics(SolverResult result, bool measured,
+        bool allowPolicyUnsatisfied = false)
     {
         if (!measured)
         {
@@ -4375,7 +4410,9 @@ internal static class Program
             && phases.Members.Sum(m => (long)m.Work.ExpandedNodes) == phases.ExpandedNodes
             && phases.Members.Sum(m => (long)m.Work.TransitionCount) == phases.LogicalTransitions,
             "Request phases missed or duplicated member work.");
-        Require(phases.Members.All(m => m.Kind != "Unclassified" && m.Outcome is "Completed" or "Disposed"),
+        Require(phases.Members.All(m => m.Kind != "Unclassified"
+                && (m.Outcome is "Completed" or "Disposed"
+                    || allowPolicyUnsatisfied && m.Outcome == "PolicyUnsatisfied")),
             "Benchmark member phases were not classified or finalized: "
             + string.Join(", ", phases.Members.Select(m => $"{m.Kind}/{m.Outcome}/{m.Work.ExpandedNodes}")));
         foreach (SearchMetricPhase phase in Enum.GetValues<SearchMetricPhase>())

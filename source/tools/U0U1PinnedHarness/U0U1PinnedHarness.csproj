@@ -58,6 +58,7 @@
     <Compile Include="../OfflineSearchHarness/MemorySaveStore.cs" Link="Shared/MemorySaveStore.cs" />
     <Compile Include="../OfflineSearchHarness/OfflineLocalization.cs" Link="Shared/OfflineLocalization.cs" />
     <Compile Include="../OfflineSearchHarness/OfflineCombat.cs" Link="Shared/OfflineCombat.cs" />
+    <Compile Include="../OfflineSearchHarness/MemorySampler.cs" Link="Shared/MemorySampler.cs" />
     <Compile Include="../OfflineSearchHarness/U0BaselineFixture.cs" Link="Shared/U0BaselineFixture.cs" />
     <Compile Include="../U2DegenerateHarness/U2Runtime.cs" Link="Shared/U2Runtime.cs" />
   </ItemGroup>

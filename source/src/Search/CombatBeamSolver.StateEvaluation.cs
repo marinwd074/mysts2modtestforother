@@ -709,6 +709,8 @@ internal sealed partial class CombatBeamSolver
             TeamLossRatio = teamLossRatio,
             WorstPlayerLossRatio = worstPlayerLossRatio,
         };
+        if (policy.SnapshotOwnership is { } ownership)
+            snapshot.TrackSimulatorOwnership(ownership);
         _run.Performance.End(SearchMetricPhase.SnapshotConstruction, constructionMeasurement);
         _run.Performance.End(SearchMetricPhase.SnapshotResult, resultMeasurement);
         return snapshot;

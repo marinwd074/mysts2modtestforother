@@ -52,6 +52,8 @@ internal sealed record SearchPolicySnapshot(
     internal bool UseLocalCorePublicThreat { get; init; }
     internal bool UseReviewedLocalMultiplayerCards { get; init; }
     internal SearchOptimizationSession? OptimizationSession { get; init; }
+    internal SearchSnapshotOwnership? SnapshotOwnership { get; init; }
+    internal bool CaptureFinalStateForDiagnostics { get; init; }
     /// <summary>
     /// Explicitly names the route horizon. Keep this separate from the legacy
     /// <see cref="CurrentTurnOnly"/> switch so multiplayer local cross-turn planning

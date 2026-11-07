@@ -1415,6 +1415,7 @@ internal sealed class SimulationSnapshot(
     CombatTerminalStamp? terminalStamp = null)
 {
     private CombatPredictionSimulator? _simulator = simulator;
+    private SearchSnapshotOwnership? _simulatorOwnership;
     private string? _releasedBy;
     private int _releasedAtLine;
 
@@ -1553,6 +1554,7 @@ internal sealed class SimulationSnapshot(
     {
         SimulationSnapshot clone = (SimulationSnapshot)MemberwiseClone();
         clone._simulator = null;
+        clone._simulatorOwnership = null;
         if (transitionIsPure.HasValue)
             clone.CachedTransitionIsPure = transitionIsPure.Value;
         clone._releasedBy = nameof(CloneValueOnlyForTransitionMemo);
@@ -1585,8 +1587,16 @@ internal sealed class SimulationSnapshot(
         [CallerLineNumber] int line = 0)
     {
         _simulator = null;
+        if (_simulatorOwnership != null)
+            Interlocked.Exchange(ref _simulatorOwnership, null)?.Release();
         _releasedBy = caller;
         _releasedAtLine = line;
+    }
+
+    internal void TrackSimulatorOwnership(SearchSnapshotOwnership ownership)
+    {
+        _simulatorOwnership = ownership;
+        ownership.Acquire();
     }
 }
 

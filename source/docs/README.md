@@ -7,7 +7,7 @@
 | 目的 | 文件 |
 |---|---|
 | 当前状态 / 未完成风险 / 下一任务 | [CODEX_HANDOFF.md](CODEX_HANDOFF.md) |
-| 当前单人优化设计附件（待实施） | [SOLO_SEARCH_OPTIMIZATION_PLAN.md](SOLO_SEARCH_OPTIMIZATION_PLAN.md) |
+| 当前单人优化设计附件 | [SOLO_SEARCH_OPTIMIZATION_PLAN.md](SOLO_SEARCH_OPTIMIZATION_PLAN.md) |
 | 架构、职责、状态所有权 | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | 当前验证入口 | [TEST_MATRIX.md](TEST_MATRIX.md) |
 | 项目版本与功能更新 | [PROJECT_VERSION](../PROJECT_VERSION) · [PROJECT_VERSION_HISTORY.md](PROJECT_VERSION_HISTORY.md) |

@@ -551,6 +551,9 @@ internal sealed partial class CombatBeamSolver
         }
 
         private Comparison<SearchNode>? _finalCandidateComparison;
+        private const int MaximumRetainedRankScratchCapacity = 512;
+        private List<(SearchNode Node, double Score)>? _legacyRankScratch;
+        private Dictionary<StateFingerprint, SearchNode>? _stateRepresentativeScratch;
 
         private MultiplayerCombatObjectiveRank BuildMultiplayerObjectiveRank(SearchNode node)
         {
@@ -620,17 +623,33 @@ internal sealed partial class CombatBeamSolver
                 return;
             // This is the pre-P1 single-player ordering. Keep it isolated so the extracted
             // BeamRankSortChecks contract proves that P1 does not change single-player order.
-            List<(SearchNode Node, double Score)> scored = new(ranked.Count);
-            foreach (SearchNode node in ranked)
-                scored.Add((node, BeamRankScore(node)));
-            scored.Sort(static (left, right) =>
+            bool reusable = ranked.Count <= MaximumRetainedRankScratchCapacity;
+            List<(SearchNode Node, double Score)> scored = reusable
+                ? _legacyRankScratch ??= new() : new(ranked.Count);
+            try
             {
-                return CompareBeamRankOrder(
-                    left.Score, left.Node.Snapshot.OffensiveProgressValue, left.Node.ActionCount,
-                    right.Score, right.Node.Snapshot.OffensiveProgressValue, right.Node.ActionCount);
-            });
-            for (int index = 0; index < ranked.Count; index++)
-                ranked[index] = scored[index].Node;
+                scored.EnsureCapacity(ranked.Count);
+                foreach (SearchNode node in ranked)
+                    scored.Add((node, BeamRankScore(node)));
+                scored.Sort(static (left, right) =>
+                {
+                    return CompareBeamRankOrder(
+                        left.Score, left.Node.Snapshot.OffensiveProgressValue, left.Node.ActionCount,
+                        right.Score, right.Node.Snapshot.OffensiveProgressValue, right.Node.ActionCount);
+                });
+                for (int index = 0; index < ranked.Count; index++)
+                    ranked[index] = scored[index].Node;
+            }
+            finally
+            {
+                if (reusable)
+                {
+                    // Clear references before the coordinator can reclaim the previous frontier.
+                    scored.Clear();
+                    if (scored.Capacity > MaximumRetainedRankScratchCapacity)
+                        _legacyRankScratch = null;
+                }
+            }
         }
 
         public void SortByLegacyBeamRankForDiagnostics(List<SearchNode> ranked)
@@ -688,16 +707,25 @@ internal sealed partial class CombatBeamSolver
                 // loss/policy history. P1 chooses the representative with the shared objective.
                 // Exact future-state merging is reserved for explicitly complete fingerprints
                 // such as ShadowFutureStateFingerprint.
-                Dictionary<StateFingerprint, SearchNode> representativeByState = [];
-                foreach (SearchNode node in nodes)
+                Dictionary<StateFingerprint, SearchNode> representativeByState = _stateRepresentativeScratch ??= new();
+                try
                 {
-                    if (!representativeByState.TryGetValue(node.StateKey, out SearchNode? current)
-                        || IsBetterSearchNode(node, current))
+                    foreach (SearchNode node in nodes)
                     {
-                        representativeByState[node.StateKey] = node;
+                        if (!representativeByState.TryGetValue(node.StateKey, out SearchNode? current)
+                            || IsBetterSearchNode(node, current))
+                        {
+                            representativeByState[node.StateKey] = node;
+                        }
                     }
+                    ranked = [.. representativeByState.Values];
                 }
-                ranked = [.. representativeByState.Values];
+                finally
+                {
+                    representativeByState.Clear();
+                    if (representativeByState.EnsureCapacity(0) > MaximumRetainedRankScratchCapacity)
+                        _stateRepresentativeScratch = null;
+                }
             }
 
             if (finalQualityFirst)

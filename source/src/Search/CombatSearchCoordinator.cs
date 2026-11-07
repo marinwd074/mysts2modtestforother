@@ -145,7 +145,10 @@ internal static partial class CombatSearchCoordinator
             && !policy.UseMultiplayerScenarioReevaluation
                 ? new(learnFromSearch: true, measurePerformance: policy.MeasurePhasePerformance) : null;
         SearchRequestWorkTotals totals = new(measurePhases: policy.MeasurePhasePerformance);
-        SearchOptimizationSession? optimizations = policy.UseUpstreamSearchOptimizations ? new(root) : null;
+        SearchSnapshotOwnership? snapshotOwnership = policy.MeasurePhasePerformance && root.PlayerCount == 1
+            && policy.RoutePolicy == SearchRoutePolicy.SinglePlayerFullRoute ? new() : null;
+        SearchOptimizationSession? optimizations = policy.UseUpstreamSearchOptimizations
+            ? new(root, measureFirstWitness: snapshotOwnership != null) : null;
         bool adaptiveHorizon = localRecoveryPolicy && CanRefineLocalHorizon(root, policy);
         if (localRecoveryPolicy && (policy.MultiplayerPlanRefresh != null
             || policy.ContinuationSeedActions.Count > 0
@@ -168,7 +171,7 @@ internal static partial class CombatSearchCoordinator
         {
             SolverResult result = SolveRequest(root, displayNames, battleDamage,
                 policy with { RequestTransitionHydrationCache = cache, RequestWorkTotals = totals,
-                    OptimizationSession = optimizations }, cancellationToken, progressCallback,
+                    OptimizationSession = optimizations, SnapshotOwnership = snapshotOwnership }, cancellationToken, progressCallback,
                 out MultiplayerPlanRefreshReport? refreshReport);
             if (result.ResultScope == SolverResultScope.SearchCompletion
                 && optimizations?.PotionFreeWitness is { } witness
@@ -224,6 +227,12 @@ internal static partial class CombatSearchCoordinator
                 if (optimizations != null)
                     policy.Diagnostics.Info("[CombatSolver/Test] SEARCH_OPTIMIZATIONS "
                         + System.Text.Json.JsonSerializer.Serialize(optimizations.Capture()));
+                if (snapshotOwnership != null)
+                {
+                    var (created, active, peak) = snapshotOwnership.Capture();
+                    policy.Diagnostics.Info($"[CombatSolver/Test] SEARCH_SNAPSHOT_OWNERSHIP "
+                        + $"outcome={recoveryOutcome} created={created} active={active} peak={peak}");
+                }
             }
             finally
             {
