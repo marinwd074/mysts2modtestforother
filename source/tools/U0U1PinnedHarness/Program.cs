@@ -44,7 +44,8 @@ internal static class Program
         bool multiplayerWindowOnly = args.Length > 0 && args[0] == "multiplayer-window";
         bool nativeActionsOnly = args.Length > 0 && args[0] == "native-actions";
         bool nativeRedecisionOnly = args.Length > 0 && args[0] == "native-redecision";
-        bool multiplayerRefreshOnly = multiplayerWindowOnly || nativeActionsOnly || nativeRedecisionOnly
+        bool winTempoOnly = args.Length > 0 && args[0] == "win-tempo";
+        bool multiplayerRefreshOnly = multiplayerWindowOnly || nativeActionsOnly || nativeRedecisionOnly || winTempoOnly
             || args.Length > 0 && args[0] == "multiplayer-refresh";
         bool entropicCostOnly = args.Length > 0 && args[0] == "entropic-cost";
         bool cardChoiceIdentityOnly = args.Length > 0 && args[0] == "card-choice-identity";
@@ -69,7 +70,7 @@ internal static class Program
         bool requestHydrationBenchmark = requestHydrationOnly && args[0] != "request-hydration";
         string outputDirectory = ParseOutput(multiplayerRefreshOnly || entropicCostOnly || upstreamSearchOnly || upstreamPortOnly || memoryDisplayOnly || cardChoiceIdentityOnly || modelIdCacheOnly || darkEmbracePactOnly || rollingReviewOnly || choiceRngOnly || continuationAuditOnly || continuationReplayOnly || completionScopeOnly || pendulumDrawOnly || turnEnergyOnly || requestHydrationOnly || rngRestoreOnly || rootHistoryOnly || strategicContextOnly || strategicTailOnly || p2QualityOnly || strategicEnergyOnly || projectedShuffleOnly ? args[1..] : args,
             allowHydrationOptions: requestHydrationBenchmark || p2QualityOnly, allowRoutePrefix: p2QualityOnly,
-            allowSelective: p2QualityOnly || nativeRedecisionOnly);
+            allowSelective: p2QualityOnly || nativeRedecisionOnly, allowWinTempo: winTempoOnly);
         Directory.CreateDirectory(outputDirectory);
         if (multiplayerRefreshOnly || p2QualityOnly && args.Any(value => value.EndsWith("-mp", StringComparison.Ordinal)))
             Environment.SetEnvironmentVariable(SolverSessionCapabilities.MultiplayerModeEnvironmentVariable, "advisor");
@@ -103,7 +104,7 @@ internal static class Program
             GameBootstrap.ApplyGodotBypasses();
             GameBootstrap.SkipGodotNodeStaticConstructors();
             Console.WriteLine(GameBootstrap.InitializeStaticState());
-            if (nativeActionsOnly || nativeRedecisionOnly)
+            if (nativeActionsOnly || nativeRedecisionOnly || winTempoOnly)
                 NativeActionChecks.InstallOfflineBridges();
             if (memoryDisplayOnly)
             {
@@ -244,6 +245,12 @@ internal static class Program
             if (nativeRedecisionOnly)
             {
                 Console.WriteLine(NativeRedecisionChecks.Run(combat, loop, names, captured, args.Contains("--selective"), outputDirectory));
+                return 0;
+            }
+            if (winTempoOnly)
+            {
+                Console.WriteLine(WinTempoChecks.Run(combat, loop, names, captured,
+                    args.Contains("--tempo"), args.Contains("--over-cap"), outputDirectory));
                 return 0;
             }
 
@@ -4405,7 +4412,7 @@ internal static class Program
         };
 
     private static string ParseOutput(string[] args, bool allowHydrationOptions = false, bool allowRoutePrefix = false,
-        bool allowSelective = false)
+        bool allowSelective = false, bool allowWinTempo = false)
     {
         string output = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory,
@@ -4415,6 +4422,8 @@ internal static class Program
             if (allowHydrationOptions && args[index] == "--measure")
                 continue;
             if (allowSelective && args[index] == "--selective")
+                continue;
+            if (allowWinTempo && args[index] is "--tempo" or "--over-cap")
                 continue;
             if (allowHydrationOptions && args[index] is "--fixture" or "--iterations" or "--dop"
                 || allowRoutePrefix && args[index] == "--prefix")

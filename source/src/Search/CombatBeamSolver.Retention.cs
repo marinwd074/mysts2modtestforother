@@ -332,7 +332,10 @@ internal sealed partial class CombatBeamSolver
     private List<SearchNode> ApplyPrimaryIncumbentBound(List<SearchNode> retained)
     {
         // Per-event growth can repeat; the HP-only floor is not a bound on this objective.
-        if (_hasGrowthTargets || _theftPolicy == SolverTheftPolicy.PreserveResources || _primaryIncumbent is not { } incumbent)
+        // A healed early win can have zero strategic deficit while still losing
+        // more raw HP than a later win. Its turn cannot bound rolling-horizon loss.
+        if (SearchEvaluationPolicy.UsesRawLossFirst(_routePolicy) || _hasGrowthTargets
+            || _theftPolicy == SolverTheftPolicy.PreserveResources || _primaryIncumbent is not { } incumbent)
             return retained;
 
         List<SearchNode> bounded = ApplyPrimaryIncumbentBound(
@@ -474,7 +477,8 @@ internal sealed partial class CombatBeamSolver
         IReadOnlyList<SearchNode> retained,
         int completedTurnLayers)
     {
-        if (_hasGrowthTargets || _theftPolicy == SolverTheftPolicy.PreserveResources)
+        if (SearchEvaluationPolicy.UsesRawLossFirst(_routePolicy)
+            || _hasGrowthTargets || _theftPolicy == SolverTheftPolicy.PreserveResources)
             return false;
         bool canEstablishPotionFreeIncumbent = _minimumPotionUses == 0
             && _potionPolicy is SolverPotionPolicy.Disabled or SolverPotionPolicy.Smart;

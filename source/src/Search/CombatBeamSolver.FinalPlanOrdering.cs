@@ -210,7 +210,8 @@ internal sealed partial class CombatBeamSolver
             bool emitDiagnostics,
             bool reevaluateScenarios = false,
             bool allowScenarioRerank = true,
-            RouteEvaluationWindow? comparisonWindow = null)
+            RouteEvaluationWindow? comparisonWindow = null,
+            bool allowWinTempo = false)
         {
             var policyCandidates = evaluated
                 .Select(candidate =>
@@ -693,6 +694,37 @@ internal sealed partial class CombatBeamSolver
                     && candidate.HasCurrentTurnCardAction)
                 .ThenBy(candidate => candidate.Features.ActionCount)
                 .ToList();
+
+            if (allowWinTempo && selected.Count > 1)
+            {
+                var baseline = selected[0];
+                if (baseline.CompleteVictory && baseline.CombatEndedTurn is int baselineTurn
+                    && WindowOf(baseline.Snapshot) is { CompleteVictory: true, CoversTarget: true }
+                    && !baseline.Snapshot.HasRisk && baseline.PotionCount == 0
+                    && baseline.Snapshot.ProjectedDeathSaveUseCount == 0)
+                {
+                    int best = 0;
+                    int earliest = baselineTurn;
+                    for (int index = 1; index < selected.Count; index++)
+                    {
+                        var candidate = selected[index];
+                        if (!candidate.CompleteVictory || !IsEarlierWinWithinCost(
+                            candidate.Snapshot, baseline.Snapshot, startTurnNumber, earliest))
+                            continue;
+                        best = index;
+                        earliest = candidate.CombatEndedTurn!.Value;
+                    }
+                    if (best != 0)
+                    {
+                        var faster = selected[best];
+                        selected.RemoveAt(best);
+                        selected.Insert(0, faster);
+                        if (emitDiagnostics)
+                            diagnostics.Info($"[CombatSolver/Test] SEARCH_WIN_TEMPO baseline_turn={baselineTurn} " +
+                                $"selected_turn={earliest} baseline_loss={baseline.HpDeficit} selected_loss={faster.HpDeficit}");
+                    }
+                }
+            }
 
             Dictionary<SearchNode, int>? qualityBaselineIndex = null;
             int qualityScenarioSelectedBaselineRank = 1;

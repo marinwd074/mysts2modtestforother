@@ -12,6 +12,7 @@
 | 已记录前缀的完整尾部（按需） | 上述 `p2-quality --fixture delayed-mp` 附加 `--prefix <recorded-json>` | 先核对根与记录末态、普通采用仍为零展开，再固定前缀并用同一搜索器继续到战斗结束；前缀入原预算、完整路线独立重放。仅为模拟模型层面的双角色固定场景；不执行原生 ActionExecutor，不是未知队友闭环证明 |
 | 选择性深入（按需） | 上述 `p2-quality` 附加 `--selective`，用同夹具和固定深度输出对照 | `setup-mp`、`delayed-mp`、`defense-mp` 核对共同窗口、实际战损、首动作及展开/转移。用 `setup-single` 核对策略隔离和完整获胜。`--measure` 记录受影响层的保留和舍弃候选，供排查质量变化。队友重决策另验 |
 | 原生离线重决策（按需） | `dotnet run --project tools/U0U1PinnedHarness -c Release -- native-redecision --out <ignored-directory>`，另一次附 `--selective` | 双角色原生 Strike 与结束回合，生产 Coordinator 按新根刷新或重搜，独立模型重放核对结果。生产观察类配合测试时钟拒绝旧版本。宿主保留内存档位和原生胜利结算，绕过显示及错误上报依赖。比较同一场景的实际战损、胜利回合、工作和回调耗时。`native-actions` 可单独定位出牌与洗牌桥接 |
+| 承伤换节奏（按需） | `dotnet run --project tools/U0U1PinnedHarness -c Release -- win-tempo --out <ignored-directory>`，另一次附 `--tempo`，上限检查附 `--tempo --over-cap` | 使用同根、预算和共同胜利窗口。独立重放快慢见证及选择结果，原生执行并从 HP 事件分开记录损失和回复。覆盖战略剪枝误删零战损胜利、2 HP 提前获胜和 3 HP 超限。 |
 | Architecture | `tools/verify-refactor-boundaries.ps1` | 依赖和职责边界 |
 | Repository | `tools/verify-repository-hygiene.ps1` | Git 跟踪文件、Markdown 本地链接、项目版本日志与 LFS 边界 |
 | L1 contracts | `tools/run-contract-tests.ps1` | Search / Prediction / Multiplayer 纯合同 |

@@ -2738,7 +2738,8 @@ internal sealed partial class CombatBeamSolver
                 emitDiagnostics: true,
                 reevaluateScenarios: !member.TimeBudgetReached,
                 allowScenarioRerank: !member.TimeBudgetReached,
-                comparisonWindow: comparisonWindow);
+                comparisonWindow: comparisonWindow,
+                allowWinTempo: !member.AdoptionReached && CanExperimentWithWinTempo());
 
             RecordCandidateEvaluated(ordering.Candidate.Node, finalEvaluationContextId);
             RecordCandidateSelected(ordering.Candidate.Node, finalEvaluationContextId);

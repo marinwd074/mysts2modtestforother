@@ -280,7 +280,8 @@ internal static partial class CombatSearchCoordinator
         SearchPolicySnapshot policy,
         SolverResult result)
     {
-        if (policy.EffectiveHasGrowthTargets
+        if (SearchEvaluationPolicy.UsesRawLossFirst(policy.RoutePolicy)
+            || policy.EffectiveHasGrowthTargets
             || policy.RelicTargets.Count > 0
             || result.Snapshot.ProjectedDeathSaveUseCount > 0
             || !IsCompleteVictory(result)

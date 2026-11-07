@@ -48,6 +48,7 @@ internal static class NativeRedecisionChecks
         List<object> turns = [];
         long staleNodes = 0, recoveredNodes = 0;
         int rejectedVersions = 0, teammatePlays = 0;
+        using CombatReplayOutcome nativeOutcome = new(combat);
         for (int step = 0; step < 12 && CombatManager.Instance.IsInProgress; step++)
         {
             int turn = local.PlayerCombatState!.TurnNumber;
@@ -116,13 +117,14 @@ internal static class NativeRedecisionChecks
         bool won = !CombatManager.Instance.IsInProgress && enemy.IsDead && !local.Creature.IsDead;
         if (!won || rejectedVersions < 2 || (deepening.Count > 0) != selective)
             throw new InvalidOperationException($"Native redecision incomplete: won={won} updates={rejectedVersions} deepening={deepening.Count}.");
-        int loss = BattleDamageTracker.Observe(combat).HpLostSoFar;
+        CombatReplayOutcomeSnapshot actual = nativeOutcome.Capture(combat, ended: won);
+        int loss = actual.HpLost;
         string filename = selective ? "native-redecision-selective.json" : "native-redecision-fixed.json";
         File.WriteAllText(Path.Combine(outputDirectory, filename), JsonSerializer.Serialize(new
         {
             Selective = selective, Root = initialState, Profile = profile,
             DllSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(typeof(CombatBeamSolver).Assembly.Location))),
-            Won = won, LocalHp = local.Creature.CurrentHp, BattleHpLost = loss, TeammatePlays = teammatePlays,
+            Won = won, LocalHp = local.Creature.CurrentHp, BattleHpLost = loss, NativeOutcome = actual, TeammatePlays = teammatePlays,
             RejectedVersions = rejectedVersions, StaleNodes = staleNodes, RecoveryNodes = recoveredNodes,
             Rounds = turns.Count, ShuffleCounter = combat.RunState.Rng.Shuffle.Counter, Turns = turns, Deepening = deepening,
         }, new JsonSerializerOptions { WriteIndented = true }));
