@@ -482,13 +482,12 @@ internal sealed partial class CombatBeamSolver
             return false;
         bool canEstablishPotionFreeIncumbent = _minimumPotionUses == 0
             && _potionPolicy is SolverPotionPolicy.Disabled or SolverPotionPolicy.Smart;
-        // Exact layers require a final-policy-eligible victory. Their override makes
-        // every explicit use optional; the single-player path also proves its potion
-        // opportunity cost. Forced-directive solvers need a separate optional-use proof.
+        // This incumbent proof prices all uses. Exact layers enforcing root directives
+        // need a separate proof based on optional cost before tightening the bound.
         bool canEstablishExactPotionIncumbent = _potionFreePolicyBaseline != null
             && _minimumPotionUses > 0
             && _maximumPotionUses == _minimumPotionUses
-            && !_enforcePotionDirectives;
+            && !EnforcePotionDirectives;
         if (!canEstablishPotionFreeIncumbent && !canEstablishExactPotionIncumbent)
         {
             return false;
@@ -506,7 +505,7 @@ internal sealed partial class CombatBeamSolver
             if (!completeVictory
                 || node.Snapshot.ProjectedDeathSaveUseCount > 0
                 || explicitPotionUses != _minimumPotionUses
-                || _enforcePotionDirectives
+                || EnforcePotionDirectives
                     && !_potionStrategy.EvaluateForcedUses(node)
                         .AllForcedUsesSatisfied)
             {

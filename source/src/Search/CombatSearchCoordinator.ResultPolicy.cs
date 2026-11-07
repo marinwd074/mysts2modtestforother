@@ -299,15 +299,11 @@ internal static partial class CombatSearchCoordinator
     {
         var remainingUses = result.PotionUses.Where(use => use.Turn >= result.StartTurnNumber);
         ForcedPotionUseEvaluation forced = policy.PotionStrategy.EvaluateForcedUses(remainingUses);
-        int ambergrisCount = remainingUses.Count(use => use.IsPaidAmbergris)
-            - forced.ForcedAmbergrisCount;
-        int strategicHpCost = PotionUsePolicy.EffectiveStrategicHpCost(
-            Math.Max(0, result.PotionStrategicCostByTurn.Where(turn => turn.Key >= result.StartTurnNumber)
-                .Sum(turn => turn.Value) - forced.ForcedStrategicHpCost),
-            ambergrisCount,
-            root.InitialPlayerMaxHp);
-        return PotionUsePolicy.SmartRequiredHpSaved(
-            strategicHpCost,
+        return PotionUsePolicy.SmartAuditHpRequired(
+            result.PotionStrategicCostByTurn.Where(turn => turn.Key >= result.StartTurnNumber).Sum(turn => turn.Value),
+            remainingUses.Count(use => use.IsPaidAmbergris),
+            forced,
+            root.InitialPlayerMaxHp,
             StrategicBossHpRelief(root, policy));
     }
 

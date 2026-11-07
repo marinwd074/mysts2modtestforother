@@ -92,6 +92,13 @@ internal static class PotionUsePolicy
             strategicHpCost,
             bossHpRelief);
 
+    internal static int SmartAuditHpRequired(int totalCost, int paidAmbergrisCount,
+        ForcedPotionUseEvaluation forced, int maximumHp, BossHpRelief relief)
+        => SmartRequiredHpSaved(EffectiveStrategicHpCost(
+            Math.Max(0, totalCost - forced.ForcedStrategicHpCost),
+            Math.Max(0, paidAmbergrisCount - forced.ForcedAmbergrisCount),
+            maximumHp), relief);
+
     internal static bool CanAcceptSmartAuditVictory(
         bool potionFreeWon,
         bool candidateWon,

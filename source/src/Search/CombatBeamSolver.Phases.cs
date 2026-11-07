@@ -363,7 +363,7 @@ internal sealed partial class CombatBeamSolver
         int earlyStopPotionUses = policy.MinimumRequiredPotionUses(battleDamage.PotionsUsedSoFar);
         bool IsEligibleCompleteVictory(SearchNode node)
             => ExplicitPotionUseCount(node) >= requiredPotionUses
-                && (!_enforcePotionDirectives
+                && (!EnforcePotionDirectives
                     || _potionStrategy.EvaluateForcedUses(node)
                         .AllForcedUsesSatisfied)
                 && SolverInterimResultOrdering.IsCompleteVictory(
@@ -411,7 +411,7 @@ internal sealed partial class CombatBeamSolver
             SearchNode? boundary = FindCurrentTurnBoundary(node);
             if (boundary == null
                 || ExplicitPotionUseCount(boundary) < _minimumPotionUses
-                || _enforcePotionDirectives
+                || EnforcePotionDirectives
                     && !_potionStrategy.EvaluateForcedUses(boundary)
                         .AllForcedUsesSatisfied
                 || !IsCurrentTurnCandidate(
@@ -2584,7 +2584,8 @@ internal sealed partial class CombatBeamSolver
                 member.Frontier = [];
                 break;
             }
-            if (!_hasGrowthTargets && member.Completed.Any(node =>
+            if (requiredPotionUses == 0 && (!EnforcePotionDirectives || !_potionStrategy.HasForcedDirectives)
+                && !_hasGrowthTargets && member.Completed.Any(node =>
                     node.Snapshot.AllEnemiesDead
                     && ExplicitPotionUseCount(node) == 0
                     && node.FutureSoldHp == 0

@@ -305,7 +305,7 @@ internal sealed partial class CombatBeamSolver
                         MaxHpDeficit: maxHpDeficit, HealthResourceCost: healthResourceCost,
                         StrategicSold: strategicSold, PotionStrategicCost: candidate.Node.PotionStrategicCost,
                         AmbergrisCount: ambergrisCount, Score: features.Score,
-                        ForcedUsesSatisfied: forced.AllForcedUsesSatisfied,
+                        Forced: forced,
                         OptionalPotionCount: optionalPotionCount,
                         OptionalPotionStrategicCost: optionalPotionStrategicCost,
                         OptionalAmbergrisCount: optionalAmbergrisCount,
@@ -553,7 +553,7 @@ internal sealed partial class CombatBeamSolver
                             initialPlayerMaxHp,
                             comparisonBaseline.PlayerHp,
                             candidate.Snapshot.PlayerHp);
-                    return candidate.ForcedUsesSatisfied
+                    return candidate.Forced.AllForcedUsesSatisfied
                         && candidate.ExplicitPotionCount >= minimumPotionUses
                         && passesSoftPotionPolicy
                         && passesAmbergrisPolicy;
@@ -606,8 +606,8 @@ internal sealed partial class CombatBeamSolver
                         potionFreeWon: true,
                         candidate.CompleteVictory,
                         PotionUsePolicy.HpSaved(smartBaseline.HpDeficit, candidate.StrategicHpDeficit),
-                        ScalePotionCost(PotionUsePolicy.EffectiveStrategicHpCost(
-                            candidate.Snapshot.PotionStrategicCost, candidate.AmbergrisCount, initialPlayerMaxHp)),
+                        PotionUsePolicy.SmartAuditHpRequired(candidate.Snapshot.PotionStrategicCost,
+                            candidate.AmbergrisCount, candidate.Forced, initialPlayerMaxHp, bossHpRelief),
                         theftPolicy == SolverTheftPolicy.PreserveResources
                             && candidate.Features.OutstandingStolenResource < smartBaseline.OutstandingStolenResource,
                         !useEvaluationWindows || RouteEvaluationWindow.CanCompare(

@@ -4,6 +4,7 @@ using CombatSolver.Engine.InCombat.Simulation;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.Models.Potions;
 using MegaCrit.Sts2.Core.Models.Relics;
 using MegaCrit.Sts2.Core.Factories;
@@ -116,8 +117,14 @@ internal static class EntropicCostChecks
                 combat.ConsumePotion(player, 0);
                 Check(combat.TryProcurePotion(player, ModelDb.Potion<EntropicBrew>(), true), "Chain fixture");
             });
-        try { Check(chained.PotionUseCount == 2 && chained.ExplicitPotionStrategicCost == SolverWeights.PotionMinimumHpSaved
-                && chained.LastExplicitPotionOrigin == PotionOrigin.EntropicBrew, "Chained Brew cost was duplicated"); }
+        try
+        {
+            Check(chained.PotionUseCount == 2 && chained.ExplicitPotionStrategicCost == SolverWeights.PotionMinimumHpSaved
+                && chained.LastExplicitPotionOrigin == PotionOrigin.EntropicBrew, "Chained Brew cost was duplicated");
+            var uses = ((SimulatedCombatState)chained.Simulator.State.CombatState).PotionUses;
+            Check(!policy.PotionStrategy.EvaluateForcedUses(uses.Skip(1)).AllForcedUsesSatisfied,
+                "A generated Brew in the same slot impersonated the required root Brew");
+        }
         finally { chained.ReleaseSimulator(); }
 
         // Ambergris is not a native 0.107.1 model. Its string-based policy is
@@ -160,7 +167,9 @@ internal static class EntropicCostChecks
         Check(coordinated.BoundaryReason != SearchBoundaryReason.TimeLimit
             && policy.PotionStrategy.EvaluateForcedUses(coordinated.PotionUses).AllForcedUsesSatisfied,
             "Coordinator/forced-baseline integration did not complete its mandatory use");
-        Check(coordinated.PotionUses.Where(use => use.Origin == PotionOrigin.EntropicBrew).All(use => use.StrategicHpCost == 0)
+        Check(coordinated.PotionUses.Any(use => use is { Origin: PotionOrigin.EntropicBrew, Automatic: false })
+            && coordinated.PotionHpRequired == 0
+            && coordinated.PotionUses.Where(use => use.Origin == PotionOrigin.EntropicBrew).All(use => use.StrategicHpCost == 0)
             && coordinated.PotionUses.Sum(use => use.StrategicHpCost) == coordinated.PotionStrategicCostByTurn.Values.Sum(),
             "Coordinator disagreed with generated/per-turn costs");
         var coordinatedReplay = verifier.ReplayDiagnosticPrefix(coordinated.BestNode.Actions);
@@ -168,6 +177,7 @@ internal static class EntropicCostChecks
             "Coordinator's final route did not independently replay"); }
         finally { coordinatedReplay.ReleaseSimulator(); }
         Check(liveBefore == ContinuationStamp.CaptureLive(live).StateText, "Search changed live fixture");
+        CheckForcedBrewSelection(live, names, damage, coordinatedPolicy, profile);
         CheckSmartPotionSelection(live, names, damage, policy);
         File.WriteAllText(Path.Combine(output, "entropic-cost.json"), JsonSerializer.Serialize(new {
             status = "PASS", checks = _checks, advances, expected, result.PotionUses, result.PotionStrategicCostByTurn,
@@ -177,6 +187,98 @@ internal static class EntropicCostChecks
             evidence = "pinned-offline; native UI and Host/Client unverified"
         }, new JsonSerializerOptions { WriteIndented = true }));
         return $"ENTROPIC_COST_PASS checks={_checks} native-generation/ledger/fork/keys/chains/Smart/materialization/continuation/replay";
+    }
+
+    private static void CheckForcedBrewSelection(CombatState live, SolverDisplayNames names,
+        BattleDamageSnapshot damage, SearchPolicySnapshot policy, SolverSearchProfile profile)
+    {
+        var player = LocalContext.GetMe(live)!;
+        Check(player.AddPotionInternal(ModelDb.Potion<BlockPotion>().ToMutable(), 2, true).success,
+            "Could not fill the second paid slot for the forced Brew fixture");
+        var enemy = live.Enemies.Single();
+        enemy.SetCurrentHpInternal(21);
+        var hand = player.PlayerCombatState!.Hand;
+        CardModel hemokinesis = live.CreateCard(ModelDb.Card<Hemokinesis>(), player);
+        hand.AddInternal(hemokinesis, -1);
+        CombatRootSnapshot root = CombatRootSnapshot.Capture(live);
+        for (int attempt = 0; attempt < 256; attempt++)
+        {
+            var oracle = root.ForkSimulator();
+            if (PotionFactory.CreateRandomPotionOutOfCombat(player, oracle.Rng.CombatPotionGeneration) is FirePotion)
+                break;
+            live.RunState.Rng.CombatPotionGeneration.NextInt(100);
+            root = CombatRootSnapshot.Capture(live);
+        }
+        string liveBefore = ContinuationStamp.CaptureLive(live).StateText;
+        SearchPolicySnapshot smart = policy with
+        {
+            RoutePolicy = SearchRoutePolicy.MultiplayerSinglePlayerCore,
+            PotionStrategy = new(SolverPotionPolicy.Smart, [new(0, "ENTROPIC_BREW", SolverPotionDirective.Force)]),
+        };
+        var verifier = new CombatBeamSolver(root, names, damage, smart, searchProfile: profile);
+        int turn = root.StartTurnNumber;
+        PlanAction brew = new(PlanActionKind.UsePotion, turn, PotionSlot: 0, PotionId: "ENTROPIC_BREW");
+        PlanAction paidFire = new(PlanActionKind.UsePotion, turn, TargetIndex: 0,
+            TargetCombatId: enemy.CombatId, PotionSlot: 1, PotionId: "FIRE_POTION");
+        PlanAction block = new(PlanActionKind.UsePotion, turn, PotionSlot: 2, PotionId: "BLOCK_POTION");
+        PlanAction strike = new(PlanActionKind.PlayCard, turn, "STRIKE_IRONCLAD", TargetIndex: 0,
+            TargetCombatId: enemy.CombatId);
+        List<SimulationSnapshot> snapshots = [];
+        try
+        {
+            SearchNode generated = ReplayRoute(verifier, snapshots,
+                [brew, paidFire with { PotionSlot = 0 }, strike with { CardId = "HEMOKINESIS" }]);
+            SearchNode paid = ReplayRoute(verifier, snapshots, [brew, paidFire, strike]);
+            SearchNode missingBrew = ReplayRoute(verifier, snapshots, [block, paidFire, strike]);
+            Check(generated.Snapshot.AllEnemiesDead && paid.Snapshot.AllEnemiesDead && missingBrew.Snapshot.AllEnemiesDead
+                && generated.Snapshot.CumulativePlayerHpLost == 2 && paid.Snapshot.CumulativePlayerHpLost == 0
+                && generated.PotionStrategicCost == SolverWeights.PotionMinimumHpSaved
+                && paid.PotionStrategicCost == 2 * SolverWeights.PotionMinimumHpSaved,
+                "The replayed wins must trade two raw HP for a free generated bottle");
+            // The audited comparison is controlled to isolate the exact-layer ordering.
+            PotionFreePolicyBaseline baseline = new(true, 0, root.InitialPlayerHp, turn)
+            {
+                BattleHpLost = damage.HpLostSoFar + 3,
+                EvaluationWindow = generated.Snapshot.EvaluationWindow,
+            };
+            var layer = new CombatBeamSolver(root, names, damage, smart, searchProfile: profile,
+                potionPolicyOverride: SolverPotionPolicy.RequireAtLeastOne, potionFreePolicyBaseline: baseline,
+                minimumPotionUses: 2, maximumPotionUses: 2);
+            var selected = layer.SelectDiagnosticCandidates([paid, generated]);
+            Console.WriteLine($"FORCED_BREW_LAYER slot={selected.Selected.Actions[1].PotionSlot} "
+                + $"loss={selected.Selected.Snapshot.CumulativePlayerHpLost} total_cost={selected.Selected.PotionStrategicCost}");
+            Check(ReferenceEquals(selected.Selected, generated), "The forced Brew charge hid the free generated follow-up");
+            Check(ReferenceEquals(layer.SelectDiagnosticCandidates([missingBrew, generated]).Selected, generated),
+                "An exact-use count was allowed to replace the forced root Brew");
+            try
+            {
+                _ = layer.SelectDiagnosticCandidates([missingBrew]);
+                Check(false, "A layer without the original Brew should report an unsatisfied policy");
+            }
+            catch (PotionPolicyUnsatisfiedException) { _checks++; }
+            Check(liveBefore == ContinuationStamp.CaptureLive(live).StateText, "Forced layer selection changed live combat");
+        }
+        finally
+        {
+            foreach (SimulationSnapshot snapshot in snapshots) snapshot.ReleaseSimulator();
+            hand.RemoveInternal(hemokinesis, silent: true);
+        }
+    }
+
+    private static SearchNode ReplayRoute(CombatBeamSolver solver, List<SimulationSnapshot> snapshots,
+        IReadOnlyList<PlanAction> actions)
+    {
+        SearchNode? parent = null;
+        for (int length = 0; length <= actions.Count; length++)
+        {
+            var snapshot = solver.ReplayDiagnosticPrefix(actions.Take(length).ToArray());
+            snapshots.Add(snapshot);
+            parent = new(length == 0 ? null : actions[length - 1], length, snapshot.PotionUseCount,
+                snapshot.PotionStrategicCost, snapshot.Turn, SearchRouteTraits.None, 0,
+                snapshot.Score, snapshot.StateKey, snapshot.HasRisk, snapshot.BoundaryReason,
+                snapshot.AllEnemiesDead || snapshot.PlayerDead, parent, snapshot, CombatProgressState.Capture(snapshot));
+        }
+        return parent!;
     }
 
     private static void CheckSmartPotionSelection(CombatState live, SolverDisplayNames names,
@@ -245,25 +347,16 @@ internal static class EntropicCostChecks
         PlanAction[] actions = [brew, new(PlanActionKind.EndTurn, 1), fire];
         var solver = new CombatBeamSolver(root, names, damage, policy, searchProfile: profile);
         var snapshots = new List<SimulationSnapshot>();
-        SearchNode? node = null;
         try
         {
-            for (int length = 0; length <= actions.Length; length++)
-            {
-                var snapshot = solver.ReplayDiagnosticPrefix(actions.Take(length).ToArray());
-                snapshots.Add(snapshot);
-                node = new SearchNode(length == 0 ? null : actions[length - 1], length, snapshot.PotionUseCount,
-                    snapshot.PotionStrategicCost, snapshot.Turn, SearchRouteTraits.None, 0, snapshot.Score,
-                    snapshot.StateKey, snapshot.HasRisk, snapshot.BoundaryReason, false, node, snapshot,
-                    CombatProgressState.Capture(snapshot));
-            }
+            SearchNode node = ReplayRoute(solver, snapshots, actions);
             Check(snapshots[^1].Turn == 2 && snapshots[^1].ExplicitPotionStrategicCost == SolverWeights.PotionMinimumHpSaved,
                 "Cross-turn native replay lost generated cost");
             var annotations = typeof(CombatBeamSolver).GetMethod("BuildRouteAnnotations",
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(solver, [node, null])!;
             var costs = (IReadOnlyDictionary<int, int>)annotations.GetType().GetProperty("PotionStrategicCostByTurn")!.GetValue(annotations)!;
             var counts = (IReadOnlyDictionary<int, int>)annotations.GetType().GetProperty("PotionCountByTurn")!.GetValue(annotations)!;
-            var uses = PotionStrategySnapshot.CaptureUses(node!, ((SimulatedCombatState)snapshots[^1].Simulator.State.CombatState).PotionUses);
+            var uses = PotionStrategySnapshot.CaptureUses(node, ((SimulatedCombatState)snapshots[^1].Simulator.State.CombatState).PotionUses);
             Check(costs.GetValueOrDefault(1) == SolverWeights.PotionMinimumHpSaved && costs.GetValueOrDefault(2) == 0
                 && counts.GetValueOrDefault(2) == 1 && uses[1].Turn == 2, "Cross-turn production annotations repriced a generated use");
             var synthetic = (SolverResult)typeof(object).GetMethod("MemberwiseClone",

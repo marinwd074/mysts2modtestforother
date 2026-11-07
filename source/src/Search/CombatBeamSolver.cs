@@ -124,7 +124,13 @@ internal sealed partial class CombatBeamSolver(
     private readonly SolverTheftPolicy? _theftPolicy = policy.TheftPolicy;
     private readonly PotionStrategySnapshot _potionStrategy = policy.PotionStrategy;
     private readonly bool _forceAllPotionsDisabled = potionPolicyOverride == SolverPotionPolicy.Disabled;
-    private readonly bool _enforcePotionDirectives = potionPolicyOverride == null;
+    private readonly bool _isSmartPotionAudit = policy.PotionPolicy == SolverPotionPolicy.Smart
+        && potionPolicyOverride == SolverPotionPolicy.RequireAtLeastOne
+        && potionFreePolicyBaseline != null
+        && minimumPotionUses is > 0 && minimumPotionUses == maximumPotionUses;
+    // The exact-use override sets the layer size; root-slot directives still apply.
+    private bool EnforcePotionDirectives => potionPolicyOverride == null
+        || _isSmartPotionAudit && _potionStrategy.HasForcedDirectives;
     private readonly SolverPotionPolicy _potionPolicy = potionPolicyOverride
         ?? (policy.TheftPolicy == SolverTheftPolicy.PreserveResources
             ? SolverPotionPolicy.Smart
@@ -153,7 +159,7 @@ internal sealed partial class CombatBeamSolver(
         _theftPolicy,
         _potionPolicy,
         _potionStrategy,
-        _enforcePotionDirectives,
+        EnforcePotionDirectives,
         _run,
         policy.R1EvaluationShadowCache,
         _continuationSeedProbe,
@@ -165,7 +171,7 @@ internal sealed partial class CombatBeamSolver(
     private FinalPlanOrdering FinalOrdering => _finalOrdering ??= new FinalPlanOrdering(
         _potionPolicy,
         _potionStrategy,
-        _enforcePotionDirectives,
+        EnforcePotionDirectives,
         _theftPolicy,
         _strategicBossHpRelief,
         root.PostCombatRelicHeal,
@@ -190,10 +196,7 @@ internal sealed partial class CombatBeamSolver(
             ? ReevaluateCurrentDecisionsAcrossScenarios
             : null,
         policy.UseUpstreamSearchOptimizations,
-        preferSmartAuditVictory: policy.PotionPolicy == SolverPotionPolicy.Smart
-            && _potionPolicy == SolverPotionPolicy.RequireAtLeastOne
-            && _minimumPotionUses > 0 && _maximumPotionUses == _minimumPotionUses
-            && !_potionStrategy.HasForcedDirectives);
+        preferSmartAuditVictory: _isSmartPotionAudit);
 
     private bool CanConsiderCardAction(PredictedCard card)
         => CanConsiderCardAction(_routePolicy, card);
