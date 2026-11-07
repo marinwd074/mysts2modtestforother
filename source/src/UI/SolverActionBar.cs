@@ -5,8 +5,7 @@ namespace CombatSolver;
 internal readonly record struct SolverActionBarState(
     bool Collapsed,
     bool Searching,
-    bool ShowAdopt,
-    bool ShowExecuteWhileSearching);
+    bool ShowAdopt);
 
 // Owns layout only. The overlay retains command bindings and capability checks.
 internal sealed partial class SolverActionBar : VBoxContainer
@@ -58,7 +57,7 @@ internal sealed partial class SolverActionBar : VBoxContainer
         _recalculate.Visible = !state.Searching;
         _stop.Visible = state.Searching;
         _adopt.Visible = !state.Collapsed && state.ShowAdopt;
-        _execute.Visible = !state.Searching || state.ShowExecuteWhileSearching;
+        _execute.Visible = !state.Searching;
         _autoStart.Visible = !state.Collapsed;
         _memoryRow.Visible = !state.Collapsed;
         _memory.Visible = !state.Collapsed;
@@ -69,13 +68,11 @@ internal sealed partial class SolverActionBar : VBoxContainer
         foreach (bool collapsed in new[] { false, true })
         foreach (bool searching in new[] { false, true })
         foreach (bool adopt in new[] { false, true })
-        foreach (bool executeWhileSearching in new[] { false, true })
         {
-            Refresh(new SolverActionBarState(
-                collapsed, searching, adopt, executeWhileSearching));
+            Refresh(new SolverActionBarState(collapsed, searching, adopt));
             if (_stop.Visible != searching || _recalculate.Visible == searching
                 || _adopt.Visible != (!collapsed && adopt)
-                || _execute.Visible != (!searching || executeWhileSearching)
+                || _execute.Visible == searching
                 || _memory.Visible == collapsed || _autoStart.Visible == collapsed
                 || _memoryRow.Visible == collapsed
                 || _fullAuto.GetParent() != _actions || _fullAuto.GetIndex() != 0

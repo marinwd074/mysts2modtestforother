@@ -1202,8 +1202,7 @@ internal static partial class SolverOverlay
         bool searching = SolverController.IsSearching;
         bool adoptingRoute = SolverController.IsAdoptingCurrentRoute;
         bool canAdoptRoute = SolverController.CanAdoptCurrentRoute;
-        bool canApplyCurrentTurn = SolverController.CanApplyCurrentTurn;
-        bool canExecuteCurrentTurn = SolverController.CanExecuteCurrentTurn;
+        bool canExecuteCurrentTurn = !searching && SolverController.CanExecuteCurrentTurn;
         bool multiplayerSafeAutoAvailable =
             capabilities.Kind == SolverSessionKind.MultiplayerSafeExecute;
         bool displayedAutoEnabled = capabilities.IsMultiplayer
@@ -1226,16 +1225,10 @@ internal static partial class SolverOverlay
         }
         _executeButton.Disabled = solverDisabled
             || SolverController.IsDeploying
-            || SolverController.IsApplyingCurrentTurn
             || adoptingRoute
-            || searching && !canApplyCurrentTurn
-            || !searching && !canExecuteCurrentTurn;
+            || !canExecuteCurrentTurn;
         if (SolverController.IsDeploying)
             _executeButton.Text = SolverText.Get("执行中…");
-        else if (SolverController.IsApplyingCurrentTurn)
-            _executeButton.Text = SolverText.Get("正在应用…");
-        else if (searching)
-            _executeButton.Text = SolverText.Get("应用当前回合");
         else if (_deployQueued)
             _executeButton.Text = SolverText.Get("已排队执行");
         else if (_presentation == SolverOverlayPresentation.ExecutedHistory
@@ -1265,8 +1258,7 @@ internal static partial class SolverOverlay
         _actionBar?.Refresh(new SolverActionBarState(
             _collapsed,
             searching,
-            canAdoptRoute || adoptingRoute,
-            canApplyCurrentTurn || SolverController.IsApplyingCurrentTurn));
+            canAdoptRoute || adoptingRoute));
         _executeButton.TooltipText = SolverText.Get(solverDisabled ? "求解器已关闭，请从标题栏开启。"
             : adoptingRoute ? "正在采用路线，请等待完成。"
             : SolverController.IsDeploying ? "正在执行当前回合。"
@@ -2404,8 +2396,7 @@ internal static partial class SolverOverlay
         _actionBar?.Refresh(new SolverActionBarState(
             _collapsed,
             SolverController.IsSearching,
-            SolverController.CanAdoptCurrentRoute || SolverController.IsAdoptingCurrentRoute,
-            SolverController.CanApplyCurrentTurn || SolverController.IsApplyingCurrentTurn));
+            SolverController.CanAdoptCurrentRoute || SolverController.IsAdoptingCurrentRoute));
         if (_potionStrategyButton != null)
             _potionStrategyButton.Visible = !_collapsed;
         if (_growthStrategyButton != null)
@@ -2767,15 +2758,11 @@ internal static partial class SolverOverlay
 
     private static void OnExecutePressed()
     {
-        NGame? host = NGame.Instance;
-        if (host != null && SolverController.IsSearching)
-        {
-            if (SolverController.CanApplyCurrentTurn)
-                SolverController.ApplyCurrentTurn();
+        if (SolverController.IsSearching)
             return;
-        }
 
         Entry.Logger.Info("[CombatSolver/Test] UI_ACTION action=deploy");
+        NGame? host = NGame.Instance;
         CombatState? state = CombatManager.Instance.DebugOnlyGetState();
         if (host == null || state == null || !CombatManager.Instance.IsInProgress)
         {
