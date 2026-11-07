@@ -255,7 +255,7 @@ internal static partial class CombatSearchCoordinator
             StrategicHpDeficit(root, policy, result),
             result.CombatEndedTurn,
             root.StartTurnNumber,
-            ProvableStrategicHpFloor(root, policy));
+            ProvableStrategicHpFloor(root, StrategicBossHpRelief(root, policy)));
 
     internal static bool HasReachedProvablePrimaryQualityLowerBound(
         bool completeVictory,
@@ -342,10 +342,11 @@ internal static partial class CombatSearchCoordinator
     /// </remarks>
     private static int ProvableStrategicHpFloor(
         CombatRootSnapshot root,
-        SearchPolicySnapshot policy)
+        BossHpRelief relief,
+        int recoveryUpperBound = int.MaxValue)
         => -ActEndingBossPolicy.PersistentValueOfRecoveredHp(
-            Math.Max(0, root.InitialPlayerMaxHp - root.InitialPlayerHp),
-            StrategicBossHpRelief(root, policy));
+            Math.Min(recoveryUpperBound, Math.Max(0, root.InitialPlayerMaxHp - root.InitialPlayerHp)),
+            relief);
 
     internal static bool CanAnySmartPotionQualify(
         CombatRootSnapshot root,
@@ -379,16 +380,24 @@ internal static partial class CombatSearchCoordinator
             return checked(allowedPotions.Length + generatedCapacity);
         bool legacyAdmission = !policy.UseUpstreamSearchOptimizations
             || SearchEvaluationPolicy.UsesRawLossFirst(policy.RoutePolicy);
+        BossHpRelief relief = StrategicBossHpRelief(root, policy);
+        bool useCertifiedRecoveryBound = !legacyAdmission && root.HasPinnedHealingCertificate
+            && !policy.EffectiveHasGrowthTargets && policy.RelicTargets.Count == 0
+            && !policy.UseMultiplayerTeamObjective && !policy.PotionStrategy.HasForcedDirectives;
+        // On a closed root, damage taken later cannot create net healing. At most
+        // the certified post-combat heal can recover HP already missing at capture.
+        int recoveryUpperBound = useCertifiedRecoveryBound
+            ? PinnedHealingBound.PostCombatHealingUpperBound(root)
+            : int.MaxValue;
         long savingRoom = legacyAdmission ? Math.Max(0, potionFreeHpDeficit)
-            : Math.Max(0L, (long)potionFreeHpDeficit - ProvableStrategicHpFloor(root, policy));
+            : Math.Max(0L, (long)potionFreeHpDeficit - ProvableStrategicHpFloor(root, relief, recoveryUpperBound));
         int qualifiedGeneratedCapacity = checked(root.PotionSlotCount * (forcedBrews
             + allowedPotions.Count(potion => potion.PotionId == "ENTROPIC_BREW"
-                && PotionUsePolicy.SmartRequiredHpSaved(potion.StrategicHpCost,
-                    StrategicBossHpRelief(root, policy)) <= savingRoom)));
+                && PotionUsePolicy.SmartRequiredHpSaved(potion.StrategicHpCost, relief) <= savingRoom)));
         if (legacyAdmission)
         {
             int paidPotionHpRequired = PotionUsePolicy.SmartRequiredHpSaved(
-                SolverWeights.PotionMinimumHpSaved, StrategicBossHpRelief(root, policy));
+                SolverWeights.PotionMinimumHpSaved, relief);
             int paidPotionCapacity = paidPotionHpRequired >= int.MaxValue / 4
                 ? 0 : Math.Max(0, potionFreeHpDeficit) / paidPotionHpRequired;
             return checked(Math.Min(allowedPotions.Length,
@@ -403,8 +412,7 @@ internal static partial class CombatSearchCoordinator
         {
             minimumCost += Math.Max(0, potion.StrategicHpCost);
             count++;
-            int required = PotionUsePolicy.SmartRequiredHpSaved((int)Math.Min(int.MaxValue, minimumCost),
-                StrategicBossHpRelief(root, policy));
+            int required = PotionUsePolicy.SmartRequiredHpSaved((int)Math.Min(int.MaxValue, minimumCost), relief);
             if (required <= savingRoom) maximum = count;
         }
         return checked(maximum + qualifiedGeneratedCapacity);

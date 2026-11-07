@@ -102,6 +102,11 @@ internal static class PinnedHealingBound
         if (!SupportsBranch(simulator, root.PlayerIdentity))
             return int.MaxValue;
         // No admitted source can heal in combat or acquire a new healing source.
+        return PostCombatHealingUpperBound(root);
+    }
+
+    internal static int PostCombatHealingUpperBound(CombatRootSnapshot root)
+    {
         // Overcount conditional post-combat healing: a lower bound must stay optimistic.
         return (int)Math.Min(int.MaxValue,
             (long)Math.Max(0, root.PostCombatRelicHeal.UnconditionalHeal)

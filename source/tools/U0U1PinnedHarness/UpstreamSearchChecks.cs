@@ -106,8 +106,11 @@ internal static class UpstreamSearchChecks
             BindingFlags.NonPublic | BindingFlags.Static)!;
         SolverInterimResult Quality(CombatRootSnapshot root, SearchPolicySnapshot policy, SolverResult result)
             => (SolverInterimResult)summary.Invoke(null, [root, policy, result])!;
-        foreach (string fixture in new[] { "native-closed", "native-closed-hard", "smart-potions", "unknown-source" })
+        foreach (string fixture in new[] { "native-closed", "native-closed-hard", "smart-potions", "smart-wounded", "unknown-source" })
         {
+            var enemy = live.Enemies.Single();
+            int priorEnemyHp = enemy.CurrentHp;
+            int priorPlayerHp = player.Creature.CurrentHp;
             if (fixture == "native-closed-hard")
             {
                 foreach (var relic in player.Relics.ToArray()) player.RemoveRelicInternal(relic, silent: true);
@@ -118,6 +121,11 @@ internal static class UpstreamSearchChecks
                 for (int slot = 0; slot < 2; slot++)
                     Check(player.AddPotionInternal(ModelDb.Potion<FirePotion>().ToMutable(), slot, silent: true).success,
                         "Could not prepare pinned Smart fixture.");
+            if (fixture == "smart-wounded")
+            {
+                player.Creature.SetCurrentHpInternal(player.Creature.MaxHp - 30);
+                enemy.SetCurrentHpInternal(6);
+            }
             if (fixture == "unknown-source")
                 player.PlayerCombatState!.DrawPile.AddInternal(live.CreateCard(CanonicalModels.Card<Feed>(), player), -1);
             CombatRootSnapshot root = CombatRootSnapshot.Capture(live);
@@ -125,10 +133,24 @@ internal static class UpstreamSearchChecks
                 "An unknown root source bypassed the certificate rejection.");
             SearchPolicySnapshot policy = fixture.StartsWith("native-closed", StringComparison.Ordinal) ? plain : plain with
             { PotionPolicy = SolverPotionPolicy.Smart, PotionStrategy = new(SolverPotionPolicy.Smart, []) };
+            if (fixture == "smart-wounded")
+            {
+                int price = root.SearchablePotions[0].StrategicHpCost;
+                Check(CombatSearchCoordinator.MaximumSmartPotionUses(root, policy, true, price - 1) == 0,
+                    "Missing HP without a healing source was counted as potion savings.");
+                Check(CombatSearchCoordinator.MaximumSmartPotionUses(root, policy, true, price) == 1,
+                    "A potion that can exactly earn back its cost must stay eligible.");
+                Check(CombatSearchCoordinator.MaximumSmartPotionUses(root, policy, false, 0) == 2,
+                    "A missing potion-free victory must keep rescue potions eligible.");
+                Check(CombatSearchCoordinator.MaximumSmartPotionUses(root,
+                        policy with { RelicTargets = [new(RelicCounterId.HappyFlower, 1, 1, 0, 3)] }, true, 0) == 2,
+                    "A resource objective must keep the optimistic recovery allowance.");
+            }
             string liveBefore = ContinuationStamp.CaptureLive(live).StateText;
             SolverResult? reference = null;
-            // ABBA, each request owns a fresh session and every selected route is replayed independently.
-            foreach (bool enabled in new[] { false, true, true, false })
+            // Each request owns a fresh session and every selected route is replayed independently.
+            bool[] modes = fixture == "smart-wounded" ? [false, true] : [false, true, true, false];
+            foreach (bool enabled in modes)
             {
                 SearchPolicySnapshot runPolicy = policy with { UseUpstreamSearchOptimizations = enabled };
                 Stopwatch clock = Stopwatch.StartNew();
@@ -145,6 +167,10 @@ internal static class UpstreamSearchChecks
                 else Check(!CombatSearchCoordinator.IsBetterPotionPolicyResult(policy.TheftPolicy,
                     Quality(root, policy, reference!), Quality(root, policy, result)),
                     "The optimization reduced selected-route quality.");
+                if (fixture == "smart-wounded")
+                    Check(root.HasPinnedHealingCertificate && result.Snapshot.AllEnemiesDead
+                        && result.ExplicitPotionCount == 0 && result.ProjectedBattleHpLost == 0,
+                        "The wounded fixture must produce a certified zero-loss win without potions.");
 
                 CombatBeamSolver replaySolver = new(root, names, damage, runPolicy, searchProfile: profile);
                 SimulationSnapshot replay = replaySolver.ReplayDiagnosticPrefix(result.BestNode.Actions);
@@ -170,6 +196,11 @@ internal static class UpstreamSearchChecks
                     + $"hp_loss={result.ProjectedBattleHpLost} expanded={result.ExpandedNodes} "
                     + $"transitions={result.TotalTransitionCount} elapsed_ms={elapsed} "
                     + JsonSerializer.Serialize(result.OptimizationMetrics));
+            }
+            if (fixture == "smart-wounded")
+            {
+                player.Creature.SetCurrentHpInternal(priorPlayerHp);
+                enemy.SetCurrentHpInternal(priorEnemyHp);
             }
             if (fixture == "native-closed" && reference!.Snapshot.AllEnemiesDead)
             {

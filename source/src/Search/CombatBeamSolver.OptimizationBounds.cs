@@ -30,18 +30,21 @@ internal sealed partial class CombatBeamSolver
         if (!CanUseOptimizationBounds) return retained;
         SearchOptimizationSession? session = policy.OptimizationSession is { } candidate && candidate.Matches(root)
             ? candidate : null;
-        PrimarySearchIncumbent? shared = session?.PotionFreeBound;
         // A zero-use witness only bounds members whose future explicit use is closed.
         bool zeroUseClosed = _forceAllPotionsDisabled || _potionPolicy == SolverPotionPolicy.Disabled
             || _maximumPotionUses == 0;
+        PrimarySearchIncumbent? shared = zeroUseClosed ? session?.PotionFreeBound : null;
+        PrimarySearchIncumbent? local = root.HasPinnedHealingCertificate ? _primaryIncumbent : null;
         int? ceiling = policy.PotionPolicy == SolverPotionPolicy.Smart
+            && root.HasPinnedHealingCertificate && _maximumPotionUses == _minimumPotionUses
             // A Brew can supply zero-cost uses. The per-use root-price lower
             // bound is not a proof for this request, even before it is consumed.
             && !root.SearchablePotions.Any(potion => potion.PotionId == "ENTROPIC_BREW")
-            && _maximumPotionUses == _minimumPotionUses
-            && root.HasPinnedHealingCertificate && root.MinimumSearchablePotionStrategicCost is { } cost
+            && root.MinimumSearchablePotionStrategicCost is { } cost
                 ? SmartEligibilityCeiling(_potionFreePolicyBaseline, _minimumPotionUses, cost, _strategicBossHpRelief)
                 : null;
+        if (shared == null && local == null && ceiling == null)
+            return retained;
         List<SearchNode>? bounded = null;
         for (int index = 0; index < retained.Count; index++)
         {
@@ -51,14 +54,13 @@ internal sealed partial class CombatBeamSolver
             {
                 int lower = OptimisticHpLowerBound(node.Snapshot);
                 // Strict comparisons preserve equal-HP growth, turn and potion opportunities.
-                if (zeroUseClosed && ExplicitPotionUseCount(node) == 0
-                    && shared is { } witnessed && lower > witnessed.StrategicHpDeficit)
+                if (shared is { } witnessed && lower > witnessed.StrategicHpDeficit
+                    && ExplicitPotionUseCount(node) == 0)
                 {
                     prune = true;
                     if (session != null) Interlocked.Increment(ref session.SharedBranchesPruned);
                 }
-                if (!prune && _primaryIncumbent is { } local && root.HasPinnedHealingCertificate
-                    && lower > local.StrategicHpDeficit)
+                if (!prune && local is { } incumbent && lower > incumbent.StrategicHpDeficit)
                 {
                     prune = true;
                     if (session != null) Interlocked.Increment(ref session.CertifiedBranchesPruned);
