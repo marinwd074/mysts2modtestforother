@@ -238,7 +238,8 @@ internal static class Program
             {
                 int prefixIndex = Array.IndexOf(args, "--prefix");
                 Console.WriteLine(P2QualityChecks.Run(combat, names, captured, p2Fixture, outputDirectory,
-                    prefixIndex >= 0 ? args[prefixIndex + 1] : null));
+                    prefixIndex >= 0 ? args[prefixIndex + 1] : null,
+                    selectiveDeepening: args.Contains("--selective"), detailed: args.Contains("--measure")));
                 return 0;
             }
             if (multiplayerRefreshOnly)
@@ -4393,6 +4394,8 @@ internal static class Program
         for (int index = 0; index < args.Length; index++)
         {
             if (allowHydrationOptions && args[index] == "--measure")
+                continue;
+            if (allowRoutePrefix && args[index] == "--selective")
                 continue;
             if (allowHydrationOptions && args[index] is "--fixture" or "--iterations" or "--dop"
                 || allowRoutePrefix && args[index] == "--prefix")

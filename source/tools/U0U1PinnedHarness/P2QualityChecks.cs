@@ -14,7 +14,8 @@ namespace U0U1PinnedHarness;
 internal static class P2QualityChecks
 {
     internal static string Run(CombatState live, SolverDisplayNames names,
-        SearchPolicySnapshot captured, string fixture, string output, string? prefixPath = null)
+        SearchPolicySnapshot captured, string fixture, string output, string? prefixPath = null,
+        bool selectiveDeepening = false, bool detailed = false)
     {
         if (fixture is not ("setup-single" or "setup-mp" or "retained-mp" or "delayed-mp" or "defense-mp"))
             throw new ArgumentException("Unknown P2 quality fixture: " + fixture);
@@ -58,6 +59,7 @@ internal static class P2QualityChecks
             ModelDb.Power<PoisonPower>().ToMutable(0).ApplyInternal(target, 100, false);
         }
         SolverSearchProfile profile = new(8, 1_200, 8, 4, 4, 20_000);
+        List<string> deepening = [];
         var policy = captured with { Profile = profile, CurrentTurnOnly = false, IncludeTurnSetup = false,
             RoutePolicy = fixture.EndsWith("-single") ? SearchRoutePolicy.SinglePlayerFullRoute
                 : SearchRoutePolicy.MultiplayerSinglePlayerCore,
@@ -66,7 +68,13 @@ internal static class P2QualityChecks
             UseMultiplayerTeamObjective = false, UseMultiplayerTeammateForecast = false,
             UseMultiplayerScenarioReevaluation = false, IgnoreLongTermRewards = true, RelicTargets = [],
             PotionPolicy = SolverPotionPolicy.Disabled, PotionStrategy = new(SolverPotionPolicy.Disabled, []),
-            Interaction = null, Diagnostics = new SearchDiagnosticsSink(_ => { }, _ => { }) };
+            UseSelectiveDeepening = selectiveDeepening,
+            DetailedDiagnostics = detailed,
+            Interaction = null, Diagnostics = new SearchDiagnosticsSink(message =>
+            {
+                if (message.StartsWith("[CombatSolver/Test] SEARCH_DEEPENING", StringComparison.Ordinal))
+                    deepening.Add(message);
+            }, _ => { }) };
         CombatRootSnapshot root = CombatRootSnapshot.Capture(live);
         var damage = BattleDamageTracker.Observe(live);
         string before = ContinuationStamp.CaptureLive(live).StateText;
@@ -124,6 +132,9 @@ internal static class P2QualityChecks
         }
         SolverResult result = new CombatBeamSolver(root, names, damage, policy, searchProfile: profile,
             continuationRouteReplayActions: prefix, continueRouteSearchForTesting: prefix != null).Solve();
+        bool expectDeepening = selectiveDeepening && policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore;
+        if ((deepening.Count > 0) != expectDeepening)
+            throw new InvalidOperationException("Selective deepening activation did not match the fixed fixture's policy.");
         if (result.BoundaryReason == SearchBoundaryReason.TimeLimit || result.ExpandedNodes > profile.MaxExpandedNodes)
             throw new InvalidOperationException("P2 comparison was not bounded by its fixed logical budget.");
         // PlanAction contains collection-valued annotations; compare their values,
@@ -146,12 +157,14 @@ internal static class P2QualityChecks
             if (fixture == "defense-mp" && (replay.PlayerDead || replay.EvaluationWindow is not { CoversTarget: true }
                 || replay.CumulativePlayerHpLost != 0))
                 throw new InvalidOperationException("Search lost the independently verified zero-loss defense route.");
-            File.WriteAllText(Path.Combine(output, fixture + (prefixPath == null ? "" : "-tail") + ".json"), JsonSerializer.Serialize(new
+            string outputName = fixture + (selectiveDeepening ? "-selective" : "") + (prefixPath == null ? "" : "-tail");
+            File.WriteAllText(Path.Combine(output, outputName + ".json"), JsonSerializer.Serialize(new
             {
                 Fixture = fixture, DefenseWitness = defenseWitness, Prefix = prefixEvidence,
                 DllSha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(typeof(CombatBeamSolver).Assembly.Location))),
                 Root = root.ContinuationStamp.StateText, Profile = profile, result.EvaluationWindow,
-                result.ExpandedNodes, Boundary = result.BoundaryReason.ToString(),
+                result.ExpandedNodes, result.TransitionCount, SelectiveDeepening = selectiveDeepening, Deepening = deepening,
+                Boundary = result.BoundaryReason.ToString(),
                 result.CombatEndedTurn, InitialDelayed = initialDelayed, replay.AllEnemiesDead, replay.PlayerDead,
                 replay.DeathSaveUseCount, replay.CumulativePlayerHpLost, replay.PlayerHp, replay.ProjectedPlayerHp, replay.EnemyHp,
                 replay.DelayedDamageValue, replay.StrategicEffects, replay.LongTermResourceValue,

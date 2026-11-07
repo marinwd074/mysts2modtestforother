@@ -39,6 +39,9 @@ internal sealed record SearchPolicySnapshot(
 {
     // Internal A/B control. Production uses the proved bounds and existing-budget retention.
     public bool UseUpstreamSearchOptimizations { get; init; } = true;
+    // P3 internal experiment; shares the ordinary engine, horizon and request budget.
+    // Keep opt-in until fixed-root and teammate redecision evidence justify enabling it.
+    internal bool UseSelectiveDeepening { get; init; }
     internal SearchOptimizationSession? OptimizationSession { get; init; }
     /// <summary>
     /// Explicitly names the route horizon. Keep this separate from the legacy

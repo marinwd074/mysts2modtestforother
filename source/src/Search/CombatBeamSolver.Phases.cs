@@ -2496,6 +2496,9 @@ internal sealed partial class CombatBeamSolver
                 ? []
                 : PruneAtMemoryBoundary(member.Ended.Where(node => !node.IsTerminal),
                     turnPruneCandidateCount, "before_turn_prune", playDepth: 0, member.Ended.Count);
+            if (policy.UseSelectiveDeepening && !member.TimeBudgetReached && !member.AdoptionReached
+                && HasExpandedNodeBudgetRemaining())
+                member.Frontier = SelectDeepeningFrontier(member.Frontier, member.SearchedTurnLayers + 1);
             foreach (SearchNode node in member.Frontier)
                 CaptureContinuation(node);
             List<SearchNode> retainedAfterRound = [.. member.Completed, .. member.Frontier];
