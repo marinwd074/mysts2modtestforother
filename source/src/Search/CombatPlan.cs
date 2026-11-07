@@ -1292,6 +1292,17 @@ internal sealed record SearchNode(
     public IReadOnlyList<PlanAction> Actions => _actions ??= MaterializeActions();
     internal IReadOnlyList<PlanAction> ActionsWithoutCaching() => _actions ?? MaterializeActions();
 
+    internal PlanAction? FindFirstCardAction(int? turn = null)
+    {
+        PlanAction? first = null;
+        for (SearchNode? node = this; node?.Action is { } action; node = node.Parent)
+        {
+            if (action.Kind == PlanActionKind.PlayCard && (turn == null || action.Turn == turn))
+                first = action;
+        }
+        return first;
+    }
+
     public IReadOnlyList<PlanCardChoice> GetTurnSetupChoices()
     {
         for (SearchNode? node = this; node != null; node = node.Parent)

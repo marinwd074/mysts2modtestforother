@@ -31,7 +31,7 @@ internal sealed partial class CombatBeamSolver
             PlanAction action = RootActionLineageNode(node).Action
                 ?? throw new InvalidOperationException("搜索首步谱系缺少动作。");
             PlanAction? firstCard = _preserveReplayAllocatorOpening
-                ? node.Actions.FirstOrDefault(candidate => candidate.Kind == PlanActionKind.PlayCard)
+                ? node.FindFirstCardAction()
                 : null;
             return new RootActionLineageSignature(
                 action.Kind,

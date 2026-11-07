@@ -344,9 +344,7 @@ internal sealed partial class CombatBeamSolver
                             OptionalPotionCount: optionalPotionCount,
                             StrategicSold: strategicSold,
                             EnemyHp: features.EnemyHp),
-                        HasCurrentTurnCardAction: candidate.Node.Actions.Any(action =>
-                            action.Turn == startTurnNumber
-                            && action.Kind == PlanActionKind.PlayCard));
+                        HasCurrentTurnCardAction: candidate.Node.FindFirstCardAction(startTurnNumber) != null);
                 })
                 .ToList();
             if (emitDiagnostics && detailedDiagnostics)
