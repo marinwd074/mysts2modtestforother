@@ -1500,11 +1500,13 @@ internal static partial class CombatSearchCoordinator
                     SolverSearchProfile supplementalProfile = activeProfile;
                     if (limitedStablePortfolioTail || confirmedMultiEnemyVictory)
                     {
-                        const int stablePortfolioAuditMilliseconds = 10_000;
+                        long auditDeadline = activeClock.ElapsedMilliseconds + (confirmedMultiEnemyVictory ? 5_000 : 10_000);
+                        if (confirmedMultiEnemyVictory)
+                            auditDeadline = Math.Min(auditDeadline, 29_000);
                         supplementalProfile = activeProfile with
                         {
                             SoftTimeBudgetMilliseconds = (int)Math.Min(activeProfile.SoftTimeBudgetMilliseconds,
-                                activeClock.ElapsedMilliseconds + stablePortfolioAuditMilliseconds),
+                                auditDeadline),
                         };
                         policy.Diagnostics.Info($"[CombatSolver/Test] SOLO_STABLE_PORTFOLIO_AUDIT " +
                             $"elapsed_ms={activeClock.ElapsedMilliseconds} " +

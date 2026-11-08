@@ -80,11 +80,14 @@ internal static partial class CombatSearchCoordinator
         {
             // Try the cheaper width first. A bounded member can still return a full
             // victory. The ordinary width must corroborate the complete outcome.
+            int narrowWidth = BeamWidthPortfolio.ScaledWidth(profile.BeamWidth, BeamWidthPortfolio.NarrowRefinementRatio);
             SolverSearchProfile narrowProfile = beforeNarrow with
             {
-                BeamWidth = BeamWidthPortfolio.ScaledWidth(profile.BeamWidth, BeamWidthPortfolio.NarrowRefinementRatio),
-                SoftTimeBudgetMilliseconds = Math.Min(24_000, beforeNarrow.SoftTimeBudgetMilliseconds / 5),
-                MaxExpandedNodes = beforeNarrow.MaxExpandedNodes / 5,
+                BeamWidth = narrowWidth,
+                SoftTimeBudgetMilliseconds = Math.Min(15_000, beforeNarrow.SoftTimeBudgetMilliseconds / 5),
+                // Cap work as well as time so a quickly found win does not spend the
+                // entire time slice expanding alternatives before the second width runs.
+                MaxExpandedNodes = (int)Math.Min(beforeNarrow.MaxExpandedNodes / 5, 96L * narrowWidth),
             };
             SolverResult narrow = runMultiEnemyProbe(narrowProfile);
             policy.Diagnostics.Info($"[CombatSolver/Test] SOLO_NARROW_BEAM_PROBE " +
@@ -101,8 +104,8 @@ internal static partial class CombatSearchCoordinator
                 {
                     SolverSearchProfile checkProfile = beforeCheck with
                     {
-                        SoftTimeBudgetMilliseconds = Math.Clamp(beforeCheck.SoftTimeBudgetMilliseconds / 5, 1, 16_000),
-                        MaxExpandedNodes = Math.Max(1, beforeCheck.MaxExpandedNodes / 5),
+                        SoftTimeBudgetMilliseconds = Math.Clamp(beforeCheck.SoftTimeBudgetMilliseconds / 5, 1, 9_000),
+                        MaxExpandedNodes = (int)Math.Clamp(beforeCheck.MaxExpandedNodes / 5, 1, 80L * beforeCheck.BeamWidth),
                     };
                     SolverResult check = runMultiEnemyProbe(checkProfile);
                     if (ResolveTakeoverResult(check, policy.Interaction) is { } adoptedCheck)
