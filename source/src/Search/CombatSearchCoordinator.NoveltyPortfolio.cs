@@ -19,10 +19,17 @@ internal static partial class CombatSearchCoordinator
             && HasReachedAcceptableBattleHpLoss(policy, result);
 
     private static bool IsCleanPotionFreeVictory(SolverResult? result)
+        => result?.BoundaryReason == SearchBoundaryReason.None && IsRiskFreePotionFreeVictory(result);
+
+    private static bool IsRiskFreePotionFreeVictory(SolverResult? result)
         => result is { PotionCount: 0, CombatEndedTurn: not null,
-            ResultScope: SolverResultScope.SearchCompletion, BoundaryReason: SearchBoundaryReason.None }
+            ResultScope: SolverResultScope.SearchCompletion }
             && !result.Snapshot.HasRisk && result.Snapshot.ProjectedDeathSaveUseCount == 0
             && IsCompleteVictory(result);
+
+    private static bool IsMultiEnemyProbeVictory(SolverResult result)
+        => result.BoundaryReason is SearchBoundaryReason.None or SearchBoundaryReason.TimeLimit or SearchBoundaryReason.NodeLimit
+            && IsRiskFreePotionFreeVictory(result);
 
     private static SolverResult RunNoveltyPortfolioPass(
         CombatRootSnapshot root, SolverDisplayNames names, BattleDamageSnapshot damage,
@@ -31,8 +38,11 @@ internal static partial class CombatSearchCoordinator
         Action<SolverProgress>? progress, Action<SolverResult>? publish,
         Func<SolverResult, SolverSearchProfile, SolverResult?>? runCrossFamilyScout,
         Func<SolverSearchProfile, SolverResult>? runWideProbe,
-        Func<SolverSearchProfile, SolverResult> solveBaseline)
+        Func<SolverSearchProfile, SolverResult>? runMultiEnemyProbe,
+        Func<SolverSearchProfile, SolverResult> solveBaseline,
+        out bool confirmedMultiEnemyVictory)
     {
+        confirmedMultiEnemyVictory = false;
         SolverSearchProfile? explorationProfile = policy.NoveltyBudget.Exploration(profile, root.IsActEndingBoss);
         if (explorationProfile == null)
         {
@@ -62,6 +72,64 @@ internal static partial class CombatSearchCoordinator
         }
         bool settled = exploration != null && (exploration.ResultScope != SolverResultScope.SearchCompletion
             || !policy.PotionStrategy.HasForcedDirectives && HasReachedAcceptableBattleHpLoss(policy, exploration));
+        SolverResult? multiEnemyWinner = null;
+        if (!settled && runMultiEnemyProbe != null
+            && NoveltyPortfolioBudget.Remaining(profile, clock.ElapsedMilliseconds, explorationExpanded) is { } beforeNarrow
+            && beforeNarrow.BeamWidth >= 3 && beforeNarrow.SoftTimeBudgetMilliseconds >= 80_000
+            && beforeNarrow.MaxExpandedNodes >= 48_000)
+        {
+            // Try the cheaper width first. A bounded member can still return a full
+            // victory. The ordinary width must corroborate the complete outcome.
+            SolverSearchProfile narrowProfile = beforeNarrow with
+            {
+                BeamWidth = BeamWidthPortfolio.ScaledWidth(profile.BeamWidth, BeamWidthPortfolio.NarrowRefinementRatio),
+                SoftTimeBudgetMilliseconds = Math.Min(24_000, beforeNarrow.SoftTimeBudgetMilliseconds / 5),
+                MaxExpandedNodes = beforeNarrow.MaxExpandedNodes / 5,
+            };
+            SolverResult narrow = runMultiEnemyProbe(narrowProfile);
+            policy.Diagnostics.Info($"[CombatSolver/Test] SOLO_NARROW_BEAM_PROBE " +
+                $"beam={narrowProfile.BeamWidth} loss={narrow.ProjectedBattleHpLost} " +
+                $"turn={narrow.CombatEndedTurn} boundary={narrow.BoundaryReason}");
+            if (ResolveTakeoverResult(narrow, policy.Interaction) is { } adoptedNarrow)
+                return adoptedNarrow;
+            if (IsMultiEnemyProbeVictory(narrow) && BeatsExploration(narrow))
+            {
+                multiEnemyWinner = narrow;
+                publish?.Invoke(narrow);
+                if (NoveltyPortfolioBudget.Remaining(profile, clock.ElapsedMilliseconds,
+                        totals.Snapshot().ExpandedNodes - expandedBefore) is { } beforeCheck)
+                {
+                    SolverSearchProfile checkProfile = beforeCheck with
+                    {
+                        SoftTimeBudgetMilliseconds = Math.Clamp(beforeCheck.SoftTimeBudgetMilliseconds / 5, 1, 16_000),
+                        MaxExpandedNodes = Math.Max(1, beforeCheck.MaxExpandedNodes / 5),
+                    };
+                    SolverResult check = runMultiEnemyProbe(checkProfile);
+                    if (ResolveTakeoverResult(check, policy.Interaction) is { } adoptedCheck)
+                        return adoptedCheck;
+                    if (IsMultiEnemyProbeVictory(check) && BeatsExploration(check))
+                    {
+                        int? checkQuality = CompareCompletedResultPrimaryQuality(root, policy, check, narrow);
+                        bool checkComplete = IsCleanPotionFreeVictory(check);
+                        confirmedMultiEnemyVictory = checkQuality is >= 0 || checkQuality.HasValue && checkComplete;
+                        policy.Diagnostics.Info($"[CombatSolver/Test] SOLO_NARROW_BEAM_CONFIRMATION " +
+                            $"accepted={confirmedMultiEnemyVictory} narrow_loss={narrow.ProjectedBattleHpLost} " +
+                            $"narrow_turn={narrow.CombatEndedTurn} check_loss={check.ProjectedBattleHpLost} " +
+                            $"check_turn={check.CombatEndedTurn} check_boundary={check.BoundaryReason}");
+                        if (confirmedMultiEnemyVictory)
+                        {
+                            bool selectCheck = checkQuality < 0 || checkQuality == 0
+                                && (checkComplete || !IsCleanPotionFreeVictory(narrow))
+                                && IsBetterPotionPolicyResult(root, policy, check, narrow);
+                            SolverResult winner = selectCheck ? check : narrow;
+                            winner.NoveltyPortfolio = Describe("narrow_confirmed", exploration, winner,
+                                selectCheck ? "beam_check" : "narrow_probe", beforeCheck);
+                            return winner;
+                        }
+                    }
+                }
+            }
+        }
         SolverResult? wideProbe = null;
         if (!settled && runWideProbe != null && exploration != null && IsCompleteVictory(exploration)
             && NoveltyPortfolioBudget.Remaining(profile, clock.ElapsedMilliseconds, explorationExpanded) is { } beforeWide
@@ -72,7 +140,9 @@ internal static partial class CombatSearchCoordinator
             var wideProfile = beforeWide with
             {
                 BeamWidth = BeamWidthPortfolio.ScaledWidth(profile.BeamWidth, BeamWidthPortfolio.WideRefinementRatio),
-                SoftTimeBudgetMilliseconds = Math.Min(12_000, beforeWide.SoftTimeBudgetMilliseconds / 8),
+                // The zero-loss stop still applies as soon as the member finds a win.
+                // Leave enough time for the wider frontier on a slower host.
+                SoftTimeBudgetMilliseconds = Math.Min(22_000, beforeWide.SoftTimeBudgetMilliseconds / 5),
                 MaxExpandedNodes = beforeWide.MaxExpandedNodes / 8,
             };
             long started = clock.ElapsedMilliseconds;
@@ -114,11 +184,13 @@ internal static partial class CombatSearchCoordinator
             clock.ElapsedMilliseconds, portfolioExpanded);
         if (settled || remaining == null)
         {
-            if (exploration == null)
+            SolverResult? finished = exploration ?? multiEnemyWinner;
+            if (finished == null)
                 throw new PotionPolicyUnsatisfiedException("Novelty search exhausted the request before satisfying mandatory potion use.");
-            SolverResult finished = PreferWideProbe(exploration) ? wideProbe! : exploration;
-            finished.NoveltyPortfolio = Describe("exploration_finished", exploration, wideProbe,
-                ReferenceEquals(finished, wideProbe) ? "wide_probe" : "exploration");
+            if (PreferProbe(multiEnemyWinner, finished)) finished = multiEnemyWinner!;
+            if (PreferProbe(wideProbe, finished)) finished = wideProbe!;
+            finished.NoveltyPortfolio = Describe("exploration_finished", exploration, wideProbe ?? multiEnemyWinner,
+                MethodOf(finished, exploration), remaining);
             return finished;
         }
         cancellation.ThrowIfCancellationRequested();
@@ -127,19 +199,31 @@ internal static partial class CombatSearchCoordinator
             && exploration != null && IsCompleteVictory(exploration)
             && IsBetterPotionPolicyResult(root, policy, exploration, baseline);
         SolverResult selected = selectExploration ? exploration! : baseline;
-        bool selectWide = PreferWideProbe(selected);
-        if (selectWide) selected = wideProbe!;
-        selected.NoveltyPortfolio = Describe("portfolio", exploration, selectWide ? wideProbe : baseline,
-            selectWide ? "wide_probe" : selectExploration ? "exploration" : "beam");
+        if (PreferProbe(multiEnemyWinner, selected)) selected = multiEnemyWinner!;
+        if (PreferProbe(wideProbe, selected)) selected = wideProbe!;
+        selected.NoveltyPortfolio = Describe("portfolio", exploration,
+            ReferenceEquals(selected, exploration) ? baseline : selected, MethodOf(selected, exploration), remaining);
         return selected;
 
-        bool PreferWideProbe(SolverResult current)
+        bool BeatsExploration(SolverResult candidate)
+            => exploration == null || !IsCompleteVictory(exploration)
+                || IsBetterPotionPolicyResult(root, policy, candidate, exploration);
+
+        bool PreferProbe(SolverResult? candidate, SolverResult current)
             => current.ResultScope == SolverResultScope.SearchCompletion
-                && wideProbe is { ResultScope: SolverResultScope.SearchCompletion } candidate
+                && candidate is { ResultScope: SolverResultScope.SearchCompletion }
                 && !candidate.Snapshot.HasRisk && IsCompleteVictory(candidate)
                 && IsBetterPotionPolicyResult(root, policy, candidate, current);
 
-        NoveltyPortfolioTelemetry Describe(string stop, SolverResult? scout, SolverResult? beam, string selectedMethod)
+        string MethodOf(SolverResult selected, SolverResult? scout)
+        {
+            if (ReferenceEquals(selected, wideProbe)) return "wide_probe";
+            if (ReferenceEquals(selected, multiEnemyWinner)) return "narrow_probe";
+            return ReferenceEquals(selected, scout) ? "exploration" : "beam";
+        }
+
+        NoveltyPortfolioTelemetry Describe(string stop, SolverResult? scout, SolverResult? beam, string selectedMethod,
+            SolverSearchProfile? remaining)
             => new(stop, explorationExpanded, explorationElapsed, scout?.NoveltySearch,
                 beam != null, selectedMethod, scout?.ProjectedBattleHpLost,
                 scout != null && IsCompleteVictory(scout), beam?.ProjectedBattleHpLost,

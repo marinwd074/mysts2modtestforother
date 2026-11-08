@@ -1012,6 +1012,10 @@ internal static partial class CombatSearchCoordinator
             SolverResult? earlySmartPotionBaseline = null;
             SolverResult? earlySmartPotionScout = null;
             bool limitedStablePortfolioTail = false;
+            bool confirmedMultiEnemyVictory = false;
+            bool probePotionFree = CanLimitSoloZeroLossRefinement(root, beamPolicy)
+                && (initialPotionPolicyOverride == SolverPotionPolicy.Disabled
+                    || beamPolicy.PotionPolicy == SolverPotionPolicy.Disabled);
 
             bool HasOptionalSmartPotionCandidate()
                 => initialPotionPolicyOverride == SolverPotionPolicy.Disabled
@@ -1132,12 +1136,14 @@ internal static partial class CombatSearchCoordinator
                             policy.RoutePolicy)
                                 ? RunCrossFamilyScout
                                 : null,
-                        CanLimitSoloZeroLossRefinement(root, beamPolicy) && root.Enemies.Count == 1
-                            && (initialPotionPolicyOverride == SolverPotionPolicy.Disabled
-                                || beamPolicy.PotionPolicy == SolverPotionPolicy.Disabled)
+                        probePotionFree && root.Enemies.Count == 1
                             ? probeProfile => SolveMember(probeProfile, refinement: true)
                             : null,
-                        RunBaseline)
+                        probePotionFree && root.Enemies.Count > 1 && !beamPolicy.FixedBudget
+                            && !beamPolicy.UseP3CrossFamilyScheduling
+                            ? probeProfile => SolveMember(probeProfile, refinement: true)
+                            : null,
+                        RunBaseline, out confirmedMultiEnemyVictory)
                     : RunBaseline(activeProfile);
 
             try
@@ -1492,7 +1498,7 @@ internal static partial class CombatSearchCoordinator
                         return SelectContinuationSeedIncumbent(passResult);
                     }
                     SolverSearchProfile supplementalProfile = activeProfile;
-                    if (limitedStablePortfolioTail)
+                    if (limitedStablePortfolioTail || confirmedMultiEnemyVictory)
                     {
                         const int stablePortfolioAuditMilliseconds = 10_000;
                         supplementalProfile = activeProfile with
