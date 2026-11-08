@@ -1324,9 +1324,8 @@ internal static class PlayerTurnSetupCoordinator
     private static bool RequiresSolverChoice(Player player)
     {
         int turn = player.PlayerCombatState?.TurnNumber ?? 0;
-        if (player.Relics.Any(relic => !relic.IsMelted
-                && (relic is ToastyMittens
-                    || turn <= 1 && relic is Toolbox or ChoicesParadox or GamblingChip)))
+        if (turn <= 1 && player.Relics.Any(relic => !relic.IsMelted
+                && relic is Toolbox or ChoicesParadox or GamblingChip))
         {
             return true;
         }

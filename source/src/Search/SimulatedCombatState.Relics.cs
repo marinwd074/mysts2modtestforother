@@ -39,7 +39,8 @@ internal sealed partial class SimulatedCombatState
         => ContinueRelicsBeforeHandDraw(simulator, player, choices, RelicsOf(player).ToArray(), GetPlayerTurnNumber(player), 0);
 
     private bool ContinueRelicsBeforeHandDraw(CombatPredictionSimulator simulator, Player player,
-        TurnStartChoiceCursor choices, IReadOnlyList<RelicModel> relics, int turn, int nextIndex)
+        TurnStartChoiceCursor choices, IReadOnlyList<RelicModel> relics, int turn, int nextIndex,
+        BeforeHandDrawRelicStage stage = BeforeHandDrawRelicStage.Start)
     {
         for (int relicIndex = nextIndex; relicIndex < relics.Count; relicIndex++)
         {
@@ -61,6 +62,37 @@ internal sealed partial class SimulatedCombatState
                     state = GetStatefulRelicState(relic);
                     SetStatefulRelicState(relic, state with { Current = state.Current + 1 });
                     break;
+                case ToastyMittens:
+                {
+                    // In 0.107.1 the relic exhausts from the draw pile before the hand draw.
+                    if (stage == BeforeHandDrawRelicStage.Start)
+                    {
+                        simulator.ShuffleIfNecessary(player);
+                        if (simulator.HasPendingChoice)
+                        {
+                            simulator.AppendExecutionContinuation(new BeforeHandDrawRelicFrame(
+                                player, relics, turn, relicIndex, BeforeHandDrawRelicStage.MittensExhaust));
+                            return true;
+                        }
+                    }
+                    IReadOnlyList<PredictedCard> draw = simulator.State.GetPlayerCombatState(player).DrawPile.Cards;
+                    if (stage != BeforeHandDrawRelicStage.MittensStrength && draw.Count > 0)
+                    {
+                        PredictedCard card = turn == 1
+                            ? draw.FirstOrDefault(static card => !card.Preview.Keywords.Contains(CardKeyword.Innate)) ?? draw[0]
+                            : draw[0];
+                        simulator.Exhaust(card);
+                        if (simulator.HasPendingChoice)
+                        {
+                            simulator.AppendExecutionContinuation(new BeforeHandDrawRelicFrame(
+                                player, relics, turn, relicIndex, BeforeHandDrawRelicStage.MittensStrength));
+                            return true;
+                        }
+                    }
+                    Apply<StrengthPower>(player.Creature, relic.DynamicVars.Strength.IntValue, player.Creature);
+                    stage = BeforeHandDrawRelicStage.Start;
+                    break;
+                }
                 case BlessedAntler when turn <= 1:
                     simulator.CreateAndAddGeneratedCardsToCombat<Dazed>(
                         player,

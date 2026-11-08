@@ -140,7 +140,7 @@ internal sealed partial class CombatPredictionSimulator
     /// <summary>
     /// Mirrors <see cref="CardPileCmd.ShuffleIfNecessary"/>.
     /// </summary>
-    private void ShuffleIfNecessary(Player player)
+    internal void ShuffleIfNecessary(Player player)
     {
         var state = State.GetPlayerCombatState(player);
         if (state.DrawPile.IsEmpty && !state.DiscardPile.IsEmpty)

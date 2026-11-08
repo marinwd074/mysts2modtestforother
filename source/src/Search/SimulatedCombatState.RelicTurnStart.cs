@@ -152,22 +152,11 @@ internal sealed partial class SimulatedCombatState
         => ContinueRelicsAfterPlayerTurnStart(simulator, player, choices, RelicsOf(player).ToArray(), GetPlayerTurnNumber(player), 0);
 
     private bool ContinueRelicsAfterPlayerTurnStart(CombatPredictionSimulator simulator, Player player,
-        TurnStartChoiceCursor choices, IReadOnlyList<RelicModel> relics, int turn, int nextIndex, bool applyMittensStrength = false)
+        TurnStartChoiceCursor choices, IReadOnlyList<RelicModel> relics, int turn, int nextIndex)
     {
         for (int relicIndex = nextIndex; relicIndex < relics.Count; relicIndex++)
         {
             RelicModel relic = relics[relicIndex];
-            if (applyMittensStrength)
-            {
-                Apply<StrengthPower>(player.Creature, relic.DynamicVars.Strength.IntValue, player.Creature);
-                applyMittensStrength = false;
-                if (simulator.HasPendingChoice)
-                {
-                    simulator.RejectExecutionContinuation();
-                    return true;
-                }
-                continue;
-            }
             if (relic.IsMelted) continue;
             switch (relic)
             {
@@ -273,25 +262,6 @@ internal sealed partial class SimulatedCombatState
                             ValueProp.Unpowered,
                             player.Creature);
                     }
-                    break;
-                case ToastyMittens:
-                    if (!simulator.State.GetPlayerCombatState(player).Hand.IsEmpty
-                        && !TurnStartChoiceSupport.Resolve(
-                            simulator,
-                            this,
-                            player,
-                            choices,
-                            relic.Id.Entry,
-                            PlanChoiceEffect.Exhaust,
-                            1))
-                    {
-                        simulator.AppendExecutionContinuation(new AfterPlayerTurnStartRelicFrame(player, relics, turn, relicIndex, ApplyMittensStrength: true));
-                        return true;
-                    }
-                    Apply<StrengthPower>(
-                        player.Creature,
-                        relic.DynamicVars.Strength.IntValue,
-                        player.Creature);
                     break;
                 case VexingPuzzlebox when turn <= 1:
                 {
