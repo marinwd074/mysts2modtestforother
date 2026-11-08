@@ -1653,7 +1653,15 @@ internal static partial class CombatSearchCoordinator
         List<BeamWidthPortfolioMemberCost> costs = [];
         BeamWidthPortfolioBaseline baseline = default;
         bool baselineObserved = false;
-        SolverResult? bestPublishedMember = null;
+        SolverResult? bestMember = null;
+        bool limitRefinementAtZeroLoss = policy.UseUpstreamSearchOptimizations
+            && policy.RoutePolicy == SearchRoutePolicy.SinglePlayerFullRoute
+            && root.PlayerCount == 1 && root.StartTurnNumber == 1 && !root.IsActEndingBoss
+            && !policy.IncludeTurnSetup && !policy.CurrentTurnOnly
+            && policy.BeamWidthPortfolioWidths is not { Count: > 0 }
+            && policy.StopAtAcceptableBattleHpLoss && policy.AcceptableBattleHpLoss == 0
+            && !policy.EffectiveHasGrowthTargets && policy.RelicTargets.Count == 0
+            && policy.TheftPolicy == null && !policy.PotionStrategy.HasForcedDirectives;
         long expandedByMembers = 0;
 
         long RemainingMilliseconds()
@@ -1695,21 +1703,24 @@ internal static partial class CombatSearchCoordinator
                     effectiveProfile.BeamWidth);
                 baselineObserved = true;
                 telemetry.RecordFirstRoutePublished(passClock.Elapsed.TotalMilliseconds);
-                bestPublishedMember = memberResult;
+                bestMember = memberResult;
                 publishBaseline?.Invoke(memberResult);
             }
-            else if (publishBaseline != null
-                     && bestPublishedMember != null
-                     && IsBetterPotionPolicyResult(root, policy, memberResult, bestPublishedMember))
+            else if ((publishBaseline != null || limitRefinementAtZeroLoss)
+                     && bestMember != null
+                     && IsBetterPotionPolicyResult(root, policy, memberResult, bestMember))
             {
-                bestPublishedMember = memberResult;
-                publishBaseline(memberResult);
-                policy.Diagnostics.Info(
-                    $"[CombatSolver/Test] BEAM_WIDTH_PORTFOLIO_EARLY_IMPROVEMENT " +
-                    $"beam={effectiveProfile.BeamWidth} " +
-                    $"second_rank_band={effectiveProfile.SecondRankBand} " +
-                    $"base_score_only={effectiveProfile.BaseScoreOnly} " +
-                    $"elapsed_ms={passClock.ElapsedMilliseconds}");
+                bestMember = memberResult;
+                if (publishBaseline != null)
+                {
+                    publishBaseline(memberResult);
+                    policy.Diagnostics.Info(
+                        $"[CombatSolver/Test] BEAM_WIDTH_PORTFOLIO_EARLY_IMPROVEMENT " +
+                        $"beam={effectiveProfile.BeamWidth} " +
+                        $"second_rank_band={effectiveProfile.SecondRankBand} " +
+                        $"base_score_only={effectiveProfile.BaseScoreOnly} " +
+                        $"elapsed_ms={passClock.ElapsedMilliseconds}");
+                }
             }
             return new BeamWidthPortfolioRun<SolverResult>(
                 memberResult,
@@ -1726,16 +1737,40 @@ internal static partial class CombatSearchCoordinator
         }
 
         string? RejectMember(BeamWidthPortfolioMemberSpec member)
-            => baselineObserved
-                ? BeamWidthPortfolioGate.RejectRefinement(
+        {
+            if (!baselineObserved)
+                return null;
+
+            long remainingMilliseconds = RemainingMilliseconds();
+            long remainingMemoryBytes = policy.MemoryPressureSignal.RemainingBytes;
+            string? RejectWidth(int width)
+                => BeamWidthPortfolioGate.RejectRefinement(
                     baseline,
-                    member.BeamWidth,
+                    width,
                     profile.MaxExpandedNodes - expandedByMembers,
-                    RemainingMilliseconds(),
+                    remainingMilliseconds,
                     profile.SoftTimeBudgetMilliseconds,
-                    policy.MemoryPressureSignal.RemainingBytes,
-                    policy.UseUpstreamSearchOptimizations && policy.MemoryPressureSignal.HasReclaimCheckpoint)
-                : null;
+                    remainingMemoryBytes,
+                    policy.UseUpstreamSearchOptimizations && policy.MemoryPressureSignal.HasReclaimCheckpoint);
+
+            string? rejection = RejectWidth(member.BeamWidth);
+            if (rejection != null || !limitRefinementAtZeroLoss
+                || bestMember is not { ProjectedBattleHpLost: 0, PotionCount: 0,
+                    ResultScope: SolverResultScope.SearchCompletion, BoundaryReason: SearchBoundaryReason.None } winner
+                || winner.Snapshot.HasRisk || !HasReachedAcceptableBattleHpLoss(policy, winner))
+            {
+                return rejection;
+            }
+
+            // Keep the ordinary wider beam to improve the victory turn. If it cannot
+            // run, the narrower beam can still use the available refinement budget.
+            if (member.BaseScoreOnly || member.BeamWidth < profile.BeamWidth
+                && RejectWidth(BeamWidthPortfolio.ScaledWidth(profile.BeamWidth, BeamWidthPortfolio.WideRefinementRatio)) == null)
+            {
+                return BeamWidthPortfolioGate.SkippedZeroLossTargetReached;
+            }
+            return null;
+        }
 
         BeamWidthPortfolioOutcome<SolverResult> outcome = policy.UseBeamWidthPortfolio
             ? BeamWidthPortfolio.Run(

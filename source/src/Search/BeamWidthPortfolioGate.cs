@@ -36,6 +36,8 @@ internal static class BeamWidthPortfolioGate
     /// <summary>基线已是证明最优，精炼不可能更好。</summary>
     internal const string SkippedBaselineProvenZeroDamage = "BaselineProvenZeroDamage";
 
+    internal const string SkippedZeroLossTargetReached = "ZeroLossTargetReached";
+
     /// <summary>基线本身就吃掉了超过 1/4 的时间预算，精炼会把总耗时推过预算。</summary>
     internal const string SkippedBaselineTimeShareExceeded = "BaselineTimeShareExceeded";
 
