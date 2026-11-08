@@ -1011,6 +1011,7 @@ internal static partial class CombatSearchCoordinator
             IReadOnlyList<PlanAction> r1ValidatedEnumerationHints = [];
             SolverResult? earlySmartPotionBaseline = null;
             SolverResult? earlySmartPotionScout = null;
+            bool limitedStablePortfolioTail = false;
 
             bool HasOptionalSmartPotionCandidate()
                 => initialPotionPolicyOverride == SolverPotionPolicy.Disabled
@@ -1106,7 +1107,7 @@ internal static partial class CombatSearchCoordinator
                     ReferenceEquals(baselineProfile, activeProfile)
                         ? activeClock
                         : Stopwatch.StartNew(),
-                    SolveMember, publishBaseline);
+                    SolveMember, publishBaseline, out limitedStablePortfolioTail);
             SolverResult? RunCrossFamilyScout(
                 SolverResult provisionalPotionFree,
                 SolverSearchProfile scoutProfile)
@@ -1131,6 +1132,11 @@ internal static partial class CombatSearchCoordinator
                             policy.RoutePolicy)
                                 ? RunCrossFamilyScout
                                 : null,
+                        CanLimitSoloZeroLossRefinement(root, beamPolicy) && root.Enemies.Count == 1
+                            && (initialPotionPolicyOverride == SolverPotionPolicy.Disabled
+                                || beamPolicy.PotionPolicy == SolverPotionPolicy.Disabled)
+                            ? probeProfile => SolveMember(probeProfile, refinement: true)
+                            : null,
                         RunBaseline)
                     : RunBaseline(activeProfile);
 
@@ -1486,6 +1492,18 @@ internal static partial class CombatSearchCoordinator
                         return SelectContinuationSeedIncumbent(passResult);
                     }
                     SolverSearchProfile supplementalProfile = activeProfile;
+                    if (limitedStablePortfolioTail)
+                    {
+                        const int stablePortfolioAuditMilliseconds = 10_000;
+                        supplementalProfile = activeProfile with
+                        {
+                            SoftTimeBudgetMilliseconds = (int)Math.Min(activeProfile.SoftTimeBudgetMilliseconds,
+                                activeClock.ElapsedMilliseconds + stablePortfolioAuditMilliseconds),
+                        };
+                        policy.Diagnostics.Info($"[CombatSolver/Test] SOLO_STABLE_PORTFOLIO_AUDIT " +
+                            $"elapsed_ms={activeClock.ElapsedMilliseconds} " +
+                            $"deadline_ms={supplementalProfile.SoftTimeBudgetMilliseconds}");
+                    }
                     bool e4SmartPotionBudgetActive = false;
                     if (policy.RoutePolicy == SearchRoutePolicy.MultiplayerSinglePlayerCore)
                     {
@@ -1644,7 +1662,8 @@ internal static partial class CombatSearchCoordinator
         SolverSearchProfile profile,
         Stopwatch passClock,
         Func<SolverSearchProfile, bool, SolverResult> solveMember,
-        Action<SolverResult>? publishBaseline)
+        Action<SolverResult>? publishBaseline,
+        out bool limitedStablePortfolioTail)
     {
         SearchRequestWorkTotals totals = policy.RequestWorkTotals
             ?? throw new InvalidOperationException("Beam 宽度组合需要请求级工作量记录。");
@@ -1654,14 +1673,9 @@ internal static partial class CombatSearchCoordinator
         BeamWidthPortfolioBaseline baseline = default;
         bool baselineObserved = false;
         SolverResult? bestMember = null;
-        bool limitRefinementAtZeroLoss = policy.UseUpstreamSearchOptimizations
-            && policy.RoutePolicy == SearchRoutePolicy.SinglePlayerFullRoute
-            && root.PlayerCount == 1 && root.StartTurnNumber == 1 && !root.IsActEndingBoss
-            && !policy.IncludeTurnSetup && !policy.CurrentTurnOnly
-            && policy.BeamWidthPortfolioWidths is not { Count: > 0 }
-            && policy.StopAtAcceptableBattleHpLoss && policy.AcceptableBattleHpLoss == 0
-            && !policy.EffectiveHasGrowthTargets && policy.RelicTargets.Count == 0
-            && policy.TheftPolicy == null && !policy.PotionStrategy.HasForcedDirectives;
+        bool limitRefinementAtZeroLoss = CanLimitSoloZeroLossRefinement(root, policy);
+        bool limitStableMultiEnemyTail = limitRefinementAtZeroLoss && root.Enemies.Count > 1;
+        long? stableTailDeadline = null;
         long expandedByMembers = 0;
 
         long RemainingMilliseconds()
@@ -1675,7 +1689,8 @@ internal static partial class CombatSearchCoordinator
                 ? memberProfile with
                 {
                     SoftTimeBudgetMilliseconds = (int)Math.Clamp(
-                        RemainingMilliseconds(), 1, memberProfile.SoftTimeBudgetMilliseconds),
+                        Math.Min(RemainingMilliseconds(), (stableTailDeadline ?? long.MaxValue) - passClock.ElapsedMilliseconds),
+                        1, memberProfile.SoftTimeBudgetMilliseconds),
                 }
                 : memberProfile;
             SearchRequestWorkSnapshot before = totals.Snapshot();
@@ -1692,6 +1707,20 @@ internal static partial class CombatSearchCoordinator
             costs.Add(new BeamWidthPortfolioMemberCost(memberElapsed, memberAllocated, managedHeapAfter));
             bool won = IsCompleteVictory(memberResult);
             bool terminal = won || memberResult.Snapshot.PlayerDead;
+            if (limitStableMultiEnemyTail && baselineObserved && memberProfile.BeamWidth < profile.BeamWidth
+                && bestMember is { ProjectedBattleHpLost: > 0 } incumbent
+                && IsCleanPotionFreeVictory(incumbent) && IsCleanPotionFreeVictory(memberResult)
+                && memberResult.ProjectedBattleHpLost == incumbent.ProjectedBattleHpLost
+                && StrategicHpDeficit(root, policy, memberResult) == StrategicHpDeficit(root, policy, incumbent))
+            {
+                // Preserve the best complete line and give the remaining scoring variants
+                // one bounded opportunity to improve it before the separate potion audit.
+                const int maximumStableRefinementMilliseconds = 8_000;
+                int allowance = (int)Math.Clamp(baseline.ElapsedMilliseconds / 2, 1_000, maximumStableRefinementMilliseconds);
+                stableTailDeadline = passClock.ElapsedMilliseconds + allowance;
+                policy.Diagnostics.Info($"[CombatSolver/Test] SOLO_STABLE_PORTFOLIO_TAIL " +
+                    $"loss={memberResult.ProjectedBattleHpLost} allowance_ms={allowance}");
+            }
             if (!baselineObserved)
             {
                 baseline = new BeamWidthPortfolioBaseline(
@@ -1740,6 +1769,8 @@ internal static partial class CombatSearchCoordinator
         {
             if (!baselineObserved)
                 return null;
+            if (stableTailDeadline <= passClock.ElapsedMilliseconds)
+                return BeamWidthPortfolioGate.SkippedStableQualityBudgetReached;
 
             long remainingMilliseconds = RemainingMilliseconds();
             long remainingMemoryBytes = policy.MemoryPressureSignal.RemainingBytes;
@@ -1755,9 +1786,7 @@ internal static partial class CombatSearchCoordinator
 
             string? rejection = RejectWidth(member.BeamWidth);
             if (rejection != null || !limitRefinementAtZeroLoss
-                || bestMember is not { ProjectedBattleHpLost: 0, PotionCount: 0,
-                    ResultScope: SolverResultScope.SearchCompletion, BoundaryReason: SearchBoundaryReason.None } winner
-                || winner.Snapshot.HasRisk || !HasReachedAcceptableBattleHpLoss(policy, winner))
+                || !IsCleanZeroLossTarget(policy, bestMember))
             {
                 return rejection;
             }
@@ -1782,6 +1811,7 @@ internal static partial class CombatSearchCoordinator
                 RejectMember,
                 policy.Diagnostics.Info)
             : SingleMemberOutcome(profile, RunMember);
+        limitedStablePortfolioTail = stableTailDeadline.HasValue;
         RecordPortfolioMembers(policy, telemetry, outcome, costs);
         return outcome.Selected;
     }

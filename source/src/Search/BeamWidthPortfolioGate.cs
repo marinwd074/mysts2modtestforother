@@ -37,6 +37,7 @@ internal static class BeamWidthPortfolioGate
     internal const string SkippedBaselineProvenZeroDamage = "BaselineProvenZeroDamage";
 
     internal const string SkippedZeroLossTargetReached = "ZeroLossTargetReached";
+    internal const string SkippedStableQualityBudgetReached = "StableQualityBudgetReached";
 
     /// <summary>基线本身就吃掉了超过 1/4 的时间预算，精炼会把总耗时推过预算。</summary>
     internal const string SkippedBaselineTimeShareExceeded = "BaselineTimeShareExceeded";
