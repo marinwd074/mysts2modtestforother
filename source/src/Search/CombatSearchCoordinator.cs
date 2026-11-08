@@ -1012,7 +1012,7 @@ internal static partial class CombatSearchCoordinator
             SolverResult? earlySmartPotionBaseline = null;
             SolverResult? earlySmartPotionScout = null;
             bool limitedStablePortfolioTail = false;
-            bool confirmedMultiEnemyVictory = false;
+            bool confirmedProbeVictory = false;
             bool probePotionFree = CanLimitSoloZeroLossRefinement(root, beamPolicy)
                 && (initialPotionPolicyOverride == SolverPotionPolicy.Disabled
                     || beamPolicy.PotionPolicy == SolverPotionPolicy.Disabled);
@@ -1139,11 +1139,11 @@ internal static partial class CombatSearchCoordinator
                         probePotionFree && root.Enemies.Count == 1
                             ? probeProfile => SolveMember(probeProfile, refinement: true)
                             : null,
-                        probePotionFree && root.Enemies.Count > 1 && !beamPolicy.FixedBudget
+                        probePotionFree && !beamPolicy.FixedBudget
                             && !beamPolicy.UseP3CrossFamilyScheduling
                             ? probeProfile => SolveMember(probeProfile, refinement: true)
                             : null,
-                        RunBaseline, out confirmedMultiEnemyVictory)
+                        RunBaseline, out confirmedProbeVictory)
                     : RunBaseline(activeProfile);
 
             try
@@ -1498,10 +1498,10 @@ internal static partial class CombatSearchCoordinator
                         return SelectContinuationSeedIncumbent(passResult);
                     }
                     SolverSearchProfile supplementalProfile = activeProfile;
-                    if (limitedStablePortfolioTail || confirmedMultiEnemyVictory)
+                    if (limitedStablePortfolioTail || confirmedProbeVictory)
                     {
-                        long auditDeadline = activeClock.ElapsedMilliseconds + (confirmedMultiEnemyVictory ? 5_000 : 10_000);
-                        if (confirmedMultiEnemyVictory)
+                        long auditDeadline = activeClock.ElapsedMilliseconds + (confirmedProbeVictory ? 5_000 : 10_000);
+                        if (confirmedProbeVictory)
                             auditDeadline = Math.Min(auditDeadline, 29_000);
                         supplementalProfile = activeProfile with
                         {
