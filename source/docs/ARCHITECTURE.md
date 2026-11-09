@@ -64,6 +64,8 @@ Harmony 参数形状的条件编译位于回合补丁入口；这是当前兼容
 
 `CombatSearchCoordinator` 主文件拥有请求、主搜索、portfolio 与工作账本；`CombatSearchCoordinator.Audits.cs` 归集补充成长/药水审计、Smart 梯度及审计内存边界；`CombatSearchCoordinator.ResultPolicy.cs` 归集结果比较、机会成本与质量下界；`CombatSearchCoordinator.PlanRefresh.cs` 在同一请求内编排多人同回合恢复和失败后的剩余预算。四者仍是同一个静态 partial 类型。
 
+补充审计将请求取消与预算截止分别传给 Beam。请求取消释放搜索状态。预算截止停止分支扩展，已提交且仍可验证的终局胜利沿用最终排序与重放物化。Smart 的顺序和并行梯度共用药水成本与路线质量审核，开局能力和强制用药审计通过阶段对象保留已入选路线。没有合格胜利时沿用此前结果。
+
 `MultiplayerPlanRefresher` 拥有冻结根上的保留前缀重放、候选评分和结果物化；不读取 live 状态、不发布 UI、不授予执行权限。`SolverController.MultiplayerPlanRefresh` 在普通搜索的原生动作/根捕获 barrier 后校验旧根与当前回合，深复制候选及选择集合到 `MultiplayerPlanRefreshRequest`。后台计算沿用 `SolverSearchSession`、GC scope、取消和完成回调；主线程不再同步调用刷新求解。保留候选不触发同回合“已有结果”去重，也不获得显式路线采用标记。
 
 Coordinator 先从新根重放当前完整路线，再在同一份额内重放最多两条完整备选，按既有新根质量规则选择；当前路线仍合法也可被更优备选替换，某条失败不取消其他候选。同回合未获合格完整路线才进入原有三组两动作前缀的物化回退；恢复份额仍为 192 节点/60ms，当前、备选、前缀和物化共用。跨回合完整路线共同使用原独立 replay 的 600ms 软上限，失败后直接进入既有 R1/主搜索，不追加同回合前缀阶段。原生转移及收尾可能超出软时间。`RecoveryBudget` 覆盖恢复、失败后的主搜索和审计。R1 保留至多 1/20 的探测份额，后续搜索只获得剩余 profile；无合格结果且预算耗尽时不再开始普通搜索。当前回合限定、回合准备以及实验 Team/Forecast/Scenario 策略沿用各自入口，不冒充已纳入本次恢复。

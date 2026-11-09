@@ -13,7 +13,9 @@
 - 生产 MultiplayerOnly 牌保留真实牌堆占位与抽牌距离。围攻和夹击已验证仅供建议的内部实验，自动执行拒绝。
 - 多人 Safe Execute 只部署本地玩家动作；队友观察不会获得部署权限。
 
-本地代码层验证入口为 `tools/run-offline-validation.ps1 -GameDir <匹配的游戏安装目录>`：使用外部 0.107.1 DLL，不启动实际游戏，不要求另复制 game-body 二进制。入口包含静态门禁、Release、L1/portfolio 合同和 17 个 pinned 模式，并输出构建摘要与未覆盖边界。Coordinator 的补充审计与质量排序已分别归入 `Audits` / `ResultPolicy` partial，方法内容与预算不变。该入口的 PASS 不关闭下文 current-build Host/Client / UI 未验证项，权限不足导致的测试子项跳过会保留在摘要中。
+本地代码层验证入口为 `tools/run-offline-validation.ps1 -GameDir <匹配的游戏安装目录>`：使用外部 0.107.1 DLL，不启动实际游戏，不要求另复制 game-body 二进制。入口包含静态门禁、Release、L1/portfolio 合同和 17 个 pinned 模式，并输出构建摘要与未覆盖边界。该入口的 PASS 不关闭下文 current-build Host/Client / UI 未验证项，权限不足导致的测试子项跳过会保留在摘要中。
+
+补充审计的软截止会收尾已提交的终局胜利，沿用完整路线物化与原有选择规则。强制用药和开局能力阶段保留已入选结果，Smart 顺序与并行共用候选审核。`entropic-cost` 固定在提交胜利后触发截止，核对零额外展开、终态独立重放与取消时释放模拟器。
 
 多人纯代码验证新增 `MultiplayerInterleavingChecks`（L1 默认运行）：在确定性时间下遍历 10,493 个因果顺序，覆盖最多三个远端观察更新与稳定读/确认交错、重复观察、取消后回调、回合/路线/世界身份和一次性 EndTurn。直接链接生产观察与授权实现；失败用 `--replay <id>` 重放。生产观察器仍为主线程入口，200ms 窗口不变。该测试没有启动游戏、网络或完整 Controller，不替代真实 ENet 和原生动作归因。上游 archive/multiplayer 的 ENet 脚本要求 0.111.0，当前只作为后续适配参考。
 

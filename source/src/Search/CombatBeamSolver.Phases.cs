@@ -67,18 +67,24 @@ internal sealed partial class CombatBeamSolver
     private bool _executionSessionCreated;
 
     public SolverResult Solve()
+        => Solve(softDeadline: default)
+            ?? throw new InvalidOperationException("搜索成员已完成但没有结果。");
+
+    internal SolverResult? Solve(CancellationToken softDeadline)
     {
         using SearchMemberExecutionSession session = CreateExecutionSession();
         while (true)
         {
             SearchStepResult step = session.Step(
                 SearchWorkAllowance.Unlimited,
-                cancellationToken);
+                cancellationToken, softDeadline);
             if (step.Status == SearchStepStatus.Completed)
             {
                 return session.Result
                     ?? throw new InvalidOperationException("搜索成员已完成但没有结果。");
             }
+            if (step.Status == SearchStepStatus.BudgetExhausted && softDeadline.IsCancellationRequested)
+                return null;
             if (step.Status == SearchStepStatus.Canceled)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -157,6 +163,11 @@ internal sealed partial class CombatBeamSolver
     {
         SearchMemberExecutionState member = execution;
         cancellationToken.ThrowIfCancellationRequested();
+        if (member.SoftDeadlineReached)
+        {
+            member.StoppedAtSoftDeadline = true;
+            yield break;
+        }
         if (policy.VerifyIncrementalSearch)
             VerifyResumableParentExpansionSessionForTesting();
         if (policy.Diagnostics.PathObserver != null)
@@ -1946,6 +1957,8 @@ internal sealed partial class CombatBeamSolver
             && !member.TimeBudgetReached)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (member.SoftDeadlineReached)
+                break;
             member.Active = member.Frontier.Where(node => !node.IsTerminal).ToList();
             foreach (SearchNode terminal in member.Frontier.Where(node => node.IsTerminal))
                 member.Completed.Add(terminal);
@@ -1988,6 +2001,8 @@ internal sealed partial class CombatBeamSolver
                  member.PlayDepth++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (member.SoftDeadlineReached)
+                    goto FinishExpansion;
                 BeginCyclePlanningLayer();
                 SearchTakeoverRequest? takeover = _interaction?.CurrentTakeoverRequest;
                 if (takeover?.Kind == SearchTakeoverKind.AdoptRoute
@@ -2186,6 +2201,8 @@ internal sealed partial class CombatBeamSolver
 
                 void ReclaimAfterCommittedWork(string reason)
                 {
+                    if (member.SoftDeadlineReached)
+                        return;
                     SearchMemoryPressureSignal signal = policy.MemoryPressureSignal;
                     bool hasMoreParents = member.ActiveIndex < member.Active.Count
                         && !member.AcceptableBattleHpLossReached
@@ -2245,6 +2262,7 @@ internal sealed partial class CombatBeamSolver
                 {
                     while (member.ActiveIndex < member.Active.Count
                            && !member.AcceptableBattleHpLossReached
+                           && !member.SoftDeadlineReached
                            && HasExpandedNodeBudgetRemaining())
                     {
                         member.StepCancellationToken.ThrowIfCancellationRequested();
@@ -2264,6 +2282,7 @@ internal sealed partial class CombatBeamSolver
                 {
                     while (member.ActiveIndex < member.Active.Count
                            && !member.AcceptableBattleHpLossReached
+                           && !member.SoftDeadlineReached
                            && HasExpandedNodeBudgetRemaining())
                     {
                         cancellationToken.ThrowIfCancellationRequested();
@@ -2449,6 +2468,8 @@ internal sealed partial class CombatBeamSolver
                         }
                     }
                 }
+                if (member.SoftDeadlineReached)
+                    goto FinishExpansion;
                 for (; member.ActiveIndex < member.Active.Count; member.ActiveIndex++)
                 {
                     if (member.AcceptableBattleHpLossReached)
@@ -2677,6 +2698,8 @@ internal sealed partial class CombatBeamSolver
             }
         }
 
+    FinishExpansion:
+        cancellationToken.ThrowIfCancellationRequested();
         if (member.RequestedCurrentTurnAdoptionSeed != null)
         {
             foreach (SearchNode candidate in member.Completed)
@@ -2729,7 +2752,22 @@ internal sealed partial class CombatBeamSolver
                 ?? (retainCrossTurnTakeoverRoute
                     ? member.CurrentTurnPreviewNode
                     : member.CurrentTurnCandidateNode);
-        if (member.AdoptionReached && adoptedNode != null)
+        if (member.SoftDeadlineReached && !member.AdoptionReached)
+        {
+            // Only committed terminal nodes may survive a soft deadline. The usual
+            // final review and replay still run, without opening a new frontier.
+            member.StoppedAtSoftDeadline = true;
+            member.TimeBudgetReached = true;
+            finalPool = member.Completed.Concat(member.Ended)
+                .Where(node => node.Snapshot.HasSimulator && !node.Snapshot.HasRisk
+                    && node.Snapshot.TerminalStamp is { Outcome: CombatTerminalOutcome.Victory }
+                    && IsEligibleCompleteVictory(node))
+                .Distinct<SearchNode>(ReferenceEqualityComparer.Instance)
+                .ToList();
+            if (finalPool.Count == 0)
+                yield break;
+        }
+        else if (member.AdoptionReached && adoptedNode != null)
         {
             SearchNode adopted = RefreshReleasedFallback(adoptedNode);
             List<SearchNode> remaining = [.. member.Completed, .. member.Frontier];
@@ -2754,19 +2792,20 @@ internal sealed partial class CombatBeamSolver
                 ? [RefreshReleasedFallback(member.Fallback)]
                 : [.. member.Completed, .. member.Frontier];
         }
-        if (!member.AdoptionReached
+        if (!member.AdoptionReached && !member.StoppedAtSoftDeadline
             && !finalPool.Any(node => ExplicitPotionUseCount(node) == 0)
             && member.PotionFreeBoundaryFallback != null)
         {
             finalPool.Add(RefreshReleasedFallback(member.PotionFreeBoundaryFallback));
         }
-        if (!member.AdoptionReached
+        if (!member.AdoptionReached && !member.StoppedAtSoftDeadline
             && !finalPool.Any(node => ExplicitPotionUseCount(node) > 0)
             && member.PotionBoundaryFallback != null)
         {
             finalPool.Add(RefreshReleasedFallback(member.PotionBoundaryFallback));
         }
-        if (member.AcceptableBattleHpLossReached)
+        if (member.AcceptableBattleHpLossReached
+            && (!member.StoppedAtSoftDeadline || finalPool.Any(MeetsHpTarget)))
         {
             List<SearchNode> reached = finalPool.Where(MeetsHpTarget).ToList();
             ReleaseDroppedSnapshots(finalPool, reached);
@@ -2774,9 +2813,10 @@ internal sealed partial class CombatBeamSolver
         }
         try
         {
-            RouteEvaluationWindow? comparisonWindow = FrontierEvaluationWindow(member.Frontier)
-                ?? FrontierEvaluationWindow(finalPool);
-            if (!member.AdoptionReached)
+            RouteEvaluationWindow? comparisonWindow = member.StoppedAtSoftDeadline
+                ? FrontierEvaluationWindow(finalPool)
+                : FrontierEvaluationWindow(member.Frontier) ?? FrontierEvaluationWindow(finalPool);
+            if (!member.AdoptionReached && !member.StoppedAtSoftDeadline)
             {
                 List<SearchNode> completedWindows = CompleteEvaluationWindows(finalPool, stopwatch, comparisonWindow);
                 ReleaseDroppedSnapshots(finalPool, completedWindows);
@@ -2814,7 +2854,7 @@ internal sealed partial class CombatBeamSolver
                 reevaluateScenarios: !member.TimeBudgetReached,
                 allowScenarioRerank: !member.TimeBudgetReached,
                 comparisonWindow: comparisonWindow,
-                allowWinTempo: !member.AdoptionReached && CanExperimentWithWinTempo());
+                allowWinTempo: !member.AdoptionReached && !member.StoppedAtSoftDeadline && CanExperimentWithWinTempo());
 
             RecordCandidateEvaluated(ordering.Candidate.Node, finalEvaluationContextId);
             RecordCandidateSelected(ordering.Candidate.Node, finalEvaluationContextId);
@@ -2836,6 +2876,8 @@ internal sealed partial class CombatBeamSolver
                 finalEvaluationContextId);
             foreach (SearchNode candidate in finalCandidates)
                 candidate.Snapshot.ReleaseSimulator();
+            if (member.StoppedAtSoftDeadline)
+                cancellationToken.ThrowIfCancellationRequested();
             if (policy.OptimizationSession is { } optimization && optimization.Matches(root, policy))
                 optimization.Observe(result, policy, ActEndingBossPolicy.StrategicHpDeficit(
                     result.Snapshot.CumulativePlayerHpLost,
@@ -3122,6 +3164,9 @@ internal sealed partial class CombatBeamSolver
         public SolverResult? Result { get; set; }
         public SearchMemberExecutionPhase Phase { get; set; } = SearchMemberExecutionPhase.Created;
         public CancellationToken StepCancellationToken { get; set; }
+        private CancellationToken StepSoftDeadline { get; set; }
+        public bool SoftDeadlineReached => StepSoftDeadline.IsCancellationRequested;
+        public bool StoppedAtSoftDeadline { get; set; }
         public int RemainingParentCommitsBeforeYield { get; private set; } = int.MaxValue;
         public long MaxTransitionsBeforeYield { get; private set; } = long.MaxValue;
         public long TransitionCountAtStepStart { get; private set; }
@@ -3131,11 +3176,13 @@ internal sealed partial class CombatBeamSolver
         public void BeginStep(
             SearchWorkAllowance allowance,
             CancellationToken token,
+            CancellationToken softDeadline,
             long currentTransitionCount)
         {
             if (currentTransitionCount < 0)
                 throw new ArgumentOutOfRangeException(nameof(currentTransitionCount));
             StepCancellationToken = token;
+            StepSoftDeadline = softDeadline;
             RemainingParentCommitsBeforeYield = allowance.MaxParentCommits;
             MaxTransitionsBeforeYield = allowance.MaxTransitions;
             TransitionCountAtStepStart = currentTransitionCount;
@@ -3295,17 +3342,21 @@ internal sealed partial class CombatBeamSolver
         internal SolverInterimResult? CurrentBestResultForScheduling => _state.CurrentBestResult;
 
         public SearchStepResult Step(SearchWorkAllowance allowance, CancellationToken token)
+            => Step(allowance, token, softDeadline: default);
+
+        internal SearchStepResult Step(
+            SearchWorkAllowance allowance, CancellationToken token, CancellationToken softDeadline)
         {
             if (_disposed)
                 throw new ObjectDisposedException(nameof(SearchMemberExecutionSession));
             if (_state.Phase == SearchMemberExecutionPhase.Completed)
             {
                 return new SearchStepResult(
-                    SearchStepStatus.Completed,
+                    _state.Result != null ? SearchStepStatus.Completed : SearchStepStatus.BudgetExhausted,
                     0,
                     _state.TotalCommittedParents);
             }
-            if (token.IsCancellationRequested)
+            if (token.IsCancellationRequested || _ownerCancellationToken.IsCancellationRequested)
             {
                 Cancel();
                 return new SearchStepResult(
@@ -3313,10 +3364,10 @@ internal sealed partial class CombatBeamSolver
                     0,
                     _state.TotalCommittedParents);
             }
-
             _state.BeginStep(
                 allowance,
                 token,
+                softDeadline,
                 _owner._run.TransitionCount);
             try
             {
@@ -3331,13 +3382,15 @@ internal sealed partial class CombatBeamSolver
                 }
                 if (!yielded)
                 {
-                    if (_state.Result == null)
+                    if (_state.Result == null && !_state.StoppedAtSoftDeadline)
                         throw new InvalidOperationException("搜索成员结束时没有生成最终结果。");
                     _state.Phase = SearchMemberExecutionPhase.Completed;
                     _steps.Dispose();
+                    if (_state.StoppedAtSoftDeadline)
+                        _state.ReleaseLiveSimulators();
                     FinalizeLifecycle();
                     return new SearchStepResult(
-                        SearchStepStatus.Completed,
+                        _state.Result != null ? SearchStepStatus.Completed : SearchStepStatus.BudgetExhausted,
                         _state.CommittedParentsInCurrentStep,
                         _state.TotalCommittedParents);
                 }

@@ -371,6 +371,7 @@ internal static class EntropicCostChecks
         CombatRootSnapshot root = CombatRootSnapshot.Capture(live);
         Check(root.SearchablePotions.Single().StrategicHpCost == 0, "The renewable potion must have zero cost");
         string liveBefore = ContinuationStamp.CaptureLive(live).StateText;
+        CheckAuditMemberDeadline(root, names, damage, policy);
         foreach (bool scheduled in new[] { false, true })
         {
             List<string> diagnostics = [];
@@ -411,6 +412,76 @@ internal static class EntropicCostChecks
             finally { replay.ReleaseSimulator(); }
         }
         Check(liveBefore == ContinuationStamp.CaptureLive(live).StateText, "Smart selection changed live combat");
+    }
+
+    private static void CheckAuditMemberDeadline(CombatRootSnapshot root, SolverDisplayNames names,
+        BattleDamageSnapshot damage, SearchPolicySnapshot policy)
+    {
+        SearchPolicySnapshot audit = policy with
+        {
+            PotionStrategy = new(SolverPotionPolicy.Smart, []),
+            StopAtAcceptableBattleHpLoss = false,
+            CaptureFinalStateForDiagnostics = true,
+        };
+
+        CombatBeamSolver CreateSolver(CancellationToken cancellation) => new(root, names, damage, audit,
+            cancellation, searchProfile: audit.Profile, potionPolicyOverride: SolverPotionPolicy.RequireAtLeastOne,
+            maximumPotionUses: 1, minimumPotionUses: 1);
+
+        using (var expired = new CancellationTokenSource())
+        using (var session = CreateSolver(default).CreateExecutionSession())
+        {
+            expired.Cancel();
+            SearchStepResult step = session.Step(SearchWorkAllowance.SingleParent, default, expired.Token);
+            Check(step.Status == SearchStepStatus.BudgetExhausted && session.Result == null
+                && session.ExpandedNodesForScheduling == 0 && !session.HasLiveSimulatorsForTesting,
+                "An expired audit initialized work without a committed victory");
+        }
+
+        foreach (bool cancelRequest in new[] { false, true })
+        {
+            using var request = new CancellationTokenSource();
+            using var deadline = new CancellationTokenSource();
+            using var session = CreateSolver(request.Token).CreateExecutionSession();
+            SearchStepResult step;
+            do
+            {
+                step = session.Step(SearchWorkAllowance.SingleParent, request.Token, deadline.Token);
+            }
+            while (step.Status == SearchStepStatus.Yielded && session.CurrentBestResultForScheduling is not { Won: true });
+            Check(step.Status == SearchStepStatus.Yielded && session.CurrentBestResultForScheduling is { Won: true },
+                "The audit fixture did not yield after committing a victory");
+
+            long expanded = session.ExpandedNodesForScheduling;
+            long transitions = session.TransitionCountForScheduling;
+            if (cancelRequest) request.Cancel();
+            deadline.Cancel();
+            step = session.Step(SearchWorkAllowance.SingleParent, request.Token, deadline.Token);
+            Check(step.CommittedParents == 0 && session.ExpandedNodesForScheduling == expanded
+                && session.TransitionCountForScheduling == transitions && !session.HasLiveSimulatorsForTesting,
+                "Audit shutdown expanded more work or retained live simulators");
+            if (cancelRequest)
+            {
+                Check(step.Status == SearchStepStatus.Canceled && session.Result == null,
+                    "Request cancellation published a route at the audit deadline");
+                continue;
+            }
+
+            SolverResult? result = session.Result;
+            Check(step.Status == SearchStepStatus.Completed && result is { Snapshot.AllEnemiesDead: true,
+                ExplicitPotionCount: 1, BoundaryReason: SearchBoundaryReason.TimeLimit },
+                "The deadline discarded a committed potion victory");
+            CombatBeamSolver verifier = CreateSolver(default);
+            SimulationSnapshot replay = verifier.ReplayDiagnosticPrefix(result!.BestNode.Actions);
+            try
+            {
+                Check(replay.AllEnemiesDead && verifier.CaptureDiagnosticContinuation(replay) == result.PredictedFinalState,
+                    "The deadline-selected victory did not replay to the same terminal state");
+            }
+            finally { replay.ReleaseSimulator(); }
+            Console.WriteLine($"AUDIT_DEADLINE_REPLAY expanded={expanded} transitions={transitions} "
+                + $"turn={result.CombatEndedTurn} loss={result.ProjectedBattleHpLost} potions={result.ExplicitPotionCount}");
+        }
     }
 
     private static void CheckCrossTurnAccounting(CombatRootSnapshot root, SolverDisplayNames names,

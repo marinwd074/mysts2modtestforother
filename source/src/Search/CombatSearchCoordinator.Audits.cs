@@ -6,6 +6,22 @@ namespace CombatSolver;
 
 internal static partial class CombatSearchCoordinator
 {
+    private sealed class SupplementalAuditStage(SolverResult primary, CancellationToken deadline, CancellationToken cancellation)
+    {
+        internal SolverResult Best { get; private set; } = primary;
+        internal CancellationToken Deadline { get; } = deadline;
+        internal CancellationToken Cancellation { get; } = cancellation;
+
+        internal SolverResult Solve(CombatBeamSolver solver)
+            => solver.Solve(Deadline) ?? throw new OperationCanceledException(Deadline);
+
+        internal void ConsiderCompleted(CombatRootSnapshot root, SearchPolicySnapshot policy, SolverResult candidate)
+        {
+            if (IsBetterCompletedResult(root, policy, candidate, Best))
+                Best = candidate;
+        }
+    }
+
     private static SolverResult RunSupplementalAudits(
         CombatRootSnapshot root,
         SolverDisplayNames displayNames,
@@ -54,6 +70,7 @@ internal static partial class CombatSearchCoordinator
         SolverResult selected = primary;
         string? activeE4Stage = null;
         SolverResult? activeE4Before = null;
+        SupplementalAuditStage? activeStage = null;
         SearchRequestWorkSnapshot activeE4WorkBefore = default;
         long activeE4StartedMs = 0;
 
@@ -108,14 +125,15 @@ internal static partial class CombatSearchCoordinator
         SolverResult MeasureE4Stage(
             string stage,
             SolverResult before,
-            Func<SolverResult> run,
+            Func<SupplementalAuditStage, SolverResult> run,
             Func<string>? completedStatus = null)
         {
             activeE4Stage = stage;
             activeE4Before = before;
             activeE4WorkBefore = E4WorkSnapshot();
             activeE4StartedMs = requestClock.ElapsedMilliseconds;
-            SolverResult after = run();
+            activeStage = new(before, deadline.Token, cancellationToken);
+            SolverResult after = run(activeStage);
             SolverInterimResult beforeSummary = BuildInterimResult(root, policy, before);
             SolverInterimResult afterSummary = BuildInterimResult(root, policy, after);
             bool admitted = ShouldAdmitE4SupplementalResult(
@@ -132,6 +150,7 @@ internal static partial class CombatSearchCoordinator
                 admission: admitted ? "accepted" : "rejected_regression");
             activeE4Stage = null;
             activeE4Before = null;
+            activeStage = null;
             return admitted ? after : before;
         }
 
@@ -143,15 +162,14 @@ internal static partial class CombatSearchCoordinator
                 selected = MeasureE4Stage(
                     "required_potion",
                     beforeRequired,
-                    () => AuditRequiredPotionUse(
+                    stage => AuditRequiredPotionUse(
                         root,
                         displayNames,
                         battleDamage,
                         policy,
-                        deadline.Token,
                         progressCallback,
                         profile,
-                        beforeRequired));
+                        stage));
             }
             if (ResolveTakeoverResult(selected, policy.Interaction) is { } requiredTakeoverResult)
                 return requiredTakeoverResult;
@@ -170,7 +188,7 @@ internal static partial class CombatSearchCoordinator
                 selected = MeasureE4Stage(
                     "early_smart_scout_reuse",
                     beforeReuse,
-                    () => reusedScout!);
+                    _ => reusedScout!);
                 if (ReferenceEquals(selected, reusedScout))
                     interimResultCallback?.Invoke(selected);
             }
@@ -200,7 +218,7 @@ internal static partial class CombatSearchCoordinator
                 selected = MeasureE4Stage(
                     "smart_potion",
                     beforeSmart,
-                    () => AuditSmartPotionUse(
+                    _ => AuditSmartPotionUse(
                         root,
                         displayNames,
                         battleDamage,
@@ -227,15 +245,14 @@ internal static partial class CombatSearchCoordinator
                 selected = MeasureE4Stage(
                     "opening_power",
                     beforeOpening,
-                    () => AuditOpeningPowerUse(
+                    stage => AuditOpeningPowerUse(
                         root,
                         displayNames,
                         battleDamage,
                         policy,
-                        deadline.Token,
                         progressCallback,
                         profile,
-                        beforeOpening));
+                        stage));
                 if (HasReachedAcceptableBattleHpLoss(policy, selected))
                     return selected;
             }
@@ -243,18 +260,24 @@ internal static partial class CombatSearchCoordinator
         catch (OperationCanceledException)
             when (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
-            if (activeE4Stage != null && activeE4Before != null)
+            if (activeE4Stage != null && activeE4Before != null && activeStage != null)
             {
+                SolverResult? retained = ReferenceEquals(activeStage.Best, activeE4Before) ? null : activeStage.Best;
+                bool admitted = retained != null && ShouldAdmitE4SupplementalResult(e4SmartPotionBudgetActive,
+                    BuildInterimResult(root, policy, activeE4Before), BuildInterimResult(root, policy, retained));
+                if (admitted)
+                    selected = retained!;
                 LogE4SupplementalValue(
                     activeE4Stage,
                     activeE4Before,
-                    after: null,
+                    retained,
                     activeE4WorkBefore,
                     activeE4StartedMs,
                     status: "deadline",
-                    admission: "no_result");
+                    admission: admitted ? "accepted" : retained != null ? "rejected_regression" : "no_result");
                 activeE4Stage = null;
                 activeE4Before = null;
+                activeStage = null;
             }
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] SUPPLEMENTAL_AUDIT_BUDGET exhausted=true " +
@@ -283,11 +306,12 @@ internal static partial class CombatSearchCoordinator
         SolverDisplayNames displayNames,
         BattleDamageSnapshot battleDamage,
         SearchPolicySnapshot policy,
-        CancellationToken cancellationToken,
         Action<SolverProgress>? progressCallback,
         SolverSearchProfile profile,
-        SolverResult primary)
+        SupplementalAuditStage stage)
     {
+        SolverResult primary = stage.Best;
+        CancellationToken cancellationToken = stage.Deadline;
         int primaryDeficit = StrategicHpDeficit(root, policy, primary);
         int maximumSmartPotionUses = policy.PotionPolicy == SolverPotionPolicy.Smart
             ? MaximumSmartPotionUses(root, policy, potionFreeWon: true, primaryDeficit)
@@ -372,18 +396,17 @@ internal static partial class CombatSearchCoordinator
             return primary;
 
         List<SolverResult> searches = [primary];
-        SolverResult selected = primary;
         foreach (PlanAction openingPower in openingPowers)
         {
-            SolverResult posterior = new CombatBeamSolver(
+            SolverResult posterior = stage.Solve(new CombatBeamSolver(
                 root,
                 displayNames,
                 battleDamage,
                 policy,
-                cancellationToken,
+                stage.Cancellation,
                 progressCallback,
                 profile,
-                fixedPrefixActions: [openingPower]).Solve();
+                fixedPrefixActions: [openingPower]));
             if (posterior.ResultScope != SolverResultScope.SearchCompletion)
                 return posterior;
 
@@ -400,14 +423,11 @@ internal static partial class CombatSearchCoordinator
                 && !posterior.Snapshot.PlayerDead
                 && posterior.Snapshot.ProjectedPlayerHp > 0;
             int posteriorDeficit = StrategicHpDeficit(root, policy, posterior);
-            if (IsBetterCompletedResult(root, policy, posterior, selected))
-            {
-                selected = posterior;
-            }
+            stage.ConsiderCompleted(root, policy, posterior);
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] OPENING_POWER_POSTERIOR card={openingPower.CardId} " +
                 $"won={posteriorWon} hp_deficit={posteriorDeficit} " +
-                $"selected={ReferenceEquals(selected, posterior)}");
+                $"selected={ReferenceEquals(stage.Best, posterior)}");
 
             PlanAction? offensiveFollowUp = new CombatBeamSolver(
                     root,
@@ -421,15 +441,15 @@ internal static partial class CombatSearchCoordinator
             if (offensiveFollowUp == null)
                 continue;
 
-            SolverResult linkedPosterior = new CombatBeamSolver(
+            SolverResult linkedPosterior = stage.Solve(new CombatBeamSolver(
                 root,
                 displayNames,
                 battleDamage,
                 policy,
-                cancellationToken,
+                stage.Cancellation,
                 progressCallback,
                 profile,
-                fixedPrefixActions: [openingPower, offensiveFollowUp]).Solve();
+                fixedPrefixActions: [openingPower, offensiveFollowUp]));
             if (linkedPosterior.ResultScope != SolverResultScope.SearchCompletion)
                 return linkedPosterior;
 
@@ -446,15 +466,12 @@ internal static partial class CombatSearchCoordinator
                 && !linkedPosterior.Snapshot.PlayerDead
                 && linkedPosterior.Snapshot.ProjectedPlayerHp > 0;
             int linkedDeficit = StrategicHpDeficit(root, policy, linkedPosterior);
-            if (IsBetterCompletedResult(root, policy, linkedPosterior, selected))
-            {
-                selected = linkedPosterior;
-            }
+            stage.ConsiderCompleted(root, policy, linkedPosterior);
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] OPENING_POWER_LINK_POSTERIOR " +
                 $"cards={openingPower.CardId}+{offensiveFollowUp.CardId} " +
                 $"won={linkedWon} hp_deficit={linkedDeficit} " +
-                $"selected={ReferenceEquals(selected, linkedPosterior)}");
+                $"selected={ReferenceEquals(stage.Best, linkedPosterior)}");
         }
 
         foreach (PlanAction openingResource in openingResources)
@@ -471,15 +488,15 @@ internal static partial class CombatSearchCoordinator
             if (defensiveFollowUp == null)
                 continue;
 
-            SolverResult resourceDefensePosterior = new CombatBeamSolver(
+            SolverResult resourceDefensePosterior = stage.Solve(new CombatBeamSolver(
                 root,
                 displayNames,
                 battleDamage,
                 policy,
-                cancellationToken,
+                stage.Cancellation,
                 progressCallback,
                 profile,
-                fixedPrefixActions: [openingResource, defensiveFollowUp]).Solve();
+                fixedPrefixActions: [openingResource, defensiveFollowUp]));
             if (resourceDefensePosterior.ResultScope != SolverResultScope.SearchCompletion)
                 return resourceDefensePosterior;
 
@@ -492,14 +509,13 @@ internal static partial class CombatSearchCoordinator
                 return resourceDefensePosterior;
             }
 
-            if (IsBetterCompletedResult(root, policy, resourceDefensePosterior, selected))
-                selected = resourceDefensePosterior;
+            stage.ConsiderCompleted(root, policy, resourceDefensePosterior);
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] OPENING_RESOURCE_DEFENSE_POSTERIOR " +
                 $"cards={openingResource.CardId}+{defensiveFollowUp.CardId} " +
                 $"won={resourceDefensePosterior.Snapshot.AllEnemiesDead && !resourceDefensePosterior.Snapshot.PlayerDead} " +
                 $"hp_deficit={StrategicHpDeficit(root, policy, resourceDefensePosterior)} " +
-                $"selected={ReferenceEquals(selected, resourceDefensePosterior)}");
+                $"selected={ReferenceEquals(stage.Best, resourceDefensePosterior)}");
         }
 
         foreach (PlanAction openingPotion in generatedResourcePotions)
@@ -510,14 +526,14 @@ internal static partial class CombatSearchCoordinator
                     displayNames,
                     battleDamage,
                     policy,
-                    cancellationToken,
+                    stage.Cancellation,
                     progressCallback,
                     profile,
                     potionPolicyOverride: SolverPotionPolicy.RequireAtLeastOne,
                     maximumPotionUses: 1,
                     fixedPrefixActions: [openingPotion]),
                 policy,
-                $"POTION_RESOURCE_POSTERIOR potion={openingPotion.PotionId}");
+                $"POTION_RESOURCE_POSTERIOR potion={openingPotion.PotionId}", stage);
             if (resourcePosterior == null)
                 continue;
             if (resourcePosterior.ResultScope != SolverResultScope.SearchCompletion)
@@ -536,22 +552,19 @@ internal static partial class CombatSearchCoordinator
                 && !resourcePosterior.Snapshot.PlayerDead
                 && resourcePosterior.Snapshot.ProjectedPlayerHp > 0;
             int resourceDeficit = StrategicHpDeficit(root, policy, resourcePosterior);
-            if (IsBetterCompletedResult(root, policy, resourcePosterior, selected))
-            {
-                selected = resourcePosterior;
-            }
+            stage.ConsiderCompleted(root, policy, resourcePosterior);
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] POTION_RESOURCE_POSTERIOR " +
                 $"potion={openingPotion.PotionId} card={openingPotion.Choice!.Cards[0].CardId} " +
                 $"won={resourceWon} hp_deficit={resourceDeficit} " +
-                $"selected={ReferenceEquals(selected, resourcePosterior)}");
+                $"selected={ReferenceEquals(stage.Best, resourcePosterior)}");
         }
 
-        if (HasReachedProvablePrimaryQualityLowerBound(root, policy, selected)
-            && selected.PotionCount <= 1)
+        if (HasReachedProvablePrimaryQualityLowerBound(root, policy, stage.Best)
+            && stage.Best.PotionCount <= 1)
         {
-            MergeAuditTotals(selected, searches.ToArray());
-            return selected;
+            MergeAuditTotals(stage.Best, searches.ToArray());
+            return stage.Best;
         }
 
         foreach ((PlanAction openingPotion, PlanAction postPotionPower) in potionPowerPairs)
@@ -563,14 +576,14 @@ internal static partial class CombatSearchCoordinator
                     displayNames,
                     battleDamage,
                     policy,
-                    cancellationToken,
+                    stage.Cancellation,
                     progressCallback,
                     profile,
                     potionPolicyOverride: SolverPotionPolicy.RequireAtLeastOne,
                     maximumPotionUses: maximumSmartPotionUses,
                     fixedPrefixActions: jointPrefix),
                 policy,
-                $"POTION_POWER_POSTERIOR potion={openingPotion.PotionId} power={postPotionPower.CardId}");
+                $"POTION_POWER_POSTERIOR potion={openingPotion.PotionId} power={postPotionPower.CardId}", stage);
             if (jointPosterior == null)
                 continue;
             if (jointPosterior.ResultScope != SolverResultScope.SearchCompletion)
@@ -589,16 +602,13 @@ internal static partial class CombatSearchCoordinator
                 && !jointPosterior.Snapshot.PlayerDead
                 && jointPosterior.Snapshot.ProjectedPlayerHp > 0;
             int jointDeficit = StrategicHpDeficit(root, policy, jointPosterior);
-            int comparisonDeficit = StrategicHpDeficit(root, policy, selected);
-            if (IsBetterCompletedResult(root, policy, jointPosterior, selected))
-            {
-                selected = jointPosterior;
-            }
+            int comparisonDeficit = StrategicHpDeficit(root, policy, stage.Best);
+            stage.ConsiderCompleted(root, policy, jointPosterior);
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] POTION_POWER_POSTERIOR " +
                 $"potion={openingPotion.PotionId} power={postPotionPower.CardId} " +
                 $"won={jointWon} hp_deficit={jointDeficit} " +
-                $"selected={ReferenceEquals(selected, jointPosterior)}");
+                $"selected={ReferenceEquals(stage.Best, jointPosterior)}");
 
             if (!jointWon
                 || HasReachedProvablePrimaryQualityLowerBound(root, policy, jointPosterior)
@@ -627,7 +637,7 @@ internal static partial class CombatSearchCoordinator
                     displayNames,
                     battleDamage,
                     policy,
-                    cancellationToken,
+                    stage.Cancellation,
                     progressCallback,
                     profile,
                     potionPolicyOverride: SolverPotionPolicy.RequireAtLeastOne,
@@ -635,7 +645,7 @@ internal static partial class CombatSearchCoordinator
                     fixedPrefixActions: [openingPotion, postPotionPower, defensiveFollowUp]),
                 policy,
                 $"POTION_POWER_DEFENSIVE_POSTERIOR potion={openingPotion.PotionId} " +
-                $"power={postPotionPower.CardId} follow_up={defensiveFollowUp.CardId}");
+                $"power={postPotionPower.CardId} follow_up={defensiveFollowUp.CardId}", stage);
             if (defensivePosterior == null)
                 continue;
             if (defensivePosterior.ResultScope != SolverResultScope.SearchCompletion)
@@ -654,22 +664,19 @@ internal static partial class CombatSearchCoordinator
                 && !defensivePosterior.Snapshot.PlayerDead
                 && defensivePosterior.Snapshot.ProjectedPlayerHp > 0;
             int defensiveDeficit = StrategicHpDeficit(root, policy, defensivePosterior);
-            if (IsBetterCompletedResult(root, policy, defensivePosterior, selected))
-            {
-                selected = defensivePosterior;
-            }
+            stage.ConsiderCompleted(root, policy, defensivePosterior);
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] POTION_POWER_DEFENSIVE_POSTERIOR " +
                 $"potion={openingPotion.PotionId} power={postPotionPower.CardId} " +
                 $"follow_up={defensiveFollowUp.CardId} won={defensiveWon} " +
-                $"hp_deficit={defensiveDeficit} selected={ReferenceEquals(selected, defensivePosterior)}");
+                $"hp_deficit={defensiveDeficit} selected={ReferenceEquals(stage.Best, defensivePosterior)}");
 
             if (HasReachedProvablePrimaryQualityLowerBound(root, policy, defensivePosterior))
                 break;
         }
 
-        MergeAuditTotals(selected, searches.ToArray());
-        return selected;
+        MergeAuditTotals(stage.Best, searches.ToArray());
+        return stage.Best;
     }
 
     private static SolverResult AuditRequiredPotionUse(
@@ -677,11 +684,12 @@ internal static partial class CombatSearchCoordinator
         SolverDisplayNames displayNames,
         BattleDamageSnapshot battleDamage,
         SearchPolicySnapshot policy,
-        CancellationToken cancellationToken,
         Action<SolverProgress>? progressCallback,
         SolverSearchProfile profile,
-        SolverResult primary)
+        SupplementalAuditStage stage)
     {
+        SolverResult primary = stage.Best;
+        CancellationToken cancellationToken = stage.Deadline;
         if (policy.PotionPolicy != SolverPotionPolicy.RequireAtLeastOne
             || battleDamage.PotionsUsedSoFar > 0
             || primary.PotionCount <= 1)
@@ -692,15 +700,15 @@ internal static partial class CombatSearchCoordinator
         policy.Diagnostics.Info(
             $"[CombatSolver/Test] REQUIRED_POTION_AUDIT start potion_count={primary.PotionCount} " +
             $"reported_saved={primary.PotionHpSaved} required={primary.PotionHpRequired}");
-        SolverResult potionFree = new CombatBeamSolver(
+        SolverResult potionFree = stage.Solve(new CombatBeamSolver(
             root,
             displayNames,
             battleDamage,
             policy,
-            cancellationToken,
+            stage.Cancellation,
             progressCallback,
             profile,
-            SolverPotionPolicy.Disabled).Solve();
+            SolverPotionPolicy.Disabled));
         if (potionFree.ResultScope != SolverResultScope.SearchCompletion)
             return potionFree;
 
@@ -711,7 +719,6 @@ internal static partial class CombatSearchCoordinator
         if (!potionFreeWon)
         {
             List<SolverResult> searches = [primary, potionFree];
-            SolverResult selected = primary;
             IReadOnlyList<PlanAction> openingPotions = new CombatBeamSolver(
                     root,
                     displayNames,
@@ -725,17 +732,17 @@ internal static partial class CombatSearchCoordinator
                 .BuildPreferredOpeningPotionActions();
             foreach (PlanAction openingPotion in openingPotions)
             {
-                SolverResult posterior = new CombatBeamSolver(
+                SolverResult posterior = stage.Solve(new CombatBeamSolver(
                     root,
                     displayNames,
                     battleDamage,
                     policy,
-                    cancellationToken,
+                    stage.Cancellation,
                     progressCallback,
                     profile,
                     SolverPotionPolicy.RequireAtLeastOne,
                     maximumPotionUses: primary.PotionCount,
-                    fixedPrefixActions: [openingPotion]).Solve();
+                    fixedPrefixActions: [openingPotion]));
                 if (posterior.ResultScope != SolverResultScope.SearchCompletion)
                     return posterior;
 
@@ -752,15 +759,12 @@ internal static partial class CombatSearchCoordinator
                     && !posterior.Snapshot.PlayerDead
                     && posterior.Snapshot.ProjectedPlayerHp > 0;
                 int posteriorDeficit = StrategicHpDeficit(root, policy, posterior);
-                if (IsBetterCompletedResult(root, policy, posterior, selected))
-                {
-                    selected = posterior;
-                }
+                stage.ConsiderCompleted(root, policy, posterior);
                 policy.Diagnostics.Info(
                     $"[CombatSolver/Test] REQUIRED_MULTI_POTION_POSTERIOR " +
                     $"potion={openingPotion.PotionId} target={openingPotion.TargetCombatId?.ToString() ?? "-"} " +
                     $"won={posteriorWon} hp_deficit={posteriorDeficit} " +
-                    $"selected={ReferenceEquals(selected, posterior)}");
+                    $"selected={ReferenceEquals(stage.Best, posterior)}");
 
                 if (primary.PotionCount != 2)
                     continue;
@@ -778,17 +782,17 @@ internal static partial class CombatSearchCoordinator
                     .PrepareAudit(builder => builder.BuildPreferredPotionActionsAfterPrefix([openingPotion]));
                 foreach (PlanAction secondPotion in secondPotions)
                 {
-                    SolverResult pairPosterior = new CombatBeamSolver(
+                    SolverResult pairPosterior = stage.Solve(new CombatBeamSolver(
                         root,
                         displayNames,
                         battleDamage,
                         policy,
-                        cancellationToken,
+                        stage.Cancellation,
                         progressCallback,
                         profile,
                         SolverPotionPolicy.RequireAtLeastOne,
                         maximumPotionUses: primary.PotionCount,
-                        fixedPrefixActions: [openingPotion, secondPotion]).Solve();
+                        fixedPrefixActions: [openingPotion, secondPotion]));
                     if (pairPosterior.ResultScope != SolverResultScope.SearchCompletion)
                         return pairPosterior;
 
@@ -805,18 +809,15 @@ internal static partial class CombatSearchCoordinator
                         && !pairPosterior.Snapshot.PlayerDead
                         && pairPosterior.Snapshot.ProjectedPlayerHp > 0;
                     int pairDeficit = StrategicHpDeficit(root, policy, pairPosterior);
-                    if (IsBetterCompletedResult(root, policy, pairPosterior, selected))
-                    {
-                        selected = pairPosterior;
-                    }
+                    stage.ConsiderCompleted(root, policy, pairPosterior);
                     policy.Diagnostics.Info(
                         $"[CombatSolver/Test] REQUIRED_POTION_PAIR_POSTERIOR " +
                         $"first={openingPotion.PotionId}:{openingPotion.TargetCombatId?.ToString() ?? "-"} " +
                         $"second={secondPotion.PotionId}:{secondPotion.TargetCombatId?.ToString() ?? "-"} " +
                         $"won={pairWon} hp_deficit={pairDeficit} " +
-                        $"selected={ReferenceEquals(selected, pairPosterior)}");
+                        $"selected={ReferenceEquals(stage.Best, pairPosterior)}");
 
-                    int selectedDeficit = StrategicHpDeficit(root, policy, selected);
+                    int selectedDeficit = StrategicHpDeficit(root, policy, stage.Best);
                     if (!pairWon || pairDeficit > selectedDeficit + 1)
                         continue;
 
@@ -835,17 +836,17 @@ internal static partial class CombatSearchCoordinator
                     if (defensiveFollowUp == null)
                         continue;
 
-                    SolverResult defensivePosterior = new CombatBeamSolver(
+                    SolverResult defensivePosterior = stage.Solve(new CombatBeamSolver(
                         root,
                         displayNames,
                         battleDamage,
                         policy,
-                        cancellationToken,
+                        stage.Cancellation,
                         progressCallback,
                         profile,
                         SolverPotionPolicy.RequireAtLeastOne,
                         maximumPotionUses: primary.PotionCount,
-                        fixedPrefixActions: [openingPotion, secondPotion, defensiveFollowUp]).Solve();
+                        fixedPrefixActions: [openingPotion, secondPotion, defensiveFollowUp]));
                     if (defensivePosterior.ResultScope != SolverResultScope.SearchCompletion)
                         return defensivePosterior;
 
@@ -862,25 +863,22 @@ internal static partial class CombatSearchCoordinator
                         && !defensivePosterior.Snapshot.PlayerDead
                         && defensivePosterior.Snapshot.ProjectedPlayerHp > 0;
                     int defensiveDeficit = StrategicHpDeficit(root, policy, defensivePosterior);
-                    if (IsBetterCompletedResult(root, policy, defensivePosterior, selected))
-                    {
-                        selected = defensivePosterior;
-                    }
+                    stage.ConsiderCompleted(root, policy, defensivePosterior);
                     policy.Diagnostics.Info(
                         $"[CombatSolver/Test] REQUIRED_POTION_PAIR_DEFENSIVE_POSTERIOR " +
                         $"first={openingPotion.PotionId}:{openingPotion.TargetCombatId?.ToString() ?? "-"} " +
                         $"second={secondPotion.PotionId}:{secondPotion.TargetCombatId?.ToString() ?? "-"} " +
                         $"follow_up={defensiveFollowUp.CardId} won={defensiveWon} " +
                         $"hp_deficit={defensiveDeficit} " +
-                        $"selected={ReferenceEquals(selected, defensivePosterior)}");
+                        $"selected={ReferenceEquals(stage.Best, defensivePosterior)}");
                 }
             }
 
-            MergeAuditTotals(selected, searches.ToArray());
+            MergeAuditTotals(stage.Best, searches.ToArray());
             policy.Diagnostics.Info(
                 "[CombatSolver/Test] REQUIRED_POTION_AUDIT result potion_free_won=False " +
-                $"selected={(ReferenceEquals(selected, primary) ? "multi_potion_rescue" : "opening_potion_posterior")}");
-            return selected;
+                $"selected={(ReferenceEquals(stage.Best, primary) ? "multi_potion_rescue" : "opening_potion_posterior")}");
+            return stage.Best;
         }
 
         // The candidates this baseline is compared against are ranked on the strategic axis, so the
@@ -896,17 +894,17 @@ internal static partial class CombatSearchCoordinator
             EvaluationWindow = potionFree.EvaluationWindow,
             OutstandingStolenResource = potionFree.OutstandingStolenResource,
         };
-        SolverResult audited = new CombatBeamSolver(
+        SolverResult audited = stage.Solve(new CombatBeamSolver(
             root,
             displayNames,
             battleDamage,
             policy,
-            cancellationToken,
+            stage.Cancellation,
             progressCallback,
             profile,
             SolverPotionPolicy.RequireAtLeastOne,
             baseline,
-            maximumPotionUses: 1).Solve();
+            maximumPotionUses: 1));
         if (audited.ResultScope != SolverResultScope.SearchCompletion)
             return audited;
 
@@ -1141,6 +1139,76 @@ internal static partial class CombatSearchCoordinator
         }
     }
 
+    private sealed class SmartPotionAudit(
+        CombatRootSnapshot root,
+        SearchPolicySnapshot policy,
+        SolverResult potionFree,
+        Action<SolverResult>? publish)
+    {
+        private readonly SolverResult _potionFree = potionFree;
+        private readonly List<SolverResult> _searches = [potionFree];
+        internal SolverResult Selected { get; private set; } = potionFree;
+        internal bool HasAcceptedLayer { get; private set; }
+
+        internal PotionFreePolicyBaseline Baseline { get; } = new(
+            potionFree.Snapshot.AllEnemiesDead && !potionFree.Snapshot.PlayerDead
+                && potionFree.Snapshot.ProjectedPlayerHp > 0,
+            StrategicHpDeficit(root, policy, potionFree),
+            potionFree.Snapshot.PlayerHp,
+            potionFree.CombatEndedTurn)
+        {
+            DeathSaveUseCount = potionFree.Snapshot.ProjectedDeathSaveUseCount,
+            BattleHpLost = potionFree.ProjectedBattleHpLost,
+            EvaluationWindow = potionFree.EvaluationWindow,
+            OutstandingStolenResource = potionFree.OutstandingStolenResource,
+        };
+
+        internal bool ReviewCompletedLayer(int potionCount, SolverResult candidate,
+            PrimarySearchIncumbent? primaryIncumbent, string? scheduler = null)
+        {
+            _searches.Add(candidate);
+            bool candidateWon = IsCompleteVictory(candidate);
+            int candidateDeficit = StrategicHpDeficit(root, policy, candidate);
+            bool costsComparable = CanComparePotionCosts(policy, candidate, _potionFree);
+            int hpSaved = !costsComparable ? 0 : Baseline.Won
+                ? Math.Max(0, Baseline.HpDeficit - candidateDeficit)
+                : candidateWon
+                    ? Math.Max(0, candidate.Snapshot.PlayerHp - Baseline.PlayerHp)
+                    : 0;
+            int hpRequired = SmartPotionHpRequired(root, policy, candidate);
+            bool protectsLoot = policy.TheftPolicy == SolverTheftPolicy.PreserveResources
+                && candidate.OutstandingStolenResource < Baseline.OutstandingStolenResource;
+            bool acceptable = PotionUsePolicy.CanAcceptSmartAuditVictory(
+                Baseline.Won, candidateWon, hpSaved, hpRequired, protectsLoot, costsComparable);
+            bool improvesSelection = acceptable
+                && IsBetterPotionPolicyResult(root, policy, candidate, Selected);
+            if (improvesSelection)
+            {
+                candidate.PotionHpSaved = hpSaved;
+                candidate.PotionHpRequired = hpRequired;
+                Selected = candidate;
+                HasAcceptedLayer = true;
+                publish?.Invoke(candidate);
+            }
+            string schedulerSuffix = scheduler == null ? string.Empty : $" scheduler={scheduler}";
+            policy.Diagnostics.Info(
+                $"[CombatSolver/Test] SMART_POTION_GRADIENT layer={potionCount} " +
+                $"won={candidateWon} hp_deficit={candidateDeficit} saved={hpSaved} " +
+                $"required={hpRequired} protects_loot={protectsLoot} acceptable={acceptable} " +
+                $"selected={improvesSelection} expanded={candidate.ExpandedNodes} " +
+                $"transitions={candidate.TransitionCount} choice_branches={candidate.ChoiceBranchesEvaluated} " +
+                $"elapsed_ms={candidate.Elapsed.TotalMilliseconds:F1} allocated_bytes={candidate.WorkerAllocatedBytes} " +
+                $"incumbent_deficit={primaryIncumbent?.StrategicHpDeficit.ToString() ?? "-"} " +
+                $"incumbent_turn={primaryIncumbent?.CombatEndedTurn.ToString() ?? "-"} " +
+                $"incumbent_pruned={candidate.PrimaryIncumbentBranchesPruned} " +
+                $"incumbent_updates={candidate.PrimaryIncumbentUpdates}{schedulerSuffix}");
+            return improvesSelection && TheftEncounterStrategy.RecoverySatisfied(
+                policy.TheftPolicy, Selected.OutstandingStolenResource);
+        }
+
+        internal void MergeTotals() => MergeAuditTotals(Selected, [.. _searches]);
+    }
+
     private static SolverResult SearchSmartPotionGradientScheduled(
         CombatRootSnapshot root,
         SolverDisplayNames displayNames,
@@ -1159,38 +1227,18 @@ internal static partial class CombatSearchCoordinator
             throw new InvalidOperationException("Smart 梯度搜索必须从仅满足强制用药的结果开始。");
 
         string scheduler = adaptive ? "e3_adaptive" : "e3_fixed";
-        bool potionFreeWon = potionFree.Snapshot.AllEnemiesDead
-            && !potionFree.Snapshot.PlayerDead
-            && potionFree.Snapshot.ProjectedPlayerHp > 0;
-        int potionFreeDeficit = StrategicHpDeficit(root, policy, potionFree);
-        int maximumOptionalPotionUses = MaximumSmartPotionUses(
-            root,
-            policy,
-            potionFreeWon,
-            potionFreeDeficit);
+        SmartPotionAudit audit = new(root, policy, potionFree, interimResultCallback);
+        PotionFreePolicyBaseline baseline = audit.Baseline;
+        int maximumOptionalPotionUses = MaximumSmartPotionUses(root, policy, baseline.Won, baseline.HpDeficit);
         if (maximumOptionalPotionUses == 0)
         {
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] SMART_POTION_GRADIENT result " +
-                $"stop=no_potion_acceptable hp_deficit={potionFreeDeficit} maximum=0 scheduler={scheduler}");
+                $"stop=no_potion_acceptable hp_deficit={baseline.HpDeficit} maximum=0 scheduler={scheduler}");
             return potionFree;
         }
 
-        PotionFreePolicyBaseline baseline = new(
-            potionFreeWon,
-            potionFreeDeficit,
-            potionFree.Snapshot.PlayerHp,
-            potionFree.CombatEndedTurn)
-        {
-            DeathSaveUseCount = potionFree.Snapshot.ProjectedDeathSaveUseCount,
-            BattleHpLost = potionFree.ProjectedBattleHpLost,
-            EvaluationWindow = potionFree.EvaluationWindow,
-            OutstandingStolenResource = potionFree.OutstandingStolenResource,
-        };
-        List<SolverResult> searches = [potionFree];
-        SolverResult selected = potionFree;
         bool deadlineExpired = false;
-        bool acceptablePotionLayerFound = false;
         int firstPotionCount = forcedPotionCount + 1;
         int lastPotionCount = forcedPotionCount + maximumOptionalPotionUses;
         int nextPotionCountToStart = firstPotionCount;
@@ -1220,7 +1268,7 @@ internal static partial class CombatSearchCoordinator
                 displayNames,
                 battleDamage,
                 policy.MeasurePhasePerformance ? policy with { RequestMemberKind = SearchRequestMemberKind.SmartPotion } : policy,
-                searchCancellationToken,
+                callerCancellationToken,
                 progressCallback: null,
                 profile,
                 SolverPotionPolicy.RequireAtLeastOne,
@@ -1314,7 +1362,7 @@ internal static partial class CombatSearchCoordinator
             SearchStepResult step;
             try
             {
-                step = session.Step(E3FixedMemberAllowance, searchCancellationToken);
+                step = session.Step(E3FixedMemberAllowance, callerCancellationToken, searchCancellationToken);
             }
             catch (PotionPolicyUnsatisfiedException)
             {
@@ -1350,8 +1398,14 @@ internal static partial class CombatSearchCoordinator
             if (step.Status == SearchStepStatus.Canceled)
             {
                 callerCancellationToken.ThrowIfCancellationRequested();
+                throw new OperationCanceledException(callerCancellationToken);
+            }
+            if (step.Status == SearchStepStatus.BudgetExhausted)
+            {
                 ObserveCompletedLayer(potionCount, session, result: null);
-                deadlineExpired = true;
+                active.Remove(potionCount);
+                missing.Add(potionCount);
+                session.Dispose();
                 return null;
             }
             if (step.Status != SearchStepStatus.Completed)
@@ -1370,51 +1424,6 @@ internal static partial class CombatSearchCoordinator
             return null;
         }
 
-        bool ReviewCompletedLayer(int potionCount, SolverResult candidate)
-        {
-            searches.Add(candidate);
-
-            bool candidateWon = IsCompleteVictory(candidate);
-            int candidateDeficit = StrategicHpDeficit(root, policy, candidate);
-            bool costsComparable = CanComparePotionCosts(policy, candidate, potionFree);
-            int hpSaved = !costsComparable ? 0 : potionFreeWon
-                ? Math.Max(0, potionFreeDeficit - candidateDeficit)
-                : candidateWon
-                    ? Math.Max(0, candidate.Snapshot.PlayerHp - potionFree.Snapshot.PlayerHp)
-                    : 0;
-            int hpRequired = SmartPotionHpRequired(root, policy, candidate);
-            bool protectsLoot = policy.TheftPolicy == SolverTheftPolicy.PreserveResources
-                && candidate.OutstandingStolenResource < potionFree.OutstandingStolenResource;
-            bool acceptable = PotionUsePolicy.CanAcceptSmartAuditVictory(
-                potionFreeWon,
-                candidateWon,
-                hpSaved,
-                hpRequired,
-                protectsLoot, costsComparable);
-            bool improvesSelection = acceptable
-                && IsBetterPotionPolicyResult(root, policy, candidate, selected);
-            if (improvesSelection)
-            {
-                candidate.PotionHpSaved = hpSaved;
-                candidate.PotionHpRequired = hpRequired;
-                selected = candidate;
-                acceptablePotionLayerFound = true;
-                interimResultCallback?.Invoke(candidate);
-            }
-            policy.Diagnostics.Info(
-                $"[CombatSolver/Test] SMART_POTION_GRADIENT layer={potionCount} " +
-                $"won={candidateWon} hp_deficit={candidateDeficit} saved={hpSaved} " +
-                $"required={hpRequired} protects_loot={protectsLoot} acceptable={acceptable} " +
-                $"selected={improvesSelection} expanded={candidate.ExpandedNodes} " +
-                $"transitions={candidate.TransitionCount} choice_branches={candidate.ChoiceBranchesEvaluated} " +
-                $"elapsed_ms={candidate.Elapsed.TotalMilliseconds:F1} allocated_bytes={candidate.WorkerAllocatedBytes} " +
-                $"incumbent_deficit={primaryIncumbent?.StrategicHpDeficit.ToString() ?? "-"} " +
-                $"incumbent_turn={primaryIncumbent?.CombatEndedTurn.ToString() ?? "-"} " +
-                $"incumbent_pruned={candidate.PrimaryIncumbentBranchesPruned} " +
-                $"incumbent_updates={candidate.PrimaryIncumbentUpdates} scheduler={scheduler}");
-            return improvesSelection;
-        }
-
         bool CommitCompletedInOrder()
         {
             while (nextPotionCountToCommit <= lastPotionCount
@@ -1427,10 +1436,7 @@ internal static partial class CombatSearchCoordinator
 
                 SolverResult candidate = completed[potionCount];
                 completed.Remove(potionCount);
-                if (ReviewCompletedLayer(potionCount, candidate)
-                    && TheftEncounterStrategy.RecoverySatisfied(
-                        policy.TheftPolicy,
-                        selected.OutstandingStolenResource))
+                if (audit.ReviewCompletedLayer(potionCount, candidate, primaryIncumbent, scheduler))
                     return true;
             }
             return false;
@@ -1446,18 +1452,12 @@ internal static partial class CombatSearchCoordinator
                 foreach (int potionCount in active.Keys.OrderBy(value => value).ToArray())
                 {
                     if (searchCancellationToken.IsCancellationRequested)
-                    {
-                        callerCancellationToken.ThrowIfCancellationRequested();
-                        deadlineExpired = true;
                         break;
-                    }
                     if (StepLayer(potionCount) is { } takeover)
                         return takeover;
-                    if (deadlineExpired)
-                        break;
                 }
 
-                if (deadlineExpired)
+                if (searchCancellationToken.IsCancellationRequested)
                     break;
                 if (CommitCompletedInOrder())
                     break;
@@ -1489,7 +1489,7 @@ internal static partial class CombatSearchCoordinator
                         pendingPriorities[bonus] = E3AdaptivePriority.None;
                         if (StepLayer(bonus) is { } takeover)
                             return takeover;
-                        if (deadlineExpired)
+                        if (searchCancellationToken.IsCancellationRequested)
                             break;
                         if (CommitCompletedInOrder())
                             break;
@@ -1497,6 +1497,15 @@ internal static partial class CombatSearchCoordinator
                 }
 
                 FillResidentSet();
+            }
+
+            if (searchCancellationToken.IsCancellationRequested)
+            {
+                deadlineExpired = true;
+                callerCancellationToken.ThrowIfCancellationRequested();
+                foreach (int potionCount in active.Keys.OrderBy(value => value).ToArray())
+                    if (StepLayer(potionCount) is { } takeover)
+                        return takeover;
             }
         }
         finally
@@ -1510,13 +1519,13 @@ internal static partial class CombatSearchCoordinator
         // Once stepping stops, unfinished lower layers cannot block already
         // materialized higher layers. Review them without opening another slice.
         foreach (var (potionCount, candidate) in completed.OrderBy(layer => layer.Key))
-            ReviewCompletedLayer(potionCount, candidate);
-        MergeAuditTotals(selected, [.. searches]);
+            audit.ReviewCompletedLayer(potionCount, candidate, primaryIncumbent, scheduler);
+        audit.MergeTotals();
         policy.Diagnostics.Info(
             $"[CombatSolver/Test] SMART_POTION_GRADIENT result " +
-            $"stop={(deadlineExpired ? "deadline" : acceptablePotionLayerFound ? "threshold_met" : "complete")} " +
-            $"maximum={lastPotionCount} selected_potions={selected.PotionCount} scheduler={scheduler}");
-        return selected;
+            $"stop={(deadlineExpired ? "deadline" : audit.HasAcceptedLayer ? "threshold_met" : "complete")} " +
+            $"maximum={lastPotionCount} selected_potions={audit.Selected.PotionCount} scheduler={scheduler}");
+        return audit.Selected;
     }
 
     private static SolverResult SearchSmartPotionGradient(
@@ -1536,38 +1545,18 @@ internal static partial class CombatSearchCoordinator
         if (potionFree.ExplicitPotionCount != forcedPotionCount)
             throw new InvalidOperationException("Smart 梯度搜索必须从仅满足强制用药的结果开始。");
 
-        bool potionFreeWon = potionFree.Snapshot.AllEnemiesDead
-            && !potionFree.Snapshot.PlayerDead
-            && potionFree.Snapshot.ProjectedPlayerHp > 0;
-        int potionFreeDeficit = StrategicHpDeficit(root, policy, potionFree);
-        int maximumOptionalPotionUses = MaximumSmartPotionUses(
-            root,
-            policy,
-            potionFreeWon,
-            potionFreeDeficit);
+        SmartPotionAudit audit = new(root, policy, potionFree, interimResultCallback);
+        PotionFreePolicyBaseline baseline = audit.Baseline;
+        int maximumOptionalPotionUses = MaximumSmartPotionUses(root, policy, baseline.Won, baseline.HpDeficit);
         if (maximumOptionalPotionUses == 0)
         {
             policy.Diagnostics.Info(
                 $"[CombatSolver/Test] SMART_POTION_GRADIENT result " +
-                $"stop=no_potion_acceptable hp_deficit={potionFreeDeficit} maximum=0");
+                $"stop=no_potion_acceptable hp_deficit={baseline.HpDeficit} maximum=0");
             return potionFree;
         }
 
-        PotionFreePolicyBaseline baseline = new(
-            potionFreeWon,
-            potionFreeDeficit,
-            potionFree.Snapshot.PlayerHp,
-            potionFree.CombatEndedTurn)
-        {
-            DeathSaveUseCount = potionFree.Snapshot.ProjectedDeathSaveUseCount,
-            BattleHpLost = potionFree.ProjectedBattleHpLost,
-            EvaluationWindow = potionFree.EvaluationWindow,
-            OutstandingStolenResource = potionFree.OutstandingStolenResource,
-        };
-        List<SolverResult> searches = [potionFree];
-        SolverResult selected = potionFree;
         bool deadlineExpired = false;
-        bool acceptablePotionLayerFound = false;
         // The layer's route remains provisional until the Smart comparison against
         // the no-optional-potion result. Forward work counters during the audit.
         Action<SolverProgress>? auditProgress = progressCallback == null ? null : progress => progressCallback(progress with
@@ -1613,11 +1602,11 @@ internal static partial class CombatSearchCoordinator
             PrimarySearchIncumbent? primaryIncumbent = BuildPrimarySearchIncumbent(
                 root,
                 policy,
-                selected);
+                audit.Selected);
             long layerAllocatedAtStart = GC.GetTotalAllocatedBytes(precise: false);
             long layerTransitionsAtStart = policy.RequestWorkTotals?.Snapshot().TransitionCount ?? 0;
             SolverResult? observedLayerResult = null;
-            SolverResult candidate;
+            SolverResult? candidate;
             try
             {
                 candidate = new CombatBeamSolver(
@@ -1625,14 +1614,14 @@ internal static partial class CombatSearchCoordinator
                     displayNames,
                     battleDamage,
                     policy.MeasurePhasePerformance ? policy with { RequestMemberKind = SearchRequestMemberKind.SmartPotion } : policy,
-                    searchCancellationToken,
+                    callerCancellationToken,
                     auditProgress,
                     profile,
                     SolverPotionPolicy.RequireAtLeastOne,
                     baseline,
                     maximumPotionUses: potionCount,
                     minimumPotionUses: potionCount,
-                    primaryIncumbent: primaryIncumbent).Solve();
+                    primaryIncumbent: primaryIncumbent).Solve(searchCancellationToken);
                 observedLayerResult = candidate;
             }
             catch (PotionPolicyUnsatisfiedException)
@@ -1656,64 +1645,28 @@ internal static partial class CombatSearchCoordinator
                     policy, memoryForecast, layerAllocatedAtStart, layerTransitionsAtStart,
                     observedLayerResult, profile, potionCount);
             }
+            if (candidate == null)
+            {
+                deadlineExpired = true;
+                break;
+            }
             if (candidate.ResultScope != SolverResultScope.SearchCompletion)
                 return candidate;
 
             candidate.SingleSessionSearch = true;
             PopulateSingleSessionTotals(candidate);
-            searches.Add(candidate);
-
-            bool candidateWon = IsCompleteVictory(candidate);
-            int candidateDeficit = StrategicHpDeficit(root, policy, candidate);
-            bool costsComparable = CanComparePotionCosts(policy, candidate, potionFree);
-            int hpSaved = !costsComparable ? 0 : potionFreeWon
-                ? Math.Max(0, potionFreeDeficit - candidateDeficit)
-                : candidateWon
-                    ? Math.Max(0, candidate.Snapshot.PlayerHp - potionFree.Snapshot.PlayerHp)
-                    : 0;
-            int hpRequired = SmartPotionHpRequired(root, policy, candidate);
-            bool protectsLoot = policy.TheftPolicy == SolverTheftPolicy.PreserveResources
-                && candidate.OutstandingStolenResource < potionFree.OutstandingStolenResource;
-            bool acceptable = PotionUsePolicy.CanAcceptSmartAuditVictory(
-                potionFreeWon,
-                candidateWon,
-                hpSaved,
-                hpRequired,
-                protectsLoot, costsComparable);
-            bool improvesSelection = acceptable && IsBetterPotionPolicyResult(root, policy, candidate, selected);
-            if (improvesSelection)
-            {
-                candidate.PotionHpSaved = hpSaved;
-                candidate.PotionHpRequired = hpRequired;
-                selected = candidate;
-                acceptablePotionLayerFound = true;
-                interimResultCallback?.Invoke(candidate);
-            }
-            policy.Diagnostics.Info(
-                $"[CombatSolver/Test] SMART_POTION_GRADIENT layer={potionCount} " +
-                $"won={candidateWon} hp_deficit={candidateDeficit} saved={hpSaved} " +
-                $"required={hpRequired} protects_loot={protectsLoot} acceptable={acceptable} " +
-                $"selected={improvesSelection} " +
-                $"expanded={candidate.ExpandedNodes} transitions={candidate.TransitionCount} " +
-                $"choice_branches={candidate.ChoiceBranchesEvaluated} " +
-                $"elapsed_ms={candidate.Elapsed.TotalMilliseconds:F1} " +
-                $"allocated_bytes={candidate.WorkerAllocatedBytes} " +
-                $"incumbent_deficit={primaryIncumbent?.StrategicHpDeficit.ToString() ?? "-"} " +
-                $"incumbent_turn={primaryIncumbent?.CombatEndedTurn.ToString() ?? "-"} " +
-                $"incumbent_pruned={candidate.PrimaryIncumbentBranchesPruned} " +
-                $"incumbent_updates={candidate.PrimaryIncumbentUpdates}");
-            if (improvesSelection && TheftEncounterStrategy.RecoverySatisfied(policy.TheftPolicy, selected.OutstandingStolenResource))
+            if (audit.ReviewCompletedLayer(potionCount, candidate, primaryIncumbent))
                 break;
         }
 
         callerCancellationToken.ThrowIfCancellationRequested();
-        MergeAuditTotals(selected, [.. searches]);
+        audit.MergeTotals();
         policy.Diagnostics.Info(
             $"[CombatSolver/Test] SMART_POTION_GRADIENT result " +
-            $"stop={(deadlineExpired ? "deadline" : acceptablePotionLayerFound ? "threshold_met" : "complete")} " +
+            $"stop={(deadlineExpired ? "deadline" : audit.HasAcceptedLayer ? "threshold_met" : "complete")} " +
             $"maximum={forcedPotionCount + maximumOptionalPotionUses} " +
-            $"selected_potions={selected.PotionCount}");
-        return selected;
+            $"selected_potions={audit.Selected.PotionCount}");
+        return audit.Selected;
     }
 
     private static bool CanComparePotionCosts(SearchPolicySnapshot policy, SolverResult candidate, SolverResult baseline)
@@ -1879,11 +1832,12 @@ internal static partial class CombatSearchCoordinator
     private static SolverResult? SolveOptionalPotionPosterior(
         CombatBeamSolver solver,
         SearchPolicySnapshot policy,
-        string diagnostic)
+        string diagnostic,
+        SupplementalAuditStage? stage = null)
     {
         try
         {
-            return solver.Solve();
+            return stage is null ? solver.Solve() : stage.Solve(solver);
         }
         catch (PotionPolicyUnsatisfiedException)
         {
