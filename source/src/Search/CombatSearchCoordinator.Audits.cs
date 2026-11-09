@@ -31,7 +31,8 @@ internal static partial class CombatSearchCoordinator
                     primary,
                     earlySmartPotionBaseline,
                     earlySmartPotionScout,
-                    out SolverResult? deadlineReusedScout))
+                    out SolverResult? deadlineReusedScout,
+                    allowBoundedVictory: true))
             {
                 policy.Diagnostics.Info(
                     $"[CombatSolver/Test] SUPPLEMENTAL_AUDIT_BUDGET exhausted=true " +
@@ -262,6 +263,18 @@ internal static partial class CombatSearchCoordinator
                 $"selected_potions={selected.PotionCount}");
         }
         cancellationToken.ThrowIfCancellationRequested();
+
+        // A bounded scout cannot replace the full audit, but its already materialized
+        // victory can still win against the result left by that audit.
+        if (selected.ResultScope == SolverResultScope.SearchCompletion
+            && earlySmartPotionScout is { BoundaryReason: SearchBoundaryReason.NodeLimit or SearchBoundaryReason.TimeLimit } boundedScout
+            && IsBetterPotionPolicyResult(root, policy, boundedScout, selected)
+            && TryReuseEarlySmartPotionScout(root, policy, primary, earlySmartPotionBaseline,
+                boundedScout, out SolverResult? boundedSelection, allowBoundedVictory: true))
+        {
+            selected = boundedSelection!;
+            interimResultCallback?.Invoke(selected);
+        }
         return selected;
     }
 
@@ -988,7 +1001,8 @@ internal static partial class CombatSearchCoordinator
         SolverResult finalPotionFree,
         SolverResult? provisionalPotionFree,
         SolverResult? scout,
-        out SolverResult? selected)
+        out SolverResult? selected,
+        bool allowBoundedVictory = false)
     {
         selected = null;
         if (policy.PotionPolicy != SolverPotionPolicy.Smart
@@ -996,11 +1010,16 @@ internal static partial class CombatSearchCoordinator
             || provisionalPotionFree == null
             || scout == null
             || scout.ResultScope != SolverResultScope.SearchCompletion
-            || scout.BoundaryReason != SearchBoundaryReason.None
             || scout.ExplicitPotionCount != 1)
         {
             return false;
         }
+        if (scout.BoundaryReason != SearchBoundaryReason.None
+            && (!allowBoundedVictory || policy.RoutePolicy != SearchRoutePolicy.SinglePlayerFullRoute
+                || root.PlayerCount != 1 || scout.Snapshot.HasRisk || scout.Snapshot.ProjectedDeathSaveUseCount != 0
+                || scout.BoundaryReason is not (SearchBoundaryReason.NodeLimit or SearchBoundaryReason.TimeLimit)
+                || !IsCompleteVictory(scout)))
+            return false;
 
         // The early member used the provisional no-potion incumbent. Reuse it only
         // when the later no-potion result is at least as strong; otherwise rerun the
@@ -1052,7 +1071,7 @@ internal static partial class CombatSearchCoordinator
         selected = scout;
         policy.Diagnostics.Info(
             $"[CombatSolver/Test] E3_CROSS_FAMILY_REUSE reused=true saved={hpSaved} " +
-            $"required={hpRequired} turn={scout.CombatEndedTurn?.ToString() ?? "-"}");
+            $"required={hpRequired} turn={scout.CombatEndedTurn?.ToString() ?? "-"} boundary={scout.BoundaryReason}");
         return true;
     }
 
