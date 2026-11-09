@@ -77,6 +77,7 @@ internal static partial class CombatSearchCoordinator
             && (root.Enemies.Count >= 4 || root.Enemies.Count == 1
                 && (exploration?.CombatEndedTurn is not { } explorationTurn || explorationTurn <= earlyWinTurn));
         SolverResult? probeWinner = null;
+        string probeWinnerMethod = compareRankBands ? "beam_probe" : "narrow_probe";
         if (!settled && runConfirmedProbe != null && (root.Enemies.Count > 1 || compareRankBands)
             && NoveltyPortfolioBudget.Remaining(profile, clock.ElapsedMilliseconds, explorationExpanded) is { } beforeProbe
             && beforeProbe.BeamWidth >= 3 && beforeProbe.SoftTimeBudgetMilliseconds >= 80_000
@@ -101,11 +102,11 @@ internal static partial class CombatSearchCoordinator
                 $"turn={first.CombatEndedTurn} boundary={first.BoundaryReason}");
             if (ResolveTakeoverResult(first, policy.Interaction) is { } adoptedProbe)
                 return adoptedProbe;
-            if (IsProbeVictory(first) && BeatsExploration(first)
-                && (!compareRankBands || first.CombatEndedTurn <= earlyWinTurn
+            if (IsProbeVictory(first) && BeatsExploration(first))
+                probeWinner = first;
+            if (probeWinner != null && (!compareRankBands || first.CombatEndedTurn <= earlyWinTurn
                     && first.BoundaryReason != SearchBoundaryReason.TimeLimit))
             {
-                probeWinner = first;
                 publish?.Invoke(first);
                 if (NoveltyPortfolioBudget.Remaining(profile, clock.ElapsedMilliseconds,
                         totals.Snapshot().ExpandedNodes - expandedBefore) is { } beforeCheck)
@@ -140,8 +141,15 @@ internal static partial class CombatSearchCoordinator
                                 && IsBetterPotionPolicyResult(root, policy, check, first);
                             SolverResult winner = selectCheck ? check : first;
                             winner.NoveltyPortfolio = Describe(compareRankBands ? "rank_band_confirmed" : "narrow_confirmed",
-                                exploration, winner, selectCheck ? "beam_check" : ProbeMethod(), beforeCheck);
+                                exploration, winner, selectCheck ? "beam_check" : probeWinnerMethod, beforeCheck);
                             return winner;
+                        }
+                        // A failed confirmation only rules out the shortcut. Keep its
+                        // verified victory in the final comparison with the normal pass.
+                        if (IsBetterPotionPolicyResult(root, policy, check, first))
+                        {
+                            probeWinner = check;
+                            probeWinnerMethod = "beam_check";
                         }
                     }
                 }
@@ -236,11 +244,9 @@ internal static partial class CombatSearchCoordinator
         string MethodOf(SolverResult selected, SolverResult? scout)
         {
             if (ReferenceEquals(selected, wideProbe)) return "wide_probe";
-            if (ReferenceEquals(selected, probeWinner)) return ProbeMethod();
+            if (ReferenceEquals(selected, probeWinner)) return probeWinnerMethod;
             return ReferenceEquals(selected, scout) ? "exploration" : "beam";
         }
-
-        string ProbeMethod() => compareRankBands ? "beam_probe" : "narrow_probe";
 
         NoveltyPortfolioTelemetry Describe(string stop, SolverResult? scout, SolverResult? beam, string selectedMethod,
             SolverSearchProfile? remaining)
