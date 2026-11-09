@@ -38,6 +38,9 @@ internal static class Program
 
     private static int Main(string[] args)
     {
+        bool nativeDeploymentOnly = args.Length > 0 && args[0] == "native-deployment";
+        if (nativeDeploymentOnly)
+            args = args[1..];
         bool modelIdCacheOnly = args.Length > 0 && args[0] == "model-id-cache";
         bool upstreamPortOnly = args.Length > 0 && args[0] == "upstream-port";
         bool upstreamSearchOnly = args.Length > 0 && args[0] is "upstream-search" or "healing-bound";
@@ -109,7 +112,7 @@ internal static class Program
             GameBootstrap.ApplyGodotBypasses();
             GameBootstrap.SkipGodotNodeStaticConstructors();
             Console.WriteLine(GameBootstrap.InitializeStaticState());
-            if (nativeActionsOnly || nativeRedecisionOnly || winTempoOnly)
+            if (nativeActionsOnly || nativeRedecisionOnly || winTempoOnly || nativeDeploymentOnly)
                 NativeActionChecks.InstallOfflineBridges();
             if (memoryDisplayOnly)
             {
@@ -139,7 +142,7 @@ internal static class Program
                 ValidateRngRestore(outputDirectory);
                 return 0;
             }
-            if (!multiplayerRefreshOnly && !upstreamSearchOnly && !upstreamPortOnly && !cardChoiceIdentityOnly && !turnEnergyOnly && !rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly && !rootHistoryOnly && !strategicContextOnly && !strategicTailOnly && !p2QualityOnly && !strategicEnergyOnly && !projectedShuffleOnly)
+            if (!nativeDeploymentOnly && !multiplayerRefreshOnly && !upstreamSearchOnly && !upstreamPortOnly && !cardChoiceIdentityOnly && !turnEnergyOnly && !rollingReviewOnly && !continuationReplayOnly && !requestHydrationOnly && !rootHistoryOnly && !strategicContextOnly && !strategicTailOnly && !p2QualityOnly && !strategicEnergyOnly && !projectedShuffleOnly)
             {
             ValidateDarkEmbracePredictionCoverage();
             ValidateViciousStrategicValue();
@@ -195,6 +198,11 @@ internal static class Program
             CombatState combat = OfflineCombat.WaitForPlayableCombat(loop);
             Console.WriteLine(OfflineCombat.DescribeRoot(combat));
 
+            if (nativeDeploymentOnly)
+            {
+                NativeActionChecks.CheckDeploymentConfirmation(combat, loop);
+                return 0;
+            }
             if (nativeActionsOnly)
             {
                 Console.WriteLine(nativeReviewedCardOnly

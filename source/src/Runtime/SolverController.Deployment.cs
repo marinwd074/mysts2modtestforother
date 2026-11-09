@@ -245,6 +245,9 @@ internal static partial class SolverController
             ? deploymentSettings.DeploymentFastMode
             : SolverDeploymentFastMode.FollowGame;
         FastModeType? overrideFastMode = ResolveDeploymentFastMode(allowedFastMode);
+        NativeActionConfirmation? failedAction = null;
+        Exception? deploymentFailure = null;
+        int confirmedActions = 0;
         try
         {
             if (overrideFastMode is { } requestedFastMode)
@@ -305,7 +308,6 @@ internal static partial class SolverController
                 MultiplayerSafeExecutionBoundary? beforeBoundary = safeExecute
                     ? MultiplayerClientProbe.CaptureSafeExecutionBoundary()
                     : null;
-                GameAction? capturedAction = null;
                 SafeLocalActionDecision liveSafety = safeExecute
                     ? MultiplayerSafeLocalActionClassifier.Classify(state, action)
                     : SafeLocalActionDecision.Allow;
@@ -374,158 +376,81 @@ internal static partial class SolverController
                 long actionStartedAt = measureDeploymentTiming
                     ? Stopwatch.GetTimestamp()
                     : 0;
-                Task actionCompletion;
+                NativeActionConfirmation confirmation;
+                try
+                {
+                    if (action.TargetCombatId.HasValue && target == null)
+                    {
+                        failedAction = new(NativeActionOutcome.NotApplied, "target_missing");
+                        return;
+                    }
+
+                    if (action.Kind == PlanActionKind.UsePotion)
+                    {
+                        PotionModel? potion = player.GetPotionAtSlotIndex(action.PotionSlot);
+                        if (potion == null || !string.Equals(potion.Id.Entry, action.PotionId, StringComparison.Ordinal))
+                        {
+                            failedAction = new(NativeActionOutcome.NotApplied,
+                                potion == null ? "potion_missing" : "potion_mismatch");
+                            return;
+                        }
+                        confirmation = await NativeDeploymentAction.UsePotionAsync(
+                            potion, action.PotionSlot, target, token, choiceSession, ObserveNativeStart);
+                    }
+                    else
+                    {
+                        List<CardModel> hand = player.PlayerCombatState!.Hand.Cards.ToList();
+                        CardModel card = FindCardForDeployment(hand, action);
+                        confirmation = await NativeDeploymentAction.PlayCardAsync(
+                            card, target, token, choiceSession, ObserveNativeStart);
+                    }
+                }
+                catch (Exception ex) when (ex is NativeChoicePlanMismatchException or NativeChoiceSurfaceMismatchException)
+                {
+                    choiceSession?.ReleaseVisibleSurface();
+                    throw;
+                }
+                if (confirmation.Outcome != NativeActionOutcome.Applied)
+                {
+                    failedAction = confirmation;
+                    return;
+                }
+                GameAction capturedAction = confirmation.NativeAction
+                    ?? throw new InvalidOperationException("确认生效的部署动作缺少原生动作身份。");
+                confirmedActions++;
                 if (action.Kind == PlanActionKind.UsePotion)
                 {
-                    PotionModel? potion = player.GetPotionAtSlotIndex(action.PotionSlot);
-                    if (potion is null)
-                    {
-                        if (safeExecute)
-                        {
-                            AbortSafeExecution(host, deployment, turn, actionIndex, "potion_missing");
-                            return;
-                        }
-                        Entry.Logger.Warn(
-                            $"[CombatSolver/Test] DEPLOY_REPLAN turn={turn} reason=potion_missing " +
-                            $"potion={action.PotionId} slot={action.PotionSlot}");
-                        _combat.ContinuationSource = null;
-                        CompleteDeployment(deployment);
-                        RequestSearch(
-                            host,
-                            state,
-                            SearchReason.DeploymentDrift,
-                            deployWhenReady: !_combat.FullAutoEnabled);
-                        return;
-                    }
-                    if (!string.Equals(potion.Id.Entry, action.PotionId, StringComparison.Ordinal))
-                    {
-                        if (safeExecute)
-                        {
-                            AbortSafeExecution(host, deployment, turn, actionIndex, "potion_mismatch");
-                            return;
-                        }
-                        Entry.Logger.Warn(
-                            $"[CombatSolver/Test] DEPLOY_REPLAN turn={turn} reason=potion_mismatch " +
-                            $"slot={action.PotionSlot} actual={potion.Id.Entry} expected={action.PotionId}");
-                        _combat.ContinuationSource = null;
-                        CompleteDeployment(deployment);
-                        RequestSearch(
-                            host,
-                            state,
-                            SearchReason.DeploymentDrift,
-                            deployWhenReady: !_combat.FullAutoEnabled);
-                        return;
-                    }
-                    GameAction queuedAction = await EnqueueAndCaptureActionAsync(
-                        candidate => candidate is UsePotionAction usePotion
-                            && ReferenceEquals(usePotion.Player, player)
-                            && usePotion.PotionIndex == (uint)action.PotionSlot,
-                        () => potion.EnqueueManualUse(target),
-                        token);
-                    capturedAction = queuedAction;
-                    actionCompletion = queuedAction.CompletionTask;
-                    LastDeployedActionStartedAtMillisecondsForTesting = System.Environment.TickCount64;
                     DeployedPotionIdsForTesting.Add(action.PotionId);
                     Entry.Logger.Info($"[CombatSolver/Test] DEPLOY_ACTION turn={turn} potion={action.PotionId} slot={action.PotionSlot} target_index={action.TargetIndex} target_combat_id={action.TargetCombatId?.ToString() ?? "-"}");
-                    if (safeExecute)
-                    {
-                        long nativeCapturedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                        long refreshToNativeSubmitMs =
-                            _combat.LastPlanRefreshDecisionTimestampMilliseconds is { } refreshAt
-                                ? Math.Max(0, nativeCapturedAt - refreshAt)
-                                : -1;
-                        Entry.Logger.Info(
-                            $"[CombatSolver/MultiplayerSafeExecute] NATIVE_ACTION_CAPTURED " +
-                            $"timestamp_ms={nativeCapturedAt} " +
-                            $"request_id={safeSession?.RequestId ?? 0} action_index={actionIndex} " +
-                            $"type={queuedAction.GetType().Name} turn={turn} card=- " +
-                            $"potion={action.PotionId} slot={action.PotionSlot} " +
-                            $"refresh_to_native_submit_ms={refreshToNativeSubmitMs} " +
-                            $"local_net_id={player.NetId} custom_network_api_used=false");
-                        _combat.LastPlanRefreshDecisionTimestampMilliseconds = null;
-                    }
                 }
                 else
                 {
-                    List<CardModel> hand = player.PlayerCombatState!.Hand.Cards.ToList();
-                    CardModel card = FindCardForDeployment(hand, action);
-                    if (!card.CanPlayTargeting(target))
-                    {
-                        bool targetValid = card.IsValidTarget(target);
-                        bool cardPlayable = card.CanPlay(out UnplayableReason reason, out AbstractModel? preventer);
-                        if (safeExecute)
-                        {
-                            AbortSafeExecution(host, deployment, turn, actionIndex, "card_unplayable");
-                            return;
-                        }
-                        Entry.Logger.Warn(
-                            $"[CombatSolver/Test] DEPLOY_REPLAN turn={turn} reason=card_unplayable " +
-                            $"card={action.CardId} occurrence={action.CardOccurrence} target_valid={targetValid} " +
-                            $"can_play={cardPlayable} unplayable_reason={reason} " +
-                            $"preventer={preventer?.Id.Entry ?? "-"} energy={player.PlayerCombatState.Energy} " +
-                            $"stars={player.PlayerCombatState.Stars} energy_cost={card.EnergyCost.GetAmountToSpend()} " +
-                            $"star_cost={card.GetStarCostWithModifiers()}");
-                        _combat.ContinuationSource = null;
-                        CompleteDeployment(deployment);
-                        RequestSearch(
-                            host,
-                            state,
-                            SearchReason.DeploymentDrift,
-                            deployWhenReady: !_combat.FullAutoEnabled);
-                        return;
-                    }
-                    GameAction queuedAction = await EnqueueAndCaptureActionAsync(
-                        candidate => candidate is PlayCardAction playCard
-                            && ReferenceEquals(playCard.NetCombatCard.ToCardModelOrNull(), card),
-                        () =>
-                        {
-                            if (!card.TryManualPlay(target))
-                                throw new InvalidOperationException($"部署卡牌 {action.CardId} 在入队时失去可用状态。");
-                        },
-                        token);
-                    capturedAction = queuedAction;
-                    actionCompletion = queuedAction.CompletionTask;
-                    LastDeployedActionStartedAtMillisecondsForTesting = System.Environment.TickCount64;
-                    DeployedCardIdsForTesting.Add(card.Id.Entry);
+                    DeployedCardIdsForTesting.Add(((PlayCardAction)capturedAction).CardModelId.Entry);
                     Entry.Logger.Info($"[CombatSolver/Test] DEPLOY_ACTION turn={turn} card={action.CardId} target_index={action.TargetIndex} target_combat_id={action.TargetCombatId?.ToString() ?? "-"} choice={action.Choice?.Effect.ToString() ?? "-"}");
-                    if (safeExecute)
-                    {
-                        long nativeCapturedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                        long refreshToNativeSubmitMs =
-                            _combat.LastPlanRefreshDecisionTimestampMilliseconds is { } refreshAt
-                                ? Math.Max(0, nativeCapturedAt - refreshAt)
-                                : -1;
-                        Entry.Logger.Info(
-                            $"[CombatSolver/MultiplayerSafeExecute] NATIVE_ACTION_CAPTURED " +
-                            $"timestamp_ms={nativeCapturedAt} " +
-                            $"request_id={safeSession?.RequestId ?? 0} action_index={actionIndex} " +
-                            $"type={queuedAction.GetType().Name} turn={turn} card={action.CardId} " +
-                            $"refresh_to_native_submit_ms={refreshToNativeSubmitMs} " +
-                            $"local_net_id={player.NetId} custom_network_api_used=false");
-                        _combat.LastPlanRefreshDecisionTimestampMilliseconds = null;
-                    }
                 }
-                try
+                if (safeExecute && !safeSession!.MarkAwaitingWorldUpdate())
+                    throw new InvalidOperationException("多人 Safe Execute 动作完成时会话状态不一致。");
+
+                void ObserveNativeStart(GameAction nativeAction)
                 {
-                    if (choiceSession is { } activeChoiceSession)
-                        await activeChoiceSession.AwaitProducerAndCompleteAsync(actionCompletion);
-                    else
-                        await actionCompletion;
-                    // The root action can complete before nested card/potion actions settle;
-                    // deploy the next planned action only after the native queue is idle.
-                    await RunManager.Instance.ActionExecutor.FinishedExecutingActions().WaitAsync(token);
-                    if (safeExecute && !safeSession!.MarkAwaitingWorldUpdate())
-                        throw new InvalidOperationException("多人 Safe Execute 动作完成时会话状态不一致。");
-                }
-                catch (NativeChoicePlanMismatchException)
-                {
-                    choiceSession?.ReleaseVisibleSurface();
-                    throw;
-                }
-                catch (NativeChoiceSurfaceMismatchException)
-                {
-                    choiceSession?.ReleaseVisibleSurface();
-                    throw;
+                    LastDeployedActionStartedAtMillisecondsForTesting = System.Environment.TickCount64;
+                    if (!safeExecute)
+                        return;
+
+                    long nativeCapturedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                    long refreshToNativeSubmitMs =
+                        _combat.LastPlanRefreshDecisionTimestampMilliseconds is { } refreshAt
+                            ? Math.Max(0, nativeCapturedAt - refreshAt)
+                            : -1;
+                    Entry.Logger.Info(
+                        $"[CombatSolver/MultiplayerSafeExecute] NATIVE_ACTION_CAPTURED " +
+                        $"timestamp_ms={nativeCapturedAt} " +
+                        $"request_id={safeSession?.RequestId ?? 0} action_index={actionIndex} " +
+                        $"type={nativeAction.GetType().Name} turn={turn} card={action.CardId ?? "-"} " +
+                        $"potion={action.PotionId ?? "-"} slot={action.PotionSlot} " +
+                        $"refresh_to_native_submit_ms={refreshToNativeSubmitMs} " +
+                        $"local_net_id={player.NetId} custom_network_api_used=false");
+                    _combat.LastPlanRefreshDecisionTimestampMilliseconds = null;
                 }
                 if (measureDeploymentTiming)
                 {
@@ -666,7 +591,7 @@ internal static partial class SolverController
             {
                 if (plannedEndTurn != null)
                 {
-                    await ExecuteSafeEndTurnAsync(
+                    failedAction = await ExecuteSafeEndTurnAsync(
                         host,
                         state,
                         deployment,
@@ -767,45 +692,46 @@ internal static partial class SolverController
                         return;
                     }
                 }
-                _combat.LastSolverDeployedTurn = turn;
                 SolverOverlay.ShowEndTurnDeploymentStep();
                 await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
                 token.ThrowIfCancellationRequested();
                 PlanCardChoice[] endTurnChoices = plannedEndTurn.TurnStartChoices?
                     .Where(choice => choice.Timing is PlanChoiceTiming.PlayerTurnEnd or PlanChoiceTiming.EnemyTurn)
                     .ToArray() ?? [];
-                if (endTurnChoices.Length > 0)
+                using NativeChoiceSession? endTurnChoiceSession = endTurnChoices.Length == 0 ? null
+                    : NativeChoiceRuntime.Begin(state, player, $"deployment_end_turn:{turn}");
+                if (endTurnChoiceSession != null)
                 {
                     Entry.Logger.Info(
                         $"[CombatSolver/Test] DEPLOY_END_TURN_CHOICE_PLAN turn={turn} " +
                         $"count={endTurnChoices.Length} sources={string.Join(',', endTurnChoices.Select(choice => choice.SourceId))}");
-                    using NativeChoiceSession choiceSession = NativeChoiceRuntime.Begin(
-                        state,
-                        player,
-                        $"deployment_end_turn:{turn}");
-                    choiceSession.SetPlanAndStartDriving(host, endTurnChoices, token);
-                    CombatManager.Instance.OnEndedTurnLocally();
-                    RunManager.Instance.ActionQueueSynchronizer.RequestEnqueue(new EndPlayerTurnAction(player, turn));
+                    endTurnChoiceSession.SetPlanAndStartDriving(host, endTurnChoices, token);
+                }
+                NativeActionConfirmation endTurn = await NativeDeploymentAction.EndTurnAsync(
+                    player, turn, token, drainQueue: false, onAccepted: () =>
+                    {
+                        // Publish ownership when the original action is accepted, before the next
+                        // turn's continuation can run. Enemy-turn and setup choices have their own lifetimes.
+                        if (IsCurrentCombatLifecycle(state, deployment.CombatLifecycleGeneration))
+                            _combat.LastSolverDeployedTurn = turn;
+                    });
+                if (endTurn.Outcome != NativeActionOutcome.Applied)
+                {
+                    failedAction = endTurn;
+                    return;
+                }
+                if (endTurnChoiceSession != null)
+                {
                     try
                     {
-                        await choiceSession.WaitForAllPlansConsumedAsync(token);
+                        await endTurnChoiceSession.WaitForAllPlansConsumedAsync(token);
+                        await endTurnChoiceSession.CompleteAndDetachAsync();
                     }
-                    catch (NativeChoicePlanMismatchException)
+                    catch (Exception ex) when (ex is NativeChoicePlanMismatchException or NativeChoiceSurfaceMismatchException)
                     {
-                        choiceSession.ReleaseVisibleSurface();
+                        endTurnChoiceSession.ReleaseVisibleSurface();
                         throw;
                     }
-                    catch (NativeChoiceSurfaceMismatchException)
-                    {
-                        choiceSession.ReleaseVisibleSurface();
-                        throw;
-                    }
-                    await choiceSession.CompleteAndDetachAsync();
-                }
-                else
-                {
-                    CombatManager.Instance.OnEndedTurnLocally();
-                    RunManager.Instance.ActionQueueSynchronizer.RequestEnqueue(new EndPlayerTurnAction(player, turn));
                 }
                 SolverOverlay.ShowDeploymentComplete(host, turn, actions.Count, endedTurn: true);
                 string deploymentEndMessage =
@@ -835,66 +761,21 @@ internal static partial class SolverController
                 _combat.LastSolverDeployedTurn = turn;
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
             Entry.Logger.Info($"[CombatSolver/Test] DEPLOY_CANCELED turn={turn}");
         }
-        catch (InvalidOperationException ex) when (IsMissingDeploymentCard(ex))
+        catch (InvalidOperationException ex) when (IsMissingDeploymentCard(ex) || IsDeploymentTurnDrift(ex))
         {
-            if (safeExecute)
-            {
-                AbortSafeExecution(host, deployment, turn, safeSession?.CompletedActions ?? 0, "card_missing");
-                return;
-            }
-            _combat.ContinuationSource = null;
-            CompleteDeployment(deployment);
-            Entry.Logger.Warn(
-                $"[CombatSolver/Test] DEPLOY_REPLAN turn={turn} reason=card_missing " +
-                $"message={ex.Message}");
-            RequestSearch(
-                host,
-                state,
-                SearchReason.DeploymentDrift,
-                deployWhenReady: !_combat.FullAutoEnabled);
-        }
-        catch (InvalidOperationException ex) when (IsDeploymentTurnDrift(ex))
-        {
-            if (safeExecute)
-            {
-                AbortSafeExecution(host, deployment, turn, safeSession?.CompletedActions ?? 0, "turn_drift");
-                return;
-            }
-            _combat.ContinuationSource = null;
-            CompleteDeployment(deployment);
-            Entry.Logger.Warn(
-                $"[CombatSolver/Test] DEPLOY_REPLAN turn={turn} reason=turn_drift " +
-                $"message={ex.Message}");
-            RequestSearch(
-                host,
-                state,
-                SearchReason.DeploymentDrift,
-                deployWhenReady: !_combat.FullAutoEnabled);
-        }
-        catch (NativeChoicePlanMismatchException ex)
-        {
-            PauseAfterNativeChoiceFailure(host, deployment, turn, ex);
-        }
-        catch (NativeChoiceSurfaceMismatchException ex)
-        {
-            PauseAfterNativeChoiceFailure(host, deployment, turn, ex);
+            failedAction = new(NativeActionOutcome.NotApplied,
+                IsMissingDeploymentCard(ex) ? "card_missing" : "turn_drift");
         }
         catch (Exception ex)
         {
-            if (safeExecute)
-            {
-                AbortSafeExecution(host, deployment, turn, safeSession?.CompletedActions ?? 0, "deployment_exception");
-                Entry.Logger.Error($"[CombatSolver/MultiplayerSafeExecute] MP2B_DEPLOY_EXCEPTION turn={turn} exception={ex}");
-                return;
-            }
-            _combat.BugReportIssues.RecordFailure(CombatBugReportIssueKind.DeploymentFailure, ex);
-            CombatBugReportExporter.RecordRuntimeException("deployment", ex);
-            SolverOverlay.Show(host, FormatDeploymentFailure(ex));
-            Entry.Logger.Error($"[CombatSolver/Test] DEPLOY_FAILURE turn={turn} exception={ex}");
+            failedAction = new(NativeActionOutcome.Unconfirmed,
+                ex is NativeChoicePlanMismatchException or NativeChoiceSurfaceMismatchException
+                    ? "native_choice_mismatch" : "deployment_exception");
+            deploymentFailure = ex;
         }
         finally
         {
@@ -915,14 +796,20 @@ internal static partial class SolverController
             }
             finally
             {
+                bool ownsDeployment = ReferenceEquals(_deployment, deployment);
                 if (safeSession is { State: not MultiplayerSafeExecutionState.Completed
                     and not MultiplayerSafeExecutionState.Aborted })
                 {
-                    safeSession.Abort("deployment_finally");
+                    safeSession.Abort(failedAction?.Reason ?? "deployment_finally");
                 }
                 CompleteDeployment(deployment);
                 DisposeDeploymentCancellationOnce(deployment);
                 SolverOverlay.RefreshControls();
+                if (ownsDeployment && failedAction is { } failure
+                    && IsCurrentCombatLifecycle(state, deployment.CombatLifecycleGeneration))
+                {
+                    RecoverOrPauseDeployment(host, state, turn, safeExecute, confirmedActions, failure, deploymentFailure);
+                }
             }
         }
     }
@@ -956,7 +843,7 @@ internal static partial class SolverController
         return candidate.Kind == PlanActionKind.EndTurn ? candidate : null;
     }
 
-    private static async Task ExecuteSafeEndTurnAsync(
+    private static async Task<NativeActionConfirmation?> ExecuteSafeEndTurnAsync(
         NGame host,
         CombatState state,
         SolverDeploymentSession deployment,
@@ -992,7 +879,7 @@ internal static partial class SolverController
         if (decision != MultiplayerSafeEndTurnDecision.Safe)
         {
             AbortSafeExecution(host, deployment, turn, actionCount, decisionReason);
-            return;
+            return null;
         }
 
         if (!safeSession.TryBeginEndTurn(
@@ -1002,30 +889,23 @@ internal static partial class SolverController
                 out string sessionReason))
         {
             AbortSafeExecution(host, deployment, turn, actionCount, sessionReason);
-            return;
+            return null;
         }
 
         SolverOverlay.ShowEndTurnDeploymentStep();
-        GameAction queuedAction = await EnqueueAndCaptureActionAsync(
-            candidate => candidate is EndPlayerTurnAction,
-            () =>
-            {
-                CombatManager.Instance.OnEndedTurnLocally();
-                RunManager.Instance.ActionQueueSynchronizer.RequestEnqueue(
-                    new EndPlayerTurnAction(LocalContext.GetMe(state)!, turn));
-            },
-            token);
-        Entry.Logger.Info(
-            $"[CombatSolver/MultiplayerSafeExecute] NATIVE_ACTION_CAPTURED " +
-            $"request_id={safeSession.RequestId} action_index={actionCount} " +
-            $"type={queuedAction.GetType().Name} turn={turn} card=- " +
-            $"local_net_id={LocalContext.GetMe(state)?.NetId} custom_network_api_used=false");
-        await queuedAction.CompletionTask.WaitAsync(token);
-        await actionExecutor.FinishedExecutingActions().WaitAsync(token);
+        Player player = LocalContext.GetMe(state)!;
+        NativeActionConfirmation confirmation = await NativeDeploymentAction.EndTurnAsync(
+            player, turn, token, drainQueue: true, onStarted: queuedAction => Entry.Logger.Info(
+                $"[CombatSolver/MultiplayerSafeExecute] NATIVE_ACTION_CAPTURED " +
+                $"request_id={safeSession.RequestId} action_index={actionCount} " +
+                $"type={queuedAction.GetType().Name} turn={turn} card=- " +
+                $"local_net_id={player.NetId} custom_network_api_used=false"));
+        if (confirmation.Outcome != NativeActionOutcome.Applied)
+            return confirmation;
         if (!safeSession.CompleteEndTurn())
         {
             AbortSafeExecution(host, deployment, turn, actionCount, "end_turn_completion_failed");
-            return;
+            return null;
         }
 
         MultiplayerClientProbe.ObserveActionBoundary(state, "safe_execute_end_turn_complete");
@@ -1059,6 +939,7 @@ internal static partial class SolverController
             $"continuation_pending={preserveFutureRoute.ToString().ToLowerInvariant()} " +
             $"route_identity={futureRoute?.RouteIdentity ?? "-"} " +
             "automatic_end_turn=true custom_network_api_used=false");
+        return null;
     }
 
     private static async Task<MultiplayerSafeExecutionBoundary?>
@@ -1269,17 +1150,47 @@ internal static partial class SolverController
         }
     }
 
-    private static void PauseAfterNativeChoiceFailure(NGame host, SolverDeploymentSession deployment, int turn, Exception failure)
+    private static void RecoverOrPauseDeployment(NGame host, CombatState state, int turn, bool safeExecute,
+        int confirmedActions, NativeActionConfirmation confirmation, Exception? failure)
     {
         _combat.ContinuationSource = null;
+        _combat.LatestResult = null;
+        _combat.LatestStamp = null;
+        _combat.MultiplayerSafeExecuteDeploymentRequested = false;
+        InvalidateRenderedRouteAdoptionSeed();
+
+        bool mayReplan = confirmation.Outcome == NativeActionOutcome.NotApplied
+            && !_combat.ShowcaseMode && !_combat.AutomaticSearchPaused
+            && IsSamePlayableTurn(state, turn) && CanSolve(state, out _);
+        if (mayReplan && _combat.TryUseNativeActionRecovery(turn, confirmation.Outcome))
+        {
+            Entry.Logger.Warn($"[CombatSolver/Test] DEPLOY_REPLAN turn={turn} reason={confirmation.Reason} "
+                + $"confirmed_actions={confirmedActions} native_action_recovery=true");
+            RequestSearch(host, state, SearchReason.DeploymentDrift,
+                deployWhenReady: !safeExecute && !_combat.FullAutoEnabled);
+            return;
+        }
+
         _combat.FullAutoEnabled = false;
+        _combat.MultiplayerSafeAutoEnabled = false;
         _combat.AutomaticSearchPaused = true;
         _combat.AutomaticSearchPausedTurn = turn;
-        _combat.BugReportIssues.RecordFailure(CombatBugReportIssueKind.DeploymentFailure, failure);
-        CombatBugReportExporter.RecordRuntimeException("deployment_choice", failure);
-        CompleteDeployment(deployment);
-        SolverOverlay.Show(host, SolverText.Get("自动选牌未完成，已暂停执行。当前选择交还手动操作，完成后点击“重新计算”。"));
-        Entry.Logger.Error($"[CombatSolver/Test] DEPLOY_CHOICE_PAUSED turn={turn} exception={failure}");
+        CancelSearch();
+        CancelDeferredSearch();
+        if (failure != null)
+        {
+            _combat.BugReportIssues.RecordFailure(CombatBugReportIssueKind.DeploymentFailure, failure);
+            CombatBugReportExporter.RecordRuntimeException("deployment", failure);
+        }
+        string pausedMessage = SolverText.Get("无法安全继续执行，已暂停。请检查当前战斗状态后重新计算。");
+        string message = confirmation.Reason == "native_choice_mismatch"
+            ? SolverText.Get("自动选牌未完成，已暂停执行。当前选择交还手动操作，完成后点击“重新计算”。")
+            : failure == null ? pausedMessage : $"{pausedMessage}\n{FormatDeploymentFailure(failure)}";
+        SolverOverlay.Show(host, message);
+        string disposition = confirmation.Outcome == NativeActionOutcome.Unconfirmed ? "unconfirmed"
+            : mayReplan ? "retry_exhausted" : "retry_unavailable";
+        Entry.Logger.Warn($"[CombatSolver/Test] DEPLOY_NATIVE_PAUSED turn={turn} reason={confirmation.Reason} "
+            + $"outcome={confirmation.Outcome} disposition={disposition} confirmed_actions={confirmedActions} exception={failure}");
     }
 
     internal static CardModel FindCardForDeployment(

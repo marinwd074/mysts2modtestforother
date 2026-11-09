@@ -106,6 +106,8 @@ Coordinator 先从新根重放当前完整路线，再在同一份额内重放�
 
 同一战斗回合已有计划、活动搜索、部署会话或已完成的部署时，迟到的 AutoTurnStart 在 RequestSearch 入口直接完成。搜索与部署会话分别冻结战斗身份和起始回合；开始部署清空 LatestResult 后由部署会话延续归属，完成后由 LastSolverDeployedTurn 保留。手动重算及下一回合请求继续原流程。
 
+`NativeDeploymentAction` 在主线程通过原生队列识别本地提交的具体动作，并在执行前订阅取消。药水以原瓶的效果完成事件确认，卡牌以原卡的出牌完成事件确认，结束回合以本地玩家被登记为已结束确认。选牌与后续队列落定沿用部署会话。已证实未生效且仍能操作同一回合时，部署丢弃旧路线并至多请求一次新搜索。第二次失败或效果无法确认时暂停自动部署。多人原有世界版本复核和执行授权继续生效。
+
 `ICombatPredictionEffectSink.ApplyPowerFromSource` 将原版显式 cardSource 传入分支 Power 施加作用域，null 明确代表能力/遗物自身来源；完成后恢复外层来源。Envenom/Concoct 的附毒使用此入口，UnsettlingLamp 继续只响应卡牌直接施加。作用域存于分支，活动期间禁止 Fork。
 
 ## 2. Runtime

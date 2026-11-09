@@ -141,6 +141,16 @@ internal sealed class SolverCombatSession
     public int RoutesRestored { get; set; }
     public IReadOnlyList<string> LastContinuationDifferences { get; set; } = [];
     public int? LastSolverDeployedTurn { get; set; }
+    private int? NativeActionRecoveryTurn { get; set; }
+
+    internal bool TryUseNativeActionRecovery(int turn, NativeActionOutcome outcome)
+    {
+        if (outcome != NativeActionOutcome.NotApplied || NativeActionRecoveryTurn == turn)
+            return false;
+        NativeActionRecoveryTurn = turn;
+        return true;
+    }
+
     public bool ManualControlObserved { get; set; }
     public bool ShowcaseMode { get; set; }
     public int? LastSafeEndTurnRequestId { get; set; }
