@@ -158,7 +158,8 @@ internal sealed partial class CombatBeamSolver
                 }
 
                 SearchNode parent = current;
-                SimulationSnapshot snapshot = ReplayAction(parent, action);
+                // The selected route reads the simulator's potion ledger even at victory.
+                SimulationSnapshot snapshot = ReplayAction(parent, action, allowValueOnlyTerminal: false);
                 bool terminal = snapshot.PlayerDead
                     || snapshot.AllEnemiesDead
                     || snapshot.BoundaryReason != SearchBoundaryReason.None;

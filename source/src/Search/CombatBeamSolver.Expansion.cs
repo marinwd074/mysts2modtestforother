@@ -2754,7 +2754,8 @@ internal sealed partial class CombatBeamSolver
         PlanAction action,
         ReplayForkSeed? replayForkSeed = null,
         RoundReplayCheckpointCapture? roundCheckpointCapture = null,
-        CardChoiceReplayCapture? cardChoiceCapture = null)
+        CardChoiceReplayCapture? cardChoiceCapture = null,
+        bool allowValueOnlyTerminal = true)
     {
         bool r0MemoEligible = CanUseR0TransitionMemoForReplay(
             action, replayForkSeed, roundCheckpointCapture, cardChoiceCapture);
@@ -2762,7 +2763,7 @@ internal sealed partial class CombatBeamSolver
             action, replayForkSeed, roundCheckpointCapture, cardChoiceCapture);
         bool requestHydrationEligible = TryRequestHydrationKey(parent, action, out ReplayCacheKey requestHydrationKey,
             replayForkSeed, roundCheckpointCapture, cardChoiceCapture);
-        if (r0MemoEligible
+        if (allowValueOnlyTerminal && r0MemoEligible
             && TryReadR0TerminalTransition(parent, action, out SimulationSnapshot cachedTerminal))
         {
             _run.TransitionCount++;
