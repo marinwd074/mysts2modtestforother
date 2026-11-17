@@ -67,6 +67,9 @@ internal static partial class CompatibilitySmoke
         Creature enemy = live.Enemies.Single();
         var checks = new List<string>();
 
+        await CheckPendulumHandDrawAsync(live, player);
+        checks.Add("PendulumHandDraw");
+
         int captureCount = ModelDb.Monsters.Count(model => MonsterMoveEffects.CaptureStaticIntValues(model).Count > 0);
         checks.Add($"monster_root_values={captureCount}");
 
@@ -196,6 +199,33 @@ internal static partial class CompatibilitySmoke
         checks.Add("MementoMori");
 
         return "PASS: v0.113.1 native/predicted mechanics " + string.Join(", ", checks);
+    }
+
+    private static async Task CheckPendulumHandDrawAsync(CombatState live, Player player)
+    {
+        Pendulum relic = await RelicCmd.Obtain<Pendulum>(player);
+        try
+        {
+            int cadence = relic.DynamicVars["Turns"].IntValue;
+            for (int counter = 0; counter < cadence; counter++)
+            {
+                relic.TurnsSeen = counter;
+                var simulator = CombatRootSnapshot.Capture(live).ForkSimulator();
+                var branch = (SimulatedCombatState)simulator.State.CombatState;
+                var capturedRelic = branch.RelicsOf(player).OfType<Pendulum>().Single();
+                branch.ApplyRelicBeforeHandDraw(simulator, player, new TurnStartChoiceCursor(null), capturedRelic);
+
+                int predicted = PersistentPowerSupport.GetModifiedHandDraw(branch, player, CombatManager.baseHandDrawCount);
+                Equal("Pendulum preserves native counter during prediction", counter, relic.TurnsSeen);
+                relic.TurnsSeen = (counter + 1) % cadence;
+                int native = (int)relic.ModifyHandDraw(player, CombatManager.baseHandDrawCount);
+                Equal($"Pendulum draw after counter {counter}", native, predicted);
+            }
+        }
+        finally
+        {
+            await RelicCmd.Remove(relic);
+        }
     }
 
     private static async Task<string> RunHopperMechanicsAsync(CombatState live)

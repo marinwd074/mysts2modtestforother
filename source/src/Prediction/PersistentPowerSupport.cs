@@ -104,7 +104,8 @@ internal static class PersistentPowerSupport
         foreach (RelicModel relic in combat.RelicsOf(player).Where(static relic => !relic.IsMelted))
         {
             result -= GetTurnBasedHandDrawContribution(relic, combat, rootTurn);
-            result -= SimulatedCombatState.GetLiveStatefulRelicHandDrawContribution(
+            // The native hook already counted the captured relic. Replace its contribution with the branch's.
+            result -= SimulatedCombatState.GetRootStatefulRelicHandDrawContribution(
                 relic,
                 player,
                 rootTurn);

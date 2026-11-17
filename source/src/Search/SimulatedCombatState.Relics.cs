@@ -254,13 +254,18 @@ internal sealed partial class SimulatedCombatState
         return true;
     }
 
-    public static decimal GetLiveStatefulRelicHandDrawContribution(
+    public static decimal GetRootStatefulRelicHandDrawContribution(
         RelicModel relic,
         Player player,
         int turn)
-        // Pendulum draws in AfterPlayerTurnStart; ModifyHandDraw never included it.
-        => relic is Pendulum ? 0m
-            : GetStatefulRelicHandDrawContribution(relic, player, turn, CaptureLiveState(relic));
+    {
+#if STS2_01071
+        // This version draws Pendulum's extra card in AfterPlayerTurnStart.
+        if (relic is Pendulum)
+            return 0m;
+#endif
+        return GetStatefulRelicHandDrawContribution(relic, player, turn, CaptureLiveState(relic));
+    }
 
     private static decimal GetStatefulRelicHandDrawContribution(
         RelicModel relic,

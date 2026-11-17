@@ -21,6 +21,10 @@ v0.107.1 与 v0.113.1 的程序集对照、上游移植快照、卡牌和敌人�
 
 ## 最近修复与下一步
 
+### 钟摆导致第二回合重算
+
+`KNIGHTS_ELITE` 问题包 `2b9adea2` 的第 2 回合重算来自钟摆抽牌偏差。v0.113.1 把额外抽牌移入正常回合抽牌，预测现在扣除原生钩子计入的根快照加成，再按分支计数补回。按原包输入离线重放首回合，旧构建多抽一张邪眼+，修复构建的完整第 2 回合 `ContinuationStamp` 与原包一致。
+
 ### 骑士团伙搜索失败
 
 `KNIGHTS_ELITE` 问题包 `4126c78ba1ea4b40af924ea89afdd63b`，桌面 `CombatSolver-BugReports/`。第一回合自动搜索曾在 `MaterializeSelectedRoute` 读取模拟器时报 `CloneValueOnlyForTransitionMemo:0`。格挡药插入重放命中了 R0 纯值终局缓存，最终结果却仍需读取模拟器的药水账本。提交 `bf63bf54` 在[格挡药插入重放](../src/Search/CombatBeamSolver.BlockPotionInsertion.cs)禁用纯值命中，正常 Beam 仍使用 R0。
