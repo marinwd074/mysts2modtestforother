@@ -52,7 +52,7 @@ Agent 可以在当前目标需要时自主：
 
 - `docs/CODEX_HANDOFF.md`：当前状态、未完成项和下一步的唯一默认入口。
 - `docs/ARCHITECTURE.md`：涉及职责、状态所有权、依赖边界时读取。
-- `docs/Rolling_Horizon_Reuse_Architecture.md`、`docs/Multiplayer_LocalCore_Search_Optimization.md`、`docs/CombatSolver_Quality_First_Next.md`、`docs/CombatSolver_GPT_Architecture_Plan.md`：已完成实现和专项状态索引，只用于追踪函数、调用链和历史设计落点，不再充当执行任务书。
+- `docs/README.md`：当前专题入口与旧计划的 Git 历史索引。
 - `docs/TEST_MATRIX.md`：只有需要决定验证层级或入口时读取。
 - `docs/compat/0.107.1/README.md`：只有版本语义/兼容问题时读取。
 - `docs/multiplayer/RUNBOOK.md`：只有真实 Host/Client Lab 操作前读取。

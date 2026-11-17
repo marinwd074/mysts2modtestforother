@@ -62,7 +62,7 @@
 - teammate forecast observation → fresh replan 的部分真实 Host/Client 时序仍标记为未验证。
 - 当前优先级已从继续堆安全层转为**实际路线质量**。
 
-当前状态与下一任务以 [../CODEX_HANDOFF.md](../CODEX_HANDOFF.md) 为准，质量计划见 [../CombatSolver_Quality_First_Next.md](../CombatSolver_Quality_First_Next.md)。
+当前状态与下一任务见[交接](../CODEX_HANDOFF.md)，原生 Host/Client 待复验场景见[实机清单](LIVE_ACCEPTANCE.md)。
 
 ## 运行与测试
 

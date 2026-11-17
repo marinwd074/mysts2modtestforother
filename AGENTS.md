@@ -24,7 +24,7 @@
 
 - 新任务默认先读取：本文件、`source/AGENTS.md`、`source/docs/CODEX_HANDOFF.md`；涉及职责/状态所有权时再读 `source/docs/ARCHITECTURE.md`，其余资料按任务定向读取。
 - `source/docs/CODEX_HANDOFF.md` 是当前任务、未完成风险和下一步的唯一默认入口。旧阶段文档不得被当成当前执行顺序。
-- `source/docs/Rolling_Horizon_Reuse_Architecture.md`、`source/docs/Multiplayer_LocalCore_Search_Optimization.md`、`source/docs/CombatSolver_Quality_First_Next.md`、`source/docs/CombatSolver_GPT_Architecture_Plan.md` 现在都是实现档案/专项状态索引：用于查询“做了什么、在哪里、调用链是什么”，不用于自动继续历史阶段。
+- 现行架构见 `source/docs/ARCHITECTURE.md`。旧计划、实现档案与阶段报告从 `source/docs/README.md` 的历史索引按需查找。
 - 不得为了“了解完整历史”自动批量读取 `source/docs/performance/`、`strategy/`、`audits/`、`issues/`、`releases/`、`history/`、`runtime-evidence/` 或 test-only submodule；只有定位特定回归、比较指定基线或用户明确要求时才定向读取。
 - `source/docs/TEST_MATRIX.md` 只在决定验证范围时读取；`source/docs/multiplayer/RUNBOOK.md` 只在真实 Host/Client Lab 操作前读取。
 - dated 报告、旧批次总结、旧 commit SHA 和历史 PASS 不是当前事实。当前状态以 `CODEX_HANDOFF.md` + 当前源码 + 当前验证结果为准。
