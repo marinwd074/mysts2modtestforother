@@ -159,7 +159,7 @@ internal static partial class CardChoiceSupport
                 owner.Hand.Cards.Where(item => !item.Preview.GetKeywordsWithSources(KeywordSources.Local)
                     .Contains(CardKeyword.Ethereal))),
             Snap => Spec(owner, PlanChoiceEffect.ApplyRetain, PileType.Hand, 1,
-                owner.Hand.Cards.Where(item => !item.Preview.Keywords.Contains(CardKeyword.Retain))),
+                owner.Hand.Cards.Where(item => !item.HasKeyword(simulator.State, CardKeyword.Retain))),
             DecisionsDecisions => Spec(owner, PlanChoiceEffect.AutoPlayRepeated, PileType.Hand, 1,
                 owner.Hand.Cards.Where(item => item.Preview.Type == CardType.Skill
                     && !item.Preview.Keywords.Contains(CardKeyword.Unplayable))),

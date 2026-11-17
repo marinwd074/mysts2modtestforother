@@ -93,10 +93,7 @@ internal static partial class CardPowerOnPlaySupport
                 combat.Apply<ViciousPower>(owner, card.DynamicVars.Cards.IntValue, owner);
                 break;
             case WellLaidPlans:
-                combat.Apply<WellLaidPlansPower>(
-                    owner,
-                    card.DynamicVars["RetainAmount"].IntValue,
-                    owner);
+                combat.Apply<WellLaidPlansPower>(owner, 1, owner);
                 break;
         }
     }

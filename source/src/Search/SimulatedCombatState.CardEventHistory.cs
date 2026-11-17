@@ -316,8 +316,10 @@ internal sealed partial class SimulatedCombatState
     public void AfterCardEnteredCombat(CombatPredictionSimulator simulator, PredictedCard card)
     {
         RegisterGeneratedCombatCard(card);
+#if STS2_01071
         foreach (PhantomBladesPower power in EffectivePowers().OfType<PhantomBladesPower>())
             CombatSolver.Engine.InCombat.Mirrors.Hooks.Card.PhantomBladesPowerMirrors.AfterCardEnteredCombat(power, card);
+#endif
         foreach (var relic in RelicsOf(card.Preview.Owner).OfType<MegaCrit.Sts2.Core.Models.Relics.GhostSeed>())
             if (!relic.IsMelted)
                 CombatSolver.Engine.InCombat.Mirrors.Hooks.Card.GhostSeedMirrors.AfterCardEnteredCombat(relic, card);

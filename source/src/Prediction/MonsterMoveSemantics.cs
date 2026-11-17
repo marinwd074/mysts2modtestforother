@@ -18,7 +18,7 @@ internal static class MonsterMoveSemantics
         IReadOnlyList<PlanCardChoice>? plannedChoices = null)
     {
         SimCreatureState simulatedPlayer = simulator.State.GetCreature(player);
-        MonsterMoveEffects.ApplyBeforeAttack(simulator, combat, move, player);
+        MonsterMoveEffects.ApplyBeforeAttack(simulator, combat, move);
         if (simulator.HasPendingChoice)
             return simulatedPlayer.IsDead;
         bool fullyBlockedAttack = false;

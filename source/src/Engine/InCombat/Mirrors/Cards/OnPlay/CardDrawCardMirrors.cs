@@ -68,10 +68,7 @@ internal static partial class CardDrawCardMirrors
 
     public static void ExpertiseOnPlay(Expertise card, CardOnPlayMirrorContext context)
     {
-        decimal drawCount = Math.Max(
-            0m,
-            card.DynamicVars.Cards.BaseValue - context.OwnerState.Hand.Cards.Count);
-        context.Simulator.Draw(card.Owner, drawCount);
+        context.Simulator.Draw(card.Owner, card.DynamicVars.Cards.IntValue);
     }
 
     public static void FetchOnPlay(Fetch _, CardOnPlayMirrorContext context)

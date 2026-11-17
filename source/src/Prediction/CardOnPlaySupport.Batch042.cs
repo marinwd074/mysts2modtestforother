@@ -105,10 +105,7 @@ internal static partial class CardOnPlaySupport
                 break;
             }
             case Tracking:
-                combat.Apply<TrackingPower>(
-                    owner,
-                    combat.GetAmount<TrackingPower>(owner) > 0 ? 1 : 2,
-                    owner);
+                combat.Apply<TrackingPower>(owner, 50, owner);
                 break;
         }
     }

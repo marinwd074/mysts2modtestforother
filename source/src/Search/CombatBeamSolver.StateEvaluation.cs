@@ -431,7 +431,7 @@ internal sealed partial class CombatBeamSolver
         for (int cardIndex = 0; hasFutureCombat && cardIndex < handCards.Count; cardIndex++)
         {
             PredictedCard card = handCards[cardIndex];
-            if (!card.Preview.ShouldRetainThisTurn)
+            if (!card.ShouldRetainThisTurn(simulator.State))
                 continue;
             // Enumerable.Sum(int) uses checked accumulation; preserve overflow behavior.
             retainedHandValue = checked(retainedHandValue + Math.Max(
@@ -1155,7 +1155,7 @@ internal sealed partial class CombatBeamSolver
                 {
                     int maxHandSize = simulator.GetMaxHandSize(player);
                     int retainedCards = playerState.Hand.Cards.Count(card =>
-                        card.Preview.ShouldRetainThisTurn);
+                        card.ShouldRetainThisTurn(simulator.State));
                     int firstTurnSpace = Math.Max(0, maxHandSize - retainedCards);
                     int firstTurnBonusSpace = Math.Max(
                         0,
@@ -1233,7 +1233,7 @@ internal sealed partial class CombatBeamSolver
                 0L, (long)demesneAmount * futureTurns);
             int baseDraw = Math.Max(0, PersistentPowerSupport.GetModifiedHandDraw(
                 combat, player, CombatManager.baseHandDrawCount) - demesneAmount);
-            int retained = playerState.Hand.Cards.Count(card => card.Preview.ShouldRetainThisTurn);
+            int retained = playerState.Hand.Cards.Count(card => card.ShouldRetainThisTurn(simulator.State));
             int firstSpace = Math.Max(0, simulator.GetMaxHandSize(player) - retained - baseDraw);
             int laterSpace = Math.Max(0, simulator.GetMaxHandSize(player) - baseDraw);
             demesneDrawGain = (int)Math.Min((long)liveCards.Count * 2,

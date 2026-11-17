@@ -71,8 +71,15 @@ internal static class AfterCardGeneratedForCombatMirrors
 
     private static void HandleRegalite(Regalite relic, AfterCardGeneratedForCombatMirrorContext context)
     {
-        if (context.Creator == relic.Owner)
-            context.Simulator.GainBlock(relic.Owner.Creature, relic.DynamicVars.Block);
+        if (context.Creator != relic.Owner)
+            return;
+
+        var state = context.StateStore.Get(relic, static value => new FlagPredictionState(value._usedThisTurn));
+        if (state.Value)
+            return;
+
+        state.Value = true;
+        context.Simulator.GainBlock(relic.Owner.Creature, relic.DynamicVars.Block);
     }
 
 #if !STS2_01071

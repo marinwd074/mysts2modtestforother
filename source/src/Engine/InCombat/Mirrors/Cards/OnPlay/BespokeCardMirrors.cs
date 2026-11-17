@@ -44,9 +44,19 @@ internal static class BespokeCardMirrors
     }
 
     public static void ExpectAFightOnPlay(ExpectAFight card, CardOnPlayMirrorContext context)
-        => context.Simulator.GainEnergy(
-            card.Owner,
-            context.Calculate(card.DynamicVars["CalculatedEnergy"]));
+    {
+        context.Simulator.AcknowledgeExecutionDispatch();
+        context.GainBlock(card.Owner.Creature);
+        ContinueOrQueueTail(context, BespokeTailKind.ExpectAFightDiscount);
+    }
+
+    public static void MementoMoriOnPlay(MementoMori card, CardOnPlayMirrorContext context)
+    {
+        Creature? target = context.State.HittableEnemies.MinBy(enemy => context.State.GetCreature(enemy).CurrentHp);
+        if (target != null)
+            DamageCmd.Attack(card.DynamicVars.Damage.IntValue).FromCard(card, context.CardPlay)
+                .Targeting(target).Simulate(context.Simulator);
+    }
 
     public static void DemonicShieldOnPlay(DemonicShield card, CardOnPlayMirrorContext context)
     {
@@ -315,6 +325,11 @@ internal static class BespokeCardMirrors
 
         switch (tail)
         {
+            case BespokeTailKind.ExpectAFightDiscount:
+                foreach (PredictedCard candidate in simulator.State.GetPlayerCombatState(playedCard.Preview.Owner).Hand)
+                    if (candidate.Preview.Type == CardType.Attack && !candidate.Preview.EnergyCost.CostsX)
+                        candidate.MutablePreview.EnergyCost.AddUntilPlayed(-playedCard.Preview.DynamicVars.Energy.IntValue);
+                break;
             case BespokeTailKind.BoneShardsGainBlock:
             {
                 var card = (BoneShards)playedCard.MutablePreview;
@@ -520,6 +535,7 @@ internal static class BespokeCardMirrors
     private enum BespokeTailKind
     {
         BoneShardsGainBlock,
+        ExpectAFightDiscount,
         DemonicShieldGainBlock,
         InterceptCoverage,
         MaulGrowth,

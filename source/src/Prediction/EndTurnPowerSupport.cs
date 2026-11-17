@@ -18,6 +18,7 @@ internal static partial class EndTurnPowerSupport
         SimulatedCombatState combat,
         Player player)
     {
+#if STS2_01071
         if (!PersistentRelicSupport.ShouldFlush(combat, player))
             return true;
 
@@ -32,6 +33,10 @@ internal static partial class EndTurnPowerSupport
             combat.ActiveExecutionChoices,
             power.Id.Entry,
             power.Amount);
+#else
+        // The native power now prevents the owner's hand flush without a selection.
+        return true;
+#endif
     }
 
     public static bool TriggerRegular(

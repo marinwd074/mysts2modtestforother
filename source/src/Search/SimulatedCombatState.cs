@@ -819,9 +819,11 @@ internal sealed partial class SimulatedCombatState
             ((StringVar)covered.DynamicVars["Applier"]).StringValue = _playerNames[applyingPlayer];
         }
         afterAmountChanged?.Invoke(amount, simulated);
+#if STS2_01071
         if (previousAmount == 0 && simulated._amount != 0 && simulated is PhantomBladesPower phantom)
             PhantomBladesPowerMirrors.AfterApplied(phantom, _predictionState
                 ?? throw new InvalidOperationException("Phantom blades requires attached branch card state."));
+#endif
         return applied;
     }
 

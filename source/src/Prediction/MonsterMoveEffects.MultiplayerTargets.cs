@@ -80,6 +80,7 @@ internal static partial class MonsterMoveEffects
             ("TwoTailedRat", "SCREECH_MOVE") => MultiplayerTargetMode.PerPlayer,
             ("Aeonglass", "INCREASING_INTENSITY_MOVE") => MultiplayerTargetMode.PerPlayerThenOwnerOnce,
             ("TestSubject", "BURNING_GROWL_MOVE") => MultiplayerTargetMode.PerPlayerThenOwnerOnce,
+            ("InfestedPrism", "PULSATE_MOVE") => MultiplayerTargetMode.PerPlayerThenOwnerOnce,
             ("LagavulinMatriarch", "SOUL_SIPHON_MOVE") => MultiplayerTargetMode.PerPlayerThenOwnerOnce,
             ("Wriggler", "WRIGGLE_MOVE") => MultiplayerTargetMode.PerPlayerThenOwnerOnce,
             ("TheLost", "DEBILITATING_SMOG") => MultiplayerTargetMode.PerPlayerThenOwnerOnce,

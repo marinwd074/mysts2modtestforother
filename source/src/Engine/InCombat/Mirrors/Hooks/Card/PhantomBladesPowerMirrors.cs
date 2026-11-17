@@ -1,3 +1,4 @@
+#if STS2_01071
 using CombatSolver.Engine.Common;
 using CombatSolver.Engine.InCombat.Simulation;
 using MegaCrit.Sts2.Core.Entities.Cards;
@@ -19,3 +20,4 @@ internal static class PhantomBladesPowerMirrors
             card.MutablePreview.AddKeyword(CardKeyword.Retain);
     }
 }
+#endif

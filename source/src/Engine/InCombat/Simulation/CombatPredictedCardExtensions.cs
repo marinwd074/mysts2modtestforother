@@ -182,6 +182,9 @@ internal static class CombatPredictedCardExtensions
             && source.MirroredHookListeners is MirroredHookListenerSnapshot listeners
             && !listeners.HasAny(MirroredHookMask.TryModifyKeywordsInCombat);
 
+    public static bool ShouldRetainThisTurn(this PredictedCard card, CombatPredictionState state)
+        => card.Preview._hasSingleTurnRetain || card.HasKeyword(state, CardKeyword.Retain);
+
     /// <summary>
     /// 热路径只查询一个关键字时复用线程本地集合，避免 CanPlay、回合末和伤害 Hook
     /// 为每次 Contains 都创建一个 HashSet。递归进入时退回独立集合，避免污染外层查询。

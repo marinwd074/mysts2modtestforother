@@ -24,8 +24,8 @@ internal static class CalculatedVarSpecRegistry
     [
         typeof(PreciseCut), typeof(Stack), typeof(Squeeze), typeof(Mirage), typeof(Rattle), typeof(MindBlast),
         typeof(GangUp), typeof(Mimic), typeof(KnifeTrap), typeof(Unleash), typeof(Radiate), typeof(PerfectedStrike),
-        typeof(SovereignBlade), typeof(Supermassive), typeof(Sacrifice), typeof(TimesUp), typeof(MementoMori),
-        typeof(SoulStorm), typeof(Voltaic), typeof(TearAsunder), typeof(ExpectAFight), typeof(HelixDrill),
+        typeof(SovereignBlade), typeof(Supermassive), typeof(Sacrifice), typeof(TimesUp),
+        typeof(SoulStorm), typeof(Voltaic), typeof(TearAsunder), typeof(HelixDrill),
         typeof(PullFromBelow), typeof(Normality), typeof(Synchronize), typeof(Protector), typeof(NoEscape),
         typeof(Flechettes), typeof(Rend), typeof(GoldAxe), typeof(FlakCannon), typeof(LunarBlast), typeof(Murder),
         typeof(CompileDriver), typeof(Finisher), typeof(Bully), typeof(BeatIntoShape), typeof(DeathMarch),
@@ -98,15 +98,12 @@ internal static class CalculatedVarSpecRegistry
             Supermassive => CountGeneratedCards(simulator, model.Owner),
             Sacrifice => simulator.State.GetOsty(model.Owner) is { } sacrificeOsty
                 && simulator.State.GetCreature(sacrificeOsty).IsAlive
-                ? combat.GetOstyMaxHp(simulator, model.Owner) * 2
+                ? combat.GetOstyMaxHp(simulator, model.Owner) * 3
                 : 0,
             TimesUp => target == null ? 0 : combat.GetAmount<DoomPower>(target),
-            MementoMori => combat.GetCardsDiscardedThisTurn(owner),
             SoulStorm => playerState.ExhaustPile.Cards.Count(candidate => candidate.Preview is Soul),
             Voltaic => CountLightningChannels(simulator, model.Owner),
             TearAsunder => 1 + CountUnblockedDamageEvents(simulator, owner),
-            ExpectAFight => playerState.Hand.Cards.Count(candidate =>
-                candidate.Preview.Type == CardType.Attack),
             HelixDrill => Math.Max(0, combat.GetEnergySpentThisTurn(model.Owner)
                 - card.GetEnergyCostWithModifiers(simulator, playerState)),
             PullFromBelow => CountEtherealPlays(simulator, model.Owner),
@@ -144,8 +141,8 @@ internal static class CalculatedVarSpecRegistry
         };
         return model is PreciseCut or Stack or Squeeze or Mirage or Rattle or MindBlast or GangUp
             or Mimic or KnifeTrap or Unleash or Radiate or PerfectedStrike or SovereignBlade
-            or Supermassive or Sacrifice or TimesUp or MementoMori or SoulStorm or Voltaic
-            or TearAsunder or ExpectAFight or HelixDrill or PullFromBelow or Normality
+            or Supermassive or Sacrifice or TimesUp or SoulStorm or Voltaic
+            or TearAsunder or HelixDrill or PullFromBelow or Normality
             or Synchronize or Protector or NoEscape or Flechettes or Rend or GoldAxe or FlakCannon
             or LunarBlast or Murder or CompileDriver or Finisher or Bully or BeatIntoShape
             or DeathMarch or DemonicShield or Barrage or CrescentSpear or BodySlam or AshenStrike;

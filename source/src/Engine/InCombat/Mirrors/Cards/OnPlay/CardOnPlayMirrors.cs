@@ -72,6 +72,7 @@ internal static partial class CardOnPlayMirrors
     {
         var registry = new Registry(OnPlay);
 
+        registry.Register<GuidingStar>(static (_, context) => context.AttackSingle());
         registry.Register<HowlFromBeyond>(GeneralCardMirrors.GeneralAttackOnPlay);
         registry.Register<Mangle>(GeneralCardMirrors.GeneralAttackOnPlay);
         registry.Register<IAmInvincible>(GeneralCardMirrors.GeneralBlockOnPlay);
@@ -81,6 +82,7 @@ internal static partial class CardOnPlayMirrors
         registry.Register<DemonicShield>(BespokeCardMirrors.DemonicShieldOnPlay);
         registry.Register<PactsEnd>(BespokeCardMirrors.PactsEndOnPlay);
         registry.Register<ExpectAFight>(BespokeCardMirrors.ExpectAFightOnPlay);
+        registry.Register<MementoMori>(BespokeCardMirrors.MementoMoriOnPlay);
         registry.Register<Intercept>(BespokeCardMirrors.InterceptOnPlay);
         registry.Register<TwinStrike>(BespokeCardMirrors.TwinStrikeOnPlay);
         registry.Register<HeavenlyDrill>(BespokeCardMirrors.HeavenlyDrillOnPlay);

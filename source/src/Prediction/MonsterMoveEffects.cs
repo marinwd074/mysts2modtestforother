@@ -38,7 +38,6 @@ internal static partial class MonsterMoveEffects
             ("HauntedShip", "HAUNT_MOVE") or
             ("HunterKiller", "TENDERIZING_GOOP_MOVE") or
             ("Guardbot", "GUARD_MOVE") or
-            ("InfestedPrism", "RADIATE_MOVE") or
             ("InfestedPrism", "PULSATE_MOVE") or
             ("KinFollower", "POWER_DANCE_MOVE") or
             ("KinPriest", "ORB_OF_FRAILTY_MOVE") or
@@ -169,8 +168,7 @@ internal static partial class MonsterMoveEffects
     public static void ApplyBeforeAttack(
         CombatPredictionSimulator simulator,
         SimulatedCombatState combat,
-        ForecastMove move,
-        Creature player)
+        ForecastMove move)
     {
         if (move.Owner.Monster is LivingFog && move.Move.Id == "BLOAT_MOVE")
         {
@@ -187,23 +185,26 @@ internal static partial class MonsterMoveEffects
         if (move.Owner.Monster?.GetType().Name == "ThievingHopper"
             && move.Move.Id == "THIEVERY_MOVE")
         {
-            ApplyThieveryFanOut(simulator, combat, move, player);
+            ApplyThieveryFanOut(simulator, combat, move);
         }
+    }
+
+    private static void ApplySoulSiphonDebuffs(SimulatedCombatState combat, Creature owner, Creature target)
+    {
+        int amount = combat.GetMonsterStaticInt(owner, "DebuffAmount");
+        combat.Apply<StrengthPower>(target, amount, owner);
+        combat.Apply<DexterityPower>(target, amount, owner);
     }
 
     private static void ApplyThieveryFanOut(
         CombatPredictionSimulator simulator,
         SimulatedCombatState combat,
-        ForecastMove move,
-        Creature fallbackPlayer)
+        ForecastMove move)
     {
-        IReadOnlyList<Creature> targets = simulator.State.RootCapturedPlayerCreatures.Count > 1
-            ? simulator.State.RootCapturedPlayerCreatures
-            : [fallbackPlayer];
+        IReadOnlyList<Creature> targets = simulator.State.PlayerCreatures;
         List<(Creature Target, PredictedCard Card)> stolenCards = [];
 
-        // Pinned 0.107.1 first enumerates every target, skips dead targets, consumes
-        // CombatCardGeneration once per successful steal, and removes all selected cards.
+        // Native selects and removes every eligible card before it applies Swipe.
         foreach (Creature target in targets)
         {
             if (!simulator.State.GetCreature(target).IsAlive)
@@ -211,11 +212,13 @@ internal static partial class MonsterMoveEffects
             Player? targetPlayer = target.Player ?? target.PetOwner;
             if (targetPlayer == null)
                 continue;
+            if (!simulator.State.IsRootCapturedPlayer(targetPlayer))
+                throw new NotSupportedException("飞贼偷牌需要完整的目标牌堆才能复现共用选牌 RNG。");
 
             SimPlayerCombatState state = simulator.State.GetPlayerCombatState(targetPlayer);
             List<PredictedCard> cards = state.DrawPile.Cards
                 .Concat(state.DiscardPile.Cards)
-                .Where(card => card.Preview.DeckVersion != null)
+                .Where(card => card.Preview.DeckVersion != null && card.Preview.Rarity != CardRarity.Quest)
                 .ToList();
             if (cards.Count == 0)
                 continue;
@@ -227,7 +230,7 @@ internal static partial class MonsterMoveEffects
                 card => card.Preview.Enchantment is not Imbued
                     && card.Preview.Rarity is CardRarity.Common or CardRarity.Rare or CardRarity.Event,
                 card => card.Preview.Enchantment is not Imbued
-                    && card.Preview.Rarity is CardRarity.Basic or CardRarity.Quest,
+                    && card.Preview.Rarity == CardRarity.Basic,
                 card => card.Preview.Rarity == CardRarity.Ancient || card.Preview.Enchantment is Imbued,
             ];
             foreach (Func<PredictedCard, bool> priority in priorities)
@@ -239,7 +242,7 @@ internal static partial class MonsterMoveEffects
                 break;
             }
 
-            PredictedCard stolen = simulator.Rng.CombatCardGeneration.NextItem(candidates)
+            PredictedCard stolen = simulator.Rng.CombatCardSelection.NextItem(candidates)
                 ?? throw new InvalidOperationException("飞贼的偷牌候选非空但没有选中牌。");
             simulator.RemoveFromCombat(stolen);
             combat.RecordStolenCard(simulator);
@@ -268,14 +271,14 @@ internal static partial class MonsterMoveEffects
         string id = move.Move.Id;
         ApplyOwnerPreludeOnce(simulator, combat, move, monster, type, id);
 
-        // Pinned 0.107.1 has two separate target loops: all Sandpit applications first,
+        // Liquify Ground has two separate target loops: all Sandpit applications first,
         // then six Frantic Escape insertions per player. The local-single-core root keeps
         // teammate private piles uncaptured, but the native move still creates one public
         // Sandpit instance per player and consumes shared Shuffle RNG for every random
         // insertion. Preserve those public/shared effects without materializing remote piles.
         foreach (Creature target in simulator.State.PlayerCreatures)
         {
-            combat.ApplyTargeted<SandpitPower>(move.Owner, target, 4, move.Owner);
+            combat.ApplyTargeted<SandpitPower>(move.Owner, target, combat.GetMonsterStaticInt(move.Owner, "SandpitAmount"), move.Owner);
             if (simulator.HasPendingChoice)
                 return true;
         }
@@ -329,8 +332,17 @@ internal static partial class MonsterMoveEffects
         if (type == "GremlinMerc" && id == "DOUBLE_SMASH_MOVE")
             combat.RecordThievery(simulator, move.Owner);
 
-        foreach (Creature target in simulator.State.RootCapturedPlayerCreatures)
+        bool distributesRandomWithers = type == "Aeonglass" && id == "INCREASING_INTENSITY_MOVE";
+        IReadOnlyList<Creature> targets = distributesRandomWithers
+            ? simulator.State.PlayerCreatures
+            : simulator.State.RootCapturedPlayerCreatures;
+        foreach (Creature target in targets)
         {
+            if (distributesRandomWithers && target.Player is { } player && !simulator.State.IsRootCapturedPlayer(player))
+            {
+                ConsumeRemoteRandomPileInsertions(simulator, combat.GetMonsterStaticInt(move.Owner, "WitherAmount"));
+                continue;
+            }
             ApplyPerPlayerTargetEffect(simulator, combat, move, type, id, target);
             if (simulator.HasPendingChoice)
                 return true;
@@ -363,7 +375,7 @@ internal static partial class MonsterMoveEffects
                     target.Player,
                     PileType.Discard,
                     combat.GetMonsterStaticInt(move.Owner, "WitherAmount"),
-                    null);
+                    null, CardPilePosition.Random);
                 break;
             }
             case ("TestSubject", "BURNING_GROWL_MOVE"):
@@ -373,9 +385,11 @@ internal static partial class MonsterMoveEffects
                     combat.GetMonsterStaticInt(move.Owner, "BurningGrowlBurnCount"),
                     null);
                 break;
+            case ("InfestedPrism", "PULSATE_MOVE"):
+                Debuff<VulnerablePower>(combat, target, 1, move.Owner);
+                break;
             case ("LagavulinMatriarch", "SOUL_SIPHON_MOVE"):
-                combat.Apply<StrengthPower>(target, -2, move.Owner);
-                combat.Apply<DexterityPower>(target, -2, move.Owner);
+                ApplySoulSiphonDebuffs(combat, move.Owner, target);
                 break;
             case ("Wriggler", "WRIGGLE_MOVE"):
                 simulator.AddToCombat<Infection>(target, PileType.Discard, 1, null);
@@ -430,6 +444,9 @@ internal static partial class MonsterMoveEffects
                     combat.GetMonsterStaticInt(move.Owner, "BurningGrowlStrengthGain"),
                     move.Owner);
                 break;
+            case ("InfestedPrism", "PULSATE_MOVE"):
+                combat.Apply<VitalSparkPower>(move.Owner, combat.GetMonsterStaticInt(move.Owner, "VitalSparkAmount"), move.Owner);
+                break;
             case ("LagavulinMatriarch", "SOUL_SIPHON_MOVE"):
                 combat.Apply<StrengthPower>(move.Owner, 2, move.Owner);
                 break;
@@ -453,7 +470,7 @@ internal static partial class MonsterMoveEffects
                     move.Owner);
                 break;
             case ("WaterfallGiant", "STOMP_MOVE"):
-                combat.Apply<SteamEruptionPower>(move.Owner, 3, move.Owner);
+                combat.Apply<SteamEruptionPower>(move.Owner, combat.GetMonsterStaticInt(move.Owner, "SteamBoostAmount"), move.Owner);
                 break;
             case ("GremlinMerc", "DOUBLE_SMASH_MOVE"):
                 break;
@@ -681,11 +698,8 @@ internal static partial class MonsterMoveEffects
                         simulator.GainBlock(enemy, 15, ValueProp.Unpowered);
                 }
                 return true;
-            case ("InfestedPrism", "RADIATE_MOVE"):
-                GainBlock(simulator, move.Owner, combat.GetMonsterStaticInt(move.Owner, "RadiateBlock"));
-                return true;
             case ("InfestedPrism", "PULSATE_MOVE"):
-                GainBlock(simulator, move.Owner, combat.GetMonsterStaticInt(move.Owner, "PulsateBlock"));
+                Debuff<VulnerablePower>(combat, player, 1, move.Owner);
                 combat.Apply<VitalSparkPower>(
                     move.Owner,
                     combat.GetMonsterStaticInt(move.Owner, "VitalSparkAmount"),
@@ -720,8 +734,7 @@ internal static partial class MonsterMoveEffects
                 GainBlock(simulator, move.Owner, combat.GetMonsterStaticInt(move.Owner, "Slash2Block"));
                 return true;
             case ("LagavulinMatriarch", "SOUL_SIPHON_MOVE"):
-                combat.Apply<StrengthPower>(player, -2, move.Owner);
-                combat.Apply<DexterityPower>(player, -2, move.Owner);
+                ApplySoulSiphonDebuffs(combat, move.Owner, player);
                 combat.Apply<StrengthPower>(move.Owner, 2, move.Owner);
                 return true;
             case ("LeafSlimeM", "STICKY_SHOT"):
@@ -812,6 +825,8 @@ internal static partial class MonsterMoveEffects
                     move.Owner);
                 return true;
             case ("CeremonialBeast", "PLOW_MOVE"):
+                if (combat.GetAmount<PlowPower>(move.Owner) <= 0)
+                    return true;
                 combat.Apply<StrengthPower>(
                     move.Owner,
                     combat.GetMonsterStaticInt(move.Owner, "PlowStrength"),
@@ -916,7 +931,7 @@ internal static partial class MonsterMoveEffects
                 simulator.AddToCombat<Wound>(player, PileType.Discard, 3, null);
                 return true;
             case ("Vantom", "PREPARE_MOVE"):
-                combat.Apply<StrengthPower>(move.Owner, 2, move.Owner);
+                combat.Apply<StrengthPower>(move.Owner, combat.GetMonsterStaticInt(move.Owner, "PrepareStrength"), move.Owner);
                 return true;
             case ("TheInsatiable", "SALIVATE_MOVE"):
                 combat.Apply<StrengthPower>(
@@ -977,7 +992,7 @@ internal static partial class MonsterMoveEffects
                 GainBlock(simulator, move.Owner, combat.GetMonsterStaticInt(move.Owner, "CurlBlock"));
                 combat.Apply<StrengthPower>(
                     move.Owner,
-                    combat.GetMonsterStaticInt(move.Owner, "_growStrength"),
+                    combat.GetMonsterStaticInt(move.Owner, "GrowStrength"),
                     move.Owner);
                 return true;
             case ("Tunneler", "BURROW_MOVE"):
@@ -1053,7 +1068,7 @@ internal static partial class MonsterMoveEffects
                 combat.Apply<StrengthPower>(
                     move.Owner,
                     combat.GetMonsterStaticInt(move.Owner, "BootUpStrGain") *
-                    (2 - combat.GetMonsterStaticInt(move.Owner, "StockAmount")),
+                    combat.GetMonsterStaticInt(move.Owner, "RespawnCount"),
                     move.Owner);
                 return true;
             case ("Axebot", "HAMMER_UPPERCUT_MOVE"):
@@ -1076,7 +1091,7 @@ internal static partial class MonsterMoveEffects
                     player.Player,
                     PileType.Discard,
                     combat.GetMonsterStaticInt(move.Owner, "WitherAmount"),
-                    null);
+                    null, CardPilePosition.Random);
                 combat.Apply<StrengthPower>(
                     move.Owner,
                     combat.GetMonsterStaticInt(move.Owner, "IncreasingIntensityBaseStrength")
@@ -1103,7 +1118,7 @@ internal static partial class MonsterMoveEffects
                     move.Owner);
                 return true;
             case ("DevotedSculptor", "FORBIDDEN_INCANTATION_MOVE"):
-                combat.Apply<RitualPower>(move.Owner, combat.GetMonsterStaticInt(move.Owner, "_ritualGain"));
+                combat.Apply<RitualPower>(move.Owner, 9);
                 return true;
             case ("Entomancer", "PHEROMONE_SPIT_MOVE"):
                 PersonalHivePower? hive = combat.GetPower<PersonalHivePower>(move.Owner);
@@ -1133,19 +1148,19 @@ internal static partial class MonsterMoveEffects
                 return true;
             case ("WaterfallGiant", "STOMP_MOVE"):
                 Debuff<WeakPower>(combat, player, 1, move.Owner);
-                combat.Apply<SteamEruptionPower>(move.Owner, 3, move.Owner);
+                combat.Apply<SteamEruptionPower>(move.Owner, combat.GetMonsterStaticInt(move.Owner, "SteamBoostAmount"), move.Owner);
                 return true;
             case ("WaterfallGiant", "RAM_MOVE"):
             case ("WaterfallGiant", "PRESSURE_UP_MOVE"):
-                combat.Apply<SteamEruptionPower>(move.Owner, 3, move.Owner);
+                combat.Apply<SteamEruptionPower>(move.Owner, combat.GetMonsterStaticInt(move.Owner, "SteamBoostAmount"), move.Owner);
                 return true;
             case ("WaterfallGiant", "SIPHON_MOVE"):
                 simulator.Heal(move.Owner, combat.GetMonsterStaticInt(move.Owner, "SiphonHeal") * combat.Players.Count);
-                combat.Apply<SteamEruptionPower>(move.Owner, 3, move.Owner);
+                combat.Apply<SteamEruptionPower>(move.Owner, combat.GetMonsterStaticInt(move.Owner, "SteamBoostAmount"), move.Owner);
                 return true;
             case ("WaterfallGiant", "PRESSURE_GUN_MOVE"):
                 combat.IncreasePressureGun(move.Owner, combat.GetMonsterStaticInt(move.Owner, "PressureGunIncrease"));
-                combat.Apply<SteamEruptionPower>(move.Owner, 3, move.Owner);
+                combat.Apply<SteamEruptionPower>(move.Owner, combat.GetMonsterStaticInt(move.Owner, "SteamBoostAmount"), move.Owner);
                 return true;
             case ("WaterfallGiant", "ABOUT_TO_BLOW_MOVE"):
                 combat.PrepareSteamEruption(move.Owner);
@@ -1193,7 +1208,7 @@ internal static partial class MonsterMoveEffects
                 Debuff<SmoggyPower>(combat, player, 1, move.Owner);
                 return true;
             case ("TheInsatiable", "LIQUIFY_GROUND_MOVE"):
-                combat.ApplyTargeted<SandpitPower>(move.Owner, player, 4, move.Owner);
+                combat.ApplyTargeted<SandpitPower>(move.Owner, player, combat.GetMonsterStaticInt(move.Owner, "SandpitAmount"), move.Owner);
                 simulator.AddToCombat<FranticEscape>(player, PileType.Draw, 3, null, CardPilePosition.Random);
                 simulator.AddToCombat<FranticEscape>(player, PileType.Discard, 3, null, CardPilePosition.Random);
                 combat.SetMonsterBool(move.Owner, "HasLiquified", true);

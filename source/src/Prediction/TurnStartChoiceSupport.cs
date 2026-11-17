@@ -273,7 +273,7 @@ internal static partial class TurnStartChoiceSupport
 
         SimPlayerCombatState state = simulator.State.GetPlayerCombatState(player);
         IReadOnlyList<PredictedCard> options = state.Hand.Cards
-            .Where(card => !card.Preview.ShouldRetainThisTurn)
+            .Where(card => !card.ShouldRetainThisTurn(simulator.State))
             .ToArray();
         int maxCount = Math.Min(requestedCount, options.Count);
         if (maxCount <= 0)

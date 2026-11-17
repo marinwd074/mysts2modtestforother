@@ -117,16 +117,13 @@ internal static partial class CardOnPlaySupport
                 simulator.GainEnergy(card.Owner, card.DynamicVars.Energy.IntValue);
                 break;
             case Fuel:
-                // Fuel.OnPlay gains energy before drawing; the draw can trigger VOID's
-                // energy loss, so both steps must stay in the native order.
                 simulator.GainEnergy(card.Owner, card.DynamicVars.Energy.IntValue);
-                if (simulator.HasPendingChoice)
-                    return;
-                simulator.Draw(card.Owner, card.DynamicVars.Cards.BaseValue);
                 break;
             case Haze:
                 foreach (Creature enemy in combat.HittableEnemies)
                     combat.Apply<PoisonPower>(enemy, card.DynamicVars.Poison.IntValue, owner);
+                foreach (Creature enemy in combat.HittableEnemies)
+                    combat.Apply<WeakPower>(enemy, card.DynamicVars.Weak.IntValue, owner);
                 break;
             case HiddenCache:
                 if (!simulator.GainStars(card.Owner, card.DynamicVars.Stars.IntValue))

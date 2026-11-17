@@ -280,11 +280,8 @@ foreach ($monsterReaderRule in @(
 
 $monsterStaticValuesPath = Join-Path $repositoryRoot 'src/Prediction/MonsterMoveEffects.StaticValues.cs'
 $monsterStaticValuesText = [IO.File]::ReadAllText($monsterStaticValuesPath)
-if (-not $monsterStaticValuesText.Contains('["LouseProgenitor"] = ["CurlBlock", "_growStrength"]')) {
-    $violations.Add("${monsterStaticValuesPath}: LouseProgenitor 0.107.1 grow strength member must be _growStrength")
-}
-if ($monsterStaticValuesText.Contains('["LouseProgenitor"] = ["CurlBlock", "GrowStrength"]')) {
-    $violations.Add("${monsterStaticValuesPath}: nonexistent LouseProgenitor.GrowStrength leaked into root capture")
+if (-not $monsterStaticValuesText.Contains('["LouseProgenitor"] = ["CurlBlock", "GrowStrength"]')) {
+    $violations.Add("${monsterStaticValuesPath}: LouseProgenitor must capture native ascension-scaled GrowStrength")
 }
 
 $monsterMoveSemanticsPath = Join-Path $repositoryRoot 'src/Prediction/MonsterMoveSemantics.cs'
@@ -443,8 +440,8 @@ foreach ($liquifyLocalCoreRule in @(
         $violations.Add("${monsterMoveEffectsPath}: Liquify Ground local-core multiplayer fanout drifted '$liquifyLocalCoreRule'")
     }
 }
-if (-not $monsterMoveEffectsText.Contains('combat.GetMonsterStaticInt(move.Owner, "_growStrength")')) {
-    $violations.Add("${monsterMoveEffectsPath}: LouseProgenitor CURL_AND_GROW must consume captured _growStrength")
+if (-not $monsterMoveEffectsText.Contains('combat.GetMonsterStaticInt(move.Owner, "GrowStrength")')) {
+    $violations.Add("${monsterMoveEffectsPath}: LouseProgenitor CURL_AND_GROW must consume captured GrowStrength")
 }
 
 $multiplayerCardSearchPaths = @(
@@ -696,7 +693,6 @@ foreach ($fixedPowerUnitRule in @(
 }
 
 foreach ($fixedCounterRule in @(
-    '[typeof(ExpectAFight)] = [Owner<NoEnergyGainPower>(_ => 1)]',
     '[typeof(Pounce)] = [Owner<FreeSkillPower>(_ => 1)]',
     '[typeof(Predator)] = [Owner<DrawCardsNextTurnPower>(_ => 2)]',
     '[typeof(Rebound)] = [Owner<ReboundPower>(_ => 1)]',
@@ -2584,15 +2580,11 @@ if (-not (Select-String -LiteralPath (Join-Path $repositoryRoot 'src/UI/SolverOv
 }
 
 
-# Card semantics below are pinned to the repository's v0.107.1 game-body assembly.
-# These guards intentionally reject later-version behavior when upstream changes are backported.
+# Guards for the current native card semantics.
 $trackingCardPath = Join-Path $repositoryRoot 'src/Prediction/CardOnPlaySupport.Batch042.cs'
 $trackingCardText = [IO.File]::ReadAllText($trackingCardPath)
-if (-not $trackingCardText.Contains('combat.GetAmount<TrackingPower>(owner) > 0 ? 1 : 2')) {
-    $violations.Add("${trackingCardPath}: 0.107.1 Tracking must apply 2 initially and +1 thereafter")
-}
-if ($trackingCardText.Contains('combat.Apply<TrackingPower>(owner, 50, owner)')) {
-    $violations.Add("${trackingCardPath}: later-version percentage Tracking application returned")
+if (-not $trackingCardText.Contains('combat.Apply<TrackingPower>(owner, 50, owner)')) {
+    $violations.Add("${trackingCardPath}: Tracking must apply 50 percentage points")
 }
 
 $damageMirrorPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Damage/ModifyDamageMirrors.cs'
@@ -2604,11 +2596,8 @@ if ($trackingHandlerStart -lt 0 -or $trackingHandlerEnd -le $trackingHandlerStar
 }
 else {
     $trackingHandler = $damageMirrorText.Substring($trackingHandlerStart, $trackingHandlerEnd - $trackingHandlerStart)
-    if (-not $trackingHandler.Contains('combat.GetAmount<TrackingPower>(power.Owner)')) {
-        $violations.Add("${damageMirrorPath}: 0.107.1 Tracking multiplier must use the branch TrackingPower amount")
-    }
-    if ($trackingHandler.Contains('/ 100m')) {
-        $violations.Add("${damageMirrorPath}: later-version percentage Tracking multiplier returned")
+    if (-not $trackingHandler.Contains('1m + combat.GetAmount<TrackingPower>(power.Owner) / 100m')) {
+        $violations.Add("${damageMirrorPath}: Tracking must use the branch percentage multiplier")
     }
 }
 
@@ -2657,10 +2646,10 @@ if ($hazeStart -lt 0 -or $hazeEnd -le $hazeStart) {
 else {
     $hazeBlock = $cardOnPlayText.Substring($hazeStart, $hazeEnd - $hazeStart)
     if (-not $hazeBlock.Contains('PoisonPower')) {
-        $violations.Add("${cardOnPlayPath}: 0.107.1 Haze must apply Poison")
+        $violations.Add("${cardOnPlayPath}: Haze must apply Poison")
     }
-    if ($hazeBlock.Contains('WeakPower')) {
-        $violations.Add("${cardOnPlayPath}: later-version Haze Weak application returned")
+    if ($hazeBlock.IndexOf('WeakPower') -le $hazeBlock.IndexOf('PoisonPower')) {
+        $violations.Add("${cardOnPlayPath}: Haze must apply Weak after Poison")
     }
 }
 
@@ -2678,15 +2667,13 @@ else {
         'card.Owner.Creature != power.Owner',
         'card.Type != CardType.Attack',
         'context.Resources.EnergyValue > 0',
+        'card.IsDupe',
         'state.ZeroCostAttacksPlayed >= power.Amount',
         'location.pileType = PileType.Hand',
         'location.player = card.Owner')) {
         if (-not $feralBlock.Contains($requiredFeralRule)) {
-            $violations.Add("${resultLocationMirrorPath}: missing 0.107.1 Feral rule '$requiredFeralRule'")
+            $violations.Add("${resultLocationMirrorPath}: missing Feral rule '$requiredFeralRule'")
         }
-    }
-    if ($feralBlock.Contains('card.IsDupe')) {
-        $violations.Add("${resultLocationMirrorPath}: v0.108 Feral dupe exclusion returned")
     }
 }
 
@@ -2703,11 +2690,8 @@ else {
         $historyRecordStart,
         $historyRecordEnd - $historyRecordStart)
     if (-not $historyRecordBlock.Contains(
-        'card.Preview.Type is not (CardType.Attack or CardType.Skill)')) {
-        $violations.Add("${historyCoursePath}: 0.107.1 History Course must track both Attacks and Skills")
-    }
-    if ($historyRecordBlock.Contains('card.Preview.Type != CardType.Attack')) {
-        $violations.Add("${historyCoursePath}: v0.109 Attack-only History Course tracking returned")
+        'card.Preview.Type != CardType.Attack')) {
+        $violations.Add("${historyCoursePath}: History Course must track Attacks")
     }
     if (-not $historyRecordBlock.Contains('card.Preview.IsDupe')) {
         $violations.Add("${historyCoursePath}: History Course must still exclude gameplay dupes")
@@ -2724,11 +2708,8 @@ else {
         $historyRootStart,
         $historyRootEnd - $historyRootStart)
     if (-not $historyRootBlock.Contains(
-        '(entry.CardPlay.Card.Type is CardType.Attack or CardType.Skill)')) {
-        $violations.Add("${historyCoursePath}: 0.107.1 live History Course lookup must accept Attacks and Skills")
-    }
-    if ($historyRootBlock.Contains('entry.CardPlay.Card.Type == CardType.Attack')) {
-        $violations.Add("${historyCoursePath}: v0.109 Attack-only live History Course lookup returned")
+        'entry.CardPlay.Card.Type == CardType.Attack')) {
+        $violations.Add("${historyCoursePath}: History Course live lookup must track Attacks")
     }
     if (-not $historyRootBlock.Contains('!entry.CardPlay.Card.IsDupe')) {
         $violations.Add("${historyCoursePath}: live History Course lookup must exclude dupes")
@@ -2836,19 +2817,12 @@ if ($regaliteStart -lt 0 -or $regaliteEnd -le $regaliteStart) {
 }
 else {
     $regaliteBlock = $generatedCardHookText.Substring($regaliteStart, $regaliteEnd - $regaliteStart)
-    if (-not $regaliteBlock.Contains('context.Creator == relic.Owner') -or
-        -not $regaliteBlock.Contains('GainBlock(relic.Owner.Creature, relic.DynamicVars.Block)')) {
-        $violations.Add("${generatedCardHookPath}: 0.107.1 Regalite must grant Block for every owner-created card")
+    foreach ($rule in @('context.Creator != relic.Owner', 'if (state.Value)', 'state.Value = true',
+            'GainBlock(relic.Owner.Creature, relic.DynamicVars.Block)')) {
+        if (-not $regaliteBlock.Contains($rule)) {
+            $violations.Add("${generatedCardHookPath}: Regalite once-per-turn rule missing '$rule'")
+        }
     }
-    if ($regaliteBlock.Contains('UsedThisTurn') -or
-        $regaliteBlock.Contains('RegalitePredictionState')) {
-        $violations.Add("${generatedCardHookPath}: v0.110 once-per-turn Regalite behavior returned")
-    }
-}
-$relicPredictionStatePath = Join-Path $repositoryRoot 'src/Prediction/RelicPredictionStateSupport.cs'
-$relicPredictionStateText = [IO.File]::ReadAllText($relicPredictionStatePath)
-if ($relicPredictionStateText.Contains('RegalitePredictionState')) {
-    $violations.Add("${relicPredictionStatePath}: 0.107.1 Regalite has no per-turn prediction state")
 }
 
 $batch043Path = Join-Path $repositoryRoot 'src/Prediction/CardOnPlaySupport.Batch043.cs'
@@ -2860,37 +2834,11 @@ if ($eidolonStart -lt 0 -or $eidolonEnd -le $eidolonStart) {
 }
 else {
     $eidolonBlock = $batch043Text.Substring($eidolonStart, $eidolonEnd - $eidolonStart)
-    foreach ($requiredEidolonRule in @(
-        '.Hand.Cards',
-        'simulator.AcknowledgeExecutionDispatch()',
-        'ContinueEidolon(',
-        'simulator.Exhaust(cards[index])',
-        'exhaustedCount++',
-        'simulator.AppendExecutionContinuation(',
-        'new EidolonExecutionFrame(',
-        'exhaustedCount >= 9',
-        'combat.Apply<IntangiblePower>',
-        'PlayedCard = context.RequireRemap(PlayedCard)',
-        'Cards = Cards.Select(card => context.RequireRemap(card)).ToArray()')) {
-        if (-not $eidolonBlock.Contains($requiredEidolonRule)) {
-            $violations.Add("${batch043Path}: missing 0.107.1 Eidolon rule '$requiredEidolonRule'")
+    foreach ($rule in @('.ExhaustPile.Cards', 'CardKeyword.Ethereal', '!card.HasKeyword(simulator.State, CardKeyword.Unplayable)',
+            'simulator.AcknowledgeExecutionDispatch()', 'simulator.AutoPlayExistingCards(cards)')) {
+        if (-not $eidolonBlock.Contains($rule)) {
+            $violations.Add("${batch043Path}: Eidolon exhaust-pile autoplay rule missing '$rule'")
         }
-    }
-    $eidolonExhaustIndex = $eidolonBlock.IndexOf('simulator.Exhaust(cards[index])')
-    $eidolonCountIndex = $eidolonBlock.IndexOf('exhaustedCount++', $eidolonExhaustIndex)
-    $eidolonPendingIndex = $eidolonBlock.IndexOf('if (simulator.HasPendingChoice)', $eidolonCountIndex)
-    if ($eidolonExhaustIndex -lt 0 -or
-        $eidolonCountIndex -le $eidolonExhaustIndex -or
-        $eidolonPendingIndex -le $eidolonCountIndex) {
-        $violations.Add("${batch043Path}: Eidolon must carry the completed Exhaust into its continuation count before suspending")
-    }
-    if (-not $batch043Text.Contains('ApplyEidolon(simulator, combat, playedCard);')) {
-        $violations.Add("${batch043Path}: Eidolon continuation must retain the prediction-owned played card")
-    }
-    if ($eidolonBlock.Contains('.ExhaustPile.Cards') -or
-        $eidolonBlock.Contains('CardExecutionSupport.AutoPlay') -or
-        $eidolonBlock.Contains('CardKeyword.Ethereal')) {
-        $violations.Add("${batch043Path}: v0.109 Eidolon exhaust-pile autoplay behavior returned")
     }
 }
 
@@ -2952,8 +2900,8 @@ if ((-not $continuationStampText.Contains('PoisonApplications=')) -or
 
 $cardEffectSpecPath = Join-Path $repositoryRoot 'src/Prediction/CardEffectSpecRegistry.cs'
 $cardEffectSpecText = [IO.File]::ReadAllText($cardEffectSpecPath)
-if ($cardEffectSpecText.Contains('[typeof(GuidingStar)] = [Owner<DrawCardsNextTurnPower>')) {
-    $violations.Add("${cardEffectSpecPath}: 0.107.1 Guiding Star draws immediately; deferred draw power returned")
+if (-not $cardEffectSpecText.Contains('[typeof(GuidingStar)] = [Owner<DrawCardsNextTurnPower>')) {
+    $violations.Add("${cardEffectSpecPath}: Guiding Star must defer its draw until the next turn")
 }
 $fightThroughStart = $cardEffectSpecText.IndexOf('case FightThrough:')
 $fightThroughEnd = $cardEffectSpecText.IndexOf('case GraveWarden:', $fightThroughStart)
@@ -2981,14 +2929,10 @@ else {
     $wellLaidPlansBlock = $cardPowerSupportText.Substring(
         $wellLaidPlansStart,
         [Math]::Min(320, $cardPowerSupportText.Length - $wellLaidPlansStart))
-    if (-not $wellLaidPlansBlock.Contains('card.DynamicVars["RetainAmount"].IntValue')) {
-        $violations.Add("${cardPowerSupportPath}: 0.107.1 Well-Laid Plans must use RetainAmount")
-    }
-    if ($wellLaidPlansBlock.Contains('WellLaidPlansPower>(owner, 1, owner)')) {
-        $violations.Add("${cardPowerSupportPath}: fixed one-stack Well-Laid Plans behavior returned")
+    if (-not $wellLaidPlansBlock.Contains('WellLaidPlansPower>(owner, 1, owner)')) {
+        $violations.Add("${cardPowerSupportPath}: Well-Laid Plans must apply one hand-retention power")
     }
 }
-
 
 $calculatedVarSpecPath = Join-Path $repositoryRoot 'src/Prediction/CalculatedVarSpecRegistry.cs'
 $calculatedVarSpecText = [IO.File]::ReadAllText($calculatedVarSpecPath)
@@ -3001,34 +2945,14 @@ else {
     $sacrificeCalculatedBlock = $calculatedVarSpecText.Substring(
         $sacrificeCalculatedStart,
         $sacrificeCalculatedEnd - $sacrificeCalculatedStart)
-    if (-not $sacrificeCalculatedBlock.Contains('GetOstyMaxHp(simulator, model.Owner) * 2')) {
-        $violations.Add("${calculatedVarSpecPath}: 0.107.1 Sacrifice calculated block must use Osty max HP x2")
-    }
-    if ($sacrificeCalculatedBlock.Contains('GetOstyMaxHp(simulator, model.Owner) * 3')) {
-        $violations.Add("${calculatedVarSpecPath}: later-version Sacrifice x3 calculated block returned")
-    }
-}
-
-$expectFightStart = $calculatedVarSpecText.IndexOf('ExpectAFight =>')
-$expectFightEnd = $calculatedVarSpecText.IndexOf('HelixDrill =>', $expectFightStart)
-if ($expectFightStart -lt 0 -or $expectFightEnd -le $expectFightStart) {
-    $violations.Add("${calculatedVarSpecPath}: Expect a Fight calculated-var boundary is missing")
-}
-else {
-    $expectFightCalculatedBlock = $calculatedVarSpecText.Substring(
-        $expectFightStart,
-        $expectFightEnd - $expectFightStart)
-    if (-not $expectFightCalculatedBlock.Contains('candidate.Preview.Type == CardType.Attack')) {
-        $violations.Add("${calculatedVarSpecPath}: 0.107.1 Expect a Fight energy must count Attack cards in hand")
-    }
-    if ($expectFightCalculatedBlock.Contains('StrengthPower')) {
-        $violations.Add("${calculatedVarSpecPath}: incorrect Strength-based Expect a Fight calculation returned")
+    if (-not $sacrificeCalculatedBlock.Contains('GetOstyMaxHp(simulator, model.Owner) * 3')) {
+        $violations.Add("${calculatedVarSpecPath}: Sacrifice must grant block equal to triple Osty's max HP")
     }
 }
 
 $cardOnPlayRegistryPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/CardOnPlayMirrors.cs'
 if (-not (Select-String -LiteralPath $cardOnPlayRegistryPath -SimpleMatch 'registry.Register<ExpectAFight>(BespokeCardMirrors.ExpectAFightOnPlay);' -Quiet)) {
-    $violations.Add("${cardOnPlayRegistryPath}: 0.107.1 Expect a Fight requires its dedicated OnPlay mirror")
+    $violations.Add("${cardOnPlayRegistryPath}: Expect a Fight requires its dedicated OnPlay mirror")
 }
 $bespokeOnPlayPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Cards/OnPlay/BespokeCardMirrors.cs'
 $bespokeOnPlayText = [IO.File]::ReadAllText($bespokeOnPlayPath)
@@ -3041,15 +2965,13 @@ else {
     $expectFightMirrorBlock = $bespokeOnPlayText.Substring(
         $expectFightMirrorStart,
         $expectFightMirrorEnd - $expectFightMirrorStart)
-    if ((-not $expectFightMirrorBlock.Contains('context.Simulator.GainEnergy(')) -or
-        (-not $expectFightMirrorBlock.Contains('card.DynamicVars["CalculatedEnergy"]'))) {
-        $violations.Add("${bespokeOnPlayPath}: Expect a Fight must gain its calculated energy before the post-mirror power effect")
+    if (-not $expectFightMirrorBlock.Contains('context.GainBlock(card.Owner.Creature)') -or
+        -not $expectFightMirrorBlock.Contains('ContinueOrQueueTail(context, BespokeTailKind.ExpectAFightDiscount)') -or
+        -not $bespokeOnPlayText.Contains('EnergyCost.AddUntilPlayed(-playedCard.Preview.DynamicVars.Energy.IntValue)') -or
+        $cardEffectSpecText.Contains('[typeof(ExpectAFight)] = [Owner<NoEnergyGainPower>')) {
+        $violations.Add("${bespokeOnPlayPath}: Expect a Fight must grant block before discounting non-X Attacks")
     }
 }
-if (-not $cardEffectSpecText.Contains('[typeof(ExpectAFight)] = [Owner<NoEnergyGainPower>(_ => 1)]')) {
-    $violations.Add("${cardEffectSpecPath}: 0.107.1 Expect a Fight must apply one NoEnergyGainPower after gaining energy")
-}
-
 
 $hyperbeamStart = $cardEffectSpecText.IndexOf('#if STS2_01071', $cardEffectSpecText.IndexOf('[typeof(Hegemony)]'))
 $hyperbeamEnd = $cardEffectSpecText.IndexOf('#else', $hyperbeamStart)
@@ -3076,17 +2998,11 @@ if ($expertiseStart -lt 0 -or $expertiseEnd -le $expertiseStart) {
 }
 else {
     $expertiseBlock = $cardDrawMirrorText.Substring($expertiseStart, $expertiseEnd - $expertiseStart)
-    if (-not $expertiseBlock.Contains('card.DynamicVars.Cards.BaseValue - context.OwnerState.Hand.Cards.Count')) {
-        $violations.Add("${cardDrawMirrorPath}: 0.107.1 Expertise must draw only enough cards to reach its Cards hand-size target")
-    }
-    if ($expertiseBlock.Contains('GiveSingleTurnRetain')) {
-        $violations.Add("${cardDrawMirrorPath}: later-version Expertise retain behavior returned")
-    }
-    if ($expertiseBlock.Contains('Draw(card.Owner, card.DynamicVars.Cards.IntValue)')) {
-        $violations.Add("${cardDrawMirrorPath}: fixed-count Expertise draw returned")
+    if (-not $expertiseBlock.Contains('Draw(card.Owner, card.DynamicVars.Cards.IntValue)') -or
+        -not $cardEffectSpecText.Contains('[typeof(Expertise)] = [Owner<RetainHandPower>(_ => 1)]')) {
+        $violations.Add("${cardDrawMirrorPath}: Expertise must draw its Cards amount and retain the hand")
     }
 }
-
 
 $scrapeStart = $cardDrawMirrorText.IndexOf('public static void ScrapeOnPlay')
 $scrapeEnd = $cardDrawMirrorText.IndexOf('public static void ScrawlOnPlay', $scrapeStart)
@@ -3110,14 +3026,11 @@ else {
     $scrapeContinuationBlock = $cardDrawContinuationText.Substring(
         $scrapeContinuationStart,
         $scrapeContinuationEnd - $scrapeContinuationStart)
-    if (-not $scrapeContinuationBlock.Contains('EnergyCost.GetWithModifiers(CostModifiers.Local) != 0')) {
-        $violations.Add("${cardDrawContinuationPath}: 0.107.1 Scrape must test the drawn card's local Energy cost only")
+    if (-not $scrapeContinuationBlock.Contains('GetEnergyCostValueWithModifiers(context.Simulator) != 0')) {
+        $violations.Add("${cardDrawContinuationPath}: Scrape must test the drawn card's Energy cost in the simulated branch")
     }
     if (-not $scrapeContinuationBlock.Contains('EnergyCost.CostsX')) {
-        $violations.Add("${cardDrawContinuationPath}: 0.107.1 Scrape must still discard X-cost cards")
-    }
-    if ($scrapeContinuationBlock.Contains('GetEnergyCostValueWithModifiers(context.Simulator)')) {
-        $violations.Add("${cardDrawContinuationPath}: later-version/global-cost Scrape behavior returned")
+        $violations.Add("${cardDrawContinuationPath}: Scrape must still discard X-cost cards")
     }
 }
 
@@ -3558,13 +3471,12 @@ if ($fuelStart -lt 0 -or $fuelEnd -le $fuelStart) {
 }
 else {
     $fuelBlock = $cardOnPlaySupportText.Substring($fuelStart, $fuelEnd - $fuelStart)
-    $fuelEnergy = $fuelBlock.IndexOf('simulator.GainEnergy(card.Owner, card.DynamicVars.Energy.IntValue);')
-    $fuelDraw = $fuelBlock.IndexOf('simulator.Draw(card.Owner, card.DynamicVars.Cards.BaseValue);')
-    if ($fuelEnergy -lt 0 -or $fuelDraw -lt 0 -or $fuelDraw -le $fuelEnergy) {
-        $violations.Add("${cardOnPlaySupportPath}: 0.107.1 Fuel must gain Energy then draw its Cards amount")
+    if (-not $fuelBlock.Contains('simulator.GainEnergy(card.Owner, card.DynamicVars.Energy.IntValue);') -or
+        $fuelBlock.Contains('simulator.Draw(')) {
+        $violations.Add("${cardOnPlaySupportPath}: Fuel must gain Energy without drawing cards")
     }
     if (-not $cardOnPlayMirrorText.Contains('registry.Register<Fuel>(static (_, _) => { });')) {
-        $violations.Add("${cardOnPlayMirrorPath}: 0.107.1 Fuel must suppress inferred OnPlay draw so CardOnPlaySupport does not double-draw")
+        $violations.Add("${cardOnPlayMirrorPath}: Fuel must use the explicit Energy mirror")
     }
 }
 
@@ -3742,15 +3654,15 @@ else {
 
 $turnStartChoiceSupportPath = Join-Path $repositoryRoot 'src/Prediction/TurnStartChoiceSupport.cs'
 $turnStartChoiceSupportText = [IO.File]::ReadAllText($turnStartChoiceSupportPath)
-foreach ($requiredWellLaidPlansChoiceRule in @(
+foreach ($requiredRetainChoiceRule in @(
     'public static bool ResolveSingleTurnRetain(',
-    'Where(card => !card.Preview.ShouldRetainThisTurn)',
+    'Where(card => !card.ShouldRetainThisTurn(simulator.State))',
     'PlanChoiceEffect.ApplyRetain,',
     '0,',
     'maxCount,',
     'card.MutablePreview.GiveSingleTurnRetain()')) {
-    if (-not $turnStartChoiceSupportText.Contains($requiredWellLaidPlansChoiceRule)) {
-        $violations.Add("${turnStartChoiceSupportPath}: missing 0.107.1 Well-Laid Plans choice rule '$requiredWellLaidPlansChoiceRule'")
+    if (-not $turnStartChoiceSupportText.Contains($requiredRetainChoiceRule)) {
+        $violations.Add("${turnStartChoiceSupportPath}: missing single-turn retain choice rule '$requiredRetainChoiceRule'")
     }
 }
 $endTurnPowerPath = Join-Path $repositoryRoot 'src/Prediction/EndTurnPowerSupport.cs'

@@ -5,6 +5,7 @@ using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Unlocks;
 using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Encounters;
 using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
@@ -22,11 +23,14 @@ internal static partial class CompatibilitySmoke
             ?? "FIRST_TURN").Trim().ToUpperInvariant();
         try
         {
-            CombatState state = await StartCombatAsync(host);
+            CombatState state = await StartCombatAsync(host, mode);
             if (mode is "COMPAT1071_FULL_BATTLE" or "FULL_BATTLE")
                 await PrepareFullBattleFixtureAsync(state);
             string result = mode switch
             {
+                "AEONGLASS_MECHANICS" => await RunAeonglassMechanicsAsync(state),
+                "HOPPER_MECHANICS" => await RunHopperMechanicsAsync(state),
+                "MECHANICS" => await RunMechanicsAsync(state),
                 "FIRST_TURN" => await RunFirstTurnAsync(state),
                 "STANDARD_FULLAUTO" => await RunStandardFullAutoAsync(host, state),
                 "COMPAT1071_TURN_SETUP" or "TURN_SETUP" =>
@@ -39,8 +43,8 @@ internal static partial class CompatibilitySmoke
                     await RunPerformanceBaselineAsync(host, state),
                 _ => throw new InvalidOperationException(
                     $"Unknown compatibility smoke mode '{mode}'. " +
-                    "Expected FIRST_TURN, STANDARD_FULLAUTO, TURN_SETUP, FULLAUTO, " +
-                    "FULL_BATTLE, or PERFORMANCE_BASELINE."),
+                    "Expected MECHANICS, AEONGLASS_MECHANICS, HOPPER_MECHANICS, FIRST_TURN, " +
+                    "STANDARD_FULLAUTO, TURN_SETUP, FULLAUTO, FULL_BATTLE, or PERFORMANCE_BASELINE."),
             };
             string? directory = System.IO.Path.GetDirectoryName(output);
             if (!string.IsNullOrWhiteSpace(directory))
@@ -57,7 +61,7 @@ internal static partial class CompatibilitySmoke
         }
     }
 
-    private static async Task<CombatState> StartCombatAsync(NGame host)
+    private static async Task<CombatState> StartCombatAsync(NGame host, string mode)
     {
         for (int frame = 0; frame < FirstTurnFrameBudget
             && (host.MainMenu is null || !host.MainMenu.IsNodeReady()); frame++)
@@ -79,10 +83,16 @@ internal static partial class CompatibilitySmoke
             false,
             0,
             null);
-        var encounter = ModelDb.AllEncounters.First(e => e.Id.Entry.Contains("NIBBIT")).ToMutable();
+        var encounter = mode switch
+        {
+            "MECHANICS" => ModelDb.Encounter<InfestedPrismsElite>().ToMutable(),
+            "AEONGLASS_MECHANICS" => ModelDb.Encounter<AeonglassBoss>().ToMutable(),
+            "HOPPER_MECHANICS" => ModelDb.Encounter<ThievingHopperWeak>().ToMutable(),
+            _ => ModelDb.AllEncounters.First(e => e.Id.Entry.Contains("NIBBIT")).ToMutable(),
+        };
         encounter.DebugRandomizeRng();
         GD.Print("[CombatSolver/CompatibilitySmoke] Run created, entering " + encounter.Id.Entry);
-        Task roomEntry = RunManager.Instance.EnterRoomDebug(RoomType.Monster, MapPointType.Unassigned, encounter);
+        Task roomEntry = RunManager.Instance.EnterRoomDebug(encounter.RoomType, MapPointType.Unassigned, encounter);
         var deadline = DateTime.UtcNow.AddSeconds(35);
         while (!roomEntry.IsCompleted && DateTime.UtcNow < deadline)
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);

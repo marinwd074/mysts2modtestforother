@@ -225,7 +225,7 @@ internal static class ModifyDamageMirrors
         if (!context.Props.IsPoweredAttack()
             || context.CardSource is null
             || context.Dealer is null
-            || context.Dealer != power.Owner && !power.Owner.Pets.Contains<Creature>(context.Dealer)
+            || context.Dealer != power.Owner && context.Dealer.PetOwner?.Creature != power.Owner
             || context.Target is null)
         {
             return 1;
@@ -233,7 +233,7 @@ internal static class ModifyDamageMirrors
 
         SimulatedCombatState combat = Combat(context);
         return combat.GetAmount<WeakPower>(context.Target) > 0
-            ? combat.GetAmount<TrackingPower>(power.Owner)
+            ? 1m + combat.GetAmount<TrackingPower>(power.Owner) / 100m
             : 1;
     }
 

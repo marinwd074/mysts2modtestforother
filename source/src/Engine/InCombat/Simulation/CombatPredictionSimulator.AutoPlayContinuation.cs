@@ -33,13 +33,17 @@ internal sealed partial class CombatPredictionSimulator
         return true;
     }
 
-    private bool ContinueAutoPlayCards(IReadOnlyList<PredictedCard> cards, bool forceExhaust, int nextIndex)
+    internal void AutoPlayExistingCards(IReadOnlyList<PredictedCard> cards)
+        => ContinueAutoPlayCards(cards, forceExhaust: null, nextIndex: 0);
+
+    private bool ContinueAutoPlayCards(IReadOnlyList<PredictedCard> cards, bool? forceExhaust, int nextIndex)
     {
         for (int index = nextIndex; index < cards.Count; index++)
         {
             PredictedCard card = cards[index];
             if (State.GetCreature(card.Preview.Owner.Creature).IsDead) break;
-            card.MutablePreview.ExhaustOnNextPlay = forceExhaust;
+            if (forceExhaust is { } exhaust)
+                card.MutablePreview.ExhaustOnNextPlay = exhaust;
             AutoPlay(card, nestedChoiceSourceId: card.Preview.Id.Entry);
             if (!HasPendingChoice) continue;
             AppendExecutionContinuation(new AutoPlayCardsExecutionFrame(cards, forceExhaust, index + 1));
@@ -58,7 +62,7 @@ internal sealed partial class CombatPredictionSimulator
             => simulator.ContinueMoveCardsForAutoPlay(Player, Count, Position, Cards, NextIndex);
     }
 
-    private sealed record AutoPlayCardsExecutionFrame(IReadOnlyList<PredictedCard> Cards, bool ForceExhaust, int NextIndex)
+    private sealed record AutoPlayCardsExecutionFrame(IReadOnlyList<PredictedCard> Cards, bool? ForceExhaust, int NextIndex)
         : ICombatPredictionExecutionFrame
     {
         public void PrepareFork(PredictionForkContext context)
