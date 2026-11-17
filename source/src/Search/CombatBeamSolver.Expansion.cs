@@ -3175,7 +3175,7 @@ internal sealed partial class CombatBeamSolver
             return SearchBoundaryReason.None;
         SimPlayerCombatState playerState = simulator.State.GetPlayerCombatState(_player);
         IReadOnlyList<PlanCardChoice>? roundChoicePlans = turnStartChoices?
-            .Where(choice => choice.Effect != PlanChoiceEffect.ApplyKnowledgeCurse)
+            .Where(choice => choice.Effect != PlanChoiceEffect.ApplyKnowledgeCurse || choice.Timing != PlanChoiceTiming.EnemyTurn)
             .ToArray();
         TurnStartChoiceCursor roundChoices = new(roundChoicePlans);
         simulatedCombat.BeginActionChoices(roundChoices);
@@ -4314,12 +4314,10 @@ internal sealed partial class CombatBeamSolver
         List<PlanCardChoice> choices = [.. action.GetActionChoicesInExecutionOrder()];
         if (action.Kind == PlanActionKind.PlayCard && action.TurnStartChoices is { Count: > 0 })
         {
-            // Knowledge Demon curses are never taken through a cursor. They are read straight off the raw plan
-            // list by KnowledgeDemonChoiceSupport.Resolve during the enemy turn, which for a card that forces the
-            // turn to end runs in AdvanceRound - after EndActionChoices has already asserted this cursor. Leaving
-            // them here makes AssertConsumed report a choice that was never this cursor's to take.
+            // The enemy's curse reads the raw plan in AdvanceRound. The Dominion's
+            // player turn-start choice is handled by the cursor.
             choices.AddRange(action.TurnStartChoices
-                .Where(choice => choice.Effect != PlanChoiceEffect.ApplyKnowledgeCurse));
+                .Where(choice => choice.Effect != PlanChoiceEffect.ApplyKnowledgeCurse || choice.Timing != PlanChoiceTiming.EnemyTurn));
         }
         return choices.Count == 0 ? null : choices;
     }

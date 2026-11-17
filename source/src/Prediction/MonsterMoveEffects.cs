@@ -100,7 +100,7 @@ internal static partial class MonsterMoveEffects
             ("TheForgotten", "MIASMA") or
             ("OwlMagistrate", "JUDICIAL_FLIGHT" or "VERDICT") or
             ("CeremonialBeast", "STAMP_MOVE" or "BEAST_CRY_MOVE") or
-            ("Queen", "PUPPET_STRINGS_MOVE" or "YOU_ARE_MINE_MOVE" or "BURN_BRIGHT_FOR_ME_MOVE" or "ENRAGE_MOVE") or
+            ("Queen", "PUPPET_STRINGS_MOVE" or "DREAD_INITIAL_MOVE" or "YOU_ARE_MINE_MOVE" or "BURN_BRIGHT_FOR_ME_MOVE" or "ENRAGE_MOVE") or
             ("LouseProgenitor", "WEB_CANNON_MOVE" or "CURL_AND_GROW_MOVE") or
             ("Tunneler", "BURROW_MOVE") or
             ("CubexConstruct", "CHARGE_UP_MOVE" or "REPEATER_BLAST_MOVE" or "REPEATER_BLAST_MOVE_2") or
@@ -373,7 +373,7 @@ internal static partial class MonsterMoveEffects
                 }
                 simulator.CreateAndAddGeneratedCardsToCombat<Wither>(
                     target.Player,
-                    PileType.Discard,
+                    combat.Rules.IsDread ? PileType.Draw : PileType.Discard,
                     combat.GetMonsterStaticInt(move.Owner, "WitherAmount"),
                     null, CardPilePosition.Random);
                 break;
@@ -663,6 +663,7 @@ internal static partial class MonsterMoveEffects
                 Debuff<FrailPower>(combat, player, 2, move.Owner);
                 return true;
             case ("GasBomb", "EXPLODE_MOVE"):
+                if (simulator.State.GetCreature(move.Owner).IsDead) return true;
                 using (simulator.PushDamageSource(
                     CombatDamageSource.For(CombatDamageSourceKind.MonsterMove, move.Owner.Monster?.Id.Entry)))
                 {
@@ -969,7 +970,9 @@ internal static partial class MonsterMoveEffects
             case ("Queen", "PUPPET_STRINGS_MOVE"):
                 Debuff<ChainsOfBindingPower>(combat, player, 3, move.Owner);
                 return true;
-            case ("Queen", "YOU_ARE_MINE_MOVE"):
+            case ("Queen", "DREAD_INITIAL_MOVE" or "YOU_ARE_MINE_MOVE"):
+                if (move.Move.Id == "DREAD_INITIAL_MOVE")
+                    Debuff<ChainsOfBindingPower>(combat, player, 3, move.Owner);
                 Debuff<FrailPower>(combat, player, 99, move.Owner);
                 Debuff<WeakPower>(combat, player, 99, move.Owner);
                 Debuff<VulnerablePower>(combat, player, 99, move.Owner);
@@ -978,7 +981,7 @@ internal static partial class MonsterMoveEffects
                 foreach (Creature enemy in combat.Enemies)
                 {
                     if (!ReferenceEquals(enemy, move.Owner))
-                        combat.Apply<StrengthPower>(enemy, 1, move.Owner);
+                        combat.Apply<StrengthPower>(enemy, combat.Rules.IsDread ? 2 : 1, move.Owner);
                 }
                 GainBlock(simulator, move.Owner, 20);
                 return true;
@@ -1035,6 +1038,8 @@ internal static partial class MonsterMoveEffects
                 return true;
             case ("SoulFysh", "BECKON_MOVE"):
                 simulator.AddToCombat<Beckon>(player, PileType.Draw, 1, null, CardPilePosition.Random);
+                if (combat.Rules.IsDread)
+                    simulator.AddToCombat<Beckon>(player, PileType.Hand, 1, null);
                 simulator.AddToCombat<Beckon>(player, PileType.Discard, 1, null);
                 return true;
             case ("SoulFysh", "GAZE_MOVE"):
@@ -1089,7 +1094,7 @@ internal static partial class MonsterMoveEffects
                 combat.AdvanceAeonglassWitherUpgrade(move.Owner);
                 simulator.CreateAndAddGeneratedCardsToCombat<Wither>(
                     player.Player,
-                    PileType.Discard,
+                    combat.Rules.IsDread ? PileType.Draw : PileType.Discard,
                     combat.GetMonsterStaticInt(move.Owner, "WitherAmount"),
                     null, CardPilePosition.Random);
                 combat.Apply<StrengthPower>(
@@ -1194,14 +1199,14 @@ internal static partial class MonsterMoveEffects
             case ("DecimillipedeSegmentMiddle", "REATTACH_MOVE"):
                 return true;
             case ("GremlinMerc", "DOUBLE_SMASH_MOVE"):
-                combat.RecordThievery(simulator, move.Owner);
+                if (!combat.Rules.IsBlitz) combat.RecordThievery(simulator, move.Owner);
                 Debuff<WeakPower>(combat, player, 2, move.Owner);
                 return true;
             case ("GremlinMerc", "GIMME_MOVE"):
-                combat.RecordThievery(simulator, move.Owner);
+                if (!combat.Rules.IsBlitz) combat.RecordThievery(simulator, move.Owner);
                 return true;
             case ("GremlinMerc", "HEHE_MOVE"):
-                combat.RecordThievery(simulator, move.Owner);
+                if (!combat.Rules.IsBlitz) combat.RecordThievery(simulator, move.Owner);
                 combat.Apply<StrengthPower>(move.Owner, 2, move.Owner);
                 return true;
             case ("LivingFog", "ADVANCED_GAS_MOVE"):

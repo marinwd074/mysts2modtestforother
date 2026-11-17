@@ -75,6 +75,23 @@ internal sealed class MirroredHookListenerFilter(bool enabled)
         [nameof(AbstractModel.AfterDamageReceivedLate)] = MirroredHookMask.AfterDamageReceivedLate,
         [nameof(AbstractModel.AfterDeath)] = MirroredHookMask.AfterDeath,
         [nameof(AbstractModel.AfterEnergyReset)] = MirroredHookMask.AfterEnergyReset,
+        // A shared bit conservatively retains any receiver of the gold callback family.
+        // Exact registries still distinguish each method; unrelated default calls are no-ops.
+        [nameof(AbstractModel.ModifyGoldGained)] = MirroredHookMask.GoldCallbacks,
+        [nameof(AbstractModel.AfterModifyingGoldGained)] = MirroredHookMask.GoldCallbacks,
+        [nameof(AbstractModel.AfterGoldGained)] = MirroredHookMask.GoldCallbacks,
+        // The final bit groups low-frequency callbacks. Registries distinguish the
+        // exact methods; sharing participation retains each receiver in native order.
+        [nameof(AbstractModel.ShouldTakeExtraTurn)] = MirroredHookMask.ExtraTurnCallbacks,
+        [nameof(AbstractModel.ShouldTakeExtraTurnEarly)] = MirroredHookMask.ExtraTurnCallbacks,
+        [nameof(AbstractModel.AfterTakingExtraTurn)] = MirroredHookMask.ExtraTurnCallbacks,
+        [nameof(AbstractModel.AfterArrowShot)] = MirroredHookMask.AdditionalCallbacks,
+        [nameof(AbstractModel.BeforeHandDraw)] = MirroredHookMask.AdditionalCallbacks,
+        [nameof(AbstractModel.AfterCreatureAddedToCombat)] = MirroredHookMask.AdditionalCallbacks,
+        [nameof(AbstractModel.AfterArrowImpaled)] = MirroredHookMask.AdditionalCallbacks,
+        [nameof(AbstractModel.AfterArrowDislodged)] = MirroredHookMask.AdditionalCallbacks,
+        [nameof(AbstractModel.ModifyPreBlockDamageTarget)] = MirroredHookMask.AdditionalCallbacks,
+        [nameof(AbstractModel.ModifyDamageMultiplicativeLate)] = MirroredHookMask.AdditionalCallbacks,
         [nameof(AbstractModel.AfterModifyingBlockAmount)] = MirroredHookMask.AfterModifyingBlockAmount,
         [nameof(AbstractModel.AfterModifyingCardPlayCount)] = MirroredHookMask.AfterModifyingCardPlayCount,
         [Sts2CardHookCompatibility.AfterModifyingCardPlayResultLocationMethodName] = MirroredHookMask.AfterModifyingCardPlayResultLocation,
@@ -287,6 +304,14 @@ internal enum MirroredHookMask : ulong
     TryModifyKeywordsInCombat = 1UL << 54,
     AfterSideTurnEndLate = 1UL << 55,
     AfterEnergyReset = 1UL << 56,
+    BeforeSideTurnStart = 1UL << 57,
+    AfterPlayerTurnStartEarly = 1UL << 58,
+    AfterPlayerTurnStart = 1UL << 59,
+    AfterPlayerTurnStartLate = 1UL << 60,
+    ModifyOrbValue = 1UL << 61,
+    GoldCallbacks = 1UL << 62,
+    AdditionalCallbacks = 1UL << 63,
+    ExtraTurnCallbacks = AdditionalCallbacks,
     All = ulong.MaxValue,
 }
 

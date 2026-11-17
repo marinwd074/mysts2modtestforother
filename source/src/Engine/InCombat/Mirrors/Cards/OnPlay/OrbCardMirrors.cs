@@ -128,10 +128,10 @@ internal static partial class OrbCardMirrors
         ContinueOrQueueTail(context, OrbCardTailKind.RainbowFrostThenDark);
     }
 
-    public static void RefractOnPlay(Refract _, CardOnPlayMirrorContext context)
+    public static void RefractOnPlay(Refract card, CardOnPlayMirrorContext context)
     {
         context.Simulator.AcknowledgeExecutionDispatch();
-        context.AttackSingle(hitCount: 2);
+        context.AttackSingle(hitCount: card.DynamicVars.HitCount.IntValue);
         ContinueOrQueueTail(context, OrbCardTailKind.RefractChannels);
     }
 

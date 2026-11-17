@@ -29,7 +29,7 @@ internal static partial class MonsterMoveEffects
             ["TheLost"] = ["DebilitatingSmogStrengthStealAmount"],
             ["CalcifiedCultist"] = ["IncantationAmount"],
             ["DampCultist"] = ["IncantationAmount"],
-            ["CeremonialBeast"] = ["PlowStrength", "CrushStrength", "PlowAmount"],
+            ["CeremonialBeast"] = ["PlowStrength", "CrushStrength", "PlowAmount", "RitualAmount"],
             ["Ovicopter"] = ["NutritionalPasteStrengthAmount"],
             ["SkulkingColony"] = ["InertiaStrengthGain"],
             ["TheInsatiable"] = ["SalivateStrength", "SandpitAmount"],

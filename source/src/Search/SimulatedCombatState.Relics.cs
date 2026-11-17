@@ -32,11 +32,9 @@ internal sealed partial class SimulatedCombatState
 
     private ForkableDictionary<RelicModel, StatefulRelicState>? _statefulRelicStates;
 
-    public bool PrepareRelicsBeforeHandDraw(
-        CombatPredictionSimulator simulator,
-        Player player,
-        TurnStartChoiceCursor choices)
-        => ContinueRelicsBeforeHandDraw(simulator, player, choices, RelicsOf(player).ToArray(), GetPlayerTurnNumber(player), 0);
+    internal bool ApplyRelicBeforeHandDraw(CombatPredictionSimulator simulator, Player player,
+        TurnStartChoiceCursor choices, RelicModel relic)
+        => ContinueRelicsBeforeHandDraw(simulator, player, choices, [relic], GetPlayerTurnNumber(player), 0);
 
     private bool ContinueRelicsBeforeHandDraw(CombatPredictionSimulator simulator, Player player,
         TurnStartChoiceCursor choices, IReadOnlyList<RelicModel> relics, int turn, int nextIndex,
@@ -49,6 +47,24 @@ internal sealed partial class SimulatedCombatState
             StatefulRelicState state;
             switch (relic)
             {
+                case BizarreLamp when turn <= 1:
+                    simulator.AddGeneratedCardsToCombat([PredictedCard.Create(ModelDb.Card<Joy>(), player),
+                        PredictedCard.Create(ModelDb.Card<Sadness>(), player)], PileType.Hand, player);
+                    break;
+                case Ocarina when turn <= 1:
+                    simulator.AddGeneratedCardsToCombat(UnlockedCharacterCards(player)
+                        .Where(card => card.Tags.Any(tag => tag is CardTag.Wah or CardTag.Cho or CardTag.Ki))
+                        .GetDistinctForCombat(player, 1, simulator.Rng.CombatCardGeneration, CardMultiplayerConstraint, Rules)
+                        .ToArray(), PileType.Hand, player, resultKind: CardGenerationResultKind.Random);
+                    break;
+                case RadiantPearl when turn == 1:
+                    simulator.CreateAndAddGeneratedCardsToCombat<Luminesce>(
+                        player, PileType.Hand, relic.DynamicVars.Cards.IntValue, player);
+                    break;
+                case NinjaScroll when turn <= 1:
+                    simulator.CreateAndAddGeneratedCardsToCombat<Shiv>(
+                        player, PileType.Hand, relic.DynamicVars["Shivs"].IntValue, player);
+                    break;
                 case Pendulum:
                     state = GetStatefulRelicState(relic);
                     SetStatefulRelicState(
@@ -121,7 +137,7 @@ internal sealed partial class SimulatedCombatState
                         powerCards = nonInnate;
                     PredictedCard selected = simulator.Rng.CombatCardSelection.NextItem(powerCards)
                         ?? throw new InvalidOperationException("宝石面具存在能力牌候选但随机选择返回空。");
-                    selected.SetToFreeThisTurn();
+                    selected.SetToFreeThisCombat();
                     simulator.AddToPile(selected, PileType.Hand);
                     break;
                 }
@@ -133,7 +149,7 @@ internal sealed partial class SimulatedCombatState
                             player,
                             relic.DynamicVars.Cards.IntValue,
                             simulator.Rng.CombatCardGeneration,
-                            _cardMultiplayerConstraint)
+                            _cardMultiplayerConstraint, Rules)
                         .ToArray();
                     if (!TurnStartChoiceSupport.ResolveGeneratedToHand(
                             simulator,
@@ -353,6 +369,22 @@ internal sealed partial class SimulatedCombatState
     private void SetStatefulRelicState(RelicModel relic, StatefulRelicState state)
         => (_statefulRelicStates ??= [])[relic] = state;
 
+    internal void SetWuppyHp(MegaCrit.Sts2.Core.Models.Relics.Wuppy relic, int hp)
+        => SetStatefulRelicState(relic, GetStatefulRelicState(relic) with { Current = hp });
+
+    internal void RecordByrdpipSwoop(Byrdpip relic)
+    {
+        var state = GetStatefulRelicState(relic);
+        if (state.Current < 6) SetStatefulRelicState(relic, state with { Current = state.Current + 1 });
+    }
+
+    internal bool TryTriggerConductorsBaton(ConductorsBaton relic)
+    {
+        if (GetStatefulRelicState(relic).Current != 0 || MelodyCount(relic.Owner) < 3) return false;
+        SetStatefulRelicState(relic, new StatefulRelicState(1, 0));
+        return true;
+    }
+
     public bool GetRedSkullStrengthApplied(RedSkull relic)
         => GetStatefulRelicState(relic).Current != 0;
 
@@ -365,6 +397,9 @@ internal sealed partial class SimulatedCombatState
     private static StatefulRelicState CaptureLiveState(RelicModel relic)
         => relic switch
         {
+            ConductorsBaton baton => new StatefulRelicState(baton._triggeredThisTurn ? 1 : 0, 0),
+            MegaCrit.Sts2.Core.Models.Relics.Wuppy wuppy => new StatefulRelicState(wuppy.CurrentHp, wuppy.MaxHp),
+            Byrdpip byrd => new StatefulRelicState(byrd.SwoopsPlayed, 0),
             ArtOfWar art => new StatefulRelicState(
                 (bool)ArtOfWarThisTurnField.GetValue(art)! ? 1 : 0,
                 (bool)ArtOfWarLastTurnField.GetValue(art)! ? 1 : 0),
@@ -428,6 +463,9 @@ internal sealed partial class SimulatedCombatState
 
     private static bool IsStatefulRelic(RelicModel relic)
         => relic is ArtOfWar
+            or ConductorsBaton
+            or MegaCrit.Sts2.Core.Models.Relics.Wuppy
+            or Byrdpip
             or BeltBuckle
             or BoneTea
             or EmotionChip

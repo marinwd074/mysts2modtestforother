@@ -94,6 +94,9 @@ internal sealed partial class SimulatedCombatState
                 entry.Receiver == receiver && entry.Result.UnblockedDamage > 0);
     }
 
+    internal int GetSadnessGeneratedBeforePrediction(Player player)
+        => _rootHistory.CardsGenerated.Count(entry => entry.Creator == player && entry.Card is Sadness);
+
     public int GetEtherealPlaysForCalculatedVar(CombatPredictionSimulator simulator, Player player)
     {
         int predicted = simulator.History.TryGetCounters(player, out CombatHistoryCounters counters)

@@ -8,6 +8,7 @@ namespace CombatSolver;
 internal enum GrowthSource
 {
     HandOfGreed, TheHunt, Feed, Royalties, Alchemize, GeneticAlgorithm, TheScythe, Goopy, ForbiddenGrimoire,
+    ShowOff,
 }
 
 internal static class GrowthPolicyLimits
@@ -245,7 +246,7 @@ internal readonly struct GrowthExtras : IEquatable<GrowthExtras>
 // Immutable vectors are used for both per-event HP budgets and realized event counts.
 internal readonly record struct GrowthValues(
     int HandOfGreed = 0, int TheHunt = 0, int Feed = 0, int Royalties = 0,
-    int Alchemize = 0, int GeneticAlgorithm = 0, int TheScythe = 0, int Goopy = 0, int ForbiddenGrimoire = 0)
+    int Alchemize = 0, int GeneticAlgorithm = 0, int TheScythe = 0, int Goopy = 0, int ForbiddenGrimoire = 0, int ShowOff = 0)
 {
     private readonly GrowthExtras _extras;
 
@@ -273,7 +274,7 @@ internal readonly record struct GrowthValues(
     public bool IsEnabled => this != default;
     [JsonIgnore]
     public int Total => checked(HandOfGreed + TheHunt + Feed + Royalties + Alchemize + GeneticAlgorithm + TheScythe + Goopy
-        + ForbiddenGrimoire + _extras.Total);
+        + ForbiddenGrimoire + ShowOff + _extras.Total);
 
     public static bool HasTarget(CardModel card)
         => HasBuiltInTarget(card)
@@ -281,7 +282,7 @@ internal readonly record struct GrowthValues(
 
     internal static bool HasBuiltInTarget(CardModel card)
         => card is Cards.HandOfGreed or Cards.TheHunt or Cards.Feed or Cards.Royalties or Cards.Alchemize or Cards.ForbiddenGrimoire
-            || card.DeckVersion != null && (card is Cards.GeneticAlgorithm or Cards.TheScythe || card.Enchantment is Enchantments.Goopy)
+            || card.DeckVersion != null && (card is Cards.GeneticAlgorithm or Cards.TheScythe or Cards.ShowOff || card.Enchantment is Enchantments.Goopy)
             ;
     public int Get(GrowthSource source) => source switch
     {
@@ -294,6 +295,7 @@ internal readonly record struct GrowthValues(
         GrowthSource.TheScythe => TheScythe,
         GrowthSource.Goopy => Goopy,
         GrowthSource.ForbiddenGrimoire => ForbiddenGrimoire,
+        GrowthSource.ShowOff => ShowOff,
         _ => throw new ArgumentOutOfRangeException(nameof(source)),
     };
 
@@ -311,6 +313,7 @@ internal readonly record struct GrowthValues(
         GrowthSource.TheScythe => this with { TheScythe = value },
         GrowthSource.Goopy => this with { Goopy = value },
         GrowthSource.ForbiddenGrimoire => this with { ForbiddenGrimoire = value },
+        GrowthSource.ShowOff => this with { ShowOff = value },
         _ => throw new ArgumentOutOfRangeException(nameof(source)),
     };
 
@@ -322,7 +325,7 @@ internal readonly record struct GrowthValues(
         + Feed * rewards.Feed + Royalties * rewards.Royalties
         + Alchemize * rewards.Alchemize + GeneticAlgorithm * rewards.GeneticAlgorithm
         + TheScythe * rewards.TheScythe + Goopy * rewards.Goopy
-        + ForbiddenGrimoire * rewards.ForbiddenGrimoire + _extras.Credit(rewards._extras));
+        + ForbiddenGrimoire * rewards.ForbiddenGrimoire + ShowOff * rewards.ShowOff + _extras.Credit(rewards._extras));
 
     public bool Satisfies(GrowthValues required)
     {
@@ -362,6 +365,7 @@ internal readonly record struct GrowthValues(
         fingerprint.Add(TheScythe);
         fingerprint.Add(Goopy);
         fingerprint.Add(ForbiddenGrimoire);
+        fingerprint.Add(ShowOff);
         _extras.AppendFingerprint(ref fingerprint);
     }
 
@@ -370,7 +374,7 @@ internal readonly record struct GrowthValues(
         string vanilla = $"{nameof(GrowthValues)} {{ {nameof(HandOfGreed)} = {HandOfGreed}, "
             + $"{nameof(TheHunt)} = {TheHunt}, {nameof(Feed)} = {Feed}, {nameof(Royalties)} = {Royalties}, "
             + $"{nameof(Alchemize)} = {Alchemize}, {nameof(GeneticAlgorithm)} = {GeneticAlgorithm}, "
-            + $"{nameof(TheScythe)} = {TheScythe}, {nameof(Goopy)} = {Goopy}, {nameof(ForbiddenGrimoire)} = {ForbiddenGrimoire}";
+            + $"{nameof(TheScythe)} = {TheScythe}, {nameof(Goopy)} = {Goopy}, {nameof(ForbiddenGrimoire)} = {ForbiddenGrimoire}, {nameof(ShowOff)} = {ShowOff}";
         return _extras.IsEmpty ? vanilla + " }" : vanilla + $", {nameof(ThirdParty)} = {_extras} }}";
     }
 

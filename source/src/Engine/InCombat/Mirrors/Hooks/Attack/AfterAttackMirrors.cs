@@ -33,7 +33,7 @@ internal static class AfterAttackMirrors
         => Registry.ResolveDispatchKind(listener);
 
     internal static bool HasPairedState(AbstractModel listener)
-        => listener is GigantificationPower or VigorPower;
+        => listener is GigantificationPower or VigorPower or AimPower or QuietusPower;
 
     // BeforeAttack stores command-scoped state for these powers. Pending-choice
     // suspension must make that state forkable without firing ordinary AfterAttack
@@ -46,11 +46,17 @@ internal static class AfterAttackMirrors
     {
         switch (listener)
         {
+            case QuietusPower power:
+                QuietusPowerMirrors.CompleteOrAbort(power, context, completed);
+                break;
             case GigantificationPower power:
                 GigantificationPowerMirrors.CompleteOrAbort(power, context, completed);
                 break;
             case VigorPower power:
                 VigorPowerMirrors.CompleteOrAbort(power, context, completed);
+                break;
+            case AimPower power:
+                AimPowerMirrors.CompleteOrAbort(power, context, completed);
                 break;
         }
     }
@@ -58,6 +64,8 @@ internal static class AfterAttackMirrors
     private static Registry CreateRegistry()
     {
         var registry = new Registry(AfterAttack);
+        registry.Register<AimPower>(AimPowerMirrors.AfterAttack);
+        registry.Register<QuietusPower>(QuietusPowerMirrors.AfterAttack);
 
         registry.Register<BoneFlute>(HandleBoneFlute);
         registry.Register<Flatten>(HandleFlatten);

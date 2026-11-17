@@ -36,8 +36,7 @@ internal static class RelicPredictionStateSupport
             or Shuriken
             or ThrowingAxe
             or TuningFork
-            or Vambrace
-            or VelvetChoker;
+            or Vambrace;
 
     public static void CaptureRootState(
         CombatPredictionSimulator simulator,

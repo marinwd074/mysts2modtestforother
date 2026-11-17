@@ -65,23 +65,25 @@ internal static class CardGenerationPotionMirrors
         CardMultiplayerConstraint multiplayerConstraint,
         CombatPredictionSimulator? simulator = null)
     {
+        var combat = simulator?.State.CombatState as SimulatedCombatState;
+        CombatRulesSnapshot rules = combat?.Rules ?? CombatRulesSnapshot.Capture(target.RunState, null);
         return potion switch
         {
             AttackPotion => new(
-                GenerateCharacterCards(target, CardType.Attack, 3, rng, multiplayerConstraint),
+                GenerateCharacterCards(target, CardType.Attack, 3, rng, multiplayerConstraint, rules, combat),
                 AddsToHand: false),
             SkillPotion => new(
-                GenerateCharacterCards(target, CardType.Skill, 3, rng, multiplayerConstraint),
+                GenerateCharacterCards(target, CardType.Skill, 3, rng, multiplayerConstraint, rules, combat),
                 AddsToHand: false),
             PowerPotion => new(
-                GenerateCharacterCards(target, CardType.Power, 3, rng, multiplayerConstraint),
+                GenerateCharacterCards(target, CardType.Power, 3, rng, multiplayerConstraint, rules, combat),
                 AddsToHand: false),
             ColorlessPotion => new(GenerateColorlessCards(target, 3, rng, multiplayerConstraint, simulator), AddsToHand: false),
             CosmicConcoction => new(
                 [.. GenerateColorlessCards(target, potion.DynamicVars.Cards.IntValue, rng, multiplayerConstraint, simulator)
                     .Select(static card => card.Upgrade())],
                 AddsToHand: true),
-            OrobicAcid => new(GenerateOrobicAcidCards(target, rng, multiplayerConstraint), AddsToHand: true),
+            OrobicAcid => new(GenerateOrobicAcidCards(target, rng, multiplayerConstraint, rules, combat), AddsToHand: true),
             _ => null
         };
     }
@@ -91,11 +93,16 @@ internal static class CardGenerationPotionMirrors
         CardType type,
         int count,
         Rng rng,
-        CardMultiplayerConstraint multiplayerConstraint)
+        CardMultiplayerConstraint multiplayerConstraint,
+        CombatRulesSnapshot rules,
+        SimulatedCombatState? combat)
     {
-        return [.. player.GetUnlockedCharacterCards(multiplayerConstraint)
+        IEnumerable<CardModel> pool = combat is null
+            ? player.GetUnlockedCharacterCards(multiplayerConstraint)
+            : combat.UnlockedCharacterCards(player);
+        return [.. pool
             .Where(candidate => candidate.Type == type)
-            .GetDistinctForCombat(player, count, rng, multiplayerConstraint)];
+            .GetDistinctForCombat(player, count, rng, multiplayerConstraint, rules)];
     }
 
     private static List<PredictedCard> GenerateColorlessCards(
@@ -109,22 +116,22 @@ internal static class CardGenerationPotionMirrors
             return [.. simulator.GetDistinctUnlockedColorlessForCombat(
                 player, count, rng, multiplayerConstraint)];
         return [.. player.GetUnlockedColorlessCards(multiplayerConstraint)
-            .GetDistinctForCombat(player, count, rng, multiplayerConstraint)];
+            .GetDistinctForCombat(player, count, rng, multiplayerConstraint, CombatRulesSnapshot.Capture(player.RunState, null))];
     }
 
     private static List<PredictedCard> GenerateOrobicAcidCards(
         Player player,
         Rng rng,
-        CardMultiplayerConstraint multiplayerConstraint)
+        CardMultiplayerConstraint multiplayerConstraint,
+        CombatRulesSnapshot rules,
+        SimulatedCombatState? combat)
     {
         List<PredictedCard> cards = [];
         CardType[] types = [CardType.Attack, CardType.Skill, CardType.Power];
 
         foreach (var type in types)
         {
-            cards.AddRange(player.GetUnlockedCharacterCards(multiplayerConstraint)
-                .Where(candidate => candidate.Type == type)
-                .GetDistinctForCombat(player, 1, rng, multiplayerConstraint));
+            cards.AddRange(GenerateCharacterCards(player, type, 1, rng, multiplayerConstraint, rules, combat));
         }
 
         foreach (var card in cards)

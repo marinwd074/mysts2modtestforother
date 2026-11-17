@@ -1017,7 +1017,7 @@ internal sealed partial class CombatBeamSolver
         // to the snapshot, so performing the same sort and shuffle in place avoids
         // another deck-sized backing array without changing RNG consumption or ordering.
         var shuffleRng = simulator.Rng.ShuffleState.ToRng();
-        StableShuffleProjection(cards, shuffleRng);
+        StableShuffleProjection(cards, shuffleRng, simulator);
 
         StateFingerprintBuilder key = new();
         key.Add(simulator.Rng.ShuffleState.Counter);
@@ -1036,10 +1036,10 @@ internal sealed partial class CombatBeamSolver
 
     internal static void StableShuffleProjection(
         List<PredictedCard> cards,
-        MegaCrit.Sts2.Core.Random.Rng rng)
+        MegaCrit.Sts2.Core.Random.Rng rng,
+        CombatPredictionSimulator simulator)
     {
-        cards.Sort();
-        cards.UnstableShuffle(rng);
+        cards.StableShuffle(rng, simulator);
     }
 
     private static int ReplayPotentialValue(IEnumerable<PredictedCard> cards)
@@ -1728,6 +1728,16 @@ internal sealed partial class CombatBeamSolver
             key.Add(false);
         }
         IReadOnlyList<Creature> knownEnemies = simulatedCombat.KnownEnemies;
+        foreach (Creature pet in simulatedCombat.Allies.Where(creature => creature.PetOwner == _player
+            && creature != simulatedCombat.GetOsty(_player)))
+        {
+            SimCreatureState petState = simulator.State.GetCreature(pet);
+            key.Add(pet.CombatId ?? uint.MaxValue);
+            key.Add(pet.Monster!.Id.Entry);
+            key.Add(petState.CurrentHp);
+            key.Add(petState.MaxHp);
+            key.Add(petState.Block);
+        }
         for (int enemyIndex = 0; enemyIndex < knownEnemies.Count; enemyIndex++)
         {
             Creature enemy = knownEnemies[enemyIndex];
@@ -1745,6 +1755,9 @@ internal sealed partial class CombatBeamSolver
         AppendPile(ref key, playerState.DiscardPile, 'C');
         AppendPile(ref key, playerState.ExhaustPile, 'X');
         AppendOrbs(ref key, simulator, playerState.OrbQueue);
+        simulatedCombat.AddMelodyFingerprint(ref key, _player);
+        FoolStateSupport.AddFingerprint(ref key, _player, playerState.Arrows, simulatedCombat.EffectivePowers(), simulator);
+        simulatedCombat.AddShowOffFingerprint(ref key, _player, simulator);
         _run.Performance.End(SearchMetricPhase.PileFingerprint, pileFingerprintMeasurement);
         AppendRngState(ref key, simulator.Rng.ShuffleState);
         AppendRngState(ref key, simulator.Rng.CombatCardGenerationState);
@@ -1755,6 +1768,7 @@ internal sealed partial class CombatBeamSolver
         AppendRngState(ref key, simulator.Rng.CombatOrbGenerationState);
         AppendRngState(ref key, simulator.Rng.MonsterAiState);
         AppendRngState(ref key, simulator.Rng.NicheState);
+        AppendRngState(ref key, simulator.Rng.NonCombatGenerationState(_player));
         ulong deathsFirst = 0;
         ulong deathsSecond = 0;
         foreach (uint combatId in processedEnemyDeaths)
@@ -1836,9 +1850,16 @@ internal sealed partial class CombatBeamSolver
         key.Add(preview.CurrentStarCost);
         CardCostStateSupport.Append(ref key, preview);
         key.Add(preview.BaseReplayCount);
+        key.Add(preview.ExtraReplayThisTurn);
+        key.Add(preview.IsDupe);
+        if (preview.IsDupe) key.Add(CardChoiceSupport.ChoiceCardKey(card.GameplayCloneSource));
+        foreach (var keyword in preview._keywordsAddedFromOutside.Order()) key.Add((int)keyword);
+        key.Add(-1);
+        foreach (var keyword in preview._keywordsRemovedFromOutside.Order()) key.Add((int)keyword);
+        key.Add(-1);
         key.Add(preview.ExhaustOnNextPlay);
         key.Add(preview.IsSlyThisTurn);
-        key.Add(preview.ShouldRetainThisTurn);
+        key.Add(preview._hasSingleTurnRetain);
         AppendLocalCardKeywords(ref key, preview);
         key.Add(preview.DeckVersion != null);
         key.Add(preview.HasBeenRemovedFromState);
@@ -1848,6 +1869,13 @@ internal sealed partial class CombatBeamSolver
         AppendDynamicVars(ref key, preview, preview.DynamicVars);
         switch (preview)
         {
+            case TheShot shot:
+                key.Add(shot._cardsExhaustedByFlorescence);
+                break;
+            case ShowOff showOff:
+                key.Add(showOff.CurrentAim);
+                key.Add(showOff.IncreasedAim);
+                break;
             case Claw claw:
                 key.Add(claw.ExtraDamageFromClawPlays);
                 break;

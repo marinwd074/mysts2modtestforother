@@ -224,7 +224,7 @@ internal static class IntentForecaster
             ("OwlMagistrate", "MAGISTRATE_SCRUTINY" or "PECK_ASSAULT" or "VERDICT") or
             ("Queen", "OFF_WITH_YOUR_HEAD_MOVE" or "EXECUTION_MOVE") or
             ("LouseProgenitor", "WEB_CANNON_MOVE" or "POUNCE_MOVE") or
-            ("Tunneler", "BITE_MOVE" or "BELOW_MOVE") or
+            ("Tunneler", "BITE_MOVE" or "FROM_BELOW_MOVE") or
             ("CubexConstruct", "REPEATER_BLAST_MOVE" or "REPEATER_BLAST_MOVE_2" or "EXPEL_MOVE") or
             ("SlumberingBeetle", "ROLL_OUT_MOVE") or
             ("Crusher", "THRASH_MOVE" or "ENLARGING_STRIKE_MOVE" or "BUG_STING_MOVE" or "GUARDED_STRIKE_MOVE") or

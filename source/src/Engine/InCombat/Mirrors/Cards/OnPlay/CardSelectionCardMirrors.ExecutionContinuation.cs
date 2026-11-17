@@ -25,7 +25,7 @@ internal static partial class CardSelectionCardMirrors
 
             PredictedCard selectedCard = selectedCards[index];
             Creature? target = null;
-            if (selectedCard.Preview.TargetType == TargetType.AnyEnemy)
+            if (context.Simulator.GetTargetType(selectedCard) == TargetType.AnyEnemy)
             {
                 // Native resolves the random target before AutoPlay checks playability.
                 target = context.Rng.CombatTargets.NextItem(context.State.HittableEnemies);
@@ -58,13 +58,13 @@ internal static partial class CardSelectionCardMirrors
                 .Where(predictedCard =>
                     !predictedCard.HasKeyword(context.State, CardKeyword.Unplayable))
                 .ToList();
-            CombatBeamSolver.StableShuffleProjection(eligibleCards, context.Rng.Shuffle);
+            eligibleCards.StableShuffle(context.Rng.CombatCardSelection, context.Simulator);
             PredictedCard? selectedCard = eligibleCards.FirstOrDefault();
 
             if (selectedCard is null)
             {
                 List<PredictedCard> fallbackCards = drawPileCards.ToList();
-                CombatBeamSolver.StableShuffleProjection(fallbackCards, context.Rng.Shuffle);
+                fallbackCards.StableShuffle(context.Rng.CombatCardSelection, context.Simulator);
                 selectedCard = fallbackCards.FirstOrDefault();
             }
 
@@ -135,7 +135,7 @@ internal static partial class CardSelectionCardMirrors
                 var card = (Thrash)context.Card.MutablePreview;
                 if (stage == 0)
                 {
-                    context.AttackSingle(hitCount: 2);
+                    context.AttackSingle(hitCount: card.DynamicVars.HitCount.IntValue);
                     if (QueueSelectionContinuation(context, sequence, 1))
                         return false;
                 }
@@ -205,7 +205,7 @@ internal static partial class CardSelectionCardMirrors
                 var card = (Uproar)context.Card.MutablePreview;
                 if (stage == 0)
                 {
-                    context.AttackSingle(hitCount: 2);
+                    context.AttackSingle(hitCount: card.DynamicVars.HitCount.IntValue);
                     if (QueueSelectionContinuation(context, sequence, 1))
                         return false;
                 }
@@ -214,16 +214,15 @@ internal static partial class CardSelectionCardMirrors
                     .Where(predictedCard => predictedCard.Preview.Type == CardType.Attack)
                     .ToList();
 
-                PredictedCard? selectedCard = attackCards
-                    .Where(predictedCard =>
-                        !predictedCard.HasKeyword(context.State, CardKeyword.Unplayable))
-                    .ToList()
-                    .StableShuffle(context.Rng.Shuffle)
-                    .FirstOrDefault();
-
-                selectedCard ??= attackCards
-                    .StableShuffle(context.Rng.Shuffle)
-                    .FirstOrDefault();
+                var playable = attackCards.Where(predictedCard =>
+                    !predictedCard.HasKeyword(context.State, CardKeyword.Unplayable)).ToList();
+                playable.StableShuffle(context.Rng.CombatCardSelection, context.Simulator);
+                PredictedCard? selectedCard = playable.FirstOrDefault();
+                if (selectedCard == null)
+                {
+                    attackCards.StableShuffle(context.Rng.CombatCardSelection, context.Simulator);
+                    selectedCard = attackCards.FirstOrDefault();
+                }
 
                 if (selectedCard is null)
                     return true;

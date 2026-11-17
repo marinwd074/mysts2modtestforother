@@ -138,6 +138,7 @@ internal sealed partial class SolverGrowthStrategyPanel : PanelContainer
         GrowthSource.TheScythe => ModelDb.Card<TheScythe>(),
         GrowthSource.Goopy => ModelDb.Card<DefendIronclad>(),
         GrowthSource.ForbiddenGrimoire => ModelDb.Card<ForbiddenGrimoire>(),
+            GrowthSource.ShowOff => ModelDb.Card<ShowOff>(),
         _ => throw new ArgumentOutOfRangeException(nameof(source)),
     };
 

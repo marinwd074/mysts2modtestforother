@@ -28,9 +28,9 @@ internal static class CombatCardGenerationExtensions
         Player player,
         int count,
         Rng rng,
-        CardMultiplayerConstraint multiplayerConstraint)
+        CardMultiplayerConstraint multiplayerConstraint, CombatRulesSnapshot rules)
     {
-        return cards.FilterForCombatAndPlayerCount(multiplayerConstraint).TakeRandom(count, rng);
+        return cards.FilterForCombatAndPlayerCount(multiplayerConstraint).Where(rules.Allows).TakeRandom(count, rng);
     }
 
     // Mirrors CardFactory.GetForCombat, but does not create cards for the player.
@@ -39,9 +39,9 @@ internal static class CombatCardGenerationExtensions
         Player player,
         int count,
         Rng rng,
-        CardMultiplayerConstraint multiplayerConstraint)
+        CardMultiplayerConstraint multiplayerConstraint, CombatRulesSnapshot rules)
     {
-        var options = cards.FilterForCombatAndPlayerCount(multiplayerConstraint).ToList();
+        var options = cards.FilterForCombatAndPlayerCount(multiplayerConstraint).Where(rules.Allows).ToList();
         if (options.Count == 0)
         {
             return [];
@@ -62,10 +62,10 @@ internal static class CombatCardGenerationExtensions
         Player player,
         int count,
         Rng rng,
-        CardMultiplayerConstraint multiplayerConstraint)
+        CardMultiplayerConstraint multiplayerConstraint, CombatRulesSnapshot rules)
     {
         return cards
-            .TakeRandomDistinctForCombat(player, count, rng, multiplayerConstraint)
+            .TakeRandomDistinctForCombat(player, count, rng, multiplayerConstraint, rules)
             .Select(card => PredictedCard.Create(card, player));
     }
 
@@ -96,7 +96,16 @@ internal static class CombatCardGenerationExtensions
                 player,
                 count,
                 rng,
-                multiplayerConstraint);
+                multiplayerConstraint, ((SimulatedCombatState)simulator.State.CombatState).Rules);
+    }
+
+    public static IEnumerable<PredictedCard> GetDistinctUnlockedCharacterCardsForCombat(
+        this CombatPredictionSimulator simulator, Player player, int count, Rng rng,
+        CardMultiplayerConstraint multiplayerConstraint, Func<CardModel, bool> filter)
+    {
+        var combat = (SimulatedCombatState)simulator.State.CombatState;
+        return combat.UnlockedCharacterCards(player).Where(filter)
+            .GetDistinctForCombat(player, count, rng, multiplayerConstraint, combat.Rules);
     }
 
     public static IEnumerable<PredictedCard> GetUnlockedCharacterAttacksForCombat(
@@ -127,7 +136,7 @@ internal static class CombatCardGenerationExtensions
 
         return player.GetUnlockedCharacterCards(multiplayerConstraint)
             .Where(static card => card.Type == CardType.Attack)
-            .GetForCombat(player, count, rng, multiplayerConstraint);
+            .GetForCombat(player, count, rng, multiplayerConstraint, ((SimulatedCombatState)simulator.State.CombatState).Rules);
     }
 
     public static IEnumerable<PredictedCard> GetDistinctUnlockedCharacterAttacksForCombat(
@@ -154,7 +163,7 @@ internal static class CombatCardGenerationExtensions
 
         return player.GetUnlockedCharacterCards(multiplayerConstraint)
             .Where(static card => card.Type == CardType.Attack)
-            .GetDistinctForCombat(player, count, rng, multiplayerConstraint);
+            .GetDistinctForCombat(player, count, rng, multiplayerConstraint, ((SimulatedCombatState)simulator.State.CombatState).Rules);
     }
 
     // Mirrors CardFactory.GetDefaultTransformationOptions' pool choice, then reuses the root's
@@ -168,17 +177,27 @@ internal static class CombatCardGenerationExtensions
         Rng rng)
     {
         CardPoolModel pool = TransformationOptionPool(original);
+        var combat = (SimulatedCombatState)simulator.State.CombatState;
+        IEnumerable<CardModel> options;
         if (simulator.State.CombatState is ICombatPredictionCardGenerationPoolSnapshot snapshot
             && snapshot.TryGetRootUnlockedTransformationCards(
                 original.Owner,
                 pool,
-                original.RunState!.CardMultiplayerConstraint,
+                combat.CardMultiplayerConstraint,
                 out IReadOnlyList<CardModel>? cached))
         {
-            return CardFactory.CreateRandomCardForTransform(original, cached, isInCombat, rng);
+            options = cached;
         }
-
-        return CardFactory.CreateRandomCardForTransform(original, isInCombat, rng);
+        else options = pool.GetUnlockedCards(original.Owner.UnlockState, combat.CardMultiplayerConstraint);
+        if (original.Rarity is not (CardRarity.Status or CardRarity.Curse))
+            options = options.Where(card => card.Rarity is CardRarity.Common or CardRarity.Uncommon or CardRarity.Rare);
+        if (isInCombat) options = options.Where(card => card.CanBeGeneratedInCombat);
+        CardModel[] eligible = options.Where(card => card.Id != original.Id && combat.Rules.Allows(card)
+            && (combat.CardMultiplayerConstraint == CardMultiplayerConstraint.SingleplayerOnly
+                ? card.MultiplayerConstraint != CardMultiplayerConstraint.MultiplayerOnly
+                : card.MultiplayerConstraint != CardMultiplayerConstraint.SingleplayerOnly)).ToArray();
+        if (eligible.Length == 0) throw new InvalidOperationException($"No transformation options for {original.Id}.");
+        return PredictedCard.Create(rng.NextItem(eligible)!, original.Owner).Preview;
     }
 
     // Mirrors the pool choice in CardFactory.GetDefaultTransformationOptions verbatim.
@@ -201,7 +220,7 @@ internal static class CombatCardGenerationExtensions
             && snapshot.TryGetRootEligibleCharacterCards(
                 player, pool, multiplayerConstraint, selection, out IReadOnlyList<CardModel>? cached))
         {
-            return new(cached, alreadyEligible: true, multiplayerConstraint);
+            return new(cached, alreadyEligible: true, multiplayerConstraint, ((SimulatedCombatState)simulator.State.CombatState).Rules);
         }
         IEnumerable<CardModel> unlocked = pool.GetUnlockedCards(player.UnlockState, multiplayerConstraint);
         IEnumerable<CardModel> options = selection switch
@@ -212,16 +231,16 @@ internal static class CombatCardGenerationExtensions
             CharacterCombatGenerationPool.Common => unlocked.Where(static card => card.Rarity == CardRarity.Common),
             _ => throw new ArgumentOutOfRangeException(nameof(selection)),
         };
-        return new(options, alreadyEligible: false, multiplayerConstraint);
+        return new(options, alreadyEligible: false, multiplayerConstraint, ((SimulatedCombatState)simulator.State.CombatState).Rules);
     }
 
     internal readonly struct CharacterGenerationCandidates(
         IEnumerable<CardModel> options,
         bool alreadyEligible,
-        CardMultiplayerConstraint multiplayerConstraint)
+        CardMultiplayerConstraint multiplayerConstraint, CombatRulesSnapshot rules)
     {
         public IEnumerable<PredictedCard> GetDistinctForCombat(Player player, int count, Rng rng)
-            => (alreadyEligible ? options : options.FilterForCombatAndPlayerCount(multiplayerConstraint))
+            => (alreadyEligible ? options : options.FilterForCombatAndPlayerCount(multiplayerConstraint).Where(rules.Allows))
                 .TakeRandom(count, rng)
                 .Select(card => PredictedCard.Create(card, player));
     }
@@ -232,10 +251,10 @@ internal static class CombatCardGenerationExtensions
         Player player,
         int count,
         Rng rng,
-        CardMultiplayerConstraint multiplayerConstraint)
+        CardMultiplayerConstraint multiplayerConstraint, CombatRulesSnapshot rules)
     {
         return cards
-            .TakeRandomForCombat(player, count, rng, multiplayerConstraint)
+            .TakeRandomForCombat(player, count, rng, multiplayerConstraint, rules)
             .Select(card => PredictedCard.Create(card, player));
     }
 }

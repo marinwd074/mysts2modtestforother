@@ -459,7 +459,7 @@ internal sealed record SolverOverlaySnapshot(
 
     private static IReadOnlyList<string> FormatTurnStartChoices(IEnumerable<PlanCardChoice> choices)
         => choices
-            .Where(choice => choice.Effect != PlanChoiceEffect.ApplyKnowledgeCurse)
+            .Where(choice => choice.Effect != PlanChoiceEffect.ApplyKnowledgeCurse || choice.Timing != PlanChoiceTiming.EnemyTurn)
             .Select(FormatTurnStartChoice)
             .ToArray();
 

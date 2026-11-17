@@ -59,6 +59,7 @@ internal static class AfterCardPlayedMirrors
         CardPlay cardPlay,
         bool completed)
     {
+        Block.StretchPowerMirrors.Cleanup(simulator, cardPlay, completed);
         if (!simulator.StateStore.HasEntries<PaelsLegionPredictionState>())
             return;
         foreach ((AbstractModel model, PaelsLegionPredictionState state) in
@@ -80,6 +81,19 @@ internal static class AfterCardPlayedMirrors
     private static Registry CreateRegistry()
     {
         var registry = new Registry(AfterCardPlayed);
+        registry.Register<Byrdpip>((relic, c) =>
+        {
+            if (c.PreviewCard is ByrdSwoop && c.PreviewCard.Owner == relic.Owner)
+                ((SimulatedCombatState)c.CombatState).RecordByrdpipSwoop(relic);
+        });
+        registry.Register<Sown>(DisableSingleUseEnchantment);
+        registry.Register<Swift>(DisableSingleUseEnchantment);
+        registry.Register<ConductorsBaton>((relic, c) =>
+        {
+            var combat = (SimulatedCombatState)c.CombatState;
+            if (c.PreviewCard.Owner == relic.Owner && c.Simulator.IsInProgress && combat.TryTriggerConductorsBaton(relic))
+                combat.ApplyPowerFromSource(typeof(ConductorsBatonPower), relic.Owner.Creature, 1, relic.Owner.Creature, null);
+        });
 
         registry.RegisterIgnored<Play20CardsSingleTurnAchievement>();
         registry.RegisterIgnored<SkillSilent1Achievement>();
@@ -108,6 +122,39 @@ internal static class AfterCardPlayedMirrors
 #if !STS2_01071
         registry.Register<ImitationLearningPower>(HandleImitationLearningPower);
 #endif
+        registry.Register<StretchPower>(Block.StretchPowerMirrors.After);
+        registry.Register<EncorePower>((power, c) =>
+        {
+            var data = power.GetInternalData<EncorePower.Data>();
+            if (c.PreviewCard.Owner.Creature != power.Owner || !data.cardsBeingPlayed.Remove(c.PreviewCard)) return;
+            data.numberOfCardsPlayedSinceApplied++;
+            power.DynamicVars["PlaysRemaining"].BaseValue = Math.Max(0, power.Amount - data.numberOfCardsPlayedSinceApplied);
+        });
+        registry.Register<LullabyPower>((power, c) =>
+        {
+            if (c.PreviewCard.Owner.Creature == power.Owner && !power._proccdThisTurn
+                && ((SimulatedCombatState)c.CombatState).MelodyCount(c.PreviewCard.Owner) == 3)
+            {
+                power._proccdThisTurn = true;
+                c.Simulator.GainBlock(power.Owner, power.Amount, ValueProp.Unpowered);
+            }
+        });
+        registry.Register<SongPathPower>((power, c) =>
+        {
+            var combat = (SimulatedCombatState)c.CombatState;
+            if (c.PreviewCard.Owner.Creature == power.Owner && c.PreviewCard.Tags.Contains(CardTag.Cho)
+                && combat.IsFirstMelodyPlay(c.CardPlay, CardTag.Cho))
+                c.Simulator.GainBlock(power.Owner, power.Amount, ValueProp.Unpowered);
+        });
+        registry.Register<ViolentChordPower>((power, c) =>
+        {
+            var combat = (SimulatedCombatState)c.CombatState;
+            if (c.PreviewCard.Owner.Creature == power.Owner && c.PreviewCard.Tags.Contains(CardTag.Wah)
+                && combat.IsFirstMelodyPlay(c.CardPlay, CardTag.Wah))
+                c.Simulator.Damage(c.State.HittableEnemies.ToArray(), power.Amount, ValueProp.Unpowered, power.Owner);
+        });
+        registry.Register<MotifPower>((power, c) => ApplyMelodyFirstCount(power, c, false));
+        registry.Register<LostLutePower>((power, c) => ApplyMelodyFirstCount(power, c, true));
         registry.Register<JugglingPower>(HandleJugglingPower);
         registry.Register<MasterPlannerPower>(HandleMasterPlannerPower);
         registry.Register<MonologuePower>(HandleMonologuePower);
@@ -169,6 +216,12 @@ internal static class AfterCardPlayedMirrors
         registry.Register<RightHandHand>(HandleRightHandHand);
 
         return registry;
+    }
+
+    private static void DisableSingleUseEnchantment(EnchantmentModel enchantment, AfterCardPlayedMirrorContext c)
+    {
+        if (c.Card.References(enchantment.Card))
+            c.MutablePreviewCard.Enchantment!._status = EnchantmentStatus.Disabled;
     }
 
     private static void HandleDaughterOfTheWind(DaughterOfTheWind relic, AfterCardPlayedMirrorContext context)
@@ -347,7 +400,7 @@ internal static class AfterCardPlayedMirrors
         }
 
         var clone = context.Card.CreateClone();
-        clone.MutablePreview.LocalKeywords.Add(CardKeyword.Ethereal);
+        clone.MutablePreview.AddKeyword(CardKeyword.Ethereal);
         context.Simulator.AddGeneratedCardToCombat(
             clone,
             PileType.Hand,
@@ -558,7 +611,7 @@ internal static class AfterCardPlayedMirrors
                 player,
                 power.Amount,
                 context.Rng.CombatCardGeneration,
-                context.CardMultiplayerConstraint)
+                context.CardMultiplayerConstraint, ((SimulatedCombatState)context.CombatState).Rules)
             .ToList();
         context.Simulator.AddGeneratedCardsToCombat(cards, PileType.Hand, player);
     }
@@ -618,32 +671,6 @@ internal static class AfterCardPlayedMirrors
         }
     }
 
-    private static void HandleJugglingPower(JugglingPower power, AfterCardPlayedMirrorContext context)
-    {
-        if (context.PreviewCard.Owner != power.Owner.Player || context.PreviewCard.Type != CardType.Attack)
-        {
-            return;
-        }
-
-        var state = context.StateStore.Get(power, () => new JugglingPredictionState(power));
-        state.AttacksPlayedThisTurn++;
-        if (state.AttacksPlayedThisTurn != 3)
-        {
-            return;
-        }
-
-        for (var i = 0; i < power.Amount; i++)
-        {
-            context.Simulator.AddGeneratedCardToCombat(
-                context.Card.CreateClone(),
-                PileType.Hand,
-                power.Owner.Player,
-                resultKind: CardGenerationResultKind.Contextual);
-            if (context.Simulator.HasPendingChoice)
-                return;
-        }
-    }
-
     private static void HandleHauntPower(HauntPower power, AfterCardPlayedMirrorContext context)
     {
         if (context.PreviewCard is Soul && context.PreviewCard.Owner.Creature == power.Owner)
@@ -660,7 +687,33 @@ internal static class AfterCardPlayedMirrors
     {
         if (context.PreviewCard.Owner == power.Owner.Player && context.PreviewCard.Type == CardType.Skill)
         {
-            context.MutablePreviewCard.LocalKeywords.Add(CardKeyword.Sly);
+            context.MutablePreviewCard.AddKeyword(CardKeyword.Sly);
+        }
+    }
+
+    private static void ApplyMelodyFirstCount(PowerModel power, AfterCardPlayedMirrorContext c, bool autoPlay)
+    {
+        if (c.PreviewCard.Owner.Creature != power.Owner) return;
+        var combat = (SimulatedCombatState)c.CombatState;
+        int count = SimulatedCombatState.MelodyTags.Count(tag => c.PreviewCard.Tags.Contains(tag)
+            && combat.MelodyStartedCount(c.PreviewCard.Owner, tag) == 1) * power.Amount;
+        if (count <= 0) return;
+        if (autoPlay) c.Simulator.AutoPlayFromDrawPile(c.PreviewCard.Owner, count, CardPilePosition.Top);
+        else c.Simulator.Draw(c.PreviewCard.Owner, count);
+    }
+
+    private static void HandleJugglingPower(JugglingPower power, AfterCardPlayedMirrorContext context)
+    {
+        var state = context.StateStore.Get(power, () => new JugglingPredictionState(power));
+        if (state.CardToClone != context.Card)
+            return;
+        state.CardToClone = null;
+        for (int index = 0; index < power.Amount; index++)
+        {
+            context.Simulator.AddGeneratedCardToCombat(context.Card.CreateClone(), PileType.Hand,
+                power.Owner.Player, resultKind: CardGenerationResultKind.Contextual);
+            if (context.Simulator.HasPendingChoice)
+                return;
         }
     }
 
@@ -684,7 +737,8 @@ internal static class AfterCardPlayedMirrors
         var clone = state.CardAndClones[index].Clone;
         state.CardAndClones.RemoveAt(index);
 
-        state.Amount--;
+        if (HookMirrors.ShouldPlay(context.Simulator, clone, out _, AutoPlayType.Default))
+            state.Amount--;
         context.Simulator.AutoPlay(
             clone,
             nestedChoiceSourceId: power.Id.Entry);

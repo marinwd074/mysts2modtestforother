@@ -20,7 +20,7 @@ internal static partial class CardGenerationCardMirrors
                 card.Owner,
                 3,
                 context.Rng.CombatCardGeneration,
-                context.CardMultiplayerConstraint)
+                context.CardMultiplayerConstraint, ((SimulatedCombatState)context.CombatState).Rules)
             .Select(candidate => candidate.Upgrade())
             .ToList();
 
@@ -51,7 +51,7 @@ internal static partial class CardGenerationCardMirrors
                 card.Owner,
                 1,
                 context.Rng.CombatCardGeneration,
-                context.CardMultiplayerConstraint)
+                context.CardMultiplayerConstraint, ((SimulatedCombatState)context.CombatState).Rules)
             .Select(generatedCard => generatedCard.SetToFreeThisTurn())
             .ToList();
 
@@ -65,7 +65,7 @@ internal static partial class CardGenerationCardMirrors
                 card.Owner,
                 3,
                 context.Rng.CombatCardGeneration,
-                context.CardMultiplayerConstraint)
+                context.CardMultiplayerConstraint, ((SimulatedCombatState)context.CombatState).Rules)
             .ToList();
 
         RecordOptions(context, cards);
@@ -95,7 +95,7 @@ internal static partial class CardGenerationCardMirrors
                 card.Owner,
                 card.DynamicVars.Cards.IntValue,
                 context.Rng.CombatCardGeneration,
-                context.CardMultiplayerConstraint)
+                context.CardMultiplayerConstraint, ((SimulatedCombatState)context.CombatState).Rules)
             .ToList();
 
         context.Simulator.AddGeneratedCardsToCombat(cards, PileType.Hand, card.Owner);
@@ -259,7 +259,7 @@ internal static partial class CardGenerationCardMirrors
                 card.Owner,
                 3,
                 context.Rng.CombatCardGeneration,
-                context.CardMultiplayerConstraint)
+                context.CardMultiplayerConstraint, ((SimulatedCombatState)context.CombatState).Rules)
             .UpgradeIf(card.IsUpgraded)
             .ToList();
 
@@ -308,7 +308,7 @@ internal static partial class CardGenerationCardMirrors
                 card.Owner,
                 cardsToExhaust.Count,
                 context.Rng.CombatCardGeneration,
-                context.CardMultiplayerConstraint)
+                context.CardMultiplayerConstraint, ((SimulatedCombatState)context.CombatState).Rules)
             .UpgradeIf(card.IsUpgraded)
             .ToList();
 
@@ -349,7 +349,7 @@ internal static partial class CardGenerationCardMirrors
                 card.Owner,
                 1,
                 context.Rng.CombatCardGeneration,
-                context.CardMultiplayerConstraint)
+                context.CardMultiplayerConstraint, ((SimulatedCombatState)context.CombatState).Rules)
             .Select(generatedCard => generatedCard.SetToFreeThisTurn())
             .ToList();
 

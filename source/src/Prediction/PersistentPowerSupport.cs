@@ -66,6 +66,8 @@ internal static class PersistentPowerSupport
             player,
             baseDraw + combat.ConsumeDrawNextTurn(player) + drawNotYetSnapshotted);
         combat.CompleteRelicHandDraw(player);
+        if (delayedDraw is { Amount: > 0 })
+            combat.SetPowerAmount(delayedDraw, 0);
         return result;
     }
 
@@ -235,10 +237,6 @@ internal static class PersistentPowerSupport
                     combat.Apply<PoisonPower>(opponent, noxiousFumes, owner);
             }
         }
-
-        int prepTime = combat.GetAmount<PrepTimePower>(owner);
-        if (prepTime > 0)
-            combat.Apply<VigorPower>(owner, prepTime, owner);
 
         int reflect = combat.GetAmount<ReflectPower>(owner);
         if (reflect > 0)

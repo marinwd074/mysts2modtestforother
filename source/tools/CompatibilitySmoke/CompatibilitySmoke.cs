@@ -31,8 +31,9 @@ internal static partial class CompatibilitySmoke
                 "AEONGLASS_MECHANICS" => await RunAeonglassMechanicsAsync(state),
                 "HOPPER_MECHANICS" => await RunHopperMechanicsAsync(state),
                 "MECHANICS" => await RunMechanicsAsync(state),
+                "FOOL_MECHANICS" => await RunFoolMechanicsAsync(state),
                 "FIRST_TURN" => await RunFirstTurnAsync(state),
-                "STANDARD_FULLAUTO" => await RunStandardFullAutoAsync(host, state),
+                "STANDARD_FULLAUTO" or "FOOL_FULLAUTO" => await RunStandardFullAutoAsync(host, state),
                 "COMPAT1071_TURN_SETUP" or "TURN_SETUP" =>
                     await RunTurnSetupAsync(host, state, fullAuto: false),
                 "COMPAT1071_FULLAUTO" or "FULLAUTO" =>
@@ -41,10 +42,12 @@ internal static partial class CompatibilitySmoke
                     await RunFullBattleAsync(host, state),
                 "COMPAT1071_PERFORMANCE_BASELINE" or "PERFORMANCE_BASELINE" =>
                     await RunPerformanceBaselineAsync(host, state),
+                _ when mode.StartsWith("CHARACTER_", StringComparison.Ordinal) => await RunFirstTurnAsync(state),
                 _ => throw new InvalidOperationException(
                     $"Unknown compatibility smoke mode '{mode}'. " +
                     "Expected MECHANICS, AEONGLASS_MECHANICS, HOPPER_MECHANICS, FIRST_TURN, " +
-                    "STANDARD_FULLAUTO, TURN_SETUP, FULLAUTO, FULL_BATTLE, or PERFORMANCE_BASELINE."),
+                    "STANDARD_FULLAUTO, FOOL_FULLAUTO, FOOL_MECHANICS, CHARACTER_<ID>, TURN_SETUP, " +
+                    "FULLAUTO, FULL_BATTLE, or PERFORMANCE_BASELINE."),
             };
             string? directory = System.IO.Path.GetDirectoryName(output);
             if (!string.IsNullOrWhiteSpace(directory))
@@ -71,7 +74,13 @@ internal static partial class CompatibilitySmoke
         if (host.MainMenu is null || !host.MainMenu.IsNodeReady())
             throw new InvalidOperationException("Timed out waiting for the main menu.");
 
-        var character = ModelDb.AllCharacters.Single(c => c.Id.Entry == "IRONCLAD");
+        string characterId = mode switch
+        {
+            "FOOL_FULLAUTO" or "FOOL_MECHANICS" => "FOOL",
+            _ when mode.StartsWith("CHARACTER_", StringComparison.Ordinal) => mode["CHARACTER_".Length..],
+            _ => "IRONCLAD",
+        };
+        var character = ModelDb.AllCharacters.Single(c => c.Id.Entry == characterId);
         Player player = Player.CreateForNewRun(character, UnlockState.all, 1UL);
         await host.StartNewSingleplayerRun(
             player,
@@ -85,7 +94,7 @@ internal static partial class CompatibilitySmoke
             null);
         var encounter = mode switch
         {
-            "MECHANICS" => ModelDb.Encounter<InfestedPrismsElite>().ToMutable(),
+            "MECHANICS" or "FOOL_MECHANICS" => ModelDb.Encounter<InfestedPrismsElite>().ToMutable(),
             "AEONGLASS_MECHANICS" => ModelDb.Encounter<AeonglassBoss>().ToMutable(),
             "HOPPER_MECHANICS" => ModelDb.Encounter<ThievingHopperWeak>().ToMutable(),
             _ => ModelDb.AllEncounters.First(e => e.Id.Entry.Contains("NIBBIT")).ToMutable(),

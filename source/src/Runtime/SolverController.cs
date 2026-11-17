@@ -755,6 +755,15 @@ internal static partial class SolverController
             searchRequested = true;
             RequestSearch(host, state, resumedReason, deployWhenReady);
         }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            RecordTurnSetupFailure(state, lifecycleGeneration, ex);
+            throw;
+        }
         finally
         {
             if (ReferenceEquals(session.TurnSetupResumeState, state))

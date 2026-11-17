@@ -53,6 +53,7 @@ internal sealed class CombatRootSnapshot
     public double CaptureElapsedMilliseconds { get; }
     public int CapturedCardCount { get; }
     public IReadOnlySet<string> PlayerCardIds { get; }
+    internal CombatRulesSnapshot Rules => ((SimulatedCombatState)_rootSimulator.State.CombatState).Rules;
     public int CapturedPowerCount { get; }
     public int CapturedHookListenerCount { get; }
     public int CapturedRunModSubscriberCount { get; }
@@ -176,6 +177,8 @@ internal sealed class CombatRootSnapshot
         if (!NGame.IsMainThread())
             throw new InvalidOperationException("Combat root snapshot must be captured on the main thread.");
         Engine.InCombat.Mirrors.Hooks.TurnEnd.AfterSideTurnEndLateMirrors.Seal();
+        Engine.InCombat.Mirrors.Hooks.TurnStart.BeforeHandDrawMirrors.Seal();
+        Engine.InCombat.Mirrors.Hooks.AfterCreatureAddedMirrors.Seal();
         Stopwatch stopwatch = Stopwatch.StartNew();
 
         Player player = LocalContext.GetMe(state)

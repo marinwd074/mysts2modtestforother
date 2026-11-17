@@ -30,6 +30,8 @@ internal static class CalculatedVarSpecRegistry
         typeof(Flechettes), typeof(Rend), typeof(GoldAxe), typeof(FlakCannon), typeof(LunarBlast), typeof(Murder),
         typeof(CompileDriver), typeof(Finisher), typeof(Bully), typeof(BeatIntoShape), typeof(DeathMarch),
         typeof(DemonicShield), typeof(Barrage), typeof(CrescentSpear), typeof(BodySlam), typeof(AshenStrike),
+        typeof(MelodicShot), typeof(HarmonicShield), typeof(SteadyCadence), typeof(WahSymphony), typeof(TheShot),
+        typeof(Anguish), typeof(FiendFire), typeof(Growth), typeof(MyShinies), typeof(RhythmStrike), typeof(TheTower),
     ];
 
     public static IReadOnlyDictionary<Type, string> EvidenceByType { get; }
@@ -73,6 +75,16 @@ internal static class CalculatedVarSpecRegistry
         multiplier = model switch
         {
             PreciseCut => -playerState.Hand.Cards.Count,
+            MelodicShot or HarmonicShield or SteadyCadence => combat.MelodyCount(model.Owner),
+            WahSymphony => playerState.AllCards.Count(candidate => SimulatedCombatState.MelodyTags.Any(candidate.Preview.Tags.Contains)),
+            TheShot shot => shot._cardsExhaustedByFlorescence,
+            Anguish => combat.GetSadnessGeneratedBeforePrediction(model.Owner)
+                + simulator.History.OfType<CombatPredictionCardGeneratedEntry>().Count(entry => entry.Creator == model.Owner && entry.Card.Id == "SADNESS"),
+            FiendFire => playerState.Hand.Cards.Count(candidate => !candidate.References(model)),
+            Growth => playerState.Hand.Cards.Count(candidate => candidate.Preview is Sadness),
+            MyShinies => combat.GetPlayerGold(model.Owner) / model.DynamicVars.Gold.BaseValue,
+            RhythmStrike => combat.MelodyCount(model.Owner),
+            TheTower => combat.CapturedTotalFloor,
             Stack => playerState.DiscardPile.Cards.Count,
             Squeeze => playerState.AllCards.Count(candidate =>
                 candidate.Preview.Tags.Contains(CardTag.OstyAttack) && !candidate.References(model)),
@@ -105,7 +117,7 @@ internal static class CalculatedVarSpecRegistry
             Voltaic => CountLightningChannels(simulator, model.Owner),
             TearAsunder => 1 + CountUnblockedDamageEvents(simulator, owner),
             HelixDrill => Math.Max(0, combat.GetEnergySpentThisTurn(model.Owner)
-                - card.GetEnergyCostWithModifiers(simulator, playerState)),
+                - UnfinishedPlayEnergy(simulator, card)),
             PullFromBelow => CountEtherealPlays(simulator, model.Owner),
             Normality => Math.Min(3, combat.GetCardPlayStartsThisTurn(owner)),
             Synchronize or CompileDriver => playerState.OrbQueue.Orbs.Select(orb => orb.Id).Distinct().Count(),
@@ -145,7 +157,17 @@ internal static class CalculatedVarSpecRegistry
             or TearAsunder or HelixDrill or PullFromBelow or Normality
             or Synchronize or Protector or NoEscape or Flechettes or Rend or GoldAxe or FlakCannon
             or LunarBlast or Murder or CompileDriver or Finisher or Bully or BeatIntoShape
-            or DeathMarch or DemonicShield or Barrage or CrescentSpear or BodySlam or AshenStrike;
+            or DeathMarch or DemonicShield or Barrage or CrescentSpear or BodySlam or AshenStrike or MelodicShot
+            or HarmonicShield or SteadyCadence or WahSymphony or TheShot
+            or Anguish or FiendFire or Growth or MyShinies or RhythmStrike or TheTower;
+    }
+
+    private static int UnfinishedPlayEnergy(CombatPredictionSimulator simulator, PredictedCard card)
+    {
+        CardPlay? play = simulator.History.OfType<CombatPredictionCardPlayStartedEntry>()
+            .LastOrDefault(entry => card.References(entry.CardPlay.Card))?.CardPlay;
+        return play is not null && !simulator.History.OfType<CombatPredictionCardPlayFinishedEntry>()
+            .Any(entry => ReferenceEquals(entry.CardPlay, play)) ? play.Resources.EnergySpent : 0;
     }
 
     private static SimulatedCombatState HistoryState(CombatPredictionSimulator simulator)

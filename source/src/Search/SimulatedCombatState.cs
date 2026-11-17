@@ -9,6 +9,8 @@ using MegaCrit.Sts2.Core.Models.Afflictions;
 using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.Models.Characters;
 using MegaCrit.Sts2.Core.Models.Enchantments;
+using MegaCrit.Sts2.Core.Models.Blitz;
+using MegaCrit.Sts2.Core.Models.Dread;
 using MegaCrit.Sts2.Core.Models.Monsters;
 using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.Models.Relics;
@@ -47,6 +49,7 @@ internal sealed partial class SimulatedCombatState
       ICombatPredictionRootMaterializable, IPredictionForkBoundary
 {
     private readonly IRunState _runState;
+    internal CombatRulesSnapshot Rules { get; }
     private readonly IReadOnlyList<Creature> _playerCreatures;
     private readonly IReadOnlyList<Player> _players;
     private readonly IReadOnlyList<Player> _rootCapturedPlayers;
@@ -76,7 +79,14 @@ internal sealed partial class SimulatedCombatState
     private readonly IReadOnlySet<CardModel> _rootFloatingCards;
     private readonly IReadOnlySet<Creature> _rootDeadCreatures;
     private readonly SerializableRunRngSet _runRngSnapshot;
+    private readonly IReadOnlyDictionary<Player, PredictionRngState> _playerNonCombatRngSnapshots;
     private readonly int _currentActIndex;
+    internal int CapturedTotalFloor { get; }
+    internal IReadOnlyList<CardModel> TarotPool { get; }
+    private readonly IReadOnlyDictionary<Player, CardModel[]> _otherCharacterCards;
+    private readonly IReadOnlyDictionary<Player, CardModel[]> _unlockedCharacterCards;
+    internal IReadOnlyList<CardModel> UnlockedCharacterCards(Player player) => _unlockedCharacterCards[player];
+    internal IReadOnlyList<CardModel> OtherCharacterCards(Player player) => _otherCharacterCards[player];
     private readonly RoomType? _currentRoomType;
     private readonly MapCoord? _currentMapCoord;
     private readonly CardMultiplayerConstraint _cardMultiplayerConstraint;
@@ -268,12 +278,24 @@ internal sealed partial class SimulatedCombatState
     {
         if (!NGame.IsMainThread())
             throw new InvalidOperationException("Live combat state can only be captured on the main thread.");
-        if (inner.Players.Any(player => player.Character is Fool || player.PlayerCombatState?.Arrows.Count > 0))
-            throw new NotSupportedException("当前求解器尚未适配愚者或箭矢战斗状态。");
 
         _runState = inner.RunState;
+        Rules = CombatRulesSnapshot.Capture(inner);
         _runRngSnapshot = inner.RunState.Rng.ToSerializable();
+        _playerNonCombatRngSnapshots = inner.Players.ToDictionary(player => player,
+            player => player.PlayerRng.NonCombatGeneration.CaptureState());
         _currentActIndex = inner.RunState.CurrentActIndex;
+        CapturedTotalFloor = inner.RunState.TotalFloor;
+        TarotPool = TarotCards.All.Where(card => card.IsAllowedInRun(inner.RunState)).ToArray();
+        _unlockedCharacterCards = inner.Players.ToDictionary(player => player, player =>
+            player.Character.CardPool.GetUnlockedCards(player.UnlockState,
+                inner.RunState.CardMultiplayerConstraint).ToArray());
+        _otherCharacterCards = inner.Players.ToDictionary(player => player, player =>
+        {
+            var pools = player.UnlockState.CharacterCardPools.ToList();
+            if (pools.Count > 1) pools.Remove(player.Character.CardPool);
+            return pools.SelectMany(pool => pool.GetUnlockedCards(player.UnlockState, inner.RunState.CardMultiplayerConstraint)).ToArray();
+        });
         _currentRoomType = inner.RunState.CurrentRoom?.RoomType;
         _currentMapCoord = inner.RunState.CurrentMapCoord;
         _cardMultiplayerConstraint = inner.RunState.CardMultiplayerConstraint;
@@ -297,13 +319,14 @@ internal sealed partial class SimulatedCombatState
         _rootCardGenerationPools = RootCombatCardGenerationPoolSnapshot.Capture(
             _players,
             _rootCapturedPlayers,
-            _cardMultiplayerConstraint);
+            _cardMultiplayerConstraint, Rules);
         _rootTransformationPools = RootCombatTransformationPoolSnapshot.Capture(
             _rootCapturedPlayers,
             _cardMultiplayerConstraint);
         _encounter = inner.Encounter;
         _encounterSlots = inner.Encounter?.Slots.ToArray() ?? [];
         _rootHistory = RootCombatHistorySnapshot.Capture();
+        CaptureMelodies(inner);
         _rootCalculatedHistory = _players.ToDictionary(
             static player => player,
             player => _rootHistory.CountCalculatedEvents(player));
@@ -339,17 +362,20 @@ internal sealed partial class SimulatedCombatState
         for (int i = 0; i < runModels.Length; i++)
         {
             RunModel live = inner.RunModels[i];
-            if (live is not MultiplayerScalingModel scaling)
+            if (live is not (MegaCrit.Sts2.Core.Models.MultiplayerScalingModel or DreadRunModel or BlitzRunModel))
                 throw new NotSupportedException($"Run model {live.GetType().FullName} requires prediction semantics.");
 
-            var detached = PredictionUtils.CloneModelForSimulation(scaling);
+            RunModel detached = PredictionUtils.CloneModelForSimulation(live);
             MultiplayerScalingRunStateField.SetValue(detached, null);
             MultiplayerScalingCombatStateField.SetValue(detached, null);
             runModels[i] = detached;
-            _multiplayerScalingModel = detached;
+            if (detached is MultiplayerScalingModel scaling)
+                _multiplayerScalingModel = scaling;
             rootModelClones.Add(live, detached);
         }
         _runModels = runModels;
+        if (inner.Dominion is { } dominion)
+            rootModelClones.Add(dominion, DominionPredictionSupport.Capture(dominion));
 #endif
         ModifierModel[] modifiers = inner.Modifiers
             .Select(PredictionUtils.CloneModelForSimulation)
@@ -534,8 +560,14 @@ internal sealed partial class SimulatedCombatState
         ForkableList<Creature> escapedCreatures)
     {
         _runState = source._runState;
+        Rules = source.Rules;
         _runRngSnapshot = source._runRngSnapshot;
+        _playerNonCombatRngSnapshots = source._playerNonCombatRngSnapshots;
         _currentActIndex = source._currentActIndex;
+        CapturedTotalFloor = source.CapturedTotalFloor;
+        TarotPool = source.TarotPool;
+        _otherCharacterCards = source._otherCharacterCards;
+        _unlockedCharacterCards = source._unlockedCharacterCards;
         _currentRoomType = source._currentRoomType;
         _currentMapCoord = source._currentMapCoord;
         _cardMultiplayerConstraint = source._cardMultiplayerConstraint;
@@ -753,6 +785,14 @@ internal sealed partial class SimulatedCombatState
             return 0;
         }
         bool instanced = incoming.InstanceType == MegaCrit.Sts2.Core.Entities.Powers.PowerInstanceType.Instanced;
+        if (incoming is TemporaryThornsPower)
+        {
+            beforeApplied += value => Apply<ThornsPower>(target, value, applier);
+            afterAmountChanged += (offset, power) =>
+            {
+                if (offset != power.Amount) Apply<ThornsPower>(target, offset, applier);
+            };
+        }
         if (instanced || GetAmount<T>(target) == 0)
             beforeApplied?.Invoke(amount);
         PowerModel simulated;
@@ -769,7 +809,7 @@ internal sealed partial class SimulatedCombatState
         int previousAmount = simulated._amount;
         simulated._amount = Math.Clamp(simulated._amount + amount, -999_999_999, 999_999_999);
         // A newly applied player duration skips its first tick; stacking never renews it.
-        if (previousAmount == 0 && simulated._amount != 0 && target.Side == CombatSide.Player
+        if (previousAmount == 0 && simulated._amount != 0 && target.Side == CombatSide.Player && CurrentSide == CombatSide.Enemy
             && PowerLifecycleSupport.UsesNativeDurationSkip(typeof(T)))
             simulated.SkipNextDurationTick = true;
         UpdatePowerListenerOrder(simulated, previousAmount, simulated._amount);
@@ -777,12 +817,18 @@ internal sealed partial class SimulatedCombatState
         int applied = simulated._amount - previousAmount;
         RecordPowerAmountChange(simulated, applied, applier);
         RecordPossessedStatChange(simulated, applied, applier);
+        if (simulated is LullabyPower lullaby && previousAmount <= 0)
+            lullaby._proccdThisTurn = MelodyCount(target.Player!) == 3;
+        if (simulated is EncorePower encore && previousAmount <= 0)
+            encore.DynamicVars["PlaysRemaining"].BaseValue = encore.Amount;
+        if (simulated is InsatiableDominionPower && previousAmount <= 0)
+            simulated.DynamicVars.Damage.BaseValue = 2 + (target.Player is { } ownerPlayer ? GetPlayerTurnNumber(ownerPlayer) : 0);
         if (simulated is DoomPower && applied > 0 && applier != null)
             (_doomAppliersThisTurn ??= []).Add(applier);
         if (simulated is RitualPower ritual
             && previousAmount <= 0
             && simulated._amount > 0
-            && target.IsEnemy)
+            && target.IsEnemy && CurrentSide == CombatSide.Enemy)
         {
             ritual._wasJustAppliedByEnemy = true;
         }
@@ -845,7 +891,13 @@ internal sealed partial class SimulatedCombatState
         bool alreadyPresent = EffectivePowers().Any(power =>
             power.GetType() == powerType && ReferenceEquals(power.Owner, target) && power.Amount > 0);
         ApplyPower(powerType, target, amount, applier);
-        if (!PowerLifecycleSupport.UsesNativeDurationSkip(powerType) && !alreadyPresent && amount > 0)
+        if (alreadyPresent || amount <= 0) return;
+        PowerModel? applied = EffectivePowers().FirstOrDefault(power =>
+            power.GetType() == powerType && ReferenceEquals(power.Owner, target) && power.Amount > 0);
+        if (applied == null) return;
+        if (PowerLifecycleSupport.UsesNativeDurationSkip(powerType))
+            GetMutablePowerInstance(applied).SkipNextDurationTick = true;
+        else
             (_skipNextDurationTick ??= []).Add((target, powerType));
     }
 
@@ -955,6 +1007,7 @@ internal sealed partial class SimulatedCombatState
         PowerModel mutable = GetMutablePowerInstance(power);
         int previousAmount = mutable._amount;
         mutable._amount = Math.Clamp(amount, -999_999_999, 999_999_999);
+        if (mutable is ShowOffPower showOff && mutable._amount == 0) _showOffSources?.Remove(showOff);
         UpdatePowerListenerOrder(mutable, previousAmount, mutable._amount);
         InvalidateHookListenersForAmountTransition(previousAmount, mutable._amount);
     }
@@ -1216,6 +1269,29 @@ internal sealed partial class SimulatedCombatState
         Apply<DexterityPower>(creature, applied, applier);
     }
 
+    public void RetireTemporaryStat(PowerModel power)
+    {
+        int delta = power.TypeForCurrentAmount == PowerType.Buff ? -power.Amount : power.Amount;
+        SetPowerAmount(power, 0);
+        if (delta == 0)
+            return;
+        switch (power)
+        {
+            case TemporaryThornsPower:
+                Apply<ThornsPower>(power.Owner, delta, power.Owner);
+                break;
+            case TemporaryFocusPower:
+                Apply<FocusPower>(power.Owner, delta, power.Owner);
+                break;
+            case TemporaryDexterityPower:
+                Apply<DexterityPower>(power.Owner, delta, power.Owner);
+                break;
+            default:
+                Apply<StrengthPower>(power.Owner, delta, power.Owner);
+                break;
+        }
+    }
+
     public void RestoreTemporaryDexterity()
     {
         foreach (IGrouping<Creature, TemporaryDexterityPower> group in EffectivePowers()
@@ -1356,6 +1432,8 @@ internal sealed partial class SimulatedCombatState
     public void BeginSideTurn(Creature owner)
     {
         ResetCardLifecycleTurn(owner);
+        if (owner.Player is { } melodyPlayer)
+            _melodies?.Remove(melodyPlayer);
         ResetTurnCounter(ref _attacksPlayedThisTurn, owner);
         ResetTurnCounter(ref _shivsPlayedThisTurn, owner);
         ResetTurnCounter(ref _blockCardsPlayedThisTurn, owner);
@@ -1401,8 +1479,6 @@ internal sealed partial class SimulatedCombatState
         bool decrementPlating)
     {
         TickDuration<BlurPower>(owner);
-        if (GetAmount<DrawCardsNextTurnPower>(owner) > 0)
-            SetAmount<DrawCardsNextTurnPower>(owner, 0);
         if (decrementPlating)
         {
             PlatingPower? plating = GetPower<PlatingPower>(owner);
@@ -1498,7 +1574,6 @@ internal sealed partial class SimulatedCombatState
         creature.HpDisplay = HpDisplay.InfiniteWithoutNumbers;
         ForceMonsterMove(owner, "ABOUT_TO_BLOW_MOVE");
         (_steamEruptionPhases ??= [])[owner] = SteamEruptionPhase.AboutToBlow;
-        RemovePowersAfterDeath(owner);
         return true;
     }
 
@@ -1745,7 +1820,7 @@ internal sealed partial class SimulatedCombatState
     }
 
     CombatPredictionRngSet ICombatPredictionRunSnapshot.CreatePredictionRngSet()
-        => CombatPredictionRngSet.From(RunRngSet.FromSave(_runRngSnapshot));
+        => CombatPredictionRngSet.From(RunRngSet.FromSave(_runRngSnapshot), _playerNonCombatRngSnapshots);
 
     private MirroredHookListenerLayout? _mirroredHookLayout;
     private MirroredHookListenerLayout? _mirroredRunHookLayout;
@@ -2239,6 +2314,29 @@ internal sealed partial class SimulatedCombatState
         {
             PowerModel mutable = GetMutablePowerInstance(power);
             PowerPredictionStateSupport.CaptureRootState(simulator, mutable, power);
+            if (power is ShowOffPower showOff && showOff.ShowOffInstance is { } showOffCard)
+            {
+                var source = simulator.State.FindCard(showOffCard)
+                    ?? new PredictedCard(showOffCard, PredictionUtils.CloneCardStateForSimulation(showOffCard));
+                ((ShowOffPower)mutable).ShowOffInstance = (ShowOff)source.MutablePreview;
+                (_showOffSources ??= []).Add((ShowOffPower)mutable, source);
+            }
+            if (power is EncorePower encore)
+            {
+                var data = ((EncorePower)mutable).GetInternalData<EncorePower.Data>();
+                data.numberOfCardsPlayedSinceApplied = encore.GetInternalData<EncorePower.Data>().numberOfCardsPlayedSinceApplied;
+                foreach (CardModel playing in encore.GetInternalData<EncorePower.Data>().cardsBeingPlayed)
+                    data.cardsBeingPlayed.Add(simulator.State.FindCard(playing)!.MutablePreview);
+            }
+            if (power is YahPower yah)
+                ((YahPower)mutable).GetInternalData<YahPower.Data>().triggeredThisTurn = yah.GetInternalData<YahPower.Data>().triggeredThisTurn;
+            if (power is ImpaledPower impaled)
+            {
+                var copy = (ImpaledPower)mutable;
+                copy.HitCounter = impaled.HitCounter;
+                copy.GetInternalData<ImpaledPower.Data>().arrowSources = impaled.Arrows.Select(arrow =>
+                    simulator.State.GetPlayerCombatState(arrow.owner).CaptureArrowReference(arrow)).ToList();
+            }
             if (power is NightmarePower nightmare)
                 CaptureNightmareRootState((NightmarePower)mutable, nightmare);
             if (power is OrbitPower orbit)
@@ -2467,6 +2565,10 @@ internal sealed partial class SimulatedCombatState
         ref StateFingerprintBuilder fingerprint,
         CombatPredictionSimulator simulator)
     {
+        fingerprint.Add((int)Rules.GameMode);
+        fingerprint.Add(Rules.AscensionLevel);
+        fingerprint.Add(Rules.Ascensions);
+        fingerprint.Add(Rules.DominionId ?? string.Empty);
         fingerprint.Add("max_hand_sizes");
         foreach (Player player in _rootCapturedPlayers)
         {
@@ -3001,6 +3103,7 @@ internal sealed partial class SimulatedCombatState
         CombatSide side,
         string? slot)
     {
+        using NativeCombatRulesScope rules = new(Rules);
         Creature creature = CreateCreature(monster, side, slot);
         if (side == CombatSide.Enemy)
         {
@@ -3022,6 +3125,7 @@ internal sealed partial class SimulatedCombatState
     }
     public void AddPredictedMonster(Creature creature)
     {
+        using NativeCombatRulesScope rules = new(Rules);
         MonsterModel monster = creature.Monster
             ?? throw new InvalidOperationException("Only monsters can be added through the predicted monster path.");
         monster.SetUpForCombat();
@@ -3033,6 +3137,7 @@ internal sealed partial class SimulatedCombatState
         CombatPredictionSimulator simulator,
         Creature creature)
     {
+        using NativeCombatRulesScope rules = new(Rules);
         MonsterModel monster = creature.Monster
             ?? throw new InvalidOperationException("Only monsters can be prepared through the predicted monster path.");
         if (CurrentSide == CombatSide.Player)
@@ -3103,6 +3208,11 @@ internal sealed partial class SimulatedCombatState
 
         foreach (AbstractModel listener in GetEffectiveHookListeners())
         {
+            if (listener is WuppysLoyaltyPower)
+            {
+                if (_predictionState!.GetCreature(creature).IsDead) return false;
+                continue;
+            }
             if (listener is ReattachPower or IllusionPower or AdaptablePower or DieForYouPower)
                 continue;
             if (!listener.ShouldAllowHitting(creature))
@@ -3112,6 +3222,7 @@ internal sealed partial class SimulatedCombatState
     }
     bool ICombatPredictionCreatureSemantics.ShouldRemoveAfterDeath(Creature creature)
         => GetAmount<AdaptablePower>(creature) <= 0
+            && GetAmount<WuppysLoyaltyPower>(creature) <= 0
             && GetAmount<IllusionPower>(creature) <= 0
             && GetAmount<ReattachPower>(creature) <= 0
             && GetAmount<SteamEruptionPower>(creature) <= 0;

@@ -73,6 +73,34 @@ internal static partial class CardChoiceSupport
         };
     }
 
+    // Inspect native choice shape before playing. Execution-time specs may sample
+    // RNG (Seeker Strike) or consume history produced by OnPlay (Recall).
+    public static PlanChoiceEffect? GetPotentialEffect(CombatPredictionSimulator simulator, PredictedCard card)
+    {
+        if (CardChoiceMirrors.TryGetSpec(simulator, card, out CardChoiceSpec registered))
+            return registered.Effect;
+        return card.Preview switch
+        {
+            Abundance or Discovery or Quasar or Splash => PlanChoiceEffect.GenerateToHand,
+            SeekerStrike or KiChant or LockedIn or ArrowStab or Hologram or Graveblast
+                or SecretWeapon or SecretTechnique or Wish or Dredge or NeowsFury => PlanChoiceEffect.MoveToHand,
+            Recall or Headbutt or CosmicIndifference or ThinkingAhead or Glimmer or PhotonCut => PlanChoiceEffect.MoveToDrawTop,
+            TheHermit or Survivor or Acrobatics or DaggerThrow or Prepared or HiddenDaggers => PlanChoiceEffect.Discard,
+            TrueGrit when card.Preview.IsUpgraded => PlanChoiceEffect.Exhaust,
+            BurningPact or Scavenge or Purity or Brand or Cleanse => PlanChoiceEffect.Exhaust,
+            Armaments when !card.Preview.IsUpgraded => PlanChoiceEffect.Upgrade,
+            Begone or Charge or Guards or Seance => PlanChoiceEffect.Transform,
+            DualWield or HeirloomHammer => PlanChoiceEffect.Duplicate,
+            Transfigure => PlanChoiceEffect.Modify,
+            Nightmare => PlanChoiceEffect.Nightmare,
+            HandTrick => PlanChoiceEffect.ApplySly,
+            SculptingStrike => PlanChoiceEffect.ApplyEthereal,
+            Snap => PlanChoiceEffect.ApplyRetain,
+            DecisionsDecisions => PlanChoiceEffect.AutoPlayRepeated,
+            _ => null,
+        };
+    }
+
     public static CardChoiceSpec? GetSpec(CombatPredictionSimulator simulator, PredictedCard playedCard)
     {
         // 第三方登记优先。登记表为空时这里只是一次计数比较，原版一条也走不进来。
@@ -104,6 +132,17 @@ internal static partial class CardChoiceSupport
         return card switch
         {
             SeekerStrike => BuildSeekerSpec(simulator, playedCard, owner),
+            KiChant => Spec(owner, PlanChoiceEffect.MoveToHand, PileType.Draw, 1,
+                owner.DrawPile.Cards.Take(card.DynamicVars.Cards.IntValue)),
+            Recall => Spec(owner, PlanChoiceEffect.MoveToDrawTop, PileType.Discard, 1,
+                simulator.History.OfType<CombatPredictionCardsSelectedEntry>()
+                    .Last(entry => playedCard.References(entry.Trace?.Source)).Cards.Count > 0 ? discardBeforeResolution : []),
+            TheHermit => Spec(owner, PlanChoiceEffect.Discard, PileType.Hand, 1, owner.Hand.Cards),
+            LockedIn => Spec(owner, PlanChoiceEffect.MoveToHand, PileType.Draw, 1,
+                owner.DrawPile.Cards.Where(item => item.Preview.Tags.Contains(CardTag.Shoot))),
+            ArrowStab when simulator.AvailableArrows(card.Owner) > 0 && owner.Hand.Cards.Count < simulator.GetMaxHandSize(card.Owner)
+                => Spec(owner, PlanChoiceEffect.MoveToHand, PileType.Discard, 1,
+                    discardBeforeResolution.Where(item => item.Preview.Tags.Contains(CardTag.Shoot))),
             TrueGrit when card.IsUpgraded => Spec(owner, PlanChoiceEffect.Exhaust, PileType.Hand, 1, owner.Hand.Cards),
             Hologram => Spec(owner, PlanChoiceEffect.MoveToHand, PileType.Discard, 1, discardBeforeResolution),
             Graveblast => Spec(owner, PlanChoiceEffect.MoveToHand, PileType.Discard, 1, discardBeforeResolution),
@@ -213,7 +252,7 @@ internal static partial class CardChoiceSupport
             .FirstOrDefault()
             ?? throw new InvalidOperationException(
                 $"嵌套选牌检查找不到 {token.CardId}+{token.UpgradeLevel}#{token.OptionOccurrence}。");
-        return GetSpec(simulator, selected) != null
+        return GetPotentialEffect(simulator, selected) != null
             || BuildRequiredEmptyChoice(selected.Preview) != null
 #if !STS2_01071
             || selected.Preview is Abundance or Discovery or Quasar or Splash;
@@ -778,7 +817,8 @@ internal static partial class CardChoiceSupport
             .ThenByDescending(selection => ChoicePriority(spec, selection))
             .FirstOrDefault());
         Add(ranked
-            .OrderByDescending(selection => selection.Count(card => card.Preview.ShouldRetainThisTurn))
+            .OrderByDescending(selection => selection.Count(card => card.Preview._hasSingleTurnRetain
+                || card.Preview.LocalKeywords.Contains(CardKeyword.Retain)))
             .ThenByDescending(selection => ChoicePriority(spec, selection))
             .FirstOrDefault());
         Add(ranked
@@ -902,7 +942,7 @@ internal static partial class CardChoiceSupport
     {
         List<PredictedCard> sampled = owner.DrawPile.Cards
             .ToList()
-            .StableShuffle(simulator.Rng.CombatCardSelection)
+            .StableShuffle(simulator.Rng.CombatCardSelection, simulator)
             .Take(playedCard.Preview.DynamicVars.Cards.IntValue)
             .ToList();
         List<PredictedCard> options = owner.DrawPile.Cards.Where(sampled.Contains).ToList();
@@ -1211,7 +1251,8 @@ internal static partial class CardChoiceSupport
 
     private static string ChoiceCardKey(
         CardModel card,
-        bool discoverUnregisteredBaseLibModifiers)
+        bool discoverUnregisteredBaseLibModifiers,
+        CardModel? dupeSource = null)
     {
         string vars = string.Join(';', card.DynamicVars
             .OrderBy(item => item.Key)
@@ -1223,10 +1264,10 @@ internal static partial class CardChoiceSupport
             .Append("|energy=").Append(card.EnergyCost.CostsX).Append(':')
             .Append(card.EnergyCost.GetWithModifiers(CostModifiers.Local))
             .Append("|stars=").Append(card.HasStarCostX).Append(':').Append(card.CurrentStarCost)
-            .Append("|replay=").Append(card.BaseReplayCount)
+            .Append("|replay=").Append(card.BaseReplayCount).Append(':').Append(card.ExtraReplayThisTurn)
             .Append("|exhaust=").Append(card.ExhaustOnNextPlay)
             .Append("|sly=").Append(card.IsSlyThisTurn)
-            .Append("|retain=").Append(card.ShouldRetainThisTurn)
+            .Append("|retain=").Append(card._hasSingleTurnRetain)
             .Append("|deck=").Append(card.DeckVersion != null)
             .Append("|keywords=").Append(keywords)
             .Append("|vars=").Append(vars).Append('|')
@@ -1239,6 +1280,7 @@ internal static partial class CardChoiceSupport
                 discoverUnregisteredBaseLibModifiers))
             key.Append('-');
         CardCostStateSupport.Append(key, card);
+        CardInstanceStateSupport.Append(key, card, dupeSource);
         return key.ToString();
     }
 
@@ -1246,7 +1288,7 @@ internal static partial class CardChoiceSupport
     {
         if (card.TryGetCachedChoiceKey(out string key))
             return key;
-        key = ChoiceCardKey(card.Preview, discoverUnregisteredBaseLibModifiers: false);
+        key = ChoiceCardKey(card.Preview, discoverUnregisteredBaseLibModifiers: false, card.DupeSource?.Preview);
         card.SetCachedChoiceKey(key);
         return key;
     }

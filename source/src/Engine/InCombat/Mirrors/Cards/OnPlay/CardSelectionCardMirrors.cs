@@ -41,7 +41,7 @@ internal static partial class CardSelectionCardMirrors
                 predictedCard.Preview.Type == CardType.Attack &&
                 !predictedCard.HasKeyword(context.State, CardKeyword.Unplayable))
             .ToList()
-            .StableShuffle(context.Rng.Shuffle)
+            .StableShuffle(context.Rng.CombatCardSelection, context.Simulator)
             .Take(card.DynamicVars.Cards.IntValue)
             .ToList();
         if (selectedCards.Count == 0)

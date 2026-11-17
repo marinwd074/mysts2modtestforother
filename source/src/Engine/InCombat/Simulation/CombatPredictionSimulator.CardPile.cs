@@ -124,7 +124,7 @@ internal sealed partial class CombatPredictionSimulator
         // implementation's iteration order; card piles do not contain duplicates, so the preview
         // uses the source order directly instead of modeling that implementation detail.
         shuffledCards.AddRange(state.DrawPile.Cards);
-        shuffledCards.StableShuffle(Rng.Shuffle);
+        shuffledCards.StableShuffle(Rng.Shuffle, this);
 
         HookMirrors.ModifyShuffleOrder(this, player, shuffledCards, isInitialShuffle: false);
 
@@ -308,6 +308,7 @@ internal sealed partial class CombatPredictionSimulator
             _ => throw new ArgumentOutOfRangeException(nameof(position), position, null)
         };
         targetPile.Insert(index, card);
+        EnsureArrowSlotForAddedCard(card, playerCombatState, targetPile);
 
         if (oldPileType == PileType.None && !isChangingOwners
             && State.CombatState is ICombatPredictionCardEventSink eventSink)
@@ -412,6 +413,8 @@ internal sealed partial class CombatPredictionSimulator
             };
             targetPile.Insert(index, card);
 
+            EnsureArrowSlotForAddedCard(card, playerCombatState, targetPile);
+
             // Vanilla CardPile.AddInternal updates CombatManager.StateTracker and raises pile UI events.
             // Prediction piles are plain model mirrors, and those UI-facing side effects are ignored.
 
@@ -427,6 +430,13 @@ internal sealed partial class CombatPredictionSimulator
         // skipped until a prediction-relevant combat-pile listener appears.
 
         return results;
+    }
+
+    private void EnsureArrowSlotForAddedCard(PredictedCard card, SimPlayerCombatState playerState, SimCardPile pile)
+    {
+        if (IsInProgress && pile.Type.IsCombatPile() && card.Preview.Tags.Contains(CardTag.Shoot)
+            && card.Preview.Owner.Character.BaseArrowSlotCount == 0 && playerState.Arrows.Count == 0)
+            playerState.GainArrowSlot();
     }
 
     // Mirrors CardPileCmd.RemoveFromCombat without mutating the real combat piles.

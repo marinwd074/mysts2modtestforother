@@ -5,6 +5,7 @@ using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.Entities.FoolArrows;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Models;
@@ -20,6 +21,45 @@ namespace CombatSolver;
 
 internal static partial class CompatibilitySmoke
 {
+    private static async Task<string> RunFoolMechanicsAsync(CombatState live)
+    {
+        Player player = LocalContext.GetMe(live) ?? throw new InvalidOperationException("Missing player.");
+        Creature enemy = live.Enemies.Single();
+        PlayerCombatState playerState = player.PlayerCombatState!;
+        int availableBefore = playerState.Arrows.Count(arrow => arrow.IsAvailable);
+        if (availableBefore == 0)
+            throw new InvalidOperationException("Fool starts the smoke with no available arrows.");
+
+        var sim = await PlayNativeAndPredictedAsync<FoolishShot>(live, player, enemy);
+        Equal("Foolish Shot HP", enemy.CurrentHp, sim.State.GetCreature(enemy).CurrentHp);
+        Equal("Foolish Shot native impaled", 1, enemy.GetPower<ImpaledPower>()!.Arrows.Count);
+        Equal("Foolish Shot predicted impaled", 1, sim.ImpaledBy(enemy, player)!.Arrows.Count);
+        CompareArrows(sim);
+
+        var child = sim.Fork();
+        child.DislodgeArrow(enemy, player, source: null);
+        Equal("Arrow stays impaled in parent", 1, sim.ImpaledBy(enemy, player)!.Arrows.Count);
+        Equal("Child removes its impaled arrow", true, child.ImpaledBy(enemy, player) == null);
+        Equal("Child arrow returned", ArrowStatus.Retrieved,
+            child.State.GetPlayerCombatState(player).Arrows.Last().Status);
+
+        sim = await PlayNativeAndPredictedAsync<Wrest>(live, player, enemy);
+        Equal("Wrest draw", playerState.Hand.Cards.Count, sim.State.GetPlayerCombatState(player).Hand.Cards.Count);
+        Equal("Wrest removes native Impaled", 0, enemy.GetPowerAmount<ImpaledPower>());
+        Equal("Wrest removes predicted Impaled", true, sim.ImpaledBy(enemy, player) == null);
+        CompareArrows(sim);
+
+        sim = await PlayNativeAndPredictedAsync<ChoFirm>(live, player);
+        Equal("Cho Firm block", player.Creature.Block, sim.State.GetCreature(player.Creature).Block);
+        Equal("Cho Firm records melody", true,
+            ((SimulatedCombatState)sim.State.CombatState).PlayedMelody(player, CardTag.Cho));
+        return "PASS: v0.113.1 Fool native shot, impale, fork, dislodge, draw and melody";
+
+        void CompareArrows(CombatPredictionSimulator predicted) => Equal("Arrow slot order and status",
+            string.Join(',', playerState.Arrows.Select(arrow => arrow.Status)),
+            string.Join(',', predicted.State.GetPlayerCombatState(player).Arrows.Select(arrow => arrow.Status)));
+    }
+
     private static async Task<string> RunMechanicsAsync(CombatState live)
     {
         Player player = LocalContext.GetMe(live) ?? throw new InvalidOperationException("Missing player.");

@@ -23,7 +23,7 @@ internal sealed partial class SimulatedCombatState
     }
 
     private sealed record AfterPlayerTurnStartRelicFrame(Player Player, IReadOnlyList<RelicModel> Relics,
-        int Turn, int NextIndex) : ICombatPredictionExecutionFrame
+        int Turn, int NextIndex, bool ApplyMittensStrength = false) : ICombatPredictionExecutionFrame
     {
         public ICombatPredictionExecutionFrame Fork(PredictionForkContext context)
             => this with { Relics = Relics.Select(context.RemapOrSelf).ToArray() };
@@ -31,11 +31,11 @@ internal sealed partial class SimulatedCombatState
         {
             var combat = (SimulatedCombatState)simulator.State.CombatState;
             return !combat.ContinueRelicsAfterPlayerTurnStart(simulator, Player, combat.ActiveExecutionChoices,
-                Relics, Turn, NextIndex);
+                Relics, Turn, NextIndex, ApplyMittensStrength);
         }
     }
 
-    private enum BeforeHandDrawStage { Relics, ReturningCards, RemoveReturnedCard }
+    private enum BeforeHandDrawStage { ReturningCards, RemoveReturnedCard }
 
     private sealed record BeforeHandDrawFrame(Player Player, IReadOnlyList<PredictedCard> ReturningCards,
         BeforeHandDrawStage Stage, int NextIndex = 0) : ICombatPredictionExecutionFrame
@@ -58,11 +58,6 @@ internal sealed partial class SimulatedCombatState
     private bool ContinueBeforeHandDraw(CombatPredictionSimulator simulator, Player player,
         TurnStartChoiceCursor choices, IReadOnlyList<PredictedCard> returningCards, BeforeHandDrawStage stage, int nextIndex = 0)
     {
-        if (stage == BeforeHandDrawStage.Relics && PrepareRelicsBeforeHandDraw(simulator, player, choices))
-        {
-            simulator.AppendExecutionContinuation(new BeforeHandDrawFrame(player, returningCards, BeforeHandDrawStage.ReturningCards));
-            return true;
-        }
         if (_returnToHandNextTurn != null)
         {
             for (int index = nextIndex; index < returningCards.Count; index++)

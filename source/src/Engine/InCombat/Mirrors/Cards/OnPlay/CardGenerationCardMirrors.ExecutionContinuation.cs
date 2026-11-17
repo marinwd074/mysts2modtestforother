@@ -33,7 +33,7 @@ internal static partial class CardGenerationCardMirrors
                         card.Owner,
                         card.DynamicVars.Cards.IntValue,
                         context.Rng.CombatCardGeneration,
-                        context.CardMultiplayerConstraint)
+                        context.CardMultiplayerConstraint, ((SimulatedCombatState)context.CombatState).Rules)
                     .UpgradeIf(card.IsUpgraded)
                     .ToList();
 
@@ -198,7 +198,7 @@ internal static partial class CardGenerationCardMirrors
                         card.Owner,
                         1,
                         context.Rng.CombatCardGeneration,
-                        context.CardMultiplayerConstraint)
+                        context.CardMultiplayerConstraint, ((SimulatedCombatState)context.CombatState).Rules)
                     .Select(generatedCard => generatedCard.SetToFreeThisTurn())
                     .ToList();
                 // 0.107.1 uses ordinary CardPileCmd.Add here, not generated-card hooks.

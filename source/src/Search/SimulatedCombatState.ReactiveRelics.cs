@@ -16,7 +16,8 @@ internal sealed partial class SimulatedCombatState
     {
         foreach (Player player in players)
         {
-            if (RelicsOf(player).Any(static relic => !relic.IsMelted && relic is PaelsEye))
+            if (GetAmount<ExtraTurnPower>(player.Creature) > 0
+                || RelicsOf(player).Any(static relic => !relic.IsMelted && relic is PaelsEye))
                 return true;
         }
         return false;
@@ -42,6 +43,7 @@ internal sealed partial class SimulatedCombatState
                 return false;
             extraTurn = true;
         }
+        extraTurn |= GetAmount<ExtraTurnPower>(player.Creature) > 0;
         return true;
     }
 
@@ -53,7 +55,10 @@ internal sealed partial class SimulatedCombatState
     {
         extraTurn = false;
         if (!paelsEyeTriggers)
+        {
+            extraTurn = GetAmount<ExtraTurnPower>(player.Creature) > 0;
             return true;
+        }
 
         PaelsEye relic = RelicsOf(player)
             .OfType<PaelsEye>()
@@ -104,8 +109,11 @@ internal sealed partial class SimulatedCombatState
                 && GetManualCardsPlayedThisTurn(player.Creature) == 0)
             {
                 SetStatefulRelicState(relic, state with { Current = 1 });
+                return;
             }
         }
+        if (GetAmount<ExtraTurnPower>(player.Creature) is > 0 and var extraTurns)
+            SetAmount<ExtraTurnPower>(player.Creature, extraTurns - 1);
     }
 
     public void TriggerRelicsAfterPotionUsed(

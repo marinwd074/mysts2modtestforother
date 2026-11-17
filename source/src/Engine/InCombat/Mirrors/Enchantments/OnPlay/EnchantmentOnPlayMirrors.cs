@@ -104,7 +104,6 @@ internal static class EnchantmentOnPlayMirrors
             return;
         }
 
-        enchantment._status = EnchantmentStatus.Disabled;
         context.Simulator.GainEnergy(context.PreviewCard.Owner, enchantment.Amount);
     }
 

@@ -22,7 +22,7 @@ internal sealed partial class UnattendedTestRunner
             (s => s.MonsterAi, s => s.MonsterAiState),
             (s => s.Niche, s => s.NicheState)
         ];
-        CombatPredictionRngSet root = CombatPredictionRngSet.From(live);
+        CombatPredictionRngSet root = CombatPredictionRngSet.From(live, Array.Empty<MegaCrit.Sts2.Core.Entities.Players.Player>());
         PredictionRngState[] initial = streams.Select(s => s.Read(root)).ToArray();
         Rng[] expected = streams.Select(s => new Rng(s.Mutable(root).ToSerializable())).ToArray();
         CombatPredictionRngSet parent = root.Fork();

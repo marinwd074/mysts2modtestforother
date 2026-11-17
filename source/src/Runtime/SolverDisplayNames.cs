@@ -230,7 +230,7 @@ internal sealed class SolverDisplayNames
 
     // Freeze the three native title stems on the main thread. Upgrade levels are
     // formatted from immutable text, so future branch upgrades need no model mutation.
-    private readonly record struct DingyDaggerDisplayNames(string Dingy, string Fine, string Pristine)
+    internal readonly record struct DingyDaggerDisplayNames(string Dingy, string Fine, string Pristine)
     {
         internal static DingyDaggerDisplayNames Capture() => new(
             new LocString("cards", "DINGY_DAGGER.title.dingy").GetFormattedText(),

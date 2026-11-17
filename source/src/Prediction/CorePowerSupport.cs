@@ -486,9 +486,6 @@ internal static class CorePowerSupport
         IReadOnlyList<Creature> players,
         int etherealExhaustCount = 0)
     {
-        combat.RestoreTemporaryStrength(players);
-        combat.RestoreTemporaryDexterity();
-        // Native 0.107.1 keeps temporary Focus active through regular AfterSideTurnEnd hooks.
         foreach (Creature player in players)
         {
 #if STS2_01071
@@ -510,7 +507,6 @@ internal static class CorePowerSupport
             if (combat.GetAmount<RingingPower>(player) > 0)
                 combat.SetAmount<RingingPower>(player, 0);
             Tick<DoubleDamagePower>(combat, player);
-            PersistentPowerSupport.TriggerRitual(combat, player);
         }
         if (!EndTurnPowerSupport.TriggerRegular(
                 simulator,
@@ -521,7 +517,6 @@ internal static class CorePowerSupport
         {
             return false;
         }
-        combat.RestoreTemporaryFocus();
         PowerLifecycleSupport.ResolvePowerAmountChanges(simulator, combat);
         if (simulator.HasPendingChoice)
             return false;
@@ -549,9 +544,6 @@ internal static class CorePowerSupport
         IReadOnlyList<Creature> enemies)
     {
         EndTurnPowerSupport.TriggerVeryEarly(combat, enemies);
-        EndTurnPowerSupport.TriggerEnemyDoom(simulator, combat, enemies);
-        if (simulator.HasPendingChoice)
-            return false;
         foreach (Creature enemy in enemies)
         {
             if (simulator.State.GetCreature(enemy).IsAlive)
@@ -566,18 +558,20 @@ internal static class CorePowerSupport
                 if (plating > 0)
                     simulator.GainBlock(enemy, plating, ValueProp.Unpowered);
             }
-            Tick<DoubleDamagePower>(combat, enemy);
-            PersistentPowerSupport.TriggerRitual(combat, enemy);
             if (simulator.HasPendingChoice)
                 return false;
         }
+        EndTurnPowerSupport.TriggerEnemyDoom(simulator, combat, enemies);
+        if (simulator.HasPendingChoice)
+            return false;
+        foreach (Creature enemy in enemies)
+            Tick<DoubleDamagePower>(combat, enemy);
         if (!EndTurnPowerSupport.TriggerRegular(simulator, combat, CombatSide.Enemy, enemies))
             return false;
         PowerLifecycleSupport.ResolvePowerAmountChanges(simulator, combat);
         if (simulator.HasPendingChoice)
             return false;
         TriggerTransientSideTurnEndPowers(simulator, combat, CombatSide.Enemy, enemies);
-        combat.RestoreTemporaryStrength(enemies);
         TickDurations(combat);
         return HookMirrors.AfterSideTurnEndLate(simulator, CombatSide.Enemy, enemies);
     }
@@ -645,11 +639,6 @@ internal static class CorePowerSupport
                 processedDeaths.Add(combatId);
                 continue;
             }
-            bool steamEruptionTriggered = combat.TryTriggerSteamEruptionDeath(simulator, enemy);
-            if (simulator.HasPendingChoice)
-                return false;
-            if (steamEruptionTriggered)
-                continue;
             (newlyDead ??= []).Add(enemy);
         }
         if (newlyDead != null)

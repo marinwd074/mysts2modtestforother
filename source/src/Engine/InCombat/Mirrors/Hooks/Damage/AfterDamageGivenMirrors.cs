@@ -4,9 +4,7 @@ using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Achievements;
 using MegaCrit.Sts2.Core.Models.Monsters;
 using MegaCrit.Sts2.Core.Models.Powers;
-#if STS2_01071
 using MegaCrit.Sts2.Core.Models.Relics;
-#endif
 using MegaCrit.Sts2.Core.ValueProps;
 using CombatSolver.Engine.Common;
 using CombatSolver.Engine.Common.Mirrors;
@@ -39,6 +37,14 @@ internal static class AfterDamageGivenMirrors
     private static Registry CreateRegistry()
     {
         var registry = new Registry(AfterDamageGiven);
+        registry.Register<MightyWings>((relic, c) =>
+        {
+            if (c.Props.IsPoweredAttack() && c.Dealer is not null
+                && (c.Dealer == relic.Owner.Creature || c.Dealer == c.State.GetOsty(relic.Owner))
+                && c.Result.TotalDamage >= relic.DynamicVars["DamageThreshold"].BaseValue)
+                Effects(c).ApplyPowerFromSource(typeof(StrengthPower), relic.Owner.Creature,
+                    relic.DynamicVars["StrengthPower"].IntValue, null, null);
+        });
 
         registry.RegisterIgnored<SkillIronclad2Achievement>();
 #if !STS2_01071

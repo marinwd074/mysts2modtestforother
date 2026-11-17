@@ -7,13 +7,16 @@
 | 层 | 验证 | 结果 |
 |---|---|---|
 | Release | 按本机 `v0.113.1` 和 RitsuLib `0.113.0` API 编译 | 通过 |
-| 加载 | 隔离游戏进程，Steam Build `26660232`，RitsuLib `0.6.14` | RitsuLib 选中 `0.113.0` 变体，CombatSolver 的 66 项必需补丁全部应用 |
+| 加载 | 隔离游戏进程，Steam Build `26660232`，RitsuLib `0.6.14` | RitsuLib 选中 `0.113.0` 变体，当前构建 68 项必需补丁全部应用 |
 | 搜索 | `CompatibilitySmoke=true`，`FIRST_TURN`，标准单人铁甲战士，`NIBBITS_NORMAL` | 原生首回合根，RNG 流计数一致，25 个计划动作，增量验证通过 |
 | 全自动 | 同一测试构建，`STANDARD_FULLAUTO`，初始牌组和原生敌人生命 | 第 6 回合击败两名敌人，80 → 59 HP。一次搜索、五次续用，状态不匹配和部署偏离均为 0，战后清理通过 |
 | 卡牌与遗物 | `MECHANICS`，隔离原生战斗与同根预测 | 11 张卡与 Regalite 差分通过，覆盖抽牌和费用、幻灵的消耗堆、幻影刀刃的保留、`MementoMori` 双目标与 RNG，以及 Regalite 的单回合触发上限 |
 | 敌人机制 | `MECHANICS`、`HOPPER_MECHANICS`、`AEONGLASS_MECHANICS` | 晶体怪脉冲对照原生易伤与能力。飞贼的偷牌、任务牌资格与选牌 RNG 一致。Aeonglass 的衰竭插入顺序、Shuffle RNG 与力量一致 |
+| 原有角色回归 | `CHARACTER_SILENT`、`CHARACTER_REGENT`、`CHARACTER_NECROBINDER`、`CHARACTER_DEFECT` | 四个初始牌组分别通过原生首回合根捕获、RNG 流计数和增量搜索校验。铁甲战士使用 `STANDARD_FULLAUTO` |
+| 愚者原生差分 | `FOOL_MECHANICS`，晶体怪，同根模拟和原生动作 | `FoolishShot` 的伤害、箭槽和插箭，预测分叉拔箭的父子隔离，`Wrest` 的拔箭与抽牌，`ChoFirm` 的格挡和旋律记录通过 |
+| 愚者全自动 | `FOOL_FULLAUTO`，初始牌组和 `SongBow`，双小啃兽 | 第 6 回合获胜，77 → 72 HP。一次搜索、五次续用，状态不匹配和部署偏离均为 0，战后清理通过 |
 
-无头实例使用独立存档。自动执行由真实游戏的 ActionExecutor 结算，可见 Steam 界面未验。当前证据限上述标准单人场景。愚者与箭矢状态、极速和恐惧 RunModel 会在根捕获时拒绝推演，多人仍待现版本复验。机制差异见 [v0.113.1 战斗差异](compat/0.113.1/README.md)。
+无头实例使用独立存档，自动执行由真实游戏的 ActionExecutor 结算。当前证据限上述标准单人场景。恐惧、极速、可见 Steam 界面和多人仍待现版本复验。机制差异见 [v0.113.1 战斗差异](compat/0.113.1/README.md)。
 
 ## 0.107.1 历史固定测试
 

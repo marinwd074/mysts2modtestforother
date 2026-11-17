@@ -43,6 +43,12 @@ internal static class BeforeCardPlayedMirrors
     private static Registry CreateRegistry()
     {
         var registry = new Registry(BeforeCardPlayed);
+        registry.Register<StretchPower>(Block.StretchPowerMirrors.Before);
+        registry.Register<EncorePower>((power, c) =>
+        {
+            if (c.PreviewCard.Owner.Creature == power.Owner)
+                power.GetInternalData<EncorePower.Data>().cardsBeingPlayed.Add(c.PreviewCard);
+        });
 
         registry.RegisterIgnored<SkillSilent1Achievement>();
 
@@ -53,12 +59,18 @@ internal static class BeforeCardPlayedMirrors
         registry.Register<ChainsOfBindingPower>(HandleChainsOfBindingPower);
         registry.Register<DanseMacabrePower>(HandleDanseMacabrePower);
         registry.Register<FreeAttackPower>(HandleFreeAttackPower);
+        registry.Register<FreeCardPower>((power, c) =>
+        {
+            if (c.PreviewCard.Owner.Creature == power.Owner && c.Card.GetPile(c.State)?.Type is PileType.Hand or PileType.Play)
+                c.StateStore.GetPowerAmount(power).Decrement();
+        });
         registry.Register<FreePowerPower>(HandleFreePowerPower);
         registry.Register<FreeSkillPower>(HandleFreeSkillPower);
         registry.Register<GravityPower>(HandleGravityPower);
 #if !STS2_01071
         registry.Register<ImitationLearningPower>(HandleImitationLearningPower);
 #endif
+        registry.Register<JugglingPower>(HandleJugglingPower);
         registry.Register<MonologuePower>(HandleMonologuePower);
         registry.Register<OblivionPower>(HandleOblivionPower);
         registry.Register<RupturePower>(HandleRupturePower);
@@ -144,6 +156,23 @@ internal static class BeforeCardPlayedMirrors
     private static void HandleGravityPower(GravityPower power, BeforeCardPlayedMirrorContext context)
     {
         SnapshotOwnerCard(power, context, power.Amount);
+    }
+
+    private static void HandleJugglingPower(JugglingPower power, BeforeCardPlayedMirrorContext context)
+    {
+        if (context.PreviewCard.Owner != power.Owner.Player || context.PreviewCard.Type != CardType.Attack)
+        {
+            return;
+        }
+
+        var state = context.StateStore.Get(power, () => new JugglingPredictionState(power));
+        state.AttacksPlayedThisTurn++;
+        if (state.AttacksPlayedThisTurn != 3)
+        {
+            return;
+        }
+
+        state.CardToClone = context.Card;
     }
 
 #if !STS2_01071
@@ -367,12 +396,24 @@ internal sealed class CardPlayPairPredictionState : IPredictionStateForkable, IP
     }
 }
 
-internal sealed class JugglingPredictionState(JugglingPower power) : IPredictionStateForkable
+internal sealed class JugglingPredictionState(JugglingPower power) : IPredictionStateForkable, IPredictionForkBoundary
 {
     public int AttacksPlayedThisTurn { get; set; } =
         power.GetInternalData<JugglingPower.Data>().attacksPlayedThisTurn;
 
-    public object Fork(PredictionForkContext context) => MemberwiseClone();
+    public PredictedCard? CardToClone { get; set; }
+
+    public object Fork(PredictionForkContext context)
+    {
+        AssertForkable();
+        return MemberwiseClone();
+    }
+
+    public void AssertForkable()
+    {
+        if (CardToClone is not null)
+            throw new InvalidOperationException("Juggling copy is pending at the Fork boundary.");
+    }
 }
 
 internal sealed class MusicBoxPredictionState(MusicBox relic) : IPredictionStateForkable, IPredictionForkBoundary

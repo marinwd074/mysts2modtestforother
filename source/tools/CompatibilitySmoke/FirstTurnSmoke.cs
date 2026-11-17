@@ -11,7 +11,7 @@ internal static partial class CompatibilitySmoke
     {
         await RunManager.Instance.ActionExecutor.FinishedExecutingActions();
         var root = CombatRootSnapshot.Capture(state);
-        var predictedRng = CombatPredictionRngSet.From(state.RunState.Rng);
+        var predictedRng = root.ForkSimulator().Rng;
         int[] liveRngCounters =
         [
             state.RunState.Rng.Shuffle.GetCounter(),

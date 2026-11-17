@@ -105,6 +105,7 @@ internal sealed partial class CombatPredictionSimulator
         AssertForkable();
         using PredictionForkContext context = new();
         PredictionTrace trace = new();
+        PrepareExecutionCardPlay(source.Card, source.Play, context);
         CombatPredictionState state = State.Fork(context);
         // A suspended manual choice can outlive ordinary pile membership for its
         // actively executing card. Reuse the execution-continuation preparation

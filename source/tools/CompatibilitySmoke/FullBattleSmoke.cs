@@ -41,7 +41,12 @@ internal static partial class CompatibilitySmoke
         {
             throw new InvalidOperationException(
                 $"Full-auto victory missing: deployed={deployed} turn={lastTurn} " +
-                $"in_combat={CombatManager.Instance.IsInProgress} hp={player.Creature.CurrentHp} " +
+                $"in_combat={CombatManager.Instance.IsInProgress} phase={player.PlayerCombatState?.Phase} " +
+                $"side={state.CurrentSide} disabled={CombatManager.Instance.PlayerActionsDisabled} " +
+                $"full_auto={SolverController.FullAutoEnabled} paused={SolverController.AutomaticSearchPaused} " +
+                $"executor_paused={RunManager.Instance.ActionExecutor.IsPaused} " +
+                $"executor_running={RunManager.Instance.ActionExecutor.IsRunning} " +
+                $"queue_state={RunManager.Instance.ActionQueueSynchronizer.CombatState} hp={player.Creature.CurrentHp} " +
                 $"enemies_alive={enemies.Count(enemy => enemy.IsAlive)}.");
         }
 

@@ -8,6 +8,7 @@ using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.ValueProps;
 using CombatSolver.Engine.Common;
 using CombatSolver.Engine.InCombat.Mirrors;
+using CombatSolver.Engine.InCombat.Mirrors.Hooks.Damage;
 
 namespace CombatSolver.Engine.InCombat.Simulation;
 
@@ -58,7 +59,8 @@ internal sealed partial class CombatPredictionSimulator
         ValueProp props,
         Creature? dealer,
         PredictedCard? cardSource,
-        CardPlay? cardPlay)
+        CardPlay? cardPlay,
+        ModifyDamageHookType modifyDamageHookType = ModifyDamageHookType.All)
     {
         using (BeginExecutionDispatch())
         {
@@ -133,7 +135,8 @@ internal sealed partial class CombatPredictionSimulator
         PredictedCard? cardSource,
         CardPlay? cardPlay,
         CombatDamageSource source,
-        out IReadOnlyList<DamageResult> results)
+        out IReadOnlyList<DamageResult> results,
+        ModifyDamageHookType modifyDamageHookType = ModifyDamageHookType.All)
     {
         results = [];
         var originalTargetState = State.GetCreature(originalTarget);
@@ -148,7 +151,7 @@ internal sealed partial class CombatPredictionSimulator
             dealer, amount,
             props,
             cardSource,
-            cardPlay);
+            cardPlay, modifyDamageHookType);
         if (HasPendingChoice)
             return false;
 
@@ -164,12 +167,29 @@ internal sealed partial class CombatPredictionSimulator
 
         var blockTarget = originalTarget.PetOwner?.Creature ?? originalTarget;
         var blockTargetState = State.GetCreature(blockTarget);
-        var blockedDamage = blockTargetState.DamageBlock(modifiedAmount, props);
+        var preBlockTarget = ModifyPreBlockDamageTargetMirrors.Resolve(this, originalTarget, amount, props, dealer);
+        decimal damageRemaining = modifiedAmount;
+        DamageResult? preBlockResult = null;
+        if (preBlockTarget is not null)
+        {
+            decimal hpLoss = HookMirrors.ModifyHpLost(this, originalTarget, damageRemaining, props,
+                dealer, cardSource, HpLossHookPhase.BeforeWuppy, out _);
+            var petState = State.GetCreature(preBlockTarget);
+            int petHpBefore = petState.CurrentHp;
+            preBlockResult = petState.LoseHp(hpLoss, props);
+            preBlockResult.IntendedHpLoss = (int)damageRemaining;
+            preBlockResult.OriginalTarget = originalTarget;
+            damageRemaining = preBlockResult.OverkillDamage;
+            ActionRelicTriggers?.RecordHealth("pre_block_damage", preBlockTarget.CombatId, source,
+                amount, hpLoss, petHpBefore, petState.CurrentHp);
+        }
+        var blockedDamage = blockTargetState.DamageBlock(damageRemaining, props);
+        damageRemaining = Math.Max(damageRemaining - blockedDamage, 0m);
 
         var unblockedDamage = HookMirrors.ModifyHpLost(
             this,
             originalTarget,
-            Math.Max(modifiedAmount - blockedDamage, 0m),
+            damageRemaining,
             props,
             dealer,
             cardSource,
@@ -203,6 +223,8 @@ internal sealed partial class CombatPredictionSimulator
         var unblockedDamageTargetState = State.GetCreature(unblockedDamageTarget);
         int hpBefore = unblockedDamageTargetState.CurrentHp;
         var unblockedDamageResult = unblockedDamageTargetState.LoseHp(unblockedDamage, props);
+        unblockedDamageResult.IntendedHpLoss = (int)damageRemaining;
+        unblockedDamageResult.OriginalTarget = originalTarget;
         ActionRelicTriggers?.RecordHealth("damage", unblockedDamageTarget.CombatId, source,
             amount, unblockedDamage, hpBefore, unblockedDamageTargetState.CurrentHp);
         var wasBlockBroken = originalTargetState.Block <= 0 && blockedDamage > 0m;
@@ -215,6 +237,7 @@ internal sealed partial class CombatPredictionSimulator
             unblockedDamageResult.BlockedDamage = (int)blockedDamage;
             unblockedDamageResult.WasBlockBroken = wasBlockBroken;
             unblockedDamageResult.WasFullyBlocked = wasFullyBlocked;
+            RecordPreBlockDamage();
             History.DamageReceived(
                 unblockedDamageResult.Receiver,
                 dealer,
@@ -223,7 +246,7 @@ internal sealed partial class CombatPredictionSimulator
                 source);
             if (State.CombatState is ICombatPredictionCardEventSink directEventSink)
                 directEventSink.RecordDamageReceived(unblockedDamageResult.Receiver, dealer, unblockedDamageResult);
-            results = [unblockedDamageResult];
+            results = preBlockResult is null ? [unblockedDamageResult] : [preBlockResult, unblockedDamageResult];
             return true;
         }
 
@@ -249,6 +272,8 @@ internal sealed partial class CombatPredictionSimulator
         damageResult.BlockedDamage = (int)blockedDamage;
         damageResult.WasBlockBroken = wasBlockBroken;
         damageResult.WasFullyBlocked = wasFullyBlocked;
+        damageResult.IntendedHpLoss = unblockedDamageResult.OverkillDamage;
+        RecordPreBlockDamage();
         History.DamageReceived(
             unblockedDamageResult.Receiver,
             dealer,
@@ -265,8 +290,17 @@ internal sealed partial class CombatPredictionSimulator
             source);
         if (State.CombatState is ICombatPredictionCardEventSink redirectedEventSink)
             redirectedEventSink.RecordDamageReceived(damageResult.Receiver, dealer, damageResult);
-        results = [unblockedDamageResult, damageResult];
+        results = preBlockResult is null ? [unblockedDamageResult, damageResult]
+            : [preBlockResult, unblockedDamageResult, damageResult];
         return true;
+
+        void RecordPreBlockDamage()
+        {
+            if (preBlockResult is null) return;
+            History.DamageReceived(preBlockResult.Receiver, dealer, preBlockResult, cardSource, source);
+            if (State.CombatState is ICombatPredictionCardEventSink sink)
+                sink.RecordDamageReceived(preBlockResult.Receiver, dealer, preBlockResult);
+        }
     }
 
     // Mirrors the post-target DamageResult processing in CreatureCmd.Damage.
@@ -332,7 +366,7 @@ internal sealed partial class CombatPredictionSimulator
 
         if (killedCreatures != null)
         {
-            if (!Kill(killedCreatures))
+            if (!Kill(killedCreatures, source: cardSource))
                 return false;
         }
         else if (State.RootCapturedPlayers.All(player => State.GetCreature(player.Creature).IsDead))
@@ -341,11 +375,11 @@ internal sealed partial class CombatPredictionSimulator
     }
 
     // Convenience overload for Kill with a single target.
-    public bool Kill(Creature creature, bool force = false)
+    public bool Kill(Creature creature, bool force = false, PredictedCard? source = null)
     {
         using (BeginExecutionDispatch())
         {
-            if (!KillWithoutCheckingWinCondition(creature, force))
+            if (!KillWithoutCheckingWinCondition(creature, force, source: source))
                 return false;
             if (State.RootCapturedPlayers.All(player => State.GetCreature(player.Creature).IsDead))
                 LoseCombat();
@@ -354,13 +388,13 @@ internal sealed partial class CombatPredictionSimulator
     }
 
     // Mirrors CreatureCmd.Kill.
-    public bool Kill(IReadOnlyList<Creature> creatures, bool force = false)
+    public bool Kill(IReadOnlyList<Creature> creatures, bool force = false, PredictedCard? source = null)
     {
         using (BeginExecutionDispatch())
         {
             foreach (var creature in creatures)
             {
-                if (!KillWithoutCheckingWinCondition(creature, force))
+                if (!KillWithoutCheckingWinCondition(creature, force, source: source))
                     return false;
             }
     
@@ -375,7 +409,7 @@ internal sealed partial class CombatPredictionSimulator
     }
 
     // Mirrors CreatureCmd.KillWithoutCheckingWinCondition, without recursion checks.
-    private bool KillWithoutCheckingWinCondition(Creature creature, bool force, int recursion = 0)
+    private bool KillWithoutCheckingWinCondition(Creature creature, bool force, int recursion = 0, PredictedCard? source = null)
     {
         var creatureState = State.GetCreature(creature);
         var currentHp = creatureState.CurrentHp;
@@ -414,9 +448,14 @@ internal sealed partial class CombatPredictionSimulator
             if (HasPendingChoice)
                 return false;
 
-            HookMirrors.AfterDeath(this, creature, wasRemovalPrevented: false);
+            HookMirrors.AfterDeath(this, creature, wasRemovalPrevented: false, source);
             if (HasPendingChoice)
                 return false;
+
+            // AfterDeath can revive a retained enemy before the attack's remaining effects.
+            if (creature.Side == CombatSide.Enemy && creatureState.IsAlive
+                && State.CombatState is SimulatedCombatState revivedCombat)
+                revivedCombat.RemovePowersAfterDeath(creature);
 
             var aliveTeammates = State.GetTeammatesOf(creature)
                 .Where(c => State.GetCreature(c).IsAlive)
@@ -461,7 +500,7 @@ internal sealed partial class CombatPredictionSimulator
                 throw new InvalidOperationException(
                     "死亡被阻止但没有返回对应的阻止者。");
             }
-            HookMirrors.AfterDeath(this, creature, wasRemovalPrevented: true);
+            HookMirrors.AfterDeath(this, creature, wasRemovalPrevented: true, source);
             if (HasPendingChoice)
                 return false;
             HookMirrors.AfterPreventingDeath(this, preventer, creature);

@@ -737,7 +737,7 @@ $specialCountChecks = @(
         )
     },
     @{
-        Path = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Card/AfterCardPlayedMirrors.cs'
+        Path = Join-Path $repositoryRoot 'src/Engine/InCombat/Mirrors/Hooks/Card/BeforeCardPlayedMirrors.cs'
         Rules = @(
             'if (state.AttacksPlayedThisTurn != 3)'
         )
@@ -1920,7 +1920,7 @@ $rootModelBoundaryChecks = @(
     },
     @{
         Path = Join-Path $repositoryRoot "src\Prediction\MonsterSpawnSupport.cs"
-        Text = ".SelectMany(combat.RelicsOf)"
+        Text = "HookMirrors.AfterCreatureAddedToCombat(simulator, creature)"
     },
     @{
         Path = Join-Path $repositoryRoot "src\Search\SimulatedCombatState.cs"
@@ -4078,12 +4078,12 @@ foreach ($boundary in @(
 }
 
 $damageSimulatorPath = Join-Path $repositoryRoot 'src/Engine/InCombat/Simulation/CombatPredictionSimulator.Damage.cs'
-$damageSimulatorText = [IO.File]::ReadAllText($damageSimulatorPath)
+$damageSimulatorText = [IO.File]::ReadAllText($damageSimulatorPath).Replace("`r`n", "`n")
 foreach ($boundary in @(
-    @{ Start = "public IReadOnlyList<DamageResult> Damage(`n        IReadOnlyList<Creature> targets,`n        decimal amount,`n        ValueProp props,`n        Creature? dealer,`n        PredictedCard? cardSource,`n        CardPlay? cardPlay)"; End = 'private IReadOnlyList<DamageResult> DamageSingleTarget(' },
+    @{ Start = "public IReadOnlyList<DamageResult> Damage(`n        IReadOnlyList<Creature> targets,`n        decimal amount,`n        ValueProp props,`n        Creature? dealer,`n        PredictedCard? cardSource,`n        CardPlay? cardPlay,"; End = 'private IReadOnlyList<DamageResult> DamageSingleTarget(' },
     @{ Start = 'private IReadOnlyList<DamageResult> DamageSingleTarget('; End = '// Mirrors the per-target body of CreatureCmd.Damage.' },
-    @{ Start = 'public bool Kill(Creature creature, bool force = false)'; End = '// Mirrors CreatureCmd.Kill.' },
-    @{ Start = 'public bool Kill(IReadOnlyList<Creature> creatures, bool force = false)'; End = '// Mirrors CreatureCmd.KillWithoutCheckingWinCondition' })) {
+    @{ Start = 'public bool Kill(Creature creature, bool force = false, PredictedCard? source = null)'; End = '// Mirrors CreatureCmd.Kill.' },
+    @{ Start = 'public bool Kill(IReadOnlyList<Creature> creatures, bool force = false, PredictedCard? source = null)'; End = '// Mirrors CreatureCmd.KillWithoutCheckingWinCondition' })) {
     $start = $damageSimulatorText.IndexOf($boundary.Start)
     $end = $damageSimulatorText.IndexOf($boundary.End, $start + 1)
     if ($start -lt 0 -or $end -le $start) {

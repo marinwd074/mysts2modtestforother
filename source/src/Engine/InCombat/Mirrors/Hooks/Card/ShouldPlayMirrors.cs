@@ -40,6 +40,9 @@ internal static class ShouldPlayMirrors
         registry.Register<SlothPower>(HandleSlothPower);
 
         registry.Register<VelvetChoker>(HandleVelvetChoker);
+        registry.Register<EncorePower>((power, c) => c.Card.Preview.Owner.Creature != power.Owner
+            || power.GetInternalData<EncorePower.Data>().numberOfCardsPlayedSinceApplied
+                + power.GetInternalData<EncorePower.Data>().cardsBeingPlayed.Count < power.Amount);
         registry.Register<Normality>(HandleNormality);
 
         return registry;

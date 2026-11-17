@@ -50,7 +50,7 @@ internal sealed class RootCombatCardGenerationPoolSnapshot
     public static RootCombatCardGenerationPoolSnapshot Capture(
         IReadOnlyList<Player> colorlessPlayers,
         IReadOnlyList<Player> characterPlayers,
-        CardMultiplayerConstraint multiplayerConstraint)
+        CardMultiplayerConstraint multiplayerConstraint, CombatRulesSnapshot rules)
     {
         CardPoolModel colorlessPool = ModelDb.CardPool<ColorlessCardPool>();
         IEnumerable<CardModel> allCards = colorlessPool.AllCards;
@@ -77,7 +77,7 @@ internal sealed class RootCombatCardGenerationPoolSnapshot
                 FilterNativeCombat(
                         player,
                         player.GetUnlockedCards(colorlessPool, multiplayerConstraint))
-                    .ToArray());
+                    .Where(rules.Allows).ToArray());
         }
 
         Dictionary<Player, NativeCharacterGenerationPoolEntry> characterPoolsByPlayer =
@@ -87,6 +87,7 @@ internal sealed class RootCombatCardGenerationPoolSnapshot
             if (TryCaptureNativeCharacterGenerationPool(
                     player,
                     multiplayerConstraint,
+                    rules,
                     out NativeCharacterGenerationPoolEntry characterAttacks))
             {
                 characterPoolsByPlayer.Add(player, characterAttacks);
@@ -190,6 +191,7 @@ internal sealed class RootCombatCardGenerationPoolSnapshot
     private static bool TryCaptureNativeCharacterGenerationPool(
         Player player,
         CardMultiplayerConstraint multiplayerConstraint,
+        CombatRulesSnapshot rules,
         out NativeCharacterGenerationPoolEntry entry)
     {
         entry = null!;
@@ -207,24 +209,24 @@ internal sealed class RootCombatCardGenerationPoolSnapshot
                 player,
                 player.GetUnlockedCards(cardPool, multiplayerConstraint)
                     .Where(static card => card.Type == CardType.Attack))
-            .ToArray();
+            .Where(rules.Allows).ToArray();
         // These callers use CardPoolModel.GetUnlockedCards directly. Preserve that source
         // and each caller's predicate before the original combat/player-count filtering.
         CardModel[] nonBasicAndAncient = FilterNativeCombat(
                 player,
                 cardPool.GetUnlockedCards(player.UnlockState, multiplayerConstraint)
                     .Where(static card => card.Rarity is not (CardRarity.Basic or CardRarity.Ancient)))
-            .ToArray();
+            .Where(rules.Allows).ToArray();
         CardModel[] powers = FilterNativeCombat(
                 player,
                 cardPool.GetUnlockedCards(player.UnlockState, multiplayerConstraint)
                     .Where(static card => card.Type == CardType.Power))
-            .ToArray();
+            .Where(rules.Allows).ToArray();
         CardModel[] common = FilterNativeCombat(
                 player,
                 cardPool.GetUnlockedCards(player.UnlockState, multiplayerConstraint)
                     .Where(static card => card.Rarity == CardRarity.Common))
-            .ToArray();
+            .Where(rules.Allows).ToArray();
         HashSet<CardModel> canonicalPoolCards = new(
             allCards,
             ReferenceEqualityComparer.Instance);

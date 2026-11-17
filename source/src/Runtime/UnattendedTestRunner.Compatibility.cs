@@ -17,7 +17,8 @@ internal static class UnattendedTestRunner
     internal static bool IsReplayingRecordedInputs => false;
     public static bool AutomaticTurnSearchEnabled => !IsActive
 #if COMPATIBILITY_SMOKE
-        || System.Environment.GetEnvironmentVariable("COMBATSOLVER_COMPAT_SMOKE_MODE") == "STANDARD_FULLAUTO"
+        || System.Environment.GetEnvironmentVariable("COMBATSOLVER_COMPAT_SMOKE_MODE")?.Trim().ToUpperInvariant()
+            is "STANDARD_FULLAUTO" or "FOOL_FULLAUTO"
 #endif
         ;
     public static bool VerifyIncrementalSearch => false;

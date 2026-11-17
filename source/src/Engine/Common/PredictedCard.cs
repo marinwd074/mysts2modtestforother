@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 
 namespace CombatSolver.Engine.Common;
 
-internal sealed class PredictedCard : IComparable<PredictedCard>
+internal sealed class PredictedCard
 {
     // A COW preview keeps the combat card's identity across hook snapshots. Gameplay
     // clones acquire their own identity when they enter a new prediction wrapper.
@@ -88,6 +88,18 @@ internal sealed class PredictedCard : IComparable<PredictedCard>
     private Action? _mutationObserver;
     private bool _observeEveryPreviewMutation;
     private bool _isolateAttachedModelsOnFork;
+    internal PredictedCard? DupeSource { get; set; }
+
+    internal PredictedCard GameplayCloneSource => Preview.IsDupe
+        ? DupeSource ?? throw new InvalidOperationException("Dupe source was not captured in branch state.")
+        : this;
+
+    internal void CaptureDupeSource(Func<CardModel, PredictedCard> resolve)
+    {
+        if (Preview.IsDupe && DupeSource is null)
+            DupeSource = resolve(Preview.DupeOf
+                ?? throw new InvalidOperationException("Native dupe has no source card."));
+    }
 
     // Entry inspection belongs to this wrapper, including root cards that need no
     // entry effect. Fork preserves it; Clone starts unchecked. Root membership is
@@ -189,11 +201,13 @@ internal sealed class PredictedCard : IComparable<PredictedCard>
             : null)
         {
             _isolateAttachedModelsOnFork = _isolateAttachedModelsOnFork,
+            DupeSource = DupeSource,
         };
     }
 
     internal PredictedCard Fork(PredictionForkContext context)
     {
+        if (context.TryRemap(this, out PredictedCard? existing)) return existing!;
         PreviewStorage forkStorage;
         if (_isolateAttachedModelsOnFork)
         {
@@ -213,12 +227,13 @@ internal sealed class PredictedCard : IComparable<PredictedCard>
             HasCheckedPowerAfflictionEntry = HasCheckedPowerAfflictionEntry,
         };
         context.Register(this, fork);
+        fork.DupeSource = DupeSource?.Fork(context);
         return fork;
     }
 
     internal bool TryGetCachedFingerprint(out ulong first, out ulong second)
     {
-        if (_isolateAttachedModelsOnFork)
+        if (_isolateAttachedModelsOnFork || DupeSource is not null)
         {
             first = 0;
             second = 0;
@@ -229,14 +244,14 @@ internal sealed class PredictedCard : IComparable<PredictedCard>
 
     internal void SetCachedFingerprint(ulong first, ulong second)
     {
-        if (_isolateAttachedModelsOnFork)
+        if (_isolateAttachedModelsOnFork || DupeSource is not null)
             return;
         _previewStorage.SetCachedFingerprint(first, second);
     }
 
     internal bool TryGetCachedChoiceKey(out string key)
     {
-        if (_isolateAttachedModelsOnFork)
+        if (_isolateAttachedModelsOnFork || DupeSource is not null)
         {
             key = string.Empty;
             return false;
@@ -246,7 +261,7 @@ internal sealed class PredictedCard : IComparable<PredictedCard>
 
     internal void SetCachedChoiceKey(string key)
     {
-        if (!_isolateAttachedModelsOnFork)
+        if (!_isolateAttachedModelsOnFork && DupeSource is null)
             _previewStorage.SetCachedChoiceKey(key);
     }
 
@@ -275,7 +290,7 @@ internal sealed class PredictedCard : IComparable<PredictedCard>
     internal void SetOwnerPile(SimCardPile? pile)
     {
         _ownerPile = pile;
-        if (_isolateAttachedModelsOnFork)
+        if (_isolateAttachedModelsOnFork || DupeSource is not null)
             pile?.DisableFingerprintCache();
         NotifyHookListenerStructureChanged();
     }
@@ -304,8 +319,4 @@ internal sealed class PredictedCard : IComparable<PredictedCard>
         _mutationObserver?.Invoke();
     }
 
-    public int CompareTo(PredictedCard? other)
-    {
-        return Preview.CompareTo(other?.Preview);
-    }
 }

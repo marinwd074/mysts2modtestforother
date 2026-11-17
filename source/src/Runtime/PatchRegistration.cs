@@ -11,6 +11,10 @@ internal static class PatchRegistration
     {
         var patcher = RitsuLibFramework.CreatePatcher(modId, "combat-solver", "战斗路线求解器");
         patcher.RegisterPatch<PlayerTurnSetupPatch>();
+#if !STS2_01071
+        patcher.RegisterPatch<NativeDreadRulesPatch>();
+        patcher.RegisterPatch<NativeAscensionRulesPatch>();
+#endif
         patcher.RegisterPatch<PlayerTurnAutoPrePlayPatch>();
         patcher.RegisterPatch<PlayerTurnSetupSceneExitPatch>();
         patcher.RegisterPatch<ChooseCardObservationPatch>();
