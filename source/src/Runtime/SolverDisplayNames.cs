@@ -4,6 +4,7 @@ using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.Nodes.Rooms;
 using CombatSolver.Engine.InCombat.Simulation;
@@ -16,6 +17,7 @@ internal sealed class SolverDisplayNames
     private static Dictionary<(string Id, int Upgrade), string>? _canonicalCardNames;
 
     private readonly Dictionary<(string Id, int Upgrade), string> _cards;
+    private readonly DingyDaggerDisplayNames _daggerNames;
     private readonly Dictionary<string, string> _potions;
     private readonly Dictionary<string, string> _relics;
     private readonly Dictionary<string, string> _powers;
@@ -35,6 +37,7 @@ internal sealed class SolverDisplayNames
         bool english)
     {
         _cards = cards;
+        _daggerNames = DingyDaggerDisplayNames.Capture();
         _potions = potions;
         _relics = relics;
         _powers = powers;
@@ -116,10 +119,11 @@ internal sealed class SolverDisplayNames
     }
 
     public string Card(CardModel card)
-        => _cards.GetValueOrDefault((card.Id.Entry, card.CurrentUpgradeLevel), card.Id.Entry);
+        => Card(card.Id.Entry, card.CurrentUpgradeLevel);
 
     public string Card(string cardId, int upgradeLevel = 0)
-        => _cards.GetValueOrDefault((cardId, upgradeLevel), cardId);
+        => cardId == "DINGY_DAGGER" ? _daggerNames.Format(upgradeLevel)
+            : _cards.GetValueOrDefault((cardId, upgradeLevel), cardId);
 
     private static Dictionary<(string Id, int Upgrade), string> CanonicalCardNames()
     {
@@ -149,7 +153,7 @@ internal sealed class SolverDisplayNames
             (string Id, int Upgrade) key = (card.Id.Entry, card.CurrentUpgradeLevel);
             if (overwrite || !names.ContainsKey(key))
                 names[key] = card.Title;
-            if (!card.IsUpgradable)
+            if (card is DingyDagger || !card.IsUpgradable)
                 return;
             card.UpgradeInternal();
             card.FinalizeUpgradeInternal();
@@ -223,4 +227,21 @@ internal sealed class SolverDisplayNames
         => creature.Monster?.Id.Entry is { } monsterId
             ? monsterNames.GetValueOrDefault(monsterId, monsterId)
             : creature.Name;
+
+    // Freeze the three native title stems on the main thread. Upgrade levels are
+    // formatted from immutable text, so future branch upgrades need no model mutation.
+    private readonly record struct DingyDaggerDisplayNames(string Dingy, string Fine, string Pristine)
+    {
+        internal static DingyDaggerDisplayNames Capture() => new(
+            new LocString("cards", "DINGY_DAGGER.title.dingy").GetFormattedText(),
+            new LocString("cards", "DINGY_DAGGER.title.fine").GetFormattedText(),
+            new LocString("cards", "DINGY_DAGGER.title.pristine").GetFormattedText());
+
+        internal string Format(int level)
+        {
+            string stem = level >= DingyDagger.pristineUpgradeLevel ? Pristine
+                : level >= DingyDagger.fineUpgradeLevel ? Fine : Dingy;
+            return level > 0 ? $"{stem}+{level}" : stem;
+        }
+    }
 }

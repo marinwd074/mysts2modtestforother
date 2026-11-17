@@ -29,7 +29,7 @@ internal static class MultiplayerCarryRankingContextCapture
             worldVersion,
             remotePlayers: [],
             enemies: [],
-            state.MultiplayerScalingModel?.ShouldReceiveCombatHooks,
+            state.GetMultiplayerScalingModel()?.ShouldReceiveCombatHooks,
             state.RunState.CardMultiplayerConstraint.ToString());
     }
 
@@ -51,7 +51,7 @@ internal static class MultiplayerCarryRankingContextCapture
         MultiplayerCarryEnemyPublicState[] enemies = state.Enemies
             .Select(enemy => CaptureEnemy(enemy, useAdvertisedThreat ? remotes : []))
             .ToArray();
-        bool? scalingHooks = state.MultiplayerScalingModel?.ShouldReceiveCombatHooks;
+        bool? scalingHooks = state.GetMultiplayerScalingModel()?.ShouldReceiveCombatHooks;
         string cardConstraint = state.RunState.CardMultiplayerConstraint.ToString();
 
         return MultiplayerCarryRankingContext.Create(

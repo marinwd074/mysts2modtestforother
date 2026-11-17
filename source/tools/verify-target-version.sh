@@ -13,7 +13,7 @@ ritsu_version="$(jq -er '.ritsu_lib_target_version' "$target_path")"
 symbol="$(jq -er '.compatibility_symbol' "$target_path")"
 manifest_version="$(jq -er '.min_game_version' "$repository_root/CombatSolver.json")"
 
-[[ "$game_version" == "$ritsu_version" ]] || { echo 'game and RitsuLib target versions differ' >&2; exit 1; }
+[[ "${game_version%.*}" == "${ritsu_version%.*}" ]] || { echo 'game and RitsuLib major/minor API targets differ' >&2; exit 1; }
 [[ "$manifest_version" == "$game_version" ]] || { echo 'manifest target differs from build-target.json' >&2; exit 1; }
 [[ "$symbol" =~ ^STS2_[0-9]+$ ]] || { echo 'compatibility_symbol has an unexpected form' >&2; exit 1; }
 

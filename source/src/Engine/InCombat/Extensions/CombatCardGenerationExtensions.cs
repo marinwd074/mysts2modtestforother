@@ -12,15 +12,14 @@ namespace CombatSolver.Engine.InCombat.Extensions;
 
 internal static class CombatCardGenerationExtensions
 {
-    // CardFactory.GetDistinctForCombat applies the native player-count filter first,
-    // then the in-combat filter. Keep this separate from the legacy constraint-only
-    // helper because the two filters are not interchangeable for every card source.
-    private static IEnumerable<CardModel> FilterForDistinctCombat(
+    internal static IEnumerable<CardModel> FilterForCombatAndPlayerCount(
         this IEnumerable<CardModel> cards,
-        Player player)
+        CardMultiplayerConstraint multiplayerConstraint)
     {
-        return CardFactory.FilterForCombat(
-            CardFactory.FilterForPlayerCount(player.RunState, cards));
+        var excludedConstraint = multiplayerConstraint == CardMultiplayerConstraint.SingleplayerOnly
+            ? CardMultiplayerConstraint.MultiplayerOnly
+            : CardMultiplayerConstraint.SingleplayerOnly;
+        return CardFactory.FilterForCombat(cards).Where(card => card.MultiplayerConstraint != excludedConstraint);
     }
 
     // Mirrors CardFactory.GetDistinctForCombat, but does not create cards for the player.
@@ -31,7 +30,7 @@ internal static class CombatCardGenerationExtensions
         Rng rng,
         CardMultiplayerConstraint multiplayerConstraint)
     {
-        return cards.FilterForDistinctCombat(player).TakeRandom(count, rng);
+        return cards.FilterForCombatAndPlayerCount(multiplayerConstraint).TakeRandom(count, rng);
     }
 
     // Mirrors CardFactory.GetForCombat, but does not create cards for the player.
@@ -42,8 +41,7 @@ internal static class CombatCardGenerationExtensions
         Rng rng,
         CardMultiplayerConstraint multiplayerConstraint)
     {
-        var options = CardFactory.FilterForCombat(cards).ToList();
-        options = CardFactory.FilterForPlayerCount(player.RunState, options).ToList();
+        var options = cards.FilterForCombatAndPlayerCount(multiplayerConstraint).ToList();
         if (options.Count == 0)
         {
             return [];
@@ -203,7 +201,7 @@ internal static class CombatCardGenerationExtensions
             && snapshot.TryGetRootEligibleCharacterCards(
                 player, pool, multiplayerConstraint, selection, out IReadOnlyList<CardModel>? cached))
         {
-            return new(cached, alreadyEligible: true);
+            return new(cached, alreadyEligible: true, multiplayerConstraint);
         }
         IEnumerable<CardModel> unlocked = pool.GetUnlockedCards(player.UnlockState, multiplayerConstraint);
         IEnumerable<CardModel> options = selection switch
@@ -214,15 +212,16 @@ internal static class CombatCardGenerationExtensions
             CharacterCombatGenerationPool.Common => unlocked.Where(static card => card.Rarity == CardRarity.Common),
             _ => throw new ArgumentOutOfRangeException(nameof(selection)),
         };
-        return new(options, alreadyEligible: false);
+        return new(options, alreadyEligible: false, multiplayerConstraint);
     }
 
     internal readonly struct CharacterGenerationCandidates(
         IEnumerable<CardModel> options,
-        bool alreadyEligible)
+        bool alreadyEligible,
+        CardMultiplayerConstraint multiplayerConstraint)
     {
         public IEnumerable<PredictedCard> GetDistinctForCombat(Player player, int count, Rng rng)
-            => (alreadyEligible ? options : options.FilterForDistinctCombat(player))
+            => (alreadyEligible ? options : options.FilterForCombatAndPlayerCount(multiplayerConstraint))
                 .TakeRandom(count, rng)
                 .Select(card => PredictedCard.Create(card, player));
     }

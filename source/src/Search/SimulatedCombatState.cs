@@ -7,12 +7,15 @@ using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Afflictions;
 using MegaCrit.Sts2.Core.Models.Cards;
+using MegaCrit.Sts2.Core.Models.Characters;
 using MegaCrit.Sts2.Core.Models.Enchantments;
 using MegaCrit.Sts2.Core.Models.Monsters;
 using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.Models.Relics;
 using MegaCrit.Sts2.Core.MonsterMoves.MonsterMoveStateMachine;
+#if STS2_01071
 using MegaCrit.Sts2.Core.Models.Singleton;
+#endif
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Saves.Runs;
 using MegaCrit.Sts2.Core.Rooms;
@@ -49,6 +52,9 @@ internal sealed partial class SimulatedCombatState
     private readonly IReadOnlyList<Player> _rootCapturedPlayers;
     private readonly IReadOnlyList<Player> _rootActionPlayers;
     private readonly IReadOnlyList<ModifierModel> _modifiers;
+#if !STS2_01071
+    private readonly IReadOnlyList<RunModel> _runModels;
+#endif
     private readonly MultiplayerScalingModel? _multiplayerScalingModel;
     private readonly EncounterModel? _encounter;
     private readonly IReadOnlyList<string> _encounterSlots;
@@ -171,12 +177,21 @@ internal sealed partial class SimulatedCombatState
             nameof(Creature.MonsterMaxHpBeforeModification),
             BindingFlags.Instance | BindingFlags.Public)
         ?? throw new MissingMemberException(typeof(Creature).FullName, nameof(Creature.MonsterMaxHpBeforeModification));
+#if STS2_01071
     private static readonly FieldInfo MultiplayerScalingRunStateField =
         typeof(MultiplayerScalingModel).GetField("_runState", BindingFlags.Instance | BindingFlags.NonPublic)
         ?? throw new MissingFieldException(typeof(MultiplayerScalingModel).FullName, "_runState");
     private static readonly FieldInfo MultiplayerScalingCombatStateField =
         typeof(MultiplayerScalingModel).GetField("_combatState", BindingFlags.Instance | BindingFlags.NonPublic)
         ?? throw new MissingFieldException(typeof(MultiplayerScalingModel).FullName, "_combatState");
+#else
+    private static readonly FieldInfo MultiplayerScalingRunStateField =
+        typeof(RunModel).GetField("_runState", BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new MissingFieldException(typeof(RunModel).FullName, "_runState");
+    private static readonly FieldInfo MultiplayerScalingCombatStateField =
+        typeof(RunModel).GetField("_combatState", BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new MissingFieldException(typeof(RunModel).FullName, "_combatState");
+#endif
 
     private enum SteamEruptionPhase
     {
@@ -253,6 +268,9 @@ internal sealed partial class SimulatedCombatState
     {
         if (!NGame.IsMainThread())
             throw new InvalidOperationException("Live combat state can only be captured on the main thread.");
+        if (inner.Players.Any(player => player.Character is Fool || player.PlayerCombatState?.Arrows.Count > 0))
+            throw new NotSupportedException("当前求解器尚未适配愚者或箭矢战斗状态。");
+
         _runState = inner.RunState;
         _runRngSnapshot = inner.RunState.Rng.ToSerializable();
         _currentActIndex = inner.RunState.CurrentActIndex;
@@ -302,6 +320,7 @@ internal sealed partial class SimulatedCombatState
         Dictionary<AbstractModel, AbstractModel> rootModelClones = [];
         foreach (BadgeModel badge in inner.BadgeModels)
             rootModelClones.Add(badge, PredictionUtils.CloneModelForSimulation(badge));
+#if STS2_01071
         if (inner.MultiplayerScalingModel is { } liveMultiplayerScaling)
         {
             MultiplayerScalingModel detachedMultiplayerScaling =
@@ -315,6 +334,23 @@ internal sealed partial class SimulatedCombatState
         {
             _multiplayerScalingModel = null;
         }
+#else
+        RunModel[] runModels = new RunModel[inner.RunModels.Count];
+        for (int i = 0; i < runModels.Length; i++)
+        {
+            RunModel live = inner.RunModels[i];
+            if (live is not MultiplayerScalingModel scaling)
+                throw new NotSupportedException($"Run model {live.GetType().FullName} requires prediction semantics.");
+
+            var detached = PredictionUtils.CloneModelForSimulation(scaling);
+            MultiplayerScalingRunStateField.SetValue(detached, null);
+            MultiplayerScalingCombatStateField.SetValue(detached, null);
+            runModels[i] = detached;
+            _multiplayerScalingModel = detached;
+            rootModelClones.Add(live, detached);
+        }
+        _runModels = runModels;
+#endif
         ModifierModel[] modifiers = inner.Modifiers
             .Select(PredictionUtils.CloneModelForSimulation)
             .ToArray();
@@ -513,6 +549,9 @@ internal sealed partial class SimulatedCombatState
         _rootActionPlayers = source._rootActionPlayers;
         _modifiers = source._modifiers;
         _multiplayerScalingModel = source._multiplayerScalingModel;
+#if !STS2_01071
+        _runModels = source._runModels;
+#endif
         _encounter = source._encounter;
         _encounterSlots = source._encounterSlots;
         _rootHistory = source._rootHistory;
@@ -597,6 +636,9 @@ internal sealed partial class SimulatedCombatState
     IReadOnlyList<Player> ICombatPredictionRootCaptureBoundary.RootActionPlayers
         => _rootActionPlayers;
     public IReadOnlyList<ModifierModel> Modifiers => _modifiers;
+#if !STS2_01071
+    public IReadOnlyList<RunModel> RunModels => _runModels;
+#endif
     public MultiplayerScalingModel? MultiplayerScalingModel => _multiplayerScalingModel;
     public int RoundNumber
     {
@@ -2530,8 +2572,11 @@ internal sealed partial class SimulatedCombatState
             item.Add(ritual._wasJustAppliedByEnemy);
         if (power is SurroundedPower surrounded)
             item.Add((int)PowerPredictionStateSupport.SurroundedFacing(simulator, surrounded));
+#if STS2_01071
         if (power is OutbreakPower outbreak)
             item.Add(PowerPredictionStateSupport.OutbreakPoisonApplications(simulator, outbreak));
+#endif
+
         if (power is InterceptPower intercept)
         {
             IReadOnlyList<Creature> coveredCreatures =

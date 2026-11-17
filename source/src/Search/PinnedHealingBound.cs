@@ -9,7 +9,9 @@ using MegaCrit.Sts2.Core.Models.Monsters;
 using MegaCrit.Sts2.Core.Models.Potions;
 using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.Models.Relics;
+#if STS2_01071
 using MegaCrit.Sts2.Core.Models.Singleton;
+#endif
 
 namespace CombatSolver;
 

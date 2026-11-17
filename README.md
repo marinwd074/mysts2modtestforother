@@ -1,19 +1,18 @@
-# CombatSolver — STS2 0.107.1 fork
+# CombatSolver — STS2 0.113.1 fork
 
-[![0.107.1 compatibility consistency](https://github.com/marinwd074/mysts2modtestforother/actions/workflows/compatibility.yml/badge.svg?branch=main)](https://github.com/marinwd074/mysts2modtestforother/actions/workflows/compatibility.yml)
-[![Pinned 0.107.1 Release build](https://github.com/marinwd074/mysts2modtestforother/actions/workflows/pinned-release-build.yml/badge.svg?branch=main)](https://github.com/marinwd074/mysts2modtestforother/actions/workflows/pinned-release-build.yml)
+[![CombatSolver compatibility consistency](https://github.com/marinwd074/mysts2modtestforother/actions/workflows/compatibility.yml/badge.svg?branch=main)](https://github.com/marinwd074/mysts2modtestforother/actions/workflows/compatibility.yml)
 
-This repository contains an actively maintained CombatSolver fork pinned to **Slay the Spire 2 0.107.1**.
+This repository contains an actively maintained CombatSolver fork targeting **Slay the Spire 2 v0.113.1**.
 
 The fork keeps the upstream solver/simulation foundation while adding substantial 0.107.1 compatibility work, multiplayer search and execution support, pinned test harnesses, diagnostics, and repository tooling.
 
 ## Current scope
 
-- Game target: **0.107.1**
+- Game target: **0.113.1**
 - Runtime: C# / .NET 9 / Godot 4.5.1
-- RitsuLib compatibility target: **0.107.1**
+- RitsuLib compatibility target: **0.113.0** (framework 0.6.11 or newer)
 - Production project: [`source/`](source/)
-- Pinned game snapshot: [`game-body/`](game-body/) through Git LFS
+- Historical 0.107.1 game snapshot: [`game-body/`](game-body/) through Git LFS
 - Project milestone version: [source/PROJECT_VERSION](source/PROJECT_VERSION); [version history](source/docs/PROJECT_VERSION_HISTORY.md)
 - Current project state: [`source/docs/CODEX_HANDOFF.md`](source/docs/CODEX_HANDOFF.md)
 - Documentation index: [`source/docs/README.md`](source/docs/README.md)
@@ -40,15 +39,14 @@ pwsh -NoLogo -NoProfile -File source/tools/verify-refactor-boundaries.ps1
 pwsh -NoLogo -NoProfile -File source/tools/verify-repository-hygiene.ps1
 ```
 
-The pinned Release workflow builds against the checked-in 0.107.1 game snapshot plus the pinned RitsuLib compatibility package.
+The current Release build uses the local v0.113.1 game installation and the
+RitsuLib `0.113.0` compatibility variant. The Git LFS snapshot and its pinned
+validation workflows refer to the historical 0.107.1 source and game.
 
 ## Installation / compatibility
 
-This fork is **not a latest-game build**. Use it only with the pinned STS2 `0.107.1` environment and the compatible RitsuLib target.
-
-For a GitHub Release build, extract the release contents into the game's `mods/CombatSolver/` directory and ensure the matching RitsuLib compatibility runtime is installed. Do not mix the 0.107.1 fork DLL with a newer-game CombatSolver/RitsuLib installation.
-
-If you are running the current retail game rather than 0.107.1, use the primary upstream CombatSolver instead of assuming this fork is compatible.
+Place a matching local build in `mods/CombatSolver/` and enable RitsuLib.
+See [current verification and limits](source/docs/TEST_MATRIX.md).
 
 ## Reporting bugs
 
@@ -65,7 +63,7 @@ Do not commit runtime evidence or problem ZIPs into the repository.
 
 Project milestone versions start at **1.01**: small updates add **0.01**, large feature or architecture updates add **0.10**. Each functional commit has a `project-vX.XX` tag and a detailed history entry. These tags record development milestones; they do not invoke the package-release workflow or change the upstream Mod/game compatibility version.
 
-Pushing a version tag in the form `vMAJOR.MINOR.PATCH` runs the pinned 0.107.1 Release build and prepares a **draft GitHub Release** containing:
+The tag workflow needs v0.113.1 game references before it can package this target. A release package contains:
 
 - `CombatSolver.dll`
 - `CombatSolver.json`
@@ -78,7 +76,7 @@ The tag, project version, and manifest version must match.
 
 ## Upstream and contribution policy
 
-Before porting upstream changes, read [UPSTREAM.md](UPSTREAM.md). Newer upstream game-version assumptions must not be bulk-merged into the pinned 0.107.1 branch.
+Before porting upstream changes, read [UPSTREAM.md](UPSTREAM.md). Port upstream API and simulation changes selectively into the fork.
 
 Contribution and validation rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -90,7 +88,7 @@ Every architectural directory has a local `README.md` describing its ownership a
   - [`source/src/`](source/src/README.md): production architecture and game-internal tests.
   - [`source/docs/`](source/docs/README.md): current documentation truth sources.
   - [`source/tools/`](source/tools/README.md): build, validation, harnesses and research tooling.
-- [`game-body/`](game-body/README.md): pinned STS2 0.107.1 compatibility snapshot used by CI/local verification.
+- [`game-body/`](game-body/README.md): historical STS2 0.107.1 compatibility snapshot.
 - [`.github/`](.github/README.md): CI, issue forms, PR template and release automation.
 
 Runtime logs, generated benchmark results, problem ZIPs, temporary evidence, `bin/`, `obj/`, `.local/`, and `artifacts/` are intentionally excluded from the active Git tree. See [repository maintenance rules](source/docs/REPOSITORY_MAINTENANCE.md).

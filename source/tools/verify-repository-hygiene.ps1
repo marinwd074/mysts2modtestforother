@@ -189,9 +189,6 @@ if ([string]$manifest.version -cne $projectVersion) {
 if ([string]$manifest.min_game_version -cne [string]$target.game_version) {
     throw "Game target drift: manifest=$($manifest.min_game_version) build-target=$($target.game_version)"
 }
-if ([string]$target.game_version -cne '0.107.1') {
-    throw "Repository hygiene currently expects pinned game target 0.107.1, got $($target.game_version)."
-}
 
 & (Join-Path $PSScriptRoot 'new-project-version.ps1') -Check -RepositoryRoot $repoRoot
 Write-Output "REPOSITORY_HYGIENE_PASS tracked=$($tracked.Count) markdown=$($markdown.Count) local_links=$localLinkCount game_body=$($gameBody.Count) version=$projectVersion target=$($target.game_version)"

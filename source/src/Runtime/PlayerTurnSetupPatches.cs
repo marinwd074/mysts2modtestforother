@@ -265,7 +265,7 @@ internal static class PlayerTurnSetupCoordinator
             || !ReferenceEquals(LocalContext.GetMe(currentCombat), player)
             || player.PlayerCombatState == null
             || player.PlayerCombatState.Phase != PlayerTurnPhase.Start
-            || CardSelectCmd.Selector != null)
+            || MegaCrit.Sts2.Core.Runs.RunManager.Instance.CardSelectorStack.GetSelector(player) != null)
         {
             return false;
         }

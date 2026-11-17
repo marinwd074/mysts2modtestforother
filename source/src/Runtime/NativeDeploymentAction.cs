@@ -113,7 +113,7 @@ internal static class NativeDeploymentAction
             // A rejected native action did not consume the local End Turn input lock.
             if (result.Outcome == NativeActionOutcome.NotApplied && disabledLocally && IsCurrentTurn()
                 && !combat.IsPlayerReadyToEndTurn(player))
-                combat.UndoReadyToEndTurn(player);
+                combat.TryUndoReadyToEndTurn(player);
             return result;
         }
         finally { combat.PlayerEndedTurn -= PlayerEndedTurn; }

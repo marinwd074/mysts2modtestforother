@@ -24,7 +24,8 @@ internal static class ModifyDamageMirrors
             typeof(decimal),
             typeof(ValueProp),
             typeof(Creature),
-            typeof(CardModel)
+            typeof(CardModel),
+            typeof(CardPlay)
         ]);
 
     private static readonly MirrorMethodSpec ModifyDamageMultiplicative = MirrorMethodSpec.Hook(
@@ -34,7 +35,8 @@ internal static class ModifyDamageMirrors
             typeof(decimal),
             typeof(ValueProp),
             typeof(Creature),
-            typeof(CardModel)
+            typeof(CardModel),
+            typeof(CardPlay)
         ]);
 
     private static readonly Registry AdditiveRegistry = CreateAdditiveRegistry();
@@ -61,7 +63,8 @@ internal static class ModifyDamageMirrors
             context.Amount,
             context.Props,
             context.Dealer,
-            context.CardSource?.Preview);
+            context.CardSource?.Preview,
+            context.CardPlay);
     }
 
     private static decimal InvokeOriginalMultiplicative(AbstractModel listener, ModifyDamageMirrorContext context)
@@ -71,7 +74,8 @@ internal static class ModifyDamageMirrors
             context.Amount,
             context.Props,
             context.Dealer,
-            context.CardSource?.Preview);
+            context.CardSource?.Preview,
+            context.CardPlay);
     }
 
     private static Registry CreateAdditiveRegistry()

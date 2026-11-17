@@ -499,11 +499,7 @@ internal static class AfterCardPlayedMirrors
 
     private static void HandleVelvetChoker(VelvetChoker relic, AfterCardPlayedMirrorContext context)
     {
-        if (context.PreviewCard.Owner == relic.Owner)
-        {
-            var state = context.StateStore.Get(relic, () => new CounterPredictionState(relic._cardsPlayedThisTurn));
-            state.Value++;
-        }
+        // The native hook refreshes display state. Gameplay reads started-play history.
     }
 
     private static void HandleShuriken(Shuriken relic, AfterCardPlayedMirrorContext context)
@@ -921,7 +917,6 @@ internal static class AfterCardPlayedMirrors
     {
         if (context.Card.References(enchantment.Card) && context.MutablePreviewCard.Enchantment is Glam preview)
         {
-            preview._usedThisCombat = true;
             preview._status = EnchantmentStatus.Disabled;
         }
     }

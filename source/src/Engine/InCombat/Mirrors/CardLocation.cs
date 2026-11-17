@@ -1,3 +1,4 @@
+#if STS2_01071
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Players;
 
@@ -31,3 +32,4 @@ internal struct CardLocation : IEquatable<CardLocation>
 
     public static bool operator !=(CardLocation left, CardLocation right) => !left.Equals(right);
 }
+#endif

@@ -280,8 +280,8 @@ $targetCompatibilitySymbol = [string]$targetConfig.compatibility_symbol
 if ([string]::IsNullOrWhiteSpace($targetGameVersion) -or
     [string]::IsNullOrWhiteSpace($targetRitsuLibVersion) -or
     [string]::IsNullOrWhiteSpace($targetCompatibilitySymbol) -or
-    $targetGameVersion -ne $targetRitsuLibVersion) {
-    throw "build-target.json must define matching game and RitsuLib compatibility versions."
+    ($targetGameVersion -replace '\.[0-9]+$', '') -ne ($targetRitsuLibVersion -replace '\.[0-9]+$', '')) {
+    throw "build-target.json must define game and RitsuLib targets for the same major/minor API."
 }
 . (Join-Path $PSScriptRoot 'headless-runtime.ps1')
 if ($EvidenceDirectory) { $EvidenceDirectory = [IO.Path]::GetFullPath($EvidenceDirectory) }

@@ -174,7 +174,7 @@ internal static class MultiplayerClientProbe
         return new MultiplayerContinuationValidation(
             ContinuationStamp.CaptureLiveCombatIdentity(state),
             localPlayer?.NetId.ToString() ?? string.Empty,
-            state.MultiplayerScalingModel?.ShouldReceiveCombatHooks,
+            state.GetMultiplayerScalingModel()?.ShouldReceiveCombatHooks,
             state.RunState.CardMultiplayerConstraint.ToString(),
             MultiplayerWorldTracker.WorldVersion,
             minimumWorldVersion);
@@ -306,7 +306,7 @@ internal static class MultiplayerClientProbe
             PlayerCount: state.Players.Count,
             RoundNumber: state.RoundNumber,
             CurrentSide: state.CurrentSide.ToString(),
-            MultiplayerScalingHooks: state.MultiplayerScalingModel?.ShouldReceiveCombatHooks,
+            MultiplayerScalingHooks: state.GetMultiplayerScalingModel()?.ShouldReceiveCombatHooks,
             CardMultiplayerConstraint: state.RunState.CardMultiplayerConstraint.ToString(),
             LocalNetId: localPlayer?.NetId.ToString(),
             LocalCharacter: localPlayer?.Character.Id.Entry,
@@ -381,9 +381,8 @@ internal static class MultiplayerClientProbe
         fingerprint.Add(state.RoundNumber);
         fingerprint.Add(state.CurrentSide.ToString());
         fingerprint.Add(state.RunState.Rng.StringSeed);
-        fingerprint.Add(state.MultiplayerScalingModel is null
-            ? -1
-            : state.MultiplayerScalingModel.ShouldReceiveCombatHooks ? 1 : 0);
+        bool? scalingHooks = state.GetMultiplayerScalingModel()?.ShouldReceiveCombatHooks;
+        fingerprint.Add(scalingHooks.HasValue ? (scalingHooks.Value ? 1 : 0) : -1);
         fingerprint.Add(state.RunState.CardMultiplayerConstraint.ToString());
         AppendCompactRng(ref fingerprint, state);
 
@@ -613,9 +612,11 @@ internal static class MultiplayerClientProbe
                 case OrbitPower orbit:
                     fingerprint.Add((4 - orbit.DisplayAmount) % 4);
                     break;
+#if STS2_01071
                 case OutbreakPower outbreak:
                     fingerprint.Add(PowerPredictionStateSupport.NativeOutbreakPoisonApplications(outbreak));
                     break;
+#endif
                 case InterceptPower intercept:
                     IReadOnlyList<Creature> covered =
                         PowerPredictionStateSupport.NativeInterceptCoveredCreatures(intercept);
@@ -633,15 +634,15 @@ internal static class MultiplayerClientProbe
     private static void AppendCompactRng(ref StateFingerprintBuilder fingerprint, CombatState state)
     {
         var rng = state.RunState.Rng;
-        fingerprint.Add(rng.Shuffle.Counter);
-        fingerprint.Add(rng.CombatCardGeneration.Counter);
-        fingerprint.Add(rng.CombatPotionGeneration.Counter);
-        fingerprint.Add(rng.CombatCardSelection.Counter);
-        fingerprint.Add(rng.CombatEnergyCosts.Counter);
-        fingerprint.Add(rng.CombatTargets.Counter);
-        fingerprint.Add(rng.CombatOrbGeneration.Counter);
-        fingerprint.Add(rng.MonsterAi.Counter);
-        fingerprint.Add(rng.Niche.Counter);
+        fingerprint.Add(rng.Shuffle.GetCounter());
+        fingerprint.Add(rng.CombatCardGeneration.GetCounter());
+        fingerprint.Add(rng.CombatPotionGeneration.GetCounter());
+        fingerprint.Add(rng.CombatCardSelection.GetCounter());
+        fingerprint.Add(rng.CombatEnergyCosts.GetCounter());
+        fingerprint.Add(rng.CombatTargets.GetCounter());
+        fingerprint.Add(rng.CombatOrbGeneration.GetCounter());
+        fingerprint.Add(rng.MonsterAi.GetCounter());
+        fingerprint.Add(rng.Niche.GetCounter());
     }
 
     private static string Describe(CombatState state, Player? localPlayer)
@@ -669,7 +670,7 @@ internal static class MultiplayerClientProbe
         return $"net_type={RunManager.Instance.NetService.Type} players={state.Players.Count} " +
                $"round={state.RoundNumber} side={state.CurrentSide} " +
                $"seed={state.RunState.Rng.StringSeed} " +
-               $"multiplayer_scaling_hooks={state.MultiplayerScalingModel?.ShouldReceiveCombatHooks.ToString() ?? "-"} " +
+               $"multiplayer_scaling_hooks={state.GetMultiplayerScalingModel()?.ShouldReceiveCombatHooks.ToString() ?? "-"} " +
                $"card_multiplayer_constraint={state.RunState.CardMultiplayerConstraint} " +
                $"rng={RngCounters(state)} enemies={enemies} remote_players={RemotePlayers(state, localPlayer)} {local}";
     }
@@ -686,7 +687,7 @@ internal static class MultiplayerClientProbe
     private static string HardFingerprint(CombatState state, Player? localPlayer)
         => $"net_type={RunManager.Instance.NetService.Type};players={state.Players.Count};" +
            $"round={state.RoundNumber};side={state.CurrentSide};seed={state.RunState.Rng.StringSeed};" +
-           $"multiplayer_scaling_hooks={state.MultiplayerScalingModel?.ShouldReceiveCombatHooks.ToString() ?? "-"};" +
+           $"multiplayer_scaling_hooks={state.GetMultiplayerScalingModel()?.ShouldReceiveCombatHooks.ToString() ?? "-"};" +
            $"card_multiplayer_constraint={state.RunState.CardMultiplayerConstraint};" +
            $"rng={RngStates(state)};enemies={Enemies(state)};" +
            $"remote_players={RemotePlayers(state, localPlayer)};local={LocalPlayer(localPlayer)}";
@@ -770,10 +771,10 @@ internal static class MultiplayerClientProbe
     private static string RngCounters(CombatState state)
     {
         var rng = state.RunState.Rng;
-        return $"shuffle={rng.Shuffle.Counter},card_gen={rng.CombatCardGeneration.Counter}," +
-               $"potion_gen={rng.CombatPotionGeneration.Counter},card_select={rng.CombatCardSelection.Counter}," +
-               $"energy={rng.CombatEnergyCosts.Counter},targets={rng.CombatTargets.Counter}," +
-               $"orb={rng.CombatOrbGeneration.Counter},monster_ai={rng.MonsterAi.Counter},niche={rng.Niche.Counter}";
+        return $"shuffle={rng.Shuffle.GetCounter()},card_gen={rng.CombatCardGeneration.GetCounter()}," +
+               $"potion_gen={rng.CombatPotionGeneration.GetCounter()},card_select={rng.CombatCardSelection.GetCounter()}," +
+               $"energy={rng.CombatEnergyCosts.GetCounter()},targets={rng.CombatTargets.GetCounter()}," +
+               $"orb={rng.CombatOrbGeneration.GetCounter()},monster_ai={rng.MonsterAi.GetCounter()},niche={rng.Niche.GetCounter()}";
     }
 
     private static string RngStates(CombatState state)

@@ -34,7 +34,7 @@ internal sealed partial class CombatPredictionSimulator
                 preview.CurrentPlayIndex = index;
                 ownerBlockBefore = ownerCreature.Block;
                 playHistoryStart = History.Entries.Count;
-                activePlay = new CardPlay { Card = preview, Target = target,
+                activePlay = new CardPlay { Player = preview.Owner, Card = preview, Target = target,
                     ResultPile = result.pileType, Resources = resources, IsAutoPlay = isAutoPlay,
                     PlayIndex = index, PlayCount = playCount };
                 if (isAutoPlay && activePlay.IsFirstInSeries)

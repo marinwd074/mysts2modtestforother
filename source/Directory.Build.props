@@ -5,9 +5,9 @@
     and preprocessor symbol, including the small audit tools.
   -->
   <PropertyGroup>
-    <CombatSolverTargetGameVersion Condition="'$(CombatSolverTargetGameVersion)' == ''">0.107.1</CombatSolverTargetGameVersion>
-    <CombatSolverTargetRitsuLibVersion Condition="'$(CombatSolverTargetRitsuLibVersion)' == ''">0.107.1</CombatSolverTargetRitsuLibVersion>
-    <CombatSolverCompatibilityConstant Condition="'$(CombatSolverCompatibilityConstant)' == ''">STS2_01071</CombatSolverCompatibilityConstant>
+    <CombatSolverTargetGameVersion Condition="'$(CombatSolverTargetGameVersion)' == ''">0.113.1</CombatSolverTargetGameVersion>
+    <CombatSolverTargetRitsuLibVersion Condition="'$(CombatSolverTargetRitsuLibVersion)' == ''">0.113.0</CombatSolverTargetRitsuLibVersion>
+    <CombatSolverCompatibilityConstant Condition="'$(CombatSolverCompatibilityConstant)' == ''">STS2_01130</CombatSolverCompatibilityConstant>
     <DefineConstants>$(DefineConstants);$(CombatSolverCompatibilityConstant)</DefineConstants>
     <RitsuLibReferenceTarget Condition="'$(RitsuLibReferenceTarget)' == ''">$(CombatSolverTargetRitsuLibVersion)</RitsuLibReferenceTarget>
   </PropertyGroup>

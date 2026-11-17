@@ -75,11 +75,11 @@ if (PreCombatForecastApi.IsAvailable)
 
 运行要求：
 
-- 《杀戮尖塔 2》`0.107.1`
-- [RitsuLib](https://steamcommunity.com/sharedfiles/filedetails/?id=3747602295) `0.6.2` 或更高版本
+- 《杀戮尖塔 2》Steam `public-beta` `v0.113.1`
+- [RitsuLib](https://steamcommunity.com/sharedfiles/filedetails/?id=3747602295) `0.6.11` 或更高版本，需包含 `0.113.0` 兼容变体
 - 单人战斗；多人模式按 `docs/multiplayer/README.md` 的当前能力边界运行
 
-本 fork 固定支持 `0.107.1`；不能把上游工坊最新包视为本分支的兼容安装包。使用本 fork 的匹配 GitHub Release 手动安装时，在游戏目录的 `mods/CombatSolver` 下放置以下文件：
+安装本 fork 的匹配构建时，在游戏目录的 `mods/CombatSolver` 下放置以下文件。
 
 ```text
 CombatSolver.dll
@@ -134,9 +134,7 @@ THIRD_PARTY_NOTICES.md
 
 Combat Solver 使用受时间、节点和内存预算约束的 Beam Search。它展示的是当前预算内找到的最佳路线，不承诺数学意义上的全局最优解。路线视野没有固定回合数或洗牌次数上限，但循环检测、状态合并和预算终止仍会限制实际搜索范围。
 
-当前目标是覆盖 `0.107.1` 的单人战斗与受控多人本地玩家求解。多人只对本地玩家拥有部署权限，队友行为作为预测/观察因子；多人专属牌当前保留真实牌堆状态与抽牌距离，但不进入主动推荐或自动执行。运行时遇到尚未支持的新版本、未知多人语义或第三方自定义战斗效果时，求解器会停在不支持边界，不会把未完成模拟误报为胜利。当前多人能力与未验证边界见 [多人架构](docs/multiplayer/README.md)。
-
-当前 `0.107.1` 的构建、Hook、原生 Smoke 和限制见 [0.107.1 兼容证据链](docs/compat/0.107.1/README.md)、[战斗 Hook 覆盖报告](docs/COMBAT_HOOK_COVERAGE.md) 与 [当前测试矩阵](docs/TEST_MATRIX.md)。旧版适配验证日志已退役；如需复核原始内容，请从 Git 历史恢复。
+当前目标是 `v0.113.1` 标准单人战斗。新版愚者、极速和恐惧机制需要独立适配，多人能力需要重新实测。实测范围见[当前测试矩阵](docs/TEST_MATRIX.md)。旧目标的记录见 [0.107.1 兼容证据链](docs/compat/0.107.1/README.md)。
 
 ## 开发
 
@@ -175,7 +173,7 @@ Windows 和 Linux 的无人测试入口分别为 `tools/run-unattended-test.ps1`
 ## 开源、许可与代码来源
 
 本仓库是 [Torch1230/CombatSolver](https://github.com/Torch1230/CombatSolver) 的修改版，当前主要维护
-《杀戮尖塔 2》`0.107.1` 兼容性与搜索器修正。它不是上游官方仓库。
+《杀戮尖塔 2》`v0.113.1` 兼容与搜索器修正，基于 Torch1230/CombatSolver。
 
 CombatSolver 采用 [MIT License](LICENSE)。MIT 要求保留的上游版权声明继续保留在 LICENSE 中。
 Random Foreseer 的来源关系、署名和既有许可记录集中保留在

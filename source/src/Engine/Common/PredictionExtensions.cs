@@ -20,8 +20,8 @@ internal static class PredictionExtensions
     public static Rng Clone(this Rng rng)
     {
         // All generator words and the counter are restored below; constructor fast-forward is redundant.
-        Rng clone = new(0U);
-        clone.Counter = rng.Counter;
+        Rng clone = new(0UL);
+        clone._counter = rng._counter;
         clone._random._s0 = rng._random._s0;
         clone._random._s1 = rng._random._s1;
         clone._random._s2 = rng._random._s2;
@@ -31,8 +31,8 @@ internal static class PredictionExtensions
 
     public static Rng ToRng(this PredictionRngState state)
     {
-        Rng rng = new(0U);
-        rng.Counter = state.Counter;
+        Rng rng = new(0UL);
+        rng._counter = state.Counter;
         rng._random._s0 = state.State0;
         rng._random._s1 = state.State1;
         rng._random._s2 = state.State2;
@@ -40,13 +40,13 @@ internal static class PredictionExtensions
         return rng;
     }
 
-    public static int Counter(this Rng rng) => rng.Counter;
+    public static int Counter(this Rng rng) => rng._counter;
 
-    public static int GetCounter(this Rng rng) => rng.Counter;
+    public static int GetCounter(this Rng rng) => rng._counter;
 
     public static PredictionRngState CaptureState(this Rng rng)
         => new(
-            rng.Counter,
+            rng._counter,
             rng._random._s0,
             rng._random._s1,
             rng._random._s2,
@@ -56,7 +56,8 @@ internal static class PredictionExtensions
     {
         ArgumentOutOfRangeException.ThrowIfNegative(count);
 
-        rng.FastForwardCounter(count);
+        for (int i = 0; i < count; i++)
+            _ = rng.NextUnsignedLong();
     }
 
     public static RelicGrabBag Clone(this RelicGrabBag grabBag)

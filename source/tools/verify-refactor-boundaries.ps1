@@ -2903,16 +2903,12 @@ if ($outbreakStart -lt 0 -or $outbreakEnd -le $outbreakStart) {
 }
 else {
     $outbreakBlock = $outbreakCardText.Substring($outbreakStart, $outbreakEnd - $outbreakStart)
-    if ((-not $outbreakBlock.Contains('combat.Apply<OutbreakPower>(')) -or
-        (-not $outbreakBlock.Contains('card.DynamicVars["OutbreakPower"].IntValue'))) {
-        $violations.Add("${outbreakCardPath}: 0.107.1 Outbreak must apply OutbreakPower from its dynamic var")
-    }
-    if ($outbreakBlock.Contains('ApplyOutbreak(')) {
-        $violations.Add("${outbreakCardPath}: later-version immediate Outbreak poison settlement returned")
+    if ($outbreakBlock -notmatch '(?s)#if STS2_01071.*?combat\.Apply<OutbreakPower>\(.*?card\.DynamicVars\["OutbreakPower"\]\.IntValue.*?#else\s+ApplyOutbreak\(') {
+        $violations.Add("${outbreakCardPath}: Outbreak must select the legacy power or immediate poison settlement by game target")
     }
 }
-if ($outbreakCardText.Contains('private static void ApplyOutbreak(')) {
-    $violations.Add("${outbreakCardPath}: retired later-version Outbreak helper returned")
+if ($outbreakCardText -notmatch '(?s)#if !STS2_01071\s+private static void ApplyOutbreak\(.*?CorePowerSupport\.TriggerPoison\(.*?#endif') {
+    $violations.Add("${outbreakCardPath}: newer Outbreak must apply and then trigger poison")
 }
 
 $powerLifecyclePath = Join-Path $repositoryRoot 'src/Prediction/PowerLifecycleSupport.cs'

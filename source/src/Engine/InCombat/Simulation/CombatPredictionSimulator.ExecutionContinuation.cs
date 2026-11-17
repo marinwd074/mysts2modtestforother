@@ -282,7 +282,7 @@ internal sealed partial class CombatPredictionSimulator
     internal static CardPlay ForkExecutionCardPlay(CardPlay source, PredictionForkContext context)
     {
         if (context.TryRemap(source, out CardPlay? found)) return found!;
-        var result = new CardPlay { Card = context.RequireRemap(source.Card),
+        var result = new CardPlay { Player = source.Player, Card = context.RequireRemap(source.Card),
             Target = source.Target, ResultPile = source.ResultPile, Resources = source.Resources,
             IsAutoPlay = source.IsAutoPlay, PlayIndex = source.PlayIndex, PlayCount = source.PlayCount };
         context.Register(source, result);

@@ -2,11 +2,26 @@
 
 > 只保留当前能力、验证入口和未验证边界。历史批次与旧数字从 Git history / 定向 evidence 查。
 
+## v0.113.1
+
+| 层 | 验证 | 结果 |
+|---|---|---|
+| Release | 按本机 `v0.113.1` 和 RitsuLib `0.113.0` API 编译 | 通过 |
+| 加载 | 隔离游戏进程，Steam Build `26660232`，RitsuLib `0.6.14` | RitsuLib 选中 `0.113.0` 变体，CombatSolver 的 66 项必需补丁全部应用 |
+| 搜索 | `CompatibilitySmoke=true`，`FIRST_TURN`，标准单人铁甲战士，`NIBBITS_NORMAL` | 原生首回合根，RNG 流计数一致，25 个计划动作，增量验证通过 |
+| 全自动 | 同一测试构建，`STANDARD_FULLAUTO`，初始牌组和原生敌人生命 | 第 6 回合击败两名敌人，80 → 59 HP。一次搜索、五次续用，状态不匹配和部署偏离均为 0，战后清理通过 |
+
+无头实例使用独立存档。自动执行由真实游戏的 ActionExecutor 结算，可见 Steam 界面未验。当前证据限上述标准单人场景。愚者与箭矢状态、极速和恐惧 RunModel 会在根捕获时拒绝推演，多人仍待现版本复验。
+
+## 0.107.1 历史固定测试
+
+以下固定场景和旧验收记录应配套历史源码及 0.107.1 DLL。它们的结果不适用于 v0.113.1。
+
 ## 静态 / 构建
 
 | 层 | 入口 | 证明范围 |
 |---|---|---|
-| Target | `tools/verify-target-version.ps1` | 0.107.1 / RitsuLib / compatibility symbol |
+| Target | `tools/verify-target-version.ps1` | 构建配置、模组清单与 RitsuLib API 一致性 |
 | 持续/延迟能力尾部定向 | `dotnet run --project tools/U0U1PinnedHarness -c Release -- strategic-tail --out <ignored-directory>` | 20 项检查、9 次独立原生模型重放、一次预算耗尽续接；力量与未来成长分开、共用终局边界（含保留/下回合资源）、敌人收益封顶及整数边界。创造性 AI/熔炉仅为公式合同；不是完整搜索质量证明 |
 | P2 固定质量输入（按需） | `dotnet run --project tools/U0U1PinnedHarness -c Release -- p2-quality --fixture <case> --out <ignored-directory>` | case 为 `setup-single`、`setup-mp`、`retained-mp`、`delayed-mp`、`defense-mp`；每次一场固定预算搜索及独立路线重放，防御另有存活见证。JSON 含根、构建哈希、范围、结果、动作、末态与工作量；跨构建须先核对输入/预算，结果标量相同不代表完整末态等价。人工 Retain、队友不主动出牌；不默认加入全量入口 |
 | 单人 Coordinator 性能（按需） | `dotnet run --project tools/U0U1PinnedHarness -c Release -- solo-performance --fixture multi-hit --iterations 5 --dop 1 --out <ignored-directory>` | 固定预算搜索、完整末态独立重放、逐次路线/工作一致性、分配和 GC。另可用 `strategic-repeat`。`--measure` 加阶段耗时、首个合规无药见证、快照引用高水位和 10 ms 进程内存采样。关闭详细计时做独立进程 A/B |

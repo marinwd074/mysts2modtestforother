@@ -4,7 +4,9 @@ using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.Models.Relics;
+#if STS2_01071
 using MegaCrit.Sts2.Core.Models.Singleton;
+#endif
 using MegaCrit.Sts2.Core.ValueProps;
 using CombatSolver.Engine.Common;
 using CombatSolver.Engine.Common.Mirrors;

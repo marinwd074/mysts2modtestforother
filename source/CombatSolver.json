@@ -6,11 +6,11 @@
   "has_pck": false,
   "has_dll": true,
   "affects_gameplay": false,
-  "min_game_version": "0.107.1",
+  "min_game_version": "0.113.1",
   "dependencies": [
     {
       "id": "STS2-RitsuLib",
-      "min_version": "0.6.2"
+      "min_version": "0.6.11"
     }
   ]
 }

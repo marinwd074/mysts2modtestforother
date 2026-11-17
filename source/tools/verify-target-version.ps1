@@ -14,7 +14,10 @@ function Assert-Target([bool]$Condition, [string]$Message) {
 }
 
 Assert-Target (-not [string]::IsNullOrWhiteSpace($gameVersion)) 'build-target.json game_version is empty.'
-Assert-Target ($gameVersion -eq $ritsuVersion) 'game_version and ritsu_lib_target_version must match.'
+$gameApi = $gameVersion -replace '\.[0-9]+$', ''
+$ritsuApi = $ritsuVersion -replace '\.[0-9]+$', ''
+Assert-Target ($gameVersion -match '^\d+\.\d+\.\d+$' -and $ritsuVersion -match '^\d+\.\d+\.\d+$' -and
+    $gameApi -eq $ritsuApi) 'Game and RitsuLib targets must use the same major/minor API.'
 Assert-Target ($symbol -match '^STS2_[0-9]+$') 'compatibility_symbol has an unexpected form.'
 
 $manifest = Get-Content -LiteralPath (Join-Path $repositoryRoot 'CombatSolver.json') -Raw | ConvertFrom-Json

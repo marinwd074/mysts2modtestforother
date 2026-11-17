@@ -86,9 +86,11 @@ internal static class ShouldPlayMirrors
 
     private static bool HandleVelvetChoker(VelvetChoker relic, ShouldPlayMirrorContext context)
     {
-        return context.Card.Preview.Owner != relic.Owner ||
-            context.StateStore.Get(relic, static value => new CounterPredictionState(value._cardsPlayedThisTurn)).Value <
-            relic.DynamicVars.Cards.IntValue;
+        if (context.Card.Preview.Owner != relic.Owner)
+            return true;
+        var combat = context.CombatState as SimulatedCombatState
+            ?? throw new InvalidOperationException("Velvet Choker requires captured card-play history.");
+        return combat.GetCardPlayStartsThisTurn(relic.Owner.Creature) < relic.DynamicVars.Cards.IntValue;
     }
 }
 

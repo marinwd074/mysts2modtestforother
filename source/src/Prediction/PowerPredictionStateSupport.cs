@@ -25,6 +25,7 @@ internal static class PowerPredictionStateSupport
     public static SurroundedPower.Direction SurroundedFacing(CombatPredictionSimulator simulator, SurroundedPower power)
         => simulator.StateStore.Peek(power, () => new SurroundedPredictionState(power)).Facing;
 
+#if STS2_01071
     public static int NativeOutbreakPoisonApplications(OutbreakPower power)
         => power.DisplayAmount;
 
@@ -48,6 +49,7 @@ internal static class PowerPredictionStateSupport
         state.Value %= OutbreakPower.poisonThreshold;
         return true;
     }
+#endif
 
     public static IReadOnlyList<Creature> NativeInterceptCoveredCreatures(InterceptPower power)
     {
@@ -118,11 +120,13 @@ internal static class PowerPredictionStateSupport
             case (JugglingPower value, JugglingPower original):
                 _ = simulator.StateStore.GetReadOnly(value, () => new JugglingPredictionState(original));
                 break;
+#if STS2_01071
             case (OutbreakPower value, OutbreakPower original):
                 _ = simulator.StateStore.GetReadOnly(
                     value,
                     () => new CounterPredictionState(NativeOutbreakPoisonApplications(original)));
                 break;
+#endif
             case (InterceptPower value, InterceptPower original):
                 _ = simulator.StateStore.GetReadOnly(
                     value,

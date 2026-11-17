@@ -9,6 +9,7 @@ namespace CombatSolver.Compatibility;
 
 // Card-play context parameters were added to the attack builder after 0.107.1.
 // Keep newer call sites source-compatible while delegating to the old builder.
+#if STS2_01071
 internal static class AttackCommandCompatibilityExtensions
 {
     public static AttackCommand FromCard(
@@ -24,3 +25,4 @@ internal static class AttackCommandCompatibilityExtensions
         CardPlay ignoredCardPlay)
         => command.FromOsty(osty, card);
 }
+#endif

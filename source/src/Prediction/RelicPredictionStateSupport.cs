@@ -114,9 +114,6 @@ internal static class RelicPredictionStateSupport
             case (Vambrace target, Vambrace source):
                 _ = simulator.StateStore.GetReadOnly((AbstractModel)target, () => new VambracePredictionState(source));
                 break;
-            case (VelvetChoker target, VelvetChoker source):
-                CaptureCounter(target, source._cardsPlayedThisTurn);
-                break;
             case (_, _) when !IsTracked(predicted):
                 break;
             default:
@@ -175,9 +172,6 @@ internal static class RelicPredictionStateSupport
                 }
             case Shuriken value:
                 Counter(simulator, value, value._attacksPlayedThisTurn).Value = 0;
-                break;
-            case VelvetChoker value:
-                Counter(simulator, value, value._cardsPlayedThisTurn).Value = 0;
                 break;
         }
     }
@@ -333,9 +327,6 @@ internal static class RelicPredictionStateSupport
                     .Peek(value, static relic => new VambracePredictionState(relic))
                     .BlockGainedThisCombat);
                 break;
-            case VelvetChoker value:
-                fingerprint.Add(CounterValueReadOnly(simulator, value, value._cardsPlayedThisTurn));
-                break;
         }
     }
 
@@ -451,7 +442,6 @@ internal static class RelicPredictionStateSupport
             ThrowingAxe value => Bool(value._usedThisCombat),
             TuningFork value => value.SkillsPlayed.ToString(),
             Vambrace value => Bool(value._blockGainedThisCombat),
-            VelvetChoker value => value._cardsPlayedThisTurn.ToString(),
             _ => throw new ArgumentOutOfRangeException(nameof(relic), relic.GetType().FullName),
         };
 
@@ -495,7 +485,6 @@ internal static class RelicPredictionStateSupport
             TuningFork value => CounterValueReadOnly(simulator, value, value.SkillsPlayed).ToString(),
             Vambrace value => Bool(simulator.StateStore
                 .Peek((AbstractModel)value, () => new VambracePredictionState(value)).BlockGainedThisCombat),
-            VelvetChoker value => CounterValueReadOnly(simulator, value, value._cardsPlayedThisTurn).ToString(),
             _ => throw new ArgumentOutOfRangeException(nameof(relic), relic.GetType().FullName),
         };
 

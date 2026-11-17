@@ -443,7 +443,7 @@ target_config="$repo_root/build-target.json"
 target_game_version="$(jq -er '.game_version' "$target_config")" || runtime_error "invalid game_version in $target_config"
 target_ritsu_lib_version="$(jq -er '.ritsu_lib_target_version' "$target_config")" || runtime_error "invalid ritsu_lib_target_version in $target_config"
 target_compatibility_symbol="$(jq -er '.compatibility_symbol' "$target_config")" || runtime_error "invalid compatibility_symbol in $target_config"
-[[ "$target_game_version" == "$target_ritsu_lib_version" ]] || runtime_error "game and RitsuLib target versions differ in $target_config"
+[[ "${target_game_version%.*}" == "${target_ritsu_lib_version%.*}" ]] || runtime_error "game and RitsuLib major/minor API targets differ in $target_config"
 [[ -n "$target_compatibility_symbol" ]] || runtime_error "compatibility_symbol is empty in $target_config"
 
 source_game_root="$(realpath -m -- "${option_value[sts2-game-root]}")"

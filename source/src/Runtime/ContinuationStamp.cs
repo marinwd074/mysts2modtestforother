@@ -588,10 +588,12 @@ internal sealed record ContinuationStamp(string StateText)
             if (power is OrbitPower orbit)
                 text.Append("EnergyRemainder=").Append(simulator == null ? (4 - orbit.DisplayAmount) % 4
                     : ((SimulatedCombatState)simulator.State.CombatState).GetOrbitEnergyRemainder(orbit)).Append(',');
+#if STS2_01071
             if (power is OutbreakPower outbreak)
                 text.Append("PoisonApplications=").Append(simulator == null
                     ? PowerPredictionStateSupport.NativeOutbreakPoisonApplications(outbreak)
                     : PowerPredictionStateSupport.OutbreakPoisonApplications(simulator, outbreak)).Append(',');
+#endif
             if (power is InterceptPower intercept)
             {
                 IReadOnlyList<Creature> coveredCreatures = simulator == null

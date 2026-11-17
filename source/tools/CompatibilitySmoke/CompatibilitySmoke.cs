@@ -1,6 +1,8 @@
 using Godot;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Context;
+using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Unlocks;
 using MegaCrit.Sts2.Core.Map;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Nodes;
@@ -26,6 +28,7 @@ internal static partial class CompatibilitySmoke
             string result = mode switch
             {
                 "FIRST_TURN" => await RunFirstTurnAsync(state),
+                "STANDARD_FULLAUTO" => await RunStandardFullAutoAsync(host, state),
                 "COMPAT1071_TURN_SETUP" or "TURN_SETUP" =>
                     await RunTurnSetupAsync(host, state, fullAuto: false),
                 "COMPAT1071_FULLAUTO" or "FULLAUTO" =>
@@ -36,8 +39,8 @@ internal static partial class CompatibilitySmoke
                     await RunPerformanceBaselineAsync(host, state),
                 _ => throw new InvalidOperationException(
                     $"Unknown compatibility smoke mode '{mode}'. " +
-                    "Expected FIRST_TURN, COMPAT1071_TURN_SETUP, COMPAT1071_FULLAUTO, " +
-                    "COMPAT1071_FULL_BATTLE, or COMPAT1071_PERFORMANCE_BASELINE."),
+                    "Expected FIRST_TURN, STANDARD_FULLAUTO, TURN_SETUP, FULLAUTO, " +
+                    "FULL_BATTLE, or PERFORMANCE_BASELINE."),
             };
             string? directory = System.IO.Path.GetDirectoryName(output);
             if (!string.IsNullOrWhiteSpace(directory))
@@ -64,17 +67,34 @@ internal static partial class CompatibilitySmoke
         if (host.MainMenu is null || !host.MainMenu.IsNodeReady())
             throw new InvalidOperationException("Timed out waiting for the main menu.");
 
+        var character = ModelDb.AllCharacters.Single(c => c.Id.Entry == "IRONCLAD");
+        Player player = Player.CreateForNewRun(character, UnlockState.all, 1UL);
         await host.StartNewSingleplayerRun(
-            ModelDb.AllCharacters.Single(c => c.Id.Entry == "IRONCLAD"),
+            player,
             false,
             ActModel.GetDefaultList(),
             [],
-            "COMPAT1071",
+            "COMPAT1131",
             GameMode.Standard,
-            0);
+            false,
+            0,
+            null);
         var encounter = ModelDb.AllEncounters.First(e => e.Id.Entry.Contains("NIBBIT")).ToMutable();
         encounter.DebugRandomizeRng();
-        await RunManager.Instance.EnterRoomDebug(RoomType.Monster, MapPointType.Unassigned, encounter);
+        GD.Print("[CombatSolver/CompatibilitySmoke] Run created, entering " + encounter.Id.Entry);
+        Task roomEntry = RunManager.Instance.EnterRoomDebug(RoomType.Monster, MapPointType.Unassigned, encounter);
+        var deadline = DateTime.UtcNow.AddSeconds(35);
+        while (!roomEntry.IsCompleted && DateTime.UtcNow < deadline)
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        if (!roomEntry.IsCompleted)
+        {
+            var pending = CombatManager.Instance.DebugOnlyGetState();
+            throw new TimeoutException($"Room entry stalled: side={pending?.CurrentSide} " +
+                $"phase={pending?.Players.FirstOrDefault()?.PlayerCombatState?.Phase} " +
+                $"in_progress={CombatManager.Instance.IsInProgress}");
+        }
+        await roomEntry;
+        GD.Print("[CombatSolver/CompatibilitySmoke] Combat room entered.");
 
         for (int frame = 0; frame < FirstTurnFrameBudget; frame++)
         {
@@ -83,10 +103,15 @@ internal static partial class CompatibilitySmoke
             if (state?.CurrentSide == CombatSide.Player
                 && LocalContext.GetMe(state)?.PlayerCombatState?.Phase == PlayerTurnPhase.Play)
             {
-                await RunManager.Instance.ActionExecutor.FinishedExecutingActions();
+                GD.Print("[CombatSolver/CompatibilitySmoke] First player turn reached Play.");
+                await RunManager.Instance.ActionExecutor.FinishedExecutingActions()
+                    .WaitAsync(TimeSpan.FromSeconds(10));
                 return state;
             }
         }
-        throw new InvalidOperationException("Timed out waiting for the first playable turn.");
+        var pendingCombat = CombatManager.Instance.DebugOnlyGetState();
+        throw new InvalidOperationException($"Timed out waiting for the first playable turn: " +
+            $"side={pendingCombat?.CurrentSide} phase={pendingCombat?.Players.FirstOrDefault()?.PlayerCombatState?.Phase} " +
+            $"in_progress={CombatManager.Instance.IsInProgress}.");
     }
 }

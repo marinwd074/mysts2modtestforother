@@ -832,7 +832,7 @@ internal static partial class HookMirrors
         var cap = decimal.MaxValue;
         foreach (var listener in IterateRunHookListeners(simulator, MirroredHookMask.ModifyDamageCap))
         {
-            cap = Math.Min(cap, listener.ModifyDamageCap(target, props, dealer, cardModel));
+            cap = Math.Min(cap, listener.ModifyDamageCap(target, props, dealer, cardModel, context.CardPlay));
         }
 
         return Math.Max(0, Math.Min(damage, cap));

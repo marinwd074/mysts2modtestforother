@@ -145,6 +145,7 @@ internal static class PowerLifecycleSupport
                         continue;
                     switch (listener)
                     {
+#if STS2_01071
                         case OutbreakPower outbreak when change.Delta > 0
                             && change.Power is PoisonPower
                             && ReferenceEquals(change.Applier, outbreak.Owner):
@@ -161,6 +162,7 @@ internal static class PowerLifecycleSupport
                                 }
                             }
                             break;
+#endif
                         case ShroudPower when ReferenceEquals(change.Applier, listener.Owner)
                                                    && change.Power is DoomPower:
                             simulator.GainBlock(listener.Owner, listener.Amount, ValueProp.Unpowered);

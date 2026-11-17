@@ -59,7 +59,7 @@ internal static partial class CompatibilitySmoke
             () => CombatSearchCoordinator.Solve(root, names, damage, policy, timeout.Token, null));
         if (!result.BestNode.Actions.Any(a => a.Kind == PlanActionKind.PlayCard))
             throw new InvalidOperationException("Search produced no card-play route.");
-        return $"PASS: native 0.107.1 first-turn search; actions={result.BestNode.Actions.Count}; " +
+        return $"PASS: native first-turn search; actions={result.BestNode.Actions.Count}; " +
             "incremental verification enabled";
     }
 }

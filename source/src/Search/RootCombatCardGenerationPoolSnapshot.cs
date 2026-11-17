@@ -253,8 +253,9 @@ internal sealed class RootCombatCardGenerationPoolSnapshot
     private static IEnumerable<CardModel> FilterNativeCombat(
         Player player,
         IEnumerable<CardModel> cards)
-        => CardFactory.FilterForCombat(
-            CardFactory.FilterForPlayerCount(player.RunState, cards));
+        => cards.FilterForCombatAndPlayerCount(player.RunState.Players.Count == 1
+            ? CardMultiplayerConstraint.SingleplayerOnly
+            : CardMultiplayerConstraint.MultiplayerOnly);
 
     private static bool TryGetNativeCanonicalCharacterPoolCards(
         CardPoolModel cardPool,

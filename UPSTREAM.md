@@ -2,13 +2,21 @@
 
 ## Primary upstream
 
-This repository is derived from **Torch1230/CombatSolver** and retains its MIT attribution. The fork intentionally maintains a pinned **STS2 0.107.1** compatibility target plus additional multiplayer, diagnostics, testing, and local-development work.
+This repository is derived from **Torch1230/CombatSolver** and retains its MIT attribution. The fork intentionally maintains a **STS2 0.113.1** compatibility target plus additional multiplayer, diagnostics, testing, and local-development work.
 
 Upstream may target a newer game version. Therefore upstream updates are reviewed and ported selectively rather than merged wholesale.
 
+## STS2 0.113.1 port (2026-11-17)
+
+Reviewed upstream [78e4545e](https://github.com/Torch1230/CombatSolver/commit/78e4545e).
+The port uses its 0.113 API changes for RNG, card play, run-model capture, choice selectors,
+and affected card, potion and relic effects. The fork retains its search, deployment and
+multiplayer implementations. The upstream Fool, Blitz and Dread simulation features are
+outside this port.
+
 ## Follow-up review (2026-11-05)
 
-GitHub still reports `5c773caaec742bc55588bc9ee21c361326a732f0` as the mainline head.
+The review used `5c773caaec742bc55588bc9ee21c361326a732f0` as the mainline head.
 The upstream [archived multiplayer ENet runner](https://github.com/Torch1230/CombatSolver/blob/14b36a28/tools/run-multiplayer-p0-enet.ps1)
 is a useful transport-test reference: it launches separate peers and checks each peer's result,
 but pins game 0.111.0 and launches actual headless game instances. It has not been imported or run here.

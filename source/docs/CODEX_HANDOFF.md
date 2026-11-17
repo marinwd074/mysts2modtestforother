@@ -4,10 +4,16 @@
 
 ## 当前状态
 
-- 项目记录版本 **4.42**，Mod **0.40.2**，游戏 / RitsuLib **0.107.1**，目标 `STS2_01071`。整理前本地和远端 `main` 的代码提交均为 `bf63bf54`。本机 Steam 安装中的 DLL 标识仍为 `0.40.2+8a58bbda`，修复版 Release 已单独构建。
+- 项目记录版本 **4.42**，Mod **0.40.2**，游戏 **v0.113.1**（Steam `public-beta`，Build `26660232`），RitsuLib API **0.113.0**，目标 `STS2_01130`。本机 Steam 活动目录仍装有原来的 `0.40.2+8a58bbda`。新构建和测试均在项目的忽略目录。
 - 工作区已有根 `AGENTS.md` 的本地修改、`source/tools/multiplayer-lab/prepare-instances.ps1` 的修改和 `game-body/` 的 222 个本地删除。固定游戏快照仍在 Git/LFS 索引中。验证用外部 Steam 安装，避免顺手还原、暂存或提交这些变化。
 - 单人与多人共用搜索和模拟核心。单人预测整场战斗，默认多人 local-single-core 搜索当前回合及之后两回合，仅允许部署本地玩家动作。六回合、选择性深入、有限承伤和队友预测属于实验。围攻、夹击的实验建议使用已结算的队友动作，带 `AdviceOnly` 的路线不具备部署权限。详见[架构](ARCHITECTURE.md)与[多人能力边界](multiplayer/LIMITATIONS.md)。
 - 用户要求**不以路线质量换速度**。以相同根和预算比较首条审核胜利、最终耗时、完整路线、末态 RNG、战损和药水成本。单人整场预测、Smart 药水策略、成长/遗物规则均适用。[性能护栏](PERFORMANCE_GUARDRAILS.md)
+
+## v0.113.1 接入验证
+
+- 参考上游 `78e4545e`，接入新版 RNG、`CardPlay`、选牌栈、RunModel 和实际发生变化的卡牌、药水、遗物行为。新版破旧匕首的名称按升级次数格式化，避免首场搜索前无限枚举升级。
+- 使用 RitsuLib **0.6.14** 的 `0.113.0` 变体在真实 Godot 进程验证。必需补丁 66 项全部成功。首回合搜索返回 25 个计划动作并通过增量验证。铁甲战士 A0 初始牌组打 `NIBBITS_NORMAL`，全自动第 6 回合击败两名敌人，生命 80 → 59。一次搜索，续用五回合，日志中状态不匹配与部署偏离均为 0。战斗结束清理搜索、部署与 GC 状态。
+- 愚者与箭矢状态、极速和恐惧 RunModel 尚未接入推演，多人能力未在该版本重验。历史 0.107.1 快照及用它构建的固定测试需配套历史源码。当前本地结果在 `source/.local/sts2-v01131-acceptance/`。
 
 ## 最近修复与下一步
 
@@ -34,4 +40,4 @@
 
 ## 验证入口
 
-在 `source/` 运行 `pwsh -NoProfile -File tools/run-offline-validation.ps1 -GameDir "<匹配的游戏安装目录>"` 可执行组合离线验证。定向验证按[测试矩阵](TEST_MATRIX.md)选择。历史设计、实机报告和旧交接的找回方式见[文档导航](README.md#历史资料)。
+在 `source/` 运行 `dotnet build CombatSolver.csproj -c Release -p:CopyModOnBuild=false`，使用本机 v0.113.1 游戏 DLL 和 RitsuLib API 0.113.0。定向验证按[测试矩阵](TEST_MATRIX.md)选择。历史设计、实机报告和旧交接的找回方式见[文档导航](README.md#历史资料)。

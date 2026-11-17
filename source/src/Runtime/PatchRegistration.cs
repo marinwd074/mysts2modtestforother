@@ -43,14 +43,7 @@ internal static class PatchRegistration
         patcher.RegisterPatch<RichTextEnvironmentLifetimePatch>();
         patcher.RegisterPatch<NodePoolSignalLifetimePatch>();
         patcher.RegisterPatch<CombatInstantModePatch>();
-#if !STS2_01071
-        patcher.RegisterPatch<UnattendedTestIsolationPatch>();
-        patcher.RegisterPatch<UnattendedHeadlessFtuePatch>();
-#endif
         patcher.RegisterPatch<CombatReplayRecordingPatch>();
-#if !STS2_01071
-        patcher.RegisterPatch<UnattendedCombatStartReplayPatch>();
-#endif
 #if !STS2_01071
         // 0.107.1 没有该 SaveManager 重载；注册会让 RitsuLib 回滚整个必需补丁集。
         patcher.RegisterPatch<CombatShowcaseSaveIsolationPatch>();

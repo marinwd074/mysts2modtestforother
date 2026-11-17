@@ -4,9 +4,8 @@ using MegaCrit.Sts2.Core.Nodes;
 
 namespace CombatSolver;
 
-// The unattended harness targets newer game builds and is intentionally inert in
-// the 0.107.1 production build. Runtime hooks use this surface so the battle
-// solver remains independent from test-only implementation files.
+// The Release build excludes the unattended fixture suite. Only a build with
+// CompatibilitySmoke enabled accepts a smoke request.
 internal static class UnattendedTestRunner
 {
     public static bool IsActive =>
@@ -16,7 +15,11 @@ internal static class UnattendedTestRunner
         false;
 #endif
     internal static bool IsReplayingRecordedInputs => false;
-    public static bool AutomaticTurnSearchEnabled => !IsActive;
+    public static bool AutomaticTurnSearchEnabled => !IsActive
+#if COMPATIBILITY_SMOKE
+        || System.Environment.GetEnvironmentVariable("COMBATSOLVER_COMPAT_SMOKE_MODE") == "STANDARD_FULLAUTO"
+#endif
+        ;
     public static bool VerifyIncrementalSearch => false;
     public static bool ForceShortSearchOnly => false;
     public static bool MeasureSearchPhases => false;
@@ -51,5 +54,5 @@ internal static class UnattendedTestRunner
         string? runSnapshotPath,
         string? nativeStatePath = null)
         => Task.FromException(new NotSupportedException(
-            "0.107.1 兼容构建不支持 0.111.0 的无人值守 replay-state 导入。"));
+            "此构建不包含无人值守 replay-state 测试入口。"));
 }

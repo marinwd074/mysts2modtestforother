@@ -13,6 +13,43 @@ internal static partial class CompatibilitySmoke
 {
     private const int FullBattleCleanupFrameBudget = 1200;
 
+    private static async Task<string> RunStandardFullAutoAsync(NGame host, CombatState state)
+    {
+        Player player = LocalContext.GetMe(state)
+            ?? throw new InvalidOperationException("Missing local player.");
+        var enemies = state.Enemies.ToArray();
+        int initialHp = player.Creature.CurrentHp;
+        int firstTurn = player.PlayerCombatState!.TurnNumber;
+        int lastTurn = firstTurn;
+        int generation = SolverController.CombatLifecycleGeneration;
+        bool deployed = false;
+
+        SolverController.SetFullAuto(host, state, enabled: true);
+        if (!SolverController.FullAutoEnabled)
+            throw new InvalidOperationException("Full auto was rejected.");
+
+        var deadline = DateTime.UtcNow.AddSeconds(55);
+        while (CombatManager.Instance.IsInProgress && DateTime.UtcNow < deadline)
+        {
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            lastTurn = Math.Max(lastTurn, player.PlayerCombatState?.TurnNumber ?? lastTurn);
+            deployed |= SolverController.LastDeployedActionStartedAtMillisecondsForTesting > 0;
+        }
+
+        if (!deployed || CombatManager.Instance.IsInProgress
+            || player.Creature.CurrentHp <= 0 || enemies.Any(enemy => enemy.IsAlive))
+        {
+            throw new InvalidOperationException(
+                $"Full-auto victory missing: deployed={deployed} turn={lastTurn} " +
+                $"in_combat={CombatManager.Instance.IsInProgress} hp={player.Creature.CurrentHp} " +
+                $"enemies_alive={enemies.Count(enemy => enemy.IsAlive)}.");
+        }
+
+        await WaitForCombatCleanupAsync(host, state, generation);
+        return $"PASS: native standard singleplayer full-auto victory; turns={firstTurn}-{lastTurn}; " +
+            $"player_hp={initialHp}->{player.Creature.CurrentHp}; enemies_defeated={enemies.Length}; cleanup=true";
+    }
+
     private static async Task PrepareFullBattleFixtureAsync(CombatState state)
     {
         Player player = LocalContext.GetMe(state)

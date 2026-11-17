@@ -270,8 +270,6 @@ internal static partial class CardChoiceSupport
             if (simulator.HasPendingChoice)
                 return false;
         }
-        original.MutablePreview.AfterTransformedFrom();
-        replacement.MutablePreview.AfterTransformedTo();
         HookMirrors.AfterCardGeneratedForCombat(
             simulator,
             replacement,
